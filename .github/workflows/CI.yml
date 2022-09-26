@@ -41,7 +41,7 @@ jobs:
       matrix:
         java: [11, 17]
 
-    name: Build and Test neural-search Plugin
+    name: Pre-commit neural-search Plugin
     runs-on: ubuntu-latest
 
     steps:
