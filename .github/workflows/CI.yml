@@ -4,7 +4,8 @@ on:
     branches:
       - "*"
       - "feature/**"
-  pull_request:
+  pull_request_target:
+    types: [ opened, synchronize, reopened ]
     branches:
       - "*"
       - "feature/**"
@@ -55,7 +56,7 @@ jobs:
 
       - name: Run build
         run: |
-          ./gradlew precommit
+          ./gradlew precommit --parallel
 
       - name: Upload Coverage Report
         uses: codecov/codecov-action@v1

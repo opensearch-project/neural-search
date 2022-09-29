@@ -6,9 +6,9 @@
 package org.opensearch.neuralsearch.plugin;
 
 import org.junit.Assert;
-import org.opensearch.test.OpenSearchIntegTestCase;
+import org.opensearch.neuralsearch.OpenSearchSecureRestTestCase;
 
-public class NeuralSearchIT extends OpenSearchIntegTestCase {
+public class NeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     /**
      * Dummy test case for passing the build.

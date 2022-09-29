@@ -6,6 +6,7 @@
  * This project uses @Incubating APIs which are subject to change.
  */
 import org.opensearch.gradle.test.RestIntegTestTask
+import java.util.concurrent.Callable
 
 apply plugin: 'java'
 apply plugin: 'idea'
@@ -13,6 +14,7 @@ apply plugin: 'opensearch.opensearchplugin'
 apply plugin: 'opensearch.pluginzip'
 apply plugin: 'jacoco'
 apply plugin: "com.diffplug.spotless"
+apply plugin: 'io.freefair.lombok'
 
 def pluginName = 'neural-search'
 def pluginDescription = 'A plugin that adds dense neural retrieval into the OpenSearch ecosytem'
@@ -59,7 +61,6 @@ opensearchplugin {
     noticeFile rootProject.file('NOTICE')
 }
 
-licenseHeaders.enabled = true
 dependencyLicenses.enabled = false
 thirdPartyAudit.enabled = false
 loggerUsageCheck.enabled = false
@@ -68,7 +69,9 @@ validateNebulaPom.enabled = false
 
 buildscript {
     ext {
-        opensearch_version = System.getProperty("opensearch.version", "3.0.0-SNAPSHOT")
+        // as we don't have 3.0.0, 2.4.0 version for K-NN on darwin we need to keep OpenSearch version as 2.3 for now.
+        // Github issue: https://github.com/opensearch-project/opensearch-build/issues/2662
+        opensearch_version = System.getProperty("opensearch.version", "2.3.0-SNAPSHOT")
         buildVersionQualifier = System.getProperty("build.version_qualifier", "")
         isSnapshot = "true" == System.getProperty("build.snapshot", "true")
         version_tokens = opensearch_version.tokenize('-')
@@ -82,6 +85,13 @@ buildscript {
             opensearch_build += "-SNAPSHOT"
         }
         opensearch_group = "org.opensearch"
+        opensearch_no_snapshot = opensearch_build.replace("-SNAPSHOT","")
+        k_NN_resource_folder = "build/resources/k-NN"
+        ml_common_resource_folder = "build/resources/ml-commons"
+        //TODO: we need a better way to construct this URL as, this URL is valid for released version of K-NN, ML-Plugin.
+        // Github issue: https://github.com/opensearch-project/opensearch-build/issues/2662
+        k_NN_build_download_url = "https://aws.oss.sonatype.org/content/repositories/releases/org/opensearch/plugin/opensearch-knn/" + opensearch_no_snapshot + "/opensearch-knn-" + opensearch_no_snapshot +".zip"
+        ml_common_build_download_url = "https://aws.oss.sonatype.org/content/repositories/releases/org/opensearch/plugin/opensearch-ml-plugin/" + opensearch_no_snapshot + "/opensearch-ml-plugin-" + opensearch_no_snapshot +".zip"
     }
 
     repositories {
@@ -93,6 +103,7 @@ buildscript {
     dependencies {
         classpath "${opensearch_group}.gradle:build-tools:${opensearch_version}"
         classpath "com.diffplug.spotless:spotless-plugin-gradle:5.6.1"
+        classpath "io.freefair.gradle:lombok-plugin:6.4.3"
     }
 }
 
@@ -113,12 +124,25 @@ repositories {
     maven { url "https://plugins.gradle.org/m2/" }
 }
 
+dependencies {
+    api "org.opensearch:opensearch:${opensearch_version}"
+    api group: 'org.opensearch', name:'opensearch-ml-client', version: "${opensearch_build}"
+}
+
+compileJava {
+    options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
+}
+compileTestJava {
+    options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
+}
+
 def opensearch_tmp_dir = rootProject.file('build/private/opensearch_tmp').absoluteFile
 opensearch_tmp_dir.mkdirs()
 def _numNodes = findProperty('numNodes') as Integer ?: 1
 
 test {
     include '**/*Tests.class'
+    systemProperty 'tests.security.manager', 'false'
 }
 
 // Setting up Integration Tests
@@ -161,8 +185,47 @@ integTest {
 
 testClusters.integTest {
     testDistribution = "ARCHIVE"
+    // Install ML-Plugin on the integTest cluster nodes
+    plugin(provider(new Callable<RegularFile>(){
+        @Override
+        RegularFile call() throws Exception {
+            return new RegularFile() {
+                @Override
+                File getAsFile() {
+                    if (new File("$project.rootDir/$ml_common_resource_folder").exists()) {
+                        project.delete(files("$project.rootDir/$ml_common_resource_folder"))
+                    }
+                    project.mkdir ml_common_resource_folder
+                    ant.get(src: ml_common_build_download_url,
+                            dest: ml_common_resource_folder,
+                            httpusecaches: false)
+                    return fileTree(ml_common_resource_folder).getSingleFile()
+                }
+            }
+        }
+    }))
 
-    // This installs our plugin into the testClusters
+    // Install K-NN plugin on the integTest cluster nodes
+    plugin(provider(new Callable<RegularFile>(){
+        @Override
+        RegularFile call() throws Exception {
+            return new RegularFile() {
+                @Override
+                File getAsFile() {
+                    if (new File("$project.rootDir/$k_NN_resource_folder").exists()) {
+                        project.delete(files("$project.rootDir/$k_NN_resource_folder"))
+                    }
+                    project.mkdir k_NN_resource_folder
+                    ant.get(src: k_NN_build_download_url,
+                            dest: k_NN_resource_folder,
+                            httpusecaches: false)
+                    return fileTree(k_NN_resource_folder).getSingleFile()
+                }
+            }
+        }
+    }))
+
+    // This installs our neural-search plugin into the testClusters
     plugin(project.tasks.bundlePlugin.archiveFile)
     // Cluster shrink exception thrown if we try to set numberOfNodes to 1, so only apply if > 1
     if (_numNodes > 1) numberOfNodes = _numNodes
@@ -177,6 +240,28 @@ testClusters.integTest {
         }
     }
 }
+
+// Remote Integration Tests
+task integTestRemote(type: RestIntegTestTask) {
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    systemProperty "https", System.getProperty("https")
+    systemProperty "user", System.getProperty("user")
+    systemProperty "password", System.getProperty("password")
+
+    systemProperty 'cluster.number_of_nodes', "${_numNodes}"
+
+    systemProperty 'tests.security.manager', 'false'
+
+    // Run tests with remote cluster only if rest case is defined
+    if (System.getProperty("tests.rest.cluster") != null) {
+        filter {
+            includeTestsMatching "org.opensearch.neuralsearch.*IT"
+        }
+    }
+}
+
 
 run {
     useCluster testClusters.integTest
