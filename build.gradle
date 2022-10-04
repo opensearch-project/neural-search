@@ -124,12 +124,30 @@ repositories {
     maven { url "https://plugins.gradle.org/m2/" }
 }
 
+configurations {
+    zipArchive
+}
+
+def knnJarDirectory = "$buildDir/dependencies/opensearch-knn"
+
 dependencies {
     api "org.opensearch:opensearch:${opensearch_version}"
+    zipArchive group: 'org.opensearch.plugin', name:'opensearch-knn', version: "${opensearch_build}"
+    api fileTree(dir: knnJarDirectory, include: '*.jar')
     api group: 'org.opensearch', name:'opensearch-ml-client', version: "${opensearch_build}"
 }
 
+// From maven, we can get the k-NN plugin as a zip. In order to add the jar to the classpath, we need to unzip the
+// k-NN zip and then copy it into a directory that we specify as a dependency.
+task unzip(type: Copy) {
+    configurations.zipArchive.asFileTree.each {
+        from(zipTree(it))
+    }
+    into knnJarDirectory
+}
+
 compileJava {
+    dependsOn unzip
     options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
 }
 compileTestJava {
