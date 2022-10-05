@@ -1,11 +1,5 @@
 <img src="https://opensearch.org/assets/img/opensearch-logo-themed.svg" height="64px">
 
-- [OpenSearch Geospatial](#opensearch-geospatial)
-- [Project Resources](#project-resources)
-- [Code of Conduct](#code-of-conduct)
-- [License](#license)
-- [Copyright](#copyright)
-
 ## OpenSearch Neural Search
 **OpenSearch Neural Search** is an OpenSearch plugin that adds dense neural retrieval into the OpenSearch ecosystem. 
 The plugin provides the capability for indexing documents and doing neural search on the indexed documents.
@@ -22,6 +16,9 @@ The plugin provides the capability for indexing documents and doing neural searc
 * [Release Management](RELEASING.md)
 * [Admin Responsibilities](ADMINS.md)
 * [Security](SECURITY.md)
+* [Code of Conduct](#code-of-conduct)
+* [License](#license)
+* [Copyright](#copyright)
 
 ## Code of Conduct
 
