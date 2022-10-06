@@ -5,15 +5,13 @@
 
 package org.opensearch.neuralsearch.plugin;
 
-import org.junit.Assert;
+import org.opensearch.knn.common.KNNConstants;
+import org.opensearch.knn.index.util.KNNEngine;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class NeuralSearchTests extends OpenSearchTestCase {
 
-    /**
-     * Dummy test case for passing the build.
-     */
-    public void testDemo() {
-        Assert.assertTrue(true);
+    public void testValidateKNNDependency() {
+        assertEquals(KNNConstants.LUCENE_NAME, KNNEngine.LUCENE.getName());
     }
 }
