@@ -16,6 +16,8 @@ import static org.opensearch.neuralsearch.plugin.query.NeuralQueryBuilder.QUERY_
 import java.io.IOException;
 import java.util.Map;
 
+import lombok.SneakyThrows;
+
 import org.opensearch.common.ParsingException;
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.common.xcontent.ToXContent;
@@ -33,7 +35,8 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
     private static final float BOOST = 1.8f;
     private static final String QUERY_NAME = "queryName";
 
-    public void testFromXContent_valid_withDefaults() throws IOException {
+    @SneakyThrows
+    public void testFromXContent_whenBuiltWithDefaults_thenBuildSuccessfully() {
         /*
           {
               "VECTOR_FIELD": {
@@ -55,13 +58,14 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         XContentParser contentParser = createParser(xContentBuilder);
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.fromXContent(contentParser);
 
-        assertEquals(FIELD_NAME, neuralQueryBuilder.getFieldName());
-        assertEquals(QUERY_TEXT, neuralQueryBuilder.getQueryText());
-        assertEquals(MODEL_ID, neuralQueryBuilder.getModelId());
-        assertEquals(K, neuralQueryBuilder.getK());
+        assertEquals(FIELD_NAME, neuralQueryBuilder.fieldName());
+        assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
+        assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
+        assertEquals(K, neuralQueryBuilder.k());
     }
 
-    public void testFromXContent_valid_withOptionals() throws IOException {
+    @SneakyThrows
+    public void testFromXContent_whenBuiltWithOptionals_thenBuildSuccessfully() {
         /*
           {
               "VECTOR_FIELD": {
@@ -87,15 +91,16 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         XContentParser contentParser = createParser(xContentBuilder);
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.fromXContent(contentParser);
 
-        assertEquals(FIELD_NAME, neuralQueryBuilder.getFieldName());
-        assertEquals(QUERY_TEXT, neuralQueryBuilder.getQueryText());
-        assertEquals(MODEL_ID, neuralQueryBuilder.getModelId());
-        assertEquals(K, neuralQueryBuilder.getK());
+        assertEquals(FIELD_NAME, neuralQueryBuilder.fieldName());
+        assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
+        assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
+        assertEquals(K, neuralQueryBuilder.k());
         assertEquals(BOOST, neuralQueryBuilder.boost(), 0.0);
         assertEquals(QUERY_NAME, neuralQueryBuilder.queryName());
     }
 
-    public void testFromXContent_invalid_multipleRootFields() throws IOException {
+    @SneakyThrows
+    public void testFromXContent_whenBuildWithMultipleRootFields_thenFail() {
         /*
           {
               "VECTOR_FIELD": {
@@ -124,7 +129,8 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         expectThrows(ParsingException.class, () -> NeuralQueryBuilder.fromXContent(contentParser));
     }
 
-    public void testFromXContent_invalid_missingParameters() throws IOException {
+    @SneakyThrows
+    public void testFromXContent_whenBuildWithMissingParameters_thenFail() {
         /*
           {
               "VECTOR_FIELD": {
@@ -138,7 +144,8 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         expectThrows(IllegalArgumentException.class, () -> NeuralQueryBuilder.fromXContent(contentParser));
     }
 
-    public void testFromXContent_invalid_duplicateParameters() throws IOException {
+    @SneakyThrows
+    public void testFromXContent_whenBuildWithDuplicateParameters_thenFail() {
         /*
           {
               "VECTOR_FIELD": {
@@ -168,7 +175,8 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
     }
 
     @SuppressWarnings("unchecked")
-    public void testToXContent() throws IOException {
+    @SneakyThrows
+    public void testToXContent() {
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(FIELD_NAME).modelId(MODEL_ID).queryText(QUERY_TEXT).k(K);
 
         XContentBuilder builder = XContentFactory.jsonBuilder();
@@ -197,7 +205,8 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(K, secondInnerMap.get(K_FIELD.getPreferredName()));
     }
 
-    public void testStreams() throws IOException {
+    @SneakyThrows
+    public void testStreams() {
         NeuralQueryBuilder original = new NeuralQueryBuilder();
         original.fieldName(FIELD_NAME);
         original.queryText(QUERY_TEXT);
@@ -227,100 +236,100 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         int k1 = 1;
         int k2 = 2;
 
-        NeuralQueryBuilder neuralQueryBuilder1 = new NeuralQueryBuilder().fieldName(fieldName1)
+        NeuralQueryBuilder neuralQueryBuilder_baseline = new NeuralQueryBuilder().fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId1)
             .k(k1)
             .boost(boost1)
             .queryName(queryName1);
 
-        // Identical to neuralQueryBuilder1
-        NeuralQueryBuilder neuralQueryBuilder2 = new NeuralQueryBuilder().fieldName(fieldName1)
+        // Identical to neuralQueryBuilder_baseline
+        NeuralQueryBuilder neuralQueryBuilder_baselineCopy = new NeuralQueryBuilder().fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId1)
             .k(k1)
             .boost(boost1)
             .queryName(queryName1);
 
-        // Identical to neuralQueryBuilder1 except default boost and query name
-        NeuralQueryBuilder neuralQueryBuilder3 = new NeuralQueryBuilder().fieldName(fieldName1)
+        // Identical to neuralQueryBuilder_baseline except default boost and query name
+        NeuralQueryBuilder neuralQueryBuilder_defaultBoostAndQueryName = new NeuralQueryBuilder().fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId1)
             .k(k1);
 
-        // Identical to neuralQueryBuilder1 except diff field name
-        NeuralQueryBuilder neuralQueryBuilder4 = new NeuralQueryBuilder().fieldName(fieldName2)
+        // Identical to neuralQueryBuilder_baseline except diff field name
+        NeuralQueryBuilder neuralQueryBuilder_diffFieldName = new NeuralQueryBuilder().fieldName(fieldName2)
             .queryText(queryText1)
             .modelId(modelId1)
             .k(k1)
             .boost(boost1)
             .queryName(queryName1);
 
-        // Identical to neuralQueryBuilder1 except diff query text
-        NeuralQueryBuilder neuralQueryBuilder5 = new NeuralQueryBuilder().fieldName(fieldName1)
+        // Identical to neuralQueryBuilder_baseline except diff query text
+        NeuralQueryBuilder neuralQueryBuilder_diffQueryText = new NeuralQueryBuilder().fieldName(fieldName1)
             .queryText(queryText2)
             .modelId(modelId1)
             .k(k1)
             .boost(boost1)
             .queryName(queryName1);
 
-        // Identical to neuralQueryBuilder1 except diff model ID
-        NeuralQueryBuilder neuralQueryBuilder6 = new NeuralQueryBuilder().fieldName(fieldName1)
+        // Identical to neuralQueryBuilder_baseline except diff model ID
+        NeuralQueryBuilder neuralQueryBuilder_diffModelId = new NeuralQueryBuilder().fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId2)
             .k(k1)
             .boost(boost1)
             .queryName(queryName1);
 
-        // Identical to neuralQueryBuilder1 except diff k
-        NeuralQueryBuilder neuralQueryBuilder7 = new NeuralQueryBuilder().fieldName(fieldName1)
+        // Identical to neuralQueryBuilder_baseline except diff k
+        NeuralQueryBuilder neuralQueryBuilder_diffK = new NeuralQueryBuilder().fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId1)
             .k(k2)
             .boost(boost1)
             .queryName(queryName1);
 
-        // Identical to neuralQueryBuilder1 except diff boost
-        NeuralQueryBuilder neuralQueryBuilder8 = new NeuralQueryBuilder().fieldName(fieldName1)
+        // Identical to neuralQueryBuilder_baseline except diff boost
+        NeuralQueryBuilder neuralQueryBuilder_diffBoost = new NeuralQueryBuilder().fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId1)
             .k(k1)
             .boost(boost2)
             .queryName(queryName1);
 
-        // Identical to neuralQueryBuilder1 except diff query name
-        NeuralQueryBuilder neuralQueryBuilder9 = new NeuralQueryBuilder().fieldName(fieldName1)
+        // Identical to neuralQueryBuilder_baseline except diff query name
+        NeuralQueryBuilder neuralQueryBuilder_diffQueryName = new NeuralQueryBuilder().fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId1)
             .k(k1)
             .boost(boost1)
             .queryName(queryName2);
 
-        assertEquals(neuralQueryBuilder1, neuralQueryBuilder1);
-        assertEquals(neuralQueryBuilder1.hashCode(), neuralQueryBuilder1.hashCode());
+        assertEquals(neuralQueryBuilder_baseline, neuralQueryBuilder_baseline);
+        assertEquals(neuralQueryBuilder_baseline.hashCode(), neuralQueryBuilder_baseline.hashCode());
 
-        assertEquals(neuralQueryBuilder1, neuralQueryBuilder2);
-        assertEquals(neuralQueryBuilder1.hashCode(), neuralQueryBuilder2.hashCode());
+        assertEquals(neuralQueryBuilder_baseline, neuralQueryBuilder_baselineCopy);
+        assertEquals(neuralQueryBuilder_baseline.hashCode(), neuralQueryBuilder_baselineCopy.hashCode());
 
-        assertNotEquals(neuralQueryBuilder1, neuralQueryBuilder3);
-        assertNotEquals(neuralQueryBuilder1.hashCode(), neuralQueryBuilder3.hashCode());
+        assertNotEquals(neuralQueryBuilder_baseline, neuralQueryBuilder_defaultBoostAndQueryName);
+        assertNotEquals(neuralQueryBuilder_baseline.hashCode(), neuralQueryBuilder_defaultBoostAndQueryName.hashCode());
 
-        assertNotEquals(neuralQueryBuilder1, neuralQueryBuilder4);
-        assertNotEquals(neuralQueryBuilder1.hashCode(), neuralQueryBuilder4.hashCode());
+        assertNotEquals(neuralQueryBuilder_baseline, neuralQueryBuilder_diffFieldName);
+        assertNotEquals(neuralQueryBuilder_baseline.hashCode(), neuralQueryBuilder_diffFieldName.hashCode());
 
-        assertNotEquals(neuralQueryBuilder1, neuralQueryBuilder5);
-        assertNotEquals(neuralQueryBuilder1.hashCode(), neuralQueryBuilder5.hashCode());
+        assertNotEquals(neuralQueryBuilder_baseline, neuralQueryBuilder_diffQueryText);
+        assertNotEquals(neuralQueryBuilder_baseline.hashCode(), neuralQueryBuilder_diffQueryText.hashCode());
 
-        assertNotEquals(neuralQueryBuilder1, neuralQueryBuilder6);
-        assertNotEquals(neuralQueryBuilder1.hashCode(), neuralQueryBuilder6.hashCode());
+        assertNotEquals(neuralQueryBuilder_baseline, neuralQueryBuilder_diffModelId);
+        assertNotEquals(neuralQueryBuilder_baseline.hashCode(), neuralQueryBuilder_diffModelId.hashCode());
 
-        assertNotEquals(neuralQueryBuilder1, neuralQueryBuilder7);
-        assertNotEquals(neuralQueryBuilder1.hashCode(), neuralQueryBuilder7.hashCode());
+        assertNotEquals(neuralQueryBuilder_baseline, neuralQueryBuilder_diffK);
+        assertNotEquals(neuralQueryBuilder_baseline.hashCode(), neuralQueryBuilder_diffK.hashCode());
 
-        assertNotEquals(neuralQueryBuilder1, neuralQueryBuilder8);
-        assertNotEquals(neuralQueryBuilder1.hashCode(), neuralQueryBuilder8.hashCode());
+        assertNotEquals(neuralQueryBuilder_baseline, neuralQueryBuilder_diffBoost);
+        assertNotEquals(neuralQueryBuilder_baseline.hashCode(), neuralQueryBuilder_diffBoost.hashCode());
 
-        assertNotEquals(neuralQueryBuilder1, neuralQueryBuilder9);
-        assertNotEquals(neuralQueryBuilder1.hashCode(), neuralQueryBuilder9.hashCode());
+        assertNotEquals(neuralQueryBuilder_baseline, neuralQueryBuilder_diffQueryName);
+        assertNotEquals(neuralQueryBuilder_baseline.hashCode(), neuralQueryBuilder_diffQueryName.hashCode());
     }
 }

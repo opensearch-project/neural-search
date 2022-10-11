@@ -9,6 +9,8 @@ import java.io.IOException;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.experimental.Accessors;
 import lombok.extern.log4j.Log4j2;
 
 import org.apache.commons.lang.builder.EqualsBuilder;
@@ -24,6 +26,8 @@ import org.opensearch.index.mapper.NumberFieldMapper;
 import org.opensearch.index.query.AbstractQueryBuilder;
 import org.opensearch.index.query.QueryShardContext;
 
+import com.google.common.annotations.VisibleForTesting;
+
 /**
  * NeuralQueryBuilder is responsible for producing "neural" query types. A "neural" query type is a wrapper around a
  * k-NN vector query. It uses a ML language model to produce a dense vector from a query string that is then used as
@@ -32,65 +36,28 @@ import org.opensearch.index.query.QueryShardContext;
 
 @Log4j2
 @Getter
+@Setter
+@Accessors(chain = true, fluent = true)
 @NoArgsConstructor
 public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder> {
 
     public static final String NAME = "neural";
 
+    @VisibleForTesting
     static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
 
+    @VisibleForTesting
     static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
 
+    @VisibleForTesting
     static final ParseField K_FIELD = new ParseField("k");
+
+    private static int DEFAULT_K = 10;
 
     private String fieldName;
     private String queryText;
     private String modelId;
-    private int k;
-
-    /**
-     * Set the fieldName this query will be executed against
-     *
-     * @param fieldName name of k-NN vector field that query will be executed against
-     * @return this
-     */
-    public NeuralQueryBuilder fieldName(String fieldName) {
-        this.fieldName = fieldName;
-        return this;
-    }
-
-    /**
-     * Set the queryText that will be translated into the dense query vector used for k-NN search.
-     *
-     * @param queryText Text of a query that should be translated to a dense vector
-     * @return this
-     */
-    public NeuralQueryBuilder queryText(String queryText) {
-        this.queryText = queryText;
-        return this;
-    }
-
-    /**
-     * Set the modelId that should produce the dense query vector
-     *
-     * @param modelId ID of model to produce query vector
-     * @return this
-     */
-    public NeuralQueryBuilder modelId(String modelId) {
-        this.modelId = modelId;
-        return this;
-    }
-
-    /**
-     * Set the number of neighbors that should be retrieved during k-NN search
-     *
-     * @param k number of neighbors to be retrieved in k-NN query
-     * @return this
-     */
-    public NeuralQueryBuilder k(int k) {
-        this.k = k;
-        return this;
-    }
+    private int k = DEFAULT_K;
 
     /**
      * Constructor from stream input
@@ -103,7 +70,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         this.fieldName = in.readString();
         this.queryText = in.readString();
         this.modelId = in.readString();
-        this.k = in.readInt();
+        this.k = in.readVInt();
     }
 
     @Override
@@ -111,7 +78,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         out.writeString(this.fieldName);
         out.writeString(this.queryText);
         out.writeString(this.modelId);
-        out.writeInt(this.k);
+        out.writeVInt(this.k);
     }
 
     @Override
@@ -157,11 +124,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         if (parser.currentToken() != XContentParser.Token.END_OBJECT) {
             throw new ParsingException(parser.getTokenLocation(), "Token must be END_OBJECT");
         }
-
-        requireValue(neuralQueryBuilder.getQueryText(), "Query text must be provided for neural query");
-        requireValue(neuralQueryBuilder.getFieldName(), "Field name must be provided for neural query");
-        requireValue(neuralQueryBuilder.getModelId(), "Model ID must be provided for neural query");
-        requireValue(neuralQueryBuilder.getK(), "K must be provided for neural query");
+        requireValue(neuralQueryBuilder.queryText(), "Query text must be provided for neural query");
+        requireValue(neuralQueryBuilder.fieldName(), "Field name must be provided for neural query");
+        requireValue(neuralQueryBuilder.modelId(), "Model ID must be provided for neural query");
 
         return neuralQueryBuilder;
     }
@@ -199,7 +164,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     }
 
     @Override
-    protected Query doToQuery(QueryShardContext queryShardContext) throws IOException {
+    protected Query doToQuery(QueryShardContext queryShardContext) {
+        // TODO Implement logic to build KNNQuery in this method
         return null;
     }
 
