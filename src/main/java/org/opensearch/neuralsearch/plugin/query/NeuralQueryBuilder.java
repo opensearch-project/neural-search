@@ -124,12 +124,13 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         if (parser.currentToken() != XContentParser.Token.END_OBJECT) {
             throw new ParsingException(
                 parser.getTokenLocation(),
-                String.format(
-                    "[%s] query doesn't support multiple fields, found [%s] and [%s]",
-                    NAME,
-                    neuralQueryBuilder.fieldName(),
-                    parser.currentName()
-                )
+                "["
+                    + NAME
+                    + "] query doesn't support multiple fields, found ["
+                    + neuralQueryBuilder.fieldName()
+                    + "] and ["
+                    + parser.currentName()
+                    + "]"
             );
         }
         requireValue(neuralQueryBuilder.queryText(), "Query text must be provided for neural query");
