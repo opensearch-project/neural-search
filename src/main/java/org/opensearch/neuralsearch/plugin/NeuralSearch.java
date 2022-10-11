@@ -13,7 +13,6 @@ import java.util.function.Supplier;
 import org.opensearch.action.ActionRequest;
 import org.opensearch.action.ActionResponse;
 import org.opensearch.client.Client;
-import org.opensearch.client.node.NodeClient;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.io.stream.NamedWriteableRegistry;
@@ -52,9 +51,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin {
         final IndexNameExpressionResolver indexNameExpressionResolver,
         final Supplier<RepositoriesService> repositoriesServiceSupplier
     ) {
-        final MachineLearningNodeClient machineLearningNodeClient = new MachineLearningNodeClient(
-            new NodeClient(environment.settings(), threadPool)
-        );
+        final MachineLearningNodeClient machineLearningNodeClient = new MachineLearningNodeClient(client);
         final MLCommonsClientAccessor clientAccessor = new MLCommonsClientAccessor(machineLearningNodeClient);
         return List.of(clientAccessor);
     }
