@@ -74,7 +74,7 @@ public class MLCommonsClientAccessor {
     ) {
         final ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
         final MLInputDataset inputDataset = new TextDocsInputDataSet(inputText, modelResultFilter);
-        final MLInput mlInput = new MLInput(FunctionName.CUSTOM, null, inputDataset, MLModelTaskType.TEXT_EMBEDDING);
+        final MLInput mlInput = new MLInput(FunctionName.TEXT_EMBEDDING, null, inputDataset, MLModelTaskType.TEXT_EMBEDDING);
         final List<List<Float>> vector = new ArrayList<>();
 
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
