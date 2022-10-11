@@ -52,7 +52,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     @VisibleForTesting
     static final ParseField K_FIELD = new ParseField("k");
 
-    private static int DEFAULT_K = 10;
+    private static final int DEFAULT_K = 10;
 
     private String fieldName;
     private String queryText;
