@@ -122,7 +122,15 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         parseQueryParams(parser, neuralQueryBuilder);
         parser.nextToken();
         if (parser.currentToken() != XContentParser.Token.END_OBJECT) {
-            throw new ParsingException(parser.getTokenLocation(), "Token must be END_OBJECT");
+            throw new ParsingException(
+                parser.getTokenLocation(),
+                String.format(
+                    "[%s] query doesn't support multiple fields, found [%s] and [%s]",
+                    NAME,
+                    neuralQueryBuilder.fieldName(),
+                    parser.currentName()
+                )
+            );
         }
         requireValue(neuralQueryBuilder.queryText(), "Query text must be provided for neural query");
         requireValue(neuralQueryBuilder.fieldName(), "Field name must be provided for neural query");
