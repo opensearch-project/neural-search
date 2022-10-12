@@ -1,0 +1,13 @@
+{
+  "title": "This is a good day",
+  "description": "daily logging",
+  "favor_list": [
+    "test",
+    null,
+    "mock"
+  ],
+  "favorites": {
+    "game": "overwatch",
+    "movie": null
+  }
+}

@@ -136,6 +136,17 @@ dependencies {
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-knn', version: "${opensearch_build}"
     api fileTree(dir: knnJarDirectory, include: '*.jar')
     api group: 'org.opensearch', name:'opensearch-ml-client', version: "${opensearch_build}"
+
+    implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.10'
+    testImplementation group: 'commons-io', name: 'commons-io', version: '2.11.0'
+    testImplementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.1.2'
+    testImplementation group: 'com.fasterxml.jackson.core', name: 'jackson-core', version: '2.13.3'
+    testImplementation group: 'com.fasterxml.jackson.core', name: 'jackson-annotations', version: '2.1.2'
+    /**Power mock**/
+    testImplementation "org.powermock:powermock-core:1.7.3"
+    testImplementation "org.powermock:powermock-module-junit4:1.7.3"
+    testImplementation "org.powermock:powermock-api-mockito2:1.7.3"
+    /**End of power mock **/
 }
 
 // From maven, we can get the k-NN plugin as a zip. In order to add the jar to the classpath, we need to unzip the

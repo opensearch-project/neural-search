@@ -1,0 +1,23 @@
+{
+  "favorites": {
+    "favorite.movie": [
+      "The Matrix",
+      null,
+      "The Lord of the Rings"
+    ],
+    "favorite.games": {
+      "adventure": {
+        "with.action": [
+          "jojo world",
+          null
+        ],
+        "with.reaction": "overwatch"
+      },
+      "puzzle": {
+        "maze": "zelda",
+        "card": "hearthstone"
+      }
+    },
+    "favorite.songs": "In The Name Of Father"
+  }
+}

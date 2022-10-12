@@ -1,0 +1,1 @@
+{"favorites":{"favorite.movie.knn":[1.234,2.354],"favorite.games":{"adventure":{"with.action.knn":[3.234,4.354],"with.reaction.knn":[5.234,6.354]},"puzzle":{"maze.knn":[7.234,8.354],"card.knn":[9.234,10.354]}},"favorite.songs.knn":[11.234,12.354]}}

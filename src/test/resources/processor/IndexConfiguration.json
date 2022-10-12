@@ -1,0 +1,73 @@
+{
+  "settings": {
+    "index": {
+      "knn": true,
+      "knn.algo_param.ef_search": 100,
+      "refresh_interval": "30s",
+      "default_pipeline": "%s"
+    },
+    "number_of_shards": 1,
+    "number_of_replicas": 0
+  },
+  "mappings": {
+    "properties": {
+      "title_knn": {
+        "type": "knn_vector",
+        "dimension": 384,
+        "method": {
+          "name": "hnsw",
+          "space_type": "l2",
+          "engine": "nmslib",
+          "parameters": {
+            "ef_construction": 128,
+            "m": 24
+          }
+        }
+      },
+      "favorites.game_knn": {
+        "type": "knn_vector",
+        "dimension": 384,
+        "method": {
+          "name": "hnsw",
+          "space_type": "l2",
+          "engine": "nmslib",
+          "parameters": {
+            "ef_construction": 128,
+            "m": 24
+          }
+        }
+      },
+      "favorites.movie_knn": {
+        "type": "knn_vector",
+        "dimension": 384,
+        "method": {
+          "name": "hnsw",
+          "space_type": "l2",
+          "engine": "nmslib",
+          "parameters": {
+            "ef_construction": 128,
+            "m": 24
+          }
+        }
+      },
+      "favor_list_knn": {
+        "type": "nested",
+        "properties": {
+          "knn": {
+            "type": "knn_vector",
+            "dimension": 384,
+            "method": {
+              "name": "hnsw",
+              "space_type": "l2",
+              "engine": "nmslib",
+              "parameters": {
+                "ef_construction": 128,
+                "m": 24
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

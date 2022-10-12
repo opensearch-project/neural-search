@@ -1,0 +1,16 @@
+{
+  "favorites": {
+    "favorite.movie": "favorite.movie.knn",
+    "favorite.games": {
+      "adventure": {
+        "with.action": "with.action.knn",
+        "with.reaction": "with.reaction.knn"
+      },
+      "puzzle": {
+        "maze": "maze.knn",
+        "card": "card.knn"
+      }
+    },
+    "favorite.songs": "favorite.songs.knn"
+  }
+}
