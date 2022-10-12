@@ -5,10 +5,12 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
+import static org.mockito.Mockito.mock;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.*;
+
 import org.apache.commons.io.FileUtils;
 import org.junit.Test;
 import org.opensearch.client.Client;
@@ -16,11 +18,10 @@ import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.Processor;
 import org.opensearch.test.OpenSearchTestCase;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.*;
-
-import static org.mockito.Mockito.mock;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 
 public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
 
@@ -243,13 +244,14 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
 
     private Map<String, Object> createConfigMap(String configFile) throws IOException {
         String configuration = FileUtils.readFileToString(new File(classLoader.getResource(configFile).getFile()), "utf-8");
-        return objectMapper.readValue(configuration, new TypeReference<HashMap<String, Object>>() {});
+        return objectMapper.readValue(configuration, new TypeReference<HashMap<String, Object>>() {
+        });
     }
 
     private IngestDocument createIngestDocument(String ingestFile) throws IOException {
         String sourceAndMetadataMap = FileUtils.readFileToString(new File(classLoader.getResource(ingestFile).getFile()), "utf-8");
-        Map<String, Object> sourceAndMetadata =
-            objectMapper.readValue(sourceAndMetadataMap, new TypeReference<HashMap<String, Object>>() {});
+        Map<String, Object> sourceAndMetadata = objectMapper.readValue(sourceAndMetadataMap, new TypeReference<HashMap<String, Object>>() {
+        });
         return new IngestDocument(sourceAndMetadata, new HashMap<>());
     }
 }

@@ -5,9 +5,14 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableMap;
+import static org.opensearch.ingest.ConfigurationUtils.readOptionalMap;
+import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
+
+import java.util.*;
+import java.util.function.Consumer;
+
 import lombok.extern.log4j.Log4j2;
+
 import org.apache.commons.lang3.StringUtils;
 import org.opensearch.action.ActionListener;
 import org.opensearch.client.Client;
@@ -18,11 +23,8 @@ import org.opensearch.ingest.Processor;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
-import java.util.*;
-import java.util.function.Consumer;
-
-import static org.opensearch.ingest.ConfigurationUtils.readOptionalMap;
-import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
 
 @Log4j2
 public class TextEmbeddingProcessor extends AbstractProcessor {
@@ -59,8 +61,10 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
         validateEmbeddingFieldsType(ingestDocument, fieldMap);
         Map<String, Object> knnMap = buildKnnMap(ingestDocument, fieldMap);
 
-        ActionListener<List<List<Float>>> internalListener =
-            ActionListener.wrap(responseConsumer(ingestDocument, knnMap), exceptionConsumer());
+        ActionListener<List<List<Float>>> internalListener = ActionListener.wrap(
+            responseConsumer(ingestDocument, knnMap),
+            exceptionConsumer()
+        );
 
         mlCommonsClientAccessor.inferenceSentences(this.modelId, buildMLInput(knnMap), internalListener);
         return ingestDocument;
@@ -103,8 +107,7 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
         } else if (value instanceof List) {
             ((List<String>) value).stream().filter(StringUtils::isNotBlank).forEach(texts::add);
         } else {
-            if (value == null || StringUtils.isBlank(value.toString()))
-                return;
+            if (value == null || StringUtils.isBlank(value.toString())) return;
             texts.add(value.toString());
         }
     }
@@ -129,10 +132,12 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
 
     @SuppressWarnings({ "unchecked" })
     private void processConfiguredMapType(
-        String parentKey, Object targetKey, Map<String, Object> sourceAndMetadataMap, Map<String, Object> treeRes
+        String parentKey,
+        Object targetKey,
+        Map<String, Object> sourceAndMetadataMap,
+        Map<String, Object> treeRes
     ) {
-        if (targetKey == null || sourceAndMetadataMap == null)
-            return;
+        if (targetKey == null || sourceAndMetadataMap == null) return;
         if (targetKey instanceof Map) {
             Map<String, Object> next = new LinkedHashMap<>();
             for (Map.Entry<String, Object> entry : ((Map<String, Object>) targetKey).entrySet()) {
@@ -148,7 +153,9 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
     @SuppressWarnings({ "unchecked" })
     @VisibleForTesting
     Map<String, Object> buildVectorOutput(
-        Map<String, Object> knnMap, List<List<Float>> modelTensorList, Map<String, Object> sourceAndMetadataMap
+        Map<String, Object> knnMap,
+        List<List<Float>> modelTensorList,
+        Map<String, Object> sourceAndMetadataMap
     ) {
         IndexWrapper indexWrapper = new IndexWrapper(0);
         Map<String, Object> result = new LinkedHashMap<>();
@@ -175,8 +182,7 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
         IndexWrapper indexWrapper,
         Map<String, Object> sourceAndMetadataMap
     ) {
-        if (targetKey == null || sourceAndMetadataMap == null || value == null)
-            return;
+        if (targetKey == null || sourceAndMetadataMap == null || value == null) return;
         if (value instanceof Map) {
             for (Map.Entry<String, Object> entry : ((Map<String, Object>) value).entrySet()) {
                 processMapTypeVectorOutput(
@@ -195,7 +201,9 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
     }
 
     private List<Map<String, List<Float>>> processListOut(
-        List<String> value, List<List<Float>> modelTensorList, IndexWrapper indexWrapper
+        List<String> value,
+        List<List<Float>> modelTensorList,
+        IndexWrapper indexWrapper
     ) {
         List<Map<String, List<Float>>> numbers = new ArrayList<>();
         for (String strValue : value) {
@@ -242,11 +250,16 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
 
         private final Client client;
 
-        public Factory(Client client) {this.client = client;}
+        public Factory(Client client) {
+            this.client = client;
+        }
 
         @Override
         public TextEmbeddingProcessor create(
-            Map<String, Processor.Factory> registry, String processorTag, String description, Map<String, Object> config
+            Map<String, Processor.Factory> registry,
+            String processorTag,
+            String description,
+            Map<String, Object> config
         ) throws Exception {
             String modelId = readStringProperty(TYPE, processorTag, config, MODEL_ID_FIELD);
             Map<String, Object> filedMap = readOptionalMap(TYPE, processorTag, config, FIELD_MAP_FIELD);

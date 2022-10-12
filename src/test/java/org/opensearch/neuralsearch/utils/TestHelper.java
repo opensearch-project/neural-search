@@ -5,7 +5,20 @@
 
 package org.opensearch.neuralsearch.utils;
 
-import com.google.common.collect.ImmutableMap;
+import static org.apache.http.entity.ContentType.APPLICATION_JSON;
+import static org.junit.Assert.assertEquals;
+import static org.opensearch.cluster.node.DiscoveryNodeRole.CLUSTER_MANAGER_ROLE;
+import static org.opensearch.cluster.node.DiscoveryNodeRole.DATA_ROLE;
+import static org.opensearch.ml.common.CommonValue.ML_MODEL_INDEX;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.InetAddress;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.entity.ContentType;
@@ -38,19 +51,7 @@ import org.opensearch.rest.RestStatus;
 import org.opensearch.search.SearchModule;
 import org.opensearch.test.rest.FakeRestRequest;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.InetAddress;
-import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.apache.http.entity.ContentType.APPLICATION_JSON;
-import static org.junit.Assert.assertEquals;
-import static org.opensearch.cluster.node.DiscoveryNodeRole.CLUSTER_MANAGER_ROLE;
-import static org.opensearch.cluster.node.DiscoveryNodeRole.DATA_ROLE;
-import static org.opensearch.ml.common.CommonValue.ML_MODEL_INDEX;
+import com.google.common.collect.ImmutableMap;
 
 public class TestHelper {
 
@@ -90,14 +91,24 @@ public class TestHelper {
     }
 
     public static Response makeRequest(
-        RestClient client, String method, String endpoint, Map<String, String> params, String jsonEntity, List<Header> headers
+        RestClient client,
+        String method,
+        String endpoint,
+        Map<String, String> params,
+        String jsonEntity,
+        List<Header> headers
     ) throws IOException {
         HttpEntity httpEntity = Strings.isBlank(jsonEntity) ? null : new NStringEntity(jsonEntity, ContentType.APPLICATION_JSON);
         return makeRequest(client, method, endpoint, params, httpEntity, headers);
     }
 
     public static Response makeRequest(
-        RestClient client, String method, String endpoint, Map<String, String> params, HttpEntity entity, List<Header> headers
+        RestClient client,
+        String method,
+        String endpoint,
+        Map<String, String> params,
+        HttpEntity entity,
+        List<Header> headers
     ) throws IOException {
         return makeRequest(client, method, endpoint, params, entity, headers, false);
     }
@@ -158,8 +169,8 @@ public class TestHelper {
     }
 
     public static RestRequest getStatsRestRequest(String nodeId, String stat) {
-        RestRequest request =
-            new FakeRestRequest.Builder(getXContentRegistry()).withParams(ImmutableMap.of("nodeId", nodeId, "stat", stat)).build();
+        RestRequest request = new FakeRestRequest.Builder(getXContentRegistry()).withParams(ImmutableMap.of("nodeId", nodeId, "stat", stat))
+            .build();
         return request;
     }
 
@@ -199,8 +210,7 @@ public class TestHelper {
         }
         discoBuilder.localNodeId(localNode.getId());
 
-        Settings indexSettings = Settings
-            .builder()
+        Settings indexSettings = Settings.builder()
             .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
             .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
             .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
@@ -208,8 +218,9 @@ public class TestHelper {
         final Settings.Builder existingSettings = Settings.builder().put(indexSettings).put(IndexMetadata.SETTING_INDEX_UUID, "test2UUID");
         IndexMetadata indexMetaData = IndexMetadata.builder(indexName).settings(existingSettings).putMapping(mapping).build();
 
-        final ImmutableOpenMap<String, IndexMetadata> indices =
-            ImmutableOpenMap.<String, IndexMetadata>builder().fPut(indexName, indexMetaData).build();
+        final ImmutableOpenMap<String, IndexMetadata> indices = ImmutableOpenMap.<String, IndexMetadata>builder()
+            .fPut(indexName, indexMetaData)
+            .build();
         ClusterState clusterState = ClusterState.builder(name).metadata(Metadata.builder().indices(indices).build()).build();
 
         return clusterState;
@@ -227,14 +238,16 @@ public class TestHelper {
         List<DiscoveryNode> allNodes = new ArrayList<>();
         allNodes.add(clusterManagerNode);
         for (int i = 1; i <= numDataNodes - 1; i++) {
-            allNodes.add(new DiscoveryNode(
-                "foo" + i,
-                "foo" + i,
-                new TransportAddress(InetAddress.getLoopbackAddress(), 9300 + i),
-                Collections.emptyMap(),
-                Collections.singleton(DATA_ROLE),
-                Version.CURRENT
-            ));
+            allNodes.add(
+                new DiscoveryNode(
+                    "foo" + i,
+                    "foo" + i,
+                    new TransportAddress(InetAddress.getLoopbackAddress(), 9300 + i),
+                    Collections.emptyMap(),
+                    Collections.singleton(DATA_ROLE),
+                    Version.CURRENT
+                )
+            );
         }
         return state(new ClusterName("test"), indexName, mapping, clusterManagerNode, clusterManagerNode, allNodes);
     }
@@ -249,17 +262,21 @@ public class TestHelper {
             roleSet,
             Version.CURRENT
         );
-        Metadata metadata = new Metadata.Builder().indices(ImmutableOpenMap.<String, IndexMetadata>builder().fPut(
-            ML_MODEL_INDEX,
-            IndexMetadata
-                .builder("test")
-                .settings(Settings
-                    .builder()
-                    .put("index.number_of_shards", 1)
-                    .put("index.number_of_replicas", 1)
-                    .put("index.version.created", Version.CURRENT.id))
+        Metadata metadata = new Metadata.Builder().indices(
+            ImmutableOpenMap.<String, IndexMetadata>builder()
+                .fPut(
+                    ML_MODEL_INDEX,
+                    IndexMetadata.builder("test")
+                        .settings(
+                            Settings.builder()
+                                .put("index.number_of_shards", 1)
+                                .put("index.number_of_replicas", 1)
+                                .put("index.version.created", Version.CURRENT.id)
+                        )
+                        .build()
+                )
                 .build()
-        ).build()).build();
+        ).build();
         return new ClusterState(
             new ClusterName("test cluster"),
             123l,

@@ -5,9 +5,10 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.collect.ImmutableList;
+import java.io.File;
+import java.io.IOException;
+import java.util.function.Predicate;
+
 import org.apache.commons.io.FileUtils;
 import org.apache.http.HttpHeaders;
 import org.apache.http.message.BasicHeader;
@@ -16,9 +17,9 @@ import org.opensearch.client.Response;
 import org.opensearch.neuralsearch.utils.TestHelper;
 import org.opensearch.test.rest.OpenSearchRestTestCase;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.function.Predicate;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.collect.ImmutableList;
 
 public class TextEmbeddingProcessorIT extends OpenSearchRestTestCase {
 
@@ -44,9 +45,9 @@ public class TextEmbeddingProcessorIT extends OpenSearchRestTestCase {
             "POST",
             "/_plugins/_ml/models/_upload",
             null,
-            TestHelper.toHttpEntity(FileUtils.readFileToString(new File(classLoader
-                .getResource("processor/UploadModelRequestBody.json")
-                .getFile()), "utf-8")),
+            TestHelper.toHttpEntity(
+                FileUtils.readFileToString(new File(classLoader.getResource("processor/UploadModelRequestBody.json").getFile()), "utf-8")
+            ),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
         JsonNode uploadResJson = objectMapper.readTree(EntityUtils.toString(uploadResponse.getEntity()));
@@ -91,9 +92,15 @@ public class TextEmbeddingProcessorIT extends OpenSearchRestTestCase {
             "PUT",
             "/_ingest/pipeline/" + pipelineName,
             null,
-            TestHelper.toHttpEntity(String.format(FileUtils.readFileToString(new File(classLoader
-                .getResource("processor/PipelineConfiguration.json")
-                .getFile()), "utf-8"), modelId)),
+            TestHelper.toHttpEntity(
+                String.format(
+                    FileUtils.readFileToString(
+                        new File(classLoader.getResource("processor/PipelineConfiguration.json").getFile()),
+                        "utf-8"
+                    ),
+                    modelId
+                )
+            ),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
         JsonNode node = objectMapper.readTree(EntityUtils.toString(pipelineCreateResponse.getEntity()));
@@ -106,9 +113,12 @@ public class TextEmbeddingProcessorIT extends OpenSearchRestTestCase {
             "PUT",
             indexName,
             null,
-            TestHelper.toHttpEntity(String.format(FileUtils.readFileToString(new File(classLoader
-                .getResource("processor/IndexConfiguration.json")
-                .getFile()), "utf-8"), pipelineName)),
+            TestHelper.toHttpEntity(
+                String.format(
+                    FileUtils.readFileToString(new File(classLoader.getResource("processor/IndexConfiguration.json").getFile()), "utf-8"),
+                    pipelineName
+                )
+            ),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
         JsonNode node = objectMapper.readTree(EntityUtils.toString(response.getEntity()));
@@ -122,9 +132,9 @@ public class TextEmbeddingProcessorIT extends OpenSearchRestTestCase {
             "POST",
             indexName + "/_doc",
             null,
-            TestHelper.toHttpEntity(FileUtils.readFileToString(new File(classLoader.getResource("processor/IngestDocument.json").getFile()),
-                "utf-8"
-            )),
+            TestHelper.toHttpEntity(
+                FileUtils.readFileToString(new File(classLoader.getResource("processor/IngestDocument.json").getFile()), "utf-8")
+            ),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
         JsonNode node = objectMapper.readTree(EntityUtils.toString(response.getEntity()));
