@@ -1,0 +1,13 @@
+{
+  "name": "all-MiniLM-L6-v2",
+  "version": 1,
+  "model_format": "TORCH_SCRIPT",
+  "model_task_type": "text_embedding",
+  "model_config": {
+    "model_type": "bert",
+    "embedding_dimension": 384,
+    "framework_type": "sentence_transformers",
+    "all_config": "{\"architectures\":[\"BertModel\"],\"max_position_embeddings\":512,\"model_type\":\"bert\",\"num_attention_heads\":12,\"num_hidden_layers\":6}"
+  },
+  "url": "file://%s"
+}
