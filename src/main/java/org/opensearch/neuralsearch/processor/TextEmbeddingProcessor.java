@@ -10,13 +10,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ExecutionException;
+import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
 import lombok.extern.log4j.Log4j2;
 
 import org.apache.commons.lang3.StringUtils;
+import org.opensearch.action.ActionListener;
 import org.opensearch.env.Environment;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.ingest.AbstractProcessor;
@@ -80,17 +81,29 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
 
     @Override
     public IngestDocument execute(IngestDocument ingestDocument) {
-        validateEmbeddingFieldsValue(ingestDocument);
-        Map<String, Object> knnMap = buildMapWithKnnKeyAndOriginalValue(ingestDocument);
-        try {
-            List<List<Float>> vectors = mlCommonsClientAccessor.inferenceSentences(this.modelId, createInferenceList(knnMap));
-            appendVectorFieldsToDocument(ingestDocument, knnMap, vectors);
-        } catch (ExecutionException | InterruptedException e) {
-            log.error("Text embedding processor failed with exception: ", e);
-            throw new RuntimeException("Text embedding processor failed with exception", e);
-        }
-        log.debug("Text embedding completed, returning ingestDocument!");
         return ingestDocument;
+    }
+
+    /**
+     * When received a bulk indexing request, the pipeline will be executed in the <a href="https://github.com/opensearch-project/OpenSearch/blob/8fda187bb459757164cc80c91ca305d274ca2b53/server/src/main/java/org/opensearch/action/bulk/TransportBulkAction.java#L226">doInternalExecute</a> method
+     * Before the pipeline execution, the pipeline will be marked as resolved (means executed), and then this overriding method will be invoked when executing the text embedding processor.
+     * After the inference completes, the handler will invoke the doInternalExecute method again to run actual write operation.
+     * @param ingestDocument
+     * @param handler
+     */
+    @Override
+    public void execute(IngestDocument ingestDocument, BiConsumer<IngestDocument, Exception> handler) {
+        try {
+            validateEmbeddingFieldsValue(ingestDocument);
+            Map<String, Object> knnMap = buildMapWithKnnKeyAndOriginalValue(ingestDocument);
+            mlCommonsClientAccessor.inferenceSentences(this.modelId, createInferenceList(knnMap), ActionListener.wrap(x -> {
+                appendVectorFieldsToDocument(ingestDocument, knnMap, x);
+                handler.accept(ingestDocument, null);
+            }, e -> { handler.accept(null, e); }));
+        } catch (Exception e) {
+            handler.accept(null, e);
+        }
+
     }
 
     void appendVectorFieldsToDocument(IngestDocument ingestDocument, Map<String, Object> knnMap, List<List<Float>> vectors) {
