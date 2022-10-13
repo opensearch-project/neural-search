@@ -7,9 +7,13 @@ package org.opensearch.neuralsearch.common;
 
 import java.util.List;
 
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+
 /**
  * Utility class for working with vectors
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class VectorUtil {
 
     /**
