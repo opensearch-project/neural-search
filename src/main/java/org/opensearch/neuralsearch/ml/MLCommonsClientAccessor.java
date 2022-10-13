@@ -36,6 +36,33 @@ public class MLCommonsClientAccessor {
     private final MachineLearningNodeClient mlClient;
 
     /**
+     * Wrapper around {@link #inferenceSentences} that expected a single input text and produces a single floating
+     * point vector as a response.
+     *
+     * @param modelId {@link String}
+     * @param inputText {@link List} of {@link String} on which inference needs to happen
+     * @param listener {@link ActionListener} which will be called when prediction is completed or errored out
+     */
+    public void inferenceSentence(
+        @NonNull final String modelId,
+        @NonNull final String inputText,
+        @NonNull final ActionListener<List<Float>> listener
+    ) {
+        inferenceSentences(TARGET_RESPONSE_FILTERS, modelId, List.of(inputText), ActionListener.wrap(response -> {
+            if (response.size() != 1) {
+                listener.onFailure(
+                    new IllegalStateException(
+                        "Unexpected number of vectors produced. Expected 1 vector to be returned, but got [" + response.size() + "]"
+                    )
+                );
+                return;
+            }
+
+            listener.onResponse(response.get(0));
+        }, listener::onFailure));
+    }
+
+    /**
      * Abstraction to call predict function of api of MLClient with default targetResponse filters. It uses the
      * custom model provided as modelId and run the {@link MLModelTaskType#TEXT_EMBEDDING}. The return will be sent
      * using the actionListener which will have a {@link List} of {@link List} of {@link Float} in the order of
