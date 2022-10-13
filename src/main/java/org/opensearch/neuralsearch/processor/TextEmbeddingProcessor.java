@@ -5,25 +5,23 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import static org.opensearch.ingest.ConfigurationUtils.readOptionalMap;
-import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
-
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 
 import lombok.extern.log4j.Log4j2;
 
 import org.apache.commons.lang3.StringUtils;
-import org.opensearch.client.Client;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
-import org.opensearch.ingest.Processor;
-import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 
+/**
+ * Before querying with neural search, all the documents should be ingested in the form of embedded vectors. Leaving the embedding process
+ * to the user offline will raise the bar of use, thus we create this processor for user input document text embedding.
+ */
 @Log4j2
 public class TextEmbeddingProcessor extends AbstractProcessor {
 
@@ -39,19 +37,28 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
 
     private final MLCommonsClientAccessor mlCommonsClientAccessor;
 
-    public TextEmbeddingProcessor(String tag, String description, String modelId, Map<String, Object> fieldMap, Client client) {
+    public TextEmbeddingProcessor(
+        String tag,
+        String description,
+        String modelId,
+        Map<String, Object> fieldMap,
+        MLCommonsClientAccessor clientAccessor
+    ) {
         super(tag, description);
-        this.modelId = Objects.requireNonNull(modelId, "model_id is null, can not process it");
-        if (fieldMap == null || fieldMap.size() == 0 || checkEmbeddingConfigNotValid(fieldMap)) {
-            throw new IllegalArgumentException("filed_map is null, can not process it");
-        } else {
-            this.fieldMap = fieldMap;
-        }
-        this.mlCommonsClientAccessor = new MLCommonsClientAccessor(new MachineLearningNodeClient(client));
+        if (StringUtils.isBlank(modelId)) throw new IllegalArgumentException("model_id is null, can not process it");
+        if (fieldMap == null || fieldMap.size() == 0 || checkEmbeddingConfigNotValid(fieldMap)) throw new IllegalArgumentException(
+            "Unable to create the TextEmbedding processor as field_map is null or empty."
+        );
+
+        this.modelId = modelId;
+        this.fieldMap = fieldMap;
+        this.mlCommonsClientAccessor = clientAccessor;
     }
 
     private boolean checkEmbeddingConfigNotValid(Map<String, Object> fieldMap) {
-        return fieldMap.entrySet().stream().anyMatch(x -> StringUtils.isBlank(x.getKey()) || Objects.isNull(x.getValue()));
+        return fieldMap.entrySet()
+            .stream()
+            .anyMatch(x -> StringUtils.isBlank(x.getKey()) || Objects.isNull(x.getValue()) || StringUtils.isBlank(x.getValue().toString()));
     }
 
     @Override
@@ -79,28 +86,28 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
     @SuppressWarnings({ "unchecked" })
     private List<String> createInferenceList(Map<String, Object> knnMap) {
         List<String> texts = new LinkedList<>();
-        knnMap.entrySet().stream().filter(entry -> entry.getValue() != null).forEach(entry -> {
-            Object value = entry.getValue();
-            if (value instanceof List) {
-                ((List<String>) value).stream().filter(StringUtils::isNotBlank).forEach(texts::add);
-            } else if (value instanceof Map) {
-                processMapTypeInput(value, texts);
+        knnMap.entrySet().stream().filter(knnMapEntry -> knnMapEntry.getValue() != null).forEach(knnMapEntry -> {
+            Object sourceValue = knnMapEntry.getValue();
+            if (sourceValue instanceof List) {
+                ((List<String>) sourceValue).stream().filter(StringUtils::isNotBlank).forEach(texts::add);
+            } else if (sourceValue instanceof Map) {
+                processMapTypeInput(sourceValue, texts);
             } else {
-                texts.add(value.toString());
+                texts.add(sourceValue.toString());
             }
         });
         return texts;
     }
 
     @SuppressWarnings("unchecked")
-    private void processMapTypeInput(Object value, List<String> texts) {
-        if (value instanceof Map) {
-            ((Map<String, Object>) value).forEach((k, v) -> processMapTypeInput(v, texts));
-        } else if (value instanceof List) {
-            ((List<String>) value).stream().filter(StringUtils::isNotBlank).forEach(texts::add);
+    private void processMapTypeInput(Object sourceValue, List<String> texts) {
+        if (sourceValue instanceof Map) {
+            ((Map<String, Object>) sourceValue).forEach((k, v) -> processMapTypeInput(v, texts));
+        } else if (sourceValue instanceof List) {
+            ((List<String>) sourceValue).stream().filter(StringUtils::isNotBlank).forEach(texts::add);
         } else {
-            if (value == null || StringUtils.isBlank(value.toString())) return;
-            texts.add(value.toString());
+            if (sourceValue == null || StringUtils.isBlank(sourceValue.toString())) return;
+            texts.add(sourceValue.toString());
         }
     }
 
@@ -108,9 +115,9 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
     Map<String, Object> buildKnnMap(IngestDocument ingestDocument, Map<String, Object> fieldMap) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
         Map<String, Object> knnMap = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> entry : fieldMap.entrySet()) {
-            String originalKey = entry.getKey();
-            Object targetKey = entry.getValue();
+        for (Map.Entry<String, Object> fieldMapEntry : fieldMap.entrySet()) {
+            String originalKey = fieldMapEntry.getKey();
+            Object targetKey = fieldMapEntry.getValue();
             if (targetKey instanceof Map) {
                 Map<String, Object> treeRes = new LinkedHashMap<>();
                 processConfiguredMapType(originalKey, targetKey, sourceAndMetadataMap, treeRes);
@@ -125,19 +132,24 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
     @SuppressWarnings({ "unchecked" })
     private void processConfiguredMapType(
         String parentKey,
-        Object targetKey,
+        Object knnKey,
         Map<String, Object> sourceAndMetadataMap,
         Map<String, Object> treeRes
     ) {
-        if (targetKey == null || sourceAndMetadataMap == null) return;
-        if (targetKey instanceof Map) {
+        if (knnKey == null || sourceAndMetadataMap == null) return;
+        if (knnKey instanceof Map) {
             Map<String, Object> next = new LinkedHashMap<>();
-            for (Map.Entry<String, Object> entry : ((Map<String, Object>) targetKey).entrySet()) {
-                processConfiguredMapType(entry.getKey(), entry.getValue(), (Map<String, Object>) sourceAndMetadataMap.get(parentKey), next);
+            for (Map.Entry<String, Object> nestedFieldMapEntry : ((Map<String, Object>) knnKey).entrySet()) {
+                processConfiguredMapType(
+                    nestedFieldMapEntry.getKey(),
+                    nestedFieldMapEntry.getValue(),
+                    (Map<String, Object>) sourceAndMetadataMap.get(parentKey),
+                    next
+                );
             }
             treeRes.put(parentKey, next);
         } else {
-            String key = String.valueOf(targetKey);
+            String key = String.valueOf(knnKey);
             treeRes.put(key, sourceAndMetadataMap.get(parentKey));
         }
     }
@@ -151,16 +163,16 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
     ) {
         IndexWrapper indexWrapper = new IndexWrapper(0);
         Map<String, Object> result = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> entry : knnMap.entrySet()) {
-            String targetKey = entry.getKey();
-            Object value = entry.getValue();
-            if (value instanceof String && StringUtils.isNotBlank(value.toString())) {
+        for (Map.Entry<String, Object> knnMapEntry : knnMap.entrySet()) {
+            String knnKey = knnMapEntry.getKey();
+            Object sourceValue = knnMapEntry.getValue();
+            if (sourceValue instanceof String && StringUtils.isNotBlank(sourceValue.toString())) {
                 List<Float> modelTensor = modelTensorList.get(indexWrapper.index++);
-                result.put(targetKey, modelTensor);
-            } else if (value instanceof List) {
-                result.put(targetKey, processListOut((List<String>) value, modelTensorList, indexWrapper));
-            } else if (value instanceof Map) {
-                processMapTypeVectorOutput(targetKey, value, modelTensorList, indexWrapper, sourceAndMetadataMap);
+                result.put(knnKey, modelTensor);
+            } else if (sourceValue instanceof List) {
+                result.put(knnKey, processListOut((List<String>) sourceValue, modelTensorList, indexWrapper));
+            } else if (sourceValue instanceof Map) {
+                processMapTypeVectorOutput(knnKey, sourceValue, modelTensorList, indexWrapper, sourceAndMetadataMap);
             }
         }
         return result;
@@ -168,38 +180,38 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
 
     @SuppressWarnings({ "unchecked" })
     private void processMapTypeVectorOutput(
-        String targetKey,
-        Object value,
+        String knnKey,
+        Object sourceValue,
         List<List<Float>> modelTensorList,
         IndexWrapper indexWrapper,
         Map<String, Object> sourceAndMetadataMap
     ) {
-        if (targetKey == null || sourceAndMetadataMap == null || value == null) return;
-        if (value instanceof Map) {
-            for (Map.Entry<String, Object> entry : ((Map<String, Object>) value).entrySet()) {
+        if (knnKey == null || sourceAndMetadataMap == null || sourceValue == null) return;
+        if (sourceValue instanceof Map) {
+            for (Map.Entry<String, Object> inputNestedMapEntry : ((Map<String, Object>) sourceValue).entrySet()) {
                 processMapTypeVectorOutput(
-                    entry.getKey(),
-                    entry.getValue(),
+                    inputNestedMapEntry.getKey(),
+                    inputNestedMapEntry.getValue(),
                     modelTensorList,
                     indexWrapper,
-                    (Map<String, Object>) sourceAndMetadataMap.get(String.valueOf(targetKey))
+                    (Map<String, Object>) sourceAndMetadataMap.get(knnKey)
                 );
             }
-        } else if (value instanceof String) {
-            sourceAndMetadataMap.put(targetKey, modelTensorList.get(indexWrapper.index++));
-        } else if (value instanceof List) {
-            sourceAndMetadataMap.put(targetKey, processListOut((List<String>) value, modelTensorList, indexWrapper));
+        } else if (sourceValue instanceof String) {
+            sourceAndMetadataMap.put(knnKey, modelTensorList.get(indexWrapper.index++));
+        } else if (sourceValue instanceof List) {
+            sourceAndMetadataMap.put(knnKey, processListOut((List<String>) sourceValue, modelTensorList, indexWrapper));
         }
     }
 
     private List<Map<String, List<Float>>> processListOut(
-        List<String> value,
+        List<String> sourceValue,
         List<List<Float>> modelTensorList,
         IndexWrapper indexWrapper
     ) {
         List<Map<String, List<Float>>> numbers = new ArrayList<>();
-        for (String strValue : value) {
-            if (StringUtils.isNotBlank(strValue)) {
+        for (String strSourceValue : sourceValue) {
+            if (StringUtils.isNotBlank(strSourceValue)) {
                 numbers.add(ImmutableMap.of(LIST_TYPE_NESTED_MAP_KEY, modelTensorList.get(indexWrapper.index++)));
             }
         }
@@ -208,55 +220,34 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
 
     private static void validateEmbeddingFieldsType(IngestDocument ingestDocument, Map<String, Object> embeddingFields) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
-        for (Map.Entry<String, Object> entry : embeddingFields.entrySet()) {
-            Object obj = sourceAndMetadataMap.get(entry.getKey());
-            if (obj != null) {
-                String key = entry.getKey();
-                Class<?> clz = obj.getClass();
-                if (List.class.isAssignableFrom(clz) || Map.class.isAssignableFrom(clz)) {
-                    checkListElementsType(obj, key);
-                } else if (!String.class.isAssignableFrom(clz)) {
-                    throw new IllegalArgumentException("field [" + key + "] is neither string nor nested type, can not process it");
+        for (Map.Entry<String, Object> embeddingFieldsEntry : embeddingFields.entrySet()) {
+            Object sourceValue = sourceAndMetadataMap.get(embeddingFieldsEntry.getKey());
+            if (sourceValue != null) {
+                String sourceKey = embeddingFieldsEntry.getKey();
+                Class<?> sourceValueClass = sourceValue.getClass();
+                if (List.class.isAssignableFrom(sourceValueClass) || Map.class.isAssignableFrom(sourceValueClass)) {
+                    checkListElementsType(sourceKey, sourceValue);
+                } else if (!String.class.isAssignableFrom(sourceValueClass)) {
+                    throw new IllegalArgumentException("field [" + sourceKey + "] is neither string nor nested type, can not process it");
                 }
             }
         }
     }
 
     @SuppressWarnings({ "rawtypes", "unchecked" })
-    private static void checkListElementsType(Object obj, String key) {
-        if (List.class.isAssignableFrom(obj.getClass())) {
-            ((List) obj).stream().filter(Objects::nonNull).forEach(x -> checkListElementsType(x, key));
-        } else if (Map.class.isAssignableFrom(obj.getClass())) {
-            ((Map) obj).values().stream().filter(Objects::nonNull).forEach(x -> checkListElementsType(x, key));
-        } else if (!String.class.isAssignableFrom(obj.getClass())) {
-            throw new IllegalArgumentException("nested type field [" + key + "] has non-string type, can not process it");
+    private static void checkListElementsType(String sourceKey, Object sourceValue) {
+        if (List.class.isAssignableFrom(sourceValue.getClass())) {
+            ((List) sourceValue).stream().filter(Objects::nonNull).forEach(x -> checkListElementsType(sourceKey, x));
+        } else if (Map.class.isAssignableFrom(sourceValue.getClass())) {
+            ((Map) sourceValue).values().stream().filter(Objects::nonNull).forEach(x -> checkListElementsType(sourceKey, x));
+        } else if (!String.class.isAssignableFrom(sourceValue.getClass())) {
+            throw new IllegalArgumentException("nested type field [" + sourceKey + "] has non-string type, can not process it");
         }
     }
 
     @Override
     public String getType() {
         return TYPE;
-    }
-
-    public static final class Factory implements Processor.Factory {
-
-        private final Client client;
-
-        public Factory(Client client) {
-            this.client = client;
-        }
-
-        @Override
-        public TextEmbeddingProcessor create(
-            Map<String, Processor.Factory> registry,
-            String processorTag,
-            String description,
-            Map<String, Object> config
-        ) throws Exception {
-            String modelId = readStringProperty(TYPE, processorTag, config, MODEL_ID_FIELD);
-            Map<String, Object> filedMap = readOptionalMap(TYPE, processorTag, config, FIELD_MAP_FIELD);
-            return new TextEmbeddingProcessor(processorTag, description, modelId, filedMap, client);
-        }
     }
 
     /**

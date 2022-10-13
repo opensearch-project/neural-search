@@ -10,15 +10,14 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
-import org.opensearch.client.Client;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
 import org.opensearch.test.OpenSearchTestCase;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -29,7 +28,7 @@ import com.google.common.collect.ImmutableMap;
 public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
 
     private static final MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
-    private static final TextEmbeddingProcessor.Factory factory = new TextEmbeddingProcessor.Factory(mock(Client.class));
+    private static final TextEmbeddingProcessorFactory factory = new TextEmbeddingProcessorFactory(mlCommonsClientAccessor);
     private static final String processorTag = "mockTag";
     private static final String description = "mockDescription";
     private static final ObjectMapper objectMapper = new ObjectMapper();
@@ -44,9 +43,6 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
         config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1Mapped", "key2", "key2Mapped"));
         TextEmbeddingProcessor processor = factory.create(registry, processorTag, description, config);
-        Field mlCommonsClientAccessorField = processor.getClass().getDeclaredField("mlCommonsClientAccessor");
-        mlCommonsClientAccessorField.setAccessible(true);
-        mlCommonsClientAccessorField.set(processor, mlCommonsClientAccessor);
         when(mlCommonsClientAccessor.blockingInferenceSentences(anyString(), anyList())).thenReturn(vector);
         return processor;
     }
@@ -62,7 +58,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         try {
             factory.create(registry, processorTag, description, config);
         } catch (IllegalArgumentException e) {
-            assertEquals("filed_map is null, can not process it", e.getMessage());
+            assertEquals("Unable to create the TextEmbedding processor as field_map is null or empty.", e.getMessage());
         }
     }
 
@@ -73,7 +69,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         try {
             factory.create(registry, processorTag, description, config);
         } catch (IllegalArgumentException e) {
-            assertEquals("filed_map is null, can not process it", e.getMessage());
+            assertEquals("Unable to create the TextEmbedding processor as field_map is null or empty.", e.getMessage());
         }
     }
 
@@ -92,14 +88,20 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put("key1", "value1");
         sourceAndMetadata.put("key2", "value2");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
-        when(mlCommonsClientAccessor.blockingInferenceSentences(anyString(), anyList())).thenThrow(new InterruptedException());
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        MLCommonsClientAccessor accessor = mock(MLCommonsClientAccessor.class);
+        TextEmbeddingProcessorFactory textEmbeddingProcessorFactory = new TextEmbeddingProcessorFactory(accessor);
+
+        Map<String, Object> config = new HashMap<>();
+        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
+        config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1Mapped", "key2", "key2Mapped"));
+        TextEmbeddingProcessor processor = textEmbeddingProcessorFactory.create(registry, processorTag, description, config);
+        when(accessor.blockingInferenceSentences(anyString(), anyList())).thenThrow(new InterruptedException());
         try {
             processor.execute(ingestDocument);
         } catch (RuntimeException e) {
-            assertEquals("java.lang.InterruptedException", e.getMessage());
+            assertEquals("Text embedding processor failed with exception", e.getMessage());
         }
-
     }
 
     public void test_execute_List_type() throws Exception {

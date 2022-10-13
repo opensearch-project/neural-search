@@ -5,24 +5,27 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
-import java.util.function.Predicate;
 
 import org.apache.http.HttpHeaders;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
 import org.opensearch.client.Response;
+import org.opensearch.common.Strings;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.common.xcontent.XContentBuilder;
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.utils.TestHelper;
-import org.opensearch.test.rest.OpenSearchRestTestCase;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableList;
 
-public class TextEmbeddingProcessorIT extends OpenSearchRestTestCase {
+public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     private static final String indexName = "text_embedding_index";
 
@@ -35,56 +38,16 @@ public class TextEmbeddingProcessorIT extends OpenSearchRestTestCase {
     private static final Locale locale = Locale.getDefault();
 
     public void test_text_embedding_processor() throws Exception {
-        String modelId = uploadModel();
+        String modelId = uploadTextEmbeddingModel();
         loadModel(modelId);
         createPipelineProcessor(modelId);
-        createIndex();
+        createTextEmbeddingIndex();
         ingestDocument();
     }
 
-    private String uploadModel() throws Exception {
-        Response uploadResponse = TestHelper.makeRequest(
-            client(),
-            "POST",
-            "/_plugins/_ml/models/_upload",
-            null,
-            TestHelper.toHttpEntity(Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()))),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
-        );
-        JsonNode uploadResJson = objectMapper.readTree(EntityUtils.toString(uploadResponse.getEntity()));
-        String taskId = uploadResJson.get("task_id").asText();
-        assertNotNull(taskId);
-
-        JsonNode taskQueryResult = getTaskQueryResponse(taskId);
-        boolean isComplete = checkComplete(taskQueryResult);
-        while (!isComplete) {
-            taskQueryResult = getTaskQueryResponse(taskId);
-            isComplete = checkComplete(taskQueryResult);
-        }
-        String modelId = taskQueryResult.get("model_id").asText();
-        assertNotNull(modelId);
-        return modelId;
-    }
-
-    private void loadModel(String modelId) throws IOException {
-        Response uploadResponse = TestHelper.makeRequest(
-            client(),
-            "POST",
-            String.format(locale, "/_plugins/_ml/models/%s/_load", modelId),
-            null,
-            TestHelper.toHttpEntity(""),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
-        );
-        JsonNode uploadResJson = objectMapper.readTree(EntityUtils.toString(uploadResponse.getEntity()));
-        String taskId = uploadResJson.get("task_id").asText();
-        assertNotNull(taskId);
-
-        JsonNode taskQueryResult = getTaskQueryResponse(taskId);
-        boolean isComplete = checkComplete(taskQueryResult);
-        while (!isComplete) {
-            taskQueryResult = getTaskQueryResponse(taskId);
-            isComplete = checkComplete(taskQueryResult);
-        }
+    private String uploadTextEmbeddingModel() throws Exception {
+        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
+        return uploadModel(requestBody);
     }
 
     private void createPipelineProcessor(String modelId) throws Exception {
@@ -106,24 +69,27 @@ public class TextEmbeddingProcessorIT extends OpenSearchRestTestCase {
         assertTrue(node.get("acknowledged").asBoolean());
     }
 
-    private void createIndex() throws Exception {
-        Response response = TestHelper.makeRequest(
-            client(),
-            "PUT",
-            indexName,
-            null,
-            TestHelper.toHttpEntity(
-                String.format(
-                    locale,
-                    Files.readString(Path.of(classLoader.getResource("processor/IndexConfiguration.json").toURI())),
-                    pipelineName
-                )
-            ),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
-        );
-        JsonNode node = objectMapper.readTree(EntityUtils.toString(response.getEntity()));
-        assertTrue(node.get("acknowledged").asBoolean());
-        assertEquals(indexName, node.get("index").asText());
+    private void createTextEmbeddingIndex() throws Exception {
+        try (XContentBuilder builder = XContentFactory.jsonBuilder()) {
+            String settings = Strings.toString(
+                builder.startObject()
+                    .startObject("index")
+                    .field("knn", true)
+                    .field("knn.algo_param.ef_search", 100)
+                    .field("refresh_interval", "30s")
+                    .field("default_pipeline", pipelineName)
+                    .endObject()
+                    .field("number_of_shards", 1)
+                    .field("number_of_replicas", 0)
+                    .endObject()
+                    .endObject()
+            );
+            createIndex(
+                indexName,
+                Settings.builder().loadFromSource(settings, XContentType.JSON).build(),
+                Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI()))
+            );
+        }
     }
 
     private void ingestDocument() throws Exception {
@@ -137,23 +103,6 @@ public class TextEmbeddingProcessorIT extends OpenSearchRestTestCase {
         );
         JsonNode node = objectMapper.readTree(EntityUtils.toString(response.getEntity()));
         assertEquals("created", node.get("result").asText());
-    }
-
-    private JsonNode getTaskQueryResponse(String taskId) throws IOException {
-        Response taskQueryResponse = TestHelper.makeRequest(
-            client(),
-            "GET",
-            String.format(locale, "_plugins/_ml/tasks/%s", taskId),
-            null,
-            TestHelper.toHttpEntity(""),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
-        );
-        return objectMapper.readTree(EntityUtils.toString(taskQueryResponse.getEntity()));
-    }
-
-    private boolean checkComplete(JsonNode node) {
-        Predicate<JsonNode> predicate = x -> node.get("error") != null || "COMPLETED".equals(node.get("state").asText());
-        return predicate.test(node);
     }
 
 }

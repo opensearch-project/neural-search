@@ -25,6 +25,7 @@ import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.plugin.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
+import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
 import org.opensearch.neuralsearch.transport.MLPredictAction;
 import org.opensearch.neuralsearch.transport.MLPredictTransportAction;
 import org.opensearch.plugins.ActionPlugin;
@@ -78,6 +79,8 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     @Override
     public Map<String, Processor.Factory> getProcessors(Processor.Parameters parameters) {
-        return Collections.singletonMap(TextEmbeddingProcessor.TYPE, new TextEmbeddingProcessor.Factory(parameters.client));
+        final MachineLearningNodeClient machineLearningNodeClient = new MachineLearningNodeClient(parameters.client);
+        final MLCommonsClientAccessor clientAccessor = new MLCommonsClientAccessor(machineLearningNodeClient);
+        return Collections.singletonMap(TextEmbeddingProcessor.TYPE, new TextEmbeddingProcessorFactory(clientAccessor));
     }
 }
