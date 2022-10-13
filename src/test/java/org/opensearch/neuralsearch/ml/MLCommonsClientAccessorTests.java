@@ -5,17 +5,24 @@
 
 package org.opensearch.neuralsearch.ml;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 import org.junit.Before;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
+import org.opensearch.action.ActionFuture;
 import org.opensearch.action.ActionListener;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.input.MLInput;
@@ -26,6 +33,8 @@ import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
 import org.opensearch.neuralsearch.constants.TestCommonConstants;
 import org.opensearch.test.OpenSearchTestCase;
+
+import com.google.common.collect.ImmutableList;
 
 public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
@@ -93,6 +102,25 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         Mockito.verify(resultListener).onFailure(exception);
         Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    public void test_blockingInferenceSentences() throws ExecutionException, InterruptedException {
+        ActionFuture actionFuture = mock(ActionFuture.class);
+        when(client.predict(anyString(), any(MLInput.class))).thenReturn(actionFuture);
+        List<ModelTensors> tensorsList = new ArrayList<>();
+
+        List<ModelTensor> tensors = new ArrayList<>();
+        ModelTensor tensor = mock(ModelTensor.class);
+        when(tensor.getData()).thenReturn(TestCommonConstants.PREDICT_VECTOR_ARRAY);
+        tensors.add(tensor);
+
+        ModelTensors modelTensors = new ModelTensors(tensors);
+        tensorsList.add(modelTensors);
+
+        ModelTensorOutput mlOutput = new ModelTensorOutput(tensorsList);
+        when(actionFuture.get()).thenReturn(mlOutput);
+        List<List<Float>> result = accessor.blockingInferenceSentences("modelId", ImmutableList.of("mock"));
+        assertEquals(TestCommonConstants.PREDICT_VECTOR_ARRAY[0], result.get(0).get(0));
     }
 
     private ModelTensorOutput createModelTensorOutput(final Float[] output) {

@@ -5,11 +5,12 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Locale;
 import java.util.function.Predicate;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.http.HttpHeaders;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
@@ -31,7 +32,9 @@ public class TextEmbeddingProcessorIT extends OpenSearchRestTestCase {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    public void test_text_embedding_processor() throws IOException {
+    private static final Locale locale = Locale.getDefault();
+
+    public void test_text_embedding_processor() throws Exception {
         String modelId = uploadModel();
         loadModel(modelId);
         createPipelineProcessor(modelId);
@@ -39,15 +42,13 @@ public class TextEmbeddingProcessorIT extends OpenSearchRestTestCase {
         ingestDocument();
     }
 
-    private String uploadModel() throws IOException {
+    private String uploadModel() throws Exception {
         Response uploadResponse = TestHelper.makeRequest(
             client(),
             "POST",
             "/_plugins/_ml/models/_upload",
             null,
-            TestHelper.toHttpEntity(
-                FileUtils.readFileToString(new File(classLoader.getResource("processor/UploadModelRequestBody.json").getFile()), "utf-8")
-            ),
+            TestHelper.toHttpEntity(Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()))),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
         JsonNode uploadResJson = objectMapper.readTree(EntityUtils.toString(uploadResponse.getEntity()));
@@ -69,7 +70,7 @@ public class TextEmbeddingProcessorIT extends OpenSearchRestTestCase {
         Response uploadResponse = TestHelper.makeRequest(
             client(),
             "POST",
-            String.format("/_plugins/_ml/models/%s/_load", modelId),
+            String.format(locale, "/_plugins/_ml/models/%s/_load", modelId),
             null,
             TestHelper.toHttpEntity(""),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
@@ -86,7 +87,7 @@ public class TextEmbeddingProcessorIT extends OpenSearchRestTestCase {
         }
     }
 
-    private void createPipelineProcessor(String modelId) throws IOException {
+    private void createPipelineProcessor(String modelId) throws Exception {
         Response pipelineCreateResponse = TestHelper.makeRequest(
             client(),
             "PUT",
@@ -94,10 +95,8 @@ public class TextEmbeddingProcessorIT extends OpenSearchRestTestCase {
             null,
             TestHelper.toHttpEntity(
                 String.format(
-                    FileUtils.readFileToString(
-                        new File(classLoader.getResource("processor/PipelineConfiguration.json").getFile()),
-                        "utf-8"
-                    ),
+                    locale,
+                    Files.readString(Path.of(classLoader.getResource("processor/PipelineConfiguration.json").toURI())),
                     modelId
                 )
             ),
@@ -107,7 +106,7 @@ public class TextEmbeddingProcessorIT extends OpenSearchRestTestCase {
         assertTrue(node.get("acknowledged").asBoolean());
     }
 
-    private void createIndex() throws IOException {
+    private void createIndex() throws Exception {
         Response response = TestHelper.makeRequest(
             client(),
             "PUT",
@@ -115,7 +114,8 @@ public class TextEmbeddingProcessorIT extends OpenSearchRestTestCase {
             null,
             TestHelper.toHttpEntity(
                 String.format(
-                    FileUtils.readFileToString(new File(classLoader.getResource("processor/IndexConfiguration.json").getFile()), "utf-8"),
+                    locale,
+                    Files.readString(Path.of(classLoader.getResource("processor/IndexConfiguration.json").toURI())),
                     pipelineName
                 )
             ),
@@ -126,15 +126,13 @@ public class TextEmbeddingProcessorIT extends OpenSearchRestTestCase {
         assertEquals(indexName, node.get("index").asText());
     }
 
-    private void ingestDocument() throws IOException {
+    private void ingestDocument() throws Exception {
         Response response = TestHelper.makeRequest(
             client(),
             "POST",
             indexName + "/_doc",
             null,
-            TestHelper.toHttpEntity(
-                FileUtils.readFileToString(new File(classLoader.getResource("processor/IngestDocument.json").getFile()), "utf-8")
-            ),
+            TestHelper.toHttpEntity(Files.readString(Path.of(classLoader.getResource("processor/IngestDocument.json").toURI()))),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
         JsonNode node = objectMapper.readTree(EntityUtils.toString(response.getEntity()));
@@ -145,7 +143,7 @@ public class TextEmbeddingProcessorIT extends OpenSearchRestTestCase {
         Response taskQueryResponse = TestHelper.makeRequest(
             client(),
             "GET",
-            String.format("_plugins/_ml/tasks/%s", taskId),
+            String.format(locale, "_plugins/_ml/tasks/%s", taskId),
             null,
             TestHelper.toHttpEntity(""),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))

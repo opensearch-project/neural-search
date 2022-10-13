@@ -9,14 +9,12 @@ import static org.opensearch.ingest.ConfigurationUtils.readOptionalMap;
 import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
 
 import java.util.*;
-import java.util.function.Consumer;
+import java.util.concurrent.ExecutionException;
 
 import lombok.extern.log4j.Log4j2;
 
 import org.apache.commons.lang3.StringUtils;
-import org.opensearch.action.ActionListener;
 import org.opensearch.client.Client;
-import org.opensearch.common.CheckedConsumer;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.Processor;
@@ -60,28 +58,22 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
     public IngestDocument execute(IngestDocument ingestDocument) {
         validateEmbeddingFieldsType(ingestDocument, fieldMap);
         Map<String, Object> knnMap = buildKnnMap(ingestDocument, fieldMap);
-
-        ActionListener<List<List<Float>>> internalListener = ActionListener.wrap(
-            responseConsumer(ingestDocument, knnMap),
-            exceptionConsumer()
-        );
-
-        mlCommonsClientAccessor.inferenceSentences(this.modelId, createInferenceList(knnMap), internalListener);
+        try {
+            List<List<Float>> vectors = mlCommonsClientAccessor.blockingInferenceSentences(this.modelId, createInferenceList(knnMap));
+            processResponse(ingestDocument, knnMap, vectors);
+        } catch (ExecutionException | InterruptedException e) {
+            log.error("Text embedding processor failed with exception: " + e.getMessage(), e);
+            throw new RuntimeException("Text embedding processor failed with exception", e);
+        }
+        log.info("Text embedding completed, returning ingestDocument!");
         return ingestDocument;
     }
 
-    @VisibleForTesting
-    CheckedConsumer<List<List<Float>>, Exception> responseConsumer(IngestDocument ingestDocument, Map<String, Object> knnMap) {
-        return res -> {
-            Objects.requireNonNull(res, "embedding failed, inference returns null result!");
-            Map<String, Object> vectorOutput = buildVectorOutput(knnMap, res, ingestDocument.getSourceAndMetadata());
-            vectorOutput.forEach(ingestDocument::appendFieldValue);
-        };
-    }
-
-    @VisibleForTesting
-    Consumer<Exception> exceptionConsumer() {
-        return exception -> log.error("Text embedding processor failed with exception: " + exception.getMessage(), exception);
+    void processResponse(IngestDocument ingestDocument, Map<String, Object> knnMap, List<List<Float>> vectors) {
+        Objects.requireNonNull(vectors, "embedding failed, inference returns null result!");
+        log.info("Text embedding result fetched, starting build vector output!");
+        Map<String, Object> vectorOutput = buildVectorOutput(knnMap, vectors, ingestDocument.getSourceAndMetadata());
+        vectorOutput.forEach(ingestDocument::appendFieldValue);
     }
 
     @SuppressWarnings({ "unchecked" })
