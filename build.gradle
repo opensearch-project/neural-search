@@ -142,11 +142,6 @@ dependencies {
     testImplementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.1.2'
     testImplementation group: 'com.fasterxml.jackson.core', name: 'jackson-core', version: '2.13.3'
     testImplementation group: 'com.fasterxml.jackson.core', name: 'jackson-annotations', version: '2.1.2'
-    /**Power mock**/
-    testImplementation "org.powermock:powermock-core:1.7.3"
-    testImplementation "org.powermock:powermock-module-junit4:1.7.3"
-    testImplementation "org.powermock:powermock-api-mockito2:1.7.3"
-    /**End of power mock **/
 }
 
 // From maven, we can get the k-NN plugin as a zip. In order to add the jar to the classpath, we need to unzip the

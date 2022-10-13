@@ -66,14 +66,14 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
             exceptionConsumer()
         );
 
-        mlCommonsClientAccessor.inferenceSentences(this.modelId, buildMLInput(knnMap), internalListener);
+        mlCommonsClientAccessor.inferenceSentences(this.modelId, createInferenceList(knnMap), internalListener);
         return ingestDocument;
     }
 
     @VisibleForTesting
     CheckedConsumer<List<List<Float>>, Exception> responseConsumer(IngestDocument ingestDocument, Map<String, Object> knnMap) {
         return res -> {
-            Objects.requireNonNull(res, "embedding failed!");
+            Objects.requireNonNull(res, "embedding failed, inference returns null result!");
             Map<String, Object> vectorOutput = buildVectorOutput(knnMap, res, ingestDocument.getSourceAndMetadata());
             vectorOutput.forEach(ingestDocument::appendFieldValue);
         };
@@ -81,11 +81,11 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
 
     @VisibleForTesting
     Consumer<Exception> exceptionConsumer() {
-        return exception -> log.error(exception.getMessage(), exception);
+        return exception -> log.error("Text embedding processor failed with exception: " + exception.getMessage(), exception);
     }
 
     @SuppressWarnings({ "unchecked" })
-    private List<String> buildMLInput(Map<String, Object> knnMap) {
+    private List<String> createInferenceList(Map<String, Object> knnMap) {
         List<String> texts = new LinkedList<>();
         knnMap.entrySet().stream().filter(entry -> entry.getValue() != null).forEach(entry -> {
             Object value = entry.getValue();
@@ -267,6 +267,14 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
         }
     }
 
+    /**
+     * Since we need to build a {@link List<String>} as the input for text embedding, and the result type is {@link List<Float>} of {@link List},
+     * we need to map the result back to the input one by one with exactly order. For nested map type input, we're performing a pre-order
+     * traversal to extract the input strings, so when mapping back to the nested map, we still need a pre-order traversal to ensure the
+     * order. And we also need to ensure the index pointer goes forward in the recursive, so here the IndexWrapper is to store and increase
+     * the index pointer during the recursive.
+     * index: the index pointer of the text embedding result.
+     */
     static class IndexWrapper {
         private int index;
 
