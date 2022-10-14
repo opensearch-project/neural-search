@@ -58,6 +58,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     ) {
         final MachineLearningNodeClient machineLearningNodeClient = new MachineLearningNodeClient(client);
         final MLCommonsClientAccessor clientAccessor = new MLCommonsClientAccessor(machineLearningNodeClient);
+        NeuralQueryBuilder.initialize(clientAccessor);
         return List.of(clientAccessor);
     }
 

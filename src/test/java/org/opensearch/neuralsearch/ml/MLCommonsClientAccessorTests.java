@@ -41,6 +41,9 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     private ActionListener<List<List<Float>>> resultListener;
 
     @Mock
+    private ActionListener<List<Float>> singleSentenceResultListener;
+
+    @Mock
     private MachineLearningNodeClient client;
 
     @InjectMocks
@@ -49,6 +52,22 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     @Before
     public void setup() {
         MockitoAnnotations.openMocks(this);
+    }
+
+    public void testInferenceSentence_whenValidInput_thenSuccess() {
+        final List<Float> vector = new ArrayList<>(List.of(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createModelTensorOutput(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentence(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_LIST.get(0), singleSentenceResultListener);
+
+        Mockito.verify(client)
+            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        Mockito.verify(singleSentenceResultListener).onResponse(vector);
+        Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
     }
 
     public void testInferenceSentences_whenValidInputThenSuccess() {
