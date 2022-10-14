@@ -74,7 +74,7 @@ buildscript {
     ext {
         // as we don't have 3.0.0, 2.4.0 version for K-NN on darwin we need to keep OpenSearch version as 2.3 for now.
         // Github issue: https://github.com/opensearch-project/opensearch-build/issues/2662
-        opensearch_version = System.getProperty("opensearch.version", "2.3.0-SNAPSHOT")
+        opensearch_version = System.getProperty("opensearch.version", "2.4.0-SNAPSHOT")
         buildVersionQualifier = System.getProperty("build.version_qualifier", "")
         isSnapshot = "true" == System.getProperty("build.snapshot", "true")
         version_tokens = opensearch_version.tokenize('-')
