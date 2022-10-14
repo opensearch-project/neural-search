@@ -46,7 +46,7 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
     ) {
         super(tag, description);
         if (StringUtils.isBlank(modelId)) throw new IllegalArgumentException("model_id is null, can not process it");
-        if (fieldMap == null || fieldMap.size() == 0 || checkEmbeddingConfigNotValid(fieldMap)) throw new IllegalArgumentException(
+        if (fieldMap == null || fieldMap.size() == 0 || isEmbeddingConfigValid(fieldMap)) throw new IllegalArgumentException(
             "Unable to create the TextEmbedding processor as field_map is null or empty."
         );
 
@@ -55,7 +55,7 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
         this.mlCommonsClientAccessor = clientAccessor;
     }
 
-    private boolean checkEmbeddingConfigNotValid(Map<String, Object> fieldMap) {
+    private boolean isEmbeddingConfigValid(Map<String, Object> fieldMap) {
         return fieldMap.entrySet()
             .stream()
             .anyMatch(x -> StringUtils.isBlank(x.getKey()) || Objects.isNull(x.getValue()) || StringUtils.isBlank(x.getValue().toString()));
@@ -66,7 +66,7 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
         validateEmbeddingFieldsType(ingestDocument, fieldMap);
         Map<String, Object> knnMap = buildKnnMap(ingestDocument, fieldMap);
         try {
-            List<List<Float>> vectors = mlCommonsClientAccessor.blockingInferenceSentences(this.modelId, createInferenceList(knnMap));
+            List<List<Float>> vectors = mlCommonsClientAccessor.inferenceSentences(this.modelId, createInferenceList(knnMap));
             processResponse(ingestDocument, knnMap, vectors);
         } catch (ExecutionException | InterruptedException e) {
             log.error("Text embedding processor failed with exception: " + e.getMessage(), e);

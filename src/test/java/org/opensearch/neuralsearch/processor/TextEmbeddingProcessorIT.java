@@ -19,7 +19,6 @@ import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
-import org.opensearch.neuralsearch.utils.TestHelper;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,10 +27,6 @@ import com.google.common.collect.ImmutableList;
 public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     private static final String indexName = "text_embedding_index";
-
-    private static final String pipelineName = "pipeline-hybrid";
-
-    private final ClassLoader classLoader = this.getClass().getClassLoader();
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -48,25 +43,6 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
     private String uploadTextEmbeddingModel() throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
         return uploadModel(requestBody);
-    }
-
-    private void createPipelineProcessor(String modelId) throws Exception {
-        Response pipelineCreateResponse = TestHelper.makeRequest(
-            client(),
-            "PUT",
-            "/_ingest/pipeline/" + pipelineName,
-            null,
-            TestHelper.toHttpEntity(
-                String.format(
-                    locale,
-                    Files.readString(Path.of(classLoader.getResource("processor/PipelineConfiguration.json").toURI())),
-                    modelId
-                )
-            ),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
-        );
-        JsonNode node = objectMapper.readTree(EntityUtils.toString(pipelineCreateResponse.getEntity()));
-        assertTrue(node.get("acknowledged").asBoolean());
     }
 
     private void createTextEmbeddingIndex() throws Exception {
@@ -93,12 +69,12 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
     }
 
     private void ingestDocument() throws Exception {
-        Response response = TestHelper.makeRequest(
+        Response response = makeRequest(
             client(),
             "POST",
             indexName + "/_doc",
             null,
-            TestHelper.toHttpEntity(Files.readString(Path.of(classLoader.getResource("processor/IngestDocument.json").toURI()))),
+            toHttpEntity(Files.readString(Path.of(classLoader.getResource("processor/IngestDocument.json").toURI()))),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
         JsonNode node = objectMapper.readTree(EntityUtils.toString(response.getEntity()));

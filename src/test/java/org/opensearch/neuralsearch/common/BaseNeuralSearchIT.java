@@ -8,6 +8,8 @@ package org.opensearch.neuralsearch.common;
 import static org.apache.http.entity.ContentType.APPLICATION_JSON;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -31,6 +33,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchRestTestCase {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final Locale locale = Locale.getDefault();
+
+    protected static final String pipelineName = "pipeline-hybrid";
+
+    protected final ClassLoader classLoader = this.getClass().getClassLoader();
 
     public String uploadModel(String requestBody) throws Exception {
         Response uploadResponse = makeRequest(
@@ -75,6 +81,25 @@ public abstract class BaseNeuralSearchIT extends OpenSearchRestTestCase {
             taskQueryResult = getTaskQueryResponse(taskId);
             isComplete = checkComplete(taskQueryResult);
         }
+    }
+
+    public void createPipelineProcessor(String modelId) throws Exception {
+        Response pipelineCreateResponse = makeRequest(
+            client(),
+            "PUT",
+            "/_ingest/pipeline/" + pipelineName,
+            null,
+            toHttpEntity(
+                String.format(
+                    locale,
+                    Files.readString(Path.of(classLoader.getResource("processor/PipelineConfiguration.json").toURI())),
+                    modelId
+                )
+            ),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+        );
+        JsonNode node = objectMapper.readTree(EntityUtils.toString(pipelineCreateResponse.getEntity()));
+        assertTrue(node.get("acknowledged").asBoolean());
     }
 
     public JsonNode getTaskQueryResponse(String taskId) throws IOException {

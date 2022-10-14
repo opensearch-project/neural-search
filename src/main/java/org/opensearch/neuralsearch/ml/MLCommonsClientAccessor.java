@@ -97,7 +97,7 @@ public class MLCommonsClientAccessor {
      * @throws ExecutionException If the underlying task failed, this exception will be thrown in the future.get().
      * @throws InterruptedException If the thread is interrupted, this will be thrown.
      */
-    public List<List<Float>> blockingInferenceSentences(@NonNull final String modelId, @NonNull final List<String> inputText)
+    public List<List<Float>> inferenceSentences(@NonNull final String modelId, @NonNull final List<String> inputText)
         throws ExecutionException, InterruptedException {
         final MLInput mlInput = createMLInput(TARGET_RESPONSE_FILTERS, inputText);
         ActionFuture<MLOutput> outputActionFuture = mlClient.predict(modelId, mlInput);
