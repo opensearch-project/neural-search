@@ -5,25 +5,24 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.*;
-
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
 import org.opensearch.test.OpenSearchTestCase;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.*;
+
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
 
@@ -43,7 +42,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
         config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1Mapped", "key2", "key2Mapped"));
         TextEmbeddingProcessor processor = factory.create(registry, processorTag, description, config);
-        when(mlCommonsClientAccessor.blockingInferenceSentences(anyString(), anyList())).thenReturn(vector);
+        when(mlCommonsClientAccessor.inferenceSentences(anyString(), anyList())).thenReturn(vector);
         return processor;
     }
 
@@ -96,7 +95,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
         config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1Mapped", "key2", "key2Mapped"));
         TextEmbeddingProcessor processor = textEmbeddingProcessorFactory.create(registry, processorTag, description, config);
-        when(accessor.blockingInferenceSentences(anyString(), anyList())).thenThrow(new InterruptedException());
+        when(accessor.inferenceSentences(anyString(), anyList())).thenThrow(new InterruptedException());
         try {
             processor.execute(ingestDocument);
         } catch (RuntimeException e) {

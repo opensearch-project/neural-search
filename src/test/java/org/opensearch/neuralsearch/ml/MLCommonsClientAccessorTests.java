@@ -5,18 +5,7 @@
 
 package org.opensearch.neuralsearch.ml;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.ExecutionException;
-
+import com.google.common.collect.ImmutableList;
 import org.junit.Before;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -34,7 +23,17 @@ import org.opensearch.ml.common.output.model.ModelTensors;
 import org.opensearch.neuralsearch.constants.TestCommonConstants;
 import org.opensearch.test.OpenSearchTestCase;
 
-import com.google.common.collect.ImmutableList;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.ExecutionException;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
@@ -119,7 +118,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
         ModelTensorOutput mlOutput = new ModelTensorOutput(tensorsList);
         when(actionFuture.get()).thenReturn(mlOutput);
-        List<List<Float>> result = accessor.blockingInferenceSentences("modelId", ImmutableList.of("mock"));
+        List<List<Float>> result = accessor.inferenceSentences("modelId", ImmutableList.of("mock"));
         assertEquals(TestCommonConstants.PREDICT_VECTOR_ARRAY[0], result.get(0).get(0));
     }
 
