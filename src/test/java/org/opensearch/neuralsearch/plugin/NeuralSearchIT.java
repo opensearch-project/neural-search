@@ -15,7 +15,7 @@ import org.opensearch.neuralsearch.OpenSearchSecureRestTestCase;
 import org.opensearch.rest.RestRequest;
 
 public class NeuralSearchIT extends OpenSearchSecureRestTestCase {
-    private static final String NEURAL_SEARCH_PLUGIN_NAME = "neural-search";
+    private static final String NEURAL_SEARCH_PLUGIN_NAME = "opensearch-neural-search";
 
     public void testNeuralSearchPluginInstalled() throws IOException {
         final Request request = new Request(RestRequest.Method.GET.name(), String.join("/", "_cat", "plugins"));

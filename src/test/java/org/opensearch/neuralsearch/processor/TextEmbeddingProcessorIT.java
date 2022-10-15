@@ -13,11 +13,7 @@ import org.apache.http.HttpHeaders;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
 import org.opensearch.client.Response;
-import org.opensearch.common.Strings;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.common.xcontent.XContentBuilder;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -46,26 +42,17 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
     }
 
     private void createTextEmbeddingIndex() throws Exception {
-        try (XContentBuilder builder = XContentFactory.jsonBuilder()) {
-            String settings = Strings.toString(
-                builder.startObject()
-                    .startObject("index")
-                    .field("knn", true)
-                    .field("knn.algo_param.ef_search", 100)
-                    .field("refresh_interval", "30s")
-                    .field("default_pipeline", pipelineName)
-                    .endObject()
-                    .field("number_of_shards", 1)
-                    .field("number_of_replicas", 0)
-                    .endObject()
-                    .endObject()
-            );
-            createIndex(
-                indexName,
-                Settings.builder().loadFromSource(settings, XContentType.JSON).build(),
-                Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI()))
-            );
-        }
+        Settings settings = Settings.builder()
+            .put("index.default_pipeline", "pipeline-hybrid")
+            .put("index.knn", true)
+            .put("index" + ".knn" + ".algo_param.ef_search", "100")
+            .put("index.refresh_interval", "30s")
+            .put("number_of_replicas", 0)
+            .put("number_of_shards", 1)
+            .build();
+        String mapping = Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI()));
+        mapping = mapping.substring(1, mapping.length() - 1);
+        createIndex(indexName, settings, mapping);
     }
 
     private void ingestDocument() throws Exception {

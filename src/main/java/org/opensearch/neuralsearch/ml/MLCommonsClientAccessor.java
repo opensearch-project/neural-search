@@ -119,8 +119,8 @@ public class MLCommonsClientAccessor {
      * needs block waiting for response, otherwise please use {@link #inferenceSentences(String, List, ActionListener)}
      * instead.
      * @param modelId {@link String}
-     * @param inputText {@link List<String>} on which inference needs to happen.
-     * @return {@link List} of {@link List<String>} represents the text embedding vector result.
+     * @param inputText {@link List} of {@link String} on which inference needs to happen.
+     * @return {@link List} of {@link List} of {@link String} represents the text embedding vector result.
      * @throws ExecutionException If the underlying task failed, this exception will be thrown in the future.get().
      * @throws InterruptedException If the thread is interrupted, this will be thrown.
      */
