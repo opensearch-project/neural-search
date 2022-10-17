@@ -42,6 +42,8 @@ import org.opensearch.watcher.ResourceWatcherService;
  */
 public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, IngestPlugin {
 
+    private MLCommonsClientAccessor clientAccessor;
+
     @Override
     public Collection<Object> createComponents(
         final Client client,
@@ -56,8 +58,6 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         final IndexNameExpressionResolver indexNameExpressionResolver,
         final Supplier<RepositoriesService> repositoriesServiceSupplier
     ) {
-        final MachineLearningNodeClient machineLearningNodeClient = new MachineLearningNodeClient(client);
-        final MLCommonsClientAccessor clientAccessor = new MLCommonsClientAccessor(machineLearningNodeClient);
         NeuralQueryBuilder.initialize(clientAccessor);
         return List.of(clientAccessor);
     }
@@ -80,8 +80,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     @Override
     public Map<String, Processor.Factory> getProcessors(Processor.Parameters parameters) {
-        final MachineLearningNodeClient machineLearningNodeClient = new MachineLearningNodeClient(parameters.client);
-        final MLCommonsClientAccessor clientAccessor = new MLCommonsClientAccessor(machineLearningNodeClient);
+        clientAccessor = new MLCommonsClientAccessor(new MachineLearningNodeClient(parameters.client));
         return Collections.singletonMap(TextEmbeddingProcessor.TYPE, new TextEmbeddingProcessorFactory(clientAccessor));
     }
 }

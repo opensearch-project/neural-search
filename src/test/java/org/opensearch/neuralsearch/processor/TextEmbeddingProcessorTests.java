@@ -5,13 +5,10 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import org.opensearch.ingest.IngestDocument;
-import org.opensearch.ingest.Processor;
-import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
-import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
-import org.opensearch.test.OpenSearchTestCase;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -19,10 +16,15 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import org.opensearch.OpenSearchParseException;
+import org.opensearch.ingest.IngestDocument;
+import org.opensearch.ingest.Processor;
+import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
+import org.opensearch.test.OpenSearchTestCase;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 
 public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
 
@@ -30,6 +32,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
     private static final TextEmbeddingProcessorFactory FACTORY = new TextEmbeddingProcessorFactory(ML_COMMONS_CLIENT_ACCESSOR);
     private static final String PROCESSOR_TAG = "mockTag";
     private static final String DESCRIPTION = "mockDescription";
+
     private TextEmbeddingProcessor createInstance(List<List<Float>> vector) throws Exception {
         Map<String, Processor.Factory> registry = new HashMap<>();
         Map<String, Object> config = new HashMap<>();
@@ -51,7 +54,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         try {
             FACTORY.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
         } catch (IllegalArgumentException e) {
-            assertEquals("Unable to create the TextEmbedding processor as field_map is null or empty.", e.getMessage());
+            assertEquals("Unable to create the TextEmbedding processor as field_map has invalid key or value", e.getMessage());
         }
     }
 
@@ -61,8 +64,8 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
         try {
             FACTORY.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
-        } catch (IllegalArgumentException e) {
-            assertEquals("Unable to create the TextEmbedding processor as field_map is null or empty.", e.getMessage());
+        } catch (OpenSearchParseException e) {
+            assertEquals("[field_map] required property is missing", e.getMessage());
         }
     }
 
@@ -109,18 +112,57 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         assert document.getSourceAndMetadata().containsKey("key1");
     }
 
-    public void testExecute_listHasNonStringValue_throwIllegalArgumentException() throws Exception {
+    public void testExecute_SimpleTypeWithEmptyStringValue_throwIllegalArgumentException() throws Exception {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put("key1", "    ");
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
+        try {
+            processor.execute(ingestDocument);
+        } catch (IllegalArgumentException e) {
+            assertEquals("field [key1] has empty string value, can not process it", e.getMessage());
+        }
+    }
+
+    public void testExecute_listHasEmptyStringValue_throwIllegalArgumentException() throws Exception {
         List<String> list1 = ImmutableList.of("", "test2", "test3");
-        List<Integer> list2 = ImmutableList.of(1, 2, 3);
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put("key1", list1);
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
+        try {
+            processor.execute(ingestDocument);
+        } catch (IllegalArgumentException e) {
+            assertEquals("list type field [key1] has empty string, can not process it", e.getMessage());
+        }
+    }
+
+    public void testExecute_listHasNonStringValue_throwIllegalArgumentException() throws Exception {
+        List<Integer> list2 = ImmutableList.of(1, 2, 3);
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put("key2", list2);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
         try {
             processor.execute(ingestDocument);
         } catch (IllegalArgumentException e) {
-            assertEquals("nested type field [key2] has non-string type, can not process it", e.getMessage());
+            assertEquals("list type field [key2] has non string value, can not process it", e.getMessage());
+        }
+    }
+
+    public void testExecute_listHasNull_throwIllegalArgumentException() throws Exception {
+        List<String> list = new ArrayList<>();
+        list.add("hello");
+        list.add(null);
+        list.add("world");
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put("key2", list);
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
+        try {
+            processor.execute(ingestDocument);
+        } catch (IllegalArgumentException e) {
+            assertEquals("list type field [key2] has null, can not process it", e.getMessage());
         }
     }
 
@@ -147,7 +189,22 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         try {
             processor.execute(ingestDocument);
         } catch (IllegalArgumentException e) {
-            assertEquals("nested type field [key2] has non-string type, can not process it", e.getMessage());
+            assertEquals("map type field [key2] has non-string type, can not process it", e.getMessage());
+        }
+    }
+
+    public void testExecute_mapHasEmptyStringValue_throwIllegalArgumentException() throws Exception {
+        Map<String, String> map1 = ImmutableMap.of("test1", "test2");
+        Map<String, String> map2 = ImmutableMap.of("test3", "   ");
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put("key1", map1);
+        sourceAndMetadata.put("key2", map2);
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
+        try {
+            processor.execute(ingestDocument);
+        } catch (IllegalArgumentException e) {
+            assertEquals("map type field [key2] has empty string, can not process it", e.getMessage());
         }
     }
 
@@ -185,10 +242,10 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         IngestDocument ingestDocument = createPlainIngestDocument();
         TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
 
-        Map<String, Object> knnMap = processor.buildKnnMap(ingestDocument, config);
+        Map<String, Object> knnMap = processor.buildMapWithKnnKeyAndOriginalValue(ingestDocument, config);
 
         List<List<Float>> modelTensorList = createMockVectorResult();
-        processor.processResponse(ingestDocument, knnMap, modelTensorList);
+        processor.appendVectorFieldsToDocument(ingestDocument, knnMap, modelTensorList);
         assertEquals(12, ingestDocument.getSourceAndMetadata().size());
     }
 
@@ -197,7 +254,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         IngestDocument ingestDocument = createPlainIngestDocument();
         TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
 
-        Map<String, Object> knnMap = processor.buildKnnMap(ingestDocument, config);
+        Map<String, Object> knnMap = processor.buildMapWithKnnKeyAndOriginalValue(ingestDocument, config);
 
         // To assert the order is not changed between config map and generated map.
         List<Object> configValueList = new LinkedList<>(config.values());
@@ -208,7 +265,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         assertEquals(knnKeyList.get(lastIndex), configValueList.get(lastIndex).toString());
 
         List<List<Float>> modelTensorList = createMockVectorResult();
-        Map<String, Object> result = processor.buildVectorOutput(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
+        Map<String, Object> result = processor.buildTextEmbeddingResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
         assertTrue(result.containsKey("oriKey1_knn"));
         assertTrue(result.containsKey("oriKey2_knn"));
         assertTrue(result.containsKey("oriKey3_knn"));
@@ -222,9 +279,9 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> config = createNestedMapConfiguration();
         IngestDocument ingestDocument = createNestedMapIngestDocument();
         TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
-        Map<String, Object> knnMap = processor.buildKnnMap(ingestDocument, config);
+        Map<String, Object> knnMap = processor.buildMapWithKnnKeyAndOriginalValue(ingestDocument, config);
         List<List<Float>> modelTensorList = createMockVectorResult();
-        processor.buildVectorOutput(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
+        processor.buildTextEmbeddingResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
         Map<String, Object> favoritesMap = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("favorites");
         assertNotNull(favoritesMap);
         Map<String, Object> favoriteGames = (Map<String, Object>) favoritesMap.get("favorite.games");

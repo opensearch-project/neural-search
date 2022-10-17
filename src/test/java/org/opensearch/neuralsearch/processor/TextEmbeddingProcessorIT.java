@@ -53,9 +53,19 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
     }
 
     private void ingestDocument() throws Exception {
-        String ingestDocument = "{\n" + "  \"title\": \"This is a good day\",\n" + "  \"description\": \"daily logging\",\n"
-            + "  \"favor_list\": [\n" + "    \"test\",\n" + "    null,\n" + "    \"mock\"\n" + "  ],\n" + "  \"favorites\": {\n"
-            + "    \"game\": \"overwatch\",\n" + "    \"movie\": null\n" + "  }\n" + "}\n";
+        String ingestDocument = "{\n"
+            + "  \"title\": \"This is a good day\",\n"
+            + "  \"description\": \"daily logging\",\n"
+            + "  \"favor_list\": [\n"
+            + "    \"test\",\n"
+            + "    \"hello\",\n"
+            + "    \"mock\"\n"
+            + "  ],\n"
+            + "  \"favorites\": {\n"
+            + "    \"game\": \"overwatch\",\n"
+            + "    \"movie\": null\n"
+            + "  }\n"
+            + "}\n";
         Response response = makeRequest(
             client(),
             "POST",
@@ -64,7 +74,11 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
             toHttpEntity(ingestDocument),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
-        Map<String, Object> map = XContentHelper.convertToMap(XContentFactory.xContent(XContentType.JSON), EntityUtils.toString(response.getEntity()), false);
+        Map<String, Object> map = XContentHelper.convertToMap(
+            XContentFactory.xContent(XContentType.JSON),
+            EntityUtils.toString(response.getEntity()),
+            false
+        );
         assertEquals("created", map.get("result"));
     }
 
