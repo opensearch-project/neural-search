@@ -195,8 +195,17 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
 
     @Override
     protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) {
-        if (vectorSupplier() != null && vectorSupplier.get() != null) {
-            return new KNNQueryBuilder(fieldName(), vectorSupplier.get(), k());
+        // When re-writing a QueryBuilder, if the QueryBuilder is not changed, doRewrite should return itself
+        // (see
+        // https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/index/query/QueryBuilder.java#L90-L98).
+        // Otherwise, it should return the modified copy (see rewrite logic
+        // https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/index/query/Rewriteable.java#L117.
+        // With the asynchronous call, on first rewrite, we create a new
+        // vector supplier that will get populated once the asynchronous call finishes and pass this supplier in to
+        // create a new builder. Once the supplier's value gets set, we return a KNNQueryBuilder. Otherwise, we just
+        // return the current unmodified query builder.
+        if (vectorSupplier() != null) {
+            return vectorSupplier().get() == null ? this : new KNNQueryBuilder(fieldName(), vectorSupplier.get(), k());
         }
 
         if (vectorSupplier() == null) {
@@ -207,12 +216,10 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                     actionListener.onResponse(null);
                 }, actionListener::onFailure)))
             );
-            vectorSupplier(vectorSetOnce::get);
+            return new NeuralQueryBuilder(fieldName(), queryText(), modelId(), k(), vectorSetOnce::get);
         }
 
-        // Rewrites will continuously happen until the supplier is set and the vector is generated. Rewrites will stop
-        // once this object is returned. Hence, if we get here, we need to return a new object
-        return new NeuralQueryBuilder(fieldName(), queryText(), modelId(), k(), vectorSupplier());
+        return this;
     }
 
     @Override

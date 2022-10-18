@@ -384,7 +384,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         NeuralQueryBuilder queryBuilder = (NeuralQueryBuilder) neuralQueryBuilder.doRewrite(queryRewriteContext);
         assertNotNull(queryBuilder.vectorSupplier());
         assertTrue(inProgressLatch.await(5, TimeUnit.SECONDS));
-        assertArrayEquals(VectorUtil.vectorAsListToArray(expectedVector), neuralQueryBuilder.vectorSupplier().get(), 0.0f);
+        assertArrayEquals(VectorUtil.vectorAsListToArray(expectedVector), queryBuilder.vectorSupplier().get(), 0.0f);
     }
 
     public void testRewrite_whenVectorNull_thenReturnCopy() {
