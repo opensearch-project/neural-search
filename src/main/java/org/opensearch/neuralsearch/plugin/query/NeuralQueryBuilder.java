@@ -208,18 +208,14 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             return vectorSupplier().get() == null ? this : new KNNQueryBuilder(fieldName(), vectorSupplier.get(), k());
         }
 
-        if (vectorSupplier() == null) {
-            SetOnce<float[]> vectorSetOnce = new SetOnce<>();
-            queryRewriteContext.registerAsyncAction(
-                ((client, actionListener) -> ML_CLIENT.inferenceSentence(modelId(), queryText(), ActionListener.wrap(floatList -> {
-                    vectorSetOnce.set(vectorAsListToArray(floatList));
-                    actionListener.onResponse(null);
-                }, actionListener::onFailure)))
-            );
-            return new NeuralQueryBuilder(fieldName(), queryText(), modelId(), k(), vectorSetOnce::get);
-        }
-
-        return this;
+        SetOnce<float[]> vectorSetOnce = new SetOnce<>();
+        queryRewriteContext.registerAsyncAction(
+            ((client, actionListener) -> ML_CLIENT.inferenceSentence(modelId(), queryText(), ActionListener.wrap(floatList -> {
+                vectorSetOnce.set(vectorAsListToArray(floatList));
+                actionListener.onResponse(null);
+            }, actionListener::onFailure)))
+        );
+        return new NeuralQueryBuilder(fieldName(), queryText(), modelId(), k(), vectorSetOnce::get);
     }
 
     @Override
