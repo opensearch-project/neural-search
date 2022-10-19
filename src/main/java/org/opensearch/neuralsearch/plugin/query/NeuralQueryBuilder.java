@@ -5,8 +5,13 @@
 
 package org.opensearch.neuralsearch.plugin.query;
 
-import java.io.IOException;
+import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 
+import java.io.IOException;
+import java.util.function.Supplier;
+
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -16,6 +21,8 @@ import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.util.SetOnce;
+import org.opensearch.action.ActionListener;
 import org.opensearch.common.ParseField;
 import org.opensearch.common.ParsingException;
 import org.opensearch.common.io.stream.StreamInput;
@@ -24,7 +31,11 @@ import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentParser;
 import org.opensearch.index.mapper.NumberFieldMapper;
 import org.opensearch.index.query.AbstractQueryBuilder;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
+import org.opensearch.knn.index.query.KNNQueryBuilder;
+import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -39,6 +50,7 @@ import com.google.common.annotations.VisibleForTesting;
 @Setter
 @Accessors(chain = true, fluent = true)
 @NoArgsConstructor
+@AllArgsConstructor
 public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder> {
 
     public static final String NAME = "neural";
@@ -54,10 +66,20 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
 
     private static final int DEFAULT_K = 10;
 
+    private static MLCommonsClientAccessor ML_CLIENT;
+
+    public static void initialize(MLCommonsClientAccessor mlClient) {
+        NeuralQueryBuilder.ML_CLIENT = mlClient;
+    }
+
     private String fieldName;
     private String queryText;
     private String modelId;
     private int k = DEFAULT_K;
+    @VisibleForTesting
+    @Getter(AccessLevel.PACKAGE)
+    @Setter(AccessLevel.PACKAGE)
+    private Supplier<float[]> vectorSupplier;
 
     /**
      * Constructor from stream input
@@ -113,15 +135,14 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
      */
     public static NeuralQueryBuilder fromXContent(XContentParser parser) throws IOException {
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
-        if (parser.nextToken() != XContentParser.Token.START_OBJECT) {
+        if (parser.currentToken() != XContentParser.Token.START_OBJECT) {
             throw new ParsingException(parser.getTokenLocation(), "Token must be START_OBJECT");
         }
         parser.nextToken();
         neuralQueryBuilder.fieldName(parser.currentName());
         parser.nextToken();
         parseQueryParams(parser, neuralQueryBuilder);
-        parser.nextToken();
-        if (parser.currentToken() != XContentParser.Token.END_OBJECT) {
+        if (parser.nextToken() != XContentParser.Token.END_OBJECT) {
             throw new ParsingException(
                 parser.getTokenLocation(),
                 "["
@@ -173,9 +194,34 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     }
 
     @Override
+    protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) {
+        // When re-writing a QueryBuilder, if the QueryBuilder is not changed, doRewrite should return itself
+        // (see
+        // https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/index/query/QueryBuilder.java#L90-L98).
+        // Otherwise, it should return the modified copy (see rewrite logic
+        // https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/index/query/Rewriteable.java#L117.
+        // With the asynchronous call, on first rewrite, we create a new
+        // vector supplier that will get populated once the asynchronous call finishes and pass this supplier in to
+        // create a new builder. Once the supplier's value gets set, we return a KNNQueryBuilder. Otherwise, we just
+        // return the current unmodified query builder.
+        if (vectorSupplier() != null) {
+            return vectorSupplier().get() == null ? this : new KNNQueryBuilder(fieldName(), vectorSupplier.get(), k());
+        }
+
+        SetOnce<float[]> vectorSetOnce = new SetOnce<>();
+        queryRewriteContext.registerAsyncAction(
+            ((client, actionListener) -> ML_CLIENT.inferenceSentence(modelId(), queryText(), ActionListener.wrap(floatList -> {
+                vectorSetOnce.set(vectorAsListToArray(floatList));
+                actionListener.onResponse(null);
+            }, actionListener::onFailure)))
+        );
+        return new NeuralQueryBuilder(fieldName(), queryText(), modelId(), k(), vectorSetOnce::get);
+    }
+
+    @Override
     protected Query doToQuery(QueryShardContext queryShardContext) {
-        // TODO Implement logic to build KNNQuery in this method
-        return null;
+        // All queries should be generated by the k-NN Query Builder
+        throw new UnsupportedOperationException("Query cannot be created by NeuralQueryBuilder directly");
     }
 
     @Override
