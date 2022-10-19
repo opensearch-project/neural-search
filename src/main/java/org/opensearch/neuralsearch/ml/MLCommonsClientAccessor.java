@@ -22,7 +22,6 @@ import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.dataset.MLInputDataset;
 import org.opensearch.ml.common.dataset.TextDocsInputDataSet;
 import org.opensearch.ml.common.input.MLInput;
-import org.opensearch.ml.common.model.MLModelTaskType;
 import org.opensearch.ml.common.output.MLOutput;
 import org.opensearch.ml.common.output.model.ModelResultFilter;
 import org.opensearch.ml.common.output.model.ModelTensor;
@@ -67,7 +66,7 @@ public class MLCommonsClientAccessor {
 
     /**
      * Abstraction to call predict function of api of MLClient with default targetResponse filters. It uses the
-     * custom model provided as modelId and run the {@link MLModelTaskType#TEXT_EMBEDDING}. The return will be sent
+     * custom model provided as modelId and run the {@link FunctionName#TEXT_EMBEDDING}. The return will be sent
      * using the actionListener which will have a {@link List} of {@link List} of {@link Float} in the order of
      * inputText. We are not making this function generic enough to take any function or TaskType as currently we
      * need to run only TextEmbedding tasks only.
@@ -86,7 +85,7 @@ public class MLCommonsClientAccessor {
 
     /**
      * Abstraction to call predict function of api of MLClient with provided targetResponse filters. It uses the
-     * custom model provided as modelId and run the {@link MLModelTaskType#TEXT_EMBEDDING}. The return will be sent
+     * custom model provided as modelId and run the {@link FunctionName#TEXT_EMBEDDING}. The return will be sent
      * using the actionListener which will have a {@link List} of {@link List} of {@link Float} in the order of
      * inputText. We are not making this function generic enough to take any function or TaskType as currently we
      * need to run only TextEmbedding tasks only.
@@ -112,7 +111,7 @@ public class MLCommonsClientAccessor {
 
     /**
      * Abstraction to call predict function of api of MLClient with provided targetResponseFilters. It uses the
-     * custom model provided as modelId and run the {@link MLModelTaskType#TEXT_EMBEDDING}. The return will be sent
+     * custom model provided as modelId and run the {@link FunctionName#TEXT_EMBEDDING}. The return will be sent
      * using the actionListener which will have a {@link List} of {@link List} of {@link Float} in the order of
      * inputText. We are not making this function generic enough to take any function or TaskType as currently we need
      * to run only TextEmbedding tasks only. Please note this method is a blocking method, use this only when the processing
@@ -136,7 +135,7 @@ public class MLCommonsClientAccessor {
     private MLInput createMLInput(final List<String> targetResponseFilters, List<String> inputText) {
         final ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
         final MLInputDataset inputDataset = new TextDocsInputDataSet(inputText, modelResultFilter);
-        return new MLInput(FunctionName.TEXT_EMBEDDING, null, inputDataset, MLModelTaskType.TEXT_EMBEDDING);
+        return new MLInput(FunctionName.TEXT_EMBEDDING, null, inputDataset);
     }
 
     private List<List<Float>> buildVectorFromResponse(MLOutput mlOutput) {
