@@ -8,6 +8,7 @@ package org.opensearch.neuralsearch.plugin;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Supplier;
 
 import org.opensearch.action.ActionRequest;
@@ -19,12 +20,16 @@ import org.opensearch.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.common.xcontent.NamedXContentRegistry;
 import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
+import org.opensearch.ingest.Processor;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.plugin.query.NeuralQueryBuilder;
+import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
+import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
 import org.opensearch.neuralsearch.transport.MLPredictAction;
 import org.opensearch.neuralsearch.transport.MLPredictTransportAction;
 import org.opensearch.plugins.ActionPlugin;
+import org.opensearch.plugins.IngestPlugin;
 import org.opensearch.plugins.Plugin;
 import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.repositories.RepositoriesService;
@@ -35,7 +40,9 @@ import org.opensearch.watcher.ResourceWatcherService;
 /**
  * Neural Search plugin class
  */
-public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin {
+public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, IngestPlugin {
+
+    private MLCommonsClientAccessor clientAccessor;
 
     @Override
     public Collection<Object> createComponents(
@@ -51,8 +58,6 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin {
         final IndexNameExpressionResolver indexNameExpressionResolver,
         final Supplier<RepositoriesService> repositoriesServiceSupplier
     ) {
-        final MachineLearningNodeClient machineLearningNodeClient = new MachineLearningNodeClient(client);
-        final MLCommonsClientAccessor clientAccessor = new MLCommonsClientAccessor(machineLearningNodeClient);
         NeuralQueryBuilder.initialize(clientAccessor);
         return List.of(clientAccessor);
     }
@@ -71,5 +76,11 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin {
         return Collections.singletonList(
             new QuerySpec<>(NeuralQueryBuilder.NAME, NeuralQueryBuilder::new, NeuralQueryBuilder::fromXContent)
         );
+    }
+
+    @Override
+    public Map<String, Processor.Factory> getProcessors(Processor.Parameters parameters) {
+        clientAccessor = new MLCommonsClientAccessor(new MachineLearningNodeClient(parameters.client));
+        return Collections.singletonMap(TextEmbeddingProcessor.TYPE, new TextEmbeddingProcessorFactory(clientAccessor, parameters.env));
     }
 }
