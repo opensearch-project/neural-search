@@ -73,8 +73,8 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
 
     @Override
     public IngestDocument execute(IngestDocument ingestDocument) {
-        validateEmbeddingFieldsValue(ingestDocument, fieldMap);
-        Map<String, Object> knnMap = buildMapWithKnnKeyAndOriginalValue(ingestDocument, fieldMap);
+        validateEmbeddingFieldsValue(ingestDocument);
+        Map<String, Object> knnMap = buildMapWithKnnKeyAndOriginalValue(ingestDocument);
         try {
             List<List<Float>> vectors = mlCommonsClientAccessor.inferenceSentences(this.modelId, createInferenceList(knnMap));
             appendVectorFieldsToDocument(ingestDocument, knnMap, vectors);
@@ -122,7 +122,7 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
     }
 
     @VisibleForTesting
-    Map<String, Object> buildMapWithKnnKeyAndOriginalValue(IngestDocument ingestDocument, Map<String, Object> fieldMap) {
+    Map<String, Object> buildMapWithKnnKeyAndOriginalValue(IngestDocument ingestDocument) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
         Map<String, Object> mapWithKnnKeys = new LinkedHashMap<>();
         for (Map.Entry<String, Object> fieldMapEntry : fieldMap.entrySet()) {
@@ -228,9 +228,9 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
         return numbers;
     }
 
-    private static void validateEmbeddingFieldsValue(IngestDocument ingestDocument, Map<String, Object> embeddingFields) {
+    private void validateEmbeddingFieldsValue(IngestDocument ingestDocument) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
-        for (Map.Entry<String, Object> embeddingFieldsEntry : embeddingFields.entrySet()) {
+        for (Map.Entry<String, Object> embeddingFieldsEntry : fieldMap.entrySet()) {
             Object sourceValue = sourceAndMetadataMap.get(embeddingFieldsEntry.getKey());
             if (sourceValue != null) {
                 String sourceKey = embeddingFieldsEntry.getKey();

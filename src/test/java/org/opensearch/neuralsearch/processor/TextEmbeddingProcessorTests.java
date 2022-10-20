@@ -242,7 +242,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         IngestDocument ingestDocument = createPlainIngestDocument();
         TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
 
-        Map<String, Object> knnMap = processor.buildMapWithKnnKeyAndOriginalValue(ingestDocument, config);
+        Map<String, Object> knnMap = processor.buildMapWithKnnKeyAndOriginalValue(ingestDocument);
 
         List<List<Float>> modelTensorList = createMockVectorResult();
         processor.appendVectorFieldsToDocument(ingestDocument, knnMap, modelTensorList);
@@ -254,7 +254,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         IngestDocument ingestDocument = createPlainIngestDocument();
         TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
 
-        Map<String, Object> knnMap = processor.buildMapWithKnnKeyAndOriginalValue(ingestDocument, config);
+        Map<String, Object> knnMap = processor.buildMapWithKnnKeyAndOriginalValue(ingestDocument);
 
         // To assert the order is not changed between config map and generated map.
         List<Object> configValueList = new LinkedList<>(config.values());
@@ -279,7 +279,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> config = createNestedMapConfiguration();
         IngestDocument ingestDocument = createNestedMapIngestDocument();
         TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
-        Map<String, Object> knnMap = processor.buildMapWithKnnKeyAndOriginalValue(ingestDocument, config);
+        Map<String, Object> knnMap = processor.buildMapWithKnnKeyAndOriginalValue(ingestDocument);
         List<List<Float>> modelTensorList = createMockVectorResult();
         processor.buildTextEmbeddingResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
         Map<String, Object> favoritesMap = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("favorites");

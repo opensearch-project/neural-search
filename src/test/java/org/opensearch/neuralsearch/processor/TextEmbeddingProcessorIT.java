@@ -5,7 +5,11 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import com.google.common.collect.ImmutableList;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Locale;
+import java.util.Map;
+
 import org.apache.http.HttpHeaders;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
@@ -15,10 +19,7 @@ import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Locale;
-import java.util.Map;
+import com.google.common.collect.ImmutableList;
 
 public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
