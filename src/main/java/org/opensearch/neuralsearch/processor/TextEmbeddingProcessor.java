@@ -11,11 +11,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
+import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
 import lombok.extern.log4j.Log4j2;
 
 import org.apache.commons.lang3.StringUtils;
+import org.opensearch.env.Environment;
+import org.opensearch.index.mapper.MapperService;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
@@ -43,12 +46,15 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
 
     private final MLCommonsClientAccessor mlCommonsClientAccessor;
 
+    private final Environment environment;
+
     public TextEmbeddingProcessor(
         String tag,
         String description,
         String modelId,
         Map<String, Object> fieldMap,
-        MLCommonsClientAccessor clientAccessor
+        MLCommonsClientAccessor clientAccessor,
+        Environment environment
     ) {
         super(tag, description);
         if (StringUtils.isBlank(modelId)) throw new IllegalArgumentException("model_id is null or empty, can not process it");
@@ -57,6 +63,7 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
         this.modelId = modelId;
         this.fieldMap = fieldMap;
         this.mlCommonsClientAccessor = clientAccessor;
+        this.environment = environment;
     }
 
     private void validateEmbeddingConfiguration(Map<String, Object> fieldMap) {
@@ -236,7 +243,7 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
                 String sourceKey = embeddingFieldsEntry.getKey();
                 Class<?> sourceValueClass = sourceValue.getClass();
                 if (List.class.isAssignableFrom(sourceValueClass) || Map.class.isAssignableFrom(sourceValueClass)) {
-                    validateNestedTypeValue(sourceKey, sourceValue);
+                    validateNestedTypeValue(sourceKey, sourceValue, () -> 1);
                 } else if (!String.class.isAssignableFrom(sourceValueClass)) {
                     throw new IllegalArgumentException("field [" + sourceKey + "] is neither string nor nested type, can not process it");
                 } else if (StringUtils.isBlank(sourceValue.toString())) {
@@ -247,11 +254,17 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
     }
 
     @SuppressWarnings({ "rawtypes", "unchecked" })
-    private static void validateNestedTypeValue(String sourceKey, Object sourceValue) {
-        if ((List.class.isAssignableFrom(sourceValue.getClass()))) {
+    private void validateNestedTypeValue(String sourceKey, Object sourceValue, Supplier<Integer> maxDepthSupplier) {
+        int maxDepth = maxDepthSupplier.get();
+        if (maxDepth > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())) {
+            throw new IllegalArgumentException("map type field [" + sourceKey + "] reached max depth limit, can not process it");
+        } else if ((List.class.isAssignableFrom(sourceValue.getClass()))) {
             validateListTypeValue(sourceKey, sourceValue);
         } else if (Map.class.isAssignableFrom(sourceValue.getClass())) {
-            ((Map) sourceValue).values().stream().filter(Objects::nonNull).forEach(x -> validateNestedTypeValue(sourceKey, x));
+            ((Map) sourceValue).values()
+                .stream()
+                .filter(Objects::nonNull)
+                .forEach(x -> validateNestedTypeValue(sourceKey, x, () -> maxDepth + 1));
         } else if (!String.class.isAssignableFrom(sourceValue.getClass())) {
             throw new IllegalArgumentException("map type field [" + sourceKey + "] has non-string type, can not process it");
         } else if (StringUtils.isBlank(sourceValue.toString())) {

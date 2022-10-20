@@ -15,8 +15,15 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
+import org.junit.Before;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 import org.opensearch.OpenSearchParseException;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.env.Environment;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
@@ -28,18 +35,31 @@ import com.google.common.collect.ImmutableMap;
 
 public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
 
-    private static final MLCommonsClientAccessor ML_COMMONS_CLIENT_ACCESSOR = mock(MLCommonsClientAccessor.class);
-    private static final TextEmbeddingProcessorFactory FACTORY = new TextEmbeddingProcessorFactory(ML_COMMONS_CLIENT_ACCESSOR);
+    @Mock
+    private MLCommonsClientAccessor mlCommonsClientAccessor;
+
+    @Mock
+    private Environment env;
+
+    @InjectMocks
+    private TextEmbeddingProcessorFactory textEmbeddingProcessorFactory;
     private static final String PROCESSOR_TAG = "mockTag";
     private static final String DESCRIPTION = "mockDescription";
+
+    @Before
+    public void setup() {
+        MockitoAnnotations.openMocks(this);
+        Settings settings = Settings.builder().put("index.mapping.depth.limit", 20).build();
+        when(env.settings()).thenReturn(settings);
+    }
 
     private TextEmbeddingProcessor createInstance(List<List<Float>> vector) throws Exception {
         Map<String, Processor.Factory> registry = new HashMap<>();
         Map<String, Object> config = new HashMap<>();
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
         config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1Mapped", "key2", "key2Mapped"));
-        TextEmbeddingProcessor processor = FACTORY.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
-        when(ML_COMMONS_CLIENT_ACCESSOR.inferenceSentences(anyString(), anyList())).thenReturn(vector);
+        TextEmbeddingProcessor processor = textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+        when(mlCommonsClientAccessor.inferenceSentences(anyString(), anyList())).thenReturn(vector);
         return processor;
     }
 
@@ -52,7 +72,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         fieldMap.put("key2", "key2Mapped");
         config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, fieldMap);
         try {
-            FACTORY.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+            textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
         } catch (IllegalArgumentException e) {
             assertEquals("Unable to create the TextEmbedding processor as field_map has invalid key or value", e.getMessage());
         }
@@ -63,7 +83,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> config = new HashMap<>();
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
         try {
-            FACTORY.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+            textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
         } catch (OpenSearchParseException e) {
             assertEquals("[field_map] required property is missing", e.getMessage());
         }
@@ -86,7 +106,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         Map<String, Processor.Factory> registry = new HashMap<>();
         MLCommonsClientAccessor accessor = mock(MLCommonsClientAccessor.class);
-        TextEmbeddingProcessorFactory textEmbeddingProcessorFactory = new TextEmbeddingProcessorFactory(accessor);
+        TextEmbeddingProcessorFactory textEmbeddingProcessorFactory = new TextEmbeddingProcessorFactory(accessor, env);
 
         Map<String, Object> config = new HashMap<>();
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
@@ -208,6 +228,34 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         }
     }
 
+    public void testExecute_mapDepthReachLimit_throwIllegalArgumentException() throws Exception {
+        Map<String, Object> ret = createMaxDepthLimitExceedMap(() -> 1);
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put("key1", "hello world");
+        sourceAndMetadata.put("key2", ret);
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
+        try {
+            processor.execute(ingestDocument);
+        } catch (IllegalArgumentException e) {
+            assertEquals("map type field [key2] reached max depth limit, can not process it", e.getMessage());
+            return;
+        }
+        fail("Shouldn't be here, expected exception!");
+    }
+
+    private Map<String, Object> createMaxDepthLimitExceedMap(Supplier<Integer> maxDepthSupplier) {
+        int maxDepth = maxDepthSupplier.get();
+        if (maxDepth > 21) {
+            return null;
+        }
+        Map<String, Object> innerMap = new HashMap<>();
+        Map<String, Object> ret = createMaxDepthLimitExceedMap(() -> maxDepth + 1);
+        if (ret == null) return innerMap;
+        innerMap.put("hello", ret);
+        return innerMap;
+    }
+
     public void testExecute_hybridTypeInput_successful() throws Exception {
         List<String> list1 = ImmutableList.of("test1", "test2");
         Map<String, List<String>> map1 = ImmutableMap.of("test3", list1);
@@ -327,7 +375,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> config = new HashMap<>();
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
         config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, fieldMap);
-        return FACTORY.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+        return textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
     }
 
     private Map<String, Object> createPlainStringConfiguration() {
