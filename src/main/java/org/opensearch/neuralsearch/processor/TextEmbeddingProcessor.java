@@ -114,9 +114,9 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
         if (sourceValue instanceof Map) {
             ((Map<String, Object>) sourceValue).forEach((k, v) -> createInferenceListForMapTypeInput(v, texts));
         } else if (sourceValue instanceof List) {
-            ((List<String>) sourceValue).stream().filter(StringUtils::isNotBlank).forEach(texts::add);
+            texts.addAll(((List<String>) sourceValue));
         } else {
-            if (sourceValue == null || StringUtils.isBlank(sourceValue.toString())) return;
+            if (sourceValue == null) return;
             texts.add(sourceValue.toString());
         }
     }
@@ -176,7 +176,7 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
         for (Map.Entry<String, Object> knnMapEntry : knnMap.entrySet()) {
             String knnKey = knnMapEntry.getKey();
             Object sourceValue = knnMapEntry.getValue();
-            if (sourceValue instanceof String && StringUtils.isNotBlank(sourceValue.toString())) {
+            if (sourceValue instanceof String) {
                 List<Float> modelTensor = modelTensorList.get(indexWrapper.index++);
                 result.put(knnKey, modelTensor);
             } else if (sourceValue instanceof List) {
