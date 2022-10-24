@@ -39,6 +39,7 @@ publishing {
             pom {
                 name = pluginName
                 description = pluginDescription
+                groupId = "org.opensearch.plugin"
                 licenses {
                     license {
                         name = "The Apache License, Version 2.0"
@@ -92,6 +93,7 @@ buildscript {
     }
 
     repositories {
+        mavenLocal()
         maven { url "https://aws.oss.sonatype.org/content/repositories/snapshots" }
         mavenCentral()
         maven { url "https://plugins.gradle.org/m2/" }
