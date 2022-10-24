@@ -74,7 +74,7 @@ buildscript {
     ext {
         // as we don't have 3.0.0, 2.4.0 version for K-NN on darwin we need to keep OpenSearch version as 2.3 for now.
         // Github issue: https://github.com/opensearch-project/opensearch-build/issues/2662
-        opensearch_version = System.getProperty("opensearch.version", "2.3.0-SNAPSHOT")
+        opensearch_version = System.getProperty("opensearch.version", "2.4.0-SNAPSHOT")
         buildVersionQualifier = System.getProperty("build.version_qualifier", "")
         isSnapshot = "true" == System.getProperty("build.snapshot", "true")
         version_tokens = opensearch_version.tokenize('-')
@@ -89,12 +89,6 @@ buildscript {
         }
         opensearch_group = "org.opensearch"
         opensearch_no_snapshot = opensearch_build.replace("-SNAPSHOT","")
-        k_NN_resource_folder = "build/resources/k-NN"
-        ml_common_resource_folder = "build/resources/ml-commons"
-        //TODO: we need a better way to construct this URL as, this URL is valid for released version of K-NN, ML-Plugin.
-        // Github issue: https://github.com/opensearch-project/opensearch-build/issues/2662
-        k_NN_build_download_url = "https://aws.oss.sonatype.org/content/repositories/releases/org/opensearch/plugin/opensearch-knn/" + opensearch_no_snapshot + "/opensearch-knn-" + opensearch_no_snapshot +".zip"
-        ml_common_build_download_url = "https://aws.oss.sonatype.org/content/repositories/releases/org/opensearch/plugin/opensearch-ml-plugin/" + opensearch_no_snapshot + "/opensearch-ml-plugin-" + opensearch_no_snapshot +".zip"
     }
 
     repositories {
@@ -137,22 +131,21 @@ def knnJarDirectory = "$buildDir/dependencies/opensearch-knn"
 dependencies {
     api "org.opensearch:opensearch:${opensearch_version}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-knn', version: "${opensearch_build}"
+    zipArchive group: 'org.opensearch', name:'opensearch-ml-plugin', version: "${opensearch_build}"
     compileOnly fileTree(dir: knnJarDirectory, include: '*.jar')
     api group: 'org.opensearch', name:'opensearch-ml-client', version: "${opensearch_build}"
     implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.10'
 }
 
-// From maven, we can get the k-NN plugin as a zip. In order to add the jar to the classpath, we need to unzip the
+// In order to add the jar to the classpath, we need to unzip the
 // k-NN zip and then copy it into a directory that we specify as a dependency.
-task unzip(type: Copy) {
-    configurations.zipArchive.asFileTree.each {
-        from(zipTree(it))
-    }
+task extractKnnJar(type: Copy) {
+    from(zipTree(configurations.zipArchive.find { it.name.startsWith("opensearch-knn")}))
     into knnJarDirectory
 }
 
 compileJava {
-    dependsOn unzip
+    dependsOn extractKnnJar
     options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
 }
 compileTestJava {
@@ -208,45 +201,20 @@ integTest {
 
 testClusters.integTest {
     testDistribution = "ARCHIVE"
-    // Install ML-Plugin on the integTest cluster nodes
-    plugin(provider(new Callable<RegularFile>(){
-        @Override
-        RegularFile call() throws Exception {
-            return new RegularFile() {
-                @Override
-                File getAsFile() {
-                    if (new File("$project.rootDir/$ml_common_resource_folder").exists()) {
-                        project.delete(files("$project.rootDir/$ml_common_resource_folder"))
+    // Install K-NN/ml-commons plugins on the integTest cluster nodes
+    configurations.zipArchive.asFileTree.each {
+        plugin(provider(new Callable<RegularFile>(){
+            @Override
+            RegularFile call() throws Exception {
+                return new RegularFile() {
+                    @Override
+                    File getAsFile() {
+                        return it
                     }
-                    project.mkdir ml_common_resource_folder
-                    ant.get(src: ml_common_build_download_url,
-                            dest: ml_common_resource_folder,
-                            httpusecaches: false)
-                    return fileTree(ml_common_resource_folder).getSingleFile()
                 }
             }
-        }
-    }))
-
-    // Install K-NN plugin on the integTest cluster nodes
-    plugin(provider(new Callable<RegularFile>(){
-        @Override
-        RegularFile call() throws Exception {
-            return new RegularFile() {
-                @Override
-                File getAsFile() {
-                    if (new File("$project.rootDir/$k_NN_resource_folder").exists()) {
-                        project.delete(files("$project.rootDir/$k_NN_resource_folder"))
-                    }
-                    project.mkdir k_NN_resource_folder
-                    ant.get(src: k_NN_build_download_url,
-                            dest: k_NN_resource_folder,
-                            httpusecaches: false)
-                    return fileTree(k_NN_resource_folder).getSingleFile()
-                }
-            }
-        }
-    }))
+        }))
+    }
 
     // This installs our neural-search plugin into the testClusters
     plugin(project.tasks.bundlePlugin.archiveFile)
