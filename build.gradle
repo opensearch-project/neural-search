@@ -133,7 +133,7 @@ def knnJarDirectory = "$buildDir/dependencies/opensearch-knn"
 dependencies {
     api "org.opensearch:opensearch:${opensearch_version}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-knn', version: "${opensearch_build}"
-    zipArchive group: 'org.opensearch', name:'opensearch-ml-plugin', version: "${opensearch_build}"
+    zipArchive group: 'org.opensearch.plugin', name:'opensearch-ml-plugin', version: "${opensearch_build}"
     compileOnly fileTree(dir: knnJarDirectory, include: '*.jar')
     api group: 'org.opensearch', name:'opensearch-ml-client', version: "${opensearch_build}"
     implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.10'
