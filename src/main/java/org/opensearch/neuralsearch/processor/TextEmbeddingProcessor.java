@@ -85,19 +85,23 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
     }
 
     /**
-     * When received a bulk indexing request, the pipeline will be executed in the <a href="https://github.com/opensearch-project/OpenSearch/blob/8fda187bb459757164cc80c91ca305d274ca2b53/server/src/main/java/org/opensearch/action/bulk/TransportBulkAction.java#L226">doInternalExecute</a> method
-     * Before the pipeline execution, the pipeline will be marked as resolved (means executed), and then this overriding method will be invoked when executing the text embedding processor.
-     * After the inference completes, the handler will invoke the doInternalExecute method again to run actual write operation.
-     * @param ingestDocument
-     * @param handler
+     * This method will be invoked by PipelineService to make async inference and then delegate the handler to
+     * process the inference response or failure.
+     * @param ingestDocument {@link IngestDocument} which is the document passed to processor.
+     * @param handler {@link BiConsumer} which is the handler which can be used after the inference task is done.
      */
     @Override
     public void execute(IngestDocument ingestDocument, BiConsumer<IngestDocument, Exception> handler) {
+        // When received a bulk indexing request, the pipeline will be executed in this method, (see
+        // https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/action/bulk/TransportBulkAction.java#L226).
+        // Before the pipeline execution, the pipeline will be marked as resolved (means executed),
+        // and then this overriding method will be invoked when executing the text embedding processor.
+        // After the inference completes, the handler will invoke the doInternalExecute method again to run actual write operation.
         try {
             validateEmbeddingFieldsValue(ingestDocument);
             Map<String, Object> knnMap = buildMapWithKnnKeyAndOriginalValue(ingestDocument);
-            mlCommonsClientAccessor.inferenceSentences(this.modelId, createInferenceList(knnMap), ActionListener.wrap(x -> {
-                appendVectorFieldsToDocument(ingestDocument, knnMap, x);
+            mlCommonsClientAccessor.inferenceSentences(this.modelId, createInferenceList(knnMap), ActionListener.wrap(vectors -> {
+                appendVectorFieldsToDocument(ingestDocument, knnMap, vectors);
                 handler.accept(ingestDocument, null);
             }, e -> { handler.accept(null, e); }));
         } catch (Exception e) {
