@@ -7,7 +7,6 @@ package org.opensearch.neuralsearch.processor;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Locale;
 import java.util.Map;
 
 import org.apache.http.HttpHeaders;
@@ -36,13 +35,8 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
     }
 
     private String uploadTextEmbeddingModel() throws Exception {
-        String currentPath = System.getProperty("user.dir");
-        Path testClusterPath = Path.of(currentPath).getParent().resolveSibling("testclusters/integTest-0/data");
-        Path path = Path.of(testClusterPath + "/all-MiniLM-L6-v2.zip");
-        Files.copy(Path.of(classLoader.getResource("model/all-MiniLM-L6-v2.zip").toURI()), path);
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        String request = String.format(Locale.getDefault(), requestBody, path);
-        return uploadModel(request);
+        return uploadModel(requestBody);
     }
 
     private void createTextEmbeddingIndex() throws Exception {
