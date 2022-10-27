@@ -10,13 +10,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ExecutionException;
+import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
 import lombok.extern.log4j.Log4j2;
 
 import org.apache.commons.lang3.StringUtils;
+import org.opensearch.action.ActionListener;
 import org.opensearch.env.Environment;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.ingest.AbstractProcessor;
@@ -80,17 +81,33 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
 
     @Override
     public IngestDocument execute(IngestDocument ingestDocument) {
-        validateEmbeddingFieldsValue(ingestDocument);
-        Map<String, Object> knnMap = buildMapWithKnnKeyAndOriginalValue(ingestDocument);
-        try {
-            List<List<Float>> vectors = mlCommonsClientAccessor.inferenceSentences(this.modelId, createInferenceList(knnMap));
-            appendVectorFieldsToDocument(ingestDocument, knnMap, vectors);
-        } catch (ExecutionException | InterruptedException e) {
-            log.error("Text embedding processor failed with exception: ", e);
-            throw new RuntimeException("Text embedding processor failed with exception", e);
-        }
-        log.debug("Text embedding completed, returning ingestDocument!");
         return ingestDocument;
+    }
+
+    /**
+     * This method will be invoked by PipelineService to make async inference and then delegate the handler to
+     * process the inference response or failure.
+     * @param ingestDocument {@link IngestDocument} which is the document passed to processor.
+     * @param handler {@link BiConsumer} which is the handler which can be used after the inference task is done.
+     */
+    @Override
+    public void execute(IngestDocument ingestDocument, BiConsumer<IngestDocument, Exception> handler) {
+        // When received a bulk indexing request, the pipeline will be executed in this method, (see
+        // https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/action/bulk/TransportBulkAction.java#L226).
+        // Before the pipeline execution, the pipeline will be marked as resolved (means executed),
+        // and then this overriding method will be invoked when executing the text embedding processor.
+        // After the inference completes, the handler will invoke the doInternalExecute method again to run actual write operation.
+        try {
+            validateEmbeddingFieldsValue(ingestDocument);
+            Map<String, Object> knnMap = buildMapWithKnnKeyAndOriginalValue(ingestDocument);
+            mlCommonsClientAccessor.inferenceSentences(this.modelId, createInferenceList(knnMap), ActionListener.wrap(vectors -> {
+                appendVectorFieldsToDocument(ingestDocument, knnMap, vectors);
+                handler.accept(ingestDocument, null);
+            }, e -> { handler.accept(null, e); }));
+        } catch (Exception e) {
+            handler.accept(null, e);
+        }
+
     }
 
     void appendVectorFieldsToDocument(IngestDocument ingestDocument, Map<String, Object> knnMap, List<List<Float>> vectors) {
