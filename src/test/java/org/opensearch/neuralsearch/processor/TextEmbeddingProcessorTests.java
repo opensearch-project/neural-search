@@ -7,14 +7,14 @@ package org.opensearch.neuralsearch.processor;
 
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
 import org.junit.Before;
@@ -22,6 +22,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.OpenSearchParseException;
+import org.opensearch.action.ActionListener;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.IngestDocument;
@@ -59,7 +60,6 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
         config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1Mapped", "key2", "key2Mapped"));
         TextEmbeddingProcessor processor = textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
-        when(mlCommonsClientAccessor.inferenceSentences(anyString(), anyList())).thenReturn(vector);
         return processor;
     }
 
@@ -95,8 +95,17 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put("key2", "value2");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
-        IngestDocument document = processor.execute(ingestDocument);
-        assert document.getSourceAndMetadata().containsKey("key1");
+
+        List<List<Float>> modelTensorList = createMockVectorResult();
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            listener.onResponse(modelTensorList);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(any(IngestDocument.class), isNull());
     }
 
     public void testExecute_whenInferenceThrowInterruptedException_throwRuntimeException() throws Exception {
@@ -112,12 +121,10 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
         config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1Mapped", "key2", "key2Mapped"));
         TextEmbeddingProcessor processor = textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
-        when(accessor.inferenceSentences(anyString(), anyList())).thenThrow(new InterruptedException());
-        try {
-            processor.execute(ingestDocument);
-        } catch (RuntimeException e) {
-            assertEquals("Text embedding processor failed with exception", e.getMessage());
-        }
+        doThrow(new RuntimeException()).when(accessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(isNull(), any(RuntimeException.class));
     }
 
     public void testExecute_withListTypeInput_successful() throws Exception {
@@ -128,8 +135,17 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put("key2", list2);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(6));
-        IngestDocument document = processor.execute(ingestDocument);
-        assert document.getSourceAndMetadata().containsKey("key1");
+
+        List<List<Float>> modelTensorList = createMockVectorResult();
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            listener.onResponse(modelTensorList);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(any(IngestDocument.class), isNull());
     }
 
     public void testExecute_SimpleTypeWithEmptyStringValue_throwIllegalArgumentException() throws Exception {
@@ -137,11 +153,10 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put("key1", "    ");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
-        try {
-            processor.execute(ingestDocument);
-        } catch (IllegalArgumentException e) {
-            assertEquals("field [key1] has empty string value, can not process it", e.getMessage());
-        }
+
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(isNull(), any(IllegalArgumentException.class));
     }
 
     public void testExecute_listHasEmptyStringValue_throwIllegalArgumentException() throws Exception {
@@ -150,11 +165,10 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put("key1", list1);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
-        try {
-            processor.execute(ingestDocument);
-        } catch (IllegalArgumentException e) {
-            assertEquals("list type field [key1] has empty string, can not process it", e.getMessage());
-        }
+
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(isNull(), any(IllegalArgumentException.class));
     }
 
     public void testExecute_listHasNonStringValue_throwIllegalArgumentException() throws Exception {
@@ -163,11 +177,9 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put("key2", list2);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
-        try {
-            processor.execute(ingestDocument);
-        } catch (IllegalArgumentException e) {
-            assertEquals("list type field [key2] has non string value, can not process it", e.getMessage());
-        }
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(isNull(), any(IllegalArgumentException.class));
     }
 
     public void testExecute_listHasNull_throwIllegalArgumentException() throws Exception {
@@ -179,11 +191,9 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put("key2", list);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
-        try {
-            processor.execute(ingestDocument);
-        } catch (IllegalArgumentException e) {
-            assertEquals("list type field [key2] has null, can not process it", e.getMessage());
-        }
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(isNull(), any(IllegalArgumentException.class));
     }
 
     public void testExecute_withMapTypeInput_successful() throws Exception {
@@ -194,8 +204,18 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put("key2", map2);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
-        IngestDocument document = processor.execute(ingestDocument);
-        assert document.getSourceAndMetadata().containsKey("key1");
+
+        List<List<Float>> modelTensorList = createMockVectorResult();
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            listener.onResponse(modelTensorList);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(any(IngestDocument.class), isNull());
+
     }
 
     public void testExecute_mapHasNonStringValue_throwIllegalArgumentException() throws Exception {
@@ -206,11 +226,9 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put("key2", map2);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
-        try {
-            processor.execute(ingestDocument);
-        } catch (IllegalArgumentException e) {
-            assertEquals("map type field [key2] has non-string type, can not process it", e.getMessage());
-        }
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(isNull(), any(IllegalArgumentException.class));
     }
 
     public void testExecute_mapHasEmptyStringValue_throwIllegalArgumentException() throws Exception {
@@ -221,11 +239,9 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put("key2", map2);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
-        try {
-            processor.execute(ingestDocument);
-        } catch (IllegalArgumentException e) {
-            assertEquals("map type field [key2] has empty string, can not process it", e.getMessage());
-        }
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(isNull(), any(IllegalArgumentException.class));
     }
 
     public void testExecute_mapDepthReachLimit_throwIllegalArgumentException() throws Exception {
@@ -235,13 +251,27 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put("key2", ret);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
-        try {
-            processor.execute(ingestDocument);
-        } catch (IllegalArgumentException e) {
-            assertEquals("map type field [key2] reached max depth limit, can not process it", e.getMessage());
-            return;
-        }
-        fail("Shouldn't be here, expected exception!");
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(isNull(), any(IllegalArgumentException.class));
+    }
+
+    public void testExecute_MLClientAccessorThrowFail_handlerFailure() throws Exception {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put("key1", "value1");
+        sourceAndMetadata.put("key2", "value2");
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
+
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            listener.onFailure(new IllegalArgumentException("illegal argument"));
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(isNull(), any(IllegalArgumentException.class));
     }
 
     private Map<String, Object> createMaxDepthLimitExceedMap(Supplier<Integer> maxDepthSupplier) {
@@ -267,17 +297,21 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         assert document.getSourceAndMetadata().containsKey("key2");
     }
 
-    public void testExecute_simpleTypeInputWithNonStringValue_throwIllegalArgumentException() throws Exception {
+    public void testExecute_simpleTypeInputWithNonStringValue_handleIllegalArgumentException() throws Exception {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put("key1", 100);
         sourceAndMetadata.put("key2", 100.232D);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            listener.onFailure(new IllegalArgumentException("illegal argument"));
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+
+        BiConsumer handler = mock(BiConsumer.class);
         TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
-        try {
-            processor.execute(ingestDocument);
-        } catch (IllegalArgumentException e) {
-            assertEquals("field [key1] is neither string nor nested type, can not process it", e.getMessage());
-        }
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(isNull(), any(IllegalArgumentException.class));
     }
 
     public void testGetType_successful() throws Exception {
