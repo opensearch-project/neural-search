@@ -40,7 +40,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_KNN_VECTOR_FIELD_NAME_2 = "test-knn-vector-2";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_NESTED = "nested.knn.field";
 
-    private static final int TEST_DIMENSION = 384;
+    private static final int TEST_DIMENSION = 768;
     private static final SpaceType TEST_SPACE_TYPE = SpaceType.L2;
     private final float[] testVector = createRandomVector(TEST_DIMENSION);
     private final AtomicReference<String> modelId = new AtomicReference<>();
