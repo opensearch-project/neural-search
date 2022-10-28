@@ -6,6 +6,7 @@
 package org.opensearch.neuralsearch.common;
 
 import static org.apache.http.entity.ContentType.APPLICATION_JSON;
+import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -15,6 +16,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
+
+import lombok.SneakyThrows;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.Header;
@@ -28,9 +32,14 @@ import org.opensearch.client.RequestOptions;
 import org.opensearch.client.Response;
 import org.opensearch.client.RestClient;
 import org.opensearch.client.WarningsHandler;
+import org.opensearch.common.Strings;
+import org.opensearch.common.xcontent.ToXContent;
+import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.rest.RestStatus;
 import org.opensearch.test.rest.OpenSearchRestTestCase;
 
 import com.google.common.collect.ImmutableList;
@@ -100,6 +109,43 @@ public abstract class BaseNeuralSearchIT extends OpenSearchRestTestCase {
         }
     }
 
+    /**
+     * Execute model inference on the provided query text
+     *
+     * @param modelId id of model to run inference
+     * @param queryText text to be transformed to a model
+     * @return text embedding
+     */
+    @SuppressWarnings("unchecked")
+    @SneakyThrows
+    public float[] runInference(String modelId, String queryText) {
+        Response inferenceResponse = makeRequest(
+            client(),
+            "POST",
+            String.format(LOCALE, "/_plugins/_ml/_predict/text_embedding/%s", modelId),
+            null,
+            toHttpEntity(String.format(LOCALE, "{\"text_docs\": [\"%s\"],\"target_response\": [\"sentence_embedding\"]}", queryText)),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+        );
+
+        Map<String, Object> inferenceResJson = XContentHelper.convertToMap(
+            XContentFactory.xContent(XContentType.JSON),
+            EntityUtils.toString(inferenceResponse.getEntity()),
+            false
+        );
+
+        Object inference_results = inferenceResJson.get("inference_results");
+        assertTrue(inference_results instanceof List);
+        List<Object> inferenceResultsAsMap = (List<Object>) inference_results;
+        assertEquals(1, inferenceResultsAsMap.size());
+        Map<String, Object> result = (Map<String, Object>) inferenceResultsAsMap.get(0);
+        List<Object> output = (List<Object>) result.get("output");
+        assertEquals(1, output.size());
+        Map<String, Object> map = (Map<String, Object>) output.get(0);
+        List<Float> data = ((List<Double>) map.get("data")).stream().map(Double::floatValue).collect(Collectors.toList());
+        return vectorAsListToArray(data);
+    }
+
     protected void createIndexWithConfiguration(String indexName, String indexConfiguration, String pipelineName) throws Exception {
         if (StringUtils.isNotBlank(pipelineName)) {
             indexConfiguration = String.format(LOCALE, indexConfiguration, pipelineName);
@@ -142,6 +188,90 @@ public abstract class BaseNeuralSearchIT extends OpenSearchRestTestCase {
             false
         );
         assertEquals("true", node.get("acknowledged").toString());
+    }
+
+    /**
+     * Get the number of documents in a particular index
+     *
+     * @param indexName name of index
+     * @return number of documents indexed to that index
+     */
+    @SneakyThrows
+    public int getDocCount(String indexName) {
+        Request request = new Request("GET", "/" + indexName + "/_count");
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), responseBody).map();
+        return (Integer) responseMap.get("count");
+    }
+
+    /**
+     * Execute a search request initialized from a neural query builder
+     *
+     * @param index Index to search against
+     * @param queryBuilder queryBuilder to produce source of query
+     * @param resultSize number of results to return in the search
+     * @return Search results represented as a map
+     */
+    protected Map<String, Object> search(String index, QueryBuilder queryBuilder, int resultSize) {
+        return search(index, queryBuilder, null, resultSize);
+    }
+
+    /**
+     * Execute a search request initialized from a neural query builder that can add a rescore query to the request
+     *
+     * @param index Index to search against
+     * @param queryBuilder queryBuilder to produce source of query
+     * @param  rescorer used for rescorer query builder
+     * @param resultSize number of results to return in the search
+     * @return Search results represented as a map
+     */
+    @SneakyThrows
+    protected Map<String, Object> search(String index, QueryBuilder queryBuilder, QueryBuilder rescorer, int resultSize) {
+        XContentBuilder builder = XContentFactory.jsonBuilder().startObject().field("query");
+        queryBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
+
+        if (rescorer != null) {
+            builder.startObject("rescore").startObject("query").field("query_weight", 0.0f).field("rescore_query");
+            rescorer.toXContent(builder, ToXContent.EMPTY_PARAMS);
+            builder.endObject().endObject();
+        }
+
+        builder.endObject();
+
+        Request request = new Request("POST", "/" + index + "/_search");
+        request.addParameter("size", Integer.toString(resultSize));
+        request.setJsonEntity(Strings.toString(builder));
+
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+
+        String responseBody = EntityUtils.toString(response.getEntity());
+
+        return XContentHelper.convertToMap(XContentFactory.xContent(XContentType.JSON), responseBody, false);
+    }
+
+    /**
+     * Add a set of knn docs to an index
+     *
+     * @param index Name of the index
+     * @param docId ID of document to be added
+     * @param fieldNames List of fields to be added
+     * @param vectors List of vectors corresponding to those fields
+     */
+    @SneakyThrows
+    protected void addKnnDoc(String index, String docId, List<String> fieldNames, List<Object[]> vectors) {
+        Request request = new Request("POST", "/" + index + "/_doc/" + docId + "?refresh=true");
+        XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
+        for (int i = 0; i < fieldNames.size(); i++) {
+            builder.field(fieldNames.get(i), vectors.get(i));
+        }
+        builder.endObject();
+
+        request.setJsonEntity(Strings.toString(builder));
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.CREATED, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
     }
 
     public Map<String, Object> getTaskQueryResponse(String taskId) throws IOException {
