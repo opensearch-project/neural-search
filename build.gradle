@@ -18,7 +18,7 @@ apply plugin: 'jacoco'
 apply plugin: "com.diffplug.spotless"
 apply plugin: 'io.freefair.lombok'
 
-def pluginName = 'neural-search'
+def pluginName = 'opensearch-neural-search'
 def pluginDescription = 'A plugin that adds dense neural retrieval into the OpenSearch ecosytem'
 def projectPath = 'org.opensearch'
 def pathToPlugin = 'neuralsearch.plugin'
