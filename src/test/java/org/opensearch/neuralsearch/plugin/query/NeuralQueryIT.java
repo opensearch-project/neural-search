@@ -9,21 +9,14 @@ import static org.opensearch.neuralsearch.plugin.TestUtils.createRandomVector;
 import static org.opensearch.neuralsearch.plugin.TestUtils.objectToFloat;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
 import lombok.SneakyThrows;
 
 import org.junit.Before;
-import org.opensearch.common.Strings;
-import org.opensearch.common.xcontent.XContentBuilder;
-import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.knn.index.SpaceType;
@@ -51,7 +44,208 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         modelId.compareAndSet(null, prepareModel());
     }
 
-    private void maybeInitializeIndex(String indexName) throws IOException {
+    /**
+     * Tests basic query:
+     * {
+     *     "query": {
+     *         "neural": {
+     *             "text_knn": {
+     *                 "query_text": "Hello world",
+     *                 "model_id": "dcsdcasd",
+     *                 "k": 1
+     *             }
+     *         }
+     *     }
+     * }
+     */
+    @SneakyThrows
+    public void testBasicQuery() {
+        initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
+            TEST_KNN_VECTOR_FIELD_NAME_1,
+            TEST_QUERY_TEXT,
+            modelId.get(),
+            1,
+            null
+        );
+        Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, neuralQueryBuilder, 1);
+        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+
+        assertEquals("1", firstInnerHit.get("_id"));
+        float expectedScore = computeExpectedScore(modelId.get(), testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
+        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
+    }
+
+    /**
+     * Tests basic query with boost parameter:
+     * {
+     *     "query": {
+     *         "neural": {
+     *             "text_knn": {
+     *                 "query_text": "Hello world",
+     *                 "model_id": "dcsdcasd",
+     *                 "k": 1,
+     *                 "boost": 2.0
+     *             }
+     *         }
+     *     }
+     * }
+     */
+    @SneakyThrows
+    public void testBoostQuery() {
+        initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
+            TEST_KNN_VECTOR_FIELD_NAME_1,
+            TEST_QUERY_TEXT,
+            modelId.get(),
+            1,
+            null
+        );
+
+        final float boost = 2.0f;
+        neuralQueryBuilder.boost(boost);
+        Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, neuralQueryBuilder, 1);
+        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+
+        assertEquals("1", firstInnerHit.get("_id"));
+        float expectedScore = 2 * computeExpectedScore(modelId.get(), testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
+        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
+    }
+
+    /**
+     * Tests rescore query:
+     * {
+     *     "query" : {
+     *       "match_all": {}
+     *     },
+     *     "rescore": {
+     *         "query": {
+     *              "rescore_query": {
+     *                  "neural": {
+     *                      "text_knn": {
+     *                          "query_text": "Hello world",
+     *                          "model_id": "dcsdcasd",
+     *                          "k": 1
+     *                      }
+     *                  }
+     *              }
+     *          }
+     *    }
+     */
+    @SneakyThrows
+    public void testRescoreQuery() {
+        initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
+        MatchAllQueryBuilder matchAllQueryBuilder = new MatchAllQueryBuilder();
+        NeuralQueryBuilder rescoreNeuralQueryBuilder = new NeuralQueryBuilder(
+            TEST_KNN_VECTOR_FIELD_NAME_1,
+            TEST_QUERY_TEXT,
+            modelId.get(),
+            1,
+            null
+        );
+
+        Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, matchAllQueryBuilder, rescoreNeuralQueryBuilder, 1);
+        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+
+        assertEquals("1", firstInnerHit.get("_id"));
+        float expectedScore = computeExpectedScore(modelId.get(), testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
+        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
+    }
+
+    /**
+     * Tests bool should query:
+     * {
+     *     "query": {
+     *         "bool" : {
+     *             "should": [
+     *                 "neural": {
+     *                     "field_1": {
+     *                         "query_text": "Hello world",
+     *                         "model_id": "dcsdcasd",
+     *                         "k": 1
+     *                     },
+     *                  },
+     *                  "neural": {
+     *                     "field_2": {
+     *                         "query_text": "Hello world",
+     *                         "model_id": "dcsdcasd",
+     *                         "k": 1
+     *                     }
+     *                  }
+     *             ]
+     *         }
+     *     }
+     * }
+     */
+    @SneakyThrows
+    public void testBooleanQuery() {
+        initializeIndexIfNotExist(TEST_MULTI_FIELD_INDEX_NAME);
+        BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
+
+        NeuralQueryBuilder neuralQueryBuilder1 = new NeuralQueryBuilder(
+            TEST_KNN_VECTOR_FIELD_NAME_1,
+            TEST_QUERY_TEXT,
+            modelId.get(),
+            1,
+            null
+        );
+        NeuralQueryBuilder neuralQueryBuilder2 = new NeuralQueryBuilder(
+            TEST_KNN_VECTOR_FIELD_NAME_2,
+            TEST_QUERY_TEXT,
+            modelId.get(),
+            1,
+            null
+        );
+
+        boolQueryBuilder.should(neuralQueryBuilder1).should(neuralQueryBuilder2);
+
+        Map<String, Object> searchResponseAsMap = search(TEST_MULTI_FIELD_INDEX_NAME, boolQueryBuilder, 1);
+        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+
+        assertEquals("1", firstInnerHit.get("_id"));
+        float expectedScore = 2 * computeExpectedScore(modelId.get(), testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
+        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
+    }
+
+    /**
+     * Tests bool should query:
+     * {
+     *     "query": {
+     *         "nested" : {
+     *             "query": {
+     *                 "neural": {
+     *                     "field_1": {
+     *                         "query_text": "Hello world",
+     *                         "model_id": "dcsdcasd",
+     *                         "k": 1
+     *                     },
+     *                  }
+     *              }
+     *          }
+     *      }
+     * }
+     */
+    @SneakyThrows
+    public void testNestedQuery() {
+        initializeIndexIfNotExist(TEST_NESTED_INDEX_NAME);
+
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
+            TEST_KNN_VECTOR_FIELD_NAME_NESTED,
+            TEST_QUERY_TEXT,
+            modelId.get(),
+            1,
+            null
+        );
+
+        Map<String, Object> searchResponseAsMap = search(TEST_NESTED_INDEX_NAME, neuralQueryBuilder, 1);
+        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+
+        assertEquals("1", firstInnerHit.get("_id"));
+        float expectedScore = computeExpectedScore(modelId.get(), testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
+        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
+    }
+
+    private void initializeIndexIfNotExist(String indexName) throws IOException {
         if (TEST_BASIC_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_INDEX_NAME)) {
             prepareKnnIndex(
                 TEST_BASIC_INDEX_NAME,
@@ -96,174 +290,5 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
             );
             assertEquals(1, getDocCount(TEST_NESTED_INDEX_NAME));
         }
-    }
-
-    @SneakyThrows
-    public void testBasicQuery() {
-        maybeInitializeIndex(TEST_BASIC_INDEX_NAME);
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
-            TEST_KNN_VECTOR_FIELD_NAME_1,
-            TEST_QUERY_TEXT,
-            modelId.get(),
-            1,
-            null
-        );
-        Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, neuralQueryBuilder, 1);
-        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
-
-        assertEquals(firstInnerHit.get("_id"), "1");
-
-        float expectedScore = computeExpectedScore(modelId.get(), testVector, TEST_SPACE_TYPE);
-        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
-    }
-
-    @SneakyThrows
-    public void testBoostQuery() {
-        maybeInitializeIndex(TEST_BASIC_INDEX_NAME);
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
-            TEST_KNN_VECTOR_FIELD_NAME_1,
-            TEST_QUERY_TEXT,
-            modelId.get(),
-            1,
-            null
-        );
-
-        final float boost = 2.0f;
-        neuralQueryBuilder.boost(boost);
-        Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, neuralQueryBuilder, 1);
-        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
-
-        assertEquals(firstInnerHit.get("_id"), "1");
-        float expectedScore = boost * computeExpectedScore(modelId.get(), testVector, TEST_SPACE_TYPE);
-        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
-    }
-
-    @SneakyThrows
-    public void testRescoreQuery() {
-        maybeInitializeIndex(TEST_BASIC_INDEX_NAME);
-        MatchAllQueryBuilder matchAllQueryBuilder = new MatchAllQueryBuilder();
-        NeuralQueryBuilder rescoreNeuralQueryBuilder = new NeuralQueryBuilder(
-            TEST_KNN_VECTOR_FIELD_NAME_1,
-            TEST_QUERY_TEXT,
-            modelId.get(),
-            1,
-            null
-        );
-
-        Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, matchAllQueryBuilder, rescoreNeuralQueryBuilder, 1);
-        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
-
-        assertEquals(firstInnerHit.get("_id"), "1");
-        float expectedScore = computeExpectedScore(modelId.get(), testVector, TEST_SPACE_TYPE);
-        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
-    }
-
-    @SneakyThrows
-    public void testBooleanQuery() {
-        maybeInitializeIndex(TEST_MULTI_FIELD_INDEX_NAME);
-        BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
-
-        NeuralQueryBuilder neuralQueryBuilder1 = new NeuralQueryBuilder(
-            TEST_KNN_VECTOR_FIELD_NAME_1,
-            TEST_QUERY_TEXT,
-            modelId.get(),
-            1,
-            null
-        );
-        NeuralQueryBuilder neuralQueryBuilder2 = new NeuralQueryBuilder(
-            TEST_KNN_VECTOR_FIELD_NAME_2,
-            TEST_QUERY_TEXT,
-            modelId.get(),
-            1,
-            null
-        );
-
-        boolQueryBuilder.should(neuralQueryBuilder1).should(neuralQueryBuilder2);
-
-        Map<String, Object> searchResponseAsMap = search(TEST_MULTI_FIELD_INDEX_NAME, boolQueryBuilder, 1);
-        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
-
-        assertEquals(firstInnerHit.get("_id"), "1");
-        float expectedScore = 2 * computeExpectedScore(modelId.get(), testVector, TEST_SPACE_TYPE);
-        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
-    }
-
-    @SneakyThrows
-    public void testNestedQuery() {
-        maybeInitializeIndex(TEST_NESTED_INDEX_NAME);
-
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
-            TEST_KNN_VECTOR_FIELD_NAME_NESTED,
-            TEST_QUERY_TEXT,
-            modelId.get(),
-            1,
-            null
-        );
-
-        Map<String, Object> searchResponseAsMap = search(TEST_NESTED_INDEX_NAME, neuralQueryBuilder, 1);
-        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
-
-        assertEquals(firstInnerHit.get("_id"), "1");
-        float expectedScore = computeExpectedScore(modelId.get(), testVector, TEST_SPACE_TYPE);
-        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
-    }
-
-    @SuppressWarnings("unchecked")
-    protected Map<String, Object> getFirstInnerHit(Map<String, Object> searchResponseAsMap) {
-        Map<String, Object> hits1map = (Map<String, Object>) searchResponseAsMap.get("hits");
-        List<Object> hits2List = (List<Object>) hits1map.get("hits");
-        assertTrue(hits2List.size() > 0);
-        return (Map<String, Object>) hits2List.get(0);
-    }
-
-    @SneakyThrows
-    private String prepareModel() {
-        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        String modelId = uploadModel(requestBody);
-        loadModel(modelId);
-        return modelId;
-    }
-
-    @SneakyThrows
-    private void prepareKnnIndex(String indexName, List<KNNFieldConfig> knnFieldConfigs) {
-        createIndexWithConfiguration(indexName, buildIndexConfiguration(knnFieldConfigs), "");
-    }
-
-    @SneakyThrows
-    private String buildIndexConfiguration(List<KNNFieldConfig> knnFieldConfigs) {
-        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject("settings")
-            .field("number_of_shards", 3)
-            .field("index.knn", true)
-            .endObject()
-            .startObject("mappings")
-            .startObject("properties");
-
-        for (KNNFieldConfig knnFieldConfig : knnFieldConfigs) {
-            xContentBuilder.startObject(knnFieldConfig.getName())
-                .field("type", "knn_vector")
-                .field("dimension", Integer.toString(knnFieldConfig.getDimension()))
-                .startObject("method")
-                .field("engine", "lucene")
-                .field("space_type", knnFieldConfig.getSpaceType().getValue())
-                .field("name", "hnsw")
-                .endObject()
-                .endObject();
-        }
-        return Strings.toString(xContentBuilder.endObject().endObject().endObject());
-    }
-
-    private float computeExpectedScore(String modelId, float[] indexVector, SpaceType spaceType) throws IOException {
-        float[] queryVector = runInference(modelId, TEST_QUERY_TEXT);
-        return spaceType.getVectorSimilarityFunction().compare(queryVector, indexVector);
-    }
-
-    @AllArgsConstructor
-    @Getter
-    private static class KNNFieldConfig {
-        private final String name;
-        private final Integer dimension;
-        private final SpaceType spaceType;
     }
 }

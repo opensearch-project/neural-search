@@ -18,6 +18,8 @@ import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.SneakyThrows;
 
 import org.apache.commons.lang3.StringUtils;
@@ -39,12 +41,13 @@ import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.knn.index.SpaceType;
+import org.opensearch.neuralsearch.OpenSearchSecureRestTestCase;
 import org.opensearch.rest.RestStatus;
-import org.opensearch.test.rest.OpenSearchRestTestCase;
 
 import com.google.common.collect.ImmutableList;
 
-public abstract class BaseNeuralSearchIT extends OpenSearchRestTestCase {
+public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     private static final Locale LOCALE = Locale.ROOT;
 
@@ -54,7 +57,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchRestTestCase {
 
     protected final ClassLoader classLoader = this.getClass().getClassLoader();
 
-    public String uploadModel(String requestBody) throws Exception {
+    protected String uploadModel(String requestBody) throws Exception {
         Response uploadResponse = makeRequest(
             client(),
             "POST",
@@ -83,7 +86,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchRestTestCase {
         return modelId;
     }
 
-    public void loadModel(String modelId) throws IOException, InterruptedException {
+    protected void loadModel(String modelId) throws IOException, InterruptedException {
         Response uploadResponse = makeRequest(
             client(),
             "POST",
@@ -110,6 +113,19 @@ public abstract class BaseNeuralSearchIT extends OpenSearchRestTestCase {
     }
 
     /**
+     * Upload default model and load into the cluster
+     *
+     * @return modelID
+     */
+    @SneakyThrows
+    protected String prepareModel() {
+        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
+        String modelId = uploadModel(requestBody);
+        loadModel(modelId);
+        return modelId;
+    }
+
+    /**
      * Execute model inference on the provided query text
      *
      * @param modelId id of model to run inference
@@ -118,7 +134,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchRestTestCase {
      */
     @SuppressWarnings("unchecked")
     @SneakyThrows
-    public float[] runInference(String modelId, String queryText) {
+    protected float[] runInference(String modelId, String queryText) {
         Response inferenceResponse = makeRequest(
             client(),
             "POST",
@@ -167,7 +183,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchRestTestCase {
         assertEquals(indexName, node.get("index").toString());
     }
 
-    public void createPipelineProcessor(String modelId, String pipelineName) throws Exception {
+    protected void createPipelineProcessor(String modelId, String pipelineName) throws Exception {
         Response pipelineCreateResponse = makeRequest(
             client(),
             "PUT",
@@ -197,7 +213,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchRestTestCase {
      * @return number of documents indexed to that index
      */
     @SneakyThrows
-    public int getDocCount(String indexName) {
+    protected int getDocCount(String indexName) {
         Request request = new Request("GET", "/" + indexName + "/_count");
         Response response = client().performRequest(request);
         assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
@@ -274,7 +290,46 @@ public abstract class BaseNeuralSearchIT extends OpenSearchRestTestCase {
         assertEquals(request.getEndpoint() + ": failed", RestStatus.CREATED, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
     }
 
-    public Map<String, Object> getTaskQueryResponse(String taskId) throws IOException {
+    /**
+     * Parse the first returned hit from a search response as a map
+     *
+     * @param searchResponseAsMap Complete search response as a map
+     * @return Map of first internal hit from the search
+     */
+    @SuppressWarnings("unchecked")
+    protected Map<String, Object> getFirstInnerHit(Map<String, Object> searchResponseAsMap) {
+        Map<String, Object> hits1map = (Map<String, Object>) searchResponseAsMap.get("hits");
+        List<Object> hits2List = (List<Object>) hits1map.get("hits");
+        assertTrue(hits2List.size() > 0);
+        return (Map<String, Object>) hits2List.get(0);
+    }
+
+    /**
+     * Create a k-NN index from a list of KNNFieldConfigs
+     *
+     * @param indexName of index to be created
+     * @param knnFieldConfigs list of configs specifying field
+     */
+    @SneakyThrows
+    protected void prepareKnnIndex(String indexName, List<KNNFieldConfig> knnFieldConfigs) {
+        createIndexWithConfiguration(indexName, buildIndexConfiguration(knnFieldConfigs), "");
+    }
+
+    /**
+     * Computes the expected distance between an indexVector and query text without using the neural query type.
+     *
+     * @param modelId ID of model to run inference
+     * @param indexVector vector to compute score against
+     * @param spaceType Space to measure distance
+     * @param queryText Text to produce query vector from
+     * @return Expected OpenSearch score for this indexVector
+     */
+    protected float computeExpectedScore(String modelId, float[] indexVector, SpaceType spaceType, String queryText) {
+        float[] queryVector = runInference(modelId, queryText);
+        return spaceType.getVectorSimilarityFunction().compare(queryVector, indexVector);
+    }
+
+    protected Map<String, Object> getTaskQueryResponse(String taskId) throws IOException {
         Response taskQueryResponse = makeRequest(
             client(),
             "GET",
@@ -290,12 +345,37 @@ public abstract class BaseNeuralSearchIT extends OpenSearchRestTestCase {
         );
     }
 
-    public boolean checkComplete(Map<String, Object> node) {
+    protected boolean checkComplete(Map<String, Object> node) {
         Predicate<Map<String, Object>> predicate = x -> node.get("error") != null || "COMPLETED".equals(String.valueOf(node.get("state")));
         return predicate.test(node);
     }
 
-    public static Response makeRequest(
+    @SneakyThrows
+    private String buildIndexConfiguration(List<KNNFieldConfig> knnFieldConfigs) {
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("settings")
+            .field("number_of_shards", 3)
+            .field("index.knn", true)
+            .endObject()
+            .startObject("mappings")
+            .startObject("properties");
+
+        for (KNNFieldConfig knnFieldConfig : knnFieldConfigs) {
+            xContentBuilder.startObject(knnFieldConfig.getName())
+                .field("type", "knn_vector")
+                .field("dimension", Integer.toString(knnFieldConfig.getDimension()))
+                .startObject("method")
+                .field("engine", "lucene")
+                .field("space_type", knnFieldConfig.getSpaceType().getValue())
+                .field("name", "hnsw")
+                .endObject()
+                .endObject();
+        }
+        return Strings.toString(xContentBuilder.endObject().endObject().endObject());
+    }
+
+    protected static Response makeRequest(
         RestClient client,
         String method,
         String endpoint,
@@ -306,7 +386,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchRestTestCase {
         return makeRequest(client, method, endpoint, params, entity, headers, false);
     }
 
-    public static Response makeRequest(
+    protected static Response makeRequest(
         RestClient client,
         String method,
         String endpoint,
@@ -333,8 +413,15 @@ public abstract class BaseNeuralSearchIT extends OpenSearchRestTestCase {
         return client.performRequest(request);
     }
 
-    public static HttpEntity toHttpEntity(String jsonString) {
+    protected static HttpEntity toHttpEntity(String jsonString) {
         return new StringEntity(jsonString, APPLICATION_JSON);
     }
 
+    @AllArgsConstructor
+    @Getter
+    protected static class KNNFieldConfig {
+        private final String name;
+        private final Integer dimension;
+        private final SpaceType spaceType;
+    }
 }
