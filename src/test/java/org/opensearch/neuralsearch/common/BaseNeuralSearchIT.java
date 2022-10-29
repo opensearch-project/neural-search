@@ -37,7 +37,7 @@ import com.google.common.collect.ImmutableList;
 
 public abstract class BaseNeuralSearchIT extends OpenSearchRestTestCase {
 
-    private static final Locale LOCALE = Locale.getDefault();
+    private static final Locale LOCALE = Locale.ROOT;
 
     private static final int MAX_TASK_RESULT_QUERY_TIME_IN_SECOND = 60 * 5;
 
