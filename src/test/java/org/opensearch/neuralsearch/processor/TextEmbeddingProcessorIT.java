@@ -41,7 +41,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         Path path = Path.of(testClusterPath + "/all-MiniLM-L6-v2.zip");
         Files.copy(Path.of(classLoader.getResource("model/all-MiniLM-L6-v2.zip").toURI()), path);
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        String request = String.format(Locale.getDefault(), requestBody, path);
+        String request = String.format(Locale.ROOT, requestBody, path);
         return uploadModel(request);
     }
 
