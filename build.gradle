@@ -232,6 +232,7 @@ testClusters.integTest {
             debugPort += 1
         }
     }
+    systemProperty "tests.heap.size", "1g"
 }
 
 // Remote Integration Tests
