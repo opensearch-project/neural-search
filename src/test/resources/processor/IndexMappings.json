@@ -13,7 +13,7 @@
     "properties": {
       "title_knn": {
         "type": "knn_vector",
-        "dimension": 384,
+        "dimension": 768,
         "method": {
           "name": "hnsw",
           "space_type": "l2",
@@ -26,7 +26,7 @@
       },
       "favorites.game_knn": {
         "type": "knn_vector",
-        "dimension": 384,
+        "dimension": 768,
         "method": {
           "name": "hnsw",
           "space_type": "l2",
@@ -39,7 +39,7 @@
       },
       "favorites.movie_knn": {
         "type": "knn_vector",
-        "dimension": 384,
+        "dimension": 768,
         "method": {
           "name": "hnsw",
           "space_type": "l2",
@@ -55,7 +55,7 @@
         "properties": {
           "knn": {
             "type": "knn_vector",
-            "dimension": 384,
+            "dimension": 768,
             "method": {
               "name": "hnsw",
               "space_type": "l2",
