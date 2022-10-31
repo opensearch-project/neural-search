@@ -11,6 +11,7 @@ import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -269,19 +270,44 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     /**
-     * Add a set of knn docs to an index
+     * Add a set of knn vectors
      *
      * @param index Name of the index
      * @param docId ID of document to be added
-     * @param fieldNames List of fields to be added
+     * @param vectorFieldNames List of vectir fields to be added
      * @param vectors List of vectors corresponding to those fields
      */
+    protected void addKnnDoc(String index, String docId, List<String> vectorFieldNames, List<Object[]> vectors) {
+        addKnnDoc(index, docId, vectorFieldNames, vectors, Collections.emptyList(), Collections.emptyList());
+    }
+
+    /**
+     * Add a set of knn vectors and text to an index
+     *
+     * @param index Name of the index
+     * @param docId ID of document to be added
+     * @param vectorFieldNames List of vectir fields to be added
+     * @param vectors List of vectors corresponding to those fields
+     * @param textFieldNames List of text fields to be added
+     * @param texts List of text corresponding to those fields
+     */
     @SneakyThrows
-    protected void addKnnDoc(String index, String docId, List<String> fieldNames, List<Object[]> vectors) {
+    protected void addKnnDoc(
+        String index,
+        String docId,
+        List<String> vectorFieldNames,
+        List<Object[]> vectors,
+        List<String> textFieldNames,
+        List<String> texts
+    ) {
         Request request = new Request("POST", "/" + index + "/_doc/" + docId + "?refresh=true");
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
-        for (int i = 0; i < fieldNames.size(); i++) {
-            builder.field(fieldNames.get(i), vectors.get(i));
+        for (int i = 0; i < vectorFieldNames.size(); i++) {
+            builder.field(vectorFieldNames.get(i), vectors.get(i));
+        }
+
+        for (int i = 0; i < textFieldNames.size(); i++) {
+            builder.field(textFieldNames.get(i), texts.get(i));
         }
         builder.endObject();
 
