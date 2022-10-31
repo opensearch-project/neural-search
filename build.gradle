@@ -232,7 +232,8 @@ testClusters.integTest {
             debugPort += 1
         }
     }
-    systemProperty "tests.heap.size", "1g"
+
+    jvmArgs("-Xms1g", "-Xmx1g")
 }
 
 // Remote Integration Tests
