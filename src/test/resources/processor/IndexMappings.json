@@ -17,7 +17,7 @@
         "method": {
           "name": "hnsw",
           "space_type": "l2",
-          "engine": "nmslib",
+          "engine": "lucene",
           "parameters": {
             "ef_construction": 128,
             "m": 24
@@ -30,7 +30,7 @@
         "method": {
           "name": "hnsw",
           "space_type": "l2",
-          "engine": "nmslib",
+          "engine": "lucene",
           "parameters": {
             "ef_construction": 128,
             "m": 24
@@ -43,7 +43,7 @@
         "method": {
           "name": "hnsw",
           "space_type": "l2",
-          "engine": "nmslib",
+          "engine": "lucene",
           "parameters": {
             "ef_construction": 128,
             "m": 24
@@ -59,7 +59,7 @@
             "method": {
               "name": "hnsw",
               "space_type": "l2",
-              "engine": "nmslib",
+              "engine": "lucene",
               "parameters": {
                 "ef_construction": 128,
                 "m": 24
