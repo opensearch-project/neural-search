@@ -32,6 +32,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         createPipelineProcessor(modelId, PIPELINE_NAME);
         createTextEmbeddingIndex();
         ingestDocument();
+        assertEquals(1, getDocCount(INDEX_NAME));
     }
 
     private String uploadTextEmbeddingModel() throws Exception {
@@ -64,7 +65,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         Response response = makeRequest(
             client(),
             "POST",
-            INDEX_NAME + "/_doc",
+            INDEX_NAME + "/_doc?refresh",
             null,
             toHttpEntity(ingestDocument),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
