@@ -3,18 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package org.opensearch.neuralsearch.plugin.query;
+package org.opensearch.neuralsearch.query;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.opensearch.index.query.AbstractQueryBuilder.BOOST_FIELD;
 import static org.opensearch.index.query.AbstractQueryBuilder.NAME_FIELD;
-import static org.opensearch.neuralsearch.plugin.TestUtils.xContentBuilderToMap;
-import static org.opensearch.neuralsearch.plugin.query.NeuralQueryBuilder.K_FIELD;
-import static org.opensearch.neuralsearch.plugin.query.NeuralQueryBuilder.MODEL_ID_FIELD;
-import static org.opensearch.neuralsearch.plugin.query.NeuralQueryBuilder.NAME;
-import static org.opensearch.neuralsearch.plugin.query.NeuralQueryBuilder.QUERY_TEXT_FIELD;
+import static org.opensearch.neuralsearch.TestUtils.xContentBuilderToMap;
+import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.K_FIELD;
+import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MODEL_ID_FIELD;
+import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.NAME;
+import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TEXT_FIELD;
 
 import java.io.IOException;
 import java.util.Arrays;
