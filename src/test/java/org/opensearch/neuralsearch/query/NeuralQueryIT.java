@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package org.opensearch.neuralsearch.plugin.query;
+package org.opensearch.neuralsearch.query;
 
-import static org.opensearch.neuralsearch.plugin.TestUtils.createRandomVector;
-import static org.opensearch.neuralsearch.plugin.TestUtils.objectToFloat;
+import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
+import static org.opensearch.neuralsearch.TestUtils.objectToFloat;
 
 import java.io.IOException;
 import java.util.Collections;

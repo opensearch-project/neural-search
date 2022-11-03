@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package org.opensearch.neuralsearch.plugin;
+package org.opensearch.neuralsearch;
 
 import static org.opensearch.test.OpenSearchTestCase.randomFloat;
 
