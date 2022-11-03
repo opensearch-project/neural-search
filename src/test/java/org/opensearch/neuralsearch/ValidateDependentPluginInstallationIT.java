@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package org.opensearch.neuralsearch.plugin;
+package org.opensearch.neuralsearch;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -18,7 +18,6 @@ import org.opensearch.client.Response;
 import org.opensearch.common.Strings;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.neuralsearch.OpenSearchSecureRestTestCase;
 import org.opensearch.rest.RestRequest;
 
 /**

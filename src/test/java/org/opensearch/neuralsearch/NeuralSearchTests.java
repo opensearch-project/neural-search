@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package org.opensearch.neuralsearch.plugin;
+package org.opensearch.neuralsearch;
 
 import org.opensearch.knn.common.KNNConstants;
 import org.opensearch.knn.index.util.KNNEngine;
