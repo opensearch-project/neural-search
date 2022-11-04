@@ -15,7 +15,7 @@ Compatible with OpenSearch 2.4.0
 
 ### Bug Fixes
 
-* Update the model function name from CUSTOM to TEXT_EMBEDDING as perthe latest changes in MLCommons [#17](https://github.com/opensearch-project/neural-search/pull/17)
+* Update the model function name from CUSTOM to TEXT_EMBEDDING as per the latest changes in MLCommons [#17](https://github.com/opensearch-project/neural-search/pull/17)
 * Fix the locale changes from locale.default to locale.ROOT to fix the tests failing on Windows [#43](https://github.com/opensearch-project/neural-search/pull/43)
 
 ### Infrastructure
