@@ -2,7 +2,7 @@
 
 Compatible with OpenSearch 2.4.0
 
-### Features
+### Experimental Features
 
 * Add MLCommonsClientAccessor and MLPredict TransportAction for accessing the MLClient's predict API ([#16](https://github.com/opensearch-project/neural-search/pull/16))
 * Add parsing logic for neural query ([#15](https://github.com/opensearch-project/neural-search/pull/15))
