@@ -38,13 +38,15 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
 
     private static final int TEST_DIMENSION = 768;
     private static final SpaceType TEST_SPACE_TYPE = SpaceType.L2;
+    private static final AtomicReference<String> modelId = new AtomicReference<>();
     private final float[] testVector = createRandomVector(TEST_DIMENSION);
-    private final AtomicReference<String> modelId = new AtomicReference<>();
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        modelId.compareAndSet(null, prepareModel());
+        if (modelId.get() == null) {
+            modelId.compareAndSet(null, prepareModel());
+        }
     }
 
     /**
