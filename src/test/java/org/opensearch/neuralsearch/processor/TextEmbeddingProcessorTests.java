@@ -127,10 +127,8 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         verify(handler).accept(isNull(), any(RuntimeException.class));
     }
 
-    public void testExecute_whenInferenceTextListEmpty_throwIllegalArgumentsException() throws Exception {
+    public void testExecute_whenInferenceTextListEmpty_SuccessWithoutEmbedding() throws Exception {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
-        sourceAndMetadata.put("key1", null);
-        sourceAndMetadata.put("key2", null);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         Map<String, Processor.Factory> registry = new HashMap<>();
         MLCommonsClientAccessor accessor = mock(MLCommonsClientAccessor.class);
@@ -143,7 +141,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         doThrow(new RuntimeException()).when(accessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
-        verify(handler).accept(isNull(), any(IllegalArgumentException.class));
+        verify(handler).accept(any(IngestDocument.class), isNull());
     }
 
     public void testExecute_withListTypeInput_successful() throws Exception {

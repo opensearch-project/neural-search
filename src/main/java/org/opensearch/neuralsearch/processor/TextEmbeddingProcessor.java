@@ -102,12 +102,13 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
             Map<String, Object> knnMap = buildMapWithKnnKeyAndOriginalValue(ingestDocument);
             List<String> inferenceList = createInferenceList(knnMap);
             if (inferenceList.size() == 0) {
-                throw new IllegalArgumentException("Unable to process embedding since no text found from corresponding source fields");
-            }
-            mlCommonsClientAccessor.inferenceSentences(this.modelId, inferenceList, ActionListener.wrap(vectors -> {
-                appendVectorFieldsToDocument(ingestDocument, knnMap, vectors);
                 handler.accept(ingestDocument, null);
-            }, e -> { handler.accept(null, e); }));
+            } else {
+                mlCommonsClientAccessor.inferenceSentences(this.modelId, inferenceList, ActionListener.wrap(vectors -> {
+                    appendVectorFieldsToDocument(ingestDocument, knnMap, vectors);
+                    handler.accept(ingestDocument, null);
+                }, e -> { handler.accept(null, e); }));
+            }
         } catch (Exception e) {
             handler.accept(null, e);
         }
