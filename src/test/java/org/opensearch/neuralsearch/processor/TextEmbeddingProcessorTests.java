@@ -127,6 +127,23 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         verify(handler).accept(isNull(), any(RuntimeException.class));
     }
 
+    public void testExecute_whenInferenceTextListEmpty_SuccessWithoutEmbedding() throws Exception {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        MLCommonsClientAccessor accessor = mock(MLCommonsClientAccessor.class);
+        TextEmbeddingProcessorFactory textEmbeddingProcessorFactory = new TextEmbeddingProcessorFactory(accessor, env);
+
+        Map<String, Object> config = new HashMap<>();
+        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
+        config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1Mapped", "key2", "key2Mapped"));
+        TextEmbeddingProcessor processor = textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+        doThrow(new RuntimeException()).when(accessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(any(IngestDocument.class), isNull());
+    }
+
     public void testExecute_withListTypeInput_successful() throws Exception {
         List<String> list1 = ImmutableList.of("test1", "test2", "test3");
         List<String> list2 = ImmutableList.of("test4", "test5", "test6");
