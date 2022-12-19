@@ -5,6 +5,9 @@
 
 package org.opensearch.neuralsearch;
 
+import static org.opensearch.client.RestClientBuilder.DEFAULT_MAX_CONN_PER_ROUTE;
+import static org.opensearch.client.RestClientBuilder.DEFAULT_MAX_CONN_TOTAL;
+
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
@@ -12,15 +15,19 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import org.apache.http.Header;
-import org.apache.http.HttpHost;
-import org.apache.http.auth.AuthScope;
-import org.apache.http.auth.UsernamePasswordCredentials;
-import org.apache.http.client.CredentialsProvider;
-import org.apache.http.conn.ssl.NoopHostnameVerifier;
-import org.apache.http.impl.client.BasicCredentialsProvider;
-import org.apache.http.message.BasicHeader;
-import org.apache.http.ssl.SSLContextBuilder;
+import org.apache.hc.client5.http.auth.AuthScope;
+import org.apache.hc.client5.http.auth.UsernamePasswordCredentials;
+import org.apache.hc.client5.http.impl.auth.BasicCredentialsProvider;
+import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManager;
+import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManagerBuilder;
+import org.apache.hc.client5.http.ssl.ClientTlsStrategyBuilder;
+import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
+import org.apache.hc.core5.http.Header;
+import org.apache.hc.core5.http.HttpHost;
+import org.apache.hc.core5.http.message.BasicHeader;
+import org.apache.hc.core5.http.nio.ssl.TlsStrategy;
+import org.apache.hc.core5.ssl.SSLContextBuilder;
+import org.apache.hc.core5.util.Timeout;
 import org.junit.After;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
@@ -97,13 +104,20 @@ public abstract class OpenSearchSecureRestTestCase extends OpenSearchRestTestCas
                 .orElseThrow(() -> new RuntimeException("user name is missing"));
             final String password = Optional.ofNullable(System.getProperty(SYS_PROPERTY_KEY_PASSWORD))
                 .orElseThrow(() -> new RuntimeException("password is missing"));
-            final CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
-            credentialsProvider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials(userName, password));
+            final BasicCredentialsProvider credentialsProvider = new BasicCredentialsProvider();
+            final AuthScope anyScope = new AuthScope(null, -1);
+            credentialsProvider.setCredentials(anyScope, new UsernamePasswordCredentials(userName, password.toCharArray()));
             try {
-                return httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider)
-                    // disable the certificate since our testing cluster just uses the default security configuration
-                    .setSSLHostnameVerifier(NoopHostnameVerifier.INSTANCE)
-                    .setSSLContext(SSLContextBuilder.create().loadTrustMaterial(null, (chains, authType) -> true).build());
+                final TlsStrategy tlsStrategy = ClientTlsStrategyBuilder.create()
+                    .setHostnameVerifier(NoopHostnameVerifier.INSTANCE)
+                    .setSslContext(SSLContextBuilder.create().loadTrustMaterial(null, (chains, authType) -> true).build())
+                    .build();
+                final PoolingAsyncClientConnectionManager connectionManager = PoolingAsyncClientConnectionManagerBuilder.create()
+                    .setMaxConnPerRoute(DEFAULT_MAX_CONN_PER_ROUTE)
+                    .setMaxConnTotal(DEFAULT_MAX_CONN_TOTAL)
+                    .setTlsStrategy(tlsStrategy)
+                    .build();
+                return httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider).setConnectionManager(connectionManager);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -114,7 +128,12 @@ public abstract class OpenSearchSecureRestTestCase extends OpenSearchRestTestCas
             socketTimeoutString == null ? DEFAULT_SOCKET_TIMEOUT : socketTimeoutString,
             CLIENT_SOCKET_TIMEOUT
         );
-        builder.setRequestConfigCallback(conf -> conf.setSocketTimeout(Math.toIntExact(socketTimeout.getMillis())));
+        builder.setRequestConfigCallback(conf -> {
+            Timeout timeout = Timeout.ofMilliseconds(Math.toIntExact(socketTimeout.getMillis()));
+            conf.setConnectTimeout(timeout);
+            conf.setResponseTimeout(timeout);
+            return conf;
+        });
         if (settings.hasValue(CLIENT_PATH_PREFIX)) {
             builder.setPathPrefix(settings.get(CLIENT_PATH_PREFIX));
         }
@@ -131,7 +150,7 @@ public abstract class OpenSearchSecureRestTestCase extends OpenSearchRestTestCas
     @After
     public void deleteExternalIndices() throws IOException {
         final Response response = client().performRequest(new Request("GET", "/_cat/indices?format=json" + "&expand_wildcards=all"));
-        final XContentType xContentType = XContentType.fromMediaType(response.getEntity().getContentType().getValue());
+        final XContentType xContentType = XContentType.fromMediaType(response.getEntity().getContentType());
         try (
             final XContentParser parser = xContentType.xContent()
                 .createParser(

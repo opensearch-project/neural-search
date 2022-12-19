@@ -29,6 +29,7 @@ import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.transport.MLPredictAction;
 import org.opensearch.neuralsearch.transport.MLPredictTransportAction;
 import org.opensearch.plugins.ActionPlugin;
+import org.opensearch.plugins.ExtensiblePlugin;
 import org.opensearch.plugins.IngestPlugin;
 import org.opensearch.plugins.Plugin;
 import org.opensearch.plugins.SearchPlugin;
@@ -40,7 +41,7 @@ import org.opensearch.watcher.ResourceWatcherService;
 /**
  * Neural Search plugin class
  */
-public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, IngestPlugin {
+public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, IngestPlugin, ExtensiblePlugin {
 
     private MLCommonsClientAccessor clientAccessor;
 
