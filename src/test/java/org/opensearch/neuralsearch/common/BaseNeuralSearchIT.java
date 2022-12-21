@@ -331,6 +331,19 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     /**
+     * Parse the total number of hits from the search
+     *
+     * @param searchResponseAsMap Complete search response as a map
+     * @return number of hits from the search
+     */
+    @SuppressWarnings("unchecked")
+    protected int getHitCount(Map<String, Object> searchResponseAsMap) {
+        Map<String, Object> hits1map = (Map<String, Object>) searchResponseAsMap.get("hits");
+        List<Object> hits1List = (List<Object>) hits1map.get("hits");
+        return hits1List.size();
+    }
+
+    /**
      * Create a k-NN index from a list of KNNFieldConfigs
      *
      * @param indexName of index to be created
