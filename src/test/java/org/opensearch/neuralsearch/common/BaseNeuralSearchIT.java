@@ -339,8 +339,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     @SuppressWarnings("unchecked")
     protected int getHitCount(Map<String, Object> searchResponseAsMap) {
         Map<String, Object> hits1map = (Map<String, Object>) searchResponseAsMap.get("hits");
-        List<Object> hits2List = (List<Object>) hits1map.get("hits");
-        return hits2List.size();
+        List<Object> hits1List = (List<Object>) hits1map.get("hits");
+        return hits1List.size();
     }
 
     /**
