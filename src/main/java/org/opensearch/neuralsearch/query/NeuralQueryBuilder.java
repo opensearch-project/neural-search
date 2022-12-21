@@ -5,6 +5,7 @@
 
 package org.opensearch.neuralsearch.query;
 
+import static org.opensearch.knn.index.query.KNNQueryBuilder.FILTER_FIELD;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 
 import java.io.IOException;
@@ -80,6 +81,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     @Getter(AccessLevel.PACKAGE)
     @Setter(AccessLevel.PACKAGE)
     private Supplier<float[]> vectorSupplier;
+    private QueryBuilder filter;
 
     /**
      * Constructor from stream input
@@ -93,6 +95,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         this.queryText = in.readString();
         this.modelId = in.readString();
         this.k = in.readVInt();
+        this.filter = in.readOptionalNamedWriteable(QueryBuilder.class);
     }
 
     @Override
@@ -101,6 +104,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         out.writeString(this.queryText);
         out.writeString(this.modelId);
         out.writeVInt(this.k);
+        out.writeOptionalNamedWriteable(this.filter);
     }
 
     @Override
@@ -110,6 +114,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
         xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
         xContentBuilder.field(K_FIELD.getPreferredName(), k);
+        if (filter != null) {
+            xContentBuilder.field(FILTER_FIELD.getPreferredName(), filter);
+        }
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
         xContentBuilder.endObject();
@@ -125,7 +132,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
      *    "model_id": "string",
      *    "k": int,
      *    "name": "string", (optional)
-     *    "boost": float (optional)
+     *    "boost": float (optional),
+     *    "filter": map (optional)
      *  }
      * }
      *
@@ -184,6 +192,10 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                         "[" + NAME + "] query does not support [" + currentFieldName + "]"
                     );
                 }
+            } else if (token == XContentParser.Token.START_OBJECT) {
+                if (FILTER_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    neuralQueryBuilder.filter(parseInnerQueryBuilder(parser));
+                }
             } else {
                 throw new ParsingException(
                     parser.getTokenLocation(),
@@ -205,7 +217,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         // create a new builder. Once the supplier's value gets set, we return a KNNQueryBuilder. Otherwise, we just
         // return the current unmodified query builder.
         if (vectorSupplier() != null) {
-            return vectorSupplier().get() == null ? this : new KNNQueryBuilder(fieldName(), vectorSupplier.get(), k());
+            return vectorSupplier().get() == null ? this : new KNNQueryBuilder(fieldName(), vectorSupplier.get(), k(), filter());
         }
 
         SetOnce<float[]> vectorSetOnce = new SetOnce<>();
@@ -215,7 +227,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 actionListener.onResponse(null);
             }, actionListener::onFailure)))
         );
-        return new NeuralQueryBuilder(fieldName(), queryText(), modelId(), k(), vectorSetOnce::get);
+        return new NeuralQueryBuilder(fieldName(), queryText(), modelId(), k(), vectorSetOnce::get, filter());
     }
 
     @Override
@@ -233,6 +245,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         equalsBuilder.append(queryText, obj.queryText);
         equalsBuilder.append(modelId, obj.modelId);
         equalsBuilder.append(k, obj.k);
+        equalsBuilder.append(filter, obj.filter);
         return equalsBuilder.isEquals();
     }
 

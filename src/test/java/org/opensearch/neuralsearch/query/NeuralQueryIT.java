@@ -30,6 +30,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_MULTI_VECTOR_FIELD_INDEX_NAME = "test-neural-multi-vector-field-index";
     private static final String TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME = "test-neural-text-and-vector-field-index";
     private static final String TEST_NESTED_INDEX_NAME = "test-neural-nested-index";
+    private static final String TEST_MULTI_DOC_INDEX_NAME = "test-neural-multi-doc-index";
     private static final String TEST_QUERY_TEXT = "Hello world";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_1 = "test-knn-vector-1";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_2 = "test-knn-vector-2";
@@ -71,6 +72,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
             TEST_QUERY_TEXT,
             modelId.get(),
             1,
+            null,
             null
         );
         Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, neuralQueryBuilder, 1);
@@ -104,6 +106,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
             TEST_QUERY_TEXT,
             modelId.get(),
             1,
+            null,
             null
         );
 
@@ -146,6 +149,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
             TEST_QUERY_TEXT,
             modelId.get(),
             1,
+            null,
             null
         );
 
@@ -192,6 +196,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
             TEST_QUERY_TEXT,
             modelId.get(),
             1,
+            null,
             null
         );
         NeuralQueryBuilder neuralQueryBuilder2 = new NeuralQueryBuilder(
@@ -199,6 +204,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
             TEST_QUERY_TEXT,
             modelId.get(),
             1,
+            null,
             null
         );
 
@@ -245,6 +251,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
             TEST_QUERY_TEXT,
             modelId.get(),
             1,
+            null,
             null
         );
 
@@ -287,6 +294,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
             TEST_QUERY_TEXT,
             modelId.get(),
             1,
+            null,
             null
         );
 
@@ -294,6 +302,46 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
 
         assertEquals("1", firstInnerHit.get("_id"));
+        float expectedScore = computeExpectedScore(modelId.get(), testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
+        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
+    }
+
+    /**
+     * Tests filter query:
+     * {
+     *     "query": {
+     *         "neural": {
+     *             "text_knn": {
+     *                 "query_text": "Hello world",
+     *                 "model_id": "dcsdcasd",
+     *                 "k": 1,
+     *                 "filter": {
+     *                     "match": {
+     *                         "_id": {
+     *                             "query": "3"
+     *                         }
+     *                     }
+     *                 }
+     *             }
+     *         }
+     *     }
+     * }
+     */
+    @SneakyThrows
+    public void testFilterQuery() {
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
+            TEST_KNN_VECTOR_FIELD_NAME_1,
+            TEST_QUERY_TEXT,
+            modelId.get(),
+            1,
+            null,
+            new MatchQueryBuilder("_id", "3")
+        );
+        Map<String, Object> searchResponseAsMap = search(TEST_MULTI_DOC_INDEX_NAME, neuralQueryBuilder, 3);
+        assertEquals(1, getHitCount(searchResponseAsMap));
+        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+        assertEquals("3", firstInnerHit.get("_id"));
         float expectedScore = computeExpectedScore(modelId.get(), testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
     }
@@ -358,6 +406,32 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEST_QUERY_TEXT)
             );
             assertEquals(1, getDocCount(TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME));
+        }
+
+        if (TEST_MULTI_DOC_INDEX_NAME.equals(indexName) && !indexExists(TEST_MULTI_DOC_INDEX_NAME)) {
+            prepareKnnIndex(
+                TEST_MULTI_DOC_INDEX_NAME,
+                Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE))
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_NAME,
+                "1",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector).toArray())
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_NAME,
+                "2",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector).toArray())
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_NAME,
+                "3",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector).toArray())
+            );
+            assertEquals(3, getDocCount(TEST_MULTI_DOC_INDEX_NAME));
         }
     }
 }
