@@ -5,7 +5,6 @@
 
 package org.opensearch.neuralsearch.common;
 
-import static org.apache.http.entity.ContentType.APPLICATION_JSON;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 
 import java.io.IOException;
@@ -24,12 +23,13 @@ import lombok.Getter;
 import lombok.SneakyThrows;
 
 import org.apache.commons.lang3.StringUtils;
-import org.apache.http.Header;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpHeaders;
-import org.apache.http.entity.StringEntity;
-import org.apache.http.message.BasicHeader;
-import org.apache.http.util.EntityUtils;
+import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.http.Header;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.HttpHeaders;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.http.io.entity.StringEntity;
+import org.apache.hc.core5.http.message.BasicHeader;
 import org.opensearch.client.Request;
 import org.opensearch.client.RequestOptions;
 import org.opensearch.client.Response;
@@ -87,7 +87,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return modelId;
     }
 
-    protected void loadModel(String modelId) throws IOException, InterruptedException {
+    protected void loadModel(String modelId) throws Exception {
         Response uploadResponse = makeRequest(
             client(),
             "POST",
@@ -368,7 +368,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return spaceType.getVectorSimilarityFunction().compare(queryVector, indexVector);
     }
 
-    protected Map<String, Object> getTaskQueryResponse(String taskId) throws IOException {
+    protected Map<String, Object> getTaskQueryResponse(String taskId) throws Exception {
         Response taskQueryResponse = makeRequest(
             client(),
             "GET",
@@ -453,7 +453,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     protected static HttpEntity toHttpEntity(String jsonString) {
-        return new StringEntity(jsonString, APPLICATION_JSON);
+        return new StringEntity(jsonString, ContentType.APPLICATION_JSON);
     }
 
     @AllArgsConstructor
