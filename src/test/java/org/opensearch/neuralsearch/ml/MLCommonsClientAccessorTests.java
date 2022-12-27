@@ -119,7 +119,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         Mockito.verifyNoMoreInteractions(resultListener);
     }
 
-    public void testInferenceSentences_whenNodeNotConnectedException_thenRetry() {
+    public void testInferenceSentences_whenNodeNotConnectedException_thenRetry_3Times() {
         final NodeNotConnectedException nodeNodeConnectedException = new NodeNotConnectedException(
             mock(DiscoveryNode.class),
             "Node not connected"
@@ -139,6 +139,25 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         Mockito.verify(client, times(4))
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         Mockito.verify(resultListener).onFailure(nodeNodeConnectedException);
+    }
+
+    public void testInferenceSentences_whenNotConnectionException_thenNoRetry() {
+        final IllegalStateException illegalStateException = new IllegalStateException("Illegal state");
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onFailure(illegalStateException);
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        accessor.inferenceSentences(
+            TestCommonConstants.TARGET_RESPONSE_FILTERS,
+            TestCommonConstants.MODEL_ID,
+            TestCommonConstants.SENTENCES_LIST,
+            resultListener
+        );
+
+        Mockito.verify(client, times(1))
+            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        Mockito.verify(resultListener).onFailure(illegalStateException);
     }
 
     private ModelTensorOutput createModelTensorOutput(final Float[] output) {

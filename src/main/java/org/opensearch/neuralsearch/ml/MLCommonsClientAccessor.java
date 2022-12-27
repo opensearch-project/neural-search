@@ -108,11 +108,11 @@ public class MLCommonsClientAccessor {
     }
 
     private void inferenceSentencesWithRetry(
-        @NonNull final List<String> targetResponseFilters,
-        @NonNull final String modelId,
-        @NonNull final List<String> inputText,
+        final List<String> targetResponseFilters,
+        final String modelId,
+        final List<String> inputText,
         final int retryTime,
-        @NonNull final ActionListener<List<List<Float>>> listener
+        final ActionListener<List<List<Float>>> listener
     ) {
         MLInput mlInput = createMLInput(targetResponseFilters, inputText);
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
@@ -120,15 +120,19 @@ public class MLCommonsClientAccessor {
             log.debug("Inference Response for input sentence {} is : {} ", inputText, vector);
             listener.onResponse(vector);
         }, e -> {
-            final int nodeNotConnectedExceptionIndex = ExceptionUtils.indexOfThrowable(e, NodeNotConnectedException.class);
-            final int nodeDisconnectExceptionIndex = ExceptionUtils.indexOfThrowable(e, NodeDisconnectedException.class);
-            if ((nodeDisconnectExceptionIndex != -1 || nodeNotConnectedExceptionIndex != -1) && retryTime < MAX_RETRY) {
+            if (shouldRetry(e, retryTime)) {
                 final int retryTimeAdd = retryTime + 1;
                 inferenceSentencesWithRetry(targetResponseFilters, modelId, inputText, retryTimeAdd, listener);
             } else {
                 listener.onFailure(e);
             }
         }));
+    }
+
+    private boolean shouldRetry(Exception e, int retryTime) {
+        final int nodeNotConnectedExceptionIndex = ExceptionUtils.indexOfThrowable(e, NodeNotConnectedException.class);
+        final int nodeDisconnectExceptionIndex = ExceptionUtils.indexOfThrowable(e, NodeDisconnectedException.class);
+        return (nodeDisconnectExceptionIndex != -1 || nodeNotConnectedExceptionIndex != -1) && retryTime < MAX_RETRY;
     }
 
     private MLInput createMLInput(final List<String> targetResponseFilters, List<String> inputText) {
