@@ -5,11 +5,16 @@
 
 package org.opensearch.neuralsearch.ml;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+
 import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.opensearch.action.ActionFuture;
 import org.opensearch.action.ActionListener;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.FunctionName;
@@ -24,12 +29,6 @@ import org.opensearch.ml.common.output.model.ModelTensors;
 import org.opensearch.transport.NodeDisconnectedException;
 import org.opensearch.transport.NodeNotConnectedException;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.ExecutionException;
-import java.util.stream.Collectors;
-
 /**
  * This class will act as an abstraction on the MLCommons client for accessing the ML Capabilities
  */
@@ -40,6 +39,7 @@ public class MLCommonsClientAccessor {
     private final MachineLearningNodeClient mlClient;
 
     private static final int MAX_RETRY = 3;
+
     /**
      * Wrapper around {@link #inferenceSentences} that expected a single input text and produces a single floating
      * point vector as a response.

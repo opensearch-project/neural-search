@@ -5,6 +5,9 @@
 
 package org.opensearch.neuralsearch.ml;
 
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -17,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.action.ActionListener;
+import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.input.MLInput;
 import org.opensearch.ml.common.output.MLOutput;
@@ -26,6 +30,7 @@ import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
 import org.opensearch.neuralsearch.constants.TestCommonConstants;
 import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.transport.NodeNotConnectedException;
 
 public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
@@ -112,6 +117,28 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         Mockito.verify(resultListener).onFailure(exception);
         Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    public void testInferenceSentences_whenNodeNotConnectedException_thenRetry() {
+        final NodeNotConnectedException nodeNodeConnectedException = new NodeNotConnectedException(
+            mock(DiscoveryNode.class),
+            "Node not connected"
+        );
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onFailure(nodeNodeConnectedException);
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        accessor.inferenceSentences(
+            TestCommonConstants.TARGET_RESPONSE_FILTERS,
+            TestCommonConstants.MODEL_ID,
+            TestCommonConstants.SENTENCES_LIST,
+            resultListener
+        );
+
+        Mockito.verify(client, times(4))
+            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        Mockito.verify(resultListener).onFailure(nodeNodeConnectedException);
     }
 
     private ModelTensorOutput createModelTensorOutput(final Float[] output) {
