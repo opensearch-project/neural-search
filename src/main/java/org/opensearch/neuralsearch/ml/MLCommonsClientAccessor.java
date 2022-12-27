@@ -5,15 +5,11 @@
 
 package org.opensearch.neuralsearch.ml;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
-
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
-
+import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.opensearch.action.ActionFuture;
 import org.opensearch.action.ActionListener;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.FunctionName;
@@ -25,6 +21,14 @@ import org.opensearch.ml.common.output.model.ModelResultFilter;
 import org.opensearch.ml.common.output.model.ModelTensor;
 import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
+import org.opensearch.transport.NodeDisconnectedException;
+import org.opensearch.transport.NodeNotConnectedException;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
 
 /**
  * This class will act as an abstraction on the MLCommons client for accessing the ML Capabilities
@@ -35,6 +39,7 @@ public class MLCommonsClientAccessor {
     private static final List<String> TARGET_RESPONSE_FILTERS = List.of("sentence_embedding");
     private final MachineLearningNodeClient mlClient;
 
+    private static final int MAX_RETRY = 3;
     /**
      * Wrapper around {@link #inferenceSentences} that expected a single input text and produces a single floating
      * point vector as a response.
@@ -99,12 +104,31 @@ public class MLCommonsClientAccessor {
         @NonNull final List<String> inputText,
         @NonNull final ActionListener<List<List<Float>>> listener
     ) {
+        inferenceSentencesWithRetry(targetResponseFilters, modelId, inputText, 0, listener);
+    }
+
+    private void inferenceSentencesWithRetry(
+        @NonNull final List<String> targetResponseFilters,
+        @NonNull final String modelId,
+        @NonNull final List<String> inputText,
+        final int retryTime,
+        @NonNull final ActionListener<List<List<Float>>> listener
+    ) {
         MLInput mlInput = createMLInput(targetResponseFilters, inputText);
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
             final List<List<Float>> vector = buildVectorFromResponse(mlOutput);
             log.debug("Inference Response for input sentence {} is : {} ", inputText, vector);
             listener.onResponse(vector);
-        }, listener::onFailure));
+        }, e -> {
+            final int nodeNotConnectedExceptionIndex = ExceptionUtils.indexOfThrowable(e, NodeNotConnectedException.class);
+            final int nodeDisconnectExceptionIndex = ExceptionUtils.indexOfThrowable(e, NodeDisconnectedException.class);
+            if ((nodeDisconnectExceptionIndex != -1 || nodeNotConnectedExceptionIndex != -1) && retryTime < MAX_RETRY) {
+                final int retryTimeAdd = retryTime + 1;
+                inferenceSentencesWithRetry(targetResponseFilters, modelId, inputText, retryTimeAdd, listener);
+            } else {
+                listener.onFailure(e);
+            }
+        }));
     }
 
     private MLInput createMLInput(final List<String> targetResponseFilters, List<String> inputText) {
