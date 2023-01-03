@@ -19,6 +19,12 @@ public class RetryUtil {
     private static final List<Class<? extends Throwable>> RETRYABLE_EXCEPTIONS = ImmutableList.of(NodeNotConnectedException.class,
         NodeDisconnectedException.class);
 
+    /**
+     *
+     * @param e {@link Exception} which is the exception received to check if retryable.
+     * @param retryTime {@link int} which is the current retried times.
+     * @return {@link boolean} which is the result of if current exception needs retry or not.
+     */
     public static boolean shouldRetry(final Exception e, int retryTime) {
         boolean hasRetryException = RETRYABLE_EXCEPTIONS.stream().anyMatch(x -> ExceptionUtils.indexOfThrowable(e, x) != -1);
         return hasRetryException && retryTime < MAX_RETRY;
