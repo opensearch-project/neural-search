@@ -5,16 +5,9 @@
 
 package org.opensearch.neuralsearch.ml;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
-
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
-
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.opensearch.action.ActionListener;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.FunctionName;
@@ -26,8 +19,12 @@ import org.opensearch.ml.common.output.model.ModelResultFilter;
 import org.opensearch.ml.common.output.model.ModelTensor;
 import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
-import org.opensearch.transport.NodeDisconnectedException;
-import org.opensearch.transport.NodeNotConnectedException;
+import org.opensearch.neuralsearch.util.RetryUtil;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * This class will act as an abstraction on the MLCommons client for accessing the ML Capabilities
@@ -37,8 +34,6 @@ import org.opensearch.transport.NodeNotConnectedException;
 public class MLCommonsClientAccessor {
     private static final List<String> TARGET_RESPONSE_FILTERS = List.of("sentence_embedding");
     private final MachineLearningNodeClient mlClient;
-
-    private static final int MAX_RETRY = 3;
 
     /**
      * Wrapper around {@link #inferenceSentences} that expected a single input text and produces a single floating
@@ -120,7 +115,7 @@ public class MLCommonsClientAccessor {
             log.debug("Inference Response for input sentence {} is : {} ", inputText, vector);
             listener.onResponse(vector);
         }, e -> {
-            if (shouldRetry(e, retryTime)) {
+            if (RetryUtil.shouldRetry(e, retryTime)) {
                 final int retryTimeAdd = retryTime + 1;
                 inferenceSentencesWithRetry(targetResponseFilters, modelId, inputText, retryTimeAdd, listener);
             } else {
@@ -129,11 +124,6 @@ public class MLCommonsClientAccessor {
         }));
     }
 
-    private boolean shouldRetry(Exception e, int retryTime) {
-        final int nodeNotConnectedExceptionIndex = ExceptionUtils.indexOfThrowable(e, NodeNotConnectedException.class);
-        final int nodeDisconnectExceptionIndex = ExceptionUtils.indexOfThrowable(e, NodeDisconnectedException.class);
-        return (nodeDisconnectExceptionIndex != -1 || nodeNotConnectedExceptionIndex != -1) && retryTime < MAX_RETRY;
-    }
 
     private MLInput createMLInput(final List<String> targetResponseFilters, List<String> inputText) {
         final ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
