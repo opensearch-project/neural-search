@@ -5,19 +5,22 @@
 
 package org.opensearch.neuralsearch.util;
 
-import com.google.common.collect.ImmutableList;
+import java.util.List;
+
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.opensearch.transport.NodeDisconnectedException;
 import org.opensearch.transport.NodeNotConnectedException;
 
-import java.util.List;
+import com.google.common.collect.ImmutableList;
 
 public class RetryUtil {
 
     private static final int MAX_RETRY = 3;
 
-    private static final List<Class<? extends Throwable>> RETRYABLE_EXCEPTIONS = ImmutableList.of(NodeNotConnectedException.class,
-        NodeDisconnectedException.class);
+    private static final List<Class<? extends Throwable>> RETRYABLE_EXCEPTIONS = ImmutableList.of(
+        NodeNotConnectedException.class,
+        NodeDisconnectedException.class
+    );
 
     /**
      *
