@@ -11,8 +11,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
-import org.opensearch.action.ActionRequest;
-import org.opensearch.action.ActionResponse;
 import org.opensearch.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.service.ClusterService;
@@ -26,8 +24,6 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
-import org.opensearch.neuralsearch.transport.MLPredictAction;
-import org.opensearch.neuralsearch.transport.MLPredictTransportAction;
 import org.opensearch.plugins.ActionPlugin;
 import org.opensearch.plugins.ExtensiblePlugin;
 import org.opensearch.plugins.IngestPlugin;
@@ -61,16 +57,6 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     ) {
         NeuralQueryBuilder.initialize(clientAccessor);
         return List.of(clientAccessor);
-    }
-
-    /**
-     * Registering the Action Handlers
-     *
-     * @return A {@link List} of {@link ActionHandler}
-     */
-    @Override
-    public List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
-        return List.of(new ActionHandler<>(MLPredictAction.INSTANCE, MLPredictTransportAction.class));
     }
 
     public List<QuerySpec<?>> getQueries() {
