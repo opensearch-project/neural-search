@@ -25,6 +25,7 @@ import org.opensearch.ml.common.output.model.ModelResultFilter;
 import org.opensearch.ml.common.output.model.ModelTensor;
 import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
+import org.opensearch.neuralsearch.util.RetryUtil;
 
 /**
  * This class will act as an abstraction on the MLCommons client for accessing the ML Capabilities
@@ -99,12 +100,29 @@ public class MLCommonsClientAccessor {
         @NonNull final List<String> inputText,
         @NonNull final ActionListener<List<List<Float>>> listener
     ) {
+        inferenceSentencesWithRetry(targetResponseFilters, modelId, inputText, 0, listener);
+    }
+
+    private void inferenceSentencesWithRetry(
+        final List<String> targetResponseFilters,
+        final String modelId,
+        final List<String> inputText,
+        final int retryTime,
+        final ActionListener<List<List<Float>>> listener
+    ) {
         MLInput mlInput = createMLInput(targetResponseFilters, inputText);
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
             final List<List<Float>> vector = buildVectorFromResponse(mlOutput);
             log.debug("Inference Response for input sentence {} is : {} ", inputText, vector);
             listener.onResponse(vector);
-        }, listener::onFailure));
+        }, e -> {
+            if (RetryUtil.shouldRetry(e, retryTime)) {
+                final int retryTimeAdd = retryTime + 1;
+                inferenceSentencesWithRetry(targetResponseFilters, modelId, inputText, retryTimeAdd, listener);
+            } else {
+                listener.onFailure(e);
+            }
+        }));
     }
 
     private MLInput createMLInput(final List<String> targetResponseFilters, List<String> inputText) {
