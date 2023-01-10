@@ -17,6 +17,8 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
+import lombok.SneakyThrows;
+
 import org.junit.Before;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -54,16 +56,17 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         when(env.settings()).thenReturn(settings);
     }
 
-    private TextEmbeddingProcessor createInstance(List<List<Float>> vector) throws Exception {
+    @SneakyThrows
+    private TextEmbeddingProcessor createInstance(List<List<Float>> vector) {
         Map<String, Processor.Factory> registry = new HashMap<>();
         Map<String, Object> config = new HashMap<>();
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
         config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1Mapped", "key2", "key2Mapped"));
-        TextEmbeddingProcessor processor = textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
-        return processor;
+        return textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
     }
 
-    public void testTextEmbeddingProcessConstructor_whenConfigMapError_throwIllegalArgumentException() throws Exception {
+    @SneakyThrows
+    public void testTextEmbeddingProcessConstructor_whenConfigMapError_throwIllegalArgumentException() {
         Map<String, Processor.Factory> registry = new HashMap<>();
         Map<String, Object> config = new HashMap<>();
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
@@ -78,7 +81,8 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         }
     }
 
-    public void testTextEmbeddingProcessConstructor_whenConfigMapEmpty_throwIllegalArgumentException() throws Exception {
+    @SneakyThrows
+    public void testTextEmbeddingProcessConstructor_whenConfigMapEmpty_throwIllegalArgumentException() {
         Map<String, Processor.Factory> registry = new HashMap<>();
         Map<String, Object> config = new HashMap<>();
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
@@ -89,7 +93,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         }
     }
 
-    public void testExecute_successful() throws Exception {
+    public void testExecute_successful() {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put("key1", "value1");
         sourceAndMetadata.put("key2", "value2");
@@ -108,7 +112,8 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         verify(handler).accept(any(IngestDocument.class), isNull());
     }
 
-    public void testExecute_whenInferenceThrowInterruptedException_throwRuntimeException() throws Exception {
+    @SneakyThrows
+    public void testExecute_whenInferenceThrowInterruptedException_throwRuntimeException() {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put("key1", "value1");
         sourceAndMetadata.put("key2", "value2");
@@ -127,7 +132,8 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         verify(handler).accept(isNull(), any(RuntimeException.class));
     }
 
-    public void testExecute_whenInferenceTextListEmpty_SuccessWithoutEmbedding() throws Exception {
+    @SneakyThrows
+    public void testExecute_whenInferenceTextListEmpty_SuccessWithoutEmbedding() {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         Map<String, Processor.Factory> registry = new HashMap<>();
@@ -144,7 +150,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         verify(handler).accept(any(IngestDocument.class), isNull());
     }
 
-    public void testExecute_withListTypeInput_successful() throws Exception {
+    public void testExecute_withListTypeInput_successful() {
         List<String> list1 = ImmutableList.of("test1", "test2", "test3");
         List<String> list2 = ImmutableList.of("test4", "test5", "test6");
         Map<String, Object> sourceAndMetadata = new HashMap<>();
@@ -165,7 +171,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         verify(handler).accept(any(IngestDocument.class), isNull());
     }
 
-    public void testExecute_SimpleTypeWithEmptyStringValue_throwIllegalArgumentException() throws Exception {
+    public void testExecute_SimpleTypeWithEmptyStringValue_throwIllegalArgumentException() {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put("key1", "    ");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
@@ -176,7 +182,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         verify(handler).accept(isNull(), any(IllegalArgumentException.class));
     }
 
-    public void testExecute_listHasEmptyStringValue_throwIllegalArgumentException() throws Exception {
+    public void testExecute_listHasEmptyStringValue_throwIllegalArgumentException() {
         List<String> list1 = ImmutableList.of("", "test2", "test3");
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put("key1", list1);
@@ -188,7 +194,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         verify(handler).accept(isNull(), any(IllegalArgumentException.class));
     }
 
-    public void testExecute_listHasNonStringValue_throwIllegalArgumentException() throws Exception {
+    public void testExecute_listHasNonStringValue_throwIllegalArgumentException() {
         List<Integer> list2 = ImmutableList.of(1, 2, 3);
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put("key2", list2);
@@ -199,7 +205,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         verify(handler).accept(isNull(), any(IllegalArgumentException.class));
     }
 
-    public void testExecute_listHasNull_throwIllegalArgumentException() throws Exception {
+    public void testExecute_listHasNull_throwIllegalArgumentException() {
         List<String> list = new ArrayList<>();
         list.add("hello");
         list.add(null);
@@ -213,7 +219,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         verify(handler).accept(isNull(), any(IllegalArgumentException.class));
     }
 
-    public void testExecute_withMapTypeInput_successful() throws Exception {
+    public void testExecute_withMapTypeInput_successful() {
         Map<String, String> map1 = ImmutableMap.of("test1", "test2");
         Map<String, String> map2 = ImmutableMap.of("test4", "test5");
         Map<String, Object> sourceAndMetadata = new HashMap<>();
@@ -235,7 +241,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
 
     }
 
-    public void testExecute_mapHasNonStringValue_throwIllegalArgumentException() throws Exception {
+    public void testExecute_mapHasNonStringValue_throwIllegalArgumentException() {
         Map<String, String> map1 = ImmutableMap.of("test1", "test2");
         Map<String, Double> map2 = ImmutableMap.of("test3", 209.3D);
         Map<String, Object> sourceAndMetadata = new HashMap<>();
@@ -248,7 +254,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         verify(handler).accept(isNull(), any(IllegalArgumentException.class));
     }
 
-    public void testExecute_mapHasEmptyStringValue_throwIllegalArgumentException() throws Exception {
+    public void testExecute_mapHasEmptyStringValue_throwIllegalArgumentException() {
         Map<String, String> map1 = ImmutableMap.of("test1", "test2");
         Map<String, String> map2 = ImmutableMap.of("test3", "   ");
         Map<String, Object> sourceAndMetadata = new HashMap<>();
@@ -261,7 +267,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         verify(handler).accept(isNull(), any(IllegalArgumentException.class));
     }
 
-    public void testExecute_mapDepthReachLimit_throwIllegalArgumentException() throws Exception {
+    public void testExecute_mapDepthReachLimit_throwIllegalArgumentException() {
         Map<String, Object> ret = createMaxDepthLimitExceedMap(() -> 1);
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put("key1", "hello world");
@@ -273,7 +279,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         verify(handler).accept(isNull(), any(IllegalArgumentException.class));
     }
 
-    public void testExecute_MLClientAccessorThrowFail_handlerFailure() throws Exception {
+    public void testExecute_MLClientAccessorThrowFail_handlerFailure() {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put("key1", "value1");
         sourceAndMetadata.put("key2", "value2");
@@ -303,7 +309,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         return innerMap;
     }
 
-    public void testExecute_hybridTypeInput_successful() throws Exception {
+    public void testExecute_hybridTypeInput_successful() {
         List<String> list1 = ImmutableList.of("test1", "test2");
         Map<String, List<String>> map1 = ImmutableMap.of("test3", list1);
         Map<String, Object> sourceAndMetadata = new HashMap<>();
@@ -314,7 +320,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         assert document.getSourceAndMetadata().containsKey("key2");
     }
 
-    public void testExecute_simpleTypeInputWithNonStringValue_handleIllegalArgumentException() throws Exception {
+    public void testExecute_simpleTypeInputWithNonStringValue_handleIllegalArgumentException() {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put("key1", 100);
         sourceAndMetadata.put("key2", 100.232D);
@@ -331,7 +337,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         verify(handler).accept(isNull(), any(IllegalArgumentException.class));
     }
 
-    public void testGetType_successful() throws Exception {
+    public void testGetType_successful() {
         TextEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
         assert processor.getType().equals(TextEmbeddingProcessor.TYPE);
     }
@@ -348,7 +354,8 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         assertEquals(12, ingestDocument.getSourceAndMetadata().size());
     }
 
-    public void testBuildVectorOutput_withPlainStringValue_successful() throws Exception {
+    @SneakyThrows
+    public void testBuildVectorOutput_withPlainStringValue_successful() {
         Map<String, Object> config = createPlainStringConfiguration();
         IngestDocument ingestDocument = createPlainIngestDocument();
         TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
@@ -373,8 +380,9 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         assertTrue(result.containsKey("oriKey6_knn"));
     }
 
+    @SneakyThrows
     @SuppressWarnings("unchecked")
-    public void testBuildVectorOutput_withNestedMap_successful() throws Exception {
+    public void testBuildVectorOutput_withNestedMap_successful() {
         Map<String, Object> config = createNestedMapConfiguration();
         IngestDocument ingestDocument = createNestedMapIngestDocument();
         TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
@@ -421,7 +429,8 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         return result;
     }
 
-    private TextEmbeddingProcessor createInstanceWithNestedMapConfiguration(Map<String, Object> fieldMap) throws Exception {
+    @SneakyThrows
+    private TextEmbeddingProcessor createInstanceWithNestedMapConfiguration(Map<String, Object> fieldMap) {
         Map<String, Processor.Factory> registry = new HashMap<>();
         Map<String, Object> config = new HashMap<>();
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
