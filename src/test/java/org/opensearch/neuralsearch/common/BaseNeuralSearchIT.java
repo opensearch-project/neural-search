@@ -62,6 +62,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     @Before
     public void setupSettings() {
         updateClusterSettings("plugins.ml_commons.only_run_on_ml_node", false);
+        updateClusterSettings("plugins.ml_commons.native_memory_threshold", 100);
     }
 
     @SneakyThrows
