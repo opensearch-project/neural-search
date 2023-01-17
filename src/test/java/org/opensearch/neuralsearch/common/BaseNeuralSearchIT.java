@@ -30,6 +30,7 @@ import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.http.message.BasicHeader;
+import org.junit.Before;
 import org.opensearch.client.Request;
 import org.opensearch.client.RequestOptions;
 import org.opensearch.client.Response;
@@ -57,6 +58,31 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     private static final int DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND = 1000;
 
     protected final ClassLoader classLoader = this.getClass().getClassLoader();
+
+    @Before
+    public void setupSettings() {
+        updateClusterSettings("plugins.ml_commons.only_run_on_ml_node", false);
+    }
+
+    @SneakyThrows
+    protected void updateClusterSettings(String settingKey, Object value) {
+        XContentBuilder builder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("persistent")
+            .field(settingKey, value)
+            .endObject()
+            .endObject();
+        Response response = makeRequest(
+            client(),
+            "PUT",
+            "_cluster/settings",
+            null,
+            toHttpEntity(Strings.toString(builder)),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, ""))
+        );
+
+        assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+    }
 
     protected String uploadModel(String requestBody) throws Exception {
         Response uploadResponse = makeRequest(
