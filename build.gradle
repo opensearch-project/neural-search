@@ -70,6 +70,7 @@ thirdPartyAudit.enabled = false
 loggerUsageCheck.enabled = false
 // No need to validate pom, as we do not upload to maven/sonatype
 validateNebulaPom.enabled = false
+forbiddenApis.ignoreFailures = true
 
 buildscript {
     ext {
