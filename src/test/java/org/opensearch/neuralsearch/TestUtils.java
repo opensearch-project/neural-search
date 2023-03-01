@@ -10,8 +10,8 @@ import static org.opensearch.test.OpenSearchTestCase.randomFloat;
 import java.util.Map;
 
 import org.opensearch.common.bytes.BytesReference;
-import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentHelper;
+import org.opensearch.core.xcontent.XContentBuilder;
 
 public class TestUtils {
 
