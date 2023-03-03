@@ -37,11 +37,11 @@ import org.opensearch.client.Response;
 import org.opensearch.client.RestClient;
 import org.opensearch.client.WarningsHandler;
 import org.opensearch.common.Strings;
-import org.opensearch.common.xcontent.ToXContent;
-import org.opensearch.common.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.core.xcontent.ToXContent;
+import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.neuralsearch.OpenSearchSecureRestTestCase;
@@ -62,6 +62,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     @Before
     public void setupSettings() {
         updateClusterSettings("plugins.ml_commons.only_run_on_ml_node", false);
+        // default threshold for native circuit breaker is 90, it may be not enough on test runner machine
+        updateClusterSettings("plugins.ml_commons.native_memory_threshold", 100);
     }
 
     @SneakyThrows
