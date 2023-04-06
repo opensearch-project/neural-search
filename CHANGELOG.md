@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * Add GHA to publish to maven repository ([#237](https://github.com/opensearch-project/neural-search/pull/130))
 * Add reflection dependency ([#136](https://github.com/opensearch-project/neural-search/pull/136))
 * Add CHANGELOG ([#135](https://github.com/opensearch-project/neural-search/pull/135))
+* Remove direct dependency on ml-commons related jars ([#xxx](url))
 ### Documentation
 ### Maintenance
 ### Refactoring
