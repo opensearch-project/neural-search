@@ -12,14 +12,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Maintenance
 ### Refactoring
 
-## [Unreleased 2.x](https://github.com/opensearch-project/neural-search/compare/2.6...2.x)
+## [Unreleased 2.x](https://github.com/opensearch-project/neural-search/compare/2.7...2.x)
 ### Features
 ### Enhancements
 ### Bug Fixes
 ### Infrastructure
-* Add GHA to publish to maven repository ([#237](https://github.com/opensearch-project/neural-search/pull/130))
-* Add reflection dependency ([#136](https://github.com/opensearch-project/neural-search/pull/136))
-* Add CHANGELOG ([#135](https://github.com/opensearch-project/neural-search/pull/135))
 ### Documentation
 ### Maintenance
 ### Refactoring
