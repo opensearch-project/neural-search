@@ -178,4 +178,9 @@ public abstract class OpenSearchSecureRestTestCase extends OpenSearchRestTestCas
             }
         }
     }
+
+    @Override
+    protected boolean preserveClusterSettings() {
+        return true;
+    }
 }
