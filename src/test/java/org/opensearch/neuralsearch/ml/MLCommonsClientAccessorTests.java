@@ -168,7 +168,9 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             output,
             new long[] { 1, 2 },
             MLResultDataType.FLOAT64,
-            ByteBuffer.wrap(new byte[12])
+            ByteBuffer.wrap(new byte[12]),
+            "",
+            Collections.emptyMap()
         );
         mlModelTensorList.add(tensor);
         final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);

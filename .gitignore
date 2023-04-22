@@ -6,5 +6,6 @@ build
 .idea
 .DS_Store
 .gitattributes
+*.iml
 
 

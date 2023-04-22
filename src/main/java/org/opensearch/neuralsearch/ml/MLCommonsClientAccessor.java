@@ -7,18 +7,24 @@ package org.opensearch.neuralsearch.ml;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
+import org.apache.commons.lang.StringUtils;
 import org.opensearch.action.ActionListener;
+import org.opensearch.common.util.CollectionUtils;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.dataset.MLInputDataset;
 import org.opensearch.ml.common.dataset.TextDocsInputDataSet;
+import org.opensearch.ml.common.dataset.remote.RemoteInferenceInputDataSet;
 import org.opensearch.ml.common.input.MLInput;
 import org.opensearch.ml.common.output.MLOutput;
 import org.opensearch.ml.common.output.model.ModelResultFilter;
@@ -35,6 +41,8 @@ import org.opensearch.neuralsearch.util.RetryUtil;
 public class MLCommonsClientAccessor {
     private static final List<String> TARGET_RESPONSE_FILTERS = List.of("sentence_embedding");
     private final MachineLearningNodeClient mlClient;
+
+    private static final String PREDICT_API_PROMPT_PARAMETER = "prompt";
 
     /**
      * Wrapper around {@link #inferenceSentences} that expected a single input text and produces a single floating
@@ -142,6 +150,44 @@ public class MLCommonsClientAccessor {
             }
         }
         return vector;
+    }
+
+    public String predict(final String prompt, String modelId) throws ExecutionException, InterruptedException {
+        final MLInput mlInput = buildMLInputForPredictCall(prompt, modelId);
+        final MLOutput output = mlClient.predict(modelId, mlInput).get();
+
+        final ModelTensorOutput modelTensorOutput = (ModelTensorOutput) output;
+        final List<ModelTensors> tensorOutputList = modelTensorOutput.getMlModelOutputs();
+        for (final ModelTensors tensors : tensorOutputList) {
+            final List<ModelTensor> tensorsList = tensors.getMlModelTensors();
+            for (final ModelTensor tensor : tensorsList) {
+                final String error = (String) tensor.getDataAsMap().get("error");
+                if (StringUtils.isNotEmpty(error)) {
+                    log.error("Error happened during the Processing of the input. Error : {}", error);
+                    return error;
+                }
+                final List<Map<String, Object>> choices = (List<Map<String, Object>>) tensor.getDataAsMap().get("choices");
+                if (!CollectionUtils.isEmpty(choices)) {
+                    for (Map<String, Object> choice : choices) {
+                        if (StringUtils.isNotEmpty((String) choice.get("text"))) {
+                            return (String) choice.get("text");
+                        }
+                    }
+                }
+            }
+        }
+        log.error("No Choice object found as ML Output is : " + output);
+        return "No Text found hence not able to summarize";
+    }
+
+    private MLInput buildMLInputForPredictCall(final String prompt, String modelId) {
+        final MLInput mlInput = new MLInput();
+        final Map<String, String> parameters = new HashMap<>();
+        parameters.put(PREDICT_API_PROMPT_PARAMETER, prompt);
+        final MLInputDataset mlInputDataset = new RemoteInferenceInputDataSet(parameters);
+        mlInput.setInputDataset(mlInputDataset);
+        mlInput.setAlgorithm(FunctionName.REMOTE);
+        return mlInput;
     }
 
 }
