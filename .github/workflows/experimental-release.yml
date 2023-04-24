@@ -1,0 +1,32 @@
+name: Create an experimental release
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_version:
+        description: 'Which version of OpenSearch that this build is targeting'
+        required: true
+
+jobs:
+  build-plugin:
+    runs-on: ubuntu-latest
+    env:
+      TARGET_VERSION: ${{ github.event.inputs.target_version || '2.7.0' }}
+      RELEASE_TAG: ${{ github.event.inputs.target_version }}-experimental.${{ github.run_id }}
+      JDK_VERSION: 14
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set Up JDK ${{ env.JDK_VERSION }}
+        uses: actions/setup-java@v1
+        with:
+          java-version: ${{ env.JDK_VERSION }}
+      - name: Create Release Tag
+        run: |
+          git tag ${{ env.RELEASE_TAG }}
+          git push origin ${{ env.RELEASE_TAG }}
+      - name: Release
+        id: release_step
+        uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/plugins/*.zip
+          tag_name: ${{ env.RELEASE_TAG }}

@@ -1,9 +1,5 @@
 name: Build and Test Neural Search
 on:
-  push:
-    branches:
-      - "*"
-      - "feature/**"
   pull_request:
     branches:
       - "*"
