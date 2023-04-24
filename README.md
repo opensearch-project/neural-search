@@ -1,5 +1,11 @@
 <img src="https://opensearch.org/assets/img/opensearch-logo-themed.svg" height="64px">
 
+[![Build and Test Neural Search](https://github.com/opensearch-project/neural-search/actions/workflows/CI.yml/badge.svg)](https://github.com/opensearch-project/neural-search/actions/workflows/CI.yml)
+[![codecov](https://codecov.io/gh/opensearch-project/neural-search/branch/main/graph/badge.svg?token=PYQO2GW39S)](https://codecov.io/gh/opensearch-project/neural-search)
+[![Documentation](https://img.shields.io/badge/doc-reference-blue)](https://opensearch.org/docs/latest/search-plugins/neural-search/)
+[![Chat](https://img.shields.io/badge/chat-on%20forums-blue)](https://forum.opensearch.org)
+![PRs welcome!](https://img.shields.io/badge/PRs-welcome!-success)
+
 ## OpenSearch Neural Search
 **OpenSearch Neural Search** is an OpenSearch plugin that adds dense neural retrieval into the OpenSearch ecosystem. 
 The plugin provides the capability for indexing documents and doing neural search on the indexed documents.
