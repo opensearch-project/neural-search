@@ -21,11 +21,12 @@ import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
 import org.opensearch.ingest.Processor;
 import org.opensearch.ml.client.MachineLearningNodeClient;
+import org.opensearch.neuralsearch.ext.QuestionExtBuilder;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.AppendQueryResponseProcessor;
-import org.opensearch.neuralsearch.processor.SummaryProcessor;
+import org.opensearch.neuralsearch.processor.GenerativeTextLLMProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
-import org.opensearch.neuralsearch.processor.factory.SummaryProcessorFactory;
+import org.opensearch.neuralsearch.processor.factory.GenerativeTextLLMProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.node.Node;
@@ -80,7 +81,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         org.opensearch.search.pipeline.Processor.Parameters parameters
     ) {
         final Map<String, org.opensearch.search.pipeline.Processor.Factory> processorsMap = new HashMap<>();
-        processorsMap.put(SummaryProcessor.TYPE, new SummaryProcessorFactory(getClientAccessor(parameters.client)));
+        processorsMap.put(GenerativeTextLLMProcessor.TYPE, new GenerativeTextLLMProcessorFactory(getClientAccessor(parameters.client)));
         processorsMap.put(AppendQueryResponseProcessor.TYPE, new AppendQueryResponseProcessor.Factory());
         return processorsMap;
     }
@@ -99,6 +100,13 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
             clientAccessor = new MLCommonsClientAccessor(new MachineLearningNodeClient(client));
         }
         return clientAccessor;
+    }
+
+    @Override
+    public List<SearchExtSpec<?>> getSearchExts() {
+        return Collections.singletonList(
+            new SearchExtSpec<>(QuestionExtBuilder.NAME, input -> new QuestionExtBuilder(), QuestionExtBuilder::parse)
+        );
     }
 
 }

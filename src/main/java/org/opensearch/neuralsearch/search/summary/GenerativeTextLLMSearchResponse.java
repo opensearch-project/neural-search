@@ -6,26 +6,42 @@
 package org.opensearch.neuralsearch.search.summary;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.log4j.Log4j2;
 
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.SearchResponseSections;
 import org.opensearch.action.search.ShardSearchFailure;
 import org.opensearch.common.io.stream.StreamInput;
+import org.opensearch.common.io.stream.StreamOutput;
+import org.opensearch.core.ParseField;
 import org.opensearch.core.xcontent.XContentBuilder;
 
 @Log4j2
-public class SummarySearchResponse extends SearchResponse {
+public class GenerativeTextLLMSearchResponse extends SearchResponse {
 
-    private final ResultsSummary resultsSummary;
+    @Getter
+    @Setter
+    private List<GeneratedText> generatedTextList;
 
-    public SummarySearchResponse(StreamInput in) throws IOException {
+    private static final ParseField GENERATED_TEXT = new ParseField("generatedText");
+
+    public GenerativeTextLLMSearchResponse(StreamInput in) throws IOException {
         super(in);
-        resultsSummary = new ResultsSummary();
+        generatedTextList = in.readList(GeneratedText::new);
     }
 
-    public SummarySearchResponse(
+    @Override
+    public void writeTo(StreamOutput out) throws IOException {
+        super.writeTo(out);
+        out.writeList(generatedTextList);
+    }
+
+    public GenerativeTextLLMSearchResponse(
         SearchResponseSections internalResponse,
         String scrollId,
         int totalShards,
@@ -34,14 +50,14 @@ public class SummarySearchResponse extends SearchResponse {
         long tookInMillis,
         ShardSearchFailure[] shardFailures,
         Clusters clusters,
-        ResultsSummary summary
+        List<GeneratedText> generatedTextList
     ) {
         super(internalResponse, scrollId, totalShards, successfulShards, skippedShards, tookInMillis, shardFailures, clusters);
-        resultsSummary = summary;
-
+        this.generatedTextList = new ArrayList<>();
+        this.generatedTextList.addAll(generatedTextList);
     }
 
-    public SummarySearchResponse(
+    public GenerativeTextLLMSearchResponse(
         SearchResponseSections internalResponse,
         String scrollId,
         int totalShards,
@@ -63,14 +79,18 @@ public class SummarySearchResponse extends SearchResponse {
             clusters,
             pointInTimeId
         );
-        resultsSummary = new ResultsSummary();
+        this.generatedTextList = new ArrayList<>();
     }
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject();
+        builder.startArray(GENERATED_TEXT.getPreferredName());
+        for (GeneratedText generatedText : generatedTextList) {
+            generatedText.toXContent(builder, params);
+        }
+        builder.endArray();
         innerToXContent(builder, params);
-        resultsSummary.toXContent(builder, params);
         builder.endObject();
         return builder;
     }

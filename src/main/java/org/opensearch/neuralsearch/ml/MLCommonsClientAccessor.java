@@ -31,6 +31,7 @@ import org.opensearch.ml.common.output.model.ModelResultFilter;
 import org.opensearch.ml.common.output.model.ModelTensor;
 import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
+import org.opensearch.neuralsearch.search.summary.GeneratedText;
 import org.opensearch.neuralsearch.util.RetryUtil;
 
 /**
@@ -152,8 +153,17 @@ public class MLCommonsClientAccessor {
         return vector;
     }
 
-    public String predict(final String prompt, String modelId) throws ExecutionException, InterruptedException {
-        final MLInput mlInput = buildMLInputForPredictCall(prompt, modelId);
+    /**
+     * Will be used to call predict API of ML Commons, to get the response for an input from a modelId.
+     *
+     * @param context to be passed to LLM
+     * @param modelId internal reference of OpenSearch to call LLM
+     * @return {@link GeneratedText}
+     * @throws ExecutionException
+     * @throws InterruptedException
+     */
+    public GeneratedText predict(final String context, String modelId) throws ExecutionException, InterruptedException {
+        final MLInput mlInput = buildMLInputForPredictCall(context, modelId);
         final MLOutput output = mlClient.predict(modelId, mlInput).get();
 
         final ModelTensorOutput modelTensorOutput = (ModelTensorOutput) output;
@@ -161,23 +171,39 @@ public class MLCommonsClientAccessor {
         for (final ModelTensors tensors : tensorOutputList) {
             final List<ModelTensor> tensorsList = tensors.getMlModelTensors();
             for (final ModelTensor tensor : tensorsList) {
-                final String error = (String) tensor.getDataAsMap().get("error");
-                if (StringUtils.isNotEmpty(error)) {
-                    log.error("Error happened during the Processing of the input. Error : {}", error);
-                    return error;
-                }
-                final List<Map<String, Object>> choices = (List<Map<String, Object>>) tensor.getDataAsMap().get("choices");
-                if (!CollectionUtils.isEmpty(choices)) {
-                    for (Map<String, Object> choice : choices) {
-                        if (StringUtils.isNotEmpty((String) choice.get("text"))) {
-                            return (String) choice.get("text");
-                        }
+                return parseModelTensorResponseForDifferentModels(tensor);
+            }
+        }
+        log.error("Tensors Object List is empty : " + output);
+        return new GeneratedText(StringUtils.EMPTY, "No Text found hence not able to summarize");
+    }
+
+    private GeneratedText parseModelTensorResponseForDifferentModels(final ModelTensor tensor) {
+        log.info("Output from the model is : {}", tensor);
+        Map<String, ?> dataAsMap = tensor.getDataAsMap();
+        if (dataAsMap.containsKey("error")) {
+            return new GeneratedText(StringUtils.EMPTY, "Error happened during the call. Error is : " + dataAsMap.get("error"));
+        } else if (tensor.getDataAsMap().containsKey("choices")) {
+            final List<Map<String, Object>> choices = (List<Map<String, Object>>) tensor.getDataAsMap().get("choices");
+            // This is Open AI output
+            if (!CollectionUtils.isEmpty(choices)) {
+                for (Map<String, Object> choice : choices) {
+                    if (StringUtils.isNotEmpty((String) choice.get("text"))) {
+                        return new GeneratedText((String) choice.get("text"), StringUtils.EMPTY);
                     }
                 }
             }
+            return new GeneratedText(StringUtils.EMPTY, "There is no data present in the response from Open AI model");
+        } else if (dataAsMap.containsKey("results")) {
+            // this is for bedrock
+            List<Map<String, Object>> results = (List<Map<String, Object>>) dataAsMap.get("results");
+            for (Map<String, Object> result : results) {
+                if (StringUtils.isNotEmpty((String) result.get("outputText"))) {
+                    return new GeneratedText((String) result.get("outputText"), StringUtils.EMPTY);
+                }
+            }
         }
-        log.error("No Choice object found as ML Output is : " + output);
-        return "No Text found hence not able to summarize";
+        return new GeneratedText(StringUtils.EMPTY, "Not able to pase the response from model. Cannot find choices " + "object, ");
     }
 
     private MLInput buildMLInputForPredictCall(final String prompt, String modelId) {
