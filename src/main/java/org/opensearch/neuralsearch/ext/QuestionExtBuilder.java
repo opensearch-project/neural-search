@@ -13,6 +13,7 @@ import lombok.Setter;
 import lombok.extern.log4j.Log4j2;
 
 import org.opensearch.common.ParsingException;
+import org.opensearch.common.io.stream.StreamInput;
 import org.opensearch.common.io.stream.StreamOutput;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.xcontent.XContentBuilder;
@@ -51,6 +52,15 @@ public class QuestionExtBuilder extends SearchExtBuilder {
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         out.writeString(question);
+    }
+
+    public QuestionExtBuilder() {
+
+    }
+
+    public QuestionExtBuilder(StreamInput in) throws IOException {
+        String question = in.readString();
+        setQuestion(question);
     }
 
     @Override

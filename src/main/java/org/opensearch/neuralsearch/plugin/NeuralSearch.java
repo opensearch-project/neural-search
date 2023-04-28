@@ -104,9 +104,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     @Override
     public List<SearchExtSpec<?>> getSearchExts() {
-        return Collections.singletonList(
-            new SearchExtSpec<>(QuestionExtBuilder.NAME, input -> new QuestionExtBuilder(), QuestionExtBuilder::parse)
-        );
+        return Collections.singletonList(new SearchExtSpec<>(QuestionExtBuilder.NAME, QuestionExtBuilder::new, QuestionExtBuilder::parse));
     }
 
 }

@@ -203,7 +203,7 @@ public class MLCommonsClientAccessor {
                 }
             }
         }
-        return new GeneratedText(StringUtils.EMPTY, "Not able to pase the response from model. Cannot find choices " + "object, ");
+        return new GeneratedText(StringUtils.EMPTY, "Not able to pase the response from model ");
     }
 
     private MLInput buildMLInputForPredictCall(final String prompt, String modelId) {
