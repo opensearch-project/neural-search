@@ -110,7 +110,7 @@ buildscript {
     dependencies {
         classpath "${opensearch_group}.gradle:build-tools:${opensearch_version}"
         classpath "com.diffplug.spotless:spotless-plugin-gradle:5.6.1"
-        classpath "io.freefair.gradle:lombok-plugin:6.4.3"
+        classpath "io.freefair.gradle:lombok-plugin:8.0.1"
     }
 }
 
@@ -156,9 +156,12 @@ dependencies {
 // In order to add the jar to the classpath, we need to unzip the
 // k-NN zip and then copy it into a directory that we specify as a dependency.
 task extractKnnJar(type: Copy) {
+    mustRunAfter()
     from(zipTree(configurations.zipArchive.find { it.name.startsWith("opensearch-knn")}))
     into knnJarDirectory
 }
+
+project.tasks.delombok.dependsOn(extractKnnJar)
 
 compileJava {
     dependsOn extractKnnJar
@@ -291,8 +294,8 @@ spotless {
 jacocoTestReport {
     dependsOn integTest, test
     reports {
-        xml.enabled = true
-        html.enabled = true
+        xml.required = true
+        html.required = true
     }
 }
 
