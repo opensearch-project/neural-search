@@ -5,7 +5,7 @@ This document contains a list of maintainers in this repo. See [opensearch-proje
 ## Current Maintainers
 
 | Maintainer             | GitHub ID                                                 | Affiliation |
-| ---------------------- | --------------------------------------------------------- | ----------- |
+| ---------------------- |-----------------------------------------------------------| ----------- |
 | Vamshi Vijay Nakkirtha | [vamshin](https://github.com/vamshin)                     | Amazon      |
 | Sean Zheng             | [sean-zheng-amazon](https://github.com/sean-zheng-amazon) | Amazon      |
 | Jack Mazanec           | [jmazanec15](https://github.com/jmazanec15)               | Amazon      |
@@ -15,3 +15,8 @@ This document contains a list of maintainers in this repo. See [opensearch-proje
 | Zan Niu                | [zane-neo](https://github.com/zane-neo)                   | Amazon      |
 | Yaliang Wu             | [ylwu-amzn](https://github.com/ylwu-amzn)                 | Amazon      |
 | Jing Zhang             | [jngz-es](https://github.com/jngz-es)                     | Amazon      |
+| Heemin Kim             | [heemin32](https://github.com/heemin32)                   | Amazon      |
+| Junqiu Lei             | [junqiu-lei](https://github.com/junqiu-lei)               | Amazon      |
+| Martin Gaievski        | [martin-gaievski](https://github.com/martin-gaievski)     | Amazon      |
+| Naveen Tatikonda       | [naveentatikonda](https://github.com/naveentatikonda)     | Amazon      |
+| Vijayan Balasubramanian| [VijayanB](https://github.com/VijayanB)                   | Amazon      |
