@@ -91,7 +91,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Response uploadResponse = makeRequest(
             client(),
             "POST",
-            "/_plugins/_ml/models/_upload",
+            "/_plugins/_ml/models/_register",
             null,
             toHttpEntity(requestBody),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
