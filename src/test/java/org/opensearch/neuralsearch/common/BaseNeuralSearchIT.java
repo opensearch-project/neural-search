@@ -64,6 +64,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         updateClusterSettings("plugins.ml_commons.only_run_on_ml_node", false);
         // default threshold for native circuit breaker is 90, it may be not enough on test runner machine
         updateClusterSettings("plugins.ml_commons.native_memory_threshold", 100);
+        updateClusterSettings("plugins.ml_commons.allow_registering_model_via_url", true);
     }
 
     @SneakyThrows
