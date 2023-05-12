@@ -45,9 +45,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        if (modelId.get() == null) {
-            modelId.compareAndSet(null, prepareModel());
-        }
+        modelId.compareAndSet(modelId.get(), prepareModel());
     }
 
     /**
