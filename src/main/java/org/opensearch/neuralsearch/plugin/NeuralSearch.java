@@ -5,6 +5,7 @@
 
 package org.opensearch.neuralsearch.plugin;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -23,6 +24,7 @@ import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
+import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.plugins.ActionPlugin;
 import org.opensearch.plugins.ExtensiblePlugin;
@@ -60,8 +62,9 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     }
 
     public List<QuerySpec<?>> getQueries() {
-        return Collections.singletonList(
-            new QuerySpec<>(NeuralQueryBuilder.NAME, NeuralQueryBuilder::new, NeuralQueryBuilder::fromXContent)
+        return Arrays.asList(
+            new QuerySpec<>(NeuralQueryBuilder.NAME, NeuralQueryBuilder::new, NeuralQueryBuilder::fromXContent),
+            new QuerySpec<>(HybridQueryBuilder.NAME, HybridQueryBuilder::new, HybridQueryBuilder::fromXContent)
         );
     }
 
