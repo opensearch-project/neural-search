@@ -35,7 +35,7 @@ import org.opensearch.script.ScriptModule;
 import org.opensearch.script.ScriptService;
 import org.opensearch.test.OpenSearchTestCase;
 
-public class OpenSearchQueryTestCase extends OpenSearchTestCase {
+public abstract class OpenSearchQueryTestCase extends OpenSearchTestCase {
 
     protected final MapperService createMapperService(Version version, XContentBuilder mapping) throws IOException {
         IndexMetadata meta = IndexMetadata.builder("index")

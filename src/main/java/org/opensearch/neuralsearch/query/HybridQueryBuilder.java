@@ -54,7 +54,7 @@ public class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBuilder>
 
     private String fieldName;
 
-    static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
+    private static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
 
     public HybridQueryBuilder(StreamInput in) throws IOException {
         super(in);
@@ -246,7 +246,7 @@ public class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBuilder>
         return NAME;
     }
 
-    static List<QueryBuilder> readQueries(StreamInput in) throws IOException {
+    private List<QueryBuilder> readQueries(StreamInput in) throws IOException {
         int size = in.readVInt();
         List<QueryBuilder> queries = new ArrayList<>(size);
         for (int i = 0; i < size; i++) {

@@ -143,6 +143,41 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
+    public void testWithRandomDocuments_whenOneTermSubQueryWithoutMatch_thenReturnSuccessfully() {
+        int docId1 = RandomizedTest.randomInt();
+        int docId2 = RandomizedTest.randomInt();
+        int docId3 = RandomizedTest.randomInt();
+        String field1Value = "text1";
+        String field2Value = "text2";
+        String field3Value = "text3";
+
+        final Directory dir = newDirectory();
+        final IndexWriter w = new IndexWriter(dir, newIndexWriterConfig(new MockAnalyzer(random())));
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
+        ft.setOmitNorms(random().nextBoolean());
+        ft.freeze();
+
+        w.addDocument(getDocument(docId1, field1Value, ft));
+        w.addDocument(getDocument(docId2, field2Value, ft));
+        w.addDocument(getDocument(docId3, field3Value, ft));
+        w.commit();
+
+        DirectoryReader reader = DirectoryReader.open(w);
+        IndexSearcher searcher = newSearcher(reader);
+
+        HybridQuery query = new HybridQuery(List.of(new TermQuery(new Term(TEXT_FIELD_NAME, QUERY_TEXT))));
+        // executing search query, getting up to 3 docs in result
+        TopDocs hybridQueryResult = searcher.search(query, 3);
+
+        assertNotNull(hybridQueryResult);
+        assertEquals(0, hybridQueryResult.scoreDocs.length);
+        w.close();
+        reader.close();
+        dir.close();
+    }
+
+    @SneakyThrows
     public void testWithRandomDocuments_whenMultipleTermSubQueriesWithoutMatch_thenReturnSuccessfully() {
         int docId1 = RandomizedTest.randomInt();
         int docId2 = RandomizedTest.randomInt();
