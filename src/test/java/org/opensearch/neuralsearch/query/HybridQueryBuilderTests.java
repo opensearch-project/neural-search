@@ -5,9 +5,6 @@
 
 package org.opensearch.neuralsearch.query;
 
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.singletonMap;
-import static java.util.stream.Collectors.toList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -19,30 +16,22 @@ import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.K_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MODEL_ID_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TEXT_FIELD;
 
-import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
-import java.util.stream.Stream;
 
 import lombok.SneakyThrows;
 
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
-import org.opensearch.Version;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.common.CheckedConsumer;
 import org.opensearch.common.ParsingException;
 import org.opensearch.common.bytes.BytesReference;
-import org.opensearch.common.compress.CompressedXContent;
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.common.io.stream.FilterStreamInput;
 import org.opensearch.common.io.stream.NamedWriteableAwareStreamInput;
 import org.opensearch.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
@@ -50,10 +39,6 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.Index;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.analysis.AnalyzerScope;
-import org.opensearch.index.analysis.IndexAnalyzers;
-import org.opensearch.index.analysis.NamedAnalyzer;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.MatchAllQueryBuilder;
@@ -61,30 +46,22 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
-import org.opensearch.index.similarity.SimilarityService;
-import org.opensearch.indices.IndicesModule;
-import org.opensearch.indices.mapper.MapperRegistry;
 import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
 import org.opensearch.knn.index.query.KNNQuery;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
-import org.opensearch.plugins.MapperPlugin;
-import org.opensearch.plugins.ScriptPlugin;
-import org.opensearch.script.ScriptModule;
-import org.opensearch.script.ScriptService;
-import org.opensearch.test.OpenSearchTestCase;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 
-public class HybridQueryBuilderTests extends OpenSearchTestCase {
-    private static final String VECTOR_FIELD_NAME = "vectorField";
-    private static final String TEXT_FIELD_NAME = "field";
-    private static final String QUERY_TEXT = "Hello world!";
-    private static final String TERM_QUERY_TEXT = "keyword";
-    private static final String MODEL_ID = "mfgfgdsfgfdgsde";
-    private static final int K = 10;
-    private static final float BOOST = 1.8f;
-    private static final Supplier<float[]> TEST_VECTOR_SUPPLIER = () -> new float[4];
-    private static final QueryBuilder TEST_FILTER = new MatchAllQueryBuilder();
+public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
+    static final String VECTOR_FIELD_NAME = "vectorField";
+    static final String TEXT_FIELD_NAME = "field";
+    static final String QUERY_TEXT = "Hello world!";
+    static final String TERM_QUERY_TEXT = "keyword";
+    static final String MODEL_ID = "mfgfgdsfgfdgsde";
+    static final int K = 10;
+    static final float BOOST = 1.8f;
+    static final Supplier<float[]> TEST_VECTOR_SUPPLIER = () -> new float[4];
+    static final QueryBuilder TEST_FILTER = new MatchAllQueryBuilder();
 
     public void testDoToQuery_whenNoSubqueries_thenBuildSuccessfully() throws Exception {
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
@@ -583,71 +560,7 @@ public class HybridQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(termSubQuery.value(), termQueryBuilder.value());
     }
 
-    protected final MapperService createMapperService(Version version, XContentBuilder mapping) throws IOException {
-        IndexMetadata meta = IndexMetadata.builder("index")
-            .settings(Settings.builder().put("index.version.created", version))
-            .numberOfReplicas(0)
-            .numberOfShards(1)
-            .build();
-        IndexSettings indexSettings = new IndexSettings(meta, getIndexSettings());
-        MapperRegistry mapperRegistry = new IndicesModule(
-            Stream.of().filter(p -> p instanceof MapperPlugin).map(p -> (MapperPlugin) p).collect(toList())
-        ).getMapperRegistry();
-        ScriptModule scriptModule = new ScriptModule(
-            Settings.EMPTY,
-            Stream.of().filter(p -> p instanceof ScriptPlugin).map(p -> (ScriptPlugin) p).collect(toList())
-        );
-        ScriptService scriptService = new ScriptService(getIndexSettings(), scriptModule.engines, scriptModule.contexts);
-        SimilarityService similarityService = new SimilarityService(indexSettings, scriptService, emptyMap());
-        MapperService mapperService = new MapperService(
-            indexSettings,
-            createIndexAnalyzers(indexSettings),
-            xContentRegistry(),
-            similarityService,
-            mapperRegistry,
-            () -> { throw new UnsupportedOperationException(); },
-            () -> true,
-            scriptService
-        );
-        merge(mapperService, mapping);
-        return mapperService;
-    }
-
-    protected Settings getIndexSettings() {
-        return Settings.builder().put("index.version.created", Version.CURRENT).build();
-    }
-
-    protected IndexAnalyzers createIndexAnalyzers(IndexSettings indexSettings) {
-        return new IndexAnalyzers(
-            singletonMap("default", new NamedAnalyzer("default", AnalyzerScope.INDEX, new StandardAnalyzer())),
-            emptyMap(),
-            emptyMap()
-        );
-    }
-
-    protected final void merge(MapperService mapperService, XContentBuilder mapping) throws IOException {
-        mapperService.merge("_doc", new CompressedXContent(BytesReference.bytes(mapping)), MapperService.MergeReason.MAPPING_UPDATE);
-    }
-
-    protected final XContentBuilder fieldMapping(CheckedConsumer<XContentBuilder, IOException> buildField) throws IOException {
-        return mapping(b -> {
-            b.startObject("field");
-            buildField.accept(b);
-            b.endObject();
-        });
-    }
-
-    protected final XContentBuilder mapping(CheckedConsumer<XContentBuilder, IOException> buildFields) throws IOException {
-        XContentBuilder builder = XContentFactory.jsonBuilder().startObject().startObject("_doc").startObject("properties");
-        buildFields.accept(builder);
-        return builder.endObject().endObject().endObject();
-    }
-
-    protected MapperService createMapperService(XContentBuilder mappings) throws IOException {
-        return createMapperService(Version.CURRENT, mappings);
-    }
-
-    private static Map<String, Object> getInnerMap(Object innerObject, String queryName, String fieldName) {
+    private Map<String, Object> getInnerMap(Object innerObject, String queryName, String fieldName) {
         if (!(innerObject instanceof Map)) {
             fail("field name does not map to nested object");
         }

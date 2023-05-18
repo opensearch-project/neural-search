@@ -31,21 +31,32 @@ import org.apache.lucene.search.Weight;
 /**
  * Implementation fo Query interface for type "hybrid". It allows execution of multiple sub-queries and collect individual
  * scores for each sub-query.
+ *
+ * @opensearch.internal
  */
 public class HybridQuery extends Query implements Iterable<Query> {
 
-    private final List<Query> subQueries = new ArrayList<>();
+    private final List<Query> subQueries;
 
     public HybridQuery(Collection<Query> subQueries) {
         Objects.requireNonNull(subQueries, "Collection of Queries must not be null");
-        this.subQueries.addAll(subQueries);
+        this.subQueries = new ArrayList<>(subQueries);
     }
 
+    /**
+     * Returns an iterator over sub-queries that are parts of this hybrid query
+     * @return iterator
+     */
     @Override
     public Iterator<Query> iterator() {
         return getSubQueries().iterator();
     }
 
+    /**
+     * Prints a query to a string, with field assumed to be the default field and omitted.
+     * @param field default field
+     * @return string representation of hybrid query
+     */
     @Override
     public String toString(String field) {
         StringBuilder buffer = new StringBuilder();
@@ -53,7 +64,7 @@ public class HybridQuery extends Query implements Iterable<Query> {
         Iterator<Query> it = subQueries.iterator();
         for (int i = 0; it.hasNext(); i++) {
             Query subquery = it.next();
-            if (subquery instanceof BooleanQuery) { // wrap sub-bools in parens
+            if (subquery instanceof BooleanQuery) { // wrap sub-boolean in parents
                 buffer.append("(");
                 buffer.append(subquery.toString(field));
                 buffer.append(")");
@@ -64,6 +75,13 @@ public class HybridQuery extends Query implements Iterable<Query> {
         return buffer.toString();
     }
 
+    /**
+     * Re-writes queries into primitive queries. Callers are expected to call rewrite multiple times if necessary,
+     * until the rewritten query is the same as the original query.
+     * @param reader
+     * @return
+     * @throws IOException
+     */
     @Override
     public Query rewrite(IndexReader reader) throws IOException {
         if (subQueries.isEmpty()) {
@@ -89,6 +107,10 @@ public class HybridQuery extends Query implements Iterable<Query> {
         return super.rewrite(reader);
     }
 
+    /**
+     * Recurse through the query tree, visiting any child queries
+     * @param queryVisitor a QueryVisitor to be called by each query in the tree
+     */
     @Override
     public void visit(QueryVisitor queryVisitor) {
         QueryVisitor v = queryVisitor.getSubVisitor(BooleanClause.Occur.SHOULD, this);
@@ -97,6 +119,11 @@ public class HybridQuery extends Query implements Iterable<Query> {
         }
     }
 
+    /**
+     * Override and implement query instance equivalence properly in a subclass. This is required so that QueryCache works properly.
+     * @param other query object that when compare with this query object
+     * @return
+     */
     @Override
     public boolean equals(Object other) {
         return sameClassAs(other) && equalsTo(getClass().cast(other));
@@ -106,6 +133,10 @@ public class HybridQuery extends Query implements Iterable<Query> {
         return Objects.equals(subQueries, other.subQueries);
     }
 
+    /**
+     * Override and implement query hash code properly in a subclass. This is required so that QueryCache works properly.
+     * @return hash code of this object
+     */
     @Override
     public int hashCode() {
         int h = classHash();
@@ -117,10 +148,13 @@ public class HybridQuery extends Query implements Iterable<Query> {
         return Collections.unmodifiableCollection(subQueries);
     }
 
+    /**
+     *  Calculate query weights and build query scorers for hybrid query.
+     */
     protected class HybridQueryWeight extends Weight {
 
         // The Weights for our subqueries, in 1-1 correspondence
-        protected final ArrayList<Weight> weights = new ArrayList<>();
+        protected final ArrayList<Weight> weights;
 
         private final ScoreMode scoreMode;
 
@@ -129,12 +163,20 @@ public class HybridQuery extends Query implements Iterable<Query> {
          */
         public HybridQueryWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
             super(HybridQuery.this);
+            weights = new ArrayList<>();
             for (Query query : subQueries) {
                 weights.add(searcher.createWeight(query, scoreMode, boost));
             }
             this.scoreMode = scoreMode;
         }
 
+        /**
+         * Returns Matches for a specific document, or null if the document does not match the parent query
+         * @param context the reader's context to create the {@link Matches} for
+         * @param doc the document's id relative to the given context's reader
+         * @return
+         * @throws IOException
+         */
         @Override
         public Matches matches(LeafReaderContext context, int doc) throws IOException {
             List<Matches> mis = new ArrayList<>();
@@ -149,7 +191,6 @@ public class HybridQuery extends Query implements Iterable<Query> {
 
         /**
          * Create the scorer used to score our associated Query
-         *
          * @param context the {@link org.apache.lucene.index.LeafReaderContext} for which to return the
          *     {@link Scorer}.
          * @return scorer of hybrid query that contains scorers of each sub-query
@@ -169,6 +210,11 @@ public class HybridQuery extends Query implements Iterable<Query> {
             return new HybridQueryScorer(this, scorers);
         }
 
+        /**
+         * Check if weight object can be cached
+         * @param ctx
+         * @return true if the object can be cached against a given leaf
+         */
         @Override
         public boolean isCacheable(LeafReaderContext ctx) {
             for (Weight w : weights) {

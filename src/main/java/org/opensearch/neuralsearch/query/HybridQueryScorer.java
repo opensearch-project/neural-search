@@ -23,6 +23,8 @@ import org.apache.lucene.search.Weight;
  * Class abstracts functionality of Scorer for hybrid query. When iterating over documents in increasing
  * order of doc id, this class fills up array of scores per sub-query for each doc id. Order in array of scores
  * corresponds to order of sub-queries in an input Hybrid query.
+ *
+ * @opensearch.internal
  */
 public class HybridQueryScorer extends Scorer {
 
@@ -81,11 +83,21 @@ public class HybridQueryScorer extends Scorer {
         return (float) (scoreMax + otherScoreSum);
     }
 
+    /**
+     * Return a DocIdSetIterator over matching documents.
+     * @return DocIdSetIterator object
+     */
     @Override
     public DocIdSetIterator iterator() {
         return approximation;
     }
 
+    /**
+     * Return the maximum score that documents between the last target that this iterator was shallow-advanced to included and upTo included.
+     * @param upTo upper limit for document id
+     * @return max score
+     * @throws IOException
+     */
     @Override
     public float getMaxScore(int upTo) throws IOException {
         float scoreMax = 0;
@@ -101,6 +113,10 @@ public class HybridQueryScorer extends Scorer {
         return scoreMax;
     }
 
+    /**
+     * Returns the doc ID that is currently being scored.
+     * @return document id
+     */
     @Override
     public int docID() {
         return subScorersPQ.top().doc;

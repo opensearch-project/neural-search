@@ -37,6 +37,8 @@ import org.opensearch.index.query.Rewriteable;
 /**
  * Class abstract creation of a Query type "hybrid". Hybrid query will allow execution of multiple sub-queries and
  * collects score for each of those sub-query.
+ *
+ * @opensearch.internal
  */
 @Log4j2
 @Getter
@@ -59,6 +61,11 @@ public class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBuilder>
         queries.addAll(readQueries(in));
     }
 
+    /**
+     * Serialize this query object into input stream
+     * @param out stream that we'll be used for serialization
+     * @throws IOException
+     */
     @Override
     protected void doWriteTo(StreamOutput out) throws IOException {
         writeQueries(out, queries);
@@ -66,7 +73,6 @@ public class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBuilder>
 
     /**
      * Add one sub-query
-     *
      * @param queryBuilder
      * @return
      */
@@ -78,6 +84,12 @@ public class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBuilder>
         return this;
     }
 
+    /**
+     * Create builder object with a content of this hybrid query
+     * @param builder
+     * @param params
+     * @throws IOException
+     */
     @Override
     protected void doXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject(NAME);
@@ -90,13 +102,18 @@ public class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBuilder>
         builder.endObject();
     }
 
+    /**
+     * Create query object for current hybrid query using shard context
+     * @param queryShardContext context object that used to create hybrid query
+     * @return hybrid query object
+     * @throws IOException
+     */
     @Override
     protected Query doToQuery(QueryShardContext queryShardContext) throws IOException {
         Collection<Query> queryCollection = toQueries(queries, queryShardContext);
         if (queryCollection.isEmpty()) {
             return Queries.newMatchNoDocsQuery(String.format(Locale.ROOT, "no clauses for %s query", NAME));
         }
-
         return new HybridQuery(queryCollection);
     }
 
@@ -196,6 +213,11 @@ public class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBuilder>
         }
     }
 
+    /**
+     * Indicates whether some other QueryBuilder object of the same type is "equal to" this one.
+     * @param obj
+     * @return true if objects are equal
+     */
     @Override
     protected boolean doEquals(HybridQueryBuilder obj) {
         if (this == obj) return true;
@@ -206,11 +228,19 @@ public class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBuilder>
         return equalsBuilder.isEquals();
     }
 
+    /**
+     * Create hash code for current hybrid query builder object
+     * @return hash code
+     */
     @Override
     protected int doHashCode() {
         return Objects.hash(queries);
     }
 
+    /**
+     * Returns the name of the writeable object
+     * @return
+     */
     @Override
     public String getWriteableName() {
         return NAME;
