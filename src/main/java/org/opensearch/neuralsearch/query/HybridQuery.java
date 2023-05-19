@@ -26,10 +26,8 @@ import org.apache.lucene.search.Weight;
 /**
  * Implementation fo Query interface for type "hybrid". It allows execution of multiple sub-queries and collect individual
  * scores for each sub-query.
- *
- * @opensearch.internal
  */
-public class HybridQuery extends Query implements Iterable<Query> {
+public final class HybridQuery extends Query implements Iterable<Query> {
 
     private final List<Query> subQueries;
 

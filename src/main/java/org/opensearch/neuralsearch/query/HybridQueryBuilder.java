@@ -37,15 +37,13 @@ import org.opensearch.index.query.Rewriteable;
 /**
  * Class abstract creation of a Query type "hybrid". Hybrid query will allow execution of multiple sub-queries and
  * collects score for each of those sub-query.
- *
- * @opensearch.internal
  */
 @Log4j2
 @Getter
 @Setter
 @Accessors(chain = true, fluent = true)
 @NoArgsConstructor
-public class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBuilder> {
+public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBuilder> {
     public static final String NAME = "hybrid";
 
     private static final ParseField QUERIES_FIELD = new ParseField("queries");

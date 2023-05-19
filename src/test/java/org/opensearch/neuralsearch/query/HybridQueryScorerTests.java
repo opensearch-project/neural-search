@@ -12,9 +12,12 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import lombok.SneakyThrows;
 
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.Explanation;
@@ -32,95 +35,44 @@ public class HybridQueryScorerTests extends LuceneTestCase {
 
     @SneakyThrows
     public void testWithRandomDocuments_whenOneSubScorer_thenReturnSuccessfully() {
-        final int maxDocId = TestUtil.nextInt(random(), 10, 10_000);
-        final int numDocs = RandomizedTest.randomIntBetween(1, maxDocId / 2);
-        final int[] docs = new int[numDocs];
-        final Set<Integer> uniqueDocs = new HashSet<>();
-        while (uniqueDocs.size() < numDocs) {
-            uniqueDocs.add(random().nextInt(maxDocId));
-        }
-        int i = 0;
-        for (int doc : uniqueDocs) {
-            docs[i++] = doc;
-        }
-        Arrays.sort(docs);
-        final float[] scores = new float[numDocs];
-        for (int j = 0; j < numDocs; ++j) {
-            scores[j] = random().nextFloat();
-        }
+        int maxDocId = TestUtil.nextInt(random(), 10, 10_000);
+        Pair<int[], float[]> docsAndScores = generateDocuments(maxDocId);
+        int[] docs = docsAndScores.getLeft();
+        float[] scores = docsAndScores.getRight();
 
         Weight weight = mock(Weight.class);
 
         HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(
             weight,
-            new Scorer[] { scorer(docs, scores, fakeWeight(new MatchAllDocsQuery())) }
+            new Scorer[] { scorer(docsAndScores.getLeft(), docsAndScores.getRight(), fakeWeight(new MatchAllDocsQuery())) }
         );
-        int doc = -1;
-        int numOfActualDocs = 0;
-        while (doc != NO_MORE_DOCS) {
-            int target = doc + 1;
-            doc = hybridQueryScorer.iterator().nextDoc();
-            int idx = Arrays.binarySearch(docs, target);
-            idx = (idx >= 0) ? idx : (-1 - idx);
-            if (idx == docs.length) {
-                assertEquals(DocIdSetIterator.NO_MORE_DOCS, doc);
-            } else {
-                assertEquals(docs[idx], doc);
-                assertEquals(scores[idx], hybridQueryScorer.score(), 0f);
-                numOfActualDocs++;
-            }
-        }
-        assertEquals(numDocs, numOfActualDocs);
+
+        testWithQuery(docs, scores, hybridQueryScorer);
     }
 
     @SneakyThrows
-    public void testWithRandomDocuments_whenMultipleScorers_thenReturnSuccessfully() {
-        final int maxDocId1 = TestUtil.nextInt(random(), 2, 10_000);
-        final int numDocs1 = RandomizedTest.randomIntBetween(1, maxDocId1 / 2);
-        final int[] docs1 = new int[numDocs1];
-        final Set<Integer> uniqueDocs1 = new HashSet<>();
-        while (uniqueDocs1.size() < numDocs1) {
-            uniqueDocs1.add(random().nextInt(maxDocId1));
-        }
-        int i = 0;
-        for (int doc : uniqueDocs1) {
-            docs1[i++] = doc;
-        }
-        Arrays.sort(docs1);
-        final float[] scores1 = new float[numDocs1];
-        for (int j = 0; j < numDocs1; ++j) {
-            scores1[j] = random().nextFloat();
-        }
+    public void testWithRandomDocumentsAndHybridScores_whenMultipleScorers_thenReturnSuccessfully() {
+        int maxDocId1 = TestUtil.nextInt(random(), 10, 10_000);
+        Pair<int[], float[]> docsAndScores1 = generateDocuments(maxDocId1);
+        int[] docs1 = docsAndScores1.getLeft();
+        float[] scores1 = docsAndScores1.getRight();
+        int maxDocId2 = TestUtil.nextInt(random(), 10, 10_000);
+        Pair<int[], float[]> docsAndScores2 = generateDocuments(maxDocId2);
+        int[] docs2 = docsAndScores2.getLeft();
+        float[] scores2 = docsAndScores2.getRight();
 
-        final int maxDocId2 = TestUtil.nextInt(random(), 2, 10_000);
-        final int numDocs2 = RandomizedTest.randomIntBetween(1, maxDocId2 / 2);
-        final int[] docs2 = new int[numDocs2];
-        final Set<Integer> uniqueDocs2 = new HashSet<>();
-        while (uniqueDocs2.size() < numDocs2) {
-            uniqueDocs2.add(random().nextInt(maxDocId2));
-        }
-        i = 0;
-        for (int doc : uniqueDocs2) {
-            docs2[i++] = doc;
-        }
-        Arrays.sort(docs2);
-        final float[] scores2 = new float[numDocs2];
-        for (int j = 0; j < numDocs2; ++j) {
-            scores2[j] = random().nextFloat();
-        }
-
-        Set<Integer> uniqueDocsAll = new HashSet<>();
-        uniqueDocsAll.addAll(uniqueDocs1);
-        uniqueDocsAll.addAll(uniqueDocs2);
+        Weight weight = mock(Weight.class);
 
         HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(
-            mock(Weight.class),
+            weight,
             new Scorer[] {
                 scorer(docs1, scores1, fakeWeight(new MatchAllDocsQuery())),
                 scorer(docs2, scores2, fakeWeight(new MatchNoDocsQuery())) }
         );
         int doc = -1;
         int numOfActualDocs = 0;
+        Set<Integer> uniqueDocs1 = Arrays.stream(docs1).boxed().collect(Collectors.toSet());
+        Set<Integer> uniqueDocs2 = Arrays.stream(docs2).boxed().collect(Collectors.toSet());
         while (doc != NO_MORE_DOCS) {
             doc = hybridQueryScorer.iterator().nextDoc();
             if (doc == DocIdSetIterator.NO_MORE_DOCS) {
@@ -143,12 +95,84 @@ public class HybridQueryScorerTests extends LuceneTestCase {
             assertEquals(expectedScore, actualTotalScore, 0.001f);
             numOfActualDocs++;
         }
-        assertEquals(uniqueDocsAll.size(), numOfActualDocs);
+
+        int totalUniqueCount = uniqueDocs1.size();
+        for (int n : uniqueDocs2) {
+            if (!uniqueDocs1.contains(n)) {
+                totalUniqueCount++;
+            }
+        }
+        assertEquals(totalUniqueCount, numOfActualDocs);
+    }
+
+    @SneakyThrows
+    public void testWithRandomDocumentsAndCombinedScore_whenMultipleScorers_thenReturnSuccessfully() {
+        int maxDocId1 = TestUtil.nextInt(random(), 10, 10_000);
+        Pair<int[], float[]> docsAndScores1 = generateDocuments(maxDocId1);
+        int[] docs1 = docsAndScores1.getLeft();
+        float[] scores1 = docsAndScores1.getRight();
+        int maxDocId2 = TestUtil.nextInt(random(), 10, 10_000);
+        Pair<int[], float[]> docsAndScores2 = generateDocuments(maxDocId2);
+        int[] docs2 = docsAndScores2.getLeft();
+        float[] scores2 = docsAndScores2.getRight();
+
+        Weight weight = mock(Weight.class);
+
+        HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(
+            weight,
+            new Scorer[] {
+                scorer(docs1, scores1, fakeWeight(new MatchAllDocsQuery())),
+                scorer(docs2, scores2, fakeWeight(new MatchNoDocsQuery())) }
+        );
+        int doc = -1;
+        int numOfActualDocs = 0;
+        Set<Integer> uniqueDocs1 = Arrays.stream(docs1).boxed().collect(Collectors.toSet());
+        Set<Integer> uniqueDocs2 = Arrays.stream(docs2).boxed().collect(Collectors.toSet());
+        while (doc != NO_MORE_DOCS) {
+            doc = hybridQueryScorer.iterator().nextDoc();
+            if (doc == DocIdSetIterator.NO_MORE_DOCS) {
+                continue;
+            }
+            float expectedScore = 0.0f;
+            if (uniqueDocs1.contains(doc)) {
+                int idx = Arrays.binarySearch(docs1, doc);
+                expectedScore += scores1[idx];
+            }
+            if (uniqueDocs2.contains(doc)) {
+                int idx = Arrays.binarySearch(docs2, doc);
+                expectedScore += scores2[idx];
+            }
+            assertEquals(expectedScore, hybridQueryScorer.score(), 0.001f);
+            numOfActualDocs++;
+        }
+
+        int totalUniqueCount = uniqueDocs1.size();
+        for (int n : uniqueDocs2) {
+            if (!uniqueDocs1.contains(n)) {
+                totalUniqueCount++;
+            }
+        }
+        assertEquals(totalUniqueCount, numOfActualDocs);
     }
 
     @SneakyThrows
     public void testWithRandomDocuments_whenMultipleScorersAndSomeScorersEmpty_thenReturnSuccessfully() {
-        final int maxDocId = TestUtil.nextInt(random(), 10, 10_000);
+        int maxDocId = TestUtil.nextInt(random(), 10, 10_000);
+        Pair<int[], float[]> docsAndScores = generateDocuments(maxDocId);
+        int[] docs = docsAndScores.getLeft();
+        float[] scores = docsAndScores.getRight();
+
+        Weight weight = mock(Weight.class);
+
+        HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(
+            weight,
+            new Scorer[] { null, scorer(docs, scores, fakeWeight(new MatchAllDocsQuery())), null }
+        );
+
+        testWithQuery(docs, scores, hybridQueryScorer);
+    }
+
+    private Pair<int[], float[]> generateDocuments(int maxDocId) {
         final int numDocs = RandomizedTest.randomIntBetween(1, maxDocId / 2);
         final int[] docs = new int[numDocs];
         final Set<Integer> uniqueDocs = new HashSet<>();
@@ -164,13 +188,10 @@ public class HybridQueryScorerTests extends LuceneTestCase {
         for (int j = 0; j < numDocs; ++j) {
             scores[j] = random().nextFloat();
         }
+        return new ImmutablePair<>(docs, scores);
+    }
 
-        Weight weight = mock(Weight.class);
-
-        HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(
-            weight,
-            new Scorer[] { null, scorer(docs, scores, fakeWeight(new MatchAllDocsQuery())), null }
-        );
+    private void testWithQuery(int[] docs, float[] scores, HybridQueryScorer hybridQueryScorer) throws IOException {
         int doc = -1;
         int numOfActualDocs = 0;
         while (doc != NO_MORE_DOCS) {
@@ -186,7 +207,7 @@ public class HybridQueryScorerTests extends LuceneTestCase {
                 numOfActualDocs++;
             }
         }
-        assertEquals(numDocs, numOfActualDocs);
+        assertEquals(docs.length, numOfActualDocs);
     }
 
     private static Weight fakeWeight(Query query) {

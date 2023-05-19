@@ -23,10 +23,8 @@ import org.apache.lucene.search.Weight;
  * Class abstracts functionality of Scorer for hybrid query. When iterating over documents in increasing
  * order of doc id, this class fills up array of scores per sub-query for each doc id. Order in array of scores
  * corresponds to order of sub-queries in an input Hybrid query.
- *
- * @opensearch.internal
  */
-public class HybridQueryScorer extends Scorer {
+public final class HybridQueryScorer extends Scorer {
 
     // score for each of sub-query in this hybrid query
     @Getter
@@ -67,25 +65,23 @@ public class HybridQueryScorer extends Scorer {
         this.approximation = new DisjunctionDISIApproximation(this.subScorersPQ);
     }
 
+    /**
+     * Returns the score of the current document matching the query. Score is a sum of all scores from sub-query scorers.
+     * @return combined total score of all sub-scores
+     * @throws IOException
+     */
+    @Override
     public float score() throws IOException {
-        float scoreMax = 0;
-        double otherScoreSum = 0;
-        subScores = new float[subScores.length];
-        for (DisiWrapper w : subScorersPQ) {
+        DisiWrapper topList = subScorersPQ.topList();
+        float totalScore = 0.0f;
+        for (DisiWrapper disiWrapper = topList; disiWrapper != null; disiWrapper = disiWrapper.next) {
             // check if this doc has match in the subQuery. If not, add score as 0.0 and continue
-            if (w.scorer.docID() == DocIdSetIterator.NO_MORE_DOCS) {
+            if (disiWrapper.scorer.docID() == DocIdSetIterator.NO_MORE_DOCS) {
                 continue;
             }
-            float subScore = w.scorer.score();
-            subScores[queryToIndex.get(w.scorer.getWeight().getQuery())] = subScore;
-            if (subScore >= scoreMax) {
-                otherScoreSum += scoreMax;
-                scoreMax = subScore;
-            } else {
-                otherScoreSum += subScore;
-            }
+            totalScore += disiWrapper.scorer.score();
         }
-        return (float) (scoreMax + otherScoreSum);
+        return totalScore;
     }
 
     /**

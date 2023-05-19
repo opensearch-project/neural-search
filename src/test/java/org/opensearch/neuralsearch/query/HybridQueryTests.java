@@ -85,7 +85,19 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) mapperService.fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
 
-        IndexReader reader = mock(IndexReader.class);
+        Directory directory = newDirectory();
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
+        ft.setOmitNorms(random().nextBoolean());
+        ft.freeze();
+
+        w.addDocument(getDocument(RandomizedTest.randomInt(), RandomizedTest.randomAsciiAlphanumOfLength(8), ft));
+        w.addDocument(getDocument(RandomizedTest.randomInt(), RandomizedTest.randomAsciiAlphanumOfLength(8), ft));
+        w.addDocument(getDocument(RandomizedTest.randomInt(), RandomizedTest.randomAsciiAlphanumOfLength(8), ft));
+        w.commit();
+
+        IndexReader reader = DirectoryReader.open(w);
         HybridQuery query = new HybridQuery(
             List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext))
         );
@@ -93,6 +105,10 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         QueryUtils.checkUnequal(query, rewritten);
         Query rewritten2 = rewritten.rewrite(reader);
         assertSame(rewritten, rewritten2);
+
+        w.close();
+        reader.close();
+        directory.close();
     }
 
     @SneakyThrows

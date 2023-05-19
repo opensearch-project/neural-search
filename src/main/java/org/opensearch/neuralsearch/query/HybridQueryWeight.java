@@ -24,7 +24,7 @@ import org.apache.lucene.search.Weight;
 /**
  * Calculates query weights and build query scorers for hybrid query.
  */
-class HybridQueryWeight extends Weight {
+public final class HybridQueryWeight extends Weight {
 
     private final HybridQuery queries;
     // The Weights for our subqueries, in 1-1 correspondence
