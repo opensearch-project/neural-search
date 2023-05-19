@@ -36,12 +36,15 @@ public class HybridQueryScorer extends Scorer {
 
     private final DocIdSetIterator approximation;
 
+    float[] subScores;
+
     Map<Query, Integer> queryToIndex;
 
     HybridQueryScorer(Weight weight, Scorer[] subScorers) throws IOException {
         super(weight);
         this.subScorers = subScorers;
         queryToIndex = new HashMap<>();
+        subScores = new float[subScorers.length];
         int idx = 0;
         int size = 0;
         for (Scorer scorer : subScorers) {
@@ -67,12 +70,14 @@ public class HybridQueryScorer extends Scorer {
     public float score() throws IOException {
         float scoreMax = 0;
         double otherScoreSum = 0;
+        subScores = new float[subScores.length];
         for (DisiWrapper w : subScorersPQ) {
             // check if this doc has match in the subQuery. If not, add score as 0.0 and continue
             if (w.scorer.docID() == DocIdSetIterator.NO_MORE_DOCS) {
                 continue;
             }
             float subScore = w.scorer.score();
+            subScores[queryToIndex.get(w.scorer.getWeight().getQuery())] = subScore;
             if (subScore >= scoreMax) {
                 otherScoreSum += scoreMax;
                 scoreMax = subScore;
@@ -120,5 +125,24 @@ public class HybridQueryScorer extends Scorer {
     @Override
     public int docID() {
         return subScorersPQ.top().doc;
+    }
+
+    /**
+     * Return array of scores per sub-query for doc id that is defined by current iterator position
+     * @return
+     * @throws IOException
+     */
+    public float[] hybridScores() throws IOException {
+        float[] scores = new float[subScores.length];
+        DisiWrapper topList = subScorersPQ.topList();
+        for (DisiWrapper disiWrapper = topList; disiWrapper != null; disiWrapper = disiWrapper.next) {
+            // check if this doc has match in the subQuery. If not, add score as 0.0 and continue
+            if (disiWrapper.scorer.docID() == DocIdSetIterator.NO_MORE_DOCS) {
+                continue;
+            }
+            float subScore = disiWrapper.scorer.score();
+            scores[queryToIndex.get(disiWrapper.scorer.getWeight().getQuery())] = subScore;
+        }
+        return scores;
     }
 }

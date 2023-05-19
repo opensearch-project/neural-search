@@ -5,6 +5,7 @@
 
 package org.opensearch.neuralsearch.query;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -205,7 +206,8 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         );
         contentParser.nextToken();
 
-        expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(contentParser));
+        ParsingException exception = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(contentParser));
+        assertThat(exception.getMessage(), containsString("Number of sub-queries exceeds maximum supported"));
     }
 
     /**
