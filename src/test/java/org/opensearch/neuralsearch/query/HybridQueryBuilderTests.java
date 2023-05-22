@@ -40,7 +40,6 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.Index;
-import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
@@ -119,17 +118,8 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
         TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT);
         queryBuilder.add(termSubQuery);
-        MapperService mapperService = createMapperService(
-            fieldMapping(
-                b -> b.field("type", "text")
-                    .field("fielddata", true)
-                    .startObject("fielddata_frequency_filter")
-                    .field("min", 2d)
-                    .field("min_segment_size", 1000)
-                    .endObject()
-            )
-        );
-        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) mapperService.fieldType(TEXT_FIELD_NAME);
+
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
         Query queryTwoSubQueries = queryBuilder.doToQuery(mockQueryShardContext);
         assertNotNull(queryTwoSubQueries);
@@ -317,17 +307,8 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
         TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT);
         queryBuilder.add(termSubQuery);
-        MapperService mapperService = createMapperService(
-            fieldMapping(
-                b -> b.field("type", "text")
-                    .field("fielddata", true)
-                    .startObject("fielddata_frequency_filter")
-                    .field("min", 2d)
-                    .field("min_segment_size", 1000)
-                    .endObject()
-            )
-        );
-        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) mapperService.fieldType(TEXT_FIELD_NAME);
+
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
 
         XContentBuilder builder = XContentFactory.jsonBuilder();
@@ -532,17 +513,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         when(mockKNNVectorField.getDimension()).thenReturn(4);
         when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
 
-        MapperService mapperService = createMapperService(
-            fieldMapping(
-                b -> b.field("type", "text")
-                    .field("fielddata", true)
-                    .startObject("fielddata_frequency_filter")
-                    .field("min", 2d)
-                    .field("min_segment_size", 1000)
-                    .endObject()
-            )
-        );
-        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) mapperService.fieldType(TEXT_FIELD_NAME);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
 
         QueryBuilder queryBuilderAfterRewrite = queryBuilder.doRewrite(mockQueryShardContext);

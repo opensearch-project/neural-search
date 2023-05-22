@@ -32,7 +32,10 @@ public final class HybridQuery extends Query implements Iterable<Query> {
     private final List<Query> subQueries;
 
     public HybridQuery(Collection<Query> subQueries) {
-        Objects.requireNonNull(subQueries, "Collection of Queries must not be null");
+        Objects.requireNonNull(subQueries, "Collection of queries must not be null");
+        if (subQueries.isEmpty()) {
+            throw new IllegalArgumentException("Collection of queries must not be empty");
+        }
         this.subQueries = new ArrayList<>(subQueries);
     }
 
@@ -79,10 +82,6 @@ public final class HybridQuery extends Query implements Iterable<Query> {
     public Query rewrite(IndexReader reader) throws IOException {
         if (subQueries.isEmpty()) {
             return new MatchNoDocsQuery("empty HybridQuery");
-        }
-
-        if (subQueries.size() == 1) {
-            return subQueries.iterator().next();
         }
 
         boolean actuallyRewritten = false;

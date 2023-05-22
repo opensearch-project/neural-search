@@ -5,11 +5,11 @@
 
 package org.opensearch.neuralsearch.query;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.opensearch.neuralsearch.query.HybridQueryBuilderTests.QUERY_TEXT;
-import static org.opensearch.neuralsearch.query.HybridQueryBuilderTests.TERM_QUERY_TEXT;
 import static org.opensearch.neuralsearch.query.HybridQueryBuilderTests.TEXT_FIELD_NAME;
 
 import java.io.IOException;
@@ -35,35 +35,40 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.tests.analysis.MockAnalyzer;
 import org.apache.lucene.tests.search.QueryUtils;
-import org.opensearch.index.mapper.MapperService;
+import org.opensearch.index.Index;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
+import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
+import org.opensearch.knn.index.query.KNNQueryBuilder;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 
 public class HybridQueryTests extends OpenSearchQueryTestCase {
 
+    static final String VECTOR_FIELD_NAME = "vectorField";
+    static final String TERM_QUERY_TEXT = "keyword";
+    static final String TERM_ANOTHER_QUERY_TEXT = "anotherkeyword";
+    static final float[] VECTOR_QUERY = new float[] { 1.0f, 2.0f, 2.1f, 0.6f };
+    static final int K = 2;
+
     @SneakyThrows
     public void testBasics() {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
-        MapperService mapperService = createMapperService(
-            fieldMapping(
-                b -> b.field("type", "text")
-                    .field("fielddata", true)
-                    .startObject("fielddata_frequency_filter")
-                    .field("min", 2d)
-                    .field("min_segment_size", 1000)
-                    .endObject()
-            )
-        );
-        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) mapperService.fieldType(TEXT_FIELD_NAME);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
 
-        HybridQuery query1 = new HybridQuery(List.of());
-        HybridQuery query2 = new HybridQuery(List.of());
-        HybridQuery query3 = new HybridQuery(
+        HybridQuery query1 = new HybridQuery(
             List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext))
+        );
+        HybridQuery query2 = new HybridQuery(
+            List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext))
+        );
+        HybridQuery query3 = new HybridQuery(
+            List.of(
+                QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext),
+                QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_ANOTHER_QUERY_TEXT).toQuery(mockQueryShardContext)
+            )
         );
         QueryUtils.check(query1);
         QueryUtils.checkEqual(query1, query2);
@@ -72,17 +77,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
 
     public void testRewrite() throws Exception {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
-        MapperService mapperService = createMapperService(
-            fieldMapping(
-                b -> b.field("type", "text")
-                    .field("fielddata", true)
-                    .startObject("fielddata_frequency_filter")
-                    .field("min", 2d)
-                    .field("min_segment_size", 1000)
-                    .endObject()
-            )
-        );
-        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) mapperService.fieldType(TEXT_FIELD_NAME);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
 
         Directory directory = newDirectory();
@@ -98,13 +93,24 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         w.commit();
 
         IndexReader reader = DirectoryReader.open(w);
-        HybridQuery query = new HybridQuery(
+        HybridQuery hybridQueryWithTerm = new HybridQuery(
             List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext))
         );
-        Query rewritten = query.rewrite(reader);
-        QueryUtils.checkUnequal(query, rewritten);
-        Query rewritten2 = rewritten.rewrite(reader);
-        assertSame(rewritten, rewritten2);
+        Query rewritten = hybridQueryWithTerm.rewrite(reader);
+        // term query is the same after we rewrite it
+        assertSame(hybridQueryWithTerm, rewritten);
+
+        Index dummyIndex = new Index("dummy", "dummy");
+        KNNVectorFieldMapper.KNNVectorFieldType mockKNNVectorField = mock(KNNVectorFieldMapper.KNNVectorFieldType.class);
+        when(mockQueryShardContext.index()).thenReturn(dummyIndex);
+        when(mockKNNVectorField.getDimension()).thenReturn(4);
+        when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
+        KNNQueryBuilder knnQueryBuilder = new KNNQueryBuilder(VECTOR_FIELD_NAME, VECTOR_QUERY, K);
+        Query knnQuery = knnQueryBuilder.toQuery(mockQueryShardContext);
+
+        HybridQuery hybridQueryWithKnn = new HybridQuery(List.of(knnQuery));
+        rewritten = hybridQueryWithKnn.rewrite(reader);
+        assertSame(hybridQueryWithKnn, rewritten);
 
         w.close();
         reader.close();
@@ -228,6 +234,12 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         w.close();
         reader.close();
         dir.close();
+    }
+
+    @SneakyThrows
+    public void testWithRandomDocuments_whenNoSubQueries_thenFail() {
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> new HybridQuery(List.of()));
+        assertThat(exception.getMessage(), containsString("Collection of queries must not be empty"));
     }
 
     private static Document getDocument(int docId1, String field1Value, FieldType ft) {

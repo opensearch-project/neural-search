@@ -100,4 +100,17 @@ public abstract class OpenSearchQueryTestCase extends OpenSearchTestCase {
     protected MapperService createMapperService(XContentBuilder mappings) throws IOException {
         return createMapperService(Version.CURRENT, mappings);
     }
+
+    protected MapperService createMapperService() throws IOException {
+        return createMapperService(
+            fieldMapping(
+                b -> b.field("type", "text")
+                    .field("fielddata", true)
+                    .startObject("fielddata_frequency_filter")
+                    .field("min", 2d)
+                    .field("min_segment_size", 1000)
+                    .endObject()
+            )
+        );
+    }
 }
