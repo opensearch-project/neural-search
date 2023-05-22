@@ -32,11 +32,11 @@ public final class HybridQueryScorer extends Scorer {
 
     private final DisiPriorityQueue subScorersPQ;
 
-    private final DocIdSetIterator approximation;
+    private final DocIdSetIterator docIdIterator;
 
-    float[] subScores;
+    final private float[] subScores;
 
-    Map<Query, Integer> queryToIndex;
+    final private Map<Query, Integer> queryToIndex;
 
     HybridQueryScorer(Weight weight, Scorer[] subScorers) throws IOException {
         super(weight);
@@ -62,7 +62,7 @@ public final class HybridQueryScorer extends Scorer {
             final DisiWrapper w = new DisiWrapper(scorer);
             this.subScorersPQ.add(w);
         }
-        this.approximation = new DisjunctionDISIApproximation(this.subScorersPQ);
+        this.docIdIterator = new DisjunctionDISIApproximation(this.subScorersPQ);
     }
 
     /**
@@ -90,7 +90,7 @@ public final class HybridQueryScorer extends Scorer {
      */
     @Override
     public DocIdSetIterator iterator() {
-        return approximation;
+        return docIdIterator;
     }
 
     /**

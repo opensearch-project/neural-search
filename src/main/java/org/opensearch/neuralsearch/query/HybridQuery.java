@@ -103,7 +103,8 @@ public final class HybridQuery extends Query implements Iterable<Query> {
     }
 
     /**
-     * Recurse through the query tree, visiting any child queries
+     * Recurse through the query tree, visiting all child queries and execute provided visitor. Part of multiple
+     * standard workflows, e.g. IndexSearcher.rewrite
      * @param queryVisitor a QueryVisitor to be called by each query in the tree
      */
     @Override

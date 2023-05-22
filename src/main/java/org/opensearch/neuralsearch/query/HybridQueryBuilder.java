@@ -117,6 +117,30 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
 
     /**
      * Creates HybridQueryBuilder from xContent.
+     * Example of a json for Hybrid Query:
+     * {
+     *      "query": {
+     *          "hybrid": {
+     *              "queries": [
+     *                  {
+     *                      "neural": {
+     *                          "text_knn": {
+     *                                    "query_text": "Hello world",
+     *                                    "model_id": "dcsdcasd",
+     *                                    "k": 10
+     *                                }
+     *                            }
+     *                   },
+     *                   {
+     *                      "term": {
+     *                          "text": "keyword"
+     *                       }
+     *                    }
+     *               ]
+     *          }
+     *     }
+     * }
+     *
      * @param parser parser that has been initialized with the query content
      * @return new instance of HybridQueryBuilder
      * @throws IOException

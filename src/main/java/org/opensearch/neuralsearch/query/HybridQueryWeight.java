@@ -28,7 +28,7 @@ public final class HybridQueryWeight extends Weight {
 
     private final HybridQuery queries;
     // The Weights for our subqueries, in 1-1 correspondence
-    protected final ArrayList<Weight> weights;
+    private final ArrayList<Weight> weights;
 
     private final ScoreMode scoreMode;
 
