@@ -269,19 +269,12 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     private List<QueryBuilder> readQueries(StreamInput in) throws IOException {
-        int size = in.readVInt();
-        List<QueryBuilder> queries = new ArrayList<>(size);
-        for (int i = 0; i < size; i++) {
-            queries.add(in.readNamedWriteable(QueryBuilder.class));
-        }
+        final List<QueryBuilder> queries = in.readNamedWriteableList(QueryBuilder.class);
         return queries;
     }
 
     static void writeQueries(StreamOutput out, List<? extends QueryBuilder> queries) throws IOException {
-        out.writeVInt(queries.size());
-        for (QueryBuilder query : queries) {
-            out.writeNamedWriteable(query);
-        }
+        out.writeNamedWriteableList(queries);
     }
 
     private Collection<Query> toQueries(Collection<QueryBuilder> queryBuilders, QueryShardContext context) throws QueryShardException,
