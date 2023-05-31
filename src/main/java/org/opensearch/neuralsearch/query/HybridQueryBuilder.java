@@ -11,6 +11,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -242,8 +243,12 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      */
     @Override
     protected boolean doEquals(HybridQueryBuilder obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null) {
+            return false;
+        }
         EqualsBuilder equalsBuilder = new EqualsBuilder();
         equalsBuilder.append(fieldName, obj.fieldName);
         equalsBuilder.append(queries, obj.queries);
@@ -269,23 +274,21 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     private List<QueryBuilder> readQueries(StreamInput in) throws IOException {
-        final List<QueryBuilder> queries = in.readNamedWriteableList(QueryBuilder.class);
-        return queries;
+        return in.readNamedWriteableList(QueryBuilder.class);
     }
 
     static void writeQueries(StreamOutput out, List<? extends QueryBuilder> queries) throws IOException {
         out.writeNamedWriteableList(queries);
     }
 
-    private Collection<Query> toQueries(Collection<QueryBuilder> queryBuilders, QueryShardContext context) throws QueryShardException,
-        IOException {
-        List<Query> queries = new ArrayList<>(queryBuilders.size());
-        for (QueryBuilder queryBuilder : queryBuilders) {
-            Query query = Rewriteable.rewrite(queryBuilder, context).toQuery(context);
-            if (query != null) {
-                queries.add(query);
+    private Collection<Query> toQueries(Collection<QueryBuilder> queryBuilders, QueryShardContext context) throws QueryShardException {
+        List<Query> queries = queryBuilders.stream().map(qb -> {
+            try {
+                return Rewriteable.rewrite(qb, context).toQuery(context);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
-        }
+        }).filter(Objects::nonNull).collect(Collectors.toList());
         return queries;
     }
 }

@@ -61,6 +61,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         return List.of(clientAccessor);
     }
 
+    @Override
     public List<QuerySpec<?>> getQueries() {
         return Arrays.asList(
             new QuerySpec<>(NeuralQueryBuilder.NAME, NeuralQueryBuilder::new, NeuralQueryBuilder::fromXContent),

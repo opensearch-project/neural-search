@@ -6,17 +6,15 @@
 package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Matches;
 import org.apache.lucene.search.MatchesUtils;
-import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Weight;
@@ -28,7 +26,7 @@ public final class HybridQueryWeight extends Weight {
 
     private final HybridQuery queries;
     // The Weights for our subqueries, in 1-1 correspondence
-    private final ArrayList<Weight> weights;
+    private final List<Weight> weights;
 
     private final ScoreMode scoreMode;
 
@@ -38,10 +36,13 @@ public final class HybridQueryWeight extends Weight {
     public HybridQueryWeight(HybridQuery hybridQuery, IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
         super(hybridQuery);
         this.queries = hybridQuery;
-        weights = new ArrayList<>();
-        for (Query query : hybridQuery.getSubQueries()) {
-            weights.add(searcher.createWeight(query, scoreMode, boost));
-        }
+        weights = hybridQuery.getSubQueries().stream().map(q -> {
+            try {
+                return searcher.createWeight(q, scoreMode, boost);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }).collect(Collectors.toList());
         this.scoreMode = scoreMode;
     }
 
@@ -55,13 +56,13 @@ public final class HybridQueryWeight extends Weight {
      */
     @Override
     public Matches matches(LeafReaderContext context, int doc) throws IOException {
-        List<Matches> mis = new ArrayList<>();
-        for (Weight weight : weights) {
-            Matches mi = weight.matches(context, doc);
-            if (mi != null) {
-                mis.add(mi);
+        List<Matches> mis = weights.stream().map(weight -> {
+            try {
+                return weight.matches(context, doc);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
-        }
+        }).filter(Objects::nonNull).collect(Collectors.toList());
         return MatchesUtils.fromSubMatches(mis);
     }
 
@@ -75,20 +76,19 @@ public final class HybridQueryWeight extends Weight {
      */
     @Override
     public Scorer scorer(LeafReaderContext context) throws IOException {
-        Scorer[] scorers = new Scorer[weights.size()];
-        for (int i = 0; i < weights.size(); i++) {
-            Weight w = weights.get(i);
-            Scorer subScorer = w.scorer(context);
-            if (subScorer != null) {
-                scorers[i] = subScorer;
+        List<Scorer> scorers = weights.stream().map(w -> {
+            try {
+                return w.scorer(context);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
-        }
+        }).collect(Collectors.toList());
         // if there are no matches in any of the scorers (sub-queries) we need to return
         // scorer as null to avoid problems with disi result iterators
-        if (Arrays.stream(scorers).allMatch(Objects::isNull)) {
+        if (scorers.stream().allMatch(Objects::isNull)) {
             return null;
         }
-        return new HybridQueryScorer(this, scorers);
+        return new HybridQueryScorer(this, scorers.toArray(new Scorer[0]));
     }
 
     /**
@@ -99,12 +99,7 @@ public final class HybridQueryWeight extends Weight {
      */
     @Override
     public boolean isCacheable(LeafReaderContext ctx) {
-        for (Weight w : weights) {
-            if (!w.isCacheable(ctx)) {
-                return false;
-            }
-        }
-        return true;
+        return weights.stream().allMatch(w -> w.isCacheable(ctx));
     }
 
     /**

@@ -24,7 +24,7 @@ import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Weight;
 
 /**
- * Implementation fo Query interface for type "hybrid". It allows execution of multiple sub-queries and collect individual
+ * Implementation of Query interface for type "hybrid". It allows execution of multiple sub-queries and collect individual
  * scores for each sub-query.
  */
 public final class HybridQuery extends Query implements Iterable<Query> {
@@ -64,8 +64,12 @@ public final class HybridQuery extends Query implements Iterable<Query> {
                 buffer.append("(");
                 buffer.append(subquery.toString(field));
                 buffer.append(")");
-            } else buffer.append(subquery.toString(field));
-            if (i != subQueries.size() - 1) buffer.append(" | ");
+            } else {
+                buffer.append(subquery.toString(field));
+            }
+            if (i != subQueries.size() - 1) {
+                buffer.append(" | ");
+            }
         }
         buffer.append(")");
         return buffer.toString();

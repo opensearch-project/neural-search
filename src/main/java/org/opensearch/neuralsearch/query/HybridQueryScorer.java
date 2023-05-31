@@ -103,11 +103,12 @@ public final class HybridQueryScorer extends Scorer {
     public float getMaxScore(int upTo) throws IOException {
         float scoreMax = 0;
         for (Scorer scorer : subScorers) {
-            if (scorer.docID() <= upTo) {
-                float subScore = scorer.getMaxScore(upTo);
-                if (subScore >= scoreMax) {
-                    scoreMax = subScore;
-                }
+            if (scorer.docID() > upTo) {
+                continue;
+            }
+            float subScore = scorer.getMaxScore(upTo);
+            if (subScore >= scoreMax) {
+                scoreMax = subScore;
             }
         }
 
