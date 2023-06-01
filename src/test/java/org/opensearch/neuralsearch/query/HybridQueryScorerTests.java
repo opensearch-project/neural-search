@@ -44,7 +44,7 @@ public class HybridQueryScorerTests extends LuceneTestCase {
 
         HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(
             weight,
-            new Scorer[] { scorer(docsAndScores.getLeft(), docsAndScores.getRight(), fakeWeight(new MatchAllDocsQuery())) }
+            Arrays.asList(scorer(docsAndScores.getLeft(), docsAndScores.getRight(), fakeWeight(new MatchAllDocsQuery())))
         );
 
         testWithQuery(docs, scores, hybridQueryScorer);
@@ -65,9 +65,10 @@ public class HybridQueryScorerTests extends LuceneTestCase {
 
         HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(
             weight,
-            new Scorer[] {
+            Arrays.asList(
                 scorer(docs1, scores1, fakeWeight(new MatchAllDocsQuery())),
-                scorer(docs2, scores2, fakeWeight(new MatchNoDocsQuery())) }
+                scorer(docs2, scores2, fakeWeight(new MatchNoDocsQuery()))
+            )
         );
         int doc = -1;
         int numOfActualDocs = 0;
@@ -120,9 +121,10 @@ public class HybridQueryScorerTests extends LuceneTestCase {
 
         HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(
             weight,
-            new Scorer[] {
+            Arrays.asList(
                 scorer(docs1, scores1, fakeWeight(new MatchAllDocsQuery())),
-                scorer(docs2, scores2, fakeWeight(new MatchNoDocsQuery())) }
+                scorer(docs2, scores2, fakeWeight(new MatchNoDocsQuery()))
+            )
         );
         int doc = -1;
         int numOfActualDocs = 0;
@@ -166,7 +168,7 @@ public class HybridQueryScorerTests extends LuceneTestCase {
 
         HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(
             weight,
-            new Scorer[] { null, scorer(docs, scores, fakeWeight(new MatchAllDocsQuery())), null }
+            Arrays.asList(null, scorer(docs, scores, fakeWeight(new MatchAllDocsQuery())), null)
         );
 
         testWithQuery(docs, scores, hybridQueryScorer);

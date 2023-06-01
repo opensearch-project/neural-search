@@ -88,7 +88,7 @@ public final class HybridQueryWeight extends Weight {
         if (scorers.stream().allMatch(Objects::isNull)) {
             return null;
         }
-        return new HybridQueryScorer(this, scorers.toArray(new Scorer[0]));
+        return new HybridQueryScorer(this, scorers);
     }
 
     /**
