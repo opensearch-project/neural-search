@@ -239,7 +239,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testWithRandomDocuments_whenNoSubQueries_thenFail() {
         IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> new HybridQuery(List.of()));
-        assertThat(exception.getMessage(), containsString("Collection of queries must not be empty"));
+        assertThat(exception.getMessage(), containsString("collection of queries must not be empty"));
     }
 
     private static Document getDocument(int docId1, String field1Value, FieldType ft) {

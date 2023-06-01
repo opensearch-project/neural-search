@@ -150,7 +150,6 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         float boost = AbstractQueryBuilder.DEFAULT_BOOST;
 
         final List<QueryBuilder> queries = new ArrayList<>();
-        boolean queriesFound = false;
         String queryName = null;
 
         String currentFieldName = null;
@@ -160,17 +159,16 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                 currentFieldName = parser.currentName();
             } else if (token == XContentParser.Token.START_OBJECT) {
                 if (QUERIES_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    queriesFound = true;
                     queries.add(parseInnerQueryBuilder(parser));
                 } else {
+                    log.error(String.format(Locale.ROOT, "[%s] query does not support [%s]", NAME, currentFieldName));
                     throw new ParsingException(
                         parser.getTokenLocation(),
-                        String.format(Locale.ROOT, "[%s] query does not support [%s]", NAME, currentFieldName)
+                        String.format(Locale.ROOT, "Field is not supported by [%s] query", NAME)
                     );
                 }
             } else if (token == XContentParser.Token.START_ARRAY) {
                 if (QUERIES_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    queriesFound = true;
                     while (token != XContentParser.Token.END_ARRAY) {
                         if (queries.size() == MAX_NUMBER_OF_SUB_QUERIES) {
                             throw new ParsingException(
@@ -182,9 +180,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                         token = parser.nextToken();
                     }
                 } else {
+                    log.error(String.format(Locale.ROOT, "[%s] query does not support [%s]", NAME, currentFieldName));
                     throw new ParsingException(
                         parser.getTokenLocation(),
-                        String.format(Locale.ROOT, "[%s] query does not support [%s]", NAME, currentFieldName)
+                        String.format(Locale.ROOT, "Field is not supported by [%s] query", NAME)
                     );
                 }
             } else {
@@ -193,15 +192,16 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                 } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     queryName = parser.text();
                 } else {
+                    log.error(String.format(Locale.ROOT, "[%s] query does not support [%s]", NAME, currentFieldName));
                     throw new ParsingException(
                         parser.getTokenLocation(),
-                        String.format(Locale.ROOT, "[%s] query does not support [%s]", NAME, currentFieldName)
+                        String.format(Locale.ROOT, "Field is not supported by [%s] query", NAME)
                     );
                 }
             }
         }
 
-        if (!queriesFound) {
+        if (queries.isEmpty()) {
             throw new ParsingException(
                 parser.getTokenLocation(),
                 String.format(Locale.ROOT, "[%s] requires 'queries' field with at least one clause", NAME)
@@ -277,7 +277,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         return in.readNamedWriteableList(QueryBuilder.class);
     }
 
-    static void writeQueries(StreamOutput out, List<? extends QueryBuilder> queries) throws IOException {
+    private void writeQueries(StreamOutput out, List<? extends QueryBuilder> queries) throws IOException {
         out.writeNamedWriteableList(queries);
     }
 

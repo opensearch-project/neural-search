@@ -6,8 +6,10 @@
 package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 import lombok.Getter;
 
@@ -34,34 +36,16 @@ public final class HybridQueryScorer extends Scorer {
 
     private final DocIdSetIterator docIdIterator;
 
-    final private float[] subScores;
+    private final float[] subScores;
 
-    final private Map<Query, Integer> queryToIndex;
+    private final Map<Query, Integer> queryToIndex;
 
     HybridQueryScorer(Weight weight, Scorer[] subScorers) throws IOException {
         super(weight);
         this.subScorers = subScorers;
-        queryToIndex = new HashMap<>();
         subScores = new float[subScorers.length];
-        int idx = 0;
-        int size = 0;
-        for (Scorer scorer : subScorers) {
-            if (scorer == null) {
-                idx++;
-                continue;
-            }
-            queryToIndex.put(scorer.getWeight().getQuery(), idx);
-            idx++;
-            size++;
-        }
-        this.subScorersPQ = new DisiPriorityQueue(size);
-        for (Scorer scorer : subScorers) {
-            if (scorer == null) {
-                continue;
-            }
-            final DisiWrapper w = new DisiWrapper(scorer);
-            this.subScorersPQ.add(w);
-        }
+        this.queryToIndex = mapQueryToIndex();
+        this.subScorersPQ = initializeSubScorersPQ();
         this.docIdIterator = new DisjunctionDISIApproximation(this.subScorersPQ);
     }
 
@@ -101,18 +85,13 @@ public final class HybridQueryScorer extends Scorer {
      */
     @Override
     public float getMaxScore(int upTo) throws IOException {
-        float scoreMax = 0;
-        for (Scorer scorer : subScorers) {
-            if (scorer.docID() > upTo) {
-                continue;
+        return Arrays.stream(subScorers).filter(scorer -> scorer.docID() <= upTo).map(scorer -> {
+            try {
+                return scorer.getMaxScore(upTo);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
-            float subScore = scorer.getMaxScore(upTo);
-            if (subScore >= scoreMax) {
-                scoreMax = subScore;
-            }
-        }
-
-        return scoreMax;
+        }).max(Float::compare).orElse(0.0f);
     }
 
     /**
@@ -141,5 +120,33 @@ public final class HybridQueryScorer extends Scorer {
             scores[queryToIndex.get(disiWrapper.scorer.getWeight().getQuery())] = subScore;
         }
         return scores;
+    }
+
+    private Map<Query, Integer> mapQueryToIndex() {
+        Map<Query, Integer> queryToIndex = new HashMap<>();
+        int idx = 0;
+        for (Scorer scorer : subScorers) {
+            if (scorer == null) {
+                idx++;
+                continue;
+            }
+            queryToIndex.put(scorer.getWeight().getQuery(), idx);
+            idx++;
+        }
+        return queryToIndex;
+    }
+
+    private DisiPriorityQueue initializeSubScorersPQ() {
+        Objects.requireNonNull(queryToIndex, "should not be null");
+        Objects.requireNonNull(subScorers, "should not be null");
+        DisiPriorityQueue subScorersPQ = new DisiPriorityQueue(queryToIndex.size());
+        for (Scorer scorer : subScorers) {
+            if (scorer == null) {
+                continue;
+            }
+            final DisiWrapper w = new DisiWrapper(scorer);
+            subScorersPQ.add(w);
+        }
+        return subScorersPQ;
     }
 }

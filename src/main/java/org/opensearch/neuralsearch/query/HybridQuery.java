@@ -32,9 +32,9 @@ public final class HybridQuery extends Query implements Iterable<Query> {
     private final List<Query> subQueries;
 
     public HybridQuery(Collection<Query> subQueries) {
-        Objects.requireNonNull(subQueries, "Collection of queries must not be null");
+        Objects.requireNonNull(subQueries, "collection of queries must not be null");
         if (subQueries.isEmpty()) {
-            throw new IllegalArgumentException("Collection of queries must not be empty");
+            throw new IllegalArgumentException("collection of queries must not be empty");
         }
         this.subQueries = new ArrayList<>(subQueries);
     }
