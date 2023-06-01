@@ -9,6 +9,7 @@ import static org.apache.http.entity.ContentType.APPLICATION_JSON;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -88,6 +89,9 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     protected String uploadModel(String requestBody) throws Exception {
+        String modelGroupId = registerModelGroup();
+        // model group id is dynamically generated, we need to update model update request body after group is registered
+        requestBody = requestBody.replace("<MODEL_GROUP_ID>", modelGroupId);
         Response uploadResponse = makeRequest(
             client(),
             "POST",
@@ -491,5 +495,27 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         private final String name;
         private final Integer dimension;
         private final SpaceType spaceType;
+    }
+
+    private String registerModelGroup() throws IOException, URISyntaxException {
+        String modelGroupRegisterRequestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
+        );
+        Response modelGroupResponse = makeRequest(
+            client(),
+            "POST",
+            "/_plugins/_ml/model_groups/_register",
+            null,
+            toHttpEntity(modelGroupRegisterRequestBody),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+        );
+        Map<String, Object> modelGroupResJson = XContentHelper.convertToMap(
+            XContentFactory.xContent(XContentType.JSON),
+            EntityUtils.toString(modelGroupResponse.getEntity()),
+            false
+        );
+        String modelGroupId = modelGroupResJson.get("model_group_id").toString();
+        assertNotNull(modelGroupId);
+        return modelGroupId;
     }
 }
