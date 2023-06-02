@@ -56,6 +56,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     private static final int MAX_TASK_RESULT_QUERY_TIME_IN_SECOND = 60 * 5;
 
     private static final int DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND = 1000;
+    private static final String DEFAULT_USER_AGENT = "Kibana";
 
     protected final ClassLoader classLoader = this.getClass().getClassLoader();
 
@@ -93,7 +94,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             "/_plugins/_ml/models/_upload",
             null,
             toHttpEntity(requestBody),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
         Map<String, Object> uploadResJson = XContentHelper.convertToMap(
             XContentFactory.xContent(XContentType.JSON),
@@ -122,7 +123,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             String.format(LOCALE, "/_plugins/_ml/models/%s/_load", modelId),
             null,
             toHttpEntity(""),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
         Map<String, Object> uploadResJson = XContentHelper.convertToMap(
             XContentFactory.xContent(XContentType.JSON),
@@ -170,7 +171,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             String.format(LOCALE, "/_plugins/_ml/_predict/text_embedding/%s", modelId),
             null,
             toHttpEntity(String.format(LOCALE, "{\"text_docs\": [\"%s\"],\"target_response\": [\"sentence_embedding\"]}", queryText)),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
 
         Map<String, Object> inferenceResJson = XContentHelper.convertToMap(
@@ -201,7 +202,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             indexName,
             null,
             toHttpEntity(indexConfiguration),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
         Map<String, Object> node = XContentHelper.convertToMap(
             XContentFactory.xContent(XContentType.JSON),
@@ -225,7 +226,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
                     modelId
                 )
             ),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
         Map<String, Object> node = XContentHelper.convertToMap(
             XContentFactory.xContent(XContentType.JSON),
@@ -403,7 +404,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             String.format(LOCALE, "_plugins/_ml/tasks/%s", taskId),
             null,
             toHttpEntity(""),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
         return XContentHelper.convertToMap(
             XContentFactory.xContent(XContentType.JSON),
@@ -494,13 +495,14 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     @SneakyThrows
     protected void deleteModel(String modelId) {
+        // need to undeploy first as model can be in use
         makeRequest(
             client(),
             "POST",
             String.format(LOCALE, "/_plugins/_ml/models/%s/_undeploy", modelId),
             null,
             toHttpEntity(""),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
 
         makeRequest(
@@ -509,7 +511,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             String.format(LOCALE, "/_plugins/_ml/models/%s", modelId),
             null,
             toHttpEntity(""),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
     }
 }

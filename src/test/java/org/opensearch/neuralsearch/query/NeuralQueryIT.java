@@ -53,6 +53,10 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void tearDown() {
         super.tearDown();
+        /* this is required to minimize chance of model not being deployed due to open memory CB,
+         * this happens in case we leave model from previous test case. We use new model for every test, and old model
+         * can be undeployed and deleted to free resources after each test case execution.
+         */
         deleteModel(modelId.get());
     }
 
