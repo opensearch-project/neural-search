@@ -286,6 +286,63 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertEquals(TERM_QUERY_TEXT, termQueryBuilder.value());
     }
 
+    public void testFromXContent_whenIncorrectFormat_thenFail() throws Exception {
+        XContentBuilder unsupportedFieldXContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startArray("random_field")
+            .startObject()
+            .startObject("neural")
+            .startObject(VECTOR_FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .field(K_FIELD.getPreferredName(), K)
+            .field(BOOST_FIELD.getPreferredName(), BOOST)
+            .endObject()
+            .endObject()
+            .endObject()
+            .endArray()
+            .endObject();
+
+        NamedXContentRegistry namedXContentRegistry = new NamedXContentRegistry(
+            List.of(
+                new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(TermQueryBuilder.NAME), TermQueryBuilder::fromXContent),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(NeuralQueryBuilder.NAME),
+                    NeuralQueryBuilder::fromXContent
+                ),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(HybridQueryBuilder.NAME),
+                    HybridQueryBuilder::fromXContent
+                )
+            )
+        );
+        XContentParser contentParser = createParser(
+            namedXContentRegistry,
+            unsupportedFieldXContentBuilder.contentType().xContent(),
+            BytesReference.bytes(unsupportedFieldXContentBuilder)
+        );
+        contentParser.nextToken();
+
+        expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(contentParser));
+
+        XContentBuilder emptySubQueriesXContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startArray("queries")
+            .endArray()
+            .endObject();
+
+        XContentParser contentParser2 = createParser(
+            namedXContentRegistry,
+            unsupportedFieldXContentBuilder.contentType().xContent(),
+            BytesReference.bytes(emptySubQueriesXContentBuilder)
+        );
+        contentParser2.nextToken();
+
+        expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(contentParser2));
+    }
+
     @SneakyThrows
     public void testToXContent() {
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();

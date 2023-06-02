@@ -38,6 +38,7 @@ import org.apache.lucene.tests.analysis.MockAnalyzer;
 import org.apache.lucene.tests.search.QueryUtils;
 import org.opensearch.index.Index;
 import org.opensearch.index.mapper.TextFieldMapper;
+import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
@@ -124,7 +125,6 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         assertSame(hybridQueryWithKnn, rewritten);
 
         IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> new HybridQuery(List.of()));
-        // term query is the same after we rewrite it
         assertThat(exception.getMessage(), containsString("collection of queries must not be empty"));
 
         w.close();
@@ -266,12 +266,15 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         HybridQuery query = new HybridQuery(
             List.of(
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext),
-                QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_ANOTHER_QUERY_TEXT).toQuery(mockQueryShardContext)
+                QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_ANOTHER_QUERY_TEXT).toQuery(mockQueryShardContext),
+                new BoolQueryBuilder().should(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT))
+                    .should(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_ANOTHER_QUERY_TEXT))
+                    .toQuery(mockQueryShardContext)
             )
         );
 
         String queryString = query.toString(TEXT_FIELD_NAME);
-        assertEquals("(keyword | anotherkeyword)", queryString);
+        assertEquals("(keyword | anotherkeyword | (keyword anotherkeyword))", queryString);
     }
 
     private static Document getDocument(int docId1, String field1Value, FieldType ft) {
