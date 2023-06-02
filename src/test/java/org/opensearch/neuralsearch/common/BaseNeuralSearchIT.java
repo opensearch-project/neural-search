@@ -491,4 +491,25 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         private final Integer dimension;
         private final SpaceType spaceType;
     }
+
+    @SneakyThrows
+    protected void deleteModel(String modelId) {
+        makeRequest(
+            client(),
+            "POST",
+            String.format(LOCALE, "/_plugins/_ml/models/%s/_undeploy", modelId),
+            null,
+            toHttpEntity(""),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+        );
+
+        makeRequest(
+            client(),
+            "DELETE",
+            String.format(LOCALE, "/_plugins/_ml/models/%s", modelId),
+            null,
+            toHttpEntity(""),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+        );
+    }
 }

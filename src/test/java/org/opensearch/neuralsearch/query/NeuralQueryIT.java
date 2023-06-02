@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import lombok.SneakyThrows;
 
+import org.junit.After;
 import org.junit.Before;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
@@ -46,6 +47,13 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     public void setUp() throws Exception {
         super.setUp();
         modelId.compareAndSet(modelId.get(), prepareModel());
+    }
+
+    @After
+    @SneakyThrows
+    public void tearDown() {
+        super.tearDown();
+        deleteModel(modelId.get());
     }
 
     /**
