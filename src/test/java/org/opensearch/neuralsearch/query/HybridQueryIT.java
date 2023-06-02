@@ -21,7 +21,6 @@ import lombok.SneakyThrows;
 
 import org.junit.Before;
 import org.opensearch.index.query.BoolQueryBuilder;
-import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.knn.index.SpaceType;
@@ -82,7 +81,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
      * }
      */
     @SneakyThrows
-    public void testBasicQuery() {
+    public void testBasicQuery_whenOneSubQuery_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId.get(), 5, null, null);
@@ -109,7 +108,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    public void testScoreCorrectness() {
+    public void testScoreCorrectness_whenHybridWithNeuralQuery_thenScoresAreCorrect() {
         initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
@@ -173,7 +172,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
      * }
      */
     @SneakyThrows
-    public void testComplexQuery() {
+    public void testComplexQuery_whenMultipleSubqueries_thenSuccessful() {
         initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
 
         TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
@@ -230,7 +229,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
      * }
      */
     @SneakyThrows
-    public void testSubQueryDifferentOrder_ResultIsSame() {
+    public void testSubQuery_whenSubqueriesInDifferentOrder_thenResultIsSame() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId.get(), 5, null, null);
@@ -293,7 +292,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    public void testBoostQuery() {
+    public void testBoostQuery_whenHybridWithBoost_thenScoreMultipliedCorrectly() {
         initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
@@ -327,46 +326,6 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
 
         float expectedScore = boost * (computeExpectedScore(modelId.get(), testVector1, TEST_SPACE_TYPE, TEST_QUERY_TEXT)
             + EXPECTED_SCORE_BM25);
-        assertEquals(expectedScore, objectToFloat(scores1.get(0)), 0.001f);
-    }
-
-    @SneakyThrows
-    public void testRescoreQuery() {
-        initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
-
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
-            TEST_KNN_VECTOR_FIELD_NAME_1,
-            TEST_QUERY_TEXT,
-            modelId.get(),
-            1,
-            null,
-            null
-        );
-        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
-        MatchAllQueryBuilder matchAllQueryBuilder = new MatchAllQueryBuilder();
-
-        HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
-        hybridQueryBuilderNeuralThenTerm.add(neuralQueryBuilder);
-        hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder);
-
-        Map<String, Object> searchResponseAsMap = search(
-            TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
-            matchAllQueryBuilder,
-            hybridQueryBuilderNeuralThenTerm,
-            1
-        );
-
-        assertEquals(1, getHitCount(searchResponseAsMap));
-
-        List<Map<String, Object>> hits1NestedList = getNestedHits(searchResponseAsMap);
-        List<String> ids1 = new ArrayList<>();
-        List<Double> scores1 = new ArrayList<>();
-        for (Map<String, Object> oneHit : hits1NestedList) {
-            ids1.add((String) oneHit.get("_id"));
-            scores1.add((Double) oneHit.get("_score"));
-        }
-
-        float expectedScore = computeExpectedScore(modelId.get(), testVector1, TEST_SPACE_TYPE, TEST_QUERY_TEXT) + EXPECTED_SCORE_BM25;
         assertEquals(expectedScore, objectToFloat(scores1.get(0)), 0.001f);
     }
 

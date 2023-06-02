@@ -63,7 +63,8 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     static final Supplier<float[]> TEST_VECTOR_SUPPLIER = () -> new float[4];
     static final QueryBuilder TEST_FILTER = new MatchAllQueryBuilder();
 
-    public void testDoToQuery_whenNoSubqueries_thenBuildSuccessfully() throws Exception {
+    @SneakyThrows
+    public void testDoToQuery_whenNoSubqueries_thenBuildSuccessfully() {
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
         Index dummyIndex = new Index("dummy", "dummy");
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
@@ -72,7 +73,8 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertTrue(queryNoSubQueries instanceof MatchNoDocsQuery);
     }
 
-    public void testDoToQuery_whenOneSubquery_thenBuildSuccessfully() throws Exception {
+    @SneakyThrows
+    public void testDoToQuery_whenOneSubquery_thenBuildSuccessfully() {
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
         Index dummyIndex = new Index("dummy", "dummy");
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
@@ -99,7 +101,8 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertNotNull(knnQuery.getQueryVector());
     }
 
-    public void testDoToQuery_whenMultipleSubqueries_thenBuildSuccessfully() throws Exception {
+    @SneakyThrows
+    public void testDoToQuery_whenMultipleSubqueries_thenBuildSuccessfully() {
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
         Index dummyIndex = new Index("dummy", "dummy");
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
@@ -141,7 +144,8 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertEquals(TERM_QUERY_TEXT, termQuery.getTerm().text());
     }
 
-    public void testDoToQuery_whenTooManySubqueries_thenFail() throws Exception {
+    @SneakyThrows
+    public void testDoToQuery_whenTooManySubqueries_thenFail() {
         // create query with 6 sub-queries, which is more than current max allowed
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
@@ -225,7 +229,8 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
      *      }
      * }
      */
-    public void testFromXContent_whenMultipleSubQueries_thenBuildSuccessfully() throws Exception {
+    @SneakyThrows
+    public void testFromXContent_whenMultipleSubQueries_thenBuildSuccessfully() {
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startArray("queries")
@@ -286,7 +291,8 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertEquals(TERM_QUERY_TEXT, termQueryBuilder.value());
     }
 
-    public void testFromXContent_whenIncorrectFormat_thenFail() throws Exception {
+    @SneakyThrows
+    public void testFromXContent_whenIncorrectFormat_thenFail() {
         XContentBuilder unsupportedFieldXContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startArray("random_field")
@@ -344,7 +350,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
-    public void testToXContent() {
+    public void testToXContent_whenIncomingJsonIsCorrect_thenSuccessful() {
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
         Index dummyIndex = new Index("dummy", "dummy");
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
@@ -401,7 +407,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
-    public void testStreams() {
+    public void testStreams_whenWrittingToStream_thenSuccessful() {
         HybridQueryBuilder original = new HybridQueryBuilder();
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
             .queryText(QUERY_TEXT)

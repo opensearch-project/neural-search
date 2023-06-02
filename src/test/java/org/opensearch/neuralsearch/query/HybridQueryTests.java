@@ -55,7 +55,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
     static final int K = 2;
 
     @SneakyThrows
-    public void testBasics() {
+    public void testQueryBasics_whenMultipleDifferentQueries_thenSuccessful() {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
@@ -87,7 +87,8 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         assertEquals(2, countOfQueries);
     }
 
-    public void testRewrite() throws Exception {
+    @SneakyThrows
+    public void testRewrite_whenRewriteQuery_thenSuccessful() {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
@@ -258,7 +259,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
-    public void testToString() {
+    public void testToString_whenCallQueryToString_thenSuccessful() {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);

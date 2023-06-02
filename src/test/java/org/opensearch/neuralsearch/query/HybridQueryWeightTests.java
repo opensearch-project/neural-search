@@ -43,7 +43,7 @@ public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
     static final String TERM_QUERY_TEXT = "keyword";
 
     @SneakyThrows
-    public void testBasics() {
+    public void testScorerIterator_whenExecuteQuery_thenScorerIteratorSuccessful() {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
@@ -90,7 +90,7 @@ public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
-    public void testExplain_fail() {
+    public void testExplain_whenCallExplain_thenFail() {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);

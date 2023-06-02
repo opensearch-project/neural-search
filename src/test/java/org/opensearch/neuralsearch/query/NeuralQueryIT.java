@@ -8,7 +8,6 @@ package org.opensearch.neuralsearch.query;
 import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
 import static org.opensearch.neuralsearch.TestUtils.objectToFloat;
 
-import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -356,7 +355,8 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
     }
 
-    private void initializeIndexIfNotExist(String indexName) throws IOException {
+    @SneakyThrows
+    private void initializeIndexIfNotExist(String indexName) {
         if (TEST_BASIC_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_INDEX_NAME)) {
             prepareKnnIndex(
                 TEST_BASIC_INDEX_NAME,

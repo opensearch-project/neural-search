@@ -216,12 +216,12 @@ public class HybridQueryScorerTests extends LuceneTestCase {
         return new Weight(query) {
 
             @Override
-            public Explanation explain(LeafReaderContext context, int doc) throws IOException {
+            public Explanation explain(LeafReaderContext context, int doc) {
                 return null;
             }
 
             @Override
-            public Scorer scorer(LeafReaderContext context) throws IOException {
+            public Scorer scorer(LeafReaderContext context) {
                 return null;
             }
 
@@ -238,7 +238,7 @@ public class HybridQueryScorerTests extends LuceneTestCase {
             int i = -1;
 
             @Override
-            public int nextDoc() throws IOException {
+            public int nextDoc() {
                 if (i + 1 == docs.length) {
                     return NO_MORE_DOCS;
                 } else {
@@ -279,7 +279,7 @@ public class HybridQueryScorerTests extends LuceneTestCase {
             }
 
             @Override
-            public float score() throws IOException {
+            public float score() {
                 assertNotEquals("score() called twice on doc " + docID(), lastScoredDoc, docID());
                 lastScoredDoc = docID();
                 final int idx = Arrays.binarySearch(docs, docID());
@@ -287,7 +287,7 @@ public class HybridQueryScorerTests extends LuceneTestCase {
             }
 
             @Override
-            public float getMaxScore(int upTo) throws IOException {
+            public float getMaxScore(int upTo) {
                 return Float.MAX_VALUE;
             }
         };
