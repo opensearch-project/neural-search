@@ -14,6 +14,7 @@ import static org.opensearch.neuralsearch.query.HybridQueryBuilderTests.TEXT_FIE
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -37,6 +38,7 @@ import org.apache.lucene.tests.analysis.MockAnalyzer;
 import org.apache.lucene.tests.search.QueryUtils;
 import org.opensearch.index.Index;
 import org.opensearch.index.mapper.TextFieldMapper;
+import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
@@ -53,7 +55,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
     static final int K = 2;
 
     @SneakyThrows
-    public void testBasics() {
+    public void testQueryBasics_whenMultipleDifferentQueries_thenSuccessful() {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
@@ -73,9 +75,20 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         QueryUtils.check(query1);
         QueryUtils.checkEqual(query1, query2);
         QueryUtils.checkUnequal(query1, query3);
+
+        Iterator<Query> queryIterator = query3.iterator();
+        assertNotNull(queryIterator);
+        int countOfQueries = 0;
+        while (queryIterator.hasNext()) {
+            Query query = queryIterator.next();
+            assertNotNull(query);
+            countOfQueries++;
+        }
+        assertEquals(2, countOfQueries);
     }
 
-    public void testRewrite() throws Exception {
+    @SneakyThrows
+    public void testRewrite_whenRewriteQuery_thenSuccessful() {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
@@ -111,6 +124,9 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         HybridQuery hybridQueryWithKnn = new HybridQuery(List.of(knnQuery));
         rewritten = hybridQueryWithKnn.rewrite(reader);
         assertSame(hybridQueryWithKnn, rewritten);
+
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> new HybridQuery(List.of()));
+        assertThat(exception.getMessage(), containsString("collection of queries must not be empty"));
 
         w.close();
         reader.close();
@@ -240,6 +256,26 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
     public void testWithRandomDocuments_whenNoSubQueries_thenFail() {
         IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> new HybridQuery(List.of()));
         assertThat(exception.getMessage(), containsString("collection of queries must not be empty"));
+    }
+
+    @SneakyThrows
+    public void testToString_whenCallQueryToString_thenSuccessful() {
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+
+        HybridQuery query = new HybridQuery(
+            List.of(
+                QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext),
+                QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_ANOTHER_QUERY_TEXT).toQuery(mockQueryShardContext),
+                new BoolQueryBuilder().should(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT))
+                    .should(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_ANOTHER_QUERY_TEXT))
+                    .toQuery(mockQueryShardContext)
+            )
+        );
+
+        String queryString = query.toString(TEXT_FIELD_NAME);
+        assertEquals("(keyword | anotherkeyword | (keyword anotherkeyword))", queryString);
     }
 
     private static Document getDocument(int docId1, String field1Value, FieldType ft) {
