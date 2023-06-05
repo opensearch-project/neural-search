@@ -8,7 +8,6 @@ package org.opensearch.neuralsearch.query;
 import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
 import static org.opensearch.neuralsearch.TestUtils.objectToFloat;
 
-import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +15,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import lombok.SneakyThrows;
 
+import org.junit.After;
 import org.junit.Before;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
@@ -46,6 +46,17 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     public void setUp() throws Exception {
         super.setUp();
         modelId.compareAndSet(modelId.get(), prepareModel());
+    }
+
+    @After
+    @SneakyThrows
+    public void tearDown() {
+        super.tearDown();
+        /* this is required to minimize chance of model not being deployed due to open memory CB,
+         * this happens in case we leave model from previous test case. We use new model for every test, and old model
+         * can be undeployed and deleted to free resources after each test case execution.
+         */
+        deleteModel(modelId.get());
     }
 
     /**
@@ -344,7 +355,8 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
     }
 
-    private void initializeIndexIfNotExist(String indexName) throws IOException {
+    @SneakyThrows
+    private void initializeIndexIfNotExist(String indexName) {
         if (TEST_BASIC_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_INDEX_NAME)) {
             prepareKnnIndex(
                 TEST_BASIC_INDEX_NAME,
