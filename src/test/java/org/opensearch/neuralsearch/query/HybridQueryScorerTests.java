@@ -18,20 +18,15 @@ import lombok.SneakyThrows;
 
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Weight;
-import org.apache.lucene.tests.util.LuceneTestCase;
 import org.apache.lucene.tests.util.TestUtil;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 
-public class HybridQueryScorerTests extends LuceneTestCase {
+public class HybridQueryScorerTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testWithRandomDocuments_whenOneSubScorer_thenReturnSuccessfully() {
@@ -210,86 +205,5 @@ public class HybridQueryScorerTests extends LuceneTestCase {
             }
         }
         assertEquals(docs.length, numOfActualDocs);
-    }
-
-    private static Weight fakeWeight(Query query) {
-        return new Weight(query) {
-
-            @Override
-            public Explanation explain(LeafReaderContext context, int doc) {
-                return null;
-            }
-
-            @Override
-            public Scorer scorer(LeafReaderContext context) {
-                return null;
-            }
-
-            @Override
-            public boolean isCacheable(LeafReaderContext ctx) {
-                return false;
-            }
-        };
-    }
-
-    private static DocIdSetIterator iterator(final int... docs) {
-        return new DocIdSetIterator() {
-
-            int i = -1;
-
-            @Override
-            public int nextDoc() {
-                if (i + 1 == docs.length) {
-                    return NO_MORE_DOCS;
-                } else {
-                    return docs[++i];
-                }
-            }
-
-            @Override
-            public int docID() {
-                return i < 0 ? -1 : i == docs.length ? NO_MORE_DOCS : docs[i];
-            }
-
-            @Override
-            public long cost() {
-                return docs.length;
-            }
-
-            @Override
-            public int advance(int target) throws IOException {
-                return slowAdvance(target);
-            }
-        };
-    }
-
-    private static Scorer scorer(final int[] docs, final float[] scores, Weight weight) {
-        final DocIdSetIterator iterator = iterator(docs);
-        return new Scorer(weight) {
-
-            int lastScoredDoc = -1;
-
-            public DocIdSetIterator iterator() {
-                return iterator;
-            }
-
-            @Override
-            public int docID() {
-                return iterator.docID();
-            }
-
-            @Override
-            public float score() {
-                assertNotEquals("score() called twice on doc " + docID(), lastScoredDoc, docID());
-                lastScoredDoc = docID();
-                final int idx = Arrays.binarySearch(docs, docID());
-                return scores[idx];
-            }
-
-            @Override
-            public float getMaxScore(int upTo) {
-                return Float.MAX_VALUE;
-            }
-        };
     }
 }

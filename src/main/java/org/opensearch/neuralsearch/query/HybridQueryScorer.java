@@ -39,7 +39,7 @@ public final class HybridQueryScorer extends Scorer {
 
     private final Map<Query, Integer> queryToIndex;
 
-    HybridQueryScorer(Weight weight, List<Scorer> subScorers) throws IOException {
+    public HybridQueryScorer(Weight weight, List<Scorer> subScorers) throws IOException {
         super(weight);
         this.subScorers = Collections.unmodifiableList(subScorers);
         subScores = new float[subScorers.size()];
