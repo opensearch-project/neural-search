@@ -29,17 +29,16 @@ import org.opensearch.neuralsearch.query.HybridQueryScorer;
  */
 @Log4j2
 public class HybridTopScoreDocCollector implements Collector {
-    int docBase;
-    float minCompetitiveScore;
-    final HitsThresholdChecker hitsThresholdChecker;
-    ScoreDoc pqTop;
-    protected TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
-    protected int[] totalHits;
-    public static final TopDocs EMPTY_TOPDOCS = new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]);
-    int numOfHits;
-
+    private static final TopDocs EMPTY_TOPDOCS = new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]);
+    private int docBase;
+    private float minCompetitiveScore;
+    private final HitsThresholdChecker hitsThresholdChecker;
+    private ScoreDoc pqTop;
+    private TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
+    private int[] totalHits;
+    private final int numOfHits;
     @Getter
-    PriorityQueue<ScoreDoc>[] compoundScores;
+    private PriorityQueue<ScoreDoc>[] compoundScores;
 
     public HybridTopScoreDocCollector(int numHits, HitsThresholdChecker hitsThresholdChecker) {
         numOfHits = numHits;

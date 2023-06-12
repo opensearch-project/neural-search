@@ -5,6 +5,8 @@
 
 package org.opensearch.neuralsearch.search;
 
+import java.util.Arrays;
+
 import lombok.Getter;
 import lombok.ToString;
 
@@ -19,27 +21,22 @@ import org.apache.lucene.search.TotalHits;
 public class HybridQueryTopDocs extends TopDocs {
 
     @Getter
-    TopDocs[] hybridQueryTopdDocs;
+    private TopDocs[] hybridQueryTopdDocs;
 
     public HybridQueryTopDocs(TotalHits totalHits, ScoreDoc[] scoreDocs) {
         super(totalHits, scoreDocs);
     }
 
     public HybridQueryTopDocs(TotalHits totalHits, TopDocs[] docs) {
-        super(totalHits, copyScoreDocs(docs[0].scoreDocs));
+        super(totalHits, cloneScoreDocs(docs[0].scoreDocs));
         this.hybridQueryTopdDocs = docs;
     }
 
-    private static ScoreDoc[] copyScoreDocs(ScoreDoc[] original) {
+    private static ScoreDoc[] cloneScoreDocs(ScoreDoc[] original) {
         if (original == null) {
             return null;
         }
         // do deep copy
-        ScoreDoc[] copy = new ScoreDoc[original.length];
-        for (int i = 0; i < original.length; i++) {
-            ScoreDoc oneOriginalDoc = original[i];
-            copy[i] = new ScoreDoc(oneOriginalDoc.doc, oneOriginalDoc.score, oneOriginalDoc.shardIndex);
-        }
-        return copy;
+        return Arrays.stream(original).map(doc -> new ScoreDoc(doc.doc, doc.score, doc.shardIndex)).toArray(ScoreDoc[]::new);
     }
 }

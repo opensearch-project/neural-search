@@ -22,4 +22,12 @@ public class HitsTresholdCheckerTests extends OpenSearchQueryTestCase {
         IntStream.rangeClosed(1, 5).forEach((checker) -> hitsThresholdChecker.incrementHitCount());
         assertTrue(hitsThresholdChecker.isThresholdReached());
     }
+
+    public void testTresholdLimit_whenThresholdNegative_thenFail() {
+        expectThrows(IllegalArgumentException.class, () -> HitsThresholdChecker.create(-1));
+    }
+
+    public void testTresholdLimit_whenThresholdMaxValue_thenFail() {
+        expectThrows(AssertionError.class, () -> HitsThresholdChecker.create(Integer.MAX_VALUE));
+    }
 }

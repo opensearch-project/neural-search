@@ -42,4 +42,16 @@ public class HybridQueryTopdDocsTests extends OpenSearchQueryTestCase {
         assertNotNull(hybridQueryScoreTopDocs);
         assertNull(hybridQueryScoreTopDocs.getHybridQueryTopdDocs());
     }
+
+    public void testBasics_whenFirstTopDocsIsNull_thenTopDocsIsNull() {
+        TopDocs topDocs1 = new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), null);
+        TopDocs topDocs2 = new TopDocs(
+            new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+            new ScoreDoc[] { new ScoreDoc(2, RandomUtils.nextFloat()), new ScoreDoc(4, RandomUtils.nextFloat()) }
+        );
+        TopDocs[] topDocs = new TopDocs[] { topDocs1, topDocs2 };
+        HybridQueryTopDocs hybridQueryTopDocs = new HybridQueryTopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), topDocs);
+        assertNotNull(hybridQueryTopDocs);
+        assertNull(hybridQueryTopDocs.scoreDocs);
+    }
 }
