@@ -14,7 +14,7 @@ public class HitsTresholdCheckerTests extends OpenSearchQueryTestCase {
 
     public void testTresholdReached_whenIncrementCount_thenTresholdReached() {
         HitsThresholdChecker hitsThresholdChecker = HitsThresholdChecker.create(5);
-        assertEquals(5, hitsThresholdChecker.getHitsThreshold());
+        assertEquals(5, hitsThresholdChecker.getTotalHitsThreshold());
         assertEquals(ScoreMode.TOP_SCORES, hitsThresholdChecker.scoreMode());
         assertFalse(hitsThresholdChecker.isThresholdReached());
         hitsThresholdChecker.incrementHitCount();
@@ -28,6 +28,6 @@ public class HitsTresholdCheckerTests extends OpenSearchQueryTestCase {
     }
 
     public void testTresholdLimit_whenThresholdMaxValue_thenFail() {
-        expectThrows(AssertionError.class, () -> HitsThresholdChecker.create(Integer.MAX_VALUE));
+        expectThrows(IllegalArgumentException.class, () -> HitsThresholdChecker.create(Integer.MAX_VALUE));
     }
 }
