@@ -12,12 +12,16 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.opensearch.ingest.Processor;
+import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
+import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
+import org.opensearch.plugins.SearchPipelinePlugin;
 import org.opensearch.plugins.SearchPlugin;
+import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.query.QueryPhaseSearcher;
 
 public class NeuralSearchTests extends OpenSearchQueryTestCase {
@@ -54,5 +58,19 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         Map<String, Processor.Factory> processors = plugin.getProcessors(processorParams);
         assertNotNull(processors);
         assertNotNull(processors.get(TextEmbeddingProcessor.TYPE));
+    }
+
+    public void testSearchPhaseResultsProcessors() {
+        NeuralSearch plugin = new NeuralSearch();
+        SearchPipelinePlugin.Parameters parameters = mock(SearchPipelinePlugin.Parameters.class);
+        Map<String, org.opensearch.search.pipeline.Processor.Factory<SearchPhaseResultsProcessor>> searchPhaseResultsProcessors = plugin
+            .getSearchPhaseResultsProcessors(parameters);
+        assertNotNull(searchPhaseResultsProcessors);
+        assertEquals(1, searchPhaseResultsProcessors.size());
+        assertTrue(searchPhaseResultsProcessors.containsKey("normalization-processor"));
+        org.opensearch.search.pipeline.Processor.Factory<SearchPhaseResultsProcessor> scoringProcessor = searchPhaseResultsProcessors.get(
+            NormalizationProcessor.TYPE
+        );
+        assertTrue(scoringProcessor instanceof NormalizationProcessorFactory);
     }
 }
