@@ -35,7 +35,7 @@ public class HitsThresholdChecker {
     }
 
     boolean isThresholdReached() {
-        return hitCount > getTotalHitsThreshold();
+        return hitCount >= getTotalHitsThreshold();
     }
 
     ScoreMode scoreMode() {

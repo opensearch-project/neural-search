@@ -11,7 +11,7 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 
-public class HybridQueryTopdDocsTests extends OpenSearchQueryTestCase {
+public class CompoundTopDocsTests extends OpenSearchQueryTestCase {
 
     public void testBasics_whenCreateWithTopDocsArray_thenSuccessful() {
         TopDocs topDocs1 = new TopDocs(
@@ -26,13 +26,13 @@ public class HybridQueryTopdDocsTests extends OpenSearchQueryTestCase {
                 new ScoreDoc(5, RandomUtils.nextFloat()) }
         );
         TopDocs[] topDocs = new TopDocs[] { topDocs1, topDocs2 };
-        HybridQueryTopDocs hybridQueryTopDocs = new HybridQueryTopDocs(new TotalHits(3, TotalHits.Relation.EQUAL_TO), topDocs);
-        assertNotNull(hybridQueryTopDocs);
-        assertEquals(topDocs, hybridQueryTopDocs.getHybridQueryTopdDocs());
+        CompoundTopDocs compoundTopDocs = new CompoundTopDocs(new TotalHits(3, TotalHits.Relation.EQUAL_TO), topDocs);
+        assertNotNull(compoundTopDocs);
+        assertEquals(topDocs, compoundTopDocs.getCompoundTopDocs());
     }
 
     public void testBasics_whenCreateWithoutTopDocs_thenTopDocsIsNull() {
-        HybridQueryTopDocs hybridQueryScoreTopDocs = new HybridQueryTopDocs(
+        CompoundTopDocs hybridQueryScoreTopDocs = new CompoundTopDocs(
             new TotalHits(3, TotalHits.Relation.EQUAL_TO),
             new ScoreDoc[] {
                 new ScoreDoc(2, RandomUtils.nextFloat()),
@@ -40,18 +40,25 @@ public class HybridQueryTopdDocsTests extends OpenSearchQueryTestCase {
                 new ScoreDoc(5, RandomUtils.nextFloat()) }
         );
         assertNotNull(hybridQueryScoreTopDocs);
-        assertNull(hybridQueryScoreTopDocs.getHybridQueryTopdDocs());
+        assertNull(hybridQueryScoreTopDocs.getCompoundTopDocs());
     }
 
-    public void testBasics_whenFirstTopDocsIsNull_thenTopDocsIsNull() {
+    public void testBasics_whenMultipleTopDocsOfDifferentLength_thenReturnTopDocsWithMostHits() {
         TopDocs topDocs1 = new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), null);
         TopDocs topDocs2 = new TopDocs(
             new TotalHits(2, TotalHits.Relation.EQUAL_TO),
             new ScoreDoc[] { new ScoreDoc(2, RandomUtils.nextFloat()), new ScoreDoc(4, RandomUtils.nextFloat()) }
         );
         TopDocs[] topDocs = new TopDocs[] { topDocs1, topDocs2 };
-        HybridQueryTopDocs hybridQueryTopDocs = new HybridQueryTopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), topDocs);
-        assertNotNull(hybridQueryTopDocs);
-        assertNull(hybridQueryTopDocs.scoreDocs);
+        CompoundTopDocs compoundTopDocs = new CompoundTopDocs(new TotalHits(2, TotalHits.Relation.EQUAL_TO), topDocs);
+        assertNotNull(compoundTopDocs);
+        assertNotNull(compoundTopDocs.scoreDocs);
+        assertEquals(2, compoundTopDocs.scoreDocs.length);
+    }
+
+    public void testBasics_whenMultipleTopDocsIsNull_thenScoreDocsIsNull() {
+        CompoundTopDocs compoundTopDocs = new CompoundTopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), (TopDocs[]) null);
+        assertNotNull(compoundTopDocs);
+        assertNull(compoundTopDocs.scoreDocs);
     }
 }

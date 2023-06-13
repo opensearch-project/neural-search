@@ -106,6 +106,10 @@ public class HybridTopScoreDocCollector implements Collector {
         }
     }
 
+    /**
+     * Get resulting collection of TopDocs for hybrid query after we ran search for each of its sub query
+     * @return
+     */
     public TopDocs[] topDocs() {
         TopDocs[] topDocs = new TopDocs[compoundScores.length];
         for (int i = 0; i < compoundScores.length; i++) {
@@ -116,7 +120,7 @@ public class HybridTopScoreDocCollector implements Collector {
         return topDocs;
     }
 
-    TopDocs topDocsPerQuery(int start, int howMany, PriorityQueue<ScoreDoc> pq, int totalHits) {
+    private TopDocs topDocsPerQuery(int start, int howMany, PriorityQueue<ScoreDoc> pq, int totalHits) {
         int size = howMany;
 
         if (howMany < 0) {
