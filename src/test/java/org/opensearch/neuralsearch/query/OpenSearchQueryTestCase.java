@@ -10,9 +10,25 @@ import static java.util.Collections.singletonMap;
 import static java.util.stream.Collectors.toList;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Stream;
 
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.document.Document;
+import org.apache.lucene.document.Field;
+import org.apache.lucene.document.FieldType;
+import org.apache.lucene.document.TextField;
+import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.search.DocIdSetIterator;
+import org.apache.lucene.search.Explanation;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.Scorer;
+import org.apache.lucene.search.Weight;
 import org.opensearch.Version;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.common.CheckedConsumer;
@@ -34,6 +50,8 @@ import org.opensearch.plugins.ScriptPlugin;
 import org.opensearch.script.ScriptModule;
 import org.opensearch.script.ScriptService;
 import org.opensearch.test.OpenSearchTestCase;
+
+import com.carrotsearch.randomizedtesting.RandomizedTest;
 
 public abstract class OpenSearchQueryTestCase extends OpenSearchTestCase {
 
@@ -112,5 +130,121 @@ public abstract class OpenSearchQueryTestCase extends OpenSearchTestCase {
                     .endObject()
             )
         );
+    }
+
+    protected static Document getDocument(String fieldName, int docId, String fieldValue, FieldType ft) {
+        Document doc = new Document();
+        doc.add(new TextField("id", Integer.toString(docId), Field.Store.YES));
+        doc.add(new Field(fieldName, fieldValue, ft));
+        return doc;
+    }
+
+    private Pair<int[], float[]> generateDocuments(int maxDocId) {
+        final int numDocs = RandomizedTest.randomIntBetween(1, maxDocId / 2);
+        final int[] docs = new int[numDocs];
+        final Set<Integer> uniqueDocs = new HashSet<>();
+        while (uniqueDocs.size() < numDocs) {
+            uniqueDocs.add(random().nextInt(maxDocId));
+        }
+        int i = 0;
+        for (int doc : uniqueDocs) {
+            docs[i++] = doc;
+        }
+        Arrays.sort(docs);
+        final float[] scores = new float[numDocs];
+        for (int j = 0; j < numDocs; ++j) {
+            scores[j] = random().nextFloat();
+        }
+        return new ImmutablePair<>(docs, scores);
+    }
+
+    protected static Weight fakeWeight(Query query) {
+        return new Weight(query) {
+
+            @Override
+            public Explanation explain(LeafReaderContext context, int doc) {
+                return null;
+            }
+
+            @Override
+            public Scorer scorer(LeafReaderContext context) {
+                return null;
+            }
+
+            @Override
+            public boolean isCacheable(LeafReaderContext ctx) {
+                return false;
+            }
+        };
+    }
+
+    static DocIdSetIterator iterator(final int... docs) {
+        return new DocIdSetIterator() {
+
+            int i = -1;
+
+            @Override
+            public int nextDoc() {
+                if (i + 1 == docs.length) {
+                    return NO_MORE_DOCS;
+                } else {
+                    return docs[++i];
+                }
+            }
+
+            @Override
+            public int docID() {
+                return i < 0 ? -1 : i == docs.length ? NO_MORE_DOCS : docs[i];
+            }
+
+            @Override
+            public long cost() {
+                return docs.length;
+            }
+
+            @Override
+            public int advance(int target) throws IOException {
+                return slowAdvance(target);
+            }
+        };
+    }
+
+    protected static Scorer scorer(final int[] docs, List<Float> scores, Weight weight) {
+        float[] scoresAsArray = new float[scores.size()];
+        int i = 0;
+        for (float score : scores) {
+            scoresAsArray[i++] = score;
+        }
+        return scorer(docs, scoresAsArray, weight);
+    }
+
+    protected static Scorer scorer(final int[] docs, final float[] scores, Weight weight) {
+        final DocIdSetIterator iterator = iterator(docs);
+        return new Scorer(weight) {
+
+            int lastScoredDoc = -1;
+
+            public DocIdSetIterator iterator() {
+                return iterator;
+            }
+
+            @Override
+            public int docID() {
+                return iterator.docID();
+            }
+
+            @Override
+            public float score() {
+                assertNotEquals("score() called twice on doc " + docID(), lastScoredDoc, docID());
+                lastScoredDoc = docID();
+                final int idx = Arrays.binarySearch(docs, docID());
+                return scores[idx];
+            }
+
+            @Override
+            public float getMaxScore(int upTo) {
+                return Float.MAX_VALUE;
+            }
+        };
     }
 }

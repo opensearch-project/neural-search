@@ -14,8 +14,6 @@ import java.util.List;
 
 import lombok.SneakyThrows;
 
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
@@ -55,7 +53,7 @@ public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
         ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
         int docId = RandomizedTest.randomInt();
-        w.addDocument(getDocument(docId, TERM_QUERY_TEXT, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId, TERM_QUERY_TEXT, ft));
         w.commit();
 
         IndexReader reader = DirectoryReader.open(w);
@@ -102,7 +100,7 @@ public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
         ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
         int docId = RandomizedTest.randomInt();
-        w.addDocument(getDocument(docId, RandomizedTest.randomAsciiAlphanumOfLength(8), ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId, RandomizedTest.randomAsciiAlphanumOfLength(8), ft));
         w.commit();
 
         IndexReader reader = DirectoryReader.open(w);
@@ -120,12 +118,5 @@ public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
         w.close();
         reader.close();
         directory.close();
-    }
-
-    private static Document getDocument(int docId1, String field1Value, FieldType ft) {
-        Document doc = new Document();
-        doc.add(new TextField("id", Integer.toString(docId1), Field.Store.YES));
-        doc.add(new Field(TEXT_FIELD_NAME, field1Value, ft));
-        return doc;
     }
 }

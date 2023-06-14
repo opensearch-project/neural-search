@@ -20,8 +20,6 @@ import java.util.stream.Collectors;
 
 import lombok.SneakyThrows;
 
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
@@ -100,9 +98,9 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
-        w.addDocument(getDocument(RandomizedTest.randomInt(), RandomizedTest.randomAsciiAlphanumOfLength(8), ft));
-        w.addDocument(getDocument(RandomizedTest.randomInt(), RandomizedTest.randomAsciiAlphanumOfLength(8), ft));
-        w.addDocument(getDocument(RandomizedTest.randomInt(), RandomizedTest.randomAsciiAlphanumOfLength(8), ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, RandomizedTest.randomInt(), RandomizedTest.randomAsciiAlphanumOfLength(8), ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, RandomizedTest.randomInt(), RandomizedTest.randomAsciiAlphanumOfLength(8), ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, RandomizedTest.randomInt(), RandomizedTest.randomAsciiAlphanumOfLength(8), ft));
         w.commit();
 
         IndexReader reader = DirectoryReader.open(w);
@@ -149,9 +147,9 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
-        w.addDocument(getDocument(docId1, field1Value, ft));
-        w.addDocument(getDocument(docId2, field2Value, ft));
-        w.addDocument(getDocument(docId3, field3Value, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId1, field1Value, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId2, field2Value, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId3, field3Value, ft));
         w.commit();
 
         DirectoryReader reader = DirectoryReader.open(w);
@@ -196,9 +194,9 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
-        w.addDocument(getDocument(docId1, field1Value, ft));
-        w.addDocument(getDocument(docId2, field2Value, ft));
-        w.addDocument(getDocument(docId3, field3Value, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId1, field1Value, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId2, field2Value, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId3, field3Value, ft));
         w.commit();
 
         DirectoryReader reader = DirectoryReader.open(w);
@@ -231,9 +229,9 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
-        w.addDocument(getDocument(docId1, field1Value, ft));
-        w.addDocument(getDocument(docId2, field2Value, ft));
-        w.addDocument(getDocument(docId3, field3Value, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId1, field1Value, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId2, field2Value, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId3, field3Value, ft));
         w.commit();
 
         DirectoryReader reader = DirectoryReader.open(w);
@@ -276,12 +274,5 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
 
         String queryString = query.toString(TEXT_FIELD_NAME);
         assertEquals("(keyword | anotherkeyword | (keyword anotherkeyword))", queryString);
-    }
-
-    private static Document getDocument(int docId1, String field1Value, FieldType ft) {
-        Document doc = new Document();
-        doc.add(new TextField("id", Integer.toString(docId1), Field.Store.YES));
-        doc.add(new Field(TEXT_FIELD_NAME, field1Value, ft));
-        return doc;
     }
 }
