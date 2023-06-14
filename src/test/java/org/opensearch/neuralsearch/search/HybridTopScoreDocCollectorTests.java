@@ -79,7 +79,7 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
 
         HybridTopScoreDocCollector hybridTopScoreDocCollector = new HybridTopScoreDocCollector(
             NUM_DOCS,
-            HitsThresholdChecker.create(TOTAL_HITS_UP_TO)
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
         );
         LeafCollector leafCollector = hybridTopScoreDocCollector.getLeafCollector(leafReaderContext);
         assertNotNull(leafCollector);
@@ -114,7 +114,7 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
 
         HybridTopScoreDocCollector hybridTopScoreDocCollector = new HybridTopScoreDocCollector(
             NUM_DOCS,
-            HitsThresholdChecker.create(TOTAL_HITS_UP_TO)
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
         );
         LeafCollector leafCollector = hybridTopScoreDocCollector.getLeafCollector(leafReaderContext);
         assertNotNull(leafCollector);
@@ -165,7 +165,7 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
 
         HybridTopScoreDocCollector hybridTopScoreDocCollector = new HybridTopScoreDocCollector(
             NUM_DOCS,
-            HitsThresholdChecker.create(TOTAL_HITS_UP_TO)
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
         );
         Weight weight = mock(Weight.class);
         hybridTopScoreDocCollector.setWeight(weight);
@@ -247,7 +247,7 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
 
         HybridTopScoreDocCollector hybridTopScoreDocCollector = new HybridTopScoreDocCollector(
             NUM_DOCS,
-            HitsThresholdChecker.create(TOTAL_HITS_UP_TO)
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
         );
         Weight weight = mock(Weight.class);
         hybridTopScoreDocCollector.setWeight(weight);

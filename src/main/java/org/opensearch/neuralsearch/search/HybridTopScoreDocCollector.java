@@ -121,8 +121,6 @@ public class HybridTopScoreDocCollector implements Collector {
     }
 
     private TopDocs topDocsPerQuery(int start, int howMany, PriorityQueue<ScoreDoc> pq, int totalHits) {
-        int size = howMany;
-
         if (howMany < 0) {
             throw new IllegalArgumentException(
                 String.format(Locale.ROOT, "Number of hits requested must be greater than 0 but value was %d", howMany)
@@ -131,31 +129,34 @@ public class HybridTopScoreDocCollector implements Collector {
 
         if (start < 0) {
             throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "Expected value of starting position is between 0 and %d, got %d", size, start)
+                String.format(Locale.ROOT, "Expected value of starting position is between 0 and %d, got %d", howMany, start)
             );
         }
 
-        if (start >= size || howMany == 0) {
+        if (start >= howMany || howMany == 0) {
             return EMPTY_TOPDOCS;
         }
 
-        howMany = Math.min(size - start, howMany);
-        ScoreDoc[] results = new ScoreDoc[howMany];
+        int size = howMany - start;
+        ScoreDoc[] results = new ScoreDoc[size];
         // pq's pop() returns the 'least' element in the queue, therefore need
         // to discard the first ones, until we reach the requested range.
-        for (int i = pq.size() - start - howMany; i > 0; i--) {
+        for (int i = pq.size() - start - size; i > 0; i--) {
             pq.pop();
         }
 
         // Get the requested results from pq.
-        populateResults(results, howMany, pq);
+        populateResults(results, size, pq);
 
         return new TopDocs(new TotalHits(totalHits, totalHitsRelation), results);
     }
 
     protected void populateResults(ScoreDoc[] results, int howMany, PriorityQueue<ScoreDoc> pq) {
         for (int i = howMany - 1; i >= 0; i--) {
-            results[i] = pq.pop();
+            // adding to array if index is within [0..array_length - 1] and heap has elements
+            if (i < results.length && pq.size() > 0) {
+                results[i] = pq.pop();
+            }
         }
     }
 }

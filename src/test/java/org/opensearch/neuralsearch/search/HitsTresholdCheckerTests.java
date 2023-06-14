@@ -13,7 +13,7 @@ import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 public class HitsTresholdCheckerTests extends OpenSearchQueryTestCase {
 
     public void testTresholdReached_whenIncrementCount_thenTresholdReached() {
-        HitsThresholdChecker hitsThresholdChecker = HitsThresholdChecker.create(5);
+        HitsThresholdChecker hitsThresholdChecker = new HitsThresholdChecker(5);
         assertEquals(5, hitsThresholdChecker.getTotalHitsThreshold());
         assertEquals(ScoreMode.TOP_SCORES, hitsThresholdChecker.scoreMode());
         assertFalse(hitsThresholdChecker.isThresholdReached());
@@ -24,10 +24,10 @@ public class HitsTresholdCheckerTests extends OpenSearchQueryTestCase {
     }
 
     public void testTresholdLimit_whenThresholdNegative_thenFail() {
-        expectThrows(IllegalArgumentException.class, () -> HitsThresholdChecker.create(-1));
+        expectThrows(IllegalArgumentException.class, () -> new HitsThresholdChecker(-1));
     }
 
     public void testTresholdLimit_whenThresholdMaxValue_thenFail() {
-        expectThrows(IllegalArgumentException.class, () -> HitsThresholdChecker.create(Integer.MAX_VALUE));
+        expectThrows(IllegalArgumentException.class, () -> new HitsThresholdChecker(Integer.MAX_VALUE));
     }
 }

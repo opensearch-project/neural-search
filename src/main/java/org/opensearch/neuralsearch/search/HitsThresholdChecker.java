@@ -20,7 +20,7 @@ public class HitsThresholdChecker {
     @Getter
     private final int totalHitsThreshold;
 
-    private HitsThresholdChecker(int totalHitsThreshold) {
+    public HitsThresholdChecker(int totalHitsThreshold) {
         if (totalHitsThreshold < 0) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "totalHitsThreshold must be >= 0, got %d", totalHitsThreshold));
         }
@@ -30,19 +30,15 @@ public class HitsThresholdChecker {
         this.totalHitsThreshold = totalHitsThreshold;
     }
 
-    void incrementHitCount() {
+    protected void incrementHitCount() {
         ++hitCount;
     }
 
-    boolean isThresholdReached() {
+    protected boolean isThresholdReached() {
         return hitCount >= getTotalHitsThreshold();
     }
 
-    ScoreMode scoreMode() {
+    protected ScoreMode scoreMode() {
         return ScoreMode.TOP_SCORES;
-    }
-
-    public static HitsThresholdChecker create(final int totalHitsThreshold) {
-        return new HitsThresholdChecker(totalHitsThreshold);
     }
 }
