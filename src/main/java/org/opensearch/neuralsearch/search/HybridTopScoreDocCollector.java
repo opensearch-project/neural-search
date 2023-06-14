@@ -152,9 +152,9 @@ public class HybridTopScoreDocCollector implements Collector {
     }
 
     protected void populateResults(ScoreDoc[] results, int howMany, PriorityQueue<ScoreDoc> pq) {
-        for (int i = howMany - 1; i >= 0; i--) {
-            // adding to array if index is within [0..array_length - 1] and heap has elements
-            if (i < results.length && pq.size() > 0) {
+        for (int i = howMany - 1; i >= 0 && pq.size() > 0; i--) {
+            // adding to array if index is within [0..array_length - 1]
+            if (i < results.length) {
                 results[i] = pq.pop();
             }
         }

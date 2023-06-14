@@ -40,7 +40,7 @@ public class CompoundTopDocs extends TopDocs {
         ScoreDoc[] maxScoreDocs = null;
         int maxLength = -1;
         for (TopDocs topDoc : docs) {
-            if (topDoc.scoreDocs == null) {
+            if (topDoc == null || topDoc.scoreDocs == null) {
                 continue;
             }
             if (topDoc.scoreDocs.length > maxLength) {

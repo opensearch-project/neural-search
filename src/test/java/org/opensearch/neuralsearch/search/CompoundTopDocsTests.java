@@ -60,5 +60,12 @@ public class CompoundTopDocsTests extends OpenSearchQueryTestCase {
         CompoundTopDocs compoundTopDocs = new CompoundTopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), (TopDocs[]) null);
         assertNotNull(compoundTopDocs);
         assertNull(compoundTopDocs.scoreDocs);
+
+        CompoundTopDocs compoundTopDocsWithNullArray = new CompoundTopDocs(
+            new TotalHits(0, TotalHits.Relation.EQUAL_TO),
+            new TopDocs[] { null, null }
+        );
+        assertNotNull(compoundTopDocsWithNullArray);
+        assertNull(compoundTopDocsWithNullArray.scoreDocs);
     }
 }
