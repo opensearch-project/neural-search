@@ -189,6 +189,14 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             } else {
                 if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     boost = parser.floatValue();
+                    // regular boost functionality is not supported, user should use score normalization methods to manipulate with scores
+                    if (boost != DEFAULT_BOOST) {
+                        log.error(String.format(Locale.ROOT, "[%s] query does not support [%s]", NAME, BOOST_FIELD));
+                        throw new ParsingException(
+                            parser.getTokenLocation(),
+                            String.format(Locale.ROOT, "[%s] query does not support [%s]", NAME, BOOST_FIELD)
+                        );
+                    }
                 } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     queryName = parser.text();
                 } else {

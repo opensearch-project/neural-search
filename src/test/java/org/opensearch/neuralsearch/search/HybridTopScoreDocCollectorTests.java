@@ -204,10 +204,10 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
             doc = iterator.nextDoc();
         }
 
-        TopDocs[] topDocs = hybridTopScoreDocCollector.topDocs();
+        List<TopDocs> topDocs = hybridTopScoreDocCollector.topDocs();
 
         assertNotNull(topDocs);
-        assertEquals(2, topDocs.length);
+        assertEquals(2, topDocs.size());
 
         for (TopDocs topDoc : topDocs) {
             // assert results for each sub-query, there must be correct number of matches, all doc id are correct and scores must be desc
@@ -296,14 +296,14 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
             doc = iterator.nextDoc();
         }
 
-        TopDocs[] topDocs = hybridTopScoreDocCollector.topDocs();
+        List<TopDocs> topDocs = hybridTopScoreDocCollector.topDocs();
 
         assertNotNull(topDocs);
-        assertEquals(4, topDocs.length);
+        assertEquals(4, topDocs.size());
 
         // assert result for each sub query
         // term query 1
-        TopDocs topDocQuery1 = topDocs[0];
+        TopDocs topDocQuery1 = topDocs.get(0);
         assertEquals(docIdsQuery1.length, topDocQuery1.totalHits.value);
         ScoreDoc[] scoreDocsQuery1 = topDocQuery1.scoreDocs;
         assertNotNull(scoreDocsQuery1);
@@ -314,7 +314,7 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
         List<Integer> resultDocIdsQuery1 = Arrays.stream(scoreDocsQuery1).map(scoreDoc -> scoreDoc.doc).collect(Collectors.toList());
         assertTrue(Arrays.stream(docIdsQuery1).allMatch(resultDocIdsQuery1::contains));
         // term query 2
-        TopDocs topDocQuery2 = topDocs[1];
+        TopDocs topDocQuery2 = topDocs.get(1);
         assertEquals(docIdsQuery2.length, topDocQuery2.totalHits.value);
         ScoreDoc[] scoreDocsQuery2 = topDocQuery2.scoreDocs;
         assertNotNull(scoreDocsQuery2);
@@ -325,13 +325,13 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
         List<Integer> resultDocIdsQuery2 = Arrays.stream(scoreDocsQuery2).map(scoreDoc -> scoreDoc.doc).collect(Collectors.toList());
         assertTrue(Arrays.stream(docIdsQuery2).allMatch(resultDocIdsQuery2::contains));
         // no match query
-        TopDocs topDocQuery3 = topDocs[2];
+        TopDocs topDocQuery3 = topDocs.get(2);
         assertEquals(0, topDocQuery3.totalHits.value);
         ScoreDoc[] scoreDocsQuery3 = topDocQuery3.scoreDocs;
         assertNotNull(scoreDocsQuery3);
         assertEquals(0, scoreDocsQuery3.length);
         // all match query
-        TopDocs topDocQueryMatchAll = topDocs[3];
+        TopDocs topDocQueryMatchAll = topDocs.get(3);
         assertEquals(docIdsQueryMatchAll.length, topDocQueryMatchAll.totalHits.value);
         ScoreDoc[] scoreDocsQueryMatchAll = topDocQueryMatchAll.scoreDocs;
         assertNotNull(scoreDocsQueryMatchAll);

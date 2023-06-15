@@ -11,6 +11,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS;
 import static org.opensearch.index.query.AbstractQueryBuilder.BOOST_FIELD;
+import static org.opensearch.index.query.AbstractQueryBuilder.DEFAULT_BOOST;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.FILTER_FIELD;
 import static org.opensearch.neuralsearch.TestUtils.xContentBuilderToMap;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.K_FIELD;
@@ -594,6 +595,88 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         TermQueryBuilder termQueryBuilder = (TermQueryBuilder) queryBuilders.get(1);
         assertEquals(termSubQuery.fieldName(), termQueryBuilder.fieldName());
         assertEquals(termSubQuery.value(), termQueryBuilder.value());
+    }
+
+    @SneakyThrows
+    public void testBoost_whenNonDefaultBoostSet_thenFail() {
+        // create query with 6 sub-queries, which is more than current max allowed
+        XContentBuilder xContentBuilderWithNonDefaultBoost = XContentFactory.jsonBuilder()
+            .startObject()
+            .startArray("queries")
+            .startObject()
+            .startObject("term")
+            .field(TEXT_FIELD_NAME, RandomizedTest.randomAsciiAlphanumOfLength(10))
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject("term")
+            .field(TEXT_FIELD_NAME, RandomizedTest.randomAsciiAlphanumOfLength(10))
+            .endObject()
+            .endObject()
+            .endArray()
+            .field("boost", 2.0f)
+            .endObject();
+
+        NamedXContentRegistry namedXContentRegistry = new NamedXContentRegistry(
+            List.of(
+                new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(TermQueryBuilder.NAME), TermQueryBuilder::fromXContent),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(HybridQueryBuilder.NAME),
+                    HybridQueryBuilder::fromXContent
+                )
+            )
+        );
+        XContentParser contentParser = createParser(
+            namedXContentRegistry,
+            xContentBuilderWithNonDefaultBoost.contentType().xContent(),
+            BytesReference.bytes(xContentBuilderWithNonDefaultBoost)
+        );
+        contentParser.nextToken();
+
+        ParsingException exception = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(contentParser));
+        assertThat(exception.getMessage(), containsString("query does not support [boost]"));
+    }
+
+    @SneakyThrows
+    public void testBoost_whenDefaultBoostSet_thenBuildSuccessfully() {
+        // create query with 6 sub-queries, which is more than current max allowed
+        XContentBuilder xContentBuilderWithNonDefaultBoost = XContentFactory.jsonBuilder()
+            .startObject()
+            .startArray("queries")
+            .startObject()
+            .startObject("term")
+            .field(TEXT_FIELD_NAME, RandomizedTest.randomAsciiAlphanumOfLength(10))
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject("term")
+            .field(TEXT_FIELD_NAME, RandomizedTest.randomAsciiAlphanumOfLength(10))
+            .endObject()
+            .endObject()
+            .endArray()
+            .field("boost", DEFAULT_BOOST)
+            .endObject();
+
+        NamedXContentRegistry namedXContentRegistry = new NamedXContentRegistry(
+            List.of(
+                new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(TermQueryBuilder.NAME), TermQueryBuilder::fromXContent),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(HybridQueryBuilder.NAME),
+                    HybridQueryBuilder::fromXContent
+                )
+            )
+        );
+        XContentParser contentParser = createParser(
+            namedXContentRegistry,
+            xContentBuilderWithNonDefaultBoost.contentType().xContent(),
+            BytesReference.bytes(xContentBuilderWithNonDefaultBoost)
+        );
+        contentParser.nextToken();
+
+        HybridQueryBuilder hybridQueryBuilder = HybridQueryBuilder.fromXContent(contentParser);
+        assertNotNull(hybridQueryBuilder);
     }
 
     private Map<String, Object> getInnerMap(Object innerObject, String queryName, String fieldName) {

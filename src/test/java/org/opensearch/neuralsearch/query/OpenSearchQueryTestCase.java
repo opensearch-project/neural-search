@@ -19,6 +19,7 @@ import java.util.stream.Stream;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.document.BinaryDocValuesField;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
@@ -45,6 +46,7 @@ import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.similarity.SimilarityService;
 import org.opensearch.indices.IndicesModule;
 import org.opensearch.indices.mapper.MapperRegistry;
+import org.opensearch.knn.index.VectorField;
 import org.opensearch.plugins.MapperPlugin;
 import org.opensearch.plugins.ScriptPlugin;
 import org.opensearch.script.ScriptModule;
@@ -136,6 +138,22 @@ public abstract class OpenSearchQueryTestCase extends OpenSearchTestCase {
         Document doc = new Document();
         doc.add(new TextField("id", Integer.toString(docId), Field.Store.YES));
         doc.add(new Field(fieldName, fieldValue, ft));
+        return doc;
+    }
+
+    protected static Document getTextAndVectorDocument(
+        String fieldName,
+        int docId,
+        String fieldValue,
+        FieldType ft,
+        String vectorName,
+        float[] vector,
+        FieldType vt
+    ) {
+        Document doc = new Document();
+        doc.add(new TextField("id", Integer.toString(docId), Field.Store.YES));
+        doc.add(new Field(fieldName, fieldValue, ft));
+        doc.add(new BinaryDocValuesField(vectorName, new VectorField(vectorName, vector, new FieldType()).binaryValue()));
         return doc;
     }
 
