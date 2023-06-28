@@ -130,7 +130,7 @@ public class HybridQueryPhaseSearcher extends QueryPhase.DefaultQueryPhaseSearch
         return new TotalHits(maxTotalHits, relation);
     }
 
-    private float getMaxScore(List<TopDocs> topDocs) {
+    private float getMaxScore(final List<TopDocs> topDocs) {
         if (topDocs.size() == 0) {
             return Float.NaN;
         } else {
