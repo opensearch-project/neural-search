@@ -597,9 +597,30 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertEquals(termSubQuery.value(), termQueryBuilder.value());
     }
 
+    /**
+     * Tests query with boost:
+     * {
+     *     "query": {
+     *         "hybrid": {
+     *              "queries": [
+     *                  {
+     *                      "term": {
+     *                          "text": "keyword"
+     *                      }
+     *                  },
+     *                  {
+     *                      "term": {
+     *                          "text": "keyword"
+     *                       }
+     *                  }
+     *              ],
+     *              "boost" : 2.0
+     *          }
+     *      }
+     * }
+     */
     @SneakyThrows
     public void testBoost_whenNonDefaultBoostSet_thenFail() {
-        // create query with 6 sub-queries, which is more than current max allowed
         XContentBuilder xContentBuilderWithNonDefaultBoost = XContentFactory.jsonBuilder()
             .startObject()
             .startArray("queries")

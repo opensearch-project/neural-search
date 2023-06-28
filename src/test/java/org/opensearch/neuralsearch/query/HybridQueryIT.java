@@ -6,7 +6,6 @@
 package org.opensearch.neuralsearch.query;
 
 import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
-import static org.opensearch.neuralsearch.TestUtils.objectToFloat;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -16,6 +15,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import lombok.SneakyThrows;
@@ -25,6 +25,7 @@ import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.knn.index.SpaceType;
+import org.opensearch.neuralsearch.TestUtils;
 import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
 
 import com.google.common.primitives.Floats;
@@ -33,6 +34,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_BASIC_INDEX_NAME = "test-neural-basic-index";
     private static final String TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME = "test-neural-vector-doc-field-index";
     private static final String TEST_MULTI_DOC_INDEX_NAME = "test-neural-multi-doc-index";
+    private static final int MAX_NUMBER_OF_DOCS_IN_MULTI_DOC_INDEX = 3;
     private static final String TEST_QUERY_TEXT = "greetings";
     private static final String TEST_QUERY_TEXT2 = "salute";
     private static final String TEST_QUERY_TEXT3 = "hello";
@@ -105,7 +107,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
 
         Map<String, Object> searchResponseAsMap1 = search(TEST_MULTI_DOC_INDEX_NAME, hybridQueryBuilder, 10);
 
-        assertEquals(3, getHitCount(searchResponseAsMap1));
+        assertEquals(MAX_NUMBER_OF_DOCS_IN_MULTI_DOC_INDEX, getHitCount(searchResponseAsMap1));
 
         List<Map<String, Object>> hits1NestedList = getNestedHits(searchResponseAsMap1);
         List<String> ids = new ArrayList<>();
@@ -122,7 +124,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
 
         Map<String, Object> total = getTotalHits(searchResponseAsMap1);
         assertNotNull(total.get("value"));
-        assertEquals(3, total.get("value"));
+        assertEquals(MAX_NUMBER_OF_DOCS_IN_MULTI_DOC_INDEX, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
         assertTrue(getMaxScore(searchResponseAsMap1).isPresent());
@@ -146,20 +148,25 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         hybridQueryBuilderNeuralThenTerm.add(neuralQueryBuilder);
         hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder);
 
-        Map<String, Object> searchResponseAsMap = search(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, hybridQueryBuilderNeuralThenTerm, 1);
+        Map<String, Object> searchResponseAsMap = search(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, hybridQueryBuilderNeuralThenTerm, 3);
 
-        assertEquals(1, getHitCount(searchResponseAsMap));
+        assertEquals(2, getHitCount(searchResponseAsMap));
 
         List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
         List<Double> scores = new ArrayList<>();
         for (Map<String, Object> oneHit : hitsNestedList) {
             scores.add((Double) oneHit.get("_score"));
         }
-        // expected score is from knn query because it has more hits and is the first in the list of sub-queries
-        float expectedScore = computeExpectedScore(modelId.get(), testVector1, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
-        assertEquals(expectedScore, objectToFloat(scores.get(0)), 0.001f);
 
-        float expectedMaxScore = Math.max(expectedScore, EXPECTED_SCORE_BM25);
+        List<Float> expectedScores = List.of(
+            computeExpectedScore(modelId.get(), testVector1, TEST_SPACE_TYPE, TEST_QUERY_TEXT),
+            computeExpectedScore(modelId.get(), testVector2, TEST_SPACE_TYPE, TEST_QUERY_TEXT),
+            computeExpectedScore(modelId.get(), testVector3, TEST_SPACE_TYPE, TEST_QUERY_TEXT)
+        );
+        List<Float> actualScores = scores.stream().map(TestUtils::objectToFloat).collect(Collectors.toList());
+        assertTrue(expectedScores.containsAll(actualScores));
+
+        float expectedMaxScore = Math.max(expectedScores.stream().max(Float::compareTo).get(), EXPECTED_SCORE_BM25);
         assertEquals(expectedMaxScore, getMaxScore(searchResponseAsMap).get(), 0.001f);
     }
 
@@ -200,8 +207,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
 
         TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
-        TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_2, TEST_QUERY_TEXT4);
-        TermQueryBuilder termQueryBuilder3 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_3, TEST_QUERY_TEXT5);
+        TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
+        TermQueryBuilder termQueryBuilder3 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT5);
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
         boolQueryBuilder.should(termQueryBuilder2).should(termQueryBuilder3);
 
@@ -271,7 +278,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
 
         Map<String, Object> searchResponseAsMap1 = search(TEST_MULTI_DOC_INDEX_NAME, hybridQueryBuilderNeuralThenTerm, 10);
 
-        assertEquals(3, getHitCount(searchResponseAsMap1));
+        assertEquals(MAX_NUMBER_OF_DOCS_IN_MULTI_DOC_INDEX, getHitCount(searchResponseAsMap1));
 
         List<Map<String, Object>> hits1NestedList = getNestedHits(searchResponseAsMap1);
         List<String> ids1 = new ArrayList<>();
@@ -283,7 +290,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
 
         Map<String, Object> total = getTotalHits(searchResponseAsMap1);
         assertNotNull(total.get("value"));
-        assertEquals(3, total.get("value"));
+        assertEquals(MAX_NUMBER_OF_DOCS_IN_MULTI_DOC_INDEX, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
 
@@ -299,7 +306,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
 
         Map<String, Object> searchResponseAsMap2 = search(TEST_MULTI_DOC_INDEX_NAME, hybridQueryBuilderNeuralThenTerm, 10);
 
-        assertEquals(3, getHitCount(searchResponseAsMap2));
+        assertEquals(MAX_NUMBER_OF_DOCS_IN_MULTI_DOC_INDEX, getHitCount(searchResponseAsMap2));
 
         List<String> ids2 = new ArrayList<>();
         List<Double> scores2 = new ArrayList<>();
@@ -310,7 +317,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
 
         Map<String, Object> total2 = getTotalHits(searchResponseAsMap2);
         assertNotNull(total.get("value"));
-        assertEquals(3, total2.get("value"));
+        assertEquals(MAX_NUMBER_OF_DOCS_IN_MULTI_DOC_INDEX, total2.get("value"));
         assertNotNull(total2.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total2.get("relation"));
         // doc ids must match same from the previous query, order of sub-queries doesn't change the result
@@ -375,7 +382,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 "2",
                 List.of(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_KNN_VECTOR_FIELD_NAME_2),
                 List.of(Floats.asList(testVector2).toArray(), Floats.asList(testVector2).toArray()),
-                Collections.singletonList(TEST_TEXT_FIELD_NAME_2),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT2)
             );
             addKnnDoc(
@@ -383,7 +390,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 "3",
                 List.of(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_KNN_VECTOR_FIELD_NAME_2),
                 List.of(Floats.asList(testVector3).toArray(), Floats.asList(testVector3).toArray()),
-                Collections.singletonList(TEST_TEXT_FIELD_NAME_3),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT3)
             );
             assertEquals(3, getDocCount(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME));

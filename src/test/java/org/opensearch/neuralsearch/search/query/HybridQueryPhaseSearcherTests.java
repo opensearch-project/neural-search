@@ -83,7 +83,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
 
         Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
         ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
         ft.setOmitNorms(random().nextBoolean());
@@ -143,7 +143,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
 
         Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
         ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
         ft.setOmitNorms(random().nextBoolean());
@@ -202,7 +202,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
 
         Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
         ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
         ft.setOmitNorms(random().nextBoolean());
@@ -237,7 +237,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.shardTarget()).thenReturn(shardTarget);
         when(searchContext.searcher()).thenReturn(contextIndexSearcher);
         when(searchContext.size()).thenReturn(3);
-        final QuerySearchResult querySearchResult = new QuerySearchResult();
+        QuerySearchResult querySearchResult = new QuerySearchResult();
         when(searchContext.queryResult()).thenReturn(querySearchResult);
 
         LinkedList<QueryCollectorContext> collectors = new LinkedList<>();
@@ -284,7 +284,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
 
         Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
         ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
         ft.setOmitNorms(random().nextBoolean());
@@ -321,7 +321,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.shardTarget()).thenReturn(shardTarget);
         when(searchContext.searcher()).thenReturn(contextIndexSearcher);
         when(searchContext.size()).thenReturn(4);
-        final QuerySearchResult querySearchResult = new QuerySearchResult();
+        QuerySearchResult querySearchResult = new QuerySearchResult();
         when(searchContext.queryResult()).thenReturn(querySearchResult);
 
         LinkedList<QueryCollectorContext> collectors = new LinkedList<>();

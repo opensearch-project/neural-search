@@ -10,8 +10,6 @@ import static org.opensearch.search.query.TopDocsCollectorContext.createTopDocsC
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Locale;
-import java.util.function.Function;
 
 import lombok.extern.log4j.Log4j2;
 
@@ -36,6 +34,8 @@ import org.opensearch.search.query.TopDocsCollectorContext;
 import org.opensearch.search.rescore.RescoreContext;
 import org.opensearch.search.sort.SortAndFormats;
 
+import com.google.common.annotations.VisibleForTesting;
+
 /**
  * Custom search implementation to be used at {@link QueryPhase} for Hybrid Query search. For queries other than Hybrid the
  * upstream standard implementation of searcher is called.
@@ -43,17 +43,13 @@ import org.opensearch.search.sort.SortAndFormats;
 @Log4j2
 public class HybridQueryPhaseSearcher extends QueryPhase.DefaultQueryPhaseSearcher {
 
-    private Function<List<TopDocs>, TotalHits> totalHitsSupplier;
-    private Function<List<TopDocs>, Float> maxScoreSupplier;
-    protected SortAndFormats sortAndFormats;
-
     public boolean searchWith(
-        SearchContext searchContext,
-        ContextIndexSearcher searcher,
-        Query query,
-        LinkedList<QueryCollectorContext> collectors,
-        boolean hasFilterCollector,
-        boolean hasTimeout
+        final SearchContext searchContext,
+        final ContextIndexSearcher searcher,
+        final Query query,
+        final LinkedList<QueryCollectorContext> collectors,
+        final boolean hasFilterCollector,
+        final boolean hasTimeout
     ) throws IOException {
         if (query instanceof HybridQuery) {
             return searchWithCollector(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);
@@ -61,30 +57,29 @@ public class HybridQueryPhaseSearcher extends QueryPhase.DefaultQueryPhaseSearch
         return super.searchWithCollector(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);
     }
 
+    @VisibleForTesting
     protected boolean searchWithCollector(
-        SearchContext searchContext,
-        ContextIndexSearcher searcher,
-        Query query,
-        LinkedList<QueryCollectorContext> collectors,
-        boolean hasFilterCollector,
-        boolean hasTimeout
+        final SearchContext searchContext,
+        final ContextIndexSearcher searcher,
+        final Query query,
+        final LinkedList<QueryCollectorContext> collectors,
+        final boolean hasFilterCollector,
+        final boolean hasTimeout
     ) throws IOException {
-        log.debug(String.format(Locale.ROOT, "searching with custom doc collector, shard %s", searchContext.shardTarget().getShardId()));
+        log.debug("searching with custom doc collector, shard {}", searchContext.shardTarget().getShardId());
 
         final TopDocsCollectorContext topDocsFactory = createTopDocsCollectorContext(searchContext, hasFilterCollector);
         collectors.addFirst(topDocsFactory);
-
-        final IndexReader reader = searchContext.searcher().getIndexReader();
-        int totalNumDocs = Math.max(0, reader.numDocs());
         if (searchContext.size() == 0) {
             final TotalHitCountCollector collector = new TotalHitCountCollector();
             searcher.search(query, collector);
             return false;
         }
+        final IndexReader reader = searchContext.searcher().getIndexReader();
+        int totalNumDocs = Math.max(0, reader.numDocs());
         int numDocs = Math.min(searchContext.from() + searchContext.size(), totalNumDocs);
-        final boolean rescore = !searchContext.rescore().isEmpty();
-        if (rescore) {
-            assert searchContext.sort() == null;
+        final boolean shouldRescore = !searchContext.rescore().isEmpty();
+        if (shouldRescore) {
             for (RescoreContext rescoreContext : searchContext.rescore()) {
                 numDocs = Math.max(numDocs, rescoreContext.getWindowSize());
             }
@@ -96,32 +91,6 @@ public class HybridQueryPhaseSearcher extends QueryPhase.DefaultQueryPhaseSearch
             numDocs,
             new HitsThresholdChecker(Math.max(numDocs, searchContext.trackTotalHitsUpTo()))
         );
-        totalHitsSupplier = topDocs -> {
-            int trackTotalHitsUpTo = searchContext.trackTotalHitsUpTo();
-            final TotalHits.Relation relation = trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED
-                ? TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO
-                : TotalHits.Relation.EQUAL_TO;
-            if (topDocs == null || topDocs.size() == 0) {
-                return new TotalHits(0, relation);
-            }
-            long maxTotalHits = topDocs.get(0).totalHits.value;
-            for (TopDocs topDoc : topDocs) {
-                maxTotalHits = Math.max(maxTotalHits, topDoc.totalHits.value);
-            }
-            return new TotalHits(maxTotalHits, relation);
-        };
-        maxScoreSupplier = topDocs -> {
-            if (topDocs.size() == 0) {
-                return Float.NaN;
-            } else {
-                return topDocs.stream()
-                    .map(docs -> docs.scoreDocs.length == 0 ? new ScoreDoc(-1, 0.0f) : docs.scoreDocs[0])
-                    .map(scoreDoc -> scoreDoc.score)
-                    .max(Float::compare)
-                    .get();
-            }
-        };
-        sortAndFormats = searchContext.sort();
 
         searcher.search(query, collector);
 
@@ -129,20 +98,51 @@ public class HybridQueryPhaseSearcher extends QueryPhase.DefaultQueryPhaseSearch
             queryResult.terminatedEarly(false);
         }
 
-        setTopDocsInQueryResult(queryResult, collector);
+        setTopDocsInQueryResult(queryResult, collector, searchContext);
 
-        return rescore;
+        return shouldRescore;
     }
 
-    void setTopDocsInQueryResult(final QuerySearchResult queryResult, final HybridTopScoreDocCollector collector) {
+    private void setTopDocsInQueryResult(
+        final QuerySearchResult queryResult,
+        final HybridTopScoreDocCollector collector,
+        final SearchContext searchContext
+    ) {
         final List<TopDocs> topDocs = collector.topDocs();
-        float maxScore = maxScoreSupplier.apply(topDocs);
-        final TopDocs newTopDocs = new CompoundTopDocs(totalHitsSupplier.apply(topDocs), topDocs);
+        final float maxScore = getMaxScore(topDocs);
+        final TopDocs newTopDocs = new CompoundTopDocs(getTotalHits(searchContext, topDocs), topDocs);
         final TopDocsAndMaxScore topDocsAndMaxScore = new TopDocsAndMaxScore(newTopDocs, maxScore);
-        queryResult.topDocs(topDocsAndMaxScore, getSortValueFormats());
+        queryResult.topDocs(topDocsAndMaxScore, getSortValueFormats(searchContext.sort()));
     }
 
-    private DocValueFormat[] getSortValueFormats() {
+    private TotalHits getTotalHits(final SearchContext searchContext, final List<TopDocs> topDocs) {
+        int trackTotalHitsUpTo = searchContext.trackTotalHitsUpTo();
+        final TotalHits.Relation relation = trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED
+            ? TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO
+            : TotalHits.Relation.EQUAL_TO;
+        if (topDocs == null || topDocs.size() == 0) {
+            return new TotalHits(0, relation);
+        }
+        long maxTotalHits = topDocs.get(0).totalHits.value;
+        for (TopDocs topDoc : topDocs) {
+            maxTotalHits = Math.max(maxTotalHits, topDoc.totalHits.value);
+        }
+        return new TotalHits(maxTotalHits, relation);
+    }
+
+    private float getMaxScore(List<TopDocs> topDocs) {
+        if (topDocs.size() == 0) {
+            return Float.NaN;
+        } else {
+            return topDocs.stream()
+                .map(docs -> docs.scoreDocs.length == 0 ? new ScoreDoc(-1, 0.0f) : docs.scoreDocs[0])
+                .map(scoreDoc -> scoreDoc.score)
+                .max(Float::compare)
+                .get();
+        }
+    }
+
+    private DocValueFormat[] getSortValueFormats(final SortAndFormats sortAndFormats) {
         return sortAndFormats == null ? null : sortAndFormats.formats;
     }
 }

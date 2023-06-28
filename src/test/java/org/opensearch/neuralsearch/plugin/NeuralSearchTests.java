@@ -5,6 +5,8 @@
 
 package org.opensearch.neuralsearch.plugin;
 
+import static org.mockito.Mockito.mock;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -17,8 +19,6 @@ import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
 import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.test.OpenSearchTestCase;
-
-import static org.mockito.Mockito.mock;
 
 public class NeuralSearchTests extends OpenSearchTestCase {
 

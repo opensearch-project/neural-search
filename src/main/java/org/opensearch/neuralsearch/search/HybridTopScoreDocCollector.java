@@ -9,6 +9,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
@@ -96,15 +98,12 @@ public class HybridTopScoreDocCollector implements Collector {
      * @return
      */
     public List<TopDocs> topDocs() {
-        List<TopDocs> topDocs;
         if (compoundScores == null) {
             return new ArrayList<>();
         }
-        topDocs = new ArrayList(compoundScores.length);
-        for (int i = 0; i < compoundScores.length; i++) {
-            int qTopSize = totalHits[i];
-            topDocs.add(topDocsPerQuery(0, Math.min(qTopSize, compoundScores[i].size()), compoundScores[i], qTopSize));
-        }
+        final List<TopDocs> topDocs = IntStream.range(0, compoundScores.length)
+            .mapToObj(i -> topDocsPerQuery(0, Math.min(totalHits[i], compoundScores[i].size()), compoundScores[i], totalHits[i]))
+            .collect(Collectors.toList());
         return topDocs;
     }
 
