@@ -5,6 +5,9 @@
 
 package org.opensearch.neuralsearch.search;
 
+import java.util.Arrays;
+import java.util.List;
+
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
@@ -25,7 +28,7 @@ public class CompoundTopDocsTests extends OpenSearchQueryTestCase {
                 new ScoreDoc(4, RandomUtils.nextFloat()),
                 new ScoreDoc(5, RandomUtils.nextFloat()) }
         );
-        TopDocs[] topDocs = new TopDocs[] { topDocs1, topDocs2 };
+        List<TopDocs> topDocs = List.of(topDocs1, topDocs2);
         CompoundTopDocs compoundTopDocs = new CompoundTopDocs(new TotalHits(3, TotalHits.Relation.EQUAL_TO), topDocs);
         assertNotNull(compoundTopDocs);
         assertEquals(topDocs, compoundTopDocs.getCompoundTopDocs());
@@ -49,7 +52,7 @@ public class CompoundTopDocsTests extends OpenSearchQueryTestCase {
             new TotalHits(2, TotalHits.Relation.EQUAL_TO),
             new ScoreDoc[] { new ScoreDoc(2, RandomUtils.nextFloat()), new ScoreDoc(4, RandomUtils.nextFloat()) }
         );
-        TopDocs[] topDocs = new TopDocs[] { topDocs1, topDocs2 };
+        List<TopDocs> topDocs = List.of(topDocs1, topDocs2);
         CompoundTopDocs compoundTopDocs = new CompoundTopDocs(new TotalHits(2, TotalHits.Relation.EQUAL_TO), topDocs);
         assertNotNull(compoundTopDocs);
         assertNotNull(compoundTopDocs.scoreDocs);
@@ -57,15 +60,16 @@ public class CompoundTopDocsTests extends OpenSearchQueryTestCase {
     }
 
     public void testBasics_whenMultipleTopDocsIsNull_thenScoreDocsIsNull() {
-        CompoundTopDocs compoundTopDocs = new CompoundTopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), (TopDocs[]) null);
+        CompoundTopDocs compoundTopDocs = new CompoundTopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), (List<TopDocs>) null);
         assertNotNull(compoundTopDocs);
         assertNull(compoundTopDocs.scoreDocs);
 
         CompoundTopDocs compoundTopDocsWithNullArray = new CompoundTopDocs(
             new TotalHits(0, TotalHits.Relation.EQUAL_TO),
-            new TopDocs[] { null, null }
+            Arrays.asList(null, null)
         );
         assertNotNull(compoundTopDocsWithNullArray);
-        assertNull(compoundTopDocsWithNullArray.scoreDocs);
+        assertNotNull(compoundTopDocsWithNullArray.scoreDocs);
+        assertEquals(0, compoundTopDocsWithNullArray.scoreDocs.length);
     }
 }

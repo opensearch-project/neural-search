@@ -6,7 +6,11 @@
 package org.opensearch.neuralsearch.search;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
@@ -31,9 +35,7 @@ import org.opensearch.neuralsearch.query.HybridQueryScorer;
 public class HybridTopScoreDocCollector implements Collector {
     private static final TopDocs EMPTY_TOPDOCS = new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]);
     private int docBase;
-    private float minCompetitiveScore;
     private final HitsThresholdChecker hitsThresholdChecker;
-    private ScoreDoc pqTop;
     private TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
     private int[] totalHits;
     private final int numOfHits;
@@ -48,7 +50,6 @@ public class HybridTopScoreDocCollector implements Collector {
     @Override
     public LeafCollector getLeafCollector(LeafReaderContext context) throws IOException {
         docBase = context.docBase;
-        minCompetitiveScore = 0f;
 
         return new TopScoreDocCollector.ScorerLeafCollector() {
             HybridQueryScorer compoundQueryScorer;
@@ -56,7 +57,6 @@ public class HybridTopScoreDocCollector implements Collector {
             @Override
             public void setScorer(Scorable scorer) throws IOException {
                 super.setScorer(scorer);
-                updateMinCompetitiveScore(scorer);
                 compoundQueryScorer = (HybridQueryScorer) scorer;
             }
 
@@ -93,30 +93,17 @@ public class HybridTopScoreDocCollector implements Collector {
         return hitsThresholdChecker.scoreMode();
     }
 
-    protected void updateMinCompetitiveScore(Scorable scorer) throws IOException {
-        if (hitsThresholdChecker.isThresholdReached() && pqTop != null && pqTop.score != Float.NEGATIVE_INFINITY) { // -Infinity is the
-                                                                                                                    // boundary score
-            // we have multiple identical doc id and collect in doc id order, we need next float
-            float localMinScore = Math.nextUp(pqTop.score);
-            if (localMinScore > minCompetitiveScore) {
-                scorer.setMinCompetitiveScore(localMinScore);
-                totalHitsRelation = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;
-                minCompetitiveScore = localMinScore;
-            }
-        }
-    }
-
     /**
      * Get resulting collection of TopDocs for hybrid query after we ran search for each of its sub query
      * @return
      */
-    public TopDocs[] topDocs() {
-        TopDocs[] topDocs = new TopDocs[compoundScores.length];
-        for (int i = 0; i < compoundScores.length; i++) {
-            int qTopSize = totalHits[i];
-            TopDocs topDocsPerQuery = topDocsPerQuery(0, Math.min(qTopSize, compoundScores[i].size()), compoundScores[i], qTopSize);
-            topDocs[i] = topDocsPerQuery;
+    public List<TopDocs> topDocs() {
+        if (compoundScores == null) {
+            return new ArrayList<>();
         }
+        final List<TopDocs> topDocs = IntStream.range(0, compoundScores.length)
+            .mapToObj(i -> topDocsPerQuery(0, Math.min(totalHits[i], compoundScores[i].size()), compoundScores[i], totalHits[i]))
+            .collect(Collectors.toList());
         return topDocs;
     }
 

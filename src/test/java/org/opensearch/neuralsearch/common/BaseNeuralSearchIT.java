@@ -62,6 +62,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     @Before
     public void setupSettings() {
+        if (isUpdateClusterSettings()) {
+            updateClusterSettings();
+        }
+    }
+
+    protected void updateClusterSettings() {
         updateClusterSettings("plugins.ml_commons.only_run_on_ml_node", false);
         // default threshold for native circuit breaker is 90, it may be not enough on test runner machine
         updateClusterSettings("plugins.ml_commons.native_memory_threshold", 100);
@@ -509,5 +515,9 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             toHttpEntity(""),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
+    }
+
+    public boolean isUpdateClusterSettings() {
+        return true;
     }
 }
