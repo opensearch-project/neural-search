@@ -17,11 +17,14 @@ import org.opensearch.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.io.stream.NamedWriteableRegistry;
+import org.opensearch.common.settings.Setting;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
 import org.opensearch.ingest.Processor;
+import org.opensearch.knn.index.KNNSettings;
 import org.opensearch.ml.client.MachineLearningNodeClient;
+import org.opensearch.neuralsearch.index.NeuralSearchSettings;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
@@ -45,6 +48,7 @@ import org.opensearch.watcher.ResourceWatcherService;
 public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, IngestPlugin, ExtensiblePlugin {
 
     private MLCommonsClientAccessor clientAccessor;
+    private ClusterService clusterService;
 
     @Override
     public Collection<Object> createComponents(
@@ -60,6 +64,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         final IndexNameExpressionResolver indexNameExpressionResolver,
         final Supplier<RepositoriesService> repositoriesServiceSupplier
     ) {
+        NeuralSearchSettings.state().initialize(clusterService);
         NeuralQueryBuilder.initialize(clientAccessor);
         return List.of(clientAccessor);
     }
@@ -81,5 +86,12 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     @Override
     public Optional<QueryPhaseSearcher> getQueryPhaseSearcher() {
         return Optional.of(new HybridQueryPhaseSearcher());
+    }
+
+    @Override
+    public List<Setting<?>> getSettings() {
+        return List.of(
+                NeuralSearchSettings.INDEX_NEURAL_SEARCH_HYBRID_SEARCH_SETTING
+        );
     }
 }
