@@ -5,15 +5,7 @@
 
 package org.opensearch.neuralsearch.ml;
 
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-
+import com.google.common.collect.ImmutableMap;
 import org.junit.Before;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -31,6 +23,15 @@ import org.opensearch.ml.common.output.model.ModelTensors;
 import org.opensearch.neuralsearch.constants.TestCommonConstants;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.transport.NodeNotConnectedException;
+
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 
 public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
@@ -168,7 +169,9 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             output,
             new long[] { 1, 2 },
             MLResultDataType.FLOAT64,
-            ByteBuffer.wrap(new byte[12])
+            ByteBuffer.wrap(new byte[12]),
+            "mockResult",
+            ImmutableMap.of("mockKey", "mockValue")
         );
         mlModelTensorList.add(tensor);
         final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);

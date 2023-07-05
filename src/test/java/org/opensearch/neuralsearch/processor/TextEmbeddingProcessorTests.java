@@ -5,20 +5,9 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.function.BiConsumer;
-import java.util.function.Supplier;
-
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import lombok.SneakyThrows;
-
 import org.junit.Before;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -33,8 +22,24 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
 import org.opensearch.test.OpenSearchTestCase;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.function.BiConsumer;
+import java.util.function.Supplier;
+
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.isA;
+import static org.mockito.Mockito.isNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
 
@@ -396,6 +401,20 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> adventure = (Map<String, Object>) favoriteGames.get("adventure");
         Object actionGamesKnn = adventure.get("with.action.knn");
         assertNotNull(actionGamesKnn);
+    }
+
+    public void test_updateDocument_appendVectorFieldsToDocument_successful() {
+        Map<String, Object> config = createPlainStringConfiguration();
+        IngestDocument ingestDocument = createPlainIngestDocument();
+        TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
+        Map<String, Object> knnMap = processor.buildMapWithKnnKeyAndOriginalValue(ingestDocument);
+        List<List<Float>> modelTensorList = createMockVectorResult();
+        processor.appendVectorFieldsToDocument(ingestDocument, knnMap, modelTensorList);
+
+        List<List<Float>> modelTensorList1 = createMockVectorResult();
+        processor.appendVectorFieldsToDocument(ingestDocument, knnMap, modelTensorList1);
+        assertEquals(12, ingestDocument.getSourceAndMetadata().size());
+        assertEquals(2, ((List<?>)ingestDocument.getSourceAndMetadata().get("oriKey6_knn")).size());
     }
 
     private List<List<Float>> createMockVectorResult() {
