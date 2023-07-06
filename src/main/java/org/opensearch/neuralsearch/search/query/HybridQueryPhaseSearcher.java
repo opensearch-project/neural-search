@@ -20,7 +20,6 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHitCountCollector;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
-import org.opensearch.neuralsearch.index.NeuralSearchSettings;
 import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.neuralsearch.search.CompoundTopDocs;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
@@ -52,8 +51,7 @@ public class HybridQueryPhaseSearcher extends QueryPhase.DefaultQueryPhaseSearch
         final boolean hasFilterCollector,
         final boolean hasTimeout
     ) throws IOException {
-        boolean isQuerySearcherEnabled =  NeuralSearchSettings.state().getSettingValue(NeuralSearchSettings.INDEX_NEURAL_SEARCH_HYBRID_SEARCH);
-        if (isQuerySearcherEnabled && query instanceof HybridQuery) {
+        if (query instanceof HybridQuery) {
             return searchWithCollector(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);
         }
         return super.searchWithCollector(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);

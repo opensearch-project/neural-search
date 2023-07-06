@@ -10,20 +10,14 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.opensearch.neuralsearch.index.NeuralSearchSettings.INDEX_NEURAL_SEARCH_HYBRID_SEARCH;
-import static org.opensearch.neuralsearch.index.NeuralSearchSettings.INDEX_NEURAL_SEARCH_HYBRID_SEARCH_SETTING;
 
 import java.io.IOException;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Set;
 
 import lombok.SneakyThrows;
 
@@ -40,26 +34,18 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.tests.analysis.MockAnalyzer;
-import org.mockito.MockedStatic;
-import org.mockito.Mockito;
 import org.opensearch.action.OriginalIndices;
-import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
 import org.opensearch.index.Index;
-import org.opensearch.index.ShardIndexingPressureSettings;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.index.shard.IndexShard;
 import org.opensearch.index.shard.ShardId;
 import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
-import org.opensearch.knn.index.memory.NativeMemoryCacheManager;
-import org.opensearch.neuralsearch.index.NeuralSearchSettings;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.search.CompoundTopDocs;
@@ -110,6 +96,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         w.commit();
 
         IndexReader reader = DirectoryReader.open(w);
+        SearchContext searchContext = mock(SearchContext.class);
 
         ContextIndexSearcher contextIndexSearcher = new ContextIndexSearcher(
             reader,
@@ -117,10 +104,10 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
             IndexSearcher.getDefaultQueryCache(),
             IndexSearcher.getDefaultQueryCachingPolicy(),
             true,
-            null
+            null,
+            searchContext
         );
 
-        SearchContext searchContext = mock(SearchContext.class);
         ShardId shardId = new ShardId(dummyIndex, 1);
         SearchShardTarget shardTarget = new SearchShardTarget(
             randomAlphaOfLength(10),
@@ -130,6 +117,11 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         );
         when(searchContext.shardTarget()).thenReturn(shardTarget);
         when(searchContext.searcher()).thenReturn(contextIndexSearcher);
+        when(searchContext.numberOfShards()).thenReturn(1);
+        when(searchContext.searcher()).thenReturn(contextIndexSearcher);
+        IndexShard indexShard = mock(IndexShard.class);
+        when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(searchContext.indexShard()).thenReturn(indexShard);
 
         LinkedList<QueryCollectorContext> collectors = new LinkedList<>();
         boolean hasFilterCollector = randomBoolean();
@@ -144,12 +136,6 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.query()).thenReturn(query);
         QuerySearchResult querySearchResult = new QuerySearchResult();
         when(searchContext.queryResult()).thenReturn(querySearchResult);
-        Settings settings = Settings.builder().put(INDEX_NEURAL_SEARCH_HYBRID_SEARCH_SETTING.getKey(), true).build();
-        Set<Setting<?>> settingsSet = new HashSet<>(ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        settingsSet.add(INDEX_NEURAL_SEARCH_HYBRID_SEARCH_SETTING);
-        ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, settingsSet);
-        ClusterService clusterService = new ClusterService(settings, clusterSettings, null);
-        NeuralSearchSettings.state().initialize(clusterService);
 
         hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
 
@@ -178,6 +164,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         w.commit();
 
         IndexReader reader = DirectoryReader.open(w);
+        SearchContext searchContext = mock(SearchContext.class);
 
         ContextIndexSearcher contextIndexSearcher = new ContextIndexSearcher(
             reader,
@@ -185,10 +172,10 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
             IndexSearcher.getDefaultQueryCache(),
             IndexSearcher.getDefaultQueryCachingPolicy(),
             true,
-            null
+            null,
+            searchContext
         );
 
-        SearchContext searchContext = mock(SearchContext.class);
         ShardId shardId = new ShardId(dummyIndex, 1);
         SearchShardTarget shardTarget = new SearchShardTarget(
             randomAlphaOfLength(10),
@@ -198,6 +185,11 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         );
         when(searchContext.shardTarget()).thenReturn(shardTarget);
         when(searchContext.searcher()).thenReturn(contextIndexSearcher);
+        when(searchContext.numberOfShards()).thenReturn(1);
+        when(searchContext.searcher()).thenReturn(contextIndexSearcher);
+        IndexShard indexShard = mock(IndexShard.class);
+        when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(searchContext.indexShard()).thenReturn(indexShard);
         when(searchContext.queryResult()).thenReturn(new QuerySearchResult());
 
         LinkedList<QueryCollectorContext> collectors = new LinkedList<>();
@@ -208,89 +200,6 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         Query query = termSubQuery.toQuery(mockQueryShardContext);
         when(searchContext.query()).thenReturn(query);
-        Settings settings = Settings.builder().put(INDEX_NEURAL_SEARCH_HYBRID_SEARCH_SETTING.getKey(), true).build();
-        Set<Setting<?>> settingsSet = new HashSet<>(ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        settingsSet.add(INDEX_NEURAL_SEARCH_HYBRID_SEARCH_SETTING);
-        ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, settingsSet);
-        ClusterService clusterService = new ClusterService(settings, clusterSettings, null);
-        NeuralSearchSettings.state().initialize(clusterService);
-
-        hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
-
-        releaseResources(directory, w, reader);
-
-        verify(hybridQueryPhaseSearcher, never()).searchWithCollector(any(), any(), any(), any(), anyBoolean(), anyBoolean());
-    }
-
-    @SneakyThrows
-    public void testSettings_whenHybridSearchDisabled_thenDoNotCallHybridDocCollector() {
-        HybridQueryPhaseSearcher hybridQueryPhaseSearcher = spy(new HybridQueryPhaseSearcher());
-        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
-        KNNVectorFieldMapper.KNNVectorFieldType mockKNNVectorField = mock(KNNVectorFieldMapper.KNNVectorFieldType.class);
-        when(mockQueryShardContext.index()).thenReturn(dummyIndex);
-        when(mockKNNVectorField.getDimension()).thenReturn(4);
-        when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
-        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
-        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
-
-        Directory directory = newDirectory();
-        IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
-        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
-        ft.freeze();
-
-        w.addDocument(getDocument(TEXT_FIELD_NAME, RandomizedTest.randomInt(), TEST_DOC_TEXT1, ft));
-        w.addDocument(getDocument(TEXT_FIELD_NAME, RandomizedTest.randomInt(), TEST_DOC_TEXT2, ft));
-        w.addDocument(getDocument(TEXT_FIELD_NAME, RandomizedTest.randomInt(), TEST_DOC_TEXT3, ft));
-        w.commit();
-
-        IndexReader reader = DirectoryReader.open(w);
-
-        ContextIndexSearcher contextIndexSearcher = new ContextIndexSearcher(
-                reader,
-                IndexSearcher.getDefaultSimilarity(),
-                IndexSearcher.getDefaultQueryCache(),
-                IndexSearcher.getDefaultQueryCachingPolicy(),
-                true,
-                null
-        );
-
-        SearchContext searchContext = mock(SearchContext.class);
-        ShardId shardId = new ShardId(dummyIndex, 1);
-        SearchShardTarget shardTarget = new SearchShardTarget(
-                randomAlphaOfLength(10),
-                shardId,
-                randomAlphaOfLength(10),
-                OriginalIndices.NONE
-        );
-        when(searchContext.shardTarget()).thenReturn(shardTarget);
-        when(searchContext.searcher()).thenReturn(contextIndexSearcher);
-
-        LinkedList<QueryCollectorContext> collectors = new LinkedList<>();
-        boolean hasFilterCollector = randomBoolean();
-        boolean hasTimeout = randomBoolean();
-
-        HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
-
-        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT1);
-        queryBuilder.add(termSubQuery);
-
-        Query query = queryBuilder.toQuery(mockQueryShardContext);
-        when(searchContext.query()).thenReturn(query);
-        QuerySearchResult querySearchResult = new QuerySearchResult();
-        when(searchContext.queryResult()).thenReturn(querySearchResult);
-        Setting<Boolean> setting = Setting.boolSetting(
-                INDEX_NEURAL_SEARCH_HYBRID_SEARCH,
-                false,
-                Setting.Property.NodeScope
-        );
-        Settings settings = Settings.builder().put(setting.getKey(), false).build();
-        Set<Setting<?>> settingsSet = new HashSet<>(ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        settingsSet.add(INDEX_NEURAL_SEARCH_HYBRID_SEARCH_SETTING);
-        ClusterSettings clusterSettings = new ClusterSettings(settings, settingsSet);
-        ClusterService clusterService = new ClusterService(settings, clusterSettings, null);
-        NeuralSearchSettings.state().initialize(clusterService);
 
         hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
 
@@ -322,6 +231,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         w.commit();
 
         IndexReader reader = DirectoryReader.open(w);
+        SearchContext searchContext = mock(SearchContext.class);
 
         ContextIndexSearcher contextIndexSearcher = new ContextIndexSearcher(
             reader,
@@ -329,10 +239,10 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
             IndexSearcher.getDefaultQueryCache(),
             IndexSearcher.getDefaultQueryCachingPolicy(),
             true,
-            null
+            null,
+            searchContext
         );
 
-        SearchContext searchContext = mock(SearchContext.class);
         ShardId shardId = new ShardId(dummyIndex, 1);
         SearchShardTarget shardTarget = new SearchShardTarget(
             randomAlphaOfLength(10),
@@ -343,6 +253,11 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.shardTarget()).thenReturn(shardTarget);
         when(searchContext.searcher()).thenReturn(contextIndexSearcher);
         when(searchContext.size()).thenReturn(3);
+        when(searchContext.numberOfShards()).thenReturn(1);
+        when(searchContext.searcher()).thenReturn(contextIndexSearcher);
+        IndexShard indexShard = mock(IndexShard.class);
+        when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(searchContext.indexShard()).thenReturn(indexShard);
         QuerySearchResult querySearchResult = new QuerySearchResult();
         when(searchContext.queryResult()).thenReturn(querySearchResult);
 
@@ -357,12 +272,6 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         Query query = queryBuilder.toQuery(mockQueryShardContext);
         when(searchContext.query()).thenReturn(query);
-        Settings settings = Settings.builder().put(INDEX_NEURAL_SEARCH_HYBRID_SEARCH_SETTING.getKey(), true).build();
-        Set<Setting<?>> settingsSet = new HashSet<>(ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        settingsSet.add(INDEX_NEURAL_SEARCH_HYBRID_SEARCH_SETTING);
-        ClusterSettings clusterSettings = new ClusterSettings(Settings.EMPTY, settingsSet);
-        ClusterService clusterService = new ClusterService(settings, clusterSettings, null);
-        NeuralSearchSettings.state().initialize(clusterService);
 
         hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
 
@@ -412,6 +321,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         w.commit();
 
         IndexReader reader = DirectoryReader.open(w);
+        SearchContext searchContext = mock(SearchContext.class);
 
         ContextIndexSearcher contextIndexSearcher = new ContextIndexSearcher(
             reader,
@@ -419,10 +329,10 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
             IndexSearcher.getDefaultQueryCache(),
             IndexSearcher.getDefaultQueryCachingPolicy(),
             true,
-            null
+            null,
+            searchContext
         );
 
-        SearchContext searchContext = mock(SearchContext.class);
         ShardId shardId = new ShardId(dummyIndex, 1);
         SearchShardTarget shardTarget = new SearchShardTarget(
             randomAlphaOfLength(10),
@@ -435,6 +345,11 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.size()).thenReturn(4);
         QuerySearchResult querySearchResult = new QuerySearchResult();
         when(searchContext.queryResult()).thenReturn(querySearchResult);
+        when(searchContext.numberOfShards()).thenReturn(1);
+        when(searchContext.searcher()).thenReturn(contextIndexSearcher);
+        IndexShard indexShard = mock(IndexShard.class);
+        when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(searchContext.indexShard()).thenReturn(indexShard);
 
         LinkedList<QueryCollectorContext> collectors = new LinkedList<>();
         boolean hasFilterCollector = randomBoolean();
