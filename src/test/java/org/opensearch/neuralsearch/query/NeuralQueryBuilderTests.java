@@ -49,7 +49,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.neuralsearch.common.VectorUtil;
-import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.ml.MLCommonsTextEmbeddingClientAccessor;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class NeuralQueryBuilderTests extends OpenSearchTestCase {
@@ -507,7 +507,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
     public void testRewrite_whenVectorSupplierNull_thenSetVectorSupplier() {
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(FIELD_NAME).queryText(QUERY_TEXT).modelId(MODEL_ID).k(K);
         List<Float> expectedVector = Arrays.asList(1.0f, 2.0f, 3.0f, 4.0f, 5.0f);
-        MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
+        MLCommonsTextEmbeddingClientAccessor mlCommonsClientAccessor = mock(MLCommonsTextEmbeddingClientAccessor.class);
         doAnswer(invocation -> {
             ActionListener<List<Float>> listener = invocation.getArgument(2);
             listener.onResponse(expectedVector);

@@ -5,6 +5,7 @@
 
 package org.opensearch.neuralsearch.plugin;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -27,10 +28,11 @@ import org.opensearch.neuralsearch.analyzer.BertAnalyzerProvider;
 import org.opensearch.neuralsearch.analyzer.BertTokenizerFactory;
 import org.opensearch.neuralsearch.analyzer.TermWeightAnalyzerProvider;
 import org.opensearch.neuralsearch.analyzer.TermWeightTokenizerFactory;
-import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.ml.MLCommonsTextEmbeddingClientAccessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.plugins.ActionPlugin;
 import org.opensearch.plugins.AnalysisPlugin;
 import org.opensearch.plugins.ExtensiblePlugin;
@@ -52,7 +54,7 @@ import org.opensearch.indices.analysis.AnalysisModule.AnalysisProvider;
  */
 public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, IngestPlugin, ExtensiblePlugin, AnalysisPlugin {
 
-    private MLCommonsClientAccessor clientAccessor;
+    private MLCommonsTextEmbeddingClientAccessor clientAccessor;
 
     @Override
     public Collection<Object> createComponents(
@@ -73,14 +75,18 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     }
 
     public List<QuerySpec<?>> getQueries() {
-        return Collections.singletonList(
-            new QuerySpec<>(NeuralQueryBuilder.NAME, NeuralQueryBuilder::new, NeuralQueryBuilder::fromXContent)
+        var qs1 = new QuerySpec<NeuralQueryBuilder>(NeuralQueryBuilder.NAME, NeuralQueryBuilder::new, NeuralQueryBuilder::fromXContent);
+        var qs2 = new QuerySpec<NeuralSparseQueryBuilder>(NeuralSparseQueryBuilder.NAME, NeuralSparseQueryBuilder::new, NeuralSparseQueryBuilder::fromXContent);
+
+        return List.of(
+            qs1,
+            qs2
         );
     }
 
     @Override
     public Map<String, Processor.Factory> getProcessors(Processor.Parameters parameters) {
-        clientAccessor = new MLCommonsClientAccessor(new MachineLearningNodeClient(parameters.client));
+        clientAccessor = new MLCommonsTextEmbeddingClientAccessor(new MachineLearningNodeClient(parameters.client));
         return Collections.singletonMap(TextEmbeddingProcessor.TYPE, new TextEmbeddingProcessorFactory(clientAccessor, parameters.env));
     }
 

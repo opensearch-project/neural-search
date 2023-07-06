@@ -36,7 +36,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
-import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.ml.MLCommonsTextEmbeddingClientAccessor;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -67,9 +67,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
 
     private static final int DEFAULT_K = 10;
 
-    private static MLCommonsClientAccessor ML_CLIENT;
+    private static MLCommonsTextEmbeddingClientAccessor ML_CLIENT;
 
-    public static void initialize(MLCommonsClientAccessor mlClient) {
+    public static void initialize(MLCommonsTextEmbeddingClientAccessor mlClient) {
         NeuralQueryBuilder.ML_CLIENT = mlClient;
     }
 

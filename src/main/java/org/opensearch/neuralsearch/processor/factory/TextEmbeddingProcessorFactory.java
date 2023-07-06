@@ -3,7 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package org.opensearch.neuralsearch.processor.factory;
+/*
+ * Copyright OpenSearch Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+ package org.opensearch.neuralsearch.processor.factory;
 
 import static org.opensearch.ingest.ConfigurationUtils.readMap;
 import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
@@ -13,16 +18,16 @@ import java.util.Map;
 
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.Processor;
-import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.ml.MLCommonsTextEmbeddingClientAccessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 
 public class TextEmbeddingProcessorFactory implements Processor.Factory {
 
-    private final MLCommonsClientAccessor clientAccessor;
+    private final MLCommonsTextEmbeddingClientAccessor clientAccessor;
 
     private final Environment environment;
 
-    public TextEmbeddingProcessorFactory(MLCommonsClientAccessor clientAccessor, Environment environment) {
+    public TextEmbeddingProcessorFactory(MLCommonsTextEmbeddingClientAccessor clientAccessor, Environment environment) {
         this.clientAccessor = clientAccessor;
         this.environment = environment;
     }
