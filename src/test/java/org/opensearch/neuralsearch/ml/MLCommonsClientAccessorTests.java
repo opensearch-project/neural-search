@@ -44,7 +44,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     private MachineLearningNodeClient client;
 
     @InjectMocks
-    private MLCommonsClientAccessor accessor;
+    private MLCommonsTextEmbeddingClientAccessor accessor;
 
     @Before
     public void setup() {
@@ -168,7 +168,9 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             output,
             new long[] { 1, 2 },
             MLResultDataType.FLOAT64,
-            ByteBuffer.wrap(new byte[12])
+            ByteBuffer.wrap(new byte[12]),
+            "",
+            null
         );
         mlModelTensorList.add(tensor);
         final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
