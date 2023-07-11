@@ -105,7 +105,7 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
                 handler.accept(ingestDocument, null);
             } else {
                 mlCommonsClientAccessor.inferenceSentences(this.modelId, inferenceList, ActionListener.wrap(vectors -> {
-                    appendVectorFieldsToDocument(ingestDocument, knnMap, vectors);
+                    setVectorFieldsToDocument(ingestDocument, knnMap, vectors);
                     handler.accept(ingestDocument, null);
                 }, e -> { handler.accept(null, e); }));
             }
@@ -115,7 +115,7 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
 
     }
 
-    void appendVectorFieldsToDocument(IngestDocument ingestDocument, Map<String, Object> knnMap, List<List<Float>> vectors) {
+    void setVectorFieldsToDocument(IngestDocument ingestDocument, Map<String, Object> knnMap, List<List<Float>> vectors) {
         Objects.requireNonNull(vectors, "embedding failed, inference returns null result!");
         log.debug("Text embedding result fetched, starting build vector output!");
         Map<String, Object> textEmbeddingResult = buildTextEmbeddingResult(knnMap, vectors, ingestDocument.getSourceAndMetadata());
