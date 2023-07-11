@@ -14,7 +14,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.opensearch.action.ActionListener;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.FunctionName;
@@ -27,8 +26,6 @@ import org.opensearch.ml.common.output.model.ModelTensor;
 import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
 import org.opensearch.neuralsearch.util.RetryUtil;
-import org.opensearch.transport.NodeDisconnectedException;
-import org.opensearch.transport.NodeNotConnectedException;
 
 /**
  * This class will act as an abstraction on the MLCommons client for accessing the ML Capabilities
