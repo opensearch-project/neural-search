@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -501,6 +502,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         String modelGroupRegisterRequestBody = Files.readString(
             Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
         );
+        modelGroupRegisterRequestBody = modelGroupRegisterRequestBody.replace("<MODEL_GROUP_NAME>", UUID.randomUUID().toString());
         Response modelGroupResponse = makeRequest(
             client(),
             "POST",
