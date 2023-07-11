@@ -5,10 +5,26 @@
 
 package org.opensearch.neuralsearch.common;
 
-import com.google.common.collect.ImmutableList;
+import static org.apache.http.entity.ContentType.APPLICATION_JSON;
+import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
+
+import java.io.IOException;
+import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.SneakyThrows;
+
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
@@ -33,21 +49,7 @@ import org.opensearch.knn.index.SpaceType;
 import org.opensearch.neuralsearch.OpenSearchSecureRestTestCase;
 import org.opensearch.rest.RestStatus;
 
-import java.io.IOException;
-import java.net.URISyntaxException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Collections;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
-
-import static org.apache.http.entity.ContentType.APPLICATION_JSON;
-import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
+import com.google.common.collect.ImmutableList;
 
 public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
