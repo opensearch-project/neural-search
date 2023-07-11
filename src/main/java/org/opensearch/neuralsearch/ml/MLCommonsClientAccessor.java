@@ -36,8 +36,6 @@ public class MLCommonsClientAccessor {
     private static final List<String> TARGET_RESPONSE_FILTERS = List.of("sentence_embedding");
     private final MachineLearningNodeClient mlClient;
 
-    private static final int MAX_RETRY = 3;
-
     /**
      * Wrapper around {@link #inferenceSentences} that expected a single input text and produces a single floating
      * point vector as a response.
