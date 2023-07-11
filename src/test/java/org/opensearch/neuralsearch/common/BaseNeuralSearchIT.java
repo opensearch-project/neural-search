@@ -5,25 +5,10 @@
 
 package org.opensearch.neuralsearch.common;
 
-import static org.apache.http.entity.ContentType.APPLICATION_JSON;
-import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
-
-import java.io.IOException;
-import java.net.URISyntaxException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Collections;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
-
+import com.google.common.collect.ImmutableList;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.SneakyThrows;
-
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
@@ -48,7 +33,21 @@ import org.opensearch.knn.index.SpaceType;
 import org.opensearch.neuralsearch.OpenSearchSecureRestTestCase;
 import org.opensearch.rest.RestStatus;
 
-import com.google.common.collect.ImmutableList;
+import java.io.IOException;
+import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+
+import static org.apache.http.entity.ContentType.APPLICATION_JSON;
+import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 
 public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
@@ -501,6 +500,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         String modelGroupRegisterRequestBody = Files.readString(
             Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
         );
+        modelGroupRegisterRequestBody = modelGroupRegisterRequestBody.replace("<MODEL_GROUP_NAME>", UUID.randomUUID().toString());
         Response modelGroupResponse = makeRequest(
             client(),
             "POST",
