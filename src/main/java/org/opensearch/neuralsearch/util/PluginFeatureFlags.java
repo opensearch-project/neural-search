@@ -20,7 +20,7 @@ public class PluginFeatureFlags {
      * and false otherwise.
      * Checks alternative flag names as they may be different for plugins
      */
-    public static boolean isEnabled(String featureFlagName) {
+    public static boolean isEnabled(final String featureFlagName) {
         return FeatureFlags.isEnabled(featureFlagName) || FeatureFlags.isEnabled(transportFeatureName(featureFlagName));
     }
 
