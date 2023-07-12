@@ -13,10 +13,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.opensearch.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.io.stream.NamedWriteableRegistry;
+import org.opensearch.common.util.FeatureFlags;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
@@ -28,7 +30,6 @@ import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFacto
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
-import org.opensearch.neuralsearch.util.PluginFeatureFlags;
 import org.opensearch.plugins.ActionPlugin;
 import org.opensearch.plugins.ExtensiblePlugin;
 import org.opensearch.plugins.IngestPlugin;
@@ -38,6 +39,7 @@ import org.opensearch.repositories.RepositoriesService;
 import org.opensearch.script.ScriptService;
 import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.threadpool.ThreadPool;
+import org.opensearch.transport.TransportSettings;
 import org.opensearch.watcher.ResourceWatcherService;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -50,9 +52,14 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
      * Gates the functionality of hybrid search
      * Currently query phase searcher added with hybrid search will conflict with concurrent search in core.
      * Once that problem is resolved this feature flag can be removed.
+     * Key is the name string, value is key + transport feature specific prefix, prefix is added by core when we register feature
+     * We need to write and read by the value, key is only for definition
      */
     @VisibleForTesting
-    public static final String NEURAL_SEARCH_HYBRID_SEARCH_ENABLED = "neural_search_hybrid_search_enabled";
+    public static final Pair<String, String> NEURAL_SEARCH_HYBRID_SEARCH_ENABLED = Pair.of(
+        "neural_search_hybrid_search_enabled",
+        String.join(".", TransportSettings.FEATURE_PREFIX, "neural_search_hybrid_search_enabled")
+    );
     private MLCommonsClientAccessor clientAccessor;
 
     @Override
@@ -89,7 +96,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     @Override
     public Optional<QueryPhaseSearcher> getQueryPhaseSearcher() {
-        if (PluginFeatureFlags.isEnabled(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED)) {
+        if (FeatureFlags.isEnabled(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED.getValue())) {
             return Optional.of(new HybridQueryPhaseSearcher());
         }
         return Optional.empty();
@@ -97,7 +104,6 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     @Override
     protected Optional<String> getFeature() {
-        return Optional.of(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED);
+        return Optional.of(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED.getKey());
     }
-
 }
