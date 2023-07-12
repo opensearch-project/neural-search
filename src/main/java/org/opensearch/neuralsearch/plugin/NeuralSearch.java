@@ -17,8 +17,8 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.opensearch.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.common.util.FeatureFlags;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
@@ -52,7 +52,8 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
      * Gates the functionality of hybrid search
      * Currently query phase searcher added with hybrid search will conflict with concurrent search in core.
      * Once that problem is resolved this feature flag can be removed.
-     * Key is the name string, value is key + transport feature specific prefix, prefix is added by core when we register feature
+     * Key is the name string, value is key + transport feature specific prefix,
+     * prefix is added by core when we register feature (https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/plugins/PluginsService.java#L277)
      * We need to write and read by the value, key is only for definition
      */
     @VisibleForTesting
