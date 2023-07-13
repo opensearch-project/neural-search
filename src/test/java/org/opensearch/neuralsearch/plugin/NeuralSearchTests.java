@@ -6,7 +6,7 @@
 package org.opensearch.neuralsearch.plugin;
 
 import static org.mockito.Mockito.mock;
-import static org.opensearch.neuralsearch.plugin.NeuralSearch.NEURAL_SEARCH_HYBRID_SEARCH_ENABLED;
+import static org.opensearch.neuralsearch.plugin.NeuralSearch.NEURAL_SEARCH_HYBRID_SEARCH_DISABLED;
 
 import java.util.List;
 import java.util.Map;
@@ -42,7 +42,7 @@ public class NeuralSearchTests extends OpenSearchTestCase {
         assertNotNull(queryPhaseSearcher);
         assertTrue(queryPhaseSearcher.isEmpty());
 
-        System.setProperty(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED.getValue(), "true");
+        System.setProperty(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED.getValue(), "true");
 
         Optional<QueryPhaseSearcher> queryPhaseSearcherWithFeatureFlagDisabled = plugin.getQueryPhaseSearcher();
 
@@ -50,7 +50,7 @@ public class NeuralSearchTests extends OpenSearchTestCase {
         assertFalse(queryPhaseSearcherWithFeatureFlagDisabled.isEmpty());
         assertTrue(queryPhaseSearcherWithFeatureFlagDisabled.get() instanceof HybridQueryPhaseSearcher);
 
-        System.setProperty(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED.getValue(), "");
+        System.setProperty(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED.getValue(), "");
     }
 
     public void testProcessors() {
@@ -66,6 +66,6 @@ public class NeuralSearchTests extends OpenSearchTestCase {
         Optional<String> feature = plugin.getFeature();
         assertNotNull(feature);
         assertFalse(feature.isEmpty());
-        assertEquals(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED.getKey(), feature.get());
+        assertEquals(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED.getKey(), feature.get());
     }
 }

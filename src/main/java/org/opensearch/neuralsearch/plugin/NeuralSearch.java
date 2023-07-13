@@ -57,9 +57,9 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
      * We need to write and read by the value, key is only for definition
      */
     @VisibleForTesting
-    public static final Pair<String, String> NEURAL_SEARCH_HYBRID_SEARCH_ENABLED = Pair.of(
-        "neural_search_hybrid_search_enabled",
-        String.join(".", TransportSettings.FEATURE_PREFIX, "neural_search_hybrid_search_enabled")
+    public static final Pair<String, String> NEURAL_SEARCH_HYBRID_SEARCH_DISABLED = Pair.of(
+        "neural_search_hybrid_search_disabled",
+        String.join(".", TransportSettings.FEATURE_PREFIX, "neural_search_hybrid_search_disabled")
     );
     private MLCommonsClientAccessor clientAccessor;
 
@@ -97,14 +97,14 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     @Override
     public Optional<QueryPhaseSearcher> getQueryPhaseSearcher() {
-        if (FeatureFlags.isEnabled(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED.getValue())) {
-            return Optional.of(new HybridQueryPhaseSearcher());
+        if (FeatureFlags.isEnabled(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED.getValue())) {
+            return Optional.empty();
         }
-        return Optional.empty();
+        return Optional.of(new HybridQueryPhaseSearcher());
     }
 
     @Override
     protected Optional<String> getFeature() {
-        return Optional.of(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED.getKey());
+        return Optional.of(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED.getKey());
     }
 }
