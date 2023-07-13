@@ -98,6 +98,8 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     @Override
     public Optional<QueryPhaseSearcher> getQueryPhaseSearcher() {
         if (FeatureFlags.isEnabled(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED.getValue())) {
+            // we want feature be disabled by default due to risk of colliding and breaking concurrent search in core
+            // but we only can set "true" values by default due to implementation limitations in core.
             return Optional.empty();
         }
         return Optional.of(new HybridQueryPhaseSearcher());
