@@ -5,7 +5,6 @@
 
 package org.opensearch.neuralsearch.plugin;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -21,7 +20,10 @@ import org.opensearch.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
-import org.opensearch.index.analysis.Analysis;
+import org.opensearch.index.analysis.AnalyzerProvider;
+import org.opensearch.index.analysis.TokenizerFactory;
+import org.opensearch.indices.analysis.AnalysisModule;
+import org.opensearch.indices.analysis.AnalysisModule.AnalysisProvider;
 import org.opensearch.ingest.Processor;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.analyzer.BertAnalyzerProvider;
@@ -43,11 +45,6 @@ import org.opensearch.repositories.RepositoriesService;
 import org.opensearch.script.ScriptService;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.watcher.ResourceWatcherService;
-import org.opensearch.index.analysis.AnalyzerProvider;
-import org.opensearch.index.analysis.AnalyzerComponents;
-import org.opensearch.index.analysis.TokenizerFactory;
-import org.opensearch.indices.analysis.AnalysisModule;
-import org.opensearch.indices.analysis.AnalysisModule.AnalysisProvider;
 
 /**
  * Neural Search plugin class
@@ -76,12 +73,13 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     public List<QuerySpec<?>> getQueries() {
         var qs1 = new QuerySpec<NeuralQueryBuilder>(NeuralQueryBuilder.NAME, NeuralQueryBuilder::new, NeuralQueryBuilder::fromXContent);
-        var qs2 = new QuerySpec<NeuralSparseQueryBuilder>(NeuralSparseQueryBuilder.NAME, NeuralSparseQueryBuilder::new, NeuralSparseQueryBuilder::fromXContent);
-
-        return List.of(
-            qs1,
-            qs2
+        var qs2 = new QuerySpec<NeuralSparseQueryBuilder>(
+            NeuralSparseQueryBuilder.NAME,
+            NeuralSparseQueryBuilder::new,
+            NeuralSparseQueryBuilder::fromXContent
         );
+
+        return List.of(qs1, qs2);
     }
 
     @Override
@@ -92,15 +90,13 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     @Override
     public Map<String, AnalysisProvider<TokenizerFactory>> getTokenizers() {
-         Map<String, AnalysisModule.AnalysisProvider<TokenizerFactory>> extra = new HashMap<>();
-
+        Map<String, AnalysisModule.AnalysisProvider<TokenizerFactory>> extra = new HashMap<>();
 
         extra.put("bert", BertTokenizerFactory::getBertTokenizerFactory);
         extra.put("term_weight", TermWeightTokenizerFactory::getTermWeightTokenizerFactory);
 
         return extra;
     }
-
 
     @Override
     public Map<String, AnalysisProvider<AnalyzerProvider<? extends Analyzer>>> getAnalyzers() {
