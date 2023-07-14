@@ -8,7 +8,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
- package org.opensearch.neuralsearch.processor.factory;
+package org.opensearch.neuralsearch.processor.factory;
 
 import static org.opensearch.ingest.ConfigurationUtils.readMap;
 import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
