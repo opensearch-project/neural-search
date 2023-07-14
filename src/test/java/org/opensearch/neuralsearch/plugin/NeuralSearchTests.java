@@ -15,12 +15,12 @@ import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
 import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.search.query.QueryPhaseSearcher;
-import org.opensearch.test.OpenSearchTestCase;
 
-public class NeuralSearchTests extends OpenSearchTestCase {
+public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
     public void testQuerySpecs() {
         NeuralSearch plugin = new NeuralSearch();
@@ -37,8 +37,15 @@ public class NeuralSearchTests extends OpenSearchTestCase {
         Optional<QueryPhaseSearcher> queryPhaseSearcher = plugin.getQueryPhaseSearcher();
 
         assertNotNull(queryPhaseSearcher);
-        assertFalse(queryPhaseSearcher.isEmpty());
-        assertTrue(queryPhaseSearcher.get() instanceof HybridQueryPhaseSearcher);
+        assertTrue(queryPhaseSearcher.isEmpty());
+
+        initFeatureFlags();
+
+        Optional<QueryPhaseSearcher> queryPhaseSearcherWithFeatureFlagDisabled = plugin.getQueryPhaseSearcher();
+
+        assertNotNull(queryPhaseSearcherWithFeatureFlagDisabled);
+        assertFalse(queryPhaseSearcherWithFeatureFlagDisabled.isEmpty());
+        assertTrue(queryPhaseSearcherWithFeatureFlagDisabled.get() instanceof HybridQueryPhaseSearcher);
     }
 
     public void testProcessors() {

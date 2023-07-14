@@ -138,7 +138,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             TEST_KNN_VECTOR_FIELD_NAME_1,
             TEST_QUERY_TEXT,
             modelId.get(),
-            1,
+            3,
             null,
             null
         );
@@ -150,7 +150,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
 
         Map<String, Object> searchResponseAsMap = search(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, hybridQueryBuilderNeuralThenTerm, 3);
 
-        assertEquals(2, getHitCount(searchResponseAsMap));
+        assertEquals(3, getHitCount(searchResponseAsMap));
 
         List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
         List<Double> scores = new ArrayList<>();

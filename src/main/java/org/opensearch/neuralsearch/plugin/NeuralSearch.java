@@ -16,7 +16,8 @@ import java.util.function.Supplier;
 import org.opensearch.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.io.stream.NamedWriteableRegistry;
+import org.opensearch.common.util.FeatureFlags;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
@@ -39,11 +40,19 @@ import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.watcher.ResourceWatcherService;
 
+import com.google.common.annotations.VisibleForTesting;
+
 /**
  * Neural Search plugin class
  */
 public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, IngestPlugin, ExtensiblePlugin {
-
+    /**
+     * Gates the functionality of hybrid search
+     * Currently query phase searcher added with hybrid search will conflict with concurrent search in core.
+     * Once that problem is resolved this feature flag can be removed.
+     */
+    @VisibleForTesting
+    public static final String NEURAL_SEARCH_HYBRID_SEARCH_ENABLED = "neural_search_hybrid_search_enabled";
     private MLCommonsClientAccessor clientAccessor;
 
     @Override
@@ -80,6 +89,10 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     @Override
     public Optional<QueryPhaseSearcher> getQueryPhaseSearcher() {
-        return Optional.of(new HybridQueryPhaseSearcher());
+        if (FeatureFlags.isEnabled(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED)) {
+            return Optional.of(new HybridQueryPhaseSearcher());
+        }
+        // we want feature be disabled by default due to risk of colliding and breaking concurrent search in core
+        return Optional.empty();
     }
 }
