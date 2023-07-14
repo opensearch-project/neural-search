@@ -8,6 +8,7 @@ package org.opensearch.neuralsearch.query;
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.singletonMap;
 import static java.util.stream.Collectors.toList;
+import static org.opensearch.neuralsearch.plugin.NeuralSearch.NEURAL_SEARCH_HYBRID_SEARCH_ENABLED;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -28,6 +29,7 @@ import org.apache.lucene.search.Weight;
 import org.opensearch.Version;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.common.CheckedConsumer;
+import org.opensearch.common.SuppressForbidden;
 import org.opensearch.common.compress.CompressedXContent;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.XContentFactory;
@@ -221,5 +223,10 @@ public abstract class OpenSearchQueryTestCase extends OpenSearchTestCase {
                 return Float.MAX_VALUE;
             }
         };
+    }
+
+    @SuppressForbidden(reason = "manipulates system properties for testing")
+    protected static void initFeatureFlags() {
+        System.setProperty(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED, "true");
     }
 }
