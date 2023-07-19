@@ -12,12 +12,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import joptsimple.internal.Strings;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
 
 import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.opensearch.action.search.QueryPhaseResultConsumer;
 import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.action.search.SearchPhaseName;
@@ -93,17 +93,14 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
                 return;
             }
 
-            TopDocsAndMaxScore[] topDocsAndMaxScores = getCompoundQueryTopDocsForResult(searchPhaseResult);
-            CompoundTopDocs[] queryTopDocs = Arrays.stream(topDocsAndMaxScores)
+            TopDocsAndMaxScore[] topDocsAndMaxScores = getCompoundQueryTopDocsFromSearchPhaseResult(searchPhaseResult);
+            List<CompoundTopDocs> queryTopDocs = Arrays.stream(topDocsAndMaxScores)
                 .map(td -> td != null ? (CompoundTopDocs) td.topDocs : null)
-                .collect(Collectors.toList())
-                .toArray(CompoundTopDocs[]::new);
+                .collect(Collectors.toList());
 
-            ScoreNormalizer scoreNormalizer = new ScoreNormalizer();
-            scoreNormalizer.normalizeScores(queryTopDocs, normalizationTechnique);
+            ScoreNormalizer.normalizeScores(queryTopDocs, normalizationTechnique);
 
-            ScoreCombiner scoreCombinator = new ScoreCombiner();
-            List<Float> combinedMaxScores = scoreCombinator.combineScores(queryTopDocs, combinationTechnique);
+            List<Float> combinedMaxScores = ScoreCombiner.combineScores(queryTopDocs, combinationTechnique);
 
             updateOriginalQueryResults(searchPhaseResult, queryTopDocs, topDocsAndMaxScores, combinedMaxScores);
         }
@@ -140,10 +137,10 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
     }
 
     protected void validateParameters(final String normalizationTechniqueName, final String combinationTechniqueName) {
-        if (Strings.isNullOrEmpty(normalizationTechniqueName)) {
+        if (StringUtils.isEmpty(normalizationTechniqueName)) {
             throw new IllegalArgumentException("normalization technique cannot be empty");
         }
-        if (Strings.isNullOrEmpty(combinationTechniqueName)) {
+        if (StringUtils.isEmpty(combinationTechniqueName)) {
             throw new IllegalArgumentException("combination technique cannot be empty");
         }
         if (!EnumUtils.isValidEnum(ScoreNormalizationTechnique.class, normalizationTechniqueName)) {
@@ -162,24 +159,22 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
             || !(maybeResult.get().queryResult().topDocs().topDocs instanceof CompoundTopDocs);
     }
 
-    private <Result extends SearchPhaseResult> TopDocsAndMaxScore[] getCompoundQueryTopDocsForResult(
+    private <Result extends SearchPhaseResult> TopDocsAndMaxScore[] getCompoundQueryTopDocsFromSearchPhaseResult(
         final SearchPhaseResults<Result> results
     ) {
         List<Result> preShardResultList = results.getAtomicArray().asList();
         TopDocsAndMaxScore[] result = new TopDocsAndMaxScore[results.getAtomicArray().length()];
-        int idx = 0;
-        for (Result shardResult : preShardResultList) {
+        for (int idx = 0; idx < preShardResultList.size(); idx++) {
+            Result shardResult = preShardResultList.get(idx);
             if (shardResult == null) {
-                idx++;
                 continue;
             }
             QuerySearchResult querySearchResult = shardResult.queryResult();
             TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
             if (!(topDocsAndMaxScore.topDocs instanceof CompoundTopDocs)) {
-                idx++;
                 continue;
             }
-            result[idx++] = topDocsAndMaxScore;
+            result[idx] = topDocsAndMaxScore;
         }
         return result;
     }
@@ -187,14 +182,14 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
     @VisibleForTesting
     protected <Result extends SearchPhaseResult> void updateOriginalQueryResults(
         final SearchPhaseResults<Result> results,
-        final CompoundTopDocs[] queryTopDocs,
+        final List<CompoundTopDocs> queryTopDocs,
         TopDocsAndMaxScore[] topDocsAndMaxScores,
         List<Float> combinedMaxScores
     ) {
         List<Result> preShardResultList = results.getAtomicArray().asList();
         for (int i = 0; i < preShardResultList.size(); i++) {
             QuerySearchResult querySearchResult = preShardResultList.get(i).queryResult();
-            CompoundTopDocs updatedTopDocs = queryTopDocs[i];
+            CompoundTopDocs updatedTopDocs = queryTopDocs.get(i);
             if (updatedTopDocs == null) {
                 continue;
             }

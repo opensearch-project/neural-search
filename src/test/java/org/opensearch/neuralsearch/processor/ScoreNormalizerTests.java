@@ -20,22 +20,22 @@ public class ScoreNormalizerTests extends OpenSearchTestCase {
 
     public void testEmptyResults_whenEmptyResultsAndDefaultMethod_thenNoProcessing() {
         ScoreNormalizer scoreNormalizer = new ScoreNormalizer();
-        final CompoundTopDocs[] queryTopDocs = new CompoundTopDocs[0];
-        scoreNormalizer.normalizeScores(queryTopDocs, ScoreNormalizationTechnique.DEFAULT);
+        scoreNormalizer.normalizeScores(List.of(), ScoreNormalizationTechnique.DEFAULT);
     }
 
     @SneakyThrows
     public void testNormalization_whenOneSubqueryAndOneShardAndDefaultMethod_thenScoreNormalized() {
         ScoreNormalizer scoreNormalizer = new ScoreNormalizer();
-        final CompoundTopDocs[] queryTopDocs = new CompoundTopDocs[] {
+        final List<CompoundTopDocs> queryTopDocs = List.of(
             new CompoundTopDocs(
                 new TotalHits(1, TotalHits.Relation.EQUAL_TO),
                 List.of(new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(1, 2.0f) }))
-            ) };
+            )
+        );
         scoreNormalizer.normalizeScores(queryTopDocs, ScoreNormalizationTechnique.DEFAULT);
         assertNotNull(queryTopDocs);
-        assertEquals(1, queryTopDocs.length);
-        CompoundTopDocs resultDoc = queryTopDocs[0];
+        assertEquals(1, queryTopDocs.size());
+        CompoundTopDocs resultDoc = queryTopDocs.get(0);
         assertNotNull(resultDoc.getCompoundTopDocs());
         assertEquals(1, resultDoc.getCompoundTopDocs().size());
         TopDocs topDoc = resultDoc.getCompoundTopDocs().get(0);
@@ -51,7 +51,7 @@ public class ScoreNormalizerTests extends OpenSearchTestCase {
     @SneakyThrows
     public void testNormalization_whenOneSubqueryMultipleHitsAndOneShardAndDefaultMethod_thenScoreNormalized() {
         ScoreNormalizer scoreNormalizer = new ScoreNormalizer();
-        final CompoundTopDocs[] queryTopDocs = new CompoundTopDocs[] {
+        final List<CompoundTopDocs> queryTopDocs = List.of(
             new CompoundTopDocs(
                 new TotalHits(3, TotalHits.Relation.EQUAL_TO),
                 List.of(
@@ -60,11 +60,12 @@ public class ScoreNormalizerTests extends OpenSearchTestCase {
                         new ScoreDoc[] { new ScoreDoc(1, 10.0f), new ScoreDoc(2, 2.5f), new ScoreDoc(4, 0.1f) }
                     )
                 )
-            ) };
+            )
+        );
         scoreNormalizer.normalizeScores(queryTopDocs, ScoreNormalizationTechnique.DEFAULT);
         assertNotNull(queryTopDocs);
-        assertEquals(1, queryTopDocs.length);
-        CompoundTopDocs resultDoc = queryTopDocs[0];
+        assertEquals(1, queryTopDocs.size());
+        CompoundTopDocs resultDoc = queryTopDocs.get(0);
         assertNotNull(resultDoc.getCompoundTopDocs());
         assertEquals(1, resultDoc.getCompoundTopDocs().size());
         TopDocs topDoc = resultDoc.getCompoundTopDocs().get(0);
@@ -82,7 +83,7 @@ public class ScoreNormalizerTests extends OpenSearchTestCase {
 
     public void testNormalization_whenMultipleSubqueriesMultipleHitsAndOneShardAndDefaultMethod_thenScoreNormalized() {
         ScoreNormalizer scoreNormalizer = new ScoreNormalizer();
-        final CompoundTopDocs[] queryTopDocs = new CompoundTopDocs[] {
+        final List<CompoundTopDocs> queryTopDocs = List.of(
             new CompoundTopDocs(
                 new TotalHits(3, TotalHits.Relation.EQUAL_TO),
                 List.of(
@@ -95,12 +96,13 @@ public class ScoreNormalizerTests extends OpenSearchTestCase {
                         new ScoreDoc[] { new ScoreDoc(3, 0.8f), new ScoreDoc(5, 0.5f) }
                     )
                 )
-            ) };
+            )
+        );
         scoreNormalizer.normalizeScores(queryTopDocs, ScoreNormalizationTechnique.DEFAULT);
 
         assertNotNull(queryTopDocs);
-        assertEquals(1, queryTopDocs.length);
-        CompoundTopDocs resultDoc = queryTopDocs[0];
+        assertEquals(1, queryTopDocs.size());
+        CompoundTopDocs resultDoc = queryTopDocs.get(0);
         assertNotNull(resultDoc.getCompoundTopDocs());
         assertEquals(2, resultDoc.getCompoundTopDocs().size());
         // sub-query one
@@ -129,7 +131,7 @@ public class ScoreNormalizerTests extends OpenSearchTestCase {
 
     public void testNormalization_whenMultipleSubqueriesMultipleHitsMultipleShardsAndDefaultMethod_thenScoreNormalized() {
         ScoreNormalizer scoreNormalizer = new ScoreNormalizer();
-        final CompoundTopDocs[] queryTopDocs = new CompoundTopDocs[] {
+        final List<CompoundTopDocs> queryTopDocs = List.of(
             new CompoundTopDocs(
                 new TotalHits(3, TotalHits.Relation.EQUAL_TO),
                 List.of(
@@ -159,12 +161,13 @@ public class ScoreNormalizerTests extends OpenSearchTestCase {
                     new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
                     new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0])
                 )
-            ) };
+            )
+        );
         scoreNormalizer.normalizeScores(queryTopDocs, ScoreNormalizationTechnique.DEFAULT);
         assertNotNull(queryTopDocs);
-        assertEquals(3, queryTopDocs.length);
+        assertEquals(3, queryTopDocs.size());
         // shard one
-        CompoundTopDocs resultDocShardOne = queryTopDocs[0];
+        CompoundTopDocs resultDocShardOne = queryTopDocs.get(0);
         assertEquals(2, resultDocShardOne.getCompoundTopDocs().size());
         // sub-query one
         TopDocs topDocSubqueryOne = resultDocShardOne.getCompoundTopDocs().get(0);
@@ -190,7 +193,7 @@ public class ScoreNormalizerTests extends OpenSearchTestCase {
         assertEquals(5, topDocSubqueryTwo.scoreDocs[topDocSubqueryTwo.scoreDocs.length - 1].doc);
 
         // shard two
-        CompoundTopDocs resultDocShardTwo = queryTopDocs[1];
+        CompoundTopDocs resultDocShardTwo = queryTopDocs.get(1);
         assertEquals(2, resultDocShardTwo.getCompoundTopDocs().size());
         // sub-query one
         TopDocs topDocShardTwoSubqueryOne = resultDocShardTwo.getCompoundTopDocs().get(0);
@@ -210,7 +213,7 @@ public class ScoreNormalizerTests extends OpenSearchTestCase {
         assertEquals(9, topDocShardTwoSubqueryTwo.scoreDocs[topDocShardTwoSubqueryTwo.scoreDocs.length - 1].doc);
 
         // shard three
-        CompoundTopDocs resultDocShardThree = queryTopDocs[2];
+        CompoundTopDocs resultDocShardThree = queryTopDocs.get(2);
         assertEquals(2, resultDocShardThree.getCompoundTopDocs().size());
         // sub-query one
         TopDocs topDocShardThreeSubqueryOne = resultDocShardThree.getCompoundTopDocs().get(0);

@@ -36,10 +36,13 @@ public class ScoreCombiner {
      * @param combinationTechnique exact combination method that should be applied
      * @return list of max combined scores for each shard
      */
-    public List<Float> combineScores(final CompoundTopDocs[] queryTopDocs, final ScoreCombinationTechnique combinationTechnique) {
+    public static List<Float> combineScores(
+        final List<CompoundTopDocs> queryTopDocs,
+        final ScoreCombinationTechnique combinationTechnique
+    ) {
         List<Float> maxScores = new ArrayList<>();
-        for (int i = 0; i < queryTopDocs.length; i++) {
-            CompoundTopDocs compoundQueryTopDocs = queryTopDocs[i];
+        for (int i = 0; i < queryTopDocs.size(); i++) {
+            CompoundTopDocs compoundQueryTopDocs = queryTopDocs.get(i);
             if (Objects.isNull(compoundQueryTopDocs) || compoundQueryTopDocs.totalHits.value == 0) {
                 maxScores.add(ZERO_SCORE);
                 continue;
@@ -76,9 +79,7 @@ public class ScoreCombiner {
                 (a, b) -> Float.compare(combinedNormalizedScoresByDocId.get(b), combinedNormalizedScoresByDocId.get(a))
             );
             // we're merging docs with normalized and combined scores. we need to have only maxHits results
-            for (int docId : normalizedScoresPerDoc.keySet()) {
-                pq.add(docId);
-            }
+            pq.addAll(normalizedScoresPerDoc.keySet());
 
             ScoreDoc[] finalScoreDocs = new ScoreDoc[maxHits];
             float maxScore = combinedNormalizedScoresByDocId.get(pq.peek());

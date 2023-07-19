@@ -5,7 +5,6 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -28,8 +27,8 @@ public class ScoreNormalizer {
      * @param queryTopDocs original query results from multiple shards and multiple sub-queries
      * @param normalizationTechnique exact normalization method that should be applied
      */
-    public void normalizeScores(final CompoundTopDocs[] queryTopDocs, final ScoreNormalizationTechnique normalizationTechnique) {
-        Optional<CompoundTopDocs> maybeCompoundQuery = Arrays.stream(queryTopDocs)
+    public static void normalizeScores(final List<CompoundTopDocs> queryTopDocs, final ScoreNormalizationTechnique normalizationTechnique) {
+        Optional<CompoundTopDocs> maybeCompoundQuery = queryTopDocs.stream()
             .filter(topDocs -> Objects.nonNull(topDocs) && !topDocs.getCompoundTopDocs().isEmpty())
             .findAny();
         if (maybeCompoundQuery.isEmpty()) {
