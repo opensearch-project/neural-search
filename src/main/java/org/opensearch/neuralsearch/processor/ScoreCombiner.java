@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.PriorityQueue;
@@ -41,8 +40,7 @@ public class ScoreCombiner {
         final ScoreCombinationTechnique combinationTechnique
     ) {
         List<Float> maxScores = new ArrayList<>();
-        for (int i = 0; i < queryTopDocs.size(); i++) {
-            CompoundTopDocs compoundQueryTopDocs = queryTopDocs.get(i);
+        for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
             if (Objects.isNull(compoundQueryTopDocs) || compoundQueryTopDocs.totalHits.value == 0) {
                 maxScores.add(ZERO_SCORE);
                 continue;
@@ -56,12 +54,12 @@ public class ScoreCombiner {
                 TopDocs topDocs = topDocsPerSubQuery.get(j);
                 int hits = 0;
                 for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
-                    if (!normalizedScoresPerDoc.containsKey(scoreDoc.doc)) {
+                    normalizedScoresPerDoc.putIfAbsent(scoreDoc.doc, normalizedScoresPerDoc.computeIfAbsent(scoreDoc.doc, key -> {
                         float[] scores = new float[topDocsPerSubQuery.size()];
                         // we initialize with -1.0, as after normalization it's possible that score is 0.0
                         Arrays.fill(scores, -1.0f);
-                        normalizedScoresPerDoc.put(scoreDoc.doc, scores);
-                    }
+                        return scores;
+                    }));
                     normalizedScoresPerDoc.get(scoreDoc.doc)[j] = scoreDoc.score;
                     hits++;
                 }
@@ -90,7 +88,6 @@ public class ScoreCombiner {
             }
             compoundQueryTopDocs.scoreDocs = finalScoreDocs;
             compoundQueryTopDocs.totalHits = new TotalHits(maxHits, totalHits);
-            log.info(String.format(Locale.ROOT, "update top docs maxScore, updated value %f", maxScore));
             maxScores.add(maxScore);
         }
         return maxScores;

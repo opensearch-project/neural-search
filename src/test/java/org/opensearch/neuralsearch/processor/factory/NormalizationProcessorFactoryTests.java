@@ -13,6 +13,8 @@ import java.util.Map;
 import lombok.SneakyThrows;
 
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
+import org.opensearch.neuralsearch.processor.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.ScoreNormalizationTechnique;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.test.OpenSearchTestCase;
@@ -65,5 +67,90 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         assertTrue(searchPhaseResultsProcessor instanceof NormalizationProcessor);
         NormalizationProcessor normalizationProcessor = (NormalizationProcessor) searchPhaseResultsProcessor;
         assertEquals("normalization-processor", normalizationProcessor.getType());
+    }
+
+    public void testInputValidation_whenInvalidParameters_thenFail() {
+        NormalizationProcessorFactory normalizationProcessorFactory = new NormalizationProcessorFactory();
+        Map<String, Processor.Factory<SearchPhaseResultsProcessor>> processorFactories = new HashMap<>();
+        String tag = "tag";
+        String description = "description";
+        boolean ignoreFailure = false;
+        Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
+
+        expectThrows(
+            IllegalArgumentException.class,
+            () -> normalizationProcessorFactory.create(
+                processorFactories,
+                tag,
+                description,
+                ignoreFailure,
+                new HashMap<>(
+                    Map.of(
+                        NormalizationProcessor.NORMALIZATION_CLAUSE,
+                        Map.of(NormalizationProcessor.TECHNIQUE, ""),
+                        NormalizationProcessor.COMBINATION_CLAUSE,
+                        Map.of(NormalizationProcessor.TECHNIQUE, ScoreCombinationTechnique.ARITHMETIC_MEAN.name())
+                    )
+                ),
+                pipelineContext
+            )
+        );
+
+        expectThrows(
+            IllegalArgumentException.class,
+            () -> normalizationProcessorFactory.create(
+                processorFactories,
+                tag,
+                description,
+                ignoreFailure,
+                new HashMap<>(
+                    Map.of(
+                        NormalizationProcessor.NORMALIZATION_CLAUSE,
+                        Map.of(NormalizationProcessor.TECHNIQUE, ScoreNormalizationTechnique.MIN_MAX.name()),
+                        NormalizationProcessor.COMBINATION_CLAUSE,
+                        Map.of(NormalizationProcessor.TECHNIQUE, "")
+                    )
+                ),
+                pipelineContext
+            )
+        );
+
+        expectThrows(
+            IllegalArgumentException.class,
+            () -> normalizationProcessorFactory.create(
+                processorFactories,
+                tag,
+                description,
+                ignoreFailure,
+                new HashMap<>(
+                    Map.of(
+                        NormalizationProcessor.NORMALIZATION_CLAUSE,
+                        Map.of(NormalizationProcessor.TECHNIQUE, "random_name_for_normalization"),
+                        NormalizationProcessor.COMBINATION_CLAUSE,
+                        Map.of(NormalizationProcessor.TECHNIQUE, ScoreCombinationTechnique.ARITHMETIC_MEAN.name())
+                    )
+                ),
+                pipelineContext
+            )
+        );
+
+        expectThrows(
+            IllegalArgumentException.class,
+            () -> normalizationProcessorFactory.create(
+                processorFactories,
+                tag,
+                description,
+                ignoreFailure,
+                new HashMap<>(
+                    Map.of(
+                        NormalizationProcessor.NORMALIZATION_CLAUSE,
+                        Map.of(NormalizationProcessor.TECHNIQUE, ScoreNormalizationTechnique.MIN_MAX.name()),
+                        NormalizationProcessor.COMBINATION_CLAUSE,
+                        Map.of(NormalizationProcessor.TECHNIQUE, "random_name_for_combination")
+                    )
+                ),
+                pipelineContext
+            )
+        );
     }
 }

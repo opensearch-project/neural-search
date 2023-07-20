@@ -19,7 +19,7 @@ public enum ScoreCombinationTechnique {
     ARITHMETIC_MEAN {
 
         @Override
-        public float combine(float[] scores) {
+        public float combine(final float[] scores) {
             float combinedScore = 0.0f;
             int count = 0;
             for (float score : scores) {
@@ -39,5 +39,5 @@ public enum ScoreCombinationTechnique {
      * @param scores array of collected original scores
      * @return combined score
      */
-    abstract float combine(float[] scores);
+    abstract float combine(final float[] scores);
 }

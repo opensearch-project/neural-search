@@ -99,8 +99,8 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
             new NormalizationProcessor(
                 PROCESSOR_TAG,
                 DESCRIPTION,
-                ScoreNormalizationTechnique.MIN_MAX.name(),
-                ScoreCombinationTechnique.ARITHMETIC_MEAN.name()
+                ScoreNormalizationTechnique.MIN_MAX,
+                ScoreCombinationTechnique.ARITHMETIC_MEAN
             )
         );
 
@@ -124,44 +124,13 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         verify(normalizationProcessor, never()).updateOriginalQueryResults(any(), any(), any(), any());
     }
 
-    public void testInputValidation_whenInvalidParameters_thenFail() {
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> new NormalizationProcessor(PROCESSOR_TAG, DESCRIPTION, "", ScoreCombinationTechnique.ARITHMETIC_MEAN.name())
-        );
-
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> new NormalizationProcessor(PROCESSOR_TAG, DESCRIPTION, ScoreNormalizationTechnique.MIN_MAX.name(), "")
-        );
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> new NormalizationProcessor(
-                PROCESSOR_TAG,
-                DESCRIPTION,
-                "random_name_for_normalization",
-                ScoreCombinationTechnique.ARITHMETIC_MEAN.name()
-            )
-        );
-
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> new NormalizationProcessor(
-                PROCESSOR_TAG,
-                DESCRIPTION,
-                ScoreNormalizationTechnique.MIN_MAX.name(),
-                "random_name_for_combination"
-            )
-        );
-    }
-
     public void testSearchResultTypes_whenCompoundDocs_thenDoNormalizationCombination() {
         NormalizationProcessor normalizationProcessor = spy(
             new NormalizationProcessor(
                 PROCESSOR_TAG,
                 DESCRIPTION,
-                ScoreNormalizationTechnique.MIN_MAX.name(),
-                ScoreCombinationTechnique.ARITHMETIC_MEAN.name()
+                ScoreNormalizationTechnique.MIN_MAX,
+                ScoreCombinationTechnique.ARITHMETIC_MEAN
             )
         );
 

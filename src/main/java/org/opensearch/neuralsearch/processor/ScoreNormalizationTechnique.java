@@ -5,9 +5,6 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import lombok.Builder;
-import lombok.Data;
-
 import com.google.common.primitives.Floats;
 
 /**
@@ -21,7 +18,7 @@ public enum ScoreNormalizationTechnique {
      */
     MIN_MAX {
         @Override
-        float normalize(ScoreNormalizationRequest request) {
+        float normalize(final ScoreNormalizationRequest request) {
             // edge case when there is only one score and min and max scores are same
             if (Floats.compare(request.getMaxScore(), request.getMinScore()) == 0
                 && Floats.compare(request.getMaxScore(), request.getScore()) == 0) {
@@ -42,16 +39,5 @@ public enum ScoreNormalizationTechnique {
      * @param request complex request DTO that defines parameters like min/max scores etc.
      * @return normalized score
      */
-    abstract float normalize(ScoreNormalizationRequest request);
-
-    /**
-     * DTO for normalize method request
-     */
-    @Data
-    @Builder
-    static class ScoreNormalizationRequest {
-        private final float score;
-        private final float minScore;
-        private final float maxScore;
-    }
+    abstract float normalize(final ScoreNormalizationRequest request);
 }

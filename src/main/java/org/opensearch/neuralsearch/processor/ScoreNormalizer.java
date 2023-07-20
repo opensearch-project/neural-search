@@ -6,7 +6,6 @@
 package org.opensearch.neuralsearch.processor;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -23,13 +22,14 @@ import org.opensearch.neuralsearch.search.CompoundTopDocs;
 public class ScoreNormalizer {
 
     /**
-     * Performs score normalization based on input combination technique. Mutates input object by updating normalized scores.
+     * Performs score normalization based on input normalization technique. Mutates input object by updating normalized scores.
      * @param queryTopDocs original query results from multiple shards and multiple sub-queries
      * @param normalizationTechnique exact normalization method that should be applied
      */
     public static void normalizeScores(final List<CompoundTopDocs> queryTopDocs, final ScoreNormalizationTechnique normalizationTechnique) {
         Optional<CompoundTopDocs> maybeCompoundQuery = queryTopDocs.stream()
-            .filter(topDocs -> Objects.nonNull(topDocs) && !topDocs.getCompoundTopDocs().isEmpty())
+            .filter(Objects::nonNull)
+            .filter(topDocs -> topDocs.getCompoundTopDocs().size() > 0)
             .findAny();
         if (maybeCompoundQuery.isEmpty()) {
             return;
@@ -64,23 +64,12 @@ public class ScoreNormalizer {
             for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
                 TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
-                    ScoreNormalizationTechnique.ScoreNormalizationRequest normalizationRequest =
-                        ScoreNormalizationTechnique.ScoreNormalizationRequest.builder()
-                            .score(scoreDoc.score)
-                            .minScore(minMaxScores[j][0])
-                            .maxScore(minMaxScores[j][1])
-                            .build();
-                    float originalScore = scoreDoc.score;
+                    ScoreNormalizationRequest normalizationRequest = ScoreNormalizationRequest.builder()
+                        .score(scoreDoc.score)
+                        .minScore(minMaxScores[j][0])
+                        .maxScore(minMaxScores[j][1])
+                        .build();
                     scoreDoc.score = normalizationTechnique.normalize(normalizationRequest);
-                    log.info(
-                        String.format(
-                            Locale.ROOT,
-                            "update doc [%d] score, original value: %f, updated value %f",
-                            scoreDoc.doc,
-                            originalScore,
-                            scoreDoc.score
-                        )
-                    );
                 }
             }
         }
