@@ -5,11 +5,10 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -20,7 +19,8 @@ import org.opensearch.action.search.QueryPhaseResultConsumer;
 import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.action.search.SearchPhaseName;
 import org.opensearch.action.search.SearchPhaseResults;
-import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.search.CompoundTopDocs;
 import org.opensearch.search.SearchPhaseResult;
 import org.opensearch.search.internal.SearchContext;
@@ -48,6 +48,7 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
     final ScoreNormalizationTechnique normalizationTechnique;
     @Getter(AccessLevel.PACKAGE)
     final ScoreCombinationTechnique combinationTechnique;
+    final NormalizationProcessorWorkflow normalizationWorkflow;
 
     /**
      * Method abstracts functional aspect of score normalization and score combination. Exact methods for each processing stage
@@ -64,17 +65,8 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
         if (shouldSearchResultsBeIgnored(searchPhaseResult)) {
             return;
         }
-
-        TopDocsAndMaxScore[] topDocsAndMaxScores = getCompoundQueryTopDocsFromSearchPhaseResult(searchPhaseResult);
-        List<CompoundTopDocs> queryTopDocs = Arrays.stream(topDocsAndMaxScores)
-            .map(td -> td != null ? (CompoundTopDocs) td.topDocs : null)
-            .collect(Collectors.toList());
-
-        ScoreNormalizer.normalizeScores(queryTopDocs, normalizationTechnique);
-
-        List<Float> combinedMaxScores = ScoreCombiner.combineScores(queryTopDocs, combinationTechnique);
-
-        updateOriginalQueryResults(searchPhaseResult, queryTopDocs, topDocsAndMaxScores, combinedMaxScores);
+        List<QuerySearchResult> querySearchResults = getQuerySearchResults(searchPhaseResult);
+        normalizationWorkflow.execute(querySearchResults, normalizationTechnique, combinationTechnique);
     }
 
     @Override
@@ -128,46 +120,16 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
             || !(maybeResult.get().queryResult().topDocs().topDocs instanceof CompoundTopDocs);
     }
 
-    private <Result extends SearchPhaseResult> TopDocsAndMaxScore[] getCompoundQueryTopDocsFromSearchPhaseResult(
-        final SearchPhaseResults<Result> results
-    ) {
-        List<Result> preShardResultList = results.getAtomicArray().asList();
-        TopDocsAndMaxScore[] result = new TopDocsAndMaxScore[preShardResultList.size()];
-        for (int idx = 0; idx < preShardResultList.size(); idx++) {
-            Result shardResult = preShardResultList.get(idx);
+    private <Result extends SearchPhaseResult> List<QuerySearchResult> getQuerySearchResults(final SearchPhaseResults<Result> results) {
+        List<Result> resultsPerShard = results.getAtomicArray().asList();
+        List<QuerySearchResult> querySearchResults = new ArrayList<>();
+        for (Result shardResult : resultsPerShard) {
             if (shardResult == null) {
+                querySearchResults.add(null);
                 continue;
             }
-            QuerySearchResult querySearchResult = shardResult.queryResult();
-            TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
-            if (!(topDocsAndMaxScore.topDocs instanceof CompoundTopDocs)) {
-                continue;
-            }
-            result[idx] = topDocsAndMaxScore;
+            querySearchResults.add(shardResult.queryResult());
         }
-        return result;
-    }
-
-    @VisibleForTesting
-    protected <Result extends SearchPhaseResult> void updateOriginalQueryResults(
-        final SearchPhaseResults<Result> results,
-        final List<CompoundTopDocs> queryTopDocs,
-        TopDocsAndMaxScore[] topDocsAndMaxScores,
-        List<Float> combinedMaxScores
-    ) {
-        List<Result> preShardResultList = results.getAtomicArray().asList();
-        for (int i = 0; i < preShardResultList.size(); i++) {
-            CompoundTopDocs updatedTopDocs = queryTopDocs.get(i);
-            if (Objects.isNull(updatedTopDocs)) {
-                continue;
-            }
-            float maxScore = updatedTopDocs.totalHits.value > 0 ? updatedTopDocs.scoreDocs[0].score : 0.0f;
-            TopDocsAndMaxScore topDocsAndMaxScore = new TopDocsAndMaxScore(updatedTopDocs, maxScore);
-            QuerySearchResult querySearchResult = preShardResultList.get(i).queryResult();
-            querySearchResult.topDocs(topDocsAndMaxScore, null);
-            if (topDocsAndMaxScores[i] != null) {
-                topDocsAndMaxScores[i].maxScore = combinedMaxScores.get(i);
-            }
-        }
+        return querySearchResults;
     }
 }

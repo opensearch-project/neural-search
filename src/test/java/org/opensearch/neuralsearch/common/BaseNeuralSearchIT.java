@@ -46,8 +46,8 @@ import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.neuralsearch.OpenSearchSecureRestTestCase;
-import org.opensearch.neuralsearch.processor.ScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 
 import com.google.common.collect.ImmutableList;
 

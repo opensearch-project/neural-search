@@ -13,8 +13,9 @@ import java.util.Objects;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
-import org.opensearch.neuralsearch.processor.ScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 
@@ -58,7 +59,8 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
             tag,
             description,
             ScoreNormalizationTechnique.valueOf(normalizationTechnique),
-            ScoreCombinationTechnique.valueOf(combinationTechnique)
+            ScoreCombinationTechnique.valueOf(combinationTechnique),
+            NormalizationProcessorWorkflow.create()
         );
     }
 

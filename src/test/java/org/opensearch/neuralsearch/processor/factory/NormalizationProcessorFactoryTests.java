@@ -13,8 +13,8 @@ import java.util.Map;
 import lombok.SneakyThrows;
 
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
-import org.opensearch.neuralsearch.processor.ScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.test.OpenSearchTestCase;
