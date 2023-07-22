@@ -20,15 +20,12 @@ import com.google.common.primitives.Floats;
  * Abstracts normalization of scores based on min-max method
  */
 public class MinMaxScoreNormalizationMethod implements ScoreNormalizationMethod {
-    static final float MIN_SCORE = 0.001f;
-    static final float SINGLE_RESULT_SCORE = 1.0f;
+    private static final float MIN_SCORE = 0.001f;
+    private static final float SINGLE_RESULT_SCORE = 1.0f;
 
-    private static MinMaxScoreNormalizationMethod INSTANCE = new MinMaxScoreNormalizationMethod();
+    private static final MinMaxScoreNormalizationMethod INSTANCE = new MinMaxScoreNormalizationMethod();
 
     public static MinMaxScoreNormalizationMethod getInstance() {
-        if (Objects.isNull(INSTANCE)) {
-            INSTANCE = new MinMaxScoreNormalizationMethod();
-        }
         return INSTANCE;
     }
 

@@ -9,8 +9,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import lombok.AccessLevel;
-import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
@@ -26,17 +25,11 @@ import com.google.common.annotations.VisibleForTesting;
  * Class abstracts steps required for score normalization and combination, this includes pre-processing of income data
  * and post-processing for final results
  */
-@NoArgsConstructor(access = AccessLevel.PRIVATE)
+@AllArgsConstructor
 public class NormalizationProcessorWorkflow {
 
-    /**
-     * Return instance of workflow class. Making default constructor private for now
-     * as we may use singleton pattern here and share one instance among processors
-     * @return instance of NormalizationProcessorWorkflow
-     */
-    public static NormalizationProcessorWorkflow create() {
-        return new NormalizationProcessorWorkflow();
-    }
+    private final ScoreNormalizer scoreNormalizer;
+    private final ScoreCombiner scoreCombiner;
 
     /**
      * Start execution of this workflow
@@ -53,19 +46,18 @@ public class NormalizationProcessorWorkflow {
         List<CompoundTopDocs> queryTopDocs = getQueryTopDocs(querySearchResults);
 
         // normalize
-        ScoreNormalizer scoreNormalizer = new ScoreNormalizer();
         scoreNormalizer.normalizeScores(queryTopDocs, normalizationTechnique);
 
         // combine
-        ScoreCombiner scoreCombiner = new ScoreCombiner();
         List<Float> combinedMaxScores = scoreCombiner.combineScores(queryTopDocs, combinationTechnique);
 
         // post-process data
         updateOriginalQueryResults(querySearchResults, queryTopDocs, combinedMaxScores);
     }
 
-    private List<CompoundTopDocs> getQueryTopDocs(List<QuerySearchResult> querySearchResults) {
+    private List<CompoundTopDocs> getQueryTopDocs(final List<QuerySearchResult> querySearchResults) {
         List<CompoundTopDocs> queryTopDocs = querySearchResults.stream()
+            .filter(searchResult -> Objects.nonNull(searchResult.topDocs()))
             .filter(searchResult -> searchResult.topDocs().topDocs instanceof CompoundTopDocs)
             .map(searchResult -> (CompoundTopDocs) searchResult.topDocs().topDocs)
             .collect(Collectors.toList());
@@ -74,34 +66,20 @@ public class NormalizationProcessorWorkflow {
 
     @VisibleForTesting
     protected void updateOriginalQueryResults(
-        List<QuerySearchResult> querySearchResults,
+        final List<QuerySearchResult> querySearchResults,
         final List<CompoundTopDocs> queryTopDocs,
-        List<Float> combinedMaxScores
+        final List<Float> combinedMaxScores
     ) {
-        TopDocsAndMaxScore[] topDocsAndMaxScores = new TopDocsAndMaxScore[querySearchResults.size()];
-        for (int idx = 0; idx < querySearchResults.size(); idx++) {
-            QuerySearchResult querySearchResult = querySearchResults.get(idx);
-            TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
-            if (!(topDocsAndMaxScore.topDocs instanceof CompoundTopDocs)) {
-                continue;
-            }
-            topDocsAndMaxScores[idx] = topDocsAndMaxScore;
-        }
         for (int i = 0; i < querySearchResults.size(); i++) {
             QuerySearchResult querySearchResult = querySearchResults.get(i);
+            if (!(querySearchResult.topDocs().topDocs instanceof CompoundTopDocs) || Objects.isNull(queryTopDocs.get(i))) {
+                continue;
+            }
             CompoundTopDocs updatedTopDocs = queryTopDocs.get(i);
-            if (Objects.isNull(updatedTopDocs)) {
-                continue;
-            }
             float maxScore = updatedTopDocs.totalHits.value > 0 ? updatedTopDocs.scoreDocs[0].score : 0.0f;
-            TopDocsAndMaxScore topDocsAndMaxScore = new TopDocsAndMaxScore(updatedTopDocs, maxScore);
-            if (querySearchResult == null) {
-                continue;
-            }
-            querySearchResult.topDocs(topDocsAndMaxScore, null);
-            if (topDocsAndMaxScores[i] != null) {
-                topDocsAndMaxScores[i].maxScore = combinedMaxScores.get(i);
-            }
+            TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(updatedTopDocs, maxScore);
+            querySearchResult.topDocs(updatedTopDocsAndMaxScore, null);
+            querySearchResults.get(i).topDocs().maxScore = combinedMaxScores.get(i);
         }
     }
 }

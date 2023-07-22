@@ -5,6 +5,7 @@
 
 package org.opensearch.neuralsearch.processor.factory;
 
+import static org.opensearch.ingest.ConfigurationUtils.newConfigurationException;
 import static org.opensearch.ingest.ConfigurationUtils.readOptionalMap;
 
 import java.util.Map;
@@ -15,7 +16,9 @@ import org.apache.commons.lang3.StringUtils;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 
@@ -23,6 +26,10 @@ import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
  * Factory for query results normalization processor for search pipeline. Instantiates processor based on user provided input.
  */
 public class NormalizationProcessorFactory implements Processor.Factory<SearchPhaseResultsProcessor> {
+    private final NormalizationProcessorWorkflow normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(
+        new ScoreNormalizer(),
+        new ScoreCombiner()
+    );
 
     @Override
     public SearchPhaseResultsProcessor create(
@@ -53,29 +60,49 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
             ? ScoreCombinationTechnique.DEFAULT.name()
             : (String) combinationClause.getOrDefault(NormalizationProcessor.TECHNIQUE, "");
 
-        validateParameters(normalizationTechnique, combinationTechnique);
+        validateParameters(normalizationTechnique, combinationTechnique, tag);
 
         return new NormalizationProcessor(
             tag,
             description,
             ScoreNormalizationTechnique.valueOf(normalizationTechnique),
             ScoreCombinationTechnique.valueOf(combinationTechnique),
-            NormalizationProcessorWorkflow.create()
+            normalizationProcessorWorkflow
         );
     }
 
-    protected void validateParameters(final String normalizationTechniqueName, final String combinationTechniqueName) {
+    protected void validateParameters(final String normalizationTechniqueName, final String combinationTechniqueName, final String tag) {
         if (StringUtils.isEmpty(normalizationTechniqueName)) {
-            throw new IllegalArgumentException("normalization technique cannot be empty");
+            throw newConfigurationException(
+                NormalizationProcessor.TYPE,
+                tag,
+                NormalizationProcessor.TECHNIQUE,
+                "normalization technique cannot be empty"
+            );
         }
         if (StringUtils.isEmpty(combinationTechniqueName)) {
-            throw new IllegalArgumentException("combination technique cannot be empty");
+            throw newConfigurationException(
+                NormalizationProcessor.TYPE,
+                tag,
+                NormalizationProcessor.TECHNIQUE,
+                "combination technique cannot be empty"
+            );
         }
         if (!EnumUtils.isValidEnum(ScoreNormalizationTechnique.class, normalizationTechniqueName)) {
-            throw new IllegalArgumentException("provided normalization technique is not supported");
+            throw newConfigurationException(
+                NormalizationProcessor.TYPE,
+                tag,
+                NormalizationProcessor.TECHNIQUE,
+                "provided normalization technique is not supported"
+            );
         }
         if (!EnumUtils.isValidEnum(ScoreCombinationTechnique.class, combinationTechniqueName)) {
-            throw new IllegalArgumentException("provided combination technique is not supported");
+            throw newConfigurationException(
+                NormalizationProcessor.TYPE,
+                tag,
+                NormalizationProcessor.TECHNIQUE,
+                "provided combination technique is not supported"
+            );
         }
     }
 }

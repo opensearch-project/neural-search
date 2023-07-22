@@ -12,6 +12,7 @@ import java.util.Map;
 
 import lombok.SneakyThrows;
 
+import org.opensearch.OpenSearchParseException;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
@@ -78,7 +79,7 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
 
         expectThrows(
-            IllegalArgumentException.class,
+            OpenSearchParseException.class,
             () -> normalizationProcessorFactory.create(
                 processorFactories,
                 tag,
@@ -97,7 +98,7 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         );
 
         expectThrows(
-            IllegalArgumentException.class,
+            OpenSearchParseException.class,
             () -> normalizationProcessorFactory.create(
                 processorFactories,
                 tag,
@@ -116,7 +117,7 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         );
 
         expectThrows(
-            IllegalArgumentException.class,
+            OpenSearchParseException.class,
             () -> normalizationProcessorFactory.create(
                 processorFactories,
                 tag,
@@ -135,7 +136,7 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         );
 
         expectThrows(
-            IllegalArgumentException.class,
+            OpenSearchParseException.class,
             () -> normalizationProcessorFactory.create(
                 processorFactories,
                 tag,

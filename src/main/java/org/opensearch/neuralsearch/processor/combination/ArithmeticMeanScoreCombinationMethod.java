@@ -5,8 +5,6 @@
 
 package org.opensearch.neuralsearch.processor.combination;
 
-import java.util.Objects;
-
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 
@@ -16,12 +14,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class ArithmeticMeanScoreCombinationMethod implements ScoreCombinationMethod {
 
-    private static ArithmeticMeanScoreCombinationMethod INSTANCE = new ArithmeticMeanScoreCombinationMethod();
+    private static final ArithmeticMeanScoreCombinationMethod INSTANCE = new ArithmeticMeanScoreCombinationMethod();
 
     public static ArithmeticMeanScoreCombinationMethod getInstance() {
-        if (Objects.isNull(INSTANCE)) {
-            INSTANCE = new ArithmeticMeanScoreCombinationMethod();
-        }
         return INSTANCE;
     }
 

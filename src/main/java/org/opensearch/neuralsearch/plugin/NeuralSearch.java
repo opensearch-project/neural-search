@@ -9,7 +9,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -98,22 +97,10 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     @Override
     public Optional<QueryPhaseSearcher> getQueryPhaseSearcher() {
         if (FeatureFlags.isEnabled(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED)) {
-            log.info(
-                String.format(
-                    Locale.ROOT,
-                    "Registering hybrid query phase searcher with feature flag [%s]",
-                    NEURAL_SEARCH_HYBRID_SEARCH_ENABLED
-                )
-            );
+            log.info("Registering hybrid query phase searcher with feature flag [%]", NEURAL_SEARCH_HYBRID_SEARCH_ENABLED);
             return Optional.of(new HybridQueryPhaseSearcher());
         }
-        log.info(
-            String.format(
-                Locale.ROOT,
-                "Not registering hybrid query phase searcher because feature flag [%s] is disabled",
-                NEURAL_SEARCH_HYBRID_SEARCH_ENABLED
-            )
-        );
+        log.info("Not registering hybrid query phase searcher because feature flag [%] is disabled", NEURAL_SEARCH_HYBRID_SEARCH_ENABLED);
         // we want feature be disabled by default due to risk of colliding and breaking concurrent search in core
         return Optional.empty();
     }

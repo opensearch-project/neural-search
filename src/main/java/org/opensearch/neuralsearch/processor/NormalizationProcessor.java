@@ -5,10 +5,10 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -55,7 +55,6 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
      * are set as part of class constructor
      * @param searchPhaseResult {@link SearchPhaseResults} DTO that has query search results. Results will be mutated as part of this method execution
      * @param searchPhaseContext {@link SearchContext}
-     * @param <Result>
      */
     @Override
     public <Result extends SearchPhaseResult> void process(
@@ -121,15 +120,10 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
     }
 
     private <Result extends SearchPhaseResult> List<QuerySearchResult> getQuerySearchResults(final SearchPhaseResults<Result> results) {
-        List<Result> resultsPerShard = results.getAtomicArray().asList();
-        List<QuerySearchResult> querySearchResults = new ArrayList<>();
-        for (Result shardResult : resultsPerShard) {
-            if (shardResult == null) {
-                querySearchResults.add(null);
-                continue;
-            }
-            querySearchResults.add(shardResult.queryResult());
-        }
-        return querySearchResults;
+        return results.getAtomicArray()
+            .asList()
+            .stream()
+            .map(result -> result == null ? null : result.queryResult())
+            .collect(Collectors.toList());
     }
 }

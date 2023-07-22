@@ -20,7 +20,9 @@ import org.opensearch.action.OriginalIndices;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.search.CompoundTopDocs;
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.SearchShardTarget;
@@ -30,7 +32,9 @@ import org.opensearch.test.OpenSearchTestCase;
 public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
 
     public void testSearchResultTypes_whenCompoundDocs_thenDoNormalizationCombination() {
-        NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(NormalizationProcessorWorkflow.create());
+        NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+        );
 
         List<QuerySearchResult> querySearchResults = new ArrayList<>();
         for (int shardId = 0; shardId < 4; shardId++) {

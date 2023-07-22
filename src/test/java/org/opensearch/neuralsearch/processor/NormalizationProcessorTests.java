@@ -36,7 +36,9 @@ import org.opensearch.common.util.concurrent.OpenSearchExecutors;
 import org.opensearch.common.util.concurrent.OpenSearchThreadPoolExecutor;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.search.CompoundTopDocs;
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.SearchShardTarget;
@@ -98,7 +100,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
             DESCRIPTION,
             ScoreNormalizationTechnique.MIN_MAX,
             ScoreCombinationTechnique.ARITHMETIC_MEAN,
-            NormalizationProcessorWorkflow.create()
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
         );
 
         assertEquals(DESCRIPTION, normalizationProcessor.getDescription());
@@ -109,7 +111,9 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
     }
 
     public void testSearchResultTypes_whenCompoundDocs_thenDoNormalizationCombination() {
-        NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(NormalizationProcessorWorkflow.create());
+        NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+        );
         NormalizationProcessor normalizationProcessor = new NormalizationProcessor(
             PROCESSOR_TAG,
             DESCRIPTION,
@@ -166,7 +170,9 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
     }
 
     public void testEmptySearchResults_whenEmptySearchResults_thenDoNotExecuteWorkflow() {
-        NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(NormalizationProcessorWorkflow.create());
+        NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+        );
         NormalizationProcessor normalizationProcessor = new NormalizationProcessor(
             PROCESSOR_TAG,
             DESCRIPTION,
@@ -181,7 +187,9 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
     }
 
     public void testNotHybridSearchResult_whenResultsNotEmptyAndNotHybridSearchResult_thenDoNotExecuteWorkflow() {
-        NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(NormalizationProcessorWorkflow.create());
+        NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+        );
         NormalizationProcessor normalizationProcessor = new NormalizationProcessor(
             PROCESSOR_TAG,
             DESCRIPTION,
