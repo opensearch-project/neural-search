@@ -72,7 +72,7 @@ public class ScoreCombiner {
 
         // - sort documents by scores and take first "max number" of docs
         // create a collection of doc ids that are sorted by their combined scores
-        List<Integer> sortedDocsIds = getPriorityQueueOfDocIds(combinedNormalizedScoresByDocId);
+        List<Integer> sortedDocsIds = getSortedDocIds(combinedNormalizedScoresByDocId);
 
         // - update query search results with normalized scores
         updateQueryTopDocsWithCombinedScores(compoundQueryTopDocs, topDocsPerSubQuery, combinedNormalizedScoresByDocId, sortedDocsIds);
@@ -85,7 +85,7 @@ public class ScoreCombiner {
     }
 
     @VisibleForTesting
-    protected List<Integer> getPriorityQueueOfDocIds(final Map<Integer, Float> combinedNormalizedScoresByDocId) {
+    protected List<Integer> getSortedDocIds(final Map<Integer, Float> combinedNormalizedScoresByDocId) {
         // we're merging docs with normalized and combined scores. we need to have only maxHits results
         List<Integer> sortedDocsIds = new ArrayList<>(combinedNormalizedScoresByDocId.keySet());
         sortedDocsIds.sort((a, b) -> Float.compare(combinedNormalizedScoresByDocId.get(b), combinedNormalizedScoresByDocId.get(a)));

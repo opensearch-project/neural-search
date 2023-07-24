@@ -57,7 +57,7 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
             NormalizationProcessor.COMBINATION_CLAUSE
         );
 
-        ScoreCombinationTechnique scoreCombinationTechnique = scoreCombinationFactory.defaultCombination();
+        ScoreCombinationTechnique scoreCombinationTechnique = scoreCombinationFactory.DEFAULT_COMBINATION_METHOD;
         if (Objects.nonNull(combinationClause)) {
             String combinationTechnique = (String) combinationClause.getOrDefault(NormalizationProcessor.TECHNIQUE, "");
             scoreCombinationTechnique = scoreCombinationFactory.createCombination(combinationTechnique);

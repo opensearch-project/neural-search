@@ -15,17 +15,17 @@ import org.opensearch.OpenSearchParseException;
  */
 public class ScoreCombinationFactory {
 
-    private static final ScoreCombinationTechnique DEFAULT_COMBINATION_METHOD = ArithmeticMeanScoreCombinationTechnique.getInstance();
+    public static final ScoreCombinationTechnique DEFAULT_COMBINATION_METHOD = new ArithmeticMeanScoreCombinationTechnique();
 
     private final Map<String, ScoreCombinationTechnique> scoreCombinationMethodsMap = Map.of(
         ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-        ArithmeticMeanScoreCombinationTechnique.getInstance()
+        new ArithmeticMeanScoreCombinationTechnique()
     );
 
     /**
      * Get score combination method by technique name
      * @param technique name of technique
-     * @return
+     * @return instance of ScoreCombinationTechnique for technique name
      */
     public ScoreCombinationTechnique createCombination(final String technique) {
         return Optional.ofNullable(scoreCombinationMethodsMap.get(technique))

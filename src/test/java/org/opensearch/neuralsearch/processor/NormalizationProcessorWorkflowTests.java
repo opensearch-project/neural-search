@@ -63,7 +63,7 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
         normalizationProcessorWorkflow.execute(
             querySearchResults,
             ScoreNormalizationTechnique.DEFAULT,
-            new ScoreCombinationFactory().defaultCombination()
+            ScoreCombinationFactory.DEFAULT_COMBINATION_METHOD
         );
 
         verify(normalizationProcessorWorkflow, times(1)).updateOriginalQueryResults(any(), any(), any());
