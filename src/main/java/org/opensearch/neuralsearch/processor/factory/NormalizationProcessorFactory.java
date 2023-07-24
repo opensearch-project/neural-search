@@ -5,7 +5,6 @@
 
 package org.opensearch.neuralsearch.processor.factory;
 
-import static org.opensearch.ingest.ConfigurationUtils.newConfigurationException;
 import static org.opensearch.ingest.ConfigurationUtils.readOptionalMap;
 
 import java.util.Map;
@@ -13,12 +12,11 @@ import java.util.Objects;
 
 import lombok.AllArgsConstructor;
 
-import org.apache.commons.lang3.EnumUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
@@ -29,6 +27,7 @@ import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 @AllArgsConstructor
 public class NormalizationProcessorFactory implements Processor.Factory<SearchPhaseResultsProcessor> {
     private final NormalizationProcessorWorkflow normalizationProcessorWorkflow;
+    private ScoreNormalizationFactory scoreNormalizationFactory;
     private ScoreCombinationFactory scoreCombinationFactory;
 
     @Override
@@ -46,9 +45,11 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
             config,
             NormalizationProcessor.NORMALIZATION_CLAUSE
         );
-        String normalizationTechnique = Objects.isNull(normalizationClause)
-            ? ScoreNormalizationTechnique.DEFAULT.name()
-            : (String) normalizationClause.getOrDefault(NormalizationProcessor.TECHNIQUE, "");
+        ScoreNormalizationTechnique normalizationTechnique = ScoreNormalizationFactory.DEFAULT_METHOD;
+        if (Objects.nonNull(normalizationClause)) {
+            String combinationTechnique = (String) normalizationClause.getOrDefault(NormalizationProcessor.TECHNIQUE, "");
+            normalizationTechnique = scoreNormalizationFactory.createNormalization(combinationTechnique);
+        }
 
         Map<String, Object> combinationClause = readOptionalMap(
             NormalizationProcessor.TYPE,
@@ -57,39 +58,18 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
             NormalizationProcessor.COMBINATION_CLAUSE
         );
 
-        ScoreCombinationTechnique scoreCombinationTechnique = scoreCombinationFactory.DEFAULT_COMBINATION_METHOD;
+        ScoreCombinationTechnique scoreCombinationTechnique = ScoreCombinationFactory.DEFAULT_METHOD;
         if (Objects.nonNull(combinationClause)) {
             String combinationTechnique = (String) combinationClause.getOrDefault(NormalizationProcessor.TECHNIQUE, "");
             scoreCombinationTechnique = scoreCombinationFactory.createCombination(combinationTechnique);
         }
 
-        validateParameters(normalizationTechnique, tag);
-
         return new NormalizationProcessor(
             tag,
             description,
-            ScoreNormalizationTechnique.valueOf(normalizationTechnique),
+            normalizationTechnique,
             scoreCombinationTechnique,
             normalizationProcessorWorkflow
         );
-    }
-
-    protected void validateParameters(final String normalizationTechniqueName, final String tag) {
-        if (StringUtils.isEmpty(normalizationTechniqueName)) {
-            throw newConfigurationException(
-                NormalizationProcessor.TYPE,
-                tag,
-                NormalizationProcessor.TECHNIQUE,
-                "normalization technique cannot be empty"
-            );
-        }
-        if (!EnumUtils.isValidEnum(ScoreNormalizationTechnique.class, normalizationTechniqueName)) {
-            throw newConfigurationException(
-                NormalizationProcessor.TYPE,
-                tag,
-                NormalizationProcessor.TECHNIQUE,
-                "provided normalization technique is not supported"
-            );
-        }
     }
 }

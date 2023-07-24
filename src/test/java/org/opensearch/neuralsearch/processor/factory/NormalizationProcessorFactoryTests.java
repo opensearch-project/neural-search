@@ -18,7 +18,8 @@ import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
-import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
@@ -30,6 +31,7 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
     public void testNormalizationProcessor_whenNoParams_thenSuccessful() {
         NormalizationProcessorFactory normalizationProcessorFactory = new NormalizationProcessorFactory(
             new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner()),
+            new ScoreNormalizationFactory(),
             new ScoreCombinationFactory()
         );
         final Map<String, Processor.Factory<SearchPhaseResultsProcessor>> processorFactories = new HashMap<>();
@@ -56,6 +58,7 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
     public void testNormalizationProcessor_whenWithParams_thenSuccessful() {
         NormalizationProcessorFactory normalizationProcessorFactory = new NormalizationProcessorFactory(
             new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner()),
+            new ScoreNormalizationFactory(),
             new ScoreCombinationFactory()
         );
         final Map<String, Processor.Factory<SearchPhaseResultsProcessor>> processorFactories = new HashMap<>();
@@ -63,7 +66,7 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         String description = "description";
         boolean ignoreFailure = false;
         Map<String, Object> config = new HashMap<>();
-        config.put("normalization", Map.of("technique", "MIN_MAX"));
+        config.put("normalization", Map.of("technique", "min_max"));
         config.put("combination", Map.of("technique", "arithmetic_mean"));
         Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
         SearchPhaseResultsProcessor searchPhaseResultsProcessor = normalizationProcessorFactory.create(
@@ -83,6 +86,7 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
     public void testInputValidation_whenInvalidParameters_thenFail() {
         NormalizationProcessorFactory normalizationProcessorFactory = new NormalizationProcessorFactory(
             new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner()),
+            new ScoreNormalizationFactory(),
             new ScoreCombinationFactory()
         );
         Map<String, Processor.Factory<SearchPhaseResultsProcessor>> processorFactories = new HashMap<>();
@@ -120,7 +124,7 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
                 new HashMap<>(
                     Map.of(
                         NormalizationProcessor.NORMALIZATION_CLAUSE,
-                        Map.of(NormalizationProcessor.TECHNIQUE, ScoreNormalizationTechnique.MIN_MAX.name()),
+                        Map.of(NormalizationProcessor.TECHNIQUE, MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME),
                         NormalizationProcessor.COMBINATION_CLAUSE,
                         Map.of(NormalizationProcessor.TECHNIQUE, "")
                     )
@@ -158,7 +162,7 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
                 new HashMap<>(
                     Map.of(
                         NormalizationProcessor.NORMALIZATION_CLAUSE,
-                        Map.of(NormalizationProcessor.TECHNIQUE, ScoreNormalizationTechnique.MIN_MAX.name()),
+                        Map.of(NormalizationProcessor.TECHNIQUE, MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME),
                         NormalizationProcessor.COMBINATION_CLAUSE,
                         Map.of(NormalizationProcessor.TECHNIQUE, "random_name_for_combination")
                     )

@@ -47,7 +47,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.neuralsearch.OpenSearchSecureRestTestCase;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique;
 
 import com.google.common.collect.ImmutableList;
 
@@ -560,7 +560,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     protected void createSearchPipelineWithResultsPostProcessor(final String pipelineId) {
         createSearchPipeline(
             pipelineId,
-            ScoreNormalizationTechnique.MIN_MAX.name(),
+            MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME,
             ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME,
             Map.of()
         );

@@ -15,7 +15,7 @@ import org.opensearch.OpenSearchParseException;
  */
 public class ScoreCombinationFactory {
 
-    public static final ScoreCombinationTechnique DEFAULT_COMBINATION_METHOD = new ArithmeticMeanScoreCombinationTechnique();
+    public static final ScoreCombinationTechnique DEFAULT_METHOD = new ArithmeticMeanScoreCombinationTechnique();
 
     private final Map<String, ScoreCombinationTechnique> scoreCombinationMethodsMap = Map.of(
         ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME,
@@ -30,13 +30,5 @@ public class ScoreCombinationFactory {
     public ScoreCombinationTechnique createCombination(final String technique) {
         return Optional.ofNullable(scoreCombinationMethodsMap.get(technique))
             .orElseThrow(() -> new OpenSearchParseException("provided combination technique is not supported"));
-    }
-
-    /**
-     * Default combination method
-     * @return combination method that is used in case user did not provide combination technique name
-     */
-    public ScoreCombinationTechnique defaultCombination() {
-        return DEFAULT_COMBINATION_METHOD;
     }
 }

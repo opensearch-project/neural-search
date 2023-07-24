@@ -21,7 +21,7 @@ import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
-import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.search.CompoundTopDocs;
 import org.opensearch.search.DocValueFormat;
@@ -62,8 +62,8 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
 
         normalizationProcessorWorkflow.execute(
             querySearchResults,
-            ScoreNormalizationTechnique.DEFAULT,
-            ScoreCombinationFactory.DEFAULT_COMBINATION_METHOD
+            ScoreNormalizationFactory.DEFAULT_METHOD,
+            ScoreCombinationFactory.DEFAULT_METHOD
         );
 
         verify(normalizationProcessorWorkflow, times(1)).updateOriginalQueryResults(any(), any(), any());

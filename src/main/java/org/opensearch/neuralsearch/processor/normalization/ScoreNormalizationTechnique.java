@@ -7,26 +7,16 @@ package org.opensearch.neuralsearch.processor.normalization;
 
 import java.util.List;
 
-import lombok.AllArgsConstructor;
-
 import org.opensearch.neuralsearch.search.CompoundTopDocs;
 
 /**
- * Collection of techniques for score normalization
+ * Abstracts normalization of scores in query search results.
  */
-@AllArgsConstructor
-public enum ScoreNormalizationTechnique {
+public interface ScoreNormalizationTechnique {
 
     /**
-     * Min-max normalization method.
-     * nscore = (score - min_score)/(max_score - min_score)
+     * Performs score normalization based on input normalization technique. Mutates input object by updating normalized scores.
+     * @param queryTopDocs original query results from multiple shards and multiple sub-queries
      */
-    MIN_MAX(MinMaxScoreNormalizationMethod.getInstance());
-
-    public static final ScoreNormalizationTechnique DEFAULT = MIN_MAX;
-    private final ScoreNormalizationMethod method;
-
-    public void normalize(final List<CompoundTopDocs> queryTopDocs) {
-        method.normalize(queryTopDocs);
-    }
+    void normalize(final List<CompoundTopDocs> queryTopDocs);
 }

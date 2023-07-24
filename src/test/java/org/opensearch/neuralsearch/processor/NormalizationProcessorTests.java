@@ -38,7 +38,8 @@ import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
-import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.search.CompoundTopDocs;
 import org.opensearch.search.DocValueFormat;
@@ -99,7 +100,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         NormalizationProcessor normalizationProcessor = new NormalizationProcessor(
             PROCESSOR_TAG,
             DESCRIPTION,
-            ScoreNormalizationTechnique.MIN_MAX,
+            new ScoreNormalizationFactory().createNormalization(MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME),
             new ScoreCombinationFactory().createCombination(ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME),
             new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
         );
@@ -118,7 +119,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         NormalizationProcessor normalizationProcessor = new NormalizationProcessor(
             PROCESSOR_TAG,
             DESCRIPTION,
-            ScoreNormalizationTechnique.MIN_MAX,
+            new ScoreNormalizationFactory().createNormalization(MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME),
             new ScoreCombinationFactory().createCombination(ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME),
             normalizationProcessorWorkflow
         );
@@ -177,7 +178,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         NormalizationProcessor normalizationProcessor = new NormalizationProcessor(
             PROCESSOR_TAG,
             DESCRIPTION,
-            ScoreNormalizationTechnique.MIN_MAX,
+            new ScoreNormalizationFactory().createNormalization(MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME),
             new ScoreCombinationFactory().createCombination(ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME),
             normalizationProcessorWorkflow
         );
@@ -194,7 +195,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         NormalizationProcessor normalizationProcessor = new NormalizationProcessor(
             PROCESSOR_TAG,
             DESCRIPTION,
-            ScoreNormalizationTechnique.MIN_MAX,
+            new ScoreNormalizationFactory().createNormalization(MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME),
             new ScoreCombinationFactory().createCombination(ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME),
             normalizationProcessorWorkflow
         );

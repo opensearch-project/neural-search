@@ -33,6 +33,7 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
+import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
@@ -66,7 +67,8 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     public static final String NEURAL_SEARCH_HYBRID_SEARCH_ENABLED = "neural_search_hybrid_search_enabled";
     private MLCommonsClientAccessor clientAccessor;
     private NormalizationProcessorWorkflow normalizationProcessorWorkflow;
-    private ScoreCombinationFactory scoreCombinationFactory;
+    private final ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
+    private final ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();;
 
     @Override
     public Collection<Object> createComponents(
@@ -84,7 +86,6 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     ) {
         NeuralQueryBuilder.initialize(clientAccessor);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
-        scoreCombinationFactory = new ScoreCombinationFactory();
         return List.of(clientAccessor);
     }
 
@@ -119,7 +120,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     ) {
         return Map.of(
             NormalizationProcessor.TYPE,
-            new NormalizationProcessorFactory(normalizationProcessorWorkflow, scoreCombinationFactory)
+            new NormalizationProcessorFactory(normalizationProcessorWorkflow, scoreNormalizationFactory, scoreCombinationFactory)
         );
     }
 }
