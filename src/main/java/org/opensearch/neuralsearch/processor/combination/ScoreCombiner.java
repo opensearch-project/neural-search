@@ -41,7 +41,7 @@ public class ScoreCombiner {
      *  Different score combination techniques are different in step 2, where we create map of "doc id" - "combined score",
      *  other steps are same for all techniques.
      * @param queryTopDocs query results that need to be normalized, mutated by method execution
-     * @param scoreCombinationTechnique exact combination technique that should be applied
+     * @param scoreCombinationTechnique exact combination method that should be applied
      * @return list of max combined scores for each shard
      */
     public List<Float> combineScores(final List<CompoundTopDocs> queryTopDocs, final ScoreCombinationTechnique scoreCombinationTechnique) {

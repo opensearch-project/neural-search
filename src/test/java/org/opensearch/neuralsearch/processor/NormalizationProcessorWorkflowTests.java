@@ -19,7 +19,7 @@ import org.apache.lucene.search.TotalHits;
 import org.opensearch.action.OriginalIndices;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
@@ -60,7 +60,11 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
             querySearchResults.add(querySearchResult);
         }
 
-        normalizationProcessorWorkflow.execute(querySearchResults, ScoreNormalizationTechnique.DEFAULT, ScoreCombinationTechnique.DEFAULT);
+        normalizationProcessorWorkflow.execute(
+            querySearchResults,
+            ScoreNormalizationTechnique.DEFAULT,
+            new ScoreCombinationFactory().defaultCombination()
+        );
 
         verify(normalizationProcessorWorkflow, times(1)).updateOriginalQueryResults(any(), any(), any());
     }

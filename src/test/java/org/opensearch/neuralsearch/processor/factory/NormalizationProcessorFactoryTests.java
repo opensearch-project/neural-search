@@ -15,7 +15,8 @@ import lombok.SneakyThrows;
 import org.opensearch.OpenSearchParseException;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
-import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
@@ -28,7 +29,8 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
     @SneakyThrows
     public void testNormalizationProcessor_whenNoParams_thenSuccessful() {
         NormalizationProcessorFactory normalizationProcessorFactory = new NormalizationProcessorFactory(
-            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner()),
+            new ScoreCombinationFactory()
         );
         final Map<String, Processor.Factory<SearchPhaseResultsProcessor>> processorFactories = new HashMap<>();
         String tag = "tag";
@@ -53,7 +55,8 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
     @SneakyThrows
     public void testNormalizationProcessor_whenWithParams_thenSuccessful() {
         NormalizationProcessorFactory normalizationProcessorFactory = new NormalizationProcessorFactory(
-            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner()),
+            new ScoreCombinationFactory()
         );
         final Map<String, Processor.Factory<SearchPhaseResultsProcessor>> processorFactories = new HashMap<>();
         String tag = "tag";
@@ -61,7 +64,7 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         boolean ignoreFailure = false;
         Map<String, Object> config = new HashMap<>();
         config.put("normalization", Map.of("technique", "MIN_MAX"));
-        config.put("combination", Map.of("technique", "ARITHMETIC_MEAN"));
+        config.put("combination", Map.of("technique", "arithmetic_mean"));
         Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
         SearchPhaseResultsProcessor searchPhaseResultsProcessor = normalizationProcessorFactory.create(
             processorFactories,
@@ -79,7 +82,8 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
 
     public void testInputValidation_whenInvalidParameters_thenFail() {
         NormalizationProcessorFactory normalizationProcessorFactory = new NormalizationProcessorFactory(
-            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner()),
+            new ScoreCombinationFactory()
         );
         Map<String, Processor.Factory<SearchPhaseResultsProcessor>> processorFactories = new HashMap<>();
         String tag = "tag";
@@ -99,7 +103,7 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
                         NormalizationProcessor.NORMALIZATION_CLAUSE,
                         Map.of(NormalizationProcessor.TECHNIQUE, ""),
                         NormalizationProcessor.COMBINATION_CLAUSE,
-                        Map.of(NormalizationProcessor.TECHNIQUE, ScoreCombinationTechnique.ARITHMETIC_MEAN.name())
+                        Map.of(NormalizationProcessor.TECHNIQUE, ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME)
                     )
                 ),
                 pipelineContext
@@ -137,7 +141,7 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
                         NormalizationProcessor.NORMALIZATION_CLAUSE,
                         Map.of(NormalizationProcessor.TECHNIQUE, "random_name_for_normalization"),
                         NormalizationProcessor.COMBINATION_CLAUSE,
-                        Map.of(NormalizationProcessor.TECHNIQUE, ScoreCombinationTechnique.ARITHMETIC_MEAN.name())
+                        Map.of(NormalizationProcessor.TECHNIQUE, ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME)
                     )
                 ),
                 pipelineContext

@@ -29,6 +29,7 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
@@ -65,6 +66,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     public static final String NEURAL_SEARCH_HYBRID_SEARCH_ENABLED = "neural_search_hybrid_search_enabled";
     private MLCommonsClientAccessor clientAccessor;
     private NormalizationProcessorWorkflow normalizationProcessorWorkflow;
+    private ScoreCombinationFactory scoreCombinationFactory;
 
     @Override
     public Collection<Object> createComponents(
@@ -82,6 +84,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     ) {
         NeuralQueryBuilder.initialize(clientAccessor);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
+        scoreCombinationFactory = new ScoreCombinationFactory();
         return List.of(clientAccessor);
     }
 
@@ -114,6 +117,9 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     public Map<String, org.opensearch.search.pipeline.Processor.Factory<SearchPhaseResultsProcessor>> getSearchPhaseResultsProcessors(
         Parameters parameters
     ) {
-        return Map.of(NormalizationProcessor.TYPE, new NormalizationProcessorFactory(normalizationProcessorWorkflow));
+        return Map.of(
+            NormalizationProcessor.TYPE,
+            new NormalizationProcessorFactory(normalizationProcessorWorkflow, scoreCombinationFactory)
+        );
     }
 }

@@ -17,6 +17,7 @@ import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.search.pipeline.Processor;
@@ -28,6 +29,7 @@ import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 @AllArgsConstructor
 public class NormalizationProcessorFactory implements Processor.Factory<SearchPhaseResultsProcessor> {
     private final NormalizationProcessorWorkflow normalizationProcessorWorkflow;
+    private ScoreCombinationFactory scoreCombinationFactory;
 
     @Override
     public SearchPhaseResultsProcessor create(
@@ -54,22 +56,25 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
             config,
             NormalizationProcessor.COMBINATION_CLAUSE
         );
-        String combinationTechnique = Objects.isNull(combinationClause)
-            ? ScoreCombinationTechnique.DEFAULT.name()
-            : (String) combinationClause.getOrDefault(NormalizationProcessor.TECHNIQUE, "");
 
-        validateParameters(normalizationTechnique, combinationTechnique, tag);
+        ScoreCombinationTechnique scoreCombinationTechnique = scoreCombinationFactory.defaultCombination();
+        if (Objects.nonNull(combinationClause)) {
+            String combinationTechnique = (String) combinationClause.getOrDefault(NormalizationProcessor.TECHNIQUE, "");
+            scoreCombinationTechnique = scoreCombinationFactory.createCombination(combinationTechnique);
+        }
+
+        validateParameters(normalizationTechnique, tag);
 
         return new NormalizationProcessor(
             tag,
             description,
             ScoreNormalizationTechnique.valueOf(normalizationTechnique),
-            ScoreCombinationTechnique.valueOf(combinationTechnique),
+            scoreCombinationTechnique,
             normalizationProcessorWorkflow
         );
     }
 
-    protected void validateParameters(final String normalizationTechniqueName, final String combinationTechniqueName, final String tag) {
+    protected void validateParameters(final String normalizationTechniqueName, final String tag) {
         if (StringUtils.isEmpty(normalizationTechniqueName)) {
             throw newConfigurationException(
                 NormalizationProcessor.TYPE,
@@ -78,28 +83,12 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
                 "normalization technique cannot be empty"
             );
         }
-        if (StringUtils.isEmpty(combinationTechniqueName)) {
-            throw newConfigurationException(
-                NormalizationProcessor.TYPE,
-                tag,
-                NormalizationProcessor.TECHNIQUE,
-                "combination technique cannot be empty"
-            );
-        }
         if (!EnumUtils.isValidEnum(ScoreNormalizationTechnique.class, normalizationTechniqueName)) {
             throw newConfigurationException(
                 NormalizationProcessor.TYPE,
                 tag,
                 NormalizationProcessor.TECHNIQUE,
                 "provided normalization technique is not supported"
-            );
-        }
-        if (!EnumUtils.isValidEnum(ScoreCombinationTechnique.class, combinationTechniqueName)) {
-            throw newConfigurationException(
-                NormalizationProcessor.TYPE,
-                tag,
-                NormalizationProcessor.TECHNIQUE,
-                "provided combination technique is not supported"
             );
         }
     }

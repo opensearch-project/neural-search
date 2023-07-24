@@ -10,16 +10,16 @@ import java.util.List;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
-import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.search.CompoundTopDocs;
 import org.opensearch.test.OpenSearchTestCase;
 
-public class ScoreCombinationMethodTests extends OpenSearchTestCase {
+public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
 
     public void testEmptyResults_whenEmptyResultsAndDefaultMethod_thenNoProcessing() {
         ScoreCombiner scoreCombiner = new ScoreCombiner();
-        List<Float> maxScores = scoreCombiner.combineScores(List.of(), ScoreCombinationTechnique.ARITHMETIC_MEAN);
+        List<Float> maxScores = scoreCombiner.combineScores(List.of(), new ScoreCombinationFactory().defaultCombination());
         assertNotNull(maxScores);
         assertEquals(0, maxScores.size());
     }
@@ -60,7 +60,7 @@ public class ScoreCombinationMethodTests extends OpenSearchTestCase {
             )
         );
 
-        List<Float> combinedMaxScores = scoreCombiner.combineScores(queryTopDocs, ScoreCombinationTechnique.ARITHMETIC_MEAN);
+        List<Float> combinedMaxScores = scoreCombiner.combineScores(queryTopDocs, new ScoreCombinationFactory().defaultCombination());
 
         assertNotNull(queryTopDocs);
         assertEquals(3, queryTopDocs.size());

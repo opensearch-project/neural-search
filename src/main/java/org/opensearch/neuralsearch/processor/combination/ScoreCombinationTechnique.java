@@ -5,23 +5,11 @@
 
 package org.opensearch.neuralsearch.processor.combination;
 
-import lombok.AllArgsConstructor;
-
-/**
- * Collection of techniques for score combination
- */
-@AllArgsConstructor
-public enum ScoreCombinationTechnique {
-
+public interface ScoreCombinationTechnique {
     /**
-     * Arithmetic mean method for combining scores.
+     * Defines combination function specific to this technique
+     * @param scores array of collected original scores
+     * @return combined score
      */
-    ARITHMETIC_MEAN(ArithmeticMeanScoreCombinationMethod.getInstance());
-
-    public static final ScoreCombinationTechnique DEFAULT = ARITHMETIC_MEAN;
-    private final ScoreCombinationMethod method;
-
-    public float combine(final float[] scores) {
-        return method.combine(scores);
-    }
+    float combine(final float[] scores);
 }

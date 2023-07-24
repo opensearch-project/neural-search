@@ -35,7 +35,8 @@ import org.opensearch.common.util.BigArrays;
 import org.opensearch.common.util.concurrent.OpenSearchExecutors;
 import org.opensearch.common.util.concurrent.OpenSearchThreadPoolExecutor;
 import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
@@ -99,7 +100,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
             PROCESSOR_TAG,
             DESCRIPTION,
             ScoreNormalizationTechnique.MIN_MAX,
-            ScoreCombinationTechnique.ARITHMETIC_MEAN,
+            new ScoreCombinationFactory().createCombination(ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME),
             new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
         );
 
@@ -118,7 +119,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
             PROCESSOR_TAG,
             DESCRIPTION,
             ScoreNormalizationTechnique.MIN_MAX,
-            ScoreCombinationTechnique.ARITHMETIC_MEAN,
+            new ScoreCombinationFactory().createCombination(ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME),
             normalizationProcessorWorkflow
         );
 
@@ -177,7 +178,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
             PROCESSOR_TAG,
             DESCRIPTION,
             ScoreNormalizationTechnique.MIN_MAX,
-            ScoreCombinationTechnique.ARITHMETIC_MEAN,
+            new ScoreCombinationFactory().createCombination(ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME),
             normalizationProcessorWorkflow
         );
         SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
@@ -194,7 +195,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
             PROCESSOR_TAG,
             DESCRIPTION,
             ScoreNormalizationTechnique.MIN_MAX,
-            ScoreCombinationTechnique.ARITHMETIC_MEAN,
+            new ScoreCombinationFactory().createCombination(ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME),
             normalizationProcessorWorkflow
         );
 

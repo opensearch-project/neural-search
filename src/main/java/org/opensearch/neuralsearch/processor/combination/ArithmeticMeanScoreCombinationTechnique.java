@@ -12,12 +12,13 @@ import lombok.NoArgsConstructor;
  * Abstracts combination of scores based on arithmetic mean method
  */
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
-public class ArithmeticMeanScoreCombinationMethod implements ScoreCombinationMethod {
+public class ArithmeticMeanScoreCombinationTechnique implements ScoreCombinationTechnique {
 
-    private static final ArithmeticMeanScoreCombinationMethod INSTANCE = new ArithmeticMeanScoreCombinationMethod();
+    private static final ArithmeticMeanScoreCombinationTechnique INSTANCE = new ArithmeticMeanScoreCombinationTechnique();
+    public static final String TECHNIQUE_NAME = "arithmetic_mean";
     private static final Float ZERO_SCORE = 0.0f;
 
-    public static ArithmeticMeanScoreCombinationMethod getInstance() {
+    public static ArithmeticMeanScoreCombinationTechnique getInstance() {
         return INSTANCE;
     }
 

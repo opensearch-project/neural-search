@@ -35,12 +35,12 @@ public class NormalizationProcessorWorkflow {
      * Start execution of this workflow
      * @param querySearchResults input data with QuerySearchResult from multiple shards
      * @param normalizationTechnique technique for score normalization
-     * @param combinationTechnique technique for score combination
+     * @param combinationMethod technique for score combination
      */
     public void execute(
         final List<QuerySearchResult> querySearchResults,
         final ScoreNormalizationTechnique normalizationTechnique,
-        final ScoreCombinationTechnique combinationTechnique
+        final ScoreCombinationTechnique combinationMethod
     ) {
         // pre-process data
         List<CompoundTopDocs> queryTopDocs = getQueryTopDocs(querySearchResults);
@@ -49,7 +49,7 @@ public class NormalizationProcessorWorkflow {
         scoreNormalizer.normalizeScores(queryTopDocs, normalizationTechnique);
 
         // combine
-        List<Float> combinedMaxScores = scoreCombiner.combineScores(queryTopDocs, combinationTechnique);
+        List<Float> combinedMaxScores = scoreCombiner.combineScores(queryTopDocs, combinationMethod);
 
         // post-process data
         updateOriginalQueryResults(querySearchResults, queryTopDocs, combinedMaxScores);
