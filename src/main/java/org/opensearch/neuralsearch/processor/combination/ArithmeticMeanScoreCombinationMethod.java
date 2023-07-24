@@ -15,6 +15,7 @@ import lombok.NoArgsConstructor;
 public class ArithmeticMeanScoreCombinationMethod implements ScoreCombinationMethod {
 
     private static final ArithmeticMeanScoreCombinationMethod INSTANCE = new ArithmeticMeanScoreCombinationMethod();
+    private static final Float ZERO_SCORE = 0.0f;
 
     public static ArithmeticMeanScoreCombinationMethod getInstance() {
         return INSTANCE;
@@ -35,6 +36,9 @@ public class ArithmeticMeanScoreCombinationMethod implements ScoreCombinationMet
                 combinedScore += score;
                 count++;
             }
+        }
+        if (count == 0) {
+            return ZERO_SCORE;
         }
         return combinedScore / count;
     }

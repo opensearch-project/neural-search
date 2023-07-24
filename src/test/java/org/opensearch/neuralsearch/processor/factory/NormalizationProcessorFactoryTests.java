@@ -14,8 +14,11 @@ import lombok.SneakyThrows;
 
 import org.opensearch.OpenSearchParseException;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
+import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.test.OpenSearchTestCase;
@@ -24,7 +27,9 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testNormalizationProcessor_whenNoParams_thenSuccessful() {
-        NormalizationProcessorFactory normalizationProcessorFactory = new NormalizationProcessorFactory();
+        NormalizationProcessorFactory normalizationProcessorFactory = new NormalizationProcessorFactory(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+        );
         final Map<String, Processor.Factory<SearchPhaseResultsProcessor>> processorFactories = new HashMap<>();
         String tag = "tag";
         String description = "description";
@@ -47,7 +52,9 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testNormalizationProcessor_whenWithParams_thenSuccessful() {
-        NormalizationProcessorFactory normalizationProcessorFactory = new NormalizationProcessorFactory();
+        NormalizationProcessorFactory normalizationProcessorFactory = new NormalizationProcessorFactory(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+        );
         final Map<String, Processor.Factory<SearchPhaseResultsProcessor>> processorFactories = new HashMap<>();
         String tag = "tag";
         String description = "description";
@@ -71,7 +78,9 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
     }
 
     public void testInputValidation_whenInvalidParameters_thenFail() {
-        NormalizationProcessorFactory normalizationProcessorFactory = new NormalizationProcessorFactory();
+        NormalizationProcessorFactory normalizationProcessorFactory = new NormalizationProcessorFactory(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+        );
         Map<String, Processor.Factory<SearchPhaseResultsProcessor>> processorFactories = new HashMap<>();
         String tag = "tag";
         String description = "description";

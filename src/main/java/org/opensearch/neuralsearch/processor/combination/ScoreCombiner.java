@@ -5,12 +5,12 @@
 
 package org.opensearch.neuralsearch.processor.combination;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.PriorityQueue;
 import java.util.stream.Collectors;
 
 import lombok.extern.log4j.Log4j2;
@@ -19,6 +19,8 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.neuralsearch.search.CompoundTopDocs;
+
+import com.google.common.annotations.VisibleForTesting;
 
 /**
  * Abstracts combination of scores in query search results.
@@ -50,7 +52,8 @@ public class ScoreCombiner {
             .collect(Collectors.toList());
     }
 
-    private float combineShardScores(
+    @VisibleForTesting
+    protected float combineShardScores(
         final ScoreCombinationTechnique scoreCombinationTechnique,
         final CompoundTopDocs compoundQueryTopDocs
     ) {
@@ -68,42 +71,46 @@ public class ScoreCombiner {
         );
 
         // - sort documents by scores and take first "max number" of docs
-        // create a priority queue of doc ids that are sorted by their combined scores
-        PriorityQueue<Integer> scoreQueue = getPriorityQueueOfDocIds(combinedNormalizedScoresByDocId);
-        // store max score to resulting list, call it now as priority queue will change after combining scores
-        float maxScore = combinedNormalizedScoresByDocId.get(scoreQueue.peek());
+        // create a collection of doc ids that are sorted by their combined scores
+        List<Integer> sortedDocsIds = getPriorityQueueOfDocIds(combinedNormalizedScoresByDocId);
 
         // - update query search results with normalized scores
-        updateQueryTopDocsWithCombinedScores(compoundQueryTopDocs, topDocsPerSubQuery, combinedNormalizedScoresByDocId, scoreQueue);
-        return maxScore;
+        updateQueryTopDocsWithCombinedScores(compoundQueryTopDocs, topDocsPerSubQuery, combinedNormalizedScoresByDocId, sortedDocsIds);
+
+        // return max score
+        if (sortedDocsIds.isEmpty()) {
+            return ZERO_SCORE;
+        }
+        return combinedNormalizedScoresByDocId.get(sortedDocsIds.get(0));
     }
 
-    private PriorityQueue<Integer> getPriorityQueueOfDocIds(final Map<Integer, Float> combinedNormalizedScoresByDocId) {
-        PriorityQueue<Integer> pq = new PriorityQueue<>(
-            (a, b) -> Float.compare(combinedNormalizedScoresByDocId.get(b), combinedNormalizedScoresByDocId.get(a))
-        );
+    @VisibleForTesting
+    protected List<Integer> getPriorityQueueOfDocIds(final Map<Integer, Float> combinedNormalizedScoresByDocId) {
         // we're merging docs with normalized and combined scores. we need to have only maxHits results
-        pq.addAll(combinedNormalizedScoresByDocId.keySet());
-        return pq;
+        List<Integer> sortedDocsIds = new ArrayList<>(combinedNormalizedScoresByDocId.keySet());
+        sortedDocsIds.sort((a, b) -> Float.compare(combinedNormalizedScoresByDocId.get(b), combinedNormalizedScoresByDocId.get(a)));
+        return sortedDocsIds;
     }
 
-    private ScoreDoc[] getCombinedScoreDocs(
+    @VisibleForTesting
+    protected ScoreDoc[] getCombinedScoreDocs(
         final CompoundTopDocs compoundQueryTopDocs,
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
-        final PriorityQueue<Integer> scoreQueue,
+        final List<Integer> sortedScores,
         final int maxHits
     ) {
         ScoreDoc[] finalScoreDocs = new ScoreDoc[maxHits];
 
         int shardId = compoundQueryTopDocs.scoreDocs[0].shardIndex;
-        for (int j = 0; j < maxHits && !scoreQueue.isEmpty(); j++) {
-            int docId = scoreQueue.poll();
+        for (int j = 0; j < maxHits && j < sortedScores.size(); j++) {
+            int docId = sortedScores.get(j);
             finalScoreDocs[j] = new ScoreDoc(docId, combinedNormalizedScoresByDocId.get(docId), shardId);
         }
         return finalScoreDocs;
     }
 
-    private Map<Integer, float[]> getNormalizedScoresPerDocument(final List<TopDocs> topDocsPerSubQuery) {
+    @VisibleForTesting
+    public Map<Integer, float[]> getNormalizedScoresPerDocument(final List<TopDocs> topDocsPerSubQuery) {
         Map<Integer, float[]> normalizedScoresPerDoc = new HashMap<>();
         for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
             TopDocs topDocs = topDocsPerSubQuery.get(j);
@@ -120,7 +127,8 @@ public class ScoreCombiner {
         return normalizedScoresPerDoc;
     }
 
-    private Map<Integer, Float> combineScoresAndGetCombinedNormilizedScoresPerDocument(
+    @VisibleForTesting
+    protected Map<Integer, Float> combineScoresAndGetCombinedNormilizedScoresPerDocument(
         final Map<Integer, float[]> normalizedScoresPerDocument,
         final ScoreCombinationTechnique scoreCombinationTechnique
     ) {
@@ -129,20 +137,22 @@ public class ScoreCombiner {
             .collect(Collectors.toMap(Map.Entry::getKey, entry -> scoreCombinationTechnique.combine(entry.getValue())));
     }
 
-    private void updateQueryTopDocsWithCombinedScores(
+    @VisibleForTesting
+    protected void updateQueryTopDocsWithCombinedScores(
         final CompoundTopDocs compoundQueryTopDocs,
         final List<TopDocs> topDocsPerSubQuery,
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
-        final PriorityQueue<Integer> scoreQueue
+        final List<Integer> sortedScores
     ) {
         // - count max number of hits among sub-queries
         int maxHits = getMaxHits(topDocsPerSubQuery);
         // - update query search results with normalized scores
-        compoundQueryTopDocs.scoreDocs = getCombinedScoreDocs(compoundQueryTopDocs, combinedNormalizedScoresByDocId, scoreQueue, maxHits);
+        compoundQueryTopDocs.scoreDocs = getCombinedScoreDocs(compoundQueryTopDocs, combinedNormalizedScoresByDocId, sortedScores, maxHits);
         compoundQueryTopDocs.totalHits = getTotalHits(topDocsPerSubQuery, maxHits);
     }
 
-    private int getMaxHits(final List<TopDocs> topDocsPerSubQuery) {
+    @VisibleForTesting
+    protected int getMaxHits(final List<TopDocs> topDocsPerSubQuery) {
         int maxHits = 0;
         for (TopDocs topDocs : topDocsPerSubQuery) {
             int hits = topDocs.scoreDocs.length;
@@ -151,7 +161,8 @@ public class ScoreCombiner {
         return maxHits;
     }
 
-    private TotalHits getTotalHits(final List<TopDocs> topDocsPerSubQuery, int maxHits) {
+    @VisibleForTesting
+    protected TotalHits getTotalHits(final List<TopDocs> topDocsPerSubQuery, int maxHits) {
         TotalHits.Relation totalHits = TotalHits.Relation.EQUAL_TO;
         if (topDocsPerSubQuery.stream().anyMatch(topDocs -> topDocs.totalHits.relation == TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO)) {
             totalHits = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;

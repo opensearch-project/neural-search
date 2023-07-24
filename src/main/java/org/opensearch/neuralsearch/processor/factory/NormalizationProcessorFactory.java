@@ -11,25 +11,23 @@ import static org.opensearch.ingest.ConfigurationUtils.readOptionalMap;
 import java.util.Map;
 import java.util.Objects;
 
+import lombok.AllArgsConstructor;
+
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
-import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 
 /**
  * Factory for query results normalization processor for search pipeline. Instantiates processor based on user provided input.
  */
+@AllArgsConstructor
 public class NormalizationProcessorFactory implements Processor.Factory<SearchPhaseResultsProcessor> {
-    private final NormalizationProcessorWorkflow normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(
-        new ScoreNormalizer(),
-        new ScoreCombiner()
-    );
+    private final NormalizationProcessorWorkflow normalizationProcessorWorkflow;
 
     @Override
     public SearchPhaseResultsProcessor create(

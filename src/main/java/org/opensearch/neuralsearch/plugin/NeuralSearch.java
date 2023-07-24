@@ -27,9 +27,12 @@ import org.opensearch.ingest.Processor;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
+import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
+import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
@@ -61,6 +64,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     @VisibleForTesting
     public static final String NEURAL_SEARCH_HYBRID_SEARCH_ENABLED = "neural_search_hybrid_search_enabled";
     private MLCommonsClientAccessor clientAccessor;
+    private NormalizationProcessorWorkflow normalizationProcessorWorkflow;
 
     @Override
     public Collection<Object> createComponents(
@@ -77,6 +81,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         final Supplier<RepositoriesService> repositoriesServiceSupplier
     ) {
         NeuralQueryBuilder.initialize(clientAccessor);
+        normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
         return List.of(clientAccessor);
     }
 
@@ -109,6 +114,6 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     public Map<String, org.opensearch.search.pipeline.Processor.Factory<SearchPhaseResultsProcessor>> getSearchPhaseResultsProcessors(
         Parameters parameters
     ) {
-        return Map.of(NormalizationProcessor.TYPE, new NormalizationProcessorFactory());
+        return Map.of(NormalizationProcessor.TYPE, new NormalizationProcessorFactory(normalizationProcessorWorkflow));
     }
 }
