@@ -23,7 +23,7 @@ public class ScoreNormalizer {
         }
     }
 
-    private boolean canQueryResultsBeNormalized(List<CompoundTopDocs> queryTopDocs) {
+    private boolean canQueryResultsBeNormalized(final List<CompoundTopDocs> queryTopDocs) {
         return queryTopDocs.stream().filter(Objects::nonNull).anyMatch(topDocs -> topDocs.getCompoundTopDocs().size() > 0);
     }
 }

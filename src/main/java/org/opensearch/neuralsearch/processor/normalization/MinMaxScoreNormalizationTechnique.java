@@ -25,12 +25,6 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
     private static final float MIN_SCORE = 0.001f;
     private static final float SINGLE_RESULT_SCORE = 1.0f;
 
-    private static final MinMaxScoreNormalizationTechnique INSTANCE = new MinMaxScoreNormalizationTechnique();
-
-    public static MinMaxScoreNormalizationTechnique getInstance() {
-        return INSTANCE;
-    }
-
     /**
      * Min-max normalization method.
      * nscore = (score - min_score)/(max_score - min_score)
@@ -69,7 +63,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         }
     }
 
-    private float[] getMaxScores(List<CompoundTopDocs> queryTopDocs, int numOfSubqueries) {
+    private float[] getMaxScores(final List<CompoundTopDocs> queryTopDocs, final int numOfSubqueries) {
         float[] maxScores = new float[numOfSubqueries];
         Arrays.fill(maxScores, Float.MIN_VALUE);
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
@@ -90,7 +84,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         return maxScores;
     }
 
-    private float[] getMinScores(List<CompoundTopDocs> queryTopDocs, int numOfScores) {
+    private float[] getMinScores(final List<CompoundTopDocs> queryTopDocs, final int numOfScores) {
         float[] minScores = new float[numOfScores];
         Arrays.fill(minScores, Float.MAX_VALUE);
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
@@ -111,7 +105,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         return minScores;
     }
 
-    private float normalizeSingleScore(float score, float minScore, float maxScore) {
+    private float normalizeSingleScore(final float score, final float minScore, final float maxScore) {
         // edge case when there is only one score and min and max scores are same
         if (Floats.compare(maxScore, minScore) == 0 && Floats.compare(maxScore, score) == 0) {
             return SINGLE_RESULT_SCORE;

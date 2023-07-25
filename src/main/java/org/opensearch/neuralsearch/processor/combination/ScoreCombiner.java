@@ -65,7 +65,7 @@ public class ScoreCombiner {
         Map<Integer, float[]> normalizedScoresPerDoc = getNormalizedScoresPerDocument(topDocsPerSubQuery);
 
         // - create map of combined scores per doc id
-        Map<Integer, Float> combinedNormalizedScoresByDocId = combineScoresAndGetCombinedNormilizedScoresPerDocument(
+        Map<Integer, Float> combinedNormalizedScoresByDocId = combineScoresAndGetCombinedNormalizedScoresPerDocument(
             normalizedScoresPerDoc,
             scoreCombinationTechnique
         );
@@ -128,7 +128,7 @@ public class ScoreCombiner {
     }
 
     @VisibleForTesting
-    protected Map<Integer, Float> combineScoresAndGetCombinedNormilizedScoresPerDocument(
+    protected Map<Integer, Float> combineScoresAndGetCombinedNormalizedScoresPerDocument(
         final Map<Integer, float[]> normalizedScoresPerDocument,
         final ScoreCombinationTechnique scoreCombinationTechnique
     ) {
