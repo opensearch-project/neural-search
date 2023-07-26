@@ -57,6 +57,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     private static final int DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND = 1000;
     private static final String DEFAULT_USER_AGENT = "Kibana";
+    private static final String NORMALIZATION_METHOD = "min_max";
+    private static final String COMBINATION_METHOD = "arithmetic_mean";
 
     protected final ClassLoader classLoader = this.getClass().getClassLoader();
 
@@ -281,6 +283,27 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      */
     @SneakyThrows
     protected Map<String, Object> search(String index, QueryBuilder queryBuilder, QueryBuilder rescorer, int resultSize) {
+        return search(index, queryBuilder, rescorer, resultSize, Map.of());
+    }
+
+    /**
+     * Execute a search request initialized from a neural query builder that can add a rescore query to the request
+     *
+     * @param index Index to search against
+     * @param queryBuilder queryBuilder to produce source of query
+     * @param  rescorer used for rescorer query builder
+     * @param resultSize number of results to return in the search
+     * @param requestParams additional request params for search
+     * @return Search results represented as a map
+     */
+    @SneakyThrows
+    protected Map<String, Object> search(
+        String index,
+        QueryBuilder queryBuilder,
+        QueryBuilder rescorer,
+        int resultSize,
+        Map<String, String> requestParams
+    ) {
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject().field("query");
         queryBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
 
@@ -294,6 +317,9 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
         Request request = new Request("POST", "/" + index + "/_search");
         request.addParameter("size", Integer.toString(resultSize));
+        if (requestParams != null && !requestParams.isEmpty()) {
+            requestParams.forEach(request::addParameter);
+        }
         request.setJsonEntity(Strings.toString(builder));
 
         Response response = client().performRequest(request);
@@ -386,7 +412,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      */
     @SneakyThrows
     protected void prepareKnnIndex(String indexName, List<KNNFieldConfig> knnFieldConfigs) {
-        createIndexWithConfiguration(indexName, buildIndexConfiguration(knnFieldConfigs), "");
+        prepareKnnIndex(indexName, knnFieldConfigs, 3);
+    }
+
+    @SneakyThrows
+    protected void prepareKnnIndex(String indexName, List<KNNFieldConfig> knnFieldConfigs, int numOfShards) {
+        createIndexWithConfiguration(indexName, buildIndexConfiguration(knnFieldConfigs, numOfShards), "");
     }
 
     /**
@@ -421,11 +452,11 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     @SneakyThrows
-    private String buildIndexConfiguration(List<KNNFieldConfig> knnFieldConfigs) {
+    private String buildIndexConfiguration(List<KNNFieldConfig> knnFieldConfigs, int numberOfShards) {
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject("settings")
-            .field("number_of_shards", 3)
+            .field("number_of_shards", numberOfShards)
             .field("index.knn", true)
             .endObject()
             .startObject("mappings")
@@ -519,5 +550,74 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     public boolean isUpdateClusterSettings() {
         return true;
+    }
+
+    @SneakyThrows
+    protected void createSearchPipelineWithResultsPostProcessor(final String pipelineId) {
+        createSearchPipeline(pipelineId, NORMALIZATION_METHOD, COMBINATION_METHOD, Map.of());
+    }
+
+    @SneakyThrows
+    protected void createSearchPipeline(
+        final String pipelineId,
+        final String normalizationMethod,
+        String combinationMethod,
+        final Map<String, Object> combinationParams
+    ) {
+        makeRequest(
+            client(),
+            "PUT",
+            String.format(LOCALE, "/_search/pipeline/%s", pipelineId),
+            null,
+            toHttpEntity(
+                String.format(
+                    LOCALE,
+                    "{\"description\": \"Post processor pipeline\","
+                        + "\"phase_results_processors\": [{ "
+                        + "\"normalization-processor\": {"
+                        + "\"normalization\": {"
+                        + "\"technique\": \"%s\""
+                        + "},"
+                        + "\"combination\": {"
+                        + "\"technique\": \"%s\""
+                        + "}"
+                        + "}}]}",
+                    normalizationMethod,
+                    combinationMethod
+                )
+            ),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+    }
+
+    @SneakyThrows
+    protected void createSearchPipelineWithDefaultResultsPostProcessor(final String pipelineId) {
+        makeRequest(
+            client(),
+            "PUT",
+            String.format(LOCALE, "/_search/pipeline/%s", pipelineId),
+            null,
+            toHttpEntity(
+                String.format(
+                    LOCALE,
+                    "{\"description\": \"Post processor pipeline\","
+                        + "\"phase_results_processors\": [{ "
+                        + "\"normalization-processor\": {}}]}"
+                )
+            ),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+    }
+
+    @SneakyThrows
+    protected void deleteSearchPipeline(final String pipelineId) {
+        makeRequest(
+            client(),
+            "DELETE",
+            String.format(LOCALE, "/_search/pipeline/%s", pipelineId),
+            null,
+            toHttpEntity(""),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
     }
 }
