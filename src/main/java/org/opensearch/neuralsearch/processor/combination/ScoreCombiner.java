@@ -40,22 +40,16 @@ public class ScoreCombiner {
      *  other steps are same for all techniques.
      * @param queryTopDocs query results that need to be normalized, mutated by method execution
      * @param scoreCombinationTechnique exact combination method that should be applied
-     * @return list of max combined scores for each shard
      */
-    public List<Float> combineScores(final List<CompoundTopDocs> queryTopDocs, final ScoreCombinationTechnique scoreCombinationTechnique) {
+    public void combineScores(final List<CompoundTopDocs> queryTopDocs, final ScoreCombinationTechnique scoreCombinationTechnique) {
         // iterate over results from each shard. Every CompoundTopDocs object has results from
         // multiple sub queries, doc ids may repeat for each sub query results
-        return queryTopDocs.stream()
-            .map(compoundQueryTopDocs -> combineShardScores(scoreCombinationTechnique, compoundQueryTopDocs))
-            .collect(Collectors.toList());
+        queryTopDocs.forEach(compoundQueryTopDocs -> combineShardScores(scoreCombinationTechnique, compoundQueryTopDocs));
     }
 
-    private float combineShardScores(
-        final ScoreCombinationTechnique scoreCombinationTechnique,
-        final CompoundTopDocs compoundQueryTopDocs
-    ) {
+    private void combineShardScores(final ScoreCombinationTechnique scoreCombinationTechnique, final CompoundTopDocs compoundQueryTopDocs) {
         if (Objects.isNull(compoundQueryTopDocs) || compoundQueryTopDocs.totalHits.value == 0) {
-            return ZERO_SCORE;
+            return;
         }
         List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getCompoundTopDocs();
         // - create map of normalized scores results returned from the single shard
@@ -73,12 +67,6 @@ public class ScoreCombiner {
 
         // - update query search results with normalized scores
         updateQueryTopDocsWithCombinedScores(compoundQueryTopDocs, topDocsPerSubQuery, combinedNormalizedScoresByDocId, sortedDocsIds);
-
-        // return max score
-        if (sortedDocsIds.isEmpty()) {
-            return ZERO_SCORE;
-        }
-        return combinedNormalizedScoresByDocId.get(sortedDocsIds.get(0));
     }
 
     private List<Integer> getSortedDocIds(final Map<Integer, Float> combinedNormalizedScoresByDocId) {

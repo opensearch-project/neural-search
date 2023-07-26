@@ -5,10 +5,7 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +16,7 @@ import org.apache.lucene.search.TotalHits;
 import org.opensearch.action.OriginalIndices;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.neuralsearch.TestUtils;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
@@ -66,6 +64,6 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
             ScoreCombinationFactory.DEFAULT_METHOD
         );
 
-        verify(normalizationProcessorWorkflow, times(1)).updateOriginalQueryResults(any(), any(), any());
+        TestUtils.assertQueryResultScores(querySearchResults);
     }
 }

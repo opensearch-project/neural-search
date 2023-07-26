@@ -19,8 +19,6 @@ import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.search.CompoundTopDocs;
 import org.opensearch.search.query.QuerySearchResult;
 
-import com.google.common.annotations.VisibleForTesting;
-
 /**
  * Class abstracts steps required for score normalization and combination, this includes pre-processing of incoming data
  * and post-processing of final results
@@ -49,10 +47,10 @@ public class NormalizationProcessorWorkflow {
         scoreNormalizer.normalizeScores(queryTopDocs, normalizationTechnique);
 
         // combine
-        List<Float> combinedMaxScores = scoreCombiner.combineScores(queryTopDocs, combinationTechnique);
+        scoreCombiner.combineScores(queryTopDocs, combinationTechnique);
 
         // post-process data
-        updateOriginalQueryResults(querySearchResults, queryTopDocs, combinedMaxScores);
+        updateOriginalQueryResults(querySearchResults, queryTopDocs);
     }
 
     /**
@@ -69,12 +67,7 @@ public class NormalizationProcessorWorkflow {
         return queryTopDocs;
     }
 
-    @VisibleForTesting
-    protected void updateOriginalQueryResults(
-        final List<QuerySearchResult> querySearchResults,
-        final List<CompoundTopDocs> queryTopDocs,
-        final List<Float> combinedMaxScores
-    ) {
+    private void updateOriginalQueryResults(final List<QuerySearchResult> querySearchResults, final List<CompoundTopDocs> queryTopDocs) {
         for (int i = 0; i < querySearchResults.size(); i++) {
             QuerySearchResult querySearchResult = querySearchResults.get(i);
             if (!(querySearchResult.topDocs().topDocs instanceof CompoundTopDocs) || Objects.isNull(queryTopDocs.get(i))) {
@@ -84,7 +77,6 @@ public class NormalizationProcessorWorkflow {
             float maxScore = updatedTopDocs.totalHits.value > 0 ? updatedTopDocs.scoreDocs[0].score : 0.0f;
             TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(updatedTopDocs, maxScore);
             querySearchResult.topDocs(updatedTopDocsAndMaxScore, null);
-            querySearchResults.get(i).topDocs().maxScore = combinedMaxScores.get(i);
         }
     }
 }

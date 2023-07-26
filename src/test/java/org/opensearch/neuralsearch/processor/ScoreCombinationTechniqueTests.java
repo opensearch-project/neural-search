@@ -19,9 +19,7 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
 
     public void testEmptyResults_whenEmptyResultsAndDefaultMethod_thenNoProcessing() {
         ScoreCombiner scoreCombiner = new ScoreCombiner();
-        List<Float> maxScores = scoreCombiner.combineScores(List.of(), ScoreCombinationFactory.DEFAULT_METHOD);
-        assertNotNull(maxScores);
-        assertEquals(0, maxScores.size());
+        scoreCombiner.combineScores(List.of(), ScoreCombinationFactory.DEFAULT_METHOD);
     }
 
     public void testCombination_whenMultipleSubqueriesResultsAndDefaultMethod_thenScoresCombined() {
@@ -60,7 +58,7 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
             )
         );
 
-        List<Float> combinedMaxScores = scoreCombiner.combineScores(queryTopDocs, ScoreCombinationFactory.DEFAULT_METHOD);
+        scoreCombiner.combineScores(queryTopDocs, ScoreCombinationFactory.DEFAULT_METHOD);
 
         assertNotNull(queryTopDocs);
         assertEquals(3, queryTopDocs.size());
@@ -84,10 +82,5 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
         assertEquals(9, queryTopDocs.get(1).scoreDocs[3].doc);
 
         assertEquals(0, queryTopDocs.get(2).scoreDocs.length);
-
-        assertEquals(3, combinedMaxScores.size());
-        assertEquals(1.0, combinedMaxScores.get(0), 0.001f);
-        assertEquals(0.9, combinedMaxScores.get(1), 0.001f);
-        assertEquals(0.0, combinedMaxScores.get(2), 0.001f);
     }
 }

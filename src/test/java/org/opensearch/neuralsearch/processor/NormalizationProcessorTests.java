@@ -9,12 +9,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
@@ -35,6 +35,7 @@ import org.opensearch.common.util.BigArrays;
 import org.opensearch.common.util.concurrent.OpenSearchExecutors;
 import org.opensearch.common.util.concurrent.OpenSearchThreadPoolExecutor;
 import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.neuralsearch.TestUtils;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
@@ -169,7 +170,13 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
         normalizationProcessor.process(queryPhaseResultConsumer, searchPhaseContext);
 
-        verify(normalizationProcessorWorkflow, times(1)).updateOriginalQueryResults(any(), any(), any());
+        List<QuerySearchResult> querySearchResults = queryPhaseResultConsumer.getAtomicArray()
+            .asList()
+            .stream()
+            .map(result -> result == null ? null : result.queryResult())
+            .collect(Collectors.toList());
+
+        TestUtils.assertQueryResultScores(querySearchResults);
     }
 
     public void testEmptySearchResults_whenEmptySearchResults_thenDoNotExecuteWorkflow() {
