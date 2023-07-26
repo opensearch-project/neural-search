@@ -5,13 +5,18 @@
 
 package org.opensearch.neuralsearch;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.opensearch.test.OpenSearchTestCase.randomFloat;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.search.query.QuerySearchResult;
 
 public class TestUtils {
 
@@ -50,5 +55,43 @@ public class TestUtils {
             vector[j] = randomFloat();
         }
         return vector;
+    }
+
+    /**
+     * Assert results of hyrdir query after score normalization and combination
+     * @param querySearchResults collection of query search results after they processed by normalization processor
+     */
+    public static void assertQueryResultScores(List<QuerySearchResult> querySearchResults) {
+        assertNotNull(querySearchResults);
+        float maxScore = querySearchResults.stream()
+            .map(searchResult -> searchResult.topDocs().maxScore)
+            .max(Float::compare)
+            .orElse(Float.MAX_VALUE);
+        assertEquals(1.0f, maxScore, 0.0f);
+        float totalMaxScore = querySearchResults.stream()
+            .map(searchResult -> searchResult.getMaxScore())
+            .max(Float::compare)
+            .orElse(Float.MAX_VALUE);
+        assertEquals(1.0f, totalMaxScore, 0.0f);
+        float maxScoreScoreFromScoreDocs = querySearchResults.stream()
+            .map(
+                searchResult -> Arrays.stream(searchResult.topDocs().topDocs.scoreDocs)
+                    .map(scoreDoc -> scoreDoc.score)
+                    .max(Float::compare)
+                    .orElse(Float.MAX_VALUE)
+            )
+            .max(Float::compare)
+            .orElse(Float.MAX_VALUE);
+        assertEquals(1.0f, maxScoreScoreFromScoreDocs, 0.0f);
+        float minScoreScoreFromScoreDocs = querySearchResults.stream()
+            .map(
+                searchResult -> Arrays.stream(searchResult.topDocs().topDocs.scoreDocs)
+                    .map(scoreDoc -> scoreDoc.score)
+                    .min(Float::compare)
+                    .orElse(Float.MAX_VALUE)
+            )
+            .min(Float::compare)
+            .orElse(Float.MAX_VALUE);
+        assertEquals(0.001f, minScoreScoreFromScoreDocs, 0.0f);
     }
 }
