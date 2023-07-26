@@ -18,7 +18,6 @@ import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
-import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.search.pipeline.Processor;
@@ -26,6 +25,9 @@ import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
+
+    private static final String NORMALIZATION_METHOD = "min_max";
+    private static final String COMBINATION_METHOD = "arithmetic_mean";
 
     @SneakyThrows
     public void testNormalizationProcessor_whenNoParams_thenSuccessful() {
@@ -104,10 +106,10 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
                 ignoreFailure,
                 new HashMap<>(
                     Map.of(
-                        NormalizationProcessor.NORMALIZATION_CLAUSE,
-                        Map.of(NormalizationProcessor.TECHNIQUE, ""),
-                        NormalizationProcessor.COMBINATION_CLAUSE,
-                        Map.of(NormalizationProcessor.TECHNIQUE, ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME)
+                        NormalizationProcessorFactory.NORMALIZATION_CLAUSE,
+                        Map.of(NormalizationProcessorFactory.TECHNIQUE, ""),
+                        NormalizationProcessorFactory.COMBINATION_CLAUSE,
+                        Map.of(NormalizationProcessorFactory.TECHNIQUE, ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME)
                     )
                 ),
                 pipelineContext
@@ -123,10 +125,10 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
                 ignoreFailure,
                 new HashMap<>(
                     Map.of(
-                        NormalizationProcessor.NORMALIZATION_CLAUSE,
-                        Map.of(NormalizationProcessor.TECHNIQUE, MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME),
-                        NormalizationProcessor.COMBINATION_CLAUSE,
-                        Map.of(NormalizationProcessor.TECHNIQUE, "")
+                        NormalizationProcessorFactory.NORMALIZATION_CLAUSE,
+                        Map.of(NormalizationProcessorFactory.TECHNIQUE, NORMALIZATION_METHOD),
+                        NormalizationProcessorFactory.COMBINATION_CLAUSE,
+                        Map.of(NormalizationProcessorFactory.TECHNIQUE, "")
                     )
                 ),
                 pipelineContext
@@ -142,10 +144,10 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
                 ignoreFailure,
                 new HashMap<>(
                     Map.of(
-                        NormalizationProcessor.NORMALIZATION_CLAUSE,
-                        Map.of(NormalizationProcessor.TECHNIQUE, "random_name_for_normalization"),
-                        NormalizationProcessor.COMBINATION_CLAUSE,
-                        Map.of(NormalizationProcessor.TECHNIQUE, ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME)
+                        NormalizationProcessorFactory.NORMALIZATION_CLAUSE,
+                        Map.of(NormalizationProcessorFactory.TECHNIQUE, "random_name_for_normalization"),
+                        NormalizationProcessorFactory.COMBINATION_CLAUSE,
+                        Map.of(NormalizationProcessorFactory.TECHNIQUE, ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME)
                     )
                 ),
                 pipelineContext
@@ -161,10 +163,10 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
                 ignoreFailure,
                 new HashMap<>(
                     Map.of(
-                        NormalizationProcessor.NORMALIZATION_CLAUSE,
-                        Map.of(NormalizationProcessor.TECHNIQUE, MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME),
-                        NormalizationProcessor.COMBINATION_CLAUSE,
-                        Map.of(NormalizationProcessor.TECHNIQUE, "random_name_for_combination")
+                        NormalizationProcessorFactory.NORMALIZATION_CLAUSE,
+                        Map.of(NormalizationProcessorFactory.TECHNIQUE, NORMALIZATION_METHOD),
+                        NormalizationProcessorFactory.COMBINATION_CLAUSE,
+                        Map.of(NormalizationProcessorFactory.TECHNIQUE, "random_name_for_combination")
                     )
                 ),
                 pipelineContext

@@ -22,8 +22,8 @@ import org.opensearch.search.query.QuerySearchResult;
 import com.google.common.annotations.VisibleForTesting;
 
 /**
- * Class abstracts steps required for score normalization and combination, this includes pre-processing of income data
- * and post-processing for final results
+ * Class abstracts steps required for score normalization and combination, this includes pre-processing of incoming data
+ * and post-processing of final results
  */
 @AllArgsConstructor
 public class NormalizationProcessorWorkflow {
@@ -55,6 +55,11 @@ public class NormalizationProcessorWorkflow {
         updateOriginalQueryResults(querySearchResults, queryTopDocs, combinedMaxScores);
     }
 
+    /**
+     * Getting list of CompoundTopDocs from list of QuerySearchResult. Each CompoundTopDocs is for individual shard
+     * @param querySearchResults collection of QuerySearchResult for all shards
+     * @return collection of CompoundTopDocs, one object for each shard
+     */
     private List<CompoundTopDocs> getQueryTopDocs(final List<QuerySearchResult> querySearchResults) {
         List<CompoundTopDocs> queryTopDocs = querySearchResults.stream()
             .filter(searchResult -> Objects.nonNull(searchResult.topDocs()))

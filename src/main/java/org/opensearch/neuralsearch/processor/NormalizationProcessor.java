@@ -33,9 +33,6 @@ import org.opensearch.search.query.QuerySearchResult;
 @AllArgsConstructor
 public class NormalizationProcessor implements SearchPhaseResultsProcessor {
     public static final String TYPE = "normalization-processor";
-    public static final String NORMALIZATION_CLAUSE = "normalization";
-    public static final String COMBINATION_CLAUSE = "combination";
-    public static final String TECHNIQUE = "technique";
 
     private final String tag;
     private final String description;
@@ -54,10 +51,10 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
         final SearchPhaseResults<Result> searchPhaseResult,
         final SearchPhaseContext searchPhaseContext
     ) {
-        if (shouldSearchResultsBeIgnored(searchPhaseResult)) {
+        if (shouldRunProcessor(searchPhaseResult)) {
             return;
         }
-        List<QuerySearchResult> querySearchResults = getQuerySearchResults(searchPhaseResult);
+        List<QuerySearchResult> querySearchResults = getQueryPhaseSearchResults(searchPhaseResult);
         normalizationWorkflow.execute(querySearchResults, normalizationTechnique, combinationTechnique);
     }
 
@@ -88,31 +85,33 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
 
     @Override
     public boolean isIgnoreFailure() {
-        return true;
+        return false;
     }
 
-    private <Result extends SearchPhaseResult> boolean shouldSearchResultsBeIgnored(SearchPhaseResults<Result> searchPhaseResult) {
+    private <Result extends SearchPhaseResult> boolean shouldRunProcessor(SearchPhaseResults<Result> searchPhaseResult) {
         if (Objects.isNull(searchPhaseResult) || !(searchPhaseResult instanceof QueryPhaseResultConsumer)) {
             return true;
         }
 
         QueryPhaseResultConsumer queryPhaseResultConsumer = (QueryPhaseResultConsumer) searchPhaseResult;
-        Optional<SearchPhaseResult> maybeResult = queryPhaseResultConsumer.getAtomicArray()
+        Optional<SearchPhaseResult> optionalSearchPhaseResult = queryPhaseResultConsumer.getAtomicArray()
             .asList()
             .stream()
             .filter(Objects::nonNull)
             .findFirst();
-        return isNotHybridQuery(maybeResult);
+        return isNotHybridQuery(optionalSearchPhaseResult);
     }
 
-    private boolean isNotHybridQuery(final Optional<SearchPhaseResult> maybeResult) {
-        return maybeResult.isEmpty()
-            || Objects.isNull(maybeResult.get().queryResult())
-            || Objects.isNull(maybeResult.get().queryResult().topDocs())
-            || !(maybeResult.get().queryResult().topDocs().topDocs instanceof CompoundTopDocs);
+    private boolean isNotHybridQuery(final Optional<SearchPhaseResult> optionalSearchPhaseResult) {
+        return optionalSearchPhaseResult.isEmpty()
+            || Objects.isNull(optionalSearchPhaseResult.get().queryResult())
+            || Objects.isNull(optionalSearchPhaseResult.get().queryResult().topDocs())
+            || !(optionalSearchPhaseResult.get().queryResult().topDocs().topDocs instanceof CompoundTopDocs);
     }
 
-    private <Result extends SearchPhaseResult> List<QuerySearchResult> getQuerySearchResults(final SearchPhaseResults<Result> results) {
+    private <Result extends SearchPhaseResult> List<QuerySearchResult> getQueryPhaseSearchResults(
+        final SearchPhaseResults<Result> results
+    ) {
         return results.getAtomicArray()
             .asList()
             .stream()

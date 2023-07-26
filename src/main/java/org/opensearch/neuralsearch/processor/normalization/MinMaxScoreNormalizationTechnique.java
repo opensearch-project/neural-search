@@ -8,7 +8,6 @@ package org.opensearch.neuralsearch.processor.normalization;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
@@ -21,7 +20,7 @@ import com.google.common.primitives.Floats;
  */
 public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTechnique {
 
-    public static final String TECHNIQUE_NAME = "min_max";
+    protected static final String TECHNIQUE_NAME = "min_max";
     private static final float MIN_SCORE = 0.001f;
     private static final float SINGLE_RESULT_SCORE = 1.0f;
 
@@ -34,14 +33,13 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
      */
     @Override
     public void normalize(final List<CompoundTopDocs> queryTopDocs) {
-        Optional<CompoundTopDocs> optionalCompoundTopDocs = queryTopDocs.stream()
+        int numOfSubqueries = queryTopDocs.stream()
             .filter(Objects::nonNull)
             .filter(topDocs -> topDocs.getCompoundTopDocs().size() > 0)
-            .findAny();
-        if (optionalCompoundTopDocs.isEmpty()) {
-            return;
-        }
-        int numOfSubqueries = optionalCompoundTopDocs.get().getCompoundTopDocs().size();
+            .findAny()
+            .get()
+            .getCompoundTopDocs()
+            .size();
         // get min scores for each sub query
         float[] minScoresPerSubquery = getMinScores(queryTopDocs, numOfSubqueries);
 

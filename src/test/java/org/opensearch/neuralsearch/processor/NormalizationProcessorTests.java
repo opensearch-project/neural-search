@@ -38,7 +38,6 @@ import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
-import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.search.CompoundTopDocs;
@@ -55,6 +54,8 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
     private static final String PROCESSOR_TAG = "mockTag";
     private static final String DESCRIPTION = "mockDescription";
     private static final String INDEX_NAME = "index1";
+    private static final String NORMALIZATION_METHOD = "min_max";
+    private static final String COMBINATION_METHOD = "arithmetic_mean";
     private SearchPhaseController searchPhaseController;
     private ThreadPool threadPool;
     private OpenSearchThreadPoolExecutor executor;
@@ -100,8 +101,8 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         NormalizationProcessor normalizationProcessor = new NormalizationProcessor(
             PROCESSOR_TAG,
             DESCRIPTION,
-            new ScoreNormalizationFactory().createNormalization(MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME),
-            new ScoreCombinationFactory().createCombination(ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME),
+            new ScoreNormalizationFactory().createNormalization(NORMALIZATION_METHOD),
+            new ScoreCombinationFactory().createCombination(COMBINATION_METHOD),
             new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
         );
 
@@ -109,7 +110,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         assertEquals(PROCESSOR_TAG, normalizationProcessor.getTag());
         assertEquals(SearchPhaseName.FETCH, normalizationProcessor.getAfterPhase());
         assertEquals(SearchPhaseName.QUERY, normalizationProcessor.getBeforePhase());
-        assertTrue(normalizationProcessor.isIgnoreFailure());
+        assertFalse(normalizationProcessor.isIgnoreFailure());
     }
 
     public void testSearchResultTypes_whenCompoundDocs_thenDoNormalizationCombination() {
@@ -119,8 +120,8 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         NormalizationProcessor normalizationProcessor = new NormalizationProcessor(
             PROCESSOR_TAG,
             DESCRIPTION,
-            new ScoreNormalizationFactory().createNormalization(MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME),
-            new ScoreCombinationFactory().createCombination(ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME),
+            new ScoreNormalizationFactory().createNormalization(NORMALIZATION_METHOD),
+            new ScoreCombinationFactory().createCombination(COMBINATION_METHOD),
             normalizationProcessorWorkflow
         );
 
@@ -178,7 +179,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         NormalizationProcessor normalizationProcessor = new NormalizationProcessor(
             PROCESSOR_TAG,
             DESCRIPTION,
-            new ScoreNormalizationFactory().createNormalization(MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME),
+            new ScoreNormalizationFactory().createNormalization(NORMALIZATION_METHOD),
             new ScoreCombinationFactory().createCombination(ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME),
             normalizationProcessorWorkflow
         );
@@ -195,8 +196,8 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         NormalizationProcessor normalizationProcessor = new NormalizationProcessor(
             PROCESSOR_TAG,
             DESCRIPTION,
-            new ScoreNormalizationFactory().createNormalization(MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME),
-            new ScoreCombinationFactory().createCombination(ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME),
+            new ScoreNormalizationFactory().createNormalization(NORMALIZATION_METHOD),
+            new ScoreCombinationFactory().createCombination(COMBINATION_METHOD),
             normalizationProcessorWorkflow
         );
 

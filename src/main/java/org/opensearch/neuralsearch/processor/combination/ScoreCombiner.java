@@ -20,8 +20,6 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.neuralsearch.search.CompoundTopDocs;
 
-import com.google.common.annotations.VisibleForTesting;
-
 /**
  * Abstracts combination of scores in query search results.
  */
@@ -52,8 +50,7 @@ public class ScoreCombiner {
             .collect(Collectors.toList());
     }
 
-    @VisibleForTesting
-    protected float combineShardScores(
+    private float combineShardScores(
         final ScoreCombinationTechnique scoreCombinationTechnique,
         final CompoundTopDocs compoundQueryTopDocs
     ) {
@@ -84,16 +81,14 @@ public class ScoreCombiner {
         return combinedNormalizedScoresByDocId.get(sortedDocsIds.get(0));
     }
 
-    @VisibleForTesting
-    protected List<Integer> getSortedDocIds(final Map<Integer, Float> combinedNormalizedScoresByDocId) {
+    private List<Integer> getSortedDocIds(final Map<Integer, Float> combinedNormalizedScoresByDocId) {
         // we're merging docs with normalized and combined scores. we need to have only maxHits results
         List<Integer> sortedDocsIds = new ArrayList<>(combinedNormalizedScoresByDocId.keySet());
         sortedDocsIds.sort((a, b) -> Float.compare(combinedNormalizedScoresByDocId.get(b), combinedNormalizedScoresByDocId.get(a)));
         return sortedDocsIds;
     }
 
-    @VisibleForTesting
-    protected ScoreDoc[] getCombinedScoreDocs(
+    private ScoreDoc[] getCombinedScoreDocs(
         final CompoundTopDocs compoundQueryTopDocs,
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
         final List<Integer> sortedScores,
@@ -109,7 +104,6 @@ public class ScoreCombiner {
         return finalScoreDocs;
     }
 
-    @VisibleForTesting
     public Map<Integer, float[]> getNormalizedScoresPerDocument(final List<TopDocs> topDocsPerSubQuery) {
         Map<Integer, float[]> normalizedScoresPerDoc = new HashMap<>();
         for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
@@ -127,8 +121,7 @@ public class ScoreCombiner {
         return normalizedScoresPerDoc;
     }
 
-    @VisibleForTesting
-    protected Map<Integer, Float> combineScoresAndGetCombinedNormalizedScoresPerDocument(
+    private Map<Integer, Float> combineScoresAndGetCombinedNormalizedScoresPerDocument(
         final Map<Integer, float[]> normalizedScoresPerDocument,
         final ScoreCombinationTechnique scoreCombinationTechnique
     ) {
@@ -137,8 +130,7 @@ public class ScoreCombiner {
             .collect(Collectors.toMap(Map.Entry::getKey, entry -> scoreCombinationTechnique.combine(entry.getValue())));
     }
 
-    @VisibleForTesting
-    protected void updateQueryTopDocsWithCombinedScores(
+    private void updateQueryTopDocsWithCombinedScores(
         final CompoundTopDocs compoundQueryTopDocs,
         final List<TopDocs> topDocsPerSubQuery,
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
@@ -151,7 +143,6 @@ public class ScoreCombiner {
         compoundQueryTopDocs.totalHits = getTotalHits(topDocsPerSubQuery, maxHits);
     }
 
-    @VisibleForTesting
     protected int getMaxHits(final List<TopDocs> topDocsPerSubQuery) {
         int maxHits = 0;
         for (TopDocs topDocs : topDocsPerSubQuery) {
@@ -161,8 +152,7 @@ public class ScoreCombiner {
         return maxHits;
     }
 
-    @VisibleForTesting
-    protected TotalHits getTotalHits(final List<TopDocs> topDocsPerSubQuery, int maxHits) {
+    private TotalHits getTotalHits(final List<TopDocs> topDocsPerSubQuery, int maxHits) {
         TotalHits.Relation totalHits = TotalHits.Relation.EQUAL_TO;
         if (topDocsPerSubQuery.stream().anyMatch(topDocs -> topDocs.totalHits.relation == TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO)) {
             totalHits = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;

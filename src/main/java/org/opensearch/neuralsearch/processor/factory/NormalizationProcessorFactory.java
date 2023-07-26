@@ -26,6 +26,10 @@ import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
  */
 @AllArgsConstructor
 public class NormalizationProcessorFactory implements Processor.Factory<SearchPhaseResultsProcessor> {
+    public static final String NORMALIZATION_CLAUSE = "normalization";
+    public static final String COMBINATION_CLAUSE = "combination";
+    public static final String TECHNIQUE = "technique";
+
     private final NormalizationProcessorWorkflow normalizationProcessorWorkflow;
     private ScoreNormalizationFactory scoreNormalizationFactory;
     private ScoreCombinationFactory scoreCombinationFactory;
@@ -39,28 +43,18 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
         final Map<String, Object> config,
         final Processor.PipelineContext pipelineContext
     ) throws Exception {
-        Map<String, Object> normalizationClause = readOptionalMap(
-            NormalizationProcessor.TYPE,
-            tag,
-            config,
-            NormalizationProcessor.NORMALIZATION_CLAUSE
-        );
+        Map<String, Object> normalizationClause = readOptionalMap(NormalizationProcessor.TYPE, tag, config, NORMALIZATION_CLAUSE);
         ScoreNormalizationTechnique normalizationTechnique = ScoreNormalizationFactory.DEFAULT_METHOD;
         if (Objects.nonNull(normalizationClause)) {
-            String combinationTechnique = (String) normalizationClause.getOrDefault(NormalizationProcessor.TECHNIQUE, "");
-            normalizationTechnique = scoreNormalizationFactory.createNormalization(combinationTechnique);
+            String normalizationTechniqueName = (String) normalizationClause.getOrDefault(TECHNIQUE, "");
+            normalizationTechnique = scoreNormalizationFactory.createNormalization(normalizationTechniqueName);
         }
 
-        Map<String, Object> combinationClause = readOptionalMap(
-            NormalizationProcessor.TYPE,
-            tag,
-            config,
-            NormalizationProcessor.COMBINATION_CLAUSE
-        );
+        Map<String, Object> combinationClause = readOptionalMap(NormalizationProcessor.TYPE, tag, config, COMBINATION_CLAUSE);
 
         ScoreCombinationTechnique scoreCombinationTechnique = ScoreCombinationFactory.DEFAULT_METHOD;
         if (Objects.nonNull(combinationClause)) {
-            String combinationTechnique = (String) combinationClause.getOrDefault(NormalizationProcessor.TECHNIQUE, "");
+            String combinationTechnique = (String) combinationClause.getOrDefault(TECHNIQUE, "");
             scoreCombinationTechnique = scoreCombinationFactory.createCombination(combinationTechnique);
         }
 
