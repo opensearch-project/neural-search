@@ -41,27 +41,27 @@ public class ArithmeticMeanScoreCombinationTechnique implements ScoreCombination
 
     /**
      * Arithmetic mean method for combining scores.
-     * cscore = (score1 + score2 +...+ scoreN)/N
+     * score = (weight1*score1 + weight2*score2 +...+ weightN*scoreN)/(weight1 + weight2 + ... + weightN)
      *
      * Zero (0.0) scores are excluded from number of scores N
      */
     @Override
     public float combine(final float[] scores) {
         float combinedScore = 0.0f;
-        int count = 0;
+        float weights = 0;
         for (int indexOfSubQuery = 0; indexOfSubQuery < scores.length; indexOfSubQuery++) {
             float score = scores[indexOfSubQuery];
             if (score >= 0.0) {
                 float weight = getWeightForSubQuery(indexOfSubQuery);
                 score = score * weight;
                 combinedScore += score;
-                count++;
+                weights += weight;
             }
         }
-        if (count == 0) {
+        if (weights == 0.0f) {
             return ZERO_SCORE;
         }
-        return combinedScore / count;
+        return combinedScore / weights;
     }
 
     private void validateParams(final Map<String, Object> params) {
