@@ -5,6 +5,7 @@
 
 package org.opensearch.neuralsearch.processor.factory;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.mock;
 import static org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory.COMBINATION_CLAUSE;
 import static org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory.NORMALIZATION_CLAUSE;
@@ -245,7 +246,7 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         boolean ignoreFailure = false;
         Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
 
-        expectThrows(
+        OpenSearchParseException exceptionBadTechnique = expectThrows(
             OpenSearchParseException.class,
             () -> normalizationProcessorFactory.create(
                 processorFactories,
@@ -270,27 +271,9 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
                 pipelineContext
             )
         );
+        assertThat(exceptionBadTechnique.getMessage(), containsString("provided combination technique is not supported"));
 
-        expectThrows(
-            OpenSearchParseException.class,
-            () -> normalizationProcessorFactory.create(
-                processorFactories,
-                tag,
-                description,
-                ignoreFailure,
-                new HashMap<>(
-                    Map.of(
-                        NormalizationProcessorFactory.NORMALIZATION_CLAUSE,
-                        new HashMap(Map.of(TECHNIQUE, NORMALIZATION_METHOD)),
-                        NormalizationProcessorFactory.COMBINATION_CLAUSE,
-                        new HashMap(Map.of(TECHNIQUE, "", NormalizationProcessorFactory.PARAMETERS, new HashMap<>(Map.of("weights", 5.0))))
-                    )
-                ),
-                pipelineContext
-            )
-        );
-
-        expectThrows(
+        OpenSearchParseException exceptionInvalidWeights = expectThrows(
             OpenSearchParseException.class,
             () -> normalizationProcessorFactory.create(
                 processorFactories,
@@ -305,9 +288,9 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
                         new HashMap(
                             Map.of(
                                 TECHNIQUE,
-                                "",
+                                COMBINATION_METHOD,
                                 NormalizationProcessorFactory.PARAMETERS,
-                                new HashMap<>(Map.of("weights", new Boolean[] { true, false }))
+                                new HashMap<>(Map.of("weights", 5.0))
                             )
                         )
                     )
@@ -315,8 +298,9 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
                 pipelineContext
             )
         );
+        assertThat(exceptionInvalidWeights.getMessage(), containsString("parameter [weights] must be a collection of numbers"));
 
-        expectThrows(
+        OpenSearchParseException exceptionInvalidWeights2 = expectThrows(
             OpenSearchParseException.class,
             () -> normalizationProcessorFactory.create(
                 processorFactories,
@@ -329,12 +313,48 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
                         new HashMap(Map.of(TECHNIQUE, NORMALIZATION_METHOD)),
                         NormalizationProcessorFactory.COMBINATION_CLAUSE,
                         new HashMap(
-                            Map.of(TECHNIQUE, "", NormalizationProcessorFactory.PARAMETERS, new HashMap<>(Map.of("random_param", "value")))
+                            Map.of(
+                                TECHNIQUE,
+                                COMBINATION_METHOD,
+                                NormalizationProcessorFactory.PARAMETERS,
+                                new HashMap<>(Map.of("weights", new Boolean[] { true, false }))
+                            )
                         )
                     )
                 ),
                 pipelineContext
             )
+        );
+        assertThat(exceptionInvalidWeights2.getMessage(), containsString("parameter [weights] must be a collection of numbers"));
+
+        OpenSearchParseException exceptionInvalidParam = expectThrows(
+            OpenSearchParseException.class,
+            () -> normalizationProcessorFactory.create(
+                processorFactories,
+                tag,
+                description,
+                ignoreFailure,
+                new HashMap<>(
+                    Map.of(
+                        NormalizationProcessorFactory.NORMALIZATION_CLAUSE,
+                        new HashMap(Map.of(TECHNIQUE, NORMALIZATION_METHOD)),
+                        NormalizationProcessorFactory.COMBINATION_CLAUSE,
+                        new HashMap(
+                            Map.of(
+                                TECHNIQUE,
+                                COMBINATION_METHOD,
+                                NormalizationProcessorFactory.PARAMETERS,
+                                new HashMap<>(Map.of("random_param", "value"))
+                            )
+                        )
+                    )
+                ),
+                pipelineContext
+            )
+        );
+        assertThat(
+            exceptionInvalidParam.getMessage(),
+            containsString("provided parameter for combination technique is not supported. supported parameters are [weights]")
         );
     }
 }

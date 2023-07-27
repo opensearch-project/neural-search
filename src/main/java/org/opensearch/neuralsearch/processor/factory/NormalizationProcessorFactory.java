@@ -13,6 +13,7 @@ import java.util.Objects;
 
 import lombok.AllArgsConstructor;
 
+import org.opensearch.OpenSearchParseException;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
@@ -55,12 +56,15 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
         Map<String, Object> combinationClause = readOptionalMap(NormalizationProcessor.TYPE, tag, config, COMBINATION_CLAUSE);
 
         ScoreCombinationTechnique scoreCombinationTechnique = ScoreCombinationFactory.DEFAULT_METHOD;
-        Map<String, Object> combinationParams;
         if (Objects.nonNull(combinationClause)) {
             String combinationTechnique = readOptionalStringProperty(NormalizationProcessor.TYPE, tag, combinationClause, TECHNIQUE);
             // check for optional combination params
-            combinationParams = readOptionalMap(NormalizationProcessor.TYPE, tag, combinationClause, PARAMETERS);
-            scoreCombinationTechnique = scoreCombinationFactory.createCombination(combinationTechnique, combinationParams);
+            Map<String, Object> combinationParams = readOptionalMap(NormalizationProcessor.TYPE, tag, combinationClause, PARAMETERS);
+            try {
+                scoreCombinationTechnique = scoreCombinationFactory.createCombination(combinationTechnique, combinationParams);
+            } catch (IllegalArgumentException illegalArgumentException) {
+                throw new OpenSearchParseException(illegalArgumentException.getMessage(), illegalArgumentException);
+            }
         }
 
         return new NormalizationProcessor(
