@@ -9,6 +9,7 @@ import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -250,6 +251,92 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
         assertQueryResults(searchResponseAsMap, 4, true);
     }
 
+    @SneakyThrows
+    public void testCombinationParams_whenWeightsParamSet_thenSuccessful() {
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
+        // check case when number of weights and sub-queries are same
+        createSearchPipeline(
+            SEARCH_PIPELINE,
+            NORMALIZATION_METHOD,
+            COMBINATION_METHOD,
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.6f, 0.5f, 0.5f }))
+        );
+
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        hybridQueryBuilder.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
+        hybridQueryBuilder.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4));
+        hybridQueryBuilder.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT7));
+
+        Map<String, Object> searchResponseWithWeights1AsMap = search(
+            TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+            hybridQueryBuilder,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
+
+        assertWeightedScores(searchResponseWithWeights1AsMap, 0.6, 0.5, 0.001);
+
+        // delete existing pipeline and create a new one with another set of weights
+        deleteSearchPipeline(SEARCH_PIPELINE);
+        createSearchPipeline(
+            SEARCH_PIPELINE,
+            NORMALIZATION_METHOD,
+            COMBINATION_METHOD,
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.8f, 2.0f, 0.5f }))
+        );
+
+        Map<String, Object> searchResponseWithWeights2AsMap = search(
+            TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+            hybridQueryBuilder,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
+
+        assertWeightedScores(searchResponseWithWeights2AsMap, 2.0, 0.8, 0.001);
+
+        // check case when number of weights is less than number of sub-queries
+        // delete existing pipeline and create a new one with another set of weights
+        deleteSearchPipeline(SEARCH_PIPELINE);
+        createSearchPipeline(
+            SEARCH_PIPELINE,
+            NORMALIZATION_METHOD,
+            COMBINATION_METHOD,
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.8f }))
+        );
+
+        Map<String, Object> searchResponseWithWeights3AsMap = search(
+            TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+            hybridQueryBuilder,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
+
+        assertWeightedScores(searchResponseWithWeights3AsMap, 1.0, 0.8, 0.001);
+
+        // check case when number of weights is more than number of sub-queries
+        // delete existing pipeline and create a new one with another set of weights
+        deleteSearchPipeline(SEARCH_PIPELINE);
+        createSearchPipeline(
+            SEARCH_PIPELINE,
+            NORMALIZATION_METHOD,
+            COMBINATION_METHOD,
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.6f, 0.5f, 0.5f, 1.5f }))
+        );
+
+        Map<String, Object> searchResponseWithWeights4AsMap = search(
+            TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+            hybridQueryBuilder,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
+
+        assertWeightedScores(searchResponseWithWeights4AsMap, 0.6, 0.5, 0.001);
+    }
+
     private void initializeIndexIfNotExist(String indexName) throws IOException {
         if (TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME.equalsIgnoreCase(indexName) && !indexExists(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME)) {
             prepareKnnIndex(
@@ -401,5 +488,32 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
         }
         // verify that all ids are unique
         assertEquals(Set.copyOf(ids).size(), ids.size());
+    }
+
+    private void assertWeightedScores(
+        Map<String, Object> searchResponseWithWeightsAsMap,
+        double expectedMaxScore,
+        double expectedMaxMinusOneScore,
+        double expectedMinScore
+    ) {
+        assertNotNull(searchResponseWithWeightsAsMap);
+        Map<String, Object> totalWeights = getTotalHits(searchResponseWithWeightsAsMap);
+        assertNotNull(totalWeights.get("value"));
+        assertEquals(4, totalWeights.get("value"));
+        assertNotNull(totalWeights.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, totalWeights.get("relation"));
+        assertTrue(getMaxScore(searchResponseWithWeightsAsMap).isPresent());
+        assertEquals(expectedMaxScore, getMaxScore(searchResponseWithWeightsAsMap).get(), 0.001f);
+
+        List<Double> scoresWeights = new ArrayList<>();
+        for (Map<String, Object> oneHit : getNestedHits(searchResponseWithWeightsAsMap)) {
+            scoresWeights.add((Double) oneHit.get("_score"));
+        }
+        // verify scores order
+        assertTrue(IntStream.range(0, scoresWeights.size() - 1).noneMatch(idx -> scoresWeights.get(idx) < scoresWeights.get(idx + 1)));
+        // verify the scores are normalized with inclusion of weights
+        assertEquals(expectedMaxScore, scoresWeights.get(0), 0.001);
+        assertEquals(expectedMaxMinusOneScore, scoresWeights.get(1), 0.001);
+        assertEquals(expectedMinScore, scoresWeights.get(scoresWeights.size() - 1), 0.001);
     }
 }

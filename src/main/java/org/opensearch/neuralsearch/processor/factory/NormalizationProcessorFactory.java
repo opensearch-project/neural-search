@@ -6,6 +6,7 @@
 package org.opensearch.neuralsearch.processor.factory;
 
 import static org.opensearch.ingest.ConfigurationUtils.readOptionalMap;
+import static org.opensearch.ingest.ConfigurationUtils.readOptionalStringProperty;
 
 import java.util.Map;
 import java.util.Objects;
@@ -29,6 +30,7 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
     public static final String NORMALIZATION_CLAUSE = "normalization";
     public static final String COMBINATION_CLAUSE = "combination";
     public static final String TECHNIQUE = "technique";
+    public static final String PARAMETERS = "parameters";
 
     private final NormalizationProcessorWorkflow normalizationProcessorWorkflow;
     private ScoreNormalizationFactory scoreNormalizationFactory;
@@ -53,9 +55,12 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
         Map<String, Object> combinationClause = readOptionalMap(NormalizationProcessor.TYPE, tag, config, COMBINATION_CLAUSE);
 
         ScoreCombinationTechnique scoreCombinationTechnique = ScoreCombinationFactory.DEFAULT_METHOD;
+        Map<String, Object> combinationParams;
         if (Objects.nonNull(combinationClause)) {
-            String combinationTechnique = (String) combinationClause.getOrDefault(TECHNIQUE, "");
-            scoreCombinationTechnique = scoreCombinationFactory.createCombination(combinationTechnique);
+            String combinationTechnique = readOptionalStringProperty(NormalizationProcessor.TYPE, tag, combinationClause, TECHNIQUE);
+            // check for optional combination params
+            combinationParams = readOptionalMap(NormalizationProcessor.TYPE, tag, combinationClause, PARAMETERS);
+            scoreCombinationTechnique = scoreCombinationFactory.createCombination(combinationTechnique, combinationParams);
         }
 
         return new NormalizationProcessor(
