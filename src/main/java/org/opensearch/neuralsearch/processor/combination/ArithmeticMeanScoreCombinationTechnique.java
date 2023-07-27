@@ -5,14 +5,13 @@
 
 package org.opensearch.neuralsearch.processor.combination;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-
-import org.opensearch.OpenSearchParseException;
+import java.util.stream.Collectors;
 
 /**
  * Abstracts combination of scores based on arithmetic mean method
@@ -21,17 +20,23 @@ public class ArithmeticMeanScoreCombinationTechnique implements ScoreCombination
 
     public static final String TECHNIQUE_NAME = "arithmetic_mean";
     public static final String PARAM_NAME_WEIGHTS = "weights";
+    private static final Set<String> SUPPORTED_PARAMS = Set.of(PARAM_NAME_WEIGHTS);
     private static final Float ZERO_SCORE = 0.0f;
-    private final List<Double> weights;
+    private final List<Float> weights;
 
     public ArithmeticMeanScoreCombinationTechnique(final Map<String, Object> params) {
         validateParams(params);
+        weights = getWeights(params);
+    }
+
+    private List<Float> getWeights(final Map<String, Object> params) {
         if (Objects.isNull(params) || params.isEmpty()) {
-            weights = List.of();
-            return;
+            return List.of();
         }
         // get weights, we don't need to check for instance as it's done during validation
-        weights = (List<Double>) params.getOrDefault(PARAM_NAME_WEIGHTS, new ArrayList<>());
+        return ((List<Double>) params.getOrDefault(PARAM_NAME_WEIGHTS, List.of())).stream()
+            .map(Double::floatValue)
+            .collect(Collectors.toUnmodifiableList());
     }
 
     /**
@@ -44,13 +49,11 @@ public class ArithmeticMeanScoreCombinationTechnique implements ScoreCombination
     public float combine(final float[] scores) {
         float combinedScore = 0.0f;
         int count = 0;
-        for (int i = 0; i < scores.length; i++) {
-            float score = scores[i];
+        for (int indexOfSubQuery = 0; indexOfSubQuery < scores.length; indexOfSubQuery++) {
+            float score = scores[indexOfSubQuery];
             if (score >= 0.0) {
-                // apply weight for this sub-query if it's set for particular sub-query
-                if (i < weights.size()) {
-                    score = (float) (score * weights.get(i));
-                }
+                float weight = getWeightForSubQuery(indexOfSubQuery);
+                score = score * weight;
                 combinedScore += score;
                 count++;
             }
@@ -66,20 +69,36 @@ public class ArithmeticMeanScoreCombinationTechnique implements ScoreCombination
             return;
         }
         // check if only supported params are passed
-        Set<String> supportedParams = Set.of(PARAM_NAME_WEIGHTS);
         Optional<String> optionalNotSupportedParam = params.keySet()
             .stream()
-            .filter(paramName -> !supportedParams.contains(paramName))
+            .filter(paramName -> !SUPPORTED_PARAMS.contains(paramName))
             .findFirst();
         if (optionalNotSupportedParam.isPresent()) {
-            throw new OpenSearchParseException("provided parameter for combination technique is not supported");
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "provided parameter for combination technique is not supported. supported parameters are [%s]",
+                    SUPPORTED_PARAMS.stream().collect(Collectors.joining(","))
+                )
+            );
         }
 
         // check param types
         if (params.keySet().stream().anyMatch(PARAM_NAME_WEIGHTS::equalsIgnoreCase)) {
             if (!(params.get(PARAM_NAME_WEIGHTS) instanceof List)) {
-                throw new OpenSearchParseException("parameter {} must be a collection of numbers", PARAM_NAME_WEIGHTS);
+                throw new IllegalArgumentException(
+                    String.format(Locale.ROOT, "parameter [%s] must be a collection of numbers", PARAM_NAME_WEIGHTS)
+                );
             }
         }
+    }
+
+    /**
+     * Get weight for sub-query based on its index in the hybrid search query. Use user provided weight or 1.0 otherwise
+     * @param indexOfSubQuery 0-based index of sub-query in the Hybrid Search query
+     * @return weight for sub-query, use one that is set in processor/pipeline definition or 1.0 as default
+     */
+    private float getWeightForSubQuery(int indexOfSubQuery) {
+        return indexOfSubQuery < weights.size() ? weights.get(indexOfSubQuery).floatValue() : 1.0f;
     }
 }
