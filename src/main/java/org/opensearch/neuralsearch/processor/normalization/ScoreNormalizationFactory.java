@@ -8,8 +8,6 @@ package org.opensearch.neuralsearch.processor.normalization;
 import java.util.Map;
 import java.util.Optional;
 
-import org.opensearch.OpenSearchParseException;
-
 /**
  * Abstracts creation of exact score normalization method based on technique name
  */
@@ -29,6 +27,6 @@ public class ScoreNormalizationFactory {
      */
     public ScoreNormalizationTechnique createNormalization(final String technique) {
         return Optional.ofNullable(scoreNormalizationMethodsMap.get(technique))
-            .orElseThrow(() -> new OpenSearchParseException("provided normalization technique is not supported"));
+            .orElseThrow(() -> new IllegalArgumentException("provided normalization technique is not supported"));
     }
 }

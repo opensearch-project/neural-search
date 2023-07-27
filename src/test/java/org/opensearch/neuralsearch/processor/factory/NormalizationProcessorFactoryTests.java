@@ -18,7 +18,6 @@ import java.util.Map;
 
 import lombok.SneakyThrows;
 
-import org.opensearch.OpenSearchParseException;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
@@ -49,6 +48,35 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         String description = "description";
         boolean ignoreFailure = false;
         Map<String, Object> config = new HashMap<>();
+        Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
+        SearchPhaseResultsProcessor searchPhaseResultsProcessor = normalizationProcessorFactory.create(
+            processorFactories,
+            tag,
+            description,
+            ignoreFailure,
+            config,
+            pipelineContext
+        );
+        assertNotNull(searchPhaseResultsProcessor);
+        assertTrue(searchPhaseResultsProcessor instanceof NormalizationProcessor);
+        NormalizationProcessor normalizationProcessor = (NormalizationProcessor) searchPhaseResultsProcessor;
+        assertEquals("normalization-processor", normalizationProcessor.getType());
+    }
+
+    @SneakyThrows
+    public void testNormalizationProcessor_whenTechniqueNamesNotSet_thenSuccessful() {
+        NormalizationProcessorFactory normalizationProcessorFactory = new NormalizationProcessorFactory(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner()),
+            new ScoreNormalizationFactory(),
+            new ScoreCombinationFactory()
+        );
+        final Map<String, Processor.Factory<SearchPhaseResultsProcessor>> processorFactories = new HashMap<>();
+        String tag = "tag";
+        String description = "description";
+        boolean ignoreFailure = false;
+        Map<String, Object> config = new HashMap<>();
+        config.put("normalization", new HashMap<>(Map.of()));
+        config.put("combination", new HashMap<>(Map.of()));
         Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
         SearchPhaseResultsProcessor searchPhaseResultsProcessor = normalizationProcessorFactory.create(
             processorFactories,
@@ -113,7 +141,7 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
                     TECHNIQUE,
                     "arithmetic_mean",
                     PARAMETERS,
-                    new HashMap<>(Map.of("weights", Arrays.asList(RandomizedTest.randomFloat(), RandomizedTest.randomFloat())))
+                    new HashMap<>(Map.of("weights", Arrays.asList(RandomizedTest.randomDouble(), RandomizedTest.randomDouble())))
                 )
             )
         );
@@ -145,7 +173,7 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
 
         expectThrows(
-            OpenSearchParseException.class,
+            IllegalArgumentException.class,
             () -> normalizationProcessorFactory.create(
                 processorFactories,
                 tag,
@@ -154,9 +182,9 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
                 new HashMap<>(
                     Map.of(
                         NormalizationProcessorFactory.NORMALIZATION_CLAUSE,
-                        Map.of(TECHNIQUE, ""),
+                        new HashMap(Map.of(TECHNIQUE, "")),
                         NormalizationProcessorFactory.COMBINATION_CLAUSE,
-                        Map.of(TECHNIQUE, ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME)
+                        new HashMap(Map.of(TECHNIQUE, ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME))
                     )
                 ),
                 pipelineContext
@@ -164,7 +192,7 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         );
 
         expectThrows(
-            OpenSearchParseException.class,
+            IllegalArgumentException.class,
             () -> normalizationProcessorFactory.create(
                 processorFactories,
                 tag,
@@ -196,7 +224,7 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
 
         expectThrows(
-            OpenSearchParseException.class,
+            IllegalArgumentException.class,
             () -> normalizationProcessorFactory.create(
                 processorFactories,
                 tag,
@@ -215,7 +243,7 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         );
 
         expectThrows(
-            OpenSearchParseException.class,
+            IllegalArgumentException.class,
             () -> normalizationProcessorFactory.create(
                 processorFactories,
                 tag,
@@ -246,8 +274,8 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         boolean ignoreFailure = false;
         Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
 
-        OpenSearchParseException exceptionBadTechnique = expectThrows(
-            OpenSearchParseException.class,
+        IllegalArgumentException exceptionBadTechnique = expectThrows(
+            IllegalArgumentException.class,
             () -> normalizationProcessorFactory.create(
                 processorFactories,
                 tag,
@@ -273,8 +301,8 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         );
         assertThat(exceptionBadTechnique.getMessage(), containsString("provided combination technique is not supported"));
 
-        OpenSearchParseException exceptionInvalidWeights = expectThrows(
-            OpenSearchParseException.class,
+        IllegalArgumentException exceptionInvalidWeights = expectThrows(
+            IllegalArgumentException.class,
             () -> normalizationProcessorFactory.create(
                 processorFactories,
                 tag,
@@ -300,8 +328,8 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         );
         assertThat(exceptionInvalidWeights.getMessage(), containsString("parameter [weights] must be a collection of numbers"));
 
-        OpenSearchParseException exceptionInvalidWeights2 = expectThrows(
-            OpenSearchParseException.class,
+        IllegalArgumentException exceptionInvalidWeights2 = expectThrows(
+            IllegalArgumentException.class,
             () -> normalizationProcessorFactory.create(
                 processorFactories,
                 tag,
@@ -327,8 +355,8 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         );
         assertThat(exceptionInvalidWeights2.getMessage(), containsString("parameter [weights] must be a collection of numbers"));
 
-        OpenSearchParseException exceptionInvalidParam = expectThrows(
-            OpenSearchParseException.class,
+        IllegalArgumentException exceptionInvalidParam = expectThrows(
+            IllegalArgumentException.class,
             () -> normalizationProcessorFactory.create(
                 processorFactories,
                 tag,

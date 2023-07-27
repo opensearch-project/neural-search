@@ -99,6 +99,6 @@ public class ArithmeticMeanScoreCombinationTechnique implements ScoreCombination
      * @return weight for sub-query, use one that is set in processor/pipeline definition or 1.0 as default
      */
     private float getWeightForSubQuery(int indexOfSubQuery) {
-        return indexOfSubQuery < weights.size() ? weights.get(indexOfSubQuery).floatValue() : 1.0f;
+        return indexOfSubQuery < weights.size() ? weights.get(indexOfSubQuery) : 1.0f;
     }
 }

@@ -6,18 +6,19 @@
 package org.opensearch.neuralsearch.processor.factory;
 
 import static org.opensearch.ingest.ConfigurationUtils.readOptionalMap;
-import static org.opensearch.ingest.ConfigurationUtils.readOptionalStringProperty;
+import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
 
 import java.util.Map;
 import java.util.Objects;
 
 import lombok.AllArgsConstructor;
 
-import org.opensearch.OpenSearchParseException;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
+import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.search.pipeline.Processor;
@@ -49,7 +50,13 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
         Map<String, Object> normalizationClause = readOptionalMap(NormalizationProcessor.TYPE, tag, config, NORMALIZATION_CLAUSE);
         ScoreNormalizationTechnique normalizationTechnique = ScoreNormalizationFactory.DEFAULT_METHOD;
         if (Objects.nonNull(normalizationClause)) {
-            String normalizationTechniqueName = (String) normalizationClause.getOrDefault(TECHNIQUE, "");
+            String normalizationTechniqueName = readStringProperty(
+                NormalizationProcessor.TYPE,
+                tag,
+                normalizationClause,
+                TECHNIQUE,
+                MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME
+            );
             normalizationTechnique = scoreNormalizationFactory.createNormalization(normalizationTechniqueName);
         }
 
@@ -57,14 +64,16 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
 
         ScoreCombinationTechnique scoreCombinationTechnique = ScoreCombinationFactory.DEFAULT_METHOD;
         if (Objects.nonNull(combinationClause)) {
-            String combinationTechnique = readOptionalStringProperty(NormalizationProcessor.TYPE, tag, combinationClause, TECHNIQUE);
+            String combinationTechnique = readStringProperty(
+                NormalizationProcessor.TYPE,
+                tag,
+                combinationClause,
+                TECHNIQUE,
+                ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME
+            );
             // check for optional combination params
             Map<String, Object> combinationParams = readOptionalMap(NormalizationProcessor.TYPE, tag, combinationClause, PARAMETERS);
-            try {
-                scoreCombinationTechnique = scoreCombinationFactory.createCombination(combinationTechnique, combinationParams);
-            } catch (IllegalArgumentException illegalArgumentException) {
-                throw new OpenSearchParseException(illegalArgumentException.getMessage(), illegalArgumentException);
-            }
+            scoreCombinationTechnique = scoreCombinationFactory.createCombination(combinationTechnique, combinationParams);
         }
 
         return new NormalizationProcessor(
