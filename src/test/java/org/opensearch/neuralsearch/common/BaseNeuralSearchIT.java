@@ -14,6 +14,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -57,8 +58,9 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     private static final int DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND = 1000;
     private static final String DEFAULT_USER_AGENT = "Kibana";
-    private static final String NORMALIZATION_METHOD = "min_max";
-    private static final String COMBINATION_METHOD = "arithmetic_mean";
+    protected static final String NORMALIZATION_METHOD = "min_max";
+    protected static final String COMBINATION_METHOD = "arithmetic_mean";
+    protected static final String PARAM_NAME_WEIGHTS = "weights";
 
     protected final ClassLoader classLoader = this.getClass().getClassLoader();
 
@@ -566,30 +568,31 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final String pipelineId,
         final String normalizationMethod,
         String combinationMethod,
-        final Map<String, Object> combinationParams
+        final Map<String, String> combinationParams
     ) {
+        StringBuilder stringBuilderForContentBody = new StringBuilder();
+        stringBuilderForContentBody.append("{\"description\": \"Post processor pipeline\",")
+            .append("\"phase_results_processors\": [{ ")
+            .append("\"normalization-processor\": {")
+            .append("\"normalization\": {")
+            .append("\"technique\": \"%s\"")
+            .append("},")
+            .append("\"combination\": {")
+            .append("\"technique\": \"%s\"");
+        if (Objects.nonNull(combinationParams) && !combinationParams.isEmpty()) {
+            stringBuilderForContentBody.append(", \"parameters\": {");
+            if (combinationParams.containsKey(PARAM_NAME_WEIGHTS)) {
+                stringBuilderForContentBody.append("\"weights\": ").append(combinationParams.get(PARAM_NAME_WEIGHTS));
+            }
+            stringBuilderForContentBody.append(" }");
+        }
+        stringBuilderForContentBody.append("}").append("}}]}");
         makeRequest(
             client(),
             "PUT",
             String.format(LOCALE, "/_search/pipeline/%s", pipelineId),
             null,
-            toHttpEntity(
-                String.format(
-                    LOCALE,
-                    "{\"description\": \"Post processor pipeline\","
-                        + "\"phase_results_processors\": [{ "
-                        + "\"normalization-processor\": {"
-                        + "\"normalization\": {"
-                        + "\"technique\": \"%s\""
-                        + "},"
-                        + "\"combination\": {"
-                        + "\"technique\": \"%s\""
-                        + "}"
-                        + "}}]}",
-                    normalizationMethod,
-                    combinationMethod
-                )
-            ),
+            toHttpEntity(String.format(LOCALE, stringBuilderForContentBody.toString(), normalizationMethod, combinationMethod)),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
     }
