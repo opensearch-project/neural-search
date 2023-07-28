@@ -5,9 +5,9 @@
 
 package org.opensearch.neuralsearch.processor.normalization;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.stream.IntStream;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
@@ -30,15 +30,8 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
      */
     @Override
     public void normalize(final List<CompoundTopDocs> queryTopDocs) {
-        int numOfSubqueries = queryTopDocs.stream()
-            .filter(Objects::nonNull)
-            .filter(topDocs -> topDocs.getCompoundTopDocs().size() > 0)
-            .findAny()
-            .get()
-            .getCompoundTopDocs()
-            .size();
         // get l2 norms for each sub-query
-        float[] normsPerSubquery = getL2Norm(queryTopDocs, numOfSubqueries);
+        List<Float> normsPerSubquery = getL2Norm(queryTopDocs);
 
         // do normalization using actual score and l2 norm
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
@@ -49,29 +42,44 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
             for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
                 TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
-                    scoreDoc.score = normalizeSingleScore(scoreDoc.score, normsPerSubquery[j]);
+                    scoreDoc.score = normalizeSingleScore(scoreDoc.score, normsPerSubquery.get(j));
                 }
             }
         }
     }
 
-    private float[] getL2Norm(final List<CompoundTopDocs> queryTopDocs, final int numOfSubqueries) {
+    private List<Float> getL2Norm(final List<CompoundTopDocs> queryTopDocs) {
+        // find any non-empty compound top docs, it's either empty if shard does not have any results for all of sub-queries,
+        // or it has results for all the sub-queries. In edge case of shard having results only for one sub-query, there will be TopDocs for
+        // rest of sub-queries with zero total hits
+        int numOfSubqueries = queryTopDocs.stream()
+            .filter(Objects::nonNull)
+            .filter(topDocs -> topDocs.getCompoundTopDocs().size() > 0)
+            .findAny()
+            .get()
+            .getCompoundTopDocs()
+            .size();
         float[] l2Norms = new float[numOfSubqueries];
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
             if (Objects.isNull(compoundQueryTopDocs)) {
                 continue;
             }
             List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getCompoundTopDocs();
-            IntStream.range(0, topDocsPerSubQuery.size()).forEach(index -> {
+            int bound = topDocsPerSubQuery.size();
+            for (int index = 0; index < bound; index++) {
                 for (ScoreDoc scoreDocs : topDocsPerSubQuery.get(index).scoreDocs) {
                     l2Norms[index] += scoreDocs.score * scoreDocs.score;
                 }
-            });
+            }
         }
         for (int index = 0; index < l2Norms.length; index++) {
             l2Norms[index] = (float) Math.sqrt(l2Norms[index]);
         }
-        return l2Norms;
+        List<Float> l2NormList = new ArrayList<>();
+        for (int index = 0; index < numOfSubqueries; index++) {
+            l2NormList.add(l2Norms[index]);
+        }
+        return l2NormList;
     }
 
     private float normalizeSingleScore(final float score, final float l2Norm) {
