@@ -27,6 +27,7 @@ import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
@@ -93,12 +94,7 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
      *                     "technique": "min-max"
      *                 },
      *                 "combination": {
-     *                     "technique": "sum",
-     *                     "parameters": {
-     *                         "weights": [
-     *                             0.4, 0.7
-     *                         ]
-     *                     }
+     *                     "technique": "arithmetic_mean"
      *                 }
      *             }
      *         }
@@ -251,6 +247,29 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
         assertQueryResults(searchResponseAsMap, 4, true);
     }
 
+    /**
+     * Using search pipelines with result processor configs like below:
+     * {
+     *     "description": "Post processor for hybrid search",
+     *     "phase_results_processors": [
+     *         {
+     *             "normalization-processor": {
+     *                 "normalization": {
+     *                     "technique": "min-max"
+     *                 },
+     *                 "combination": {
+     *                     "technique": "arithmetic_mean",
+     *                     "parameters": {
+     *                         "weights": [
+     *                             0.4, 0.7
+     *                         ]
+     *                     }
+     *                 }
+     *             }
+     *         }
+     *     ]
+     * }
+     */
     @SneakyThrows
     public void testArithmeticWeightedMean_whenWeightsPassed_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
@@ -335,6 +354,74 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
         );
 
         assertWeightedScores(searchResponseWithWeights4AsMap, 1.0, 1.0, 0.001);
+    }
+
+    /**
+     * Using search pipelines with config for l2 norm:
+     * {
+     *     "description": "Post processor for hybrid search",
+     *     "phase_results_processors": [
+     *         {
+     *             "normalization-processor": {
+     *                 "normalization": {
+     *                     "technique": "l2"
+     *                 },
+     *                 "combination": {
+     *                     "technique": "arithmetic_mean"
+     *                 }
+     *             }
+     *         }
+     *     ]
+     * }
+     */
+    @SneakyThrows
+    public void testL2Norm_whenOneShardAndQueryMatches_thenSuccessful() {
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+        createSearchPipeline(
+            SEARCH_PIPELINE,
+            L2ScoreNormalizationTechnique.TECHNIQUE_NAME,
+            COMBINATION_METHOD,
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.8f, 0.7f }))
+        );
+
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId.get(), 5, null, null);
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        hybridQueryBuilder.add(neuralQueryBuilder);
+        hybridQueryBuilder.add(termQueryBuilder);
+
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+            hybridQueryBuilder,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
+        int totalExpectedDocQty = 5;
+        assertNotNull(searchResponseAsMap);
+        Map<String, Object> total = getTotalHits(searchResponseAsMap);
+        assertNotNull(total.get("value"));
+        assertEquals(totalExpectedDocQty, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+        assertTrue(getMaxScore(searchResponseAsMap).isPresent());
+        assertTrue(Range.between(.6f, 1.0f).contains(getMaxScore(searchResponseAsMap).get()));
+
+        List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
+        List<String> ids = new ArrayList<>();
+        List<Double> scores = new ArrayList<>();
+        for (Map<String, Object> oneHit : hitsNestedList) {
+            ids.add((String) oneHit.get("_id"));
+            scores.add((Double) oneHit.get("_score"));
+        }
+        // verify scores order
+        assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
+        // verify the scores are normalized. for l2 scores max score will not be 1.0 so we're checking on a range
+        assertTrue(Range.between(.6f, 1.0f).contains((float) scores.stream().map(Double::floatValue).max(Double::compare).get()));
+
+        // verify that all ids are unique
+        assertEquals(Set.copyOf(ids).size(), ids.size());
     }
 
     private void initializeIndexIfNotExist(String indexName) throws IOException {
