@@ -31,8 +31,11 @@ import org.opensearch.neuralsearch.analyzer.BertTokenizerFactory;
 import org.opensearch.neuralsearch.analyzer.TermWeightAnalyzerProvider;
 import org.opensearch.neuralsearch.analyzer.TermWeightTokenizerFactory;
 import org.opensearch.neuralsearch.ml.MLCommonsTextEmbeddingClientAccessor;
+import org.opensearch.neuralsearch.ml.MLCommonsNeuralSparseClientAccessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
+import org.opensearch.neuralsearch.processor.NeuralSparseDocumentProcessor;
+import org.opensearch.neuralsearch.processor.factory.NeuralSparseProcessorFactory;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.plugins.ActionPlugin;
@@ -46,12 +49,15 @@ import org.opensearch.script.ScriptService;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.watcher.ResourceWatcherService;
 
+import com.google.common.collect.ImmutableMap;
+
 /**
  * Neural Search plugin class
  */
 public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, IngestPlugin, ExtensiblePlugin, AnalysisPlugin {
 
-    private MLCommonsTextEmbeddingClientAccessor clientAccessor;
+    private MLCommonsTextEmbeddingClientAccessor clientTEAccessor;
+    private MLCommonsNeuralSparseClientAccessor clientNSAccessor;
 
     @Override
     public Collection<Object> createComponents(
@@ -67,8 +73,9 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         final IndexNameExpressionResolver indexNameExpressionResolver,
         final Supplier<RepositoriesService> repositoriesServiceSupplier
     ) {
-        NeuralQueryBuilder.initialize(clientAccessor);
-        return List.of(clientAccessor);
+        NeuralQueryBuilder.initialize(clientTEAccessor);
+        NeuralSparseQueryBuilder.initialize(clientNSAccessor);
+        return List.of(clientTEAccessor, clientNSAccessor);
     }
 
     public List<QuerySpec<?>> getQueries() {
@@ -84,8 +91,9 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     @Override
     public Map<String, Processor.Factory> getProcessors(Processor.Parameters parameters) {
-        clientAccessor = new MLCommonsTextEmbeddingClientAccessor(new MachineLearningNodeClient(parameters.client));
-        return Collections.singletonMap(TextEmbeddingProcessor.TYPE, new TextEmbeddingProcessorFactory(clientAccessor, parameters.env));
+        clientTEAccessor = new MLCommonsTextEmbeddingClientAccessor(new MachineLearningNodeClient(parameters.client));
+        clientNSAccessor = new MLCommonsNeuralSparseClientAccessor(new MachineLearningNodeClient(parameters.client));
+        return ImmutableMap.of(TextEmbeddingProcessor.TYPE, new TextEmbeddingProcessorFactory(clientTEAccessor, parameters.env), NeuralSparseDocumentProcessor.TYPE, new NeuralSparseProcessorFactory(clientNSAccessor, parameters.env));
     }
 
     @Override

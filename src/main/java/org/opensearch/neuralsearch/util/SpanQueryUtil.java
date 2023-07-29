@@ -19,6 +19,9 @@ import org.apache.lucene.queries.spans.SpanTermQuery;
 import org.apache.lucene.queryparser.xml.ParserException;
 import org.apache.lucene.util.BytesRef;
 
+import lombok.extern.log4j.Log4j2;
+
+@Log4j2
 public class SpanQueryUtil {
     public static SpanQuery getSpanOrTermQuery(Analyzer analyzer, String fieldName, String value) throws ParserException {
         List<SpanQuery> clausesList = new ArrayList<>();
@@ -34,6 +37,10 @@ public class SpanQueryUtil {
             return new SpanOrQuery(clausesList.toArray(new SpanQuery[clausesList.size()]));
         } catch (IOException ioe) {
             throw new ParserException("IOException parsing value:" + value, ioe);
+        } catch (Exception e) {
+            log.warn("Fail to build span query: " + e.toString());
         }
+
+        return null;
     }
 }

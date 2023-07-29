@@ -177,10 +177,11 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
 
     @Override
     protected Query doToQuery(QueryShardContext context) throws IOException {
+        log.info("start building query [" + fieldName + ", " + queryText + "]");
         Analyzer analyzer = new BertAnalyzer();
         SpanQuery spanQuery;
         try {
-            spanQuery = SpanQueryUtil.getSpanOrTermQuery(analyzer, fieldName, queryName);
+            spanQuery = SpanQueryUtil.getSpanOrTermQuery(analyzer, fieldName, queryText);
         } catch (ParserException e) {
             spanQuery = null;
         }
@@ -189,6 +190,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             ? 1
             : PayloadHelper.decodeFloat(payload.bytes, payload.offset);
 
+        log.info("last to building query");
         return new PayloadScoreQuery(spanQuery, payloadFunction, payloadDecoder, false);
     }
 

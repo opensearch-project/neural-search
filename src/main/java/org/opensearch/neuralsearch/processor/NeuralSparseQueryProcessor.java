@@ -56,4 +56,9 @@ public class NeuralSparseQueryProcessor implements SearchRequestProcessor {
         return null;
     }
 
+    @Override
+    public boolean isIgnoreFailure() {
+        return false;
+    }
+
 }

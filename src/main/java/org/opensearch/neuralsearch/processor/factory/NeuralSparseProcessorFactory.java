@@ -16,12 +16,12 @@ import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.ml.MLCommonsNeuralSparseClientAccessor;
 import org.opensearch.neuralsearch.processor.NeuralSparseDocumentProcessor;
 
-public class NeuralDocumentExpansionProcessorFactory implements Processor.Factory {
+public class NeuralSparseProcessorFactory implements Processor.Factory {
     private final MLCommonsNeuralSparseClientAccessor clientAccessor;
 
     private final Environment environment;
 
-    public NeuralDocumentExpansionProcessorFactory(MLCommonsNeuralSparseClientAccessor clientAccessor, Environment environment) {
+    public NeuralSparseProcessorFactory(MLCommonsNeuralSparseClientAccessor clientAccessor, Environment environment) {
         this.clientAccessor = clientAccessor;
         this.environment = environment;
     }

@@ -18,6 +18,7 @@ import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.dataset.MLInputDataset;
 import org.opensearch.ml.common.dataset.TextDocsInputDataSet;
+import org.opensearch.ml.common.dataset.remote.RemoteInferenceInputDataSet;
 import org.opensearch.ml.common.input.MLInput;
 import org.opensearch.ml.common.output.MLOutput;
 import org.opensearch.ml.common.output.model.ModelResultFilter;
@@ -25,6 +26,8 @@ import org.opensearch.ml.common.output.model.ModelTensor;
 import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
 import org.opensearch.neuralsearch.util.RetryUtil;
+
+import com.google.common.collect.ImmutableMap;
 
 /**
  * This class will act as an abstraction on the MLCommons client for accessing the ML Capabilities
@@ -46,7 +49,7 @@ public class MLCommonsNeuralSparseClientAccessor {
     public void inferenceSentence(
         @NonNull final String modelId,
         @NonNull final String inputText,
-        @NonNull final ActionListener<Map<String, Float>> listener
+        @NonNull final ActionListener<Map<String, Double>> listener
     ) {
         inferenceSentences(TARGET_RESPONSE_FILTERS, modelId, List.of(inputText), ActionListener.wrap(response -> {
             if (response.size() != 1) {
@@ -76,7 +79,7 @@ public class MLCommonsNeuralSparseClientAccessor {
     public void inferenceSentences(
         @NonNull final String modelId,
         @NonNull final List<String> inputText,
-        @NonNull final ActionListener<List<Map<String, Float>>> listener
+        @NonNull final ActionListener<List<Map<String, Double>>> listener
     ) {
         inferenceSentences(TARGET_RESPONSE_FILTERS, modelId, inputText, listener);
     }
@@ -97,7 +100,7 @@ public class MLCommonsNeuralSparseClientAccessor {
         @NonNull final List<String> targetResponseFilters,
         @NonNull final String modelId,
         @NonNull final List<String> inputText,
-        @NonNull final ActionListener<List<Map<String, Float>>> listener
+        @NonNull final ActionListener<List<Map<String, Double>>> listener
     ) {
         inferenceSentencesWithRetry(targetResponseFilters, modelId, inputText, 0, listener);
     }
@@ -107,11 +110,11 @@ public class MLCommonsNeuralSparseClientAccessor {
         final String modelId,
         final List<String> inputText,
         final int retryTime,
-        final ActionListener<List<Map<String, Float>>> listener
+        final ActionListener<List<Map<String, Double>>> listener
     ) {
         MLInput mlInput = createMLInput(targetResponseFilters, inputText);
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
-            final List<Map<String, Float>> vector = buildTermWeightsFromResponse(mlOutput);
+            final List<Map<String, Double>> vector = buildTermWeightsFromResponse(mlOutput);
             log.debug("Inference Response for input sentence {} is : {} ", inputText, vector);
             listener.onResponse(vector);
         }, e -> {
@@ -124,20 +127,41 @@ public class MLCommonsNeuralSparseClientAccessor {
         }));
     }
 
+    private String createTextListParam(List<String> inputText) {
+        if (inputText.size() == 0) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("[");
+        for (int i = 0; i < inputText.size() - 1; i++) {
+            sb.append("\"");
+            sb.append(inputText.get(i));
+            sb.append("\",");
+        }
+
+        sb.append("\"");
+        sb.append(inputText.get(inputText.size() - 1));
+        sb.append("\"");
+        sb.append("]");
+
+        return sb.toString();
+    }
+
     private MLInput createMLInput(final List<String> targetResponseFilters, List<String> inputText) {
         final ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
-        final MLInputDataset inputDataset = new TextDocsInputDataSet(inputText, modelResultFilter);
+        final MLInputDataset inputDataset = new RemoteInferenceInputDataSet(ImmutableMap.of("inputs", createTextListParam(inputText)));
         return new MLInput(FunctionName.REMOTE, null, inputDataset);
     }
 
-    private List<Map<String, Float>> buildTermWeightsFromResponse(MLOutput mlOutput) {
-        final List<Map<String, Float>> ret = new ArrayList<>();
+    private List<Map<String, Double>> buildTermWeightsFromResponse(MLOutput mlOutput) {
+        log.info("building response back from inference");
+        final List<Map<String, Double>> ret = new ArrayList<>();
         final ModelTensorOutput modelTensorOutput = (ModelTensorOutput) mlOutput;
         final List<ModelTensors> tensorOutputList = modelTensorOutput.getMlModelOutputs();
         for (final ModelTensors tensors : tensorOutputList) {
             final List<ModelTensor> tensorsList = tensors.getMlModelTensors();
             for (final ModelTensor tensor : tensorsList) {
-                Map<String, Float> map = (Map<String, Float>) tensor.getDataAsMap();
+                Map<String, Double> map = (Map<String, Double>) tensor.getDataAsMap();
                 ret.add(map);
             }
         }

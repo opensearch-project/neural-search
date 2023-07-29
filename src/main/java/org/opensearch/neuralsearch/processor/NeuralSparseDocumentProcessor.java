@@ -5,6 +5,8 @@
 
 package org.opensearch.neuralsearch.processor;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,7 +33,7 @@ import com.google.common.annotations.VisibleForTesting;
 @Log4j2
 
 public class NeuralSparseDocumentProcessor extends AbstractProcessor {
-    public static final String TYPE = "neural_expansion";
+    public static final String TYPE = "neural_sparse";
     public static final String MODEL_ID_FIELD = "model_id";
     public static final String FIELD_MAP_FIELD = "field_map";
 
@@ -81,8 +83,8 @@ public class NeuralSparseDocumentProcessor extends AbstractProcessor {
             if (inferenceList.size() == 0) {
                 handler.accept(ingestDocument, null);
             } else {
-                mlCommonsClientAccessor.inferenceSentences(this.modelId, inferenceList, ActionListener.wrap(vectors -> {
-                    appendNeuralSparseResultToDocument(ingestDocument, sparseMap, vectors);
+                mlCommonsClientAccessor.inferenceSentences(this.modelId, inferenceList, ActionListener.wrap(tw -> {
+                    appendNeuralSparseResultToDocument(ingestDocument, sparseMap, tw);
                     handler.accept(ingestDocument, null);
                 }, e -> { handler.accept(null, e); }));
             }
@@ -94,7 +96,7 @@ public class NeuralSparseDocumentProcessor extends AbstractProcessor {
     void appendNeuralSparseResultToDocument(
         IngestDocument ingestDocument,
         Map<String, Object> expansionMap,
-        List<Map<String, Float>> termWeightMapList
+        List<Map<String, Double>> termWeightMapList
     ) {
         Objects.requireNonNull(termWeightMapList, "embedding failed, inference returns null result!");
         log.debug("Text embedding result fetched, starting build vector output!");
@@ -103,7 +105,7 @@ public class NeuralSparseDocumentProcessor extends AbstractProcessor {
             termWeightMapList,
             ingestDocument.getSourceAndMetadata()
         );
-        neuralExpansionResult.forEach(ingestDocument::appendFieldValue);
+        neuralExpansionResult.forEach(ingestDocument::setFieldValue);
     }
 
     @SuppressWarnings({ "unchecked" })
@@ -181,15 +183,18 @@ public class NeuralSparseDocumentProcessor extends AbstractProcessor {
     @VisibleForTesting
     Map<String, Object> buildNeuralSparseResult(
         Map<String, Object> sparseMap,
-        List<Map<String, Float>> termWeightMapList,
+        List<Map<String, Double>> termWeightMapList,
         Map<String, Object> sourceAndMetadataMap
     ) {
+        log.info("building sparse result");
         IndexWrapper indexWrapper = new IndexWrapper(0);
         Map<String, Object> result = new LinkedHashMap<>();
         for (Map.Entry<String, Object> sparseMapEntry : sparseMap.entrySet()) {
             String knnKey = sparseMapEntry.getKey();
             Object sourceValue = sparseMapEntry.getValue();
+            log.info("key = " + knnKey + ", val = " + sourceValue.toString());
             if (sourceValue instanceof String) {
+                log.info("i am here");
                 var termWeights = termWeightMapList.get(indexWrapper.index++);
                 result.put(knnKey, encodeTermWeightPairs(termWeights));
             } else if (sourceValue instanceof List) {
@@ -198,6 +203,7 @@ public class NeuralSparseDocumentProcessor extends AbstractProcessor {
                 putNeuralSparseResultToSourceMapForMapType(knnKey, sourceValue, termWeightMapList, indexWrapper, sourceAndMetadataMap);
             }
         }
+        log.info("built sparse result");
         return result;
     }
 
@@ -205,7 +211,7 @@ public class NeuralSparseDocumentProcessor extends AbstractProcessor {
     private void putNeuralSparseResultToSourceMapForMapType(
         String knnKey,
         Object sourceValue,
-        List<Map<String, Float>> termWeightMapList,
+        List<Map<String, Double>> termWeightMapList,
         IndexWrapper indexWrapper,
         Map<String, Object> sourceAndMetadataMap
     ) {
@@ -232,7 +238,7 @@ public class NeuralSparseDocumentProcessor extends AbstractProcessor {
 
     private List<String> buildNeuralSparseResultForListType(
         List<String> sourceValue,
-        List<Map<String, Float>> termWeightMapList,
+        List<Map<String, Double>> termWeightMapList,
         IndexWrapper indexWrapper
     ) {
         List<String> twList = new ArrayList<>();
@@ -241,16 +247,28 @@ public class NeuralSparseDocumentProcessor extends AbstractProcessor {
         return twList;
     }
 
-    private String encodeTermWeightPairs(Map<String, Float> termWeights) {
-        StringBuilder builder = new StringBuilder();
-        for (var p : termWeights.entrySet()) {
-            builder.append(p.getKey());
-            builder.append("|");
-            builder.append(p.getValue().toString());
-            builder.append("|");
+    private String encodeTermWeightPairs(Map<String, Double> termWeights) {
+        log.info("termWeights = " + termWeights.toString());
+        try{
+            StringBuilder builder = new StringBuilder();
+            for (var p : termWeights.entrySet()) {
+                builder.append(p.getKey());
+                builder.append("|");
+                builder.append(p.getValue().toString());
+                builder.append("|");
+            }
+
+            var tw = builder.substring(0, builder.length()-1);
+            log.info("tw = " + tw);
+            return tw;
+        } catch (Exception e) {
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            e.printStackTrace(pw);
+            log.warn("Exception = " + e.toString() + ", stack = " + sw.toString());
         }
 
-        return builder.substring(0, builder.length());
+        return "";
     }
 
     static class IndexWrapper {
@@ -263,7 +281,6 @@ public class NeuralSparseDocumentProcessor extends AbstractProcessor {
 
     @Override
     public String getType() {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getType'");
+        return TYPE;
     }
 }
