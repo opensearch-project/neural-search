@@ -83,7 +83,11 @@ validateNebulaPom.enabled = false
 
 buildscript {
     ext {
+<<<<<<< HEAD
         opensearch_version = System.getProperty("opensearch.version", "2.9.0-SNAPSHOT")
+=======
+        opensearch_version = System.getProperty("opensearch.version", "2.8.0-SNAPSHOT")
+>>>>>>> b9c03dc04512559bedf43c39b2806fb2d67018cc
         buildVersionQualifier = System.getProperty("build.version_qualifier", "")
         isSnapshot = "true" == System.getProperty("build.snapshot", "true")
         version_tokens = opensearch_version.tokenize('-')
@@ -144,7 +148,7 @@ dependencies {
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-ml-plugin', version: "${opensearch_build}"
     compileOnly fileTree(dir: knnJarDirectory, include: '*.jar')
     api group: 'org.opensearch', name:'opensearch-ml-client', version: "${opensearch_build}"
-    implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.10'
+    //implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.10'
     // ml-common excluded reflection for runtime so we need to add it by ourselves.
     // https://github.com/opensearch-project/ml-commons/commit/464bfe34c66d7a729a00dd457f03587ea4e504d9
     // TODO: Remove following three lines of dependencies if ml-common include them in their jar
@@ -156,8 +160,12 @@ dependencies {
     implementation group: 'ai.djl', name: 'api', version: '0.19.0'
     implementation group: 'ai.djl.huggingface', name: 'tokenizers', version: '0.19.0'
     implementation group: 'org.slf4j', name: 'slf4j-api', version: '1.7.36' 
+<<<<<<< HEAD
     implementation group: 'com.google.code.gson', name: 'gson', version: '2.10.1'
 }   
+=======
+}
+>>>>>>> b9c03dc04512559bedf43c39b2806fb2d67018cc
 
 // In order to add the jar to the classpath, we need to unzip the
 // k-NN zip and then copy it into a directory that we specify as a dependency.
