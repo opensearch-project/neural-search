@@ -18,7 +18,9 @@ public class ScoreCombinationFactory {
 
     private final Map<String, Function<Map<String, Object>, ScoreCombinationTechnique>> scoreCombinationMethodsMap = Map.of(
         ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-        ArithmeticMeanScoreCombinationTechnique::new
+        ArithmeticMeanScoreCombinationTechnique::new,
+        HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+        HarmonicMeanScoreCombinationTechnique::new
     );
 
     /**

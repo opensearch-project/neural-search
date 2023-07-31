@@ -58,8 +58,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     private static final int DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND = 1000;
     private static final String DEFAULT_USER_AGENT = "Kibana";
-    protected static final String NORMALIZATION_METHOD = "min_max";
-    protected static final String COMBINATION_METHOD = "arithmetic_mean";
+    protected static final String DEFAULT_NORMALIZATION_METHOD = "min_max";
+    protected static final String DEFAULT_COMBINATION_METHOD = "arithmetic_mean";
     protected static final String PARAM_NAME_WEIGHTS = "weights";
 
     protected final ClassLoader classLoader = this.getClass().getClassLoader();
@@ -556,7 +556,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     @SneakyThrows
     protected void createSearchPipelineWithResultsPostProcessor(final String pipelineId) {
-        createSearchPipeline(pipelineId, NORMALIZATION_METHOD, COMBINATION_METHOD, Map.of());
+        createSearchPipeline(pipelineId, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of());
     }
 
     @SneakyThrows

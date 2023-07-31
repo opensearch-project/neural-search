@@ -27,7 +27,6 @@ import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
-import org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
@@ -58,6 +57,10 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
     private final float[] testVector4 = createRandomVector(TEST_DIMENSION);
     private final static String RELATION_EQUAL_TO = "eq";
     private final static String RELATION_GREATER_OR_EQUAL_TO = "gte";
+
+    private static final String L2_NORMALIZATION_METHOD = "l2";
+    private static final String HARMONIC_MEAN_COMBINATION_METHOD = "harmonic_mean";
+    private static final String GEOMETRIC_MEAN_COMBINATION_METHOD = "geometric_mean";
 
     @Before
     public void setUp() throws Exception {
@@ -276,8 +279,8 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
         // check case when number of weights and sub-queries are same
         createSearchPipeline(
             SEARCH_PIPELINE,
-            NORMALIZATION_METHOD,
-            COMBINATION_METHOD,
+            DEFAULT_NORMALIZATION_METHOD,
+            DEFAULT_COMBINATION_METHOD,
             Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.6f, 0.5f, 0.5f }))
         );
 
@@ -300,8 +303,8 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
         deleteSearchPipeline(SEARCH_PIPELINE);
         createSearchPipeline(
             SEARCH_PIPELINE,
-            NORMALIZATION_METHOD,
-            COMBINATION_METHOD,
+            DEFAULT_NORMALIZATION_METHOD,
+            DEFAULT_COMBINATION_METHOD,
             Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.8f, 2.0f, 0.5f }))
         );
 
@@ -320,8 +323,8 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
         deleteSearchPipeline(SEARCH_PIPELINE);
         createSearchPipeline(
             SEARCH_PIPELINE,
-            NORMALIZATION_METHOD,
-            COMBINATION_METHOD,
+            DEFAULT_NORMALIZATION_METHOD,
+            DEFAULT_COMBINATION_METHOD,
             Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.8f }))
         );
 
@@ -340,8 +343,8 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
         deleteSearchPipeline(SEARCH_PIPELINE);
         createSearchPipeline(
             SEARCH_PIPELINE,
-            NORMALIZATION_METHOD,
-            COMBINATION_METHOD,
+            DEFAULT_NORMALIZATION_METHOD,
+            DEFAULT_COMBINATION_METHOD,
             Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.6f, 0.5f, 0.5f, 1.5f }))
         );
 
@@ -379,8 +382,8 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
         createSearchPipeline(
             SEARCH_PIPELINE,
-            L2ScoreNormalizationTechnique.TECHNIQUE_NAME,
-            COMBINATION_METHOD,
+            L2_NORMALIZATION_METHOD,
+            DEFAULT_COMBINATION_METHOD,
             Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.8f, 0.7f }))
         );
 
@@ -399,29 +402,66 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         int totalExpectedDocQty = 5;
-        assertNotNull(searchResponseAsMap);
-        Map<String, Object> total = getTotalHits(searchResponseAsMap);
-        assertNotNull(total.get("value"));
-        assertEquals(totalExpectedDocQty, total.get("value"));
-        assertNotNull(total.get("relation"));
-        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-        assertTrue(getMaxScore(searchResponseAsMap).isPresent());
-        assertTrue(Range.between(.6f, 1.0f).contains(getMaxScore(searchResponseAsMap).get()));
+        float[] minMaxExpectedScoresRange = { 0.6f, 1.0f };
+        assertHybridSearchResults(searchResponseAsMap, totalExpectedDocQty, minMaxExpectedScoresRange);
+    }
 
-        List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
-        List<String> ids = new ArrayList<>();
-        List<Double> scores = new ArrayList<>();
-        for (Map<String, Object> oneHit : hitsNestedList) {
-            ids.add((String) oneHit.get("_id"));
-            scores.add((Double) oneHit.get("_score"));
-        }
-        // verify scores order
-        assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
-        // verify the scores are normalized. for l2 scores max score will not be 1.0 so we're checking on a range
-        assertTrue(Range.between(.6f, 1.0f).contains((float) scores.stream().map(Double::floatValue).max(Double::compare).get()));
+    @SneakyThrows
+    public void testMinMaxNormHarmonicMeanCombination_whenOneShardAndQueryMatches_thenSuccessful() {
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+        createSearchPipeline(
+            SEARCH_PIPELINE,
+            DEFAULT_NORMALIZATION_METHOD,
+            HARMONIC_MEAN_COMBINATION_METHOD,
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.8f, 0.7f }))
+        );
 
-        // verify that all ids are unique
-        assertEquals(Set.copyOf(ids).size(), ids.size());
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId.get(), 5, null, null);
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        hybridQueryBuilder.add(neuralQueryBuilder);
+        hybridQueryBuilder.add(termQueryBuilder);
+
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+            hybridQueryBuilder,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
+        int totalExpectedDocQty = 5;
+        float[] minMaxExpectedScoresRange = { 0.6f, 1.0f };
+        assertHybridSearchResults(searchResponseAsMap, totalExpectedDocQty, minMaxExpectedScoresRange);
+    }
+
+    @SneakyThrows
+    public void testL2NormHarmonicMeanCombination_whenOneShardAndQueryMatches_thenSuccessful() {
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+        createSearchPipeline(
+            SEARCH_PIPELINE,
+            L2_NORMALIZATION_METHOD,
+            HARMONIC_MEAN_COMBINATION_METHOD,
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.8f, 0.7f }))
+        );
+
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId.get(), 5, null, null);
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        hybridQueryBuilder.add(neuralQueryBuilder);
+        hybridQueryBuilder.add(termQueryBuilder);
+
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+            hybridQueryBuilder,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
+        int totalExpectedDocQty = 5;
+        float[] minMaxExpectedScoresRange = { 0.5f, 1.0f };
+        assertHybridSearchResults(searchResponseAsMap, totalExpectedDocQty, minMaxExpectedScoresRange);
     }
 
     private void initializeIndexIfNotExist(String indexName) throws IOException {
@@ -602,5 +642,34 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
         assertEquals(expectedMaxScore, scoresWeights.get(0), 0.001);
         assertEquals(expectedMaxMinusOneScore, scoresWeights.get(1), 0.001);
         assertEquals(expectedMinScore, scoresWeights.get(scoresWeights.size() - 1), 0.001);
+    }
+
+    private void assertHybridSearchResults(Map<String, Object> searchResponseAsMap, int totalExpectedDocQty, float[] minMaxScoreRange) {
+        assertNotNull(searchResponseAsMap);
+        Map<String, Object> total = getTotalHits(searchResponseAsMap);
+        assertNotNull(total.get("value"));
+        assertEquals(totalExpectedDocQty, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+        assertTrue(getMaxScore(searchResponseAsMap).isPresent());
+        assertTrue(Range.between(minMaxScoreRange[0], minMaxScoreRange[1]).contains(getMaxScore(searchResponseAsMap).get()));
+
+        List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
+        List<String> ids = new ArrayList<>();
+        List<Double> scores = new ArrayList<>();
+        for (Map<String, Object> oneHit : hitsNestedList) {
+            ids.add((String) oneHit.get("_id"));
+            scores.add((Double) oneHit.get("_score"));
+        }
+        // verify scores order
+        assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
+        // verify the scores are normalized. for l2 scores max score will not be 1.0 so we're checking on a range
+        assertTrue(
+            Range.between(minMaxScoreRange[0], minMaxScoreRange[1])
+                .contains(scores.stream().map(Double::floatValue).max(Double::compare).get())
+        );
+
+        // verify that all ids are unique
+        assertEquals(Set.copyOf(ids).size(), ids.size());
     }
 }
