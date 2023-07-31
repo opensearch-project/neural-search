@@ -17,7 +17,9 @@ public class ScoreNormalizationFactory {
 
     private final Map<String, ScoreNormalizationTechnique> scoreNormalizationMethodsMap = Map.of(
         MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME,
-        new MinMaxScoreNormalizationTechnique()
+        new MinMaxScoreNormalizationTechnique(),
+        L2ScoreNormalizationTechnique.TECHNIQUE_NAME,
+        new L2ScoreNormalizationTechnique()
     );
 
     /**
