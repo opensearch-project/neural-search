@@ -13,12 +13,18 @@ import java.util.function.Function;
  * Abstracts creation of exact score combination method based on technique name
  */
 public class ScoreCombinationFactory {
+    private static final ScoreCombinationUtil scoreCombinationUtil = new ScoreCombinationUtil();
 
-    public static final ScoreCombinationTechnique DEFAULT_METHOD = new ArithmeticMeanScoreCombinationTechnique(Map.of());
+    public static final ScoreCombinationTechnique DEFAULT_METHOD = new ArithmeticMeanScoreCombinationTechnique(
+        Map.of(),
+        scoreCombinationUtil
+    );
 
     private final Map<String, Function<Map<String, Object>, ScoreCombinationTechnique>> scoreCombinationMethodsMap = Map.of(
         ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-        ArithmeticMeanScoreCombinationTechnique::new
+        params -> new ArithmeticMeanScoreCombinationTechnique(params, scoreCombinationUtil),
+        HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+        params -> new HarmonicMeanScoreCombinationTechnique(params, scoreCombinationUtil)
     );
 
     /**
