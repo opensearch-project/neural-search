@@ -14,16 +14,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Base class for score normalization technique
+ * Collection of utility methods for score combination technique classes
  */
-public abstract class AbstractScoreCombinationTechnique {
+public class ScoreCombinationUtil {
     private static final String PARAM_NAME_WEIGHTS = "weights";
-
-    /**
-     * Each technique must provide collection of supported parameters
-     * @return set of supported parameter names
-     */
-    abstract Set<String> getSupportedParams();
 
     /**
      * Get collection of weights based on user provided config
@@ -42,30 +36,31 @@ public abstract class AbstractScoreCombinationTechnique {
 
     /**
      * Validate config parameters for this technique
-     * @param params map of parameters in form of name-value
+     * @param actualParams map of parameters in form of name-value
+     * @param supportedParams collection of parameters that we should validate against, typically that's what is supported by exact technique
      */
-    protected void validateParams(final Map<String, Object> params) {
-        if (Objects.isNull(params) || params.isEmpty()) {
+    protected void validateParams(final Map<String, Object> actualParams, final Set<String> supportedParams) {
+        if (Objects.isNull(actualParams) || actualParams.isEmpty()) {
             return;
         }
         // check if only supported params are passed
-        Optional<String> optionalNotSupportedParam = params.keySet()
+        Optional<String> optionalNotSupportedParam = actualParams.keySet()
             .stream()
-            .filter(paramName -> !getSupportedParams().contains(paramName))
+            .filter(paramName -> !supportedParams.contains(paramName))
             .findFirst();
         if (optionalNotSupportedParam.isPresent()) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
                     "provided parameter for combination technique is not supported. supported parameters are [%s]",
-                    getSupportedParams().stream().collect(Collectors.joining(","))
+                    supportedParams.stream().collect(Collectors.joining(","))
                 )
             );
         }
 
         // check param types
-        if (params.keySet().stream().anyMatch(PARAM_NAME_WEIGHTS::equalsIgnoreCase)) {
-            if (!(params.get(PARAM_NAME_WEIGHTS) instanceof List)) {
+        if (actualParams.keySet().stream().anyMatch(PARAM_NAME_WEIGHTS::equalsIgnoreCase)) {
+            if (!(actualParams.get(PARAM_NAME_WEIGHTS) instanceof List)) {
                 throw new IllegalArgumentException(
                     String.format(Locale.ROOT, "parameter [%s] must be a collection of numbers", PARAM_NAME_WEIGHTS)
                 );

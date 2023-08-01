@@ -12,17 +12,19 @@ import java.util.Set;
 /**
  * Abstracts combination of scores based on arithmetic mean method
  */
-public class ArithmeticMeanScoreCombinationTechnique extends AbstractScoreCombinationTechnique implements ScoreCombinationTechnique {
+public class ArithmeticMeanScoreCombinationTechnique implements ScoreCombinationTechnique {
 
     public static final String TECHNIQUE_NAME = "arithmetic_mean";
     public static final String PARAM_NAME_WEIGHTS = "weights";
     private static final Set<String> SUPPORTED_PARAMS = Set.of(PARAM_NAME_WEIGHTS);
     private static final Float ZERO_SCORE = 0.0f;
     private final List<Float> weights;
+    private final ScoreCombinationUtil scoreCombinationUtil;
 
-    public ArithmeticMeanScoreCombinationTechnique(final Map<String, Object> params) {
-        validateParams(params);
-        weights = getWeights(params);
+    public ArithmeticMeanScoreCombinationTechnique(final Map<String, Object> params, final ScoreCombinationUtil combinationUtil) {
+        scoreCombinationUtil = combinationUtil;
+        scoreCombinationUtil.validateParams(params, SUPPORTED_PARAMS);
+        weights = scoreCombinationUtil.getWeights(params);
     }
 
     /**
@@ -38,7 +40,7 @@ public class ArithmeticMeanScoreCombinationTechnique extends AbstractScoreCombin
         for (int indexOfSubQuery = 0; indexOfSubQuery < scores.length; indexOfSubQuery++) {
             float score = scores[indexOfSubQuery];
             if (score >= 0.0) {
-                float weight = getWeightForSubQuery(weights, indexOfSubQuery);
+                float weight = scoreCombinationUtil.getWeightForSubQuery(weights, indexOfSubQuery);
                 score = score * weight;
                 combinedScore += score;
                 sumOfWeights += weight;
@@ -48,10 +50,5 @@ public class ArithmeticMeanScoreCombinationTechnique extends AbstractScoreCombin
             return ZERO_SCORE;
         }
         return combinedScore / sumOfWeights;
-    }
-
-    @Override
-    Set<String> getSupportedParams() {
-        return SUPPORTED_PARAMS;
     }
 }

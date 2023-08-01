@@ -17,24 +17,30 @@ public class HarmonicMeanScoreCombinationTechniqueTests extends BaseScoreCombina
     }
 
     public void testLogic_whenAllScoresPresentAndNoWeights_thenCorrectScores() {
-        ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(Map.of());
+        ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(Map.of(), new ScoreCombinationUtil());
         testLogic_whenAllScoresPresentAndNoWeights_thenCorrectScores(technique);
     }
 
     public void testLogic_whenNotAllScoresPresentAndNoWeights_thenCorrectScores() {
-        ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(Map.of());
+        ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(Map.of(), new ScoreCombinationUtil());
         testLogic_whenNotAllScoresPresentAndNoWeights_thenCorrectScores(technique);
     }
 
     public void testLogic_whenAllScoresAndWeightsPresent_thenCorrectScores() {
         List<Double> weights = List.of(0.9, 0.2, 0.7);
-        ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(Map.of(PARAM_NAME_WEIGHTS, weights));
+        ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(
+            Map.of(PARAM_NAME_WEIGHTS, weights),
+            new ScoreCombinationUtil()
+        );
         testLogic_whenAllScoresAndWeightsPresent_thenCorrectScores(technique, weights);
     }
 
     public void testLogic_whenNotAllScoresAndWeightsPresent_thenCorrectScores() {
         List<Double> weights = List.of(0.9, 0.2, 0.7);
-        ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(Map.of(PARAM_NAME_WEIGHTS, weights));
+        ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(
+            Map.of(PARAM_NAME_WEIGHTS, weights),
+            new ScoreCombinationUtil()
+        );
         testLogic_whenNotAllScoresAndWeightsPresent_thenCorrectScores(technique, weights);
     }
 

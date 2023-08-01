@@ -6,6 +6,7 @@
 package org.opensearch.neuralsearch.processor.combination;
 
 public interface ScoreCombinationTechnique {
+
     /**
      * Defines combination function specific to this technique
      * @param scores array of collected original scores

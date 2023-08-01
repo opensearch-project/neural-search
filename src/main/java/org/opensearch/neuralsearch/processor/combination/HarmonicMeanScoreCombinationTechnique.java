@@ -12,17 +12,19 @@ import java.util.Set;
 /**
  * Abstracts combination of scores based on harmonic mean method
  */
-public class HarmonicMeanScoreCombinationTechnique extends AbstractScoreCombinationTechnique implements ScoreCombinationTechnique {
+public class HarmonicMeanScoreCombinationTechnique implements ScoreCombinationTechnique {
 
     public static final String TECHNIQUE_NAME = "harmonic_mean";
     public static final String PARAM_NAME_WEIGHTS = "weights";
     private static final Set<String> SUPPORTED_PARAMS = Set.of(PARAM_NAME_WEIGHTS);
     private static final Float ZERO_SCORE = 0.0f;
     private final List<Float> weights;
+    private final ScoreCombinationUtil scoreCombinationUtil;
 
-    public HarmonicMeanScoreCombinationTechnique(final Map<String, Object> params) {
-        validateParams(params);
-        weights = getWeights(params);
+    public HarmonicMeanScoreCombinationTechnique(final Map<String, Object> params, final ScoreCombinationUtil combinationUtil) {
+        scoreCombinationUtil = combinationUtil;
+        scoreCombinationUtil.validateParams(params, SUPPORTED_PARAMS);
+        weights = scoreCombinationUtil.getWeights(params);
     }
 
     /**
@@ -40,15 +42,10 @@ public class HarmonicMeanScoreCombinationTechnique extends AbstractScoreCombinat
             if (score <= 0) {
                 continue;
             }
-            float weightOfSubQuery = getWeightForSubQuery(weights, indexOfSubQuery);
+            float weightOfSubQuery = scoreCombinationUtil.getWeightForSubQuery(weights, indexOfSubQuery);
             sumOfWeights += weightOfSubQuery;
             sumOfHarmonics += weightOfSubQuery / score;
         }
         return sumOfHarmonics > 0 ? sumOfWeights / sumOfHarmonics : ZERO_SCORE;
-    }
-
-    @Override
-    Set<String> getSupportedParams() {
-        return SUPPORTED_PARAMS;
     }
 }
