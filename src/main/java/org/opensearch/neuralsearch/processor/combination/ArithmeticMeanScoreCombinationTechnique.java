@@ -34,20 +34,20 @@ public class ArithmeticMeanScoreCombinationTechnique extends AbstractScoreCombin
     @Override
     public float combine(final float[] scores) {
         float combinedScore = 0.0f;
-        float weights = 0;
+        float sumOfWeights = 0;
         for (int indexOfSubQuery = 0; indexOfSubQuery < scores.length; indexOfSubQuery++) {
             float score = scores[indexOfSubQuery];
             if (score >= 0.0) {
-                float weight = getWeightForSubQuery(this.weights, indexOfSubQuery);
+                float weight = getWeightForSubQuery(weights, indexOfSubQuery);
                 score = score * weight;
                 combinedScore += score;
-                weights += weight;
+                sumOfWeights += weight;
             }
         }
-        if (weights == 0.0f) {
+        if (sumOfWeights == 0.0f) {
             return ZERO_SCORE;
         }
-        return combinedScore / weights;
+        return combinedScore / sumOfWeights;
     }
 
     @Override
