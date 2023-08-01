@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 /**
  * Collection of utility methods for score combination technique classes
  */
-public class ScoreCombinationUtil {
+class ScoreCombinationUtil {
     private static final String PARAM_NAME_WEIGHTS = "weights";
 
     /**
@@ -24,7 +24,7 @@ public class ScoreCombinationUtil {
      * @param params map of named parameters and their values
      * @return collection of weights
      */
-    protected List<Float> getWeights(final Map<String, Object> params) {
+    public List<Float> getWeights(final Map<String, Object> params) {
         if (Objects.isNull(params) || params.isEmpty()) {
             return List.of();
         }
@@ -39,7 +39,7 @@ public class ScoreCombinationUtil {
      * @param actualParams map of parameters in form of name-value
      * @param supportedParams collection of parameters that we should validate against, typically that's what is supported by exact technique
      */
-    protected void validateParams(final Map<String, Object> actualParams, final Set<String> supportedParams) {
+    public void validateParams(final Map<String, Object> actualParams, final Set<String> supportedParams) {
         if (Objects.isNull(actualParams) || actualParams.isEmpty()) {
             return;
         }
@@ -74,7 +74,7 @@ public class ScoreCombinationUtil {
      * @param indexOfSubQuery 0-based index of sub-query in the Hybrid Search query
      * @return weight for sub-query, use one that is set in processor/pipeline definition or 1.0 as default
      */
-    protected float getWeightForSubQuery(final List<Float> weights, final int indexOfSubQuery) {
+    public float getWeightForSubQuery(final List<Float> weights, final int indexOfSubQuery) {
         return indexOfSubQuery < weights.size() ? weights.get(indexOfSubQuery) : 1.0f;
     }
 }
