@@ -12,17 +12,19 @@ import java.util.Map;
 
 public class ArithmeticMeanScoreCombinationTechniqueTests extends BaseScoreCombinationTechniqueTests {
 
+    private ScoreCombinationUtil scoreCombinationUtil = new ScoreCombinationUtil();
+
     public ArithmeticMeanScoreCombinationTechniqueTests() {
         this.expectedScoreFunction = this::arithmeticMean;
     }
 
     public void testLogic_whenAllScoresPresentAndNoWeights_thenCorrectScores() {
-        ScoreCombinationTechnique technique = new ArithmeticMeanScoreCombinationTechnique(Map.of(), new ScoreCombinationUtil());
+        ScoreCombinationTechnique technique = new ArithmeticMeanScoreCombinationTechnique(Map.of(), scoreCombinationUtil);
         testLogic_whenAllScoresPresentAndNoWeights_thenCorrectScores(technique);
     }
 
     public void testLogic_whenNotAllScoresPresentAndNoWeights_thenCorrectScores() {
-        ScoreCombinationTechnique technique = new ArithmeticMeanScoreCombinationTechnique(Map.of(), new ScoreCombinationUtil());
+        ScoreCombinationTechnique technique = new ArithmeticMeanScoreCombinationTechnique(Map.of(), scoreCombinationUtil);
         testLogic_whenNotAllScoresPresentAndNoWeights_thenCorrectScores(technique);
     }
 
@@ -30,7 +32,7 @@ public class ArithmeticMeanScoreCombinationTechniqueTests extends BaseScoreCombi
         List<Double> weights = List.of(0.9, 0.2, 0.7);
         ScoreCombinationTechnique technique = new ArithmeticMeanScoreCombinationTechnique(
             Map.of(PARAM_NAME_WEIGHTS, weights),
-            new ScoreCombinationUtil()
+            scoreCombinationUtil
         );
         testLogic_whenAllScoresAndWeightsPresent_thenCorrectScores(technique, weights);
     }
@@ -39,7 +41,7 @@ public class ArithmeticMeanScoreCombinationTechniqueTests extends BaseScoreCombi
         List<Double> weights = List.of(0.9, 0.2, 0.7);
         ScoreCombinationTechnique technique = new ArithmeticMeanScoreCombinationTechnique(
             Map.of(PARAM_NAME_WEIGHTS, weights),
-            new ScoreCombinationUtil()
+            scoreCombinationUtil
         );
         testLogic_whenNotAllScoresAndWeightsPresent_thenCorrectScores(technique, weights);
     }

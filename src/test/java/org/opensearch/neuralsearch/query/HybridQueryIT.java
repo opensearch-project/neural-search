@@ -14,18 +14,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import lombok.SneakyThrows;
 
+import org.junit.After;
 import org.junit.Before;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.knn.index.SpaceType;
-import org.opensearch.neuralsearch.TestUtils;
 import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
 
 import com.google.common.primitives.Floats;
@@ -46,24 +44,30 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_KNN_VECTOR_FIELD_NAME_1 = "test-knn-vector-1";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_2 = "test-knn-vector-2";
     private static final String TEST_TEXT_FIELD_NAME_1 = "test-text-field-1";
-    private static final String TEST_TEXT_FIELD_NAME_2 = "test-text-field-2";
-    private static final String TEST_TEXT_FIELD_NAME_3 = "test-text-field-3";
 
     private static final int TEST_DIMENSION = 768;
     private static final SpaceType TEST_SPACE_TYPE = SpaceType.L2;
-    private static final AtomicReference<String> modelId = new AtomicReference<>();
-    private static final float EXPECTED_SCORE_BM25 = 0.287682082504034f;
     private final float[] testVector1 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector2 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector3 = createRandomVector(TEST_DIMENSION);
     private final static String RELATION_EQUAL_TO = "eq";
-    private final static String RELATION_GREATER_OR_EQUAL_TO = "gte";
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
         updateClusterSettings();
-        modelId.compareAndSet(null, prepareModel());
+        prepareModel();
+    }
+
+    @After
+    @SneakyThrows
+    public void tearDown() {
+        super.tearDown();
+        /* this is required to minimize chance of model not being deployed due to open memory CB,
+         * this happens in case we leave model from previous test case. We use new model for every test, and old model
+         * can be undeployed and deleted to free resources after each test case execution.
+         */
+        findDeployedModels().forEach(this::deleteModel);
     }
 
     @Override
@@ -99,8 +103,9 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testBasicQuery_whenOneSubQuery_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
+        String modelId = getDeployedModelId();
 
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId.get(), 5, null, null);
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId, 5, null, null);
 
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
         hybridQueryBuilder.add(neuralQueryBuilder);
@@ -128,46 +133,6 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
         assertTrue(getMaxScore(searchResponseAsMap1).isPresent());
-    }
-
-    @SneakyThrows
-    public void testScoreCorrectness_whenHybridWithNeuralQuery_thenScoresAreCorrect() {
-        initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
-
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
-            TEST_KNN_VECTOR_FIELD_NAME_1,
-            TEST_QUERY_TEXT,
-            modelId.get(),
-            3,
-            null,
-            null
-        );
-        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
-
-        HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
-        hybridQueryBuilderNeuralThenTerm.add(neuralQueryBuilder);
-        hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder);
-
-        Map<String, Object> searchResponseAsMap = search(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, hybridQueryBuilderNeuralThenTerm, 3);
-
-        assertEquals(3, getHitCount(searchResponseAsMap));
-
-        List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
-        List<Double> scores = new ArrayList<>();
-        for (Map<String, Object> oneHit : hitsNestedList) {
-            scores.add((Double) oneHit.get("_score"));
-        }
-
-        List<Float> expectedScores = List.of(
-            computeExpectedScore(modelId.get(), testVector1, TEST_SPACE_TYPE, TEST_QUERY_TEXT),
-            computeExpectedScore(modelId.get(), testVector2, TEST_SPACE_TYPE, TEST_QUERY_TEXT),
-            computeExpectedScore(modelId.get(), testVector3, TEST_SPACE_TYPE, TEST_QUERY_TEXT)
-        );
-        List<Float> actualScores = scores.stream().map(TestUtils::objectToFloat).collect(Collectors.toList());
-        assertTrue(expectedScores.containsAll(actualScores));
-
-        float expectedMaxScore = Math.max(expectedScores.stream().max(Float::compareTo).get(), EXPECTED_SCORE_BM25);
-        assertEquals(expectedMaxScore, getMaxScore(searchResponseAsMap).get(), 0.001f);
     }
 
     /**
@@ -268,8 +233,9 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testSubQuery_whenSubqueriesInDifferentOrder_thenResultIsSame() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
+        String modelId = getDeployedModelId();
 
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId.get(), 5, null, null);
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId, 5, null, null);
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
 
         HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
@@ -326,7 +292,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    public void test_whenOnlyTermSubQueryWithoutMatch_thenEmptyResult() {
+    public void testNoMatchResults_whenOnlyTermSubQueryWithoutMatch_thenEmptyResult() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
 
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);

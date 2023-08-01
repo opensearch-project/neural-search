@@ -27,6 +27,14 @@ public class ScoreCombinationFactoryTests extends OpenSearchQueryTestCase {
         assertTrue(scoreCombinationTechnique instanceof HarmonicMeanScoreCombinationTechnique);
     }
 
+    public void testGeometricWeightedMean_whenCreatingByName_thenReturnCorrectInstance() {
+        ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();
+        ScoreCombinationTechnique scoreCombinationTechnique = scoreCombinationFactory.createCombination("geometric_mean");
+
+        assertNotNull(scoreCombinationTechnique);
+        assertTrue(scoreCombinationTechnique instanceof GeometricMeanScoreCombinationTechnique);
+    }
+
     public void testUnsupportedTechnique_whenPassingInvalidName_thenFail() {
         ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();
         IllegalArgumentException illegalArgumentException = expectThrows(

@@ -10,27 +10,27 @@ import static org.opensearch.neuralsearch.processor.combination.ArithmeticMeanSc
 import java.util.List;
 import java.util.Map;
 
-public class HarmonicMeanScoreCombinationTechniqueTests extends BaseScoreCombinationTechniqueTests {
+public class GeometricMeanScoreCombinationTechniqueTests extends BaseScoreCombinationTechniqueTests {
 
     private ScoreCombinationUtil scoreCombinationUtil = new ScoreCombinationUtil();
 
-    public HarmonicMeanScoreCombinationTechniqueTests() {
-        this.expectedScoreFunction = (scores, weights) -> harmonicMean(scores, weights);
+    public GeometricMeanScoreCombinationTechniqueTests() {
+        this.expectedScoreFunction = this::geometricMean;
     }
 
     public void testLogic_whenAllScoresPresentAndNoWeights_thenCorrectScores() {
-        ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(Map.of(), scoreCombinationUtil);
+        ScoreCombinationTechnique technique = new GeometricMeanScoreCombinationTechnique(Map.of(), scoreCombinationUtil);
         testLogic_whenAllScoresPresentAndNoWeights_thenCorrectScores(technique);
     }
 
     public void testLogic_whenNotAllScoresPresentAndNoWeights_thenCorrectScores() {
-        ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(Map.of(), scoreCombinationUtil);
+        ScoreCombinationTechnique technique = new GeometricMeanScoreCombinationTechnique(Map.of(), scoreCombinationUtil);
         testLogic_whenNotAllScoresPresentAndNoWeights_thenCorrectScores(technique);
     }
 
     public void testLogic_whenAllScoresAndWeightsPresent_thenCorrectScores() {
         List<Double> weights = List.of(0.9, 0.2, 0.7);
-        ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(
+        ScoreCombinationTechnique technique = new GeometricMeanScoreCombinationTechnique(
             Map.of(PARAM_NAME_WEIGHTS, weights),
             scoreCombinationUtil
         );
@@ -39,23 +39,24 @@ public class HarmonicMeanScoreCombinationTechniqueTests extends BaseScoreCombina
 
     public void testLogic_whenNotAllScoresAndWeightsPresent_thenCorrectScores() {
         List<Double> weights = List.of(0.9, 0.2, 0.7);
-        ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(
+        ScoreCombinationTechnique technique = new GeometricMeanScoreCombinationTechnique(
             Map.of(PARAM_NAME_WEIGHTS, weights),
             scoreCombinationUtil
         );
         testLogic_whenNotAllScoresAndWeightsPresent_thenCorrectScores(technique, weights);
     }
 
-    private float harmonicMean(List<Float> scores, List<Double> weights) {
+    private float geometricMean(List<Float> scores, List<Double> weights) {
         assertEquals(scores.size(), weights.size());
-        float w = 0, h = 0;
+        float sumOfWeights = 0;
+        float weightedSumOfLn = 0;
         for (int i = 0; i < scores.size(); i++) {
             float score = scores.get(i), weight = weights.get(i).floatValue();
             if (score > 0) {
-                w += weight;
-                h += weight / score;
+                sumOfWeights += weight;
+                weightedSumOfLn += weight * Math.log(score);
             }
         }
-        return h == 0 ? 0f : w / h;
+        return sumOfWeights == 0 ? 0f : (float) Math.exp(weightedSumOfLn / sumOfWeights);
     }
 }
