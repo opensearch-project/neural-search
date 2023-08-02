@@ -9,6 +9,10 @@ import static org.opensearch.neuralsearch.processor.combination.ArithmeticMeanSc
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+import com.carrotsearch.randomizedtesting.RandomizedTest;
 
 public class ArithmeticMeanScoreCombinationTechniqueTests extends BaseScoreCombinationTechniqueTests {
 
@@ -29,21 +33,47 @@ public class ArithmeticMeanScoreCombinationTechniqueTests extends BaseScoreCombi
     }
 
     public void testLogic_whenAllScoresAndWeightsPresent_thenCorrectScores() {
+        List<Float> scores = List.of(1.0f, 0.5f, 0.3f);
         List<Double> weights = List.of(0.9, 0.2, 0.7);
         ScoreCombinationTechnique technique = new ArithmeticMeanScoreCombinationTechnique(
             Map.of(PARAM_NAME_WEIGHTS, weights),
             scoreCombinationUtil
         );
-        testLogic_whenAllScoresAndWeightsPresent_thenCorrectScores(technique, weights);
+        float expectedScore = 0.6722f;
+        testLogic_whenAllScoresAndWeightsPresent_thenCorrectScores(technique, scores, expectedScore);
+    }
+
+    public void testRandomValues_whenAllScoresAndWeightsPresent_thenCorrectScores() {
+        List<Double> weights = IntStream.range(0, RANDOM_SCORES_SIZE)
+            .mapToObj(i -> RandomizedTest.randomDouble())
+            .collect(Collectors.toList());
+        ScoreCombinationTechnique technique = new ArithmeticMeanScoreCombinationTechnique(
+            Map.of(PARAM_NAME_WEIGHTS, weights),
+            scoreCombinationUtil
+        );
+        testRandomValues_whenAllScoresAndWeightsPresent_thenCorrectScores(technique, weights);
     }
 
     public void testLogic_whenNotAllScoresAndWeightsPresent_thenCorrectScores() {
+        List<Float> scores = List.of(1.0f, -1.0f, 0.6f);
         List<Double> weights = List.of(0.9, 0.2, 0.7);
         ScoreCombinationTechnique technique = new ArithmeticMeanScoreCombinationTechnique(
             Map.of(PARAM_NAME_WEIGHTS, weights),
             scoreCombinationUtil
         );
-        testLogic_whenNotAllScoresAndWeightsPresent_thenCorrectScores(technique, weights);
+        float expectedScore = 0.825f;
+        testLogic_whenNotAllScoresAndWeightsPresent_thenCorrectScores(technique, scores, expectedScore);
+    }
+
+    public void testRandomValues_whenNotAllScoresAndWeightsPresent_thenCorrectScores() {
+        List<Double> weights = IntStream.range(0, RANDOM_SCORES_SIZE)
+            .mapToObj(i -> RandomizedTest.randomDouble())
+            .collect(Collectors.toList());
+        ScoreCombinationTechnique technique = new ArithmeticMeanScoreCombinationTechnique(
+            Map.of(PARAM_NAME_WEIGHTS, weights),
+            scoreCombinationUtil
+        );
+        testRandomValues_whenNotAllScoresAndWeightsPresent_thenCorrectScores(technique, weights);
     }
 
     private float arithmeticMean(List<Float> scores, List<Double> weights) {
