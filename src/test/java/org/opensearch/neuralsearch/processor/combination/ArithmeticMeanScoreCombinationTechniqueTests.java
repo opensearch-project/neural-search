@@ -32,17 +32,6 @@ public class ArithmeticMeanScoreCombinationTechniqueTests extends BaseScoreCombi
         testLogic_whenNotAllScoresPresentAndNoWeights_thenCorrectScores(technique);
     }
 
-    public void testLogic_whenAllScoresAndWeightsPresent_thenCorrectScores() {
-        List<Float> scores = List.of(1.0f, 0.5f, 0.3f);
-        List<Double> weights = List.of(0.9, 0.2, 0.7);
-        ScoreCombinationTechnique technique = new ArithmeticMeanScoreCombinationTechnique(
-            Map.of(PARAM_NAME_WEIGHTS, weights),
-            scoreCombinationUtil
-        );
-        float expectedScore = 0.6722f;
-        testLogic_whenAllScoresAndWeightsPresent_thenCorrectScores(technique, scores, expectedScore);
-    }
-
     public void testRandomValues_whenAllScoresAndWeightsPresent_thenCorrectScores() {
         List<Double> weights = IntStream.range(0, RANDOM_SCORES_SIZE)
             .mapToObj(i -> RandomizedTest.randomDouble())

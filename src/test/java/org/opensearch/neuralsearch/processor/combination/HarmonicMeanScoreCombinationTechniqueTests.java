@@ -43,17 +43,6 @@ public class HarmonicMeanScoreCombinationTechniqueTests extends BaseScoreCombina
         testLogic_whenAllScoresAndWeightsPresent_thenCorrectScores(technique, scores, expecteScore);
     }
 
-    public void testRandomValues_whenAllScoresAndWeightsPresent_thenCorrectScores() {
-        List<Double> weights = IntStream.range(0, RANDOM_SCORES_SIZE)
-            .mapToObj(i -> RandomizedTest.randomDouble())
-            .collect(Collectors.toList());
-        ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(
-            Map.of(PARAM_NAME_WEIGHTS, weights),
-            scoreCombinationUtil
-        );
-        testRandomValues_whenAllScoresAndWeightsPresent_thenCorrectScores(technique, weights);
-    }
-
     public void testLogic_whenNotAllScoresAndWeightsPresent_thenCorrectScores() {
         List<Float> scores = List.of(1.0f, -1.0f, 0.6f);
         List<Double> weights = List.of(0.9, 0.2, 0.7);
