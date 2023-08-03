@@ -9,13 +9,11 @@ import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
 
 import lombok.SneakyThrows;
@@ -32,12 +30,11 @@ import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 import com.google.common.primitives.Floats;
 
-public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
+public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     private static final String TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME = "test-neural-multi-doc-one-shard-index";
     private static final String TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME = "test-neural-multi-doc-three-shards-index";
     private static final String TEST_QUERY_TEXT3 = "hello";
     private static final String TEST_QUERY_TEXT4 = "place";
-    private static final String TEST_QUERY_TEXT5 = "welcome";
     private static final String TEST_QUERY_TEXT6 = "notexistingword";
     private static final String TEST_QUERY_TEXT7 = "notexistingwordtwo";
     private static final String TEST_DOC_TEXT1 = "Hello world";
@@ -49,24 +46,17 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
     private static final String TEST_TEXT_FIELD_NAME_1 = "test-text-field-1";
     private static final int TEST_DIMENSION = 768;
     private static final SpaceType TEST_SPACE_TYPE = SpaceType.L2;
-    private static final AtomicReference<String> modelId = new AtomicReference<>();
     private static final String SEARCH_PIPELINE = "phase-results-pipeline";
     private final float[] testVector1 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector2 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector3 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector4 = createRandomVector(TEST_DIMENSION);
     private final static String RELATION_EQUAL_TO = "eq";
-    private final static String RELATION_GREATER_OR_EQUAL_TO = "gte";
-
-    private static final String L2_NORMALIZATION_METHOD = "l2";
-    private static final String HARMONIC_MEAN_COMBINATION_METHOD = "harmonic_mean";
-    private static final String GEOMETRIC_MEAN_COMBINATION_METHOD = "geometric_mean";
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        updateClusterSettings();
-        modelId.compareAndSet(null, prepareModel());
+        prepareModel();
     }
 
     @After
@@ -74,16 +64,7 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
     public void tearDown() {
         super.tearDown();
         deleteSearchPipeline(SEARCH_PIPELINE);
-    }
-
-    @Override
-    public boolean isUpdateClusterSettings() {
-        return false;
-    }
-
-    @Override
-    protected boolean preserveClusterUponCompletion() {
-        return true;
+        findDeployedModels().forEach(this::deleteModel);
     }
 
     /**
@@ -108,8 +89,9 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
     public void testResultProcessor_whenOneShardAndQueryMatches_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
         createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        String modelId = getDeployedModelId();
 
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId.get(), 5, null, null);
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId, 5, null, null);
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
 
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
@@ -142,8 +124,9 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
     public void testResultProcessor_whenDefaultProcessorConfigAndQueryMatches_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
         createSearchPipelineWithDefaultResultsPostProcessor(SEARCH_PIPELINE);
+        String modelId = getDeployedModelId();
 
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId.get(), 5, null, null);
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId, 5, null, null);
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
 
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
@@ -164,9 +147,10 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
     public void testResultProcessor_whenMultipleShardsAndQueryMatches_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
         createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        String modelId = getDeployedModelId();
         int totalExpectedDocQty = 6;
 
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId.get(), 6, null, null);
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId, 6, null, null);
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
 
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
@@ -248,220 +232,6 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertQueryResults(searchResponseAsMap, 4, true);
-    }
-
-    /**
-     * Using search pipelines with result processor configs like below:
-     * {
-     *     "description": "Post processor for hybrid search",
-     *     "phase_results_processors": [
-     *         {
-     *             "normalization-processor": {
-     *                 "normalization": {
-     *                     "technique": "min-max"
-     *                 },
-     *                 "combination": {
-     *                     "technique": "arithmetic_mean",
-     *                     "parameters": {
-     *                         "weights": [
-     *                             0.4, 0.7
-     *                         ]
-     *                     }
-     *                 }
-     *             }
-     *         }
-     *     ]
-     * }
-     */
-    @SneakyThrows
-    public void testArithmeticWeightedMean_whenWeightsPassed_thenSuccessful() {
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
-        // check case when number of weights and sub-queries are same
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            DEFAULT_NORMALIZATION_METHOD,
-            DEFAULT_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.6f, 0.5f, 0.5f }))
-        );
-
-        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-        hybridQueryBuilder.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
-        hybridQueryBuilder.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4));
-        hybridQueryBuilder.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT7));
-
-        Map<String, Object> searchResponseWithWeights1AsMap = search(
-            TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-            hybridQueryBuilder,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
-
-        assertWeightedScores(searchResponseWithWeights1AsMap, 1.0, 1.0, 0.001);
-
-        // delete existing pipeline and create a new one with another set of weights
-        deleteSearchPipeline(SEARCH_PIPELINE);
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            DEFAULT_NORMALIZATION_METHOD,
-            DEFAULT_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.8f, 2.0f, 0.5f }))
-        );
-
-        Map<String, Object> searchResponseWithWeights2AsMap = search(
-            TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-            hybridQueryBuilder,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
-
-        assertWeightedScores(searchResponseWithWeights2AsMap, 1.0, 1.0, 0.001);
-
-        // check case when number of weights is less than number of sub-queries
-        // delete existing pipeline and create a new one with another set of weights
-        deleteSearchPipeline(SEARCH_PIPELINE);
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            DEFAULT_NORMALIZATION_METHOD,
-            DEFAULT_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.8f }))
-        );
-
-        Map<String, Object> searchResponseWithWeights3AsMap = search(
-            TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-            hybridQueryBuilder,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
-
-        assertWeightedScores(searchResponseWithWeights3AsMap, 1.0, 1.0, 0.001);
-
-        // check case when number of weights is more than number of sub-queries
-        // delete existing pipeline and create a new one with another set of weights
-        deleteSearchPipeline(SEARCH_PIPELINE);
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            DEFAULT_NORMALIZATION_METHOD,
-            DEFAULT_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.6f, 0.5f, 0.5f, 1.5f }))
-        );
-
-        Map<String, Object> searchResponseWithWeights4AsMap = search(
-            TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-            hybridQueryBuilder,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
-
-        assertWeightedScores(searchResponseWithWeights4AsMap, 1.0, 1.0, 0.001);
-    }
-
-    /**
-     * Using search pipelines with config for l2 norm:
-     * {
-     *     "description": "Post processor for hybrid search",
-     *     "phase_results_processors": [
-     *         {
-     *             "normalization-processor": {
-     *                 "normalization": {
-     *                     "technique": "l2"
-     *                 },
-     *                 "combination": {
-     *                     "technique": "arithmetic_mean"
-     *                 }
-     *             }
-     *         }
-     *     ]
-     * }
-     */
-    @SneakyThrows
-    public void testL2Norm_whenOneShardAndQueryMatches_thenSuccessful() {
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            L2_NORMALIZATION_METHOD,
-            DEFAULT_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.8f, 0.7f }))
-        );
-
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId.get(), 5, null, null);
-        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
-
-        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-        hybridQueryBuilder.add(neuralQueryBuilder);
-        hybridQueryBuilder.add(termQueryBuilder);
-
-        Map<String, Object> searchResponseAsMap = search(
-            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-            hybridQueryBuilder,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
-        int totalExpectedDocQty = 5;
-        float[] minMaxExpectedScoresRange = { 0.6f, 1.0f };
-        assertHybridSearchResults(searchResponseAsMap, totalExpectedDocQty, minMaxExpectedScoresRange);
-    }
-
-    @SneakyThrows
-    public void testMinMaxNormHarmonicMeanCombination_whenOneShardAndQueryMatches_thenSuccessful() {
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            DEFAULT_NORMALIZATION_METHOD,
-            HARMONIC_MEAN_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.8f, 0.7f }))
-        );
-
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId.get(), 5, null, null);
-        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
-
-        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-        hybridQueryBuilder.add(neuralQueryBuilder);
-        hybridQueryBuilder.add(termQueryBuilder);
-
-        Map<String, Object> searchResponseAsMap = search(
-            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-            hybridQueryBuilder,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
-        int totalExpectedDocQty = 5;
-        float[] minMaxExpectedScoresRange = { 0.6f, 1.0f };
-        assertHybridSearchResults(searchResponseAsMap, totalExpectedDocQty, minMaxExpectedScoresRange);
-    }
-
-    @SneakyThrows
-    public void testL2NormHarmonicMeanCombination_whenOneShardAndQueryMatches_thenSuccessful() {
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            L2_NORMALIZATION_METHOD,
-            HARMONIC_MEAN_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.8f, 0.7f }))
-        );
-
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId.get(), 5, null, null);
-        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
-
-        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-        hybridQueryBuilder.add(neuralQueryBuilder);
-        hybridQueryBuilder.add(termQueryBuilder);
-
-        Map<String, Object> searchResponseAsMap = search(
-            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-            hybridQueryBuilder,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
-        int totalExpectedDocQty = 5;
-        float[] minMaxExpectedScoresRange = { 0.5f, 1.0f };
-        assertHybridSearchResults(searchResponseAsMap, totalExpectedDocQty, minMaxExpectedScoresRange);
     }
 
     private void initializeIndexIfNotExist(String indexName) throws IOException {
@@ -613,62 +383,6 @@ public class ScoreNormalizationCombinationIT extends BaseNeuralSearchIT {
                 assertEquals(0.001, (double) scores.stream().min(Double::compare).get(), 0.001);
             }
         }
-        // verify that all ids are unique
-        assertEquals(Set.copyOf(ids).size(), ids.size());
-    }
-
-    private void assertWeightedScores(
-        Map<String, Object> searchResponseWithWeightsAsMap,
-        double expectedMaxScore,
-        double expectedMaxMinusOneScore,
-        double expectedMinScore
-    ) {
-        assertNotNull(searchResponseWithWeightsAsMap);
-        Map<String, Object> totalWeights = getTotalHits(searchResponseWithWeightsAsMap);
-        assertNotNull(totalWeights.get("value"));
-        assertEquals(4, totalWeights.get("value"));
-        assertNotNull(totalWeights.get("relation"));
-        assertEquals(RELATION_EQUAL_TO, totalWeights.get("relation"));
-        assertTrue(getMaxScore(searchResponseWithWeightsAsMap).isPresent());
-        assertEquals(expectedMaxScore, getMaxScore(searchResponseWithWeightsAsMap).get(), 0.001f);
-
-        List<Double> scoresWeights = new ArrayList<>();
-        for (Map<String, Object> oneHit : getNestedHits(searchResponseWithWeightsAsMap)) {
-            scoresWeights.add((Double) oneHit.get("_score"));
-        }
-        // verify scores order
-        assertTrue(IntStream.range(0, scoresWeights.size() - 1).noneMatch(idx -> scoresWeights.get(idx) < scoresWeights.get(idx + 1)));
-        // verify the scores are normalized with inclusion of weights
-        assertEquals(expectedMaxScore, scoresWeights.get(0), 0.001);
-        assertEquals(expectedMaxMinusOneScore, scoresWeights.get(1), 0.001);
-        assertEquals(expectedMinScore, scoresWeights.get(scoresWeights.size() - 1), 0.001);
-    }
-
-    private void assertHybridSearchResults(Map<String, Object> searchResponseAsMap, int totalExpectedDocQty, float[] minMaxScoreRange) {
-        assertNotNull(searchResponseAsMap);
-        Map<String, Object> total = getTotalHits(searchResponseAsMap);
-        assertNotNull(total.get("value"));
-        assertEquals(totalExpectedDocQty, total.get("value"));
-        assertNotNull(total.get("relation"));
-        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-        assertTrue(getMaxScore(searchResponseAsMap).isPresent());
-        assertTrue(Range.between(minMaxScoreRange[0], minMaxScoreRange[1]).contains(getMaxScore(searchResponseAsMap).get()));
-
-        List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
-        List<String> ids = new ArrayList<>();
-        List<Double> scores = new ArrayList<>();
-        for (Map<String, Object> oneHit : hitsNestedList) {
-            ids.add((String) oneHit.get("_id"));
-            scores.add((Double) oneHit.get("_score"));
-        }
-        // verify scores order
-        assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
-        // verify the scores are normalized. for l2 scores max score will not be 1.0 so we're checking on a range
-        assertTrue(
-            Range.between(minMaxScoreRange[0], minMaxScoreRange[1])
-                .contains(scores.stream().map(Double::floatValue).max(Double::compare).get())
-        );
-
         // verify that all ids are unique
         assertEquals(Set.copyOf(ids).size(), ids.size());
     }

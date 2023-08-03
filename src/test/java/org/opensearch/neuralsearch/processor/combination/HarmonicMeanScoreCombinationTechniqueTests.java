@@ -9,39 +9,60 @@ import static org.opensearch.neuralsearch.processor.combination.ArithmeticMeanSc
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+import com.carrotsearch.randomizedtesting.RandomizedTest;
 
 public class HarmonicMeanScoreCombinationTechniqueTests extends BaseScoreCombinationTechniqueTests {
+
+    private ScoreCombinationUtil scoreCombinationUtil = new ScoreCombinationUtil();
 
     public HarmonicMeanScoreCombinationTechniqueTests() {
         this.expectedScoreFunction = (scores, weights) -> harmonicMean(scores, weights);
     }
 
     public void testLogic_whenAllScoresPresentAndNoWeights_thenCorrectScores() {
-        ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(Map.of(), new ScoreCombinationUtil());
+        ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(Map.of(), scoreCombinationUtil);
         testLogic_whenAllScoresPresentAndNoWeights_thenCorrectScores(technique);
     }
 
     public void testLogic_whenNotAllScoresPresentAndNoWeights_thenCorrectScores() {
-        ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(Map.of(), new ScoreCombinationUtil());
+        ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(Map.of(), scoreCombinationUtil);
         testLogic_whenNotAllScoresPresentAndNoWeights_thenCorrectScores(technique);
     }
 
     public void testLogic_whenAllScoresAndWeightsPresent_thenCorrectScores() {
+        List<Float> scores = List.of(1.0f, 0.5f, 0.3f);
         List<Double> weights = List.of(0.9, 0.2, 0.7);
         ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(
             Map.of(PARAM_NAME_WEIGHTS, weights),
-            new ScoreCombinationUtil()
+            scoreCombinationUtil
         );
-        testLogic_whenAllScoresAndWeightsPresent_thenCorrectScores(technique, weights);
+        float expecteScore = 0.4954f;
+        testLogic_whenAllScoresAndWeightsPresent_thenCorrectScores(technique, scores, expecteScore);
     }
 
     public void testLogic_whenNotAllScoresAndWeightsPresent_thenCorrectScores() {
+        List<Float> scores = List.of(1.0f, -1.0f, 0.6f);
         List<Double> weights = List.of(0.9, 0.2, 0.7);
         ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(
             Map.of(PARAM_NAME_WEIGHTS, weights),
-            new ScoreCombinationUtil()
+            scoreCombinationUtil
         );
-        testLogic_whenNotAllScoresAndWeightsPresent_thenCorrectScores(technique, weights);
+        float expectedScore = 0.7741f;
+        testLogic_whenNotAllScoresAndWeightsPresent_thenCorrectScores(technique, scores, expectedScore);
+    }
+
+    public void testRandomValues_whenNotAllScoresAndWeightsPresent_thenCorrectScores() {
+        List<Double> weights = IntStream.range(0, RANDOM_SCORES_SIZE)
+            .mapToObj(i -> RandomizedTest.randomDouble())
+            .collect(Collectors.toList());
+        ScoreCombinationTechnique technique = new HarmonicMeanScoreCombinationTechnique(
+            Map.of(PARAM_NAME_WEIGHTS, weights),
+            scoreCombinationUtil
+        );
+        testRandomValues_whenNotAllScoresAndWeightsPresent_thenCorrectScores(technique, weights);
     }
 
     private float harmonicMean(List<Float> scores, List<Double> weights) {
