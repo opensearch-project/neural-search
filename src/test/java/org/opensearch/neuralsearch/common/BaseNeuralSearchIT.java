@@ -13,10 +13,13 @@ import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -57,11 +60,21 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     private static final int MAX_TASK_RESULT_QUERY_TIME_IN_SECOND = 60 * 5;
 
     private static final int DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND = 1000;
+    private static final String DEFAULT_USER_AGENT = "Kibana";
+    protected static final String DEFAULT_NORMALIZATION_METHOD = "min_max";
+    protected static final String DEFAULT_COMBINATION_METHOD = "arithmetic_mean";
+    protected static final String PARAM_NAME_WEIGHTS = "weights";
 
     protected final ClassLoader classLoader = this.getClass().getClassLoader();
 
     @Before
     public void setupSettings() {
+        if (isUpdateClusterSettings()) {
+            updateClusterSettings();
+        }
+    }
+
+    protected void updateClusterSettings() {
         updateClusterSettings("plugins.ml_commons.only_run_on_ml_node", false);
         // default threshold for native circuit breaker is 90, it may be not enough on test runner machine
         updateClusterSettings("plugins.ml_commons.native_memory_threshold", 100);
@@ -279,6 +292,27 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      */
     @SneakyThrows
     protected Map<String, Object> search(String index, QueryBuilder queryBuilder, QueryBuilder rescorer, int resultSize) {
+        return search(index, queryBuilder, rescorer, resultSize, Map.of());
+    }
+
+    /**
+     * Execute a search request initialized from a neural query builder that can add a rescore query to the request
+     *
+     * @param index Index to search against
+     * @param queryBuilder queryBuilder to produce source of query
+     * @param  rescorer used for rescorer query builder
+     * @param resultSize number of results to return in the search
+     * @param requestParams additional request params for search
+     * @return Search results represented as a map
+     */
+    @SneakyThrows
+    protected Map<String, Object> search(
+        String index,
+        QueryBuilder queryBuilder,
+        QueryBuilder rescorer,
+        int resultSize,
+        Map<String, String> requestParams
+    ) {
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject().field("query");
         queryBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
 
@@ -292,6 +326,9 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
         Request request = new Request("POST", "/" + index + "/_search");
         request.addParameter("size", Integer.toString(resultSize));
+        if (requestParams != null && !requestParams.isEmpty()) {
+            requestParams.forEach(request::addParameter);
+        }
         request.setJsonEntity(builder.toString());
 
         Response response = client().performRequest(request);
@@ -384,7 +421,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      */
     @SneakyThrows
     protected void prepareKnnIndex(String indexName, List<KNNFieldConfig> knnFieldConfigs) {
-        createIndexWithConfiguration(indexName, buildIndexConfiguration(knnFieldConfigs), "");
+        prepareKnnIndex(indexName, knnFieldConfigs, 3);
+    }
+
+    @SneakyThrows
+    protected void prepareKnnIndex(String indexName, List<KNNFieldConfig> knnFieldConfigs, int numOfShards) {
+        createIndexWithConfiguration(indexName, buildIndexConfiguration(knnFieldConfigs, numOfShards), "");
     }
 
     /**
@@ -419,11 +461,11 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     @SneakyThrows
-    private String buildIndexConfiguration(List<KNNFieldConfig> knnFieldConfigs) {
+    private String buildIndexConfiguration(List<KNNFieldConfig> knnFieldConfigs, int numberOfShards) {
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject("settings")
-            .field("number_of_shards", 3)
+            .field("number_of_shards", numberOfShards)
             .field("index.knn", true)
             .endObject()
             .startObject("mappings")
@@ -515,5 +557,153 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         String modelGroupId = modelGroupResJson.get("model_group_id").toString();
         assertNotNull(modelGroupId);
         return modelGroupId;
+    }
+
+    public boolean isUpdateClusterSettings() {
+        return true;
+    }
+
+    @SneakyThrows
+    protected void deleteModel(String modelId) {
+        // need to undeploy first as model can be in use
+        makeRequest(
+            client(),
+            "POST",
+            String.format(LOCALE, "/_plugins/_ml/models/%s/_undeploy", modelId),
+            null,
+            toHttpEntity(""),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+        Thread.sleep(DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND);
+        makeRequest(
+            client(),
+            "DELETE",
+            String.format(LOCALE, "/_plugins/_ml/models/%s", modelId),
+            null,
+            toHttpEntity(""),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+    }
+
+    @SneakyThrows
+    protected void createSearchPipelineWithResultsPostProcessor(final String pipelineId) {
+        createSearchPipeline(pipelineId, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of());
+    }
+
+    @SneakyThrows
+    protected void createSearchPipeline(
+        final String pipelineId,
+        final String normalizationMethod,
+        String combinationMethod,
+        final Map<String, String> combinationParams
+    ) {
+        StringBuilder stringBuilderForContentBody = new StringBuilder();
+        stringBuilderForContentBody.append("{\"description\": \"Post processor pipeline\",")
+            .append("\"phase_results_processors\": [{ ")
+            .append("\"normalization-processor\": {")
+            .append("\"normalization\": {")
+            .append("\"technique\": \"%s\"")
+            .append("},")
+            .append("\"combination\": {")
+            .append("\"technique\": \"%s\"");
+        if (Objects.nonNull(combinationParams) && !combinationParams.isEmpty()) {
+            stringBuilderForContentBody.append(", \"parameters\": {");
+            if (combinationParams.containsKey(PARAM_NAME_WEIGHTS)) {
+                stringBuilderForContentBody.append("\"weights\": ").append(combinationParams.get(PARAM_NAME_WEIGHTS));
+            }
+            stringBuilderForContentBody.append(" }");
+        }
+        stringBuilderForContentBody.append("}").append("}}]}");
+        makeRequest(
+            client(),
+            "PUT",
+            String.format(LOCALE, "/_search/pipeline/%s", pipelineId),
+            null,
+            toHttpEntity(String.format(LOCALE, stringBuilderForContentBody.toString(), normalizationMethod, combinationMethod)),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+    }
+
+    @SneakyThrows
+    protected void createSearchPipelineWithDefaultResultsPostProcessor(final String pipelineId) {
+        makeRequest(
+            client(),
+            "PUT",
+            String.format(LOCALE, "/_search/pipeline/%s", pipelineId),
+            null,
+            toHttpEntity(
+                String.format(
+                    LOCALE,
+                    "{\"description\": \"Post processor pipeline\","
+                        + "\"phase_results_processors\": [{ "
+                        + "\"normalization-processor\": {}}]}"
+                )
+            ),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+    }
+
+    @SneakyThrows
+    protected void deleteSearchPipeline(final String pipelineId) {
+        makeRequest(
+            client(),
+            "DELETE",
+            String.format(LOCALE, "/_search/pipeline/%s", pipelineId),
+            null,
+            toHttpEntity(""),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+    }
+
+    /**
+     * Find all modesl that are currently deployed in the cluster
+     * @return set of model ids
+     */
+    @SneakyThrows
+    protected Set<String> findDeployedModels() {
+
+        StringBuilder stringBuilderForContentBody = new StringBuilder();
+        stringBuilderForContentBody.append("{")
+            .append("\"query\": { \"match_all\": {} },")
+            .append("  \"_source\": {")
+            .append("    \"includes\": [\"model_id\"],")
+            .append("    \"excludes\": [\"content\", \"model_content\"]")
+            .append("}}");
+
+        Response response = makeRequest(
+            client(),
+            "POST",
+            "/_plugins/_ml/models/_search",
+            null,
+            toHttpEntity(stringBuilderForContentBody.toString()),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+
+        String responseBody = EntityUtils.toString(response.getEntity());
+
+        Map<String, Object> models = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
+        Set<String> modelIds = new HashSet<>();
+        if (Objects.isNull(models) || models.isEmpty()) {
+            return modelIds;
+        }
+
+        Map<String, Object> hits = (Map<String, Object>) models.get("hits");
+        List<Map<String, Object>> innerHitsMap = (List<Map<String, Object>>) hits.get("hits");
+        return innerHitsMap.stream()
+            .map(hit -> (Map<String, Object>) hit.get("_source"))
+            .filter(hitsMap -> !Objects.isNull(hitsMap) && hitsMap.containsKey("model_id"))
+            .map(hitsMap -> (String) hitsMap.get("model_id"))
+            .collect(Collectors.toSet());
+    }
+
+    /**
+     * Get the id for model currently deployed in the cluster. If there are no models deployed or it's more than 1 model
+     * fail on assertion
+     * @return id of deployed model
+     */
+    protected String getDeployedModelId() {
+        Set<String> modelIds = findDeployedModels();
+        assertEquals(1, modelIds.size());
+        return modelIds.iterator().next();
     }
 }
