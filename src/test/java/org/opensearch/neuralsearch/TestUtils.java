@@ -18,8 +18,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.IntStream;
 
-import org.opensearch.common.bytes.BytesReference;
 import org.apache.commons.lang3.Range;
+import org.opensearch.common.bytes.BytesReference;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.search.query.QuerySearchResult;

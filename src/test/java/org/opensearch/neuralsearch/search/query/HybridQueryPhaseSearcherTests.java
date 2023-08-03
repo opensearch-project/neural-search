@@ -36,8 +36,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.tests.analysis.MockAnalyzer;
 import org.opensearch.action.OriginalIndices;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
-import org.opensearch.core.index.Index;
-import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.index.Index;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
@@ -45,6 +44,7 @@ import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.index.shard.IndexShard;
+import org.opensearch.index.shard.ShardId;
 import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
@@ -122,7 +122,6 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         IndexShard indexShard = mock(IndexShard.class);
         when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
         when(searchContext.indexShard()).thenReturn(indexShard);
-        when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
 
         LinkedList<QueryCollectorContext> collectors = new LinkedList<>();
         boolean hasFilterCollector = randomBoolean();
@@ -192,7 +191,6 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
         when(searchContext.indexShard()).thenReturn(indexShard);
         when(searchContext.queryResult()).thenReturn(new QuerySearchResult());
-        when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
 
         LinkedList<QueryCollectorContext> collectors = new LinkedList<>();
         boolean hasFilterCollector = randomBoolean();
@@ -262,7 +260,6 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.indexShard()).thenReturn(indexShard);
         QuerySearchResult querySearchResult = new QuerySearchResult();
         when(searchContext.queryResult()).thenReturn(querySearchResult);
-        when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
 
         LinkedList<QueryCollectorContext> collectors = new LinkedList<>();
         boolean hasFilterCollector = randomBoolean();
@@ -353,7 +350,6 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         IndexShard indexShard = mock(IndexShard.class);
         when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
         when(searchContext.indexShard()).thenReturn(indexShard);
-        when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
 
         LinkedList<QueryCollectorContext> collectors = new LinkedList<>();
         boolean hasFilterCollector = randomBoolean();

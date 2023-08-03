@@ -9,11 +9,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 
+import lombok.SneakyThrows;
+
 import org.apache.http.HttpHeaders;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
-import lombok.SneakyThrows;
-
 import org.junit.After;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentFactory;

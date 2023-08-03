@@ -19,8 +19,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -570,6 +570,28 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     @SneakyThrows
     protected void createSearchPipelineWithResultsPostProcessor(final String pipelineId) {
         createSearchPipeline(pipelineId, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of());
+    }
+
+    @SneakyThrows
+    protected void deleteModel(String modelId) {
+        // need to undeploy first as model can be in use
+        makeRequest(
+            client(),
+            "POST",
+            String.format(LOCALE, "/_plugins/_ml/models/%s/_undeploy", modelId),
+            null,
+            toHttpEntity(""),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+
+        makeRequest(
+            client(),
+            "DELETE",
+            String.format(LOCALE, "/_plugins/_ml/models/%s", modelId),
+            null,
+            toHttpEntity(""),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
     }
 
     @SneakyThrows
