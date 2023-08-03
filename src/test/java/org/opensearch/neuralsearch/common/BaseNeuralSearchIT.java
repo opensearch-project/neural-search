@@ -677,5 +677,4 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertEquals(1, modelIds.size());
         return modelIds.iterator().next();
     }
-
 }
