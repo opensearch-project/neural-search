@@ -16,7 +16,6 @@ import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
 import org.junit.After;
 import org.opensearch.client.Response;
-import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
@@ -85,7 +84,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
         Map<String, Object> map = XContentHelper.convertToMap(
-            XContentFactory.xContent(XContentType.JSON),
+            XContentType.JSON.xContent(),
             EntityUtils.toString(response.getEntity()),
             false
         );

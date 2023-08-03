@@ -15,7 +15,6 @@ import java.util.Set;
 import org.junit.Assert;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
-import org.opensearch.common.Strings;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.rest.RestRequest;
@@ -62,21 +61,20 @@ public class ValidateDependentPluginInstallationIT extends OpenSearchSecureRestT
     }
 
     private void createBasicKnnIndex() throws IOException {
-        String mapping = Strings.toString(
-            XContentFactory.jsonBuilder()
-                .startObject()
-                .startObject("properties")
-                .startObject(KNN_VECTOR_FIELD_NAME)
-                .field("type", "knn_vector")
-                .field("dimension", Integer.toString(3))
-                .startObject("method")
-                .field("engine", "lucene")
-                .field("name", "hnsw")
-                .endObject()
-                .endObject()
-                .endObject()
-                .endObject()
-        );
+        String mapping = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("properties")
+            .startObject(KNN_VECTOR_FIELD_NAME)
+            .field("type", "knn_vector")
+            .field("dimension", Integer.toString(3))
+            .startObject("method")
+            .field("engine", "lucene")
+            .field("name", "hnsw")
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .toString();
         mapping = mapping.substring(1, mapping.length() - 1);
         createIndex(KNN_INDEX_NAME, Settings.EMPTY, mapping);
     }
@@ -99,16 +97,15 @@ public class ValidateDependentPluginInstallationIT extends OpenSearchSecureRestT
     }
 
     private void indexDocument() throws IOException {
-        final String indexRequestBody = Strings.toString(
-            XContentFactory.jsonBuilder()
-                .startObject()
-                .startArray(KNN_VECTOR_FIELD_NAME)
-                .value(1.0)
-                .value(2.0)
-                .value(4.0)
-                .endArray()
-                .endObject()
-        );
+        final String indexRequestBody = XContentFactory.jsonBuilder()
+            .startObject()
+            .startArray(KNN_VECTOR_FIELD_NAME)
+            .value(1.0)
+            .value(2.0)
+            .value(4.0)
+            .endArray()
+            .endObject()
+            .toString();
         final Request indexRequest = new Request(RestRequest.Method.POST.name(), KNN_DOCUMENT_URL);
         indexRequest.setJsonEntity(indexRequestBody);
         assertOK(client().performRequest(indexRequest));

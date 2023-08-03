@@ -14,6 +14,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.opensearch.search.internal.SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR;
 
 import java.io.IOException;
 import java.util.LinkedList;
@@ -36,7 +37,8 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.tests.analysis.MockAnalyzer;
 import org.opensearch.action.OriginalIndices;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
-import org.opensearch.index.Index;
+import org.opensearch.core.index.Index;
+import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
@@ -44,7 +46,6 @@ import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.index.shard.IndexShard;
-import org.opensearch.index.shard.ShardId;
 import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
@@ -136,6 +137,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.query()).thenReturn(query);
         QuerySearchResult querySearchResult = new QuerySearchResult();
         when(searchContext.queryResult()).thenReturn(querySearchResult);
+        when(searchContext.bucketCollectorProcessor()).thenReturn(NO_OP_BUCKET_COLLECTOR_PROCESSOR);
 
         hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
 
@@ -200,6 +202,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         Query query = termSubQuery.toQuery(mockQueryShardContext);
         when(searchContext.query()).thenReturn(query);
+        when(searchContext.bucketCollectorProcessor()).thenReturn(NO_OP_BUCKET_COLLECTOR_PROCESSOR);
 
         hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
 
@@ -272,6 +275,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         Query query = queryBuilder.toQuery(mockQueryShardContext);
         when(searchContext.query()).thenReturn(query);
+        when(searchContext.bucketCollectorProcessor()).thenReturn(NO_OP_BUCKET_COLLECTOR_PROCESSOR);
 
         hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
 
@@ -363,6 +367,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         Query query = queryBuilder.toQuery(mockQueryShardContext);
         when(searchContext.query()).thenReturn(query);
+        when(searchContext.bucketCollectorProcessor()).thenReturn(NO_OP_BUCKET_COLLECTOR_PROCESSOR);
 
         hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
 
