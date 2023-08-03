@@ -12,10 +12,10 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 
 import lombok.SneakyThrows;
 
+import org.junit.After;
 import org.junit.Before;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
@@ -39,13 +39,24 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
 
     private static final int TEST_DIMENSION = 768;
     private static final SpaceType TEST_SPACE_TYPE = SpaceType.L2;
-    private static final AtomicReference<String> modelId = new AtomicReference<>();
     private final float[] testVector = createRandomVector(TEST_DIMENSION);
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        modelId.compareAndSet(modelId.get(), prepareModel());
+        updateClusterSettings();
+        prepareModel();
+    }
+
+    @After
+    @SneakyThrows
+    public void tearDown() {
+        super.tearDown();
+        /* this is required to minimize chance of model not being deployed due to open memory CB,
+         * this happens in case we leave model from previous test case. We use new model for every test, and old model
+         * can be undeployed and deleted to free resources after each test case execution.
+         */
+        findDeployedModels().forEach(this::deleteModel);
     }
 
     /**
@@ -65,10 +76,11 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testBasicQuery() {
         initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
+        String modelId = getDeployedModelId();
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_1,
             TEST_QUERY_TEXT,
-            modelId.get(),
+            modelId,
             1,
             null,
             null
@@ -77,7 +89,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
 
         assertEquals("1", firstInnerHit.get("_id"));
-        float expectedScore = computeExpectedScore(modelId.get(), testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
+        float expectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
     }
 
@@ -99,10 +111,11 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testBoostQuery() {
         initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
+        String modelId = getDeployedModelId();
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_1,
             TEST_QUERY_TEXT,
-            modelId.get(),
+            modelId,
             1,
             null,
             null
@@ -114,7 +127,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
 
         assertEquals("1", firstInnerHit.get("_id"));
-        float expectedScore = 2 * computeExpectedScore(modelId.get(), testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
+        float expectedScore = 2 * computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
     }
 
@@ -141,11 +154,12 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testRescoreQuery() {
         initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
+        String modelId = getDeployedModelId();
         MatchAllQueryBuilder matchAllQueryBuilder = new MatchAllQueryBuilder();
         NeuralQueryBuilder rescoreNeuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_1,
             TEST_QUERY_TEXT,
-            modelId.get(),
+            modelId,
             1,
             null,
             null
@@ -155,7 +169,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
 
         assertEquals("1", firstInnerHit.get("_id"));
-        float expectedScore = computeExpectedScore(modelId.get(), testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
+        float expectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
     }
 
@@ -187,12 +201,13 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testBooleanQuery_withMultipleNeuralQueries() {
         initializeIndexIfNotExist(TEST_MULTI_VECTOR_FIELD_INDEX_NAME);
+        String modelId = getDeployedModelId();
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
 
         NeuralQueryBuilder neuralQueryBuilder1 = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_1,
             TEST_QUERY_TEXT,
-            modelId.get(),
+            modelId,
             1,
             null,
             null
@@ -200,7 +215,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         NeuralQueryBuilder neuralQueryBuilder2 = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_2,
             TEST_QUERY_TEXT,
-            modelId.get(),
+            modelId,
             1,
             null,
             null
@@ -212,7 +227,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
 
         assertEquals("1", firstInnerHit.get("_id"));
-        float expectedScore = 2 * computeExpectedScore(modelId.get(), testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
+        float expectedScore = 2 * computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
     }
 
@@ -242,12 +257,13 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testBooleanQuery_withNeuralAndBM25Queries() {
         initializeIndexIfNotExist(TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME);
+        String modelId = getDeployedModelId();
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_1,
             TEST_QUERY_TEXT,
-            modelId.get(),
+            modelId,
             1,
             null,
             null
@@ -261,7 +277,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
 
         assertEquals("1", firstInnerHit.get("_id"));
-        float minExpectedScore = computeExpectedScore(modelId.get(), testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
+        float minExpectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertTrue(minExpectedScore < objectToFloat(firstInnerHit.get("_score")));
     }
 
@@ -286,11 +302,12 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testNestedQuery() {
         initializeIndexIfNotExist(TEST_NESTED_INDEX_NAME);
+        String modelId = getDeployedModelId();
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_NESTED,
             TEST_QUERY_TEXT,
-            modelId.get(),
+            modelId,
             1,
             null,
             null
@@ -300,7 +317,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
 
         assertEquals("1", firstInnerHit.get("_id"));
-        float expectedScore = computeExpectedScore(modelId.get(), testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
+        float expectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
     }
 
@@ -328,10 +345,11 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testFilterQuery() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
+        String modelId = getDeployedModelId();
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_1,
             TEST_QUERY_TEXT,
-            modelId.get(),
+            modelId,
             1,
             null,
             new MatchQueryBuilder("_id", "3")
@@ -340,7 +358,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals(1, getHitCount(searchResponseAsMap));
         Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
         assertEquals("3", firstInnerHit.get("_id"));
-        float expectedScore = computeExpectedScore(modelId.get(), testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
+        float expectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
     }
 

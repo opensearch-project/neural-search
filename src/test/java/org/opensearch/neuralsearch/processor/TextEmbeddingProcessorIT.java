@@ -12,6 +12,9 @@ import java.util.Map;
 import org.apache.http.HttpHeaders;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
+import lombok.SneakyThrows;
+
+import org.junit.After;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentHelper;
@@ -25,6 +28,17 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
     private static final String INDEX_NAME = "text_embedding_index";
 
     private static final String PIPELINE_NAME = "pipeline-hybrid";
+
+    @After
+    @SneakyThrows
+    public void tearDown() {
+        super.tearDown();
+        /* this is required to minimize chance of model not being deployed due to open memory CB,
+         * this happens in case we leave model from previous test case. We use new model for every test, and old model
+         * can be undeployed and deleted to free resources after each test case execution.
+         */
+        findDeployedModels().forEach(this::deleteModel);
+    }
 
     public void testTextEmbeddingProcessor() throws Exception {
         String modelId = uploadTextEmbeddingModel();
