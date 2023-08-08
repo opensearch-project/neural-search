@@ -9,11 +9,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import lombok.ToString;
+
 /**
  * Abstracts combination of scores based on arithmetic mean method
  */
+@ToString(onlyExplicitlyIncluded = true)
 public class ArithmeticMeanScoreCombinationTechnique implements ScoreCombinationTechnique {
-
+    @ToString.Include
     public static final String TECHNIQUE_NAME = "arithmetic_mean";
     public static final String PARAM_NAME_WEIGHTS = "weights";
     private static final Set<String> SUPPORTED_PARAMS = Set.of(PARAM_NAME_WEIGHTS);
