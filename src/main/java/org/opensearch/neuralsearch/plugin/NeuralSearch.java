@@ -5,6 +5,8 @@
 
 package org.opensearch.neuralsearch.plugin;
 
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SEARCH_HYBRID_SEARCH_ENABLED;
+
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -18,6 +20,7 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.settings.Setting;
 import org.opensearch.common.util.FeatureFlags;
 import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
@@ -51,20 +54,11 @@ import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.watcher.ResourceWatcherService;
 
-import com.google.common.annotations.VisibleForTesting;
-
 /**
  * Neural Search plugin class
  */
 @Log4j2
 public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, IngestPlugin, ExtensiblePlugin, SearchPipelinePlugin {
-    /**
-     * Gates the functionality of hybrid search
-     * Currently query phase searcher added with hybrid search will conflict with concurrent search in core.
-     * Once that problem is resolved this feature flag can be removed.
-     */
-    @VisibleForTesting
-    public static final String NEURAL_SEARCH_HYBRID_SEARCH_ENABLED = "neural_search_hybrid_search_enabled";
     private MLCommonsClientAccessor clientAccessor;
     private NormalizationProcessorWorkflow normalizationProcessorWorkflow;
     private final ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
@@ -105,11 +99,14 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     @Override
     public Optional<QueryPhaseSearcher> getQueryPhaseSearcher() {
-        if (FeatureFlags.isEnabled(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED)) {
-            log.info("Registering hybrid query phase searcher with feature flag [%]", NEURAL_SEARCH_HYBRID_SEARCH_ENABLED);
+        if (FeatureFlags.isEnabled(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED.getKey())) {
+            log.info("Registering hybrid query phase searcher with feature flag [{}]", NEURAL_SEARCH_HYBRID_SEARCH_ENABLED.getKey());
             return Optional.of(new HybridQueryPhaseSearcher());
         }
-        log.info("Not registering hybrid query phase searcher because feature flag [%] is disabled", NEURAL_SEARCH_HYBRID_SEARCH_ENABLED);
+        log.info(
+            "Not registering hybrid query phase searcher because feature flag [{}] is disabled",
+            NEURAL_SEARCH_HYBRID_SEARCH_ENABLED.getKey()
+        );
         // we want feature be disabled by default due to risk of colliding and breaking concurrent search in core
         return Optional.empty();
     }
@@ -122,5 +119,10 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
             NormalizationProcessor.TYPE,
             new NormalizationProcessorFactory(normalizationProcessorWorkflow, scoreNormalizationFactory, scoreCombinationFactory)
         );
+    }
+
+    @Override
+    public List<Setting<?>> getSettings() {
+        return List.of(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED);
     }
 }

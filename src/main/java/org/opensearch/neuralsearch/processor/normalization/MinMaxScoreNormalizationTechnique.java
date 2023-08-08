@@ -9,6 +9,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
+import lombok.ToString;
+
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.opensearch.neuralsearch.search.CompoundTopDocs;
@@ -18,8 +20,9 @@ import com.google.common.primitives.Floats;
 /**
  * Abstracts normalization of scores based on min-max method
  */
+@ToString(onlyExplicitlyIncluded = true)
 public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTechnique {
-
+    @ToString.Include
     public static final String TECHNIQUE_NAME = "min_max";
     private static final float MIN_SCORE = 0.001f;
     private static final float SINGLE_RESULT_SCORE = 1.0f;
