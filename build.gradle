@@ -256,9 +256,7 @@ testClusters.integTest {
     
     // enable features for testing
     // hybrid search
-    systemProperty('neural_search_hybrid_search_enabled', 'true')
-    // search pipelines
-    systemProperty('opensearch.experimental.feature.search_pipeline.enabled', 'true')
+    systemProperty('plugins.ml_commons.hybrid_search_enabled', 'true')
 }
 
 // Remote Integration Tests

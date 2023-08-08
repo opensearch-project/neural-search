@@ -51,7 +51,8 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
         final SearchPhaseResults<Result> searchPhaseResult,
         final SearchPhaseContext searchPhaseContext
     ) {
-        if (shouldRunProcessor(searchPhaseResult)) {
+        if (shouldSkipProcessor(searchPhaseResult)) {
+            log.debug("Query results are not compatible with normalization processor");
             return;
         }
         List<QuerySearchResult> querySearchResults = getQueryPhaseSearchResults(searchPhaseResult);
@@ -88,7 +89,7 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
         return false;
     }
 
-    private <Result extends SearchPhaseResult> boolean shouldRunProcessor(SearchPhaseResults<Result> searchPhaseResult) {
+    private <Result extends SearchPhaseResult> boolean shouldSkipProcessor(SearchPhaseResults<Result> searchPhaseResult) {
         if (Objects.isNull(searchPhaseResult) || !(searchPhaseResult instanceof QueryPhaseResultConsumer)) {
             return true;
         }

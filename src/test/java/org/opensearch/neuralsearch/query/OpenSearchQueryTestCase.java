@@ -8,7 +8,7 @@ package org.opensearch.neuralsearch.query;
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.singletonMap;
 import static java.util.stream.Collectors.toList;
-import static org.opensearch.neuralsearch.plugin.NeuralSearch.NEURAL_SEARCH_HYBRID_SEARCH_ENABLED;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SEARCH_HYBRID_SEARCH_ENABLED;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -227,6 +227,6 @@ public abstract class OpenSearchQueryTestCase extends OpenSearchTestCase {
 
     @SuppressForbidden(reason = "manipulates system properties for testing")
     protected static void initFeatureFlags() {
-        System.setProperty(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED, "true");
+        System.setProperty(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED.getKey(), "true");
     }
 }
