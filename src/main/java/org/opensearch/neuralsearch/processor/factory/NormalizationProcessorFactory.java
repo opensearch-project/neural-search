@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import lombok.AllArgsConstructor;
+import lombok.extern.log4j.Log4j2;
 
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
@@ -28,6 +29,7 @@ import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
  * Factory for query results normalization processor for search pipeline. Instantiates processor based on user provided input.
  */
 @AllArgsConstructor
+@Log4j2
 public class NormalizationProcessorFactory implements Processor.Factory<SearchPhaseResultsProcessor> {
     public static final String NORMALIZATION_CLAUSE = "normalization";
     public static final String COMBINATION_CLAUSE = "combination";
@@ -75,7 +77,12 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
             Map<String, Object> combinationParams = readOptionalMap(NormalizationProcessor.TYPE, tag, combinationClause, PARAMETERS);
             scoreCombinationTechnique = scoreCombinationFactory.createCombination(combinationTechnique, combinationParams);
         }
-
+        log.info(
+            "Creating search phase results processor of type [{}] with normalization [{}] and combination [{}]",
+            NormalizationProcessor.TYPE,
+            normalizationTechnique,
+            scoreCombinationTechnique
+        );
         return new NormalizationProcessor(
             tag,
             description,

@@ -10,6 +10,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import lombok.AllArgsConstructor;
+import lombok.extern.log4j.Log4j2;
 
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
@@ -24,6 +25,7 @@ import org.opensearch.search.query.QuerySearchResult;
  * and post-processing of final results
  */
 @AllArgsConstructor
+@Log4j2
 public class NormalizationProcessorWorkflow {
 
     private final ScoreNormalizer scoreNormalizer;
@@ -41,15 +43,19 @@ public class NormalizationProcessorWorkflow {
         final ScoreCombinationTechnique combinationTechnique
     ) {
         // pre-process data
+        log.debug("Pre-process query results");
         List<CompoundTopDocs> queryTopDocs = getQueryTopDocs(querySearchResults);
 
         // normalize
+        log.debug("Do score normalization");
         scoreNormalizer.normalizeScores(queryTopDocs, normalizationTechnique);
 
         // combine
+        log.debug("Do score combination");
         scoreCombiner.combineScores(queryTopDocs, combinationTechnique);
 
         // post-process data
+        log.debug("Post-process query results after score normalization and combination");
         updateOriginalQueryResults(querySearchResults, queryTopDocs);
     }
 
