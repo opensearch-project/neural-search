@@ -22,7 +22,7 @@ public final class NeuralSearchSettings {
      * Once that problem is resolved this feature flag can be removed.
      */
     public static final Setting<Boolean> NEURAL_SEARCH_HYBRID_SEARCH_ENABLED = Setting.boolSetting(
-        "plugins.ml_commons.hybrid_search_enabled",
+        "plugins.neural_search.hybrid_search_enabled",
         false,
         Setting.Property.NodeScope
     );
