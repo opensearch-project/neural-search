@@ -22,7 +22,7 @@ import org.opensearch.neuralsearch.search.CompoundTopDocs;
 public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechnique {
     @ToString.Include
     public static final String TECHNIQUE_NAME = "l2";
-    private static final float MIN_SCORE = 0.001f;
+    private static final float MIN_SCORE = 0.0f;
 
     /**
      * L2 normalization method.

@@ -24,7 +24,7 @@ import com.google.common.primitives.Floats;
 public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTechnique {
     @ToString.Include
     public static final String TECHNIQUE_NAME = "min_max";
-    private static final float MIN_SCORE = 0.001f;
+    private static final float MIN_SCORE = 0.0f;
     private static final float SINGLE_RESULT_SCORE = 1.0f;
 
     /**

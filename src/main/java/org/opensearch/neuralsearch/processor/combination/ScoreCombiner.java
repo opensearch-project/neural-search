@@ -6,7 +6,6 @@
 package org.opensearch.neuralsearch.processor.combination;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -100,7 +99,7 @@ public class ScoreCombiner {
                 normalizedScoresPerDoc.computeIfAbsent(scoreDoc.doc, key -> {
                     float[] scores = new float[topDocsPerSubQuery.size()];
                     // we initialize with -1.0, as after normalization it's possible that score is 0.0
-                    Arrays.fill(scores, -1.0f);
+                    // Arrays.fill(scores, -1.0f);
                     return scores;
                 });
                 normalizedScoresPerDoc.get(scoreDoc.doc)[j] = scoreDoc.score;

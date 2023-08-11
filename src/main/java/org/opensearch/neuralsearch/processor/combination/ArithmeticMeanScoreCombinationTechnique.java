@@ -42,12 +42,12 @@ public class ArithmeticMeanScoreCombinationTechnique implements ScoreCombination
         float sumOfWeights = 0;
         for (int indexOfSubQuery = 0; indexOfSubQuery < scores.length; indexOfSubQuery++) {
             float score = scores[indexOfSubQuery];
-            if (score >= 0.0) {
-                float weight = scoreCombinationUtil.getWeightForSubQuery(weights, indexOfSubQuery);
-                score = score * weight;
-                combinedScore += score;
-                sumOfWeights += weight;
-            }
+            // if (score >= 0.0) {
+            float weight = scoreCombinationUtil.getWeightForSubQuery(weights, indexOfSubQuery);
+            score = score * weight;
+            combinedScore += score;
+            sumOfWeights += weight;
+            // }
         }
         if (sumOfWeights == 0.0f) {
             return ZERO_SCORE;
