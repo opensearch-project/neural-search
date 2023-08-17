@@ -29,7 +29,7 @@ import org.opensearch.client.RestClientBuilder;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.common.xcontent.json.JsonXContent;
 import org.opensearch.core.xcontent.DeprecationHandler;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.XContentParser;
@@ -131,14 +131,12 @@ public abstract class OpenSearchSecureRestTestCase extends OpenSearchRestTestCas
     @After
     public void deleteExternalIndices() throws IOException {
         final Response response = client().performRequest(new Request("GET", "/_cat/indices?format=json" + "&expand_wildcards=all"));
-        final XContentType xContentType = XContentType.fromMediaType(response.getEntity().getContentType().getValue());
         try (
-            final XContentParser parser = xContentType.xContent()
-                .createParser(
-                    NamedXContentRegistry.EMPTY,
-                    DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
-                    response.getEntity().getContent()
-                )
+            final XContentParser parser = JsonXContent.jsonXContent.createParser(
+                NamedXContentRegistry.EMPTY,
+                DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+                response.getEntity().getContent()
+            )
         ) {
             final XContentParser.Token token = parser.nextToken();
             final List<Map<String, Object>> parserList;

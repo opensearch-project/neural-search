@@ -17,7 +17,7 @@ import java.util.stream.IntStream;
 import lombok.extern.log4j.Log4j2;
 
 import org.apache.commons.lang3.StringUtils;
-import org.opensearch.action.ActionListener;
+import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.ingest.AbstractProcessor;

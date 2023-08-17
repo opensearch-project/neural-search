@@ -38,7 +38,6 @@ import org.opensearch.client.RequestOptions;
 import org.opensearch.client.Response;
 import org.opensearch.client.RestClient;
 import org.opensearch.client.WarningsHandler;
-import org.opensearch.common.Strings;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
@@ -82,7 +81,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             "PUT",
             "_cluster/settings",
             null,
-            toHttpEntity(Strings.toString(builder)),
+            toHttpEntity(builder.toString()),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, ""))
         );
 
@@ -102,7 +101,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
         Map<String, Object> uploadResJson = XContentHelper.convertToMap(
-            XContentFactory.xContent(XContentType.JSON),
+            XContentType.JSON.xContent(),
             EntityUtils.toString(uploadResponse.getEntity()),
             false
         );
@@ -131,7 +130,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
         Map<String, Object> uploadResJson = XContentHelper.convertToMap(
-            XContentFactory.xContent(XContentType.JSON),
+            XContentType.JSON.xContent(),
             EntityUtils.toString(uploadResponse.getEntity()),
             false
         );
@@ -180,7 +179,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         );
 
         Map<String, Object> inferenceResJson = XContentHelper.convertToMap(
-            XContentFactory.xContent(XContentType.JSON),
+            XContentType.JSON.xContent(),
             EntityUtils.toString(inferenceResponse.getEntity()),
             false
         );
@@ -210,7 +209,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
         Map<String, Object> node = XContentHelper.convertToMap(
-            XContentFactory.xContent(XContentType.JSON),
+            XContentType.JSON.xContent(),
             EntityUtils.toString(response.getEntity()),
             false
         );
@@ -234,7 +233,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
         Map<String, Object> node = XContentHelper.convertToMap(
-            XContentFactory.xContent(XContentType.JSON),
+            XContentType.JSON.xContent(),
             EntityUtils.toString(pipelineCreateResponse.getEntity()),
             false
         );
@@ -293,14 +292,14 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
         Request request = new Request("POST", "/" + index + "/_search");
         request.addParameter("size", Integer.toString(resultSize));
-        request.setJsonEntity(Strings.toString(builder));
+        request.setJsonEntity(builder.toString());
 
         Response response = client().performRequest(request);
         assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
 
         String responseBody = EntityUtils.toString(response.getEntity());
 
-        return XContentHelper.convertToMap(XContentFactory.xContent(XContentType.JSON), responseBody, false);
+        return XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
     }
 
     /**
@@ -345,7 +344,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         }
         builder.endObject();
 
-        request.setJsonEntity(Strings.toString(builder));
+        request.setJsonEntity(builder.toString());
         Response response = client().performRequest(request);
         assertEquals(request.getEndpoint() + ": failed", RestStatus.CREATED, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
     }
@@ -411,11 +410,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             toHttpEntity(""),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
-        return XContentHelper.convertToMap(
-            XContentFactory.xContent(XContentType.JSON),
-            EntityUtils.toString(taskQueryResponse.getEntity()),
-            false
-        );
+        return XContentHelper.convertToMap(XContentType.JSON.xContent(), EntityUtils.toString(taskQueryResponse.getEntity()), false);
     }
 
     protected boolean checkComplete(Map<String, Object> node) {
@@ -445,7 +440,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
                 .endObject()
                 .endObject();
         }
-        return Strings.toString(xContentBuilder.endObject().endObject().endObject());
+        xContentBuilder.endObject().endObject().endObject();
+        return xContentBuilder.toString();
     }
 
     protected static Response makeRequest(
@@ -512,7 +508,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
         Map<String, Object> modelGroupResJson = XContentHelper.convertToMap(
-            XContentFactory.xContent(XContentType.JSON),
+            XContentType.JSON.xContent(),
             EntityUtils.toString(modelGroupResponse.getEntity()),
             false
         );
