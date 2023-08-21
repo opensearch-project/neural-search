@@ -5,16 +5,12 @@
 
 package org.opensearch.neuralsearch.processor;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.isA;
-import static org.mockito.Mockito.isNull;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.*;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -36,7 +32,7 @@ import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.Processor;
-import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.ml.MLCommonsTextEmbeddingClientAccessor;
 import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
 import org.opensearch.test.OpenSearchTestCase;
 
@@ -46,7 +42,7 @@ import com.google.common.collect.ImmutableMap;
 public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
 
     @Mock
-    private MLCommonsClientAccessor mlCommonsClientAccessor;
+    private MLCommonsTextEmbeddingClientAccessor mlCommonsClientAccessor;
 
     @Mock
     private Environment env;
@@ -126,7 +122,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put("key2", "value2");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         Map<String, Processor.Factory> registry = new HashMap<>();
-        MLCommonsClientAccessor accessor = mock(MLCommonsClientAccessor.class);
+        MLCommonsTextEmbeddingClientAccessor accessor = mock(MLCommonsTextEmbeddingClientAccessor.class);
         TextEmbeddingProcessorFactory textEmbeddingProcessorFactory = new TextEmbeddingProcessorFactory(accessor, env);
 
         Map<String, Object> config = new HashMap<>();
@@ -144,7 +140,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         Map<String, Processor.Factory> registry = new HashMap<>();
-        MLCommonsClientAccessor accessor = mock(MLCommonsClientAccessor.class);
+        MLCommonsTextEmbeddingClientAccessor accessor = mock(MLCommonsTextEmbeddingClientAccessor.class);
         TextEmbeddingProcessorFactory textEmbeddingProcessorFactory = new TextEmbeddingProcessorFactory(accessor, env);
 
         Map<String, Object> config = new HashMap<>();

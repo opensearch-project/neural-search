@@ -22,7 +22,7 @@ import org.opensearch.env.Environment;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
-import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.ml.MLCommonsTextEmbeddingClientAccessor;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
@@ -45,7 +45,7 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
 
     private final Map<String, Object> fieldMap;
 
-    private final MLCommonsClientAccessor mlCommonsClientAccessor;
+    private final MLCommonsTextEmbeddingClientAccessor mlCommonsClientAccessor;
 
     private final Environment environment;
 
@@ -54,7 +54,7 @@ public class TextEmbeddingProcessor extends AbstractProcessor {
         String description,
         String modelId,
         Map<String, Object> fieldMap,
-        MLCommonsClientAccessor clientAccessor,
+        MLCommonsTextEmbeddingClientAccessor clientAccessor,
         Environment environment
     ) {
         super(tag, description);

@@ -151,6 +151,11 @@ dependencies {
     runtimeOnly group: 'org.reflections', name: 'reflections', version: '0.9.12'
     runtimeOnly group: 'org.javassist', name: 'javassist', version: '3.29.2-GA'
     runtimeOnly group: 'org.opensearch', name: 'common-utils', version: "${opensearch_build}"
+    implementation platform("ai.djl:bom:0.19.0")
+    implementation group: 'ai.djl.pytorch', name: 'pytorch-model-zoo', version: '0.19.0'
+    implementation group: 'ai.djl', name: 'api', version: '0.19.0'
+    implementation group: 'ai.djl.huggingface', name: 'tokenizers', version: '0.19.0'
+//    implementation group: 'org.slf4j', name: 'slf4j-api', version: '1.7.36'
 }
 
 // In order to add the jar to the classpath, we need to unzip the
