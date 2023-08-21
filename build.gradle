@@ -155,7 +155,7 @@ dependencies {
     implementation group: 'ai.djl.pytorch', name: 'pytorch-model-zoo', version: '0.19.0'
     implementation group: 'ai.djl', name: 'api', version: '0.19.0'
     implementation group: 'ai.djl.huggingface', name: 'tokenizers', version: '0.19.0'
-//    implementation group: 'org.slf4j', name: 'slf4j-api', version: '1.7.36'
+    implementation group: 'org.slf4j', name: 'slf4j-api', version: '1.7.36'
 }
 
 // In order to add the jar to the classpath, we need to unzip the

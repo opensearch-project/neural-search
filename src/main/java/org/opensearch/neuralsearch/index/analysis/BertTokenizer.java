@@ -5,6 +5,7 @@
 
 package org.opensearch.neuralsearch.index.analysis;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.security.AccessController;
@@ -59,7 +60,10 @@ public class BertTokenizer extends Tokenizer {
             
             System.setProperty("DJL_CACHE_DIR", DJL_CACHE_DIR);
             Thread.currentThread().setContextClassLoader(ai.djl.Model.class.getClassLoader());
-            Path path = Path.of(".", "tokenizer.json");
+            Path path = Path.of("/Users/zhichaog/Desktop/repos/neural-search", "tokenizer.json");
+            File curDir = new File(".");
+            File[] fileList = curDir.listFiles();
+            System.out.println(fileList);
             tokenizer = HuggingFaceTokenizer.builder().optPadding(true).optTokenizerPath(path).build();
         } catch (Exception e) {
             log.error("Tail to create tokenizer, ", e);
