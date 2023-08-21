@@ -51,7 +51,7 @@ public class TermWeightTokenizer extends Tokenizer {
     }
 
     @Override
-    public boolean incrementToken() throws IOException {
+    final public boolean incrementToken() throws IOException {
         clearAttributes();
 
         if (tokens.size() == 0 || cursor >= tokens.size()) {

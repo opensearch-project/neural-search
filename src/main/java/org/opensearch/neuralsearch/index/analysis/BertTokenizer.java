@@ -43,7 +43,7 @@ public class BertTokenizer extends Tokenizer {
             DJL_CACHE_DIR = "/tmp/djl_cache";
             AccessController.doPrivileged((PrivilegedExceptionAction<Void>) () -> initalizeHuggingFaaceTokenizer(), null);
         } catch (Exception e) {
-            log.error("Tail to create tokenizer, ", e);
+            log.error("Fail to create tokenizer, ", e);
         }
     }
 
@@ -85,7 +85,7 @@ public class BertTokenizer extends Tokenizer {
     }
 
     @Override
-    public boolean incrementToken() throws IOException {
+    final public boolean incrementToken() throws IOException {
         clearAttributes();
 
         if (cursor >= tokens.size()) {
