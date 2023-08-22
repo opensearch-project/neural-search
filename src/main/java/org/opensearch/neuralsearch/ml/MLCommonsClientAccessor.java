@@ -8,6 +8,7 @@ package org.opensearch.neuralsearch.ml;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import lombok.NonNull;
@@ -15,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.dataset.MLInputDataset;
@@ -100,10 +102,38 @@ public class MLCommonsClientAccessor {
         @NonNull final List<String> inputText,
         @NonNull final ActionListener<List<List<Float>>> listener
     ) {
-        inferenceSentencesWithRetry(targetResponseFilters, modelId, inputText, 0, listener);
+        retryableInferenceSentencesWithVectorResult(targetResponseFilters, modelId, inputText, 0, listener);
     }
 
-    private void inferenceSentencesWithRetry(
+    public void inferenceSentencesWithMapResult(
+        @NonNull final String modelId,
+        @NonNull final List<String> inputText,
+        @NonNull final ActionListener<Map<String, ?>> listener) {
+        retryableInferenceSentencesWithMapResult(modelId, inputText, 0, listener);
+    }
+
+    private void retryableInferenceSentencesWithMapResult(
+        final String modelId,
+        final List<String> inputText,
+        final int retryTime,
+        final ActionListener<Map<String, ?>> listener
+    ) {
+        MLInput mlInput = createMLInput(null, inputText);
+        mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
+            final Map<String, ?> result = buildMapResultFromResponse(mlOutput);
+            log.debug("Inference Response for input sentence {} is : {} ", inputText, result);
+            listener.onResponse(result);
+        }, e -> {
+            if (RetryUtil.shouldRetry(e, retryTime)) {
+                final int retryTimeAdd = retryTime + 1;
+                retryableInferenceSentencesWithMapResult(modelId, inputText, retryTimeAdd, listener);
+            } else {
+                listener.onFailure(e);
+            }
+        }));
+    }
+
+    private void retryableInferenceSentencesWithVectorResult(
         final List<String> targetResponseFilters,
         final String modelId,
         final List<String> inputText,
@@ -118,7 +148,7 @@ public class MLCommonsClientAccessor {
         }, e -> {
             if (RetryUtil.shouldRetry(e, retryTime)) {
                 final int retryTimeAdd = retryTime + 1;
-                inferenceSentencesWithRetry(targetResponseFilters, modelId, inputText, retryTimeAdd, listener);
+                retryableInferenceSentencesWithVectorResult(targetResponseFilters, modelId, inputText, retryTimeAdd, listener);
             } else {
                 listener.onFailure(e);
             }
@@ -142,6 +172,21 @@ public class MLCommonsClientAccessor {
             }
         }
         return vector;
+    }
+
+    private Map<String, ?> buildMapResultFromResponse(MLOutput mlOutput) {
+        final ModelTensorOutput modelTensorOutput = (ModelTensorOutput) mlOutput;
+        final List<ModelTensors> tensorOutputList = modelTensorOutput.getMlModelOutputs();
+        if (CollectionUtils.isEmpty(tensorOutputList)) {
+            log.error("No tensor output found!");
+            return null;
+        }
+        List<ModelTensor> tensorList = tensorOutputList.get(0).getMlModelTensors();
+        if (CollectionUtils.isEmpty(tensorList)) {
+            log.error("No tensor found!");
+            return null;
+        }
+        return tensorList.get(0).getDataAsMap();
     }
 
 }
