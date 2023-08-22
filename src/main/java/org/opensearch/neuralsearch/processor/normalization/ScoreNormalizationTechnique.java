@@ -7,7 +7,7 @@ package org.opensearch.neuralsearch.processor.normalization;
 
 import java.util.List;
 
-import org.opensearch.neuralsearch.search.CompoundTopDocs;
+import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 /**
  * Abstracts normalization of scores in query search results.

@@ -6,10 +6,15 @@
 package org.opensearch.neuralsearch.processor;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
+import static org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher.MAGIC_NUMBER_DELIMITER;
+import static org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher.MAGIC_NUMBER_START_STOP;
+import static org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher.createDelimiterElementForHybridSearchResults;
+import static org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher.createStartStopElementForHybridSearchResults;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -28,6 +33,7 @@ import org.opensearch.action.search.SearchPhaseController;
 import org.opensearch.action.search.SearchPhaseName;
 import org.opensearch.action.search.SearchProgressListener;
 import org.opensearch.action.search.SearchRequest;
+import org.opensearch.common.Randomness;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.common.util.BigArrays;
 import org.opensearch.common.util.concurrent.OpenSearchExecutors;
@@ -41,7 +47,6 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
-import org.opensearch.neuralsearch.search.CompoundTopDocs;
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.SearchShardTarget;
 import org.opensearch.search.aggregations.InternalAggregation;
@@ -151,14 +156,18 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
                 OriginalIndices.NONE
             );
             QuerySearchResult querySearchResult = new QuerySearchResult();
-            CompoundTopDocs topDocs = new CompoundTopDocs(
+            TopDocs topDocs = new TopDocs(
                 new TotalHits(4, TotalHits.Relation.EQUAL_TO),
-                List.of(
-                    new TopDocs(
-                        new TotalHits(4, TotalHits.Relation.EQUAL_TO),
-                        new ScoreDoc[] { new ScoreDoc(0, 0.5f), new ScoreDoc(2, 0.3f), new ScoreDoc(4, 0.25f), new ScoreDoc(10, 0.2f) }
-                    )
-                )
+
+                new ScoreDoc[] {
+                    createStartStopElementForHybridSearchResults(4),
+                    createDelimiterElementForHybridSearchResults(4),
+                    new ScoreDoc(0, 0.5f),
+                    new ScoreDoc(2, 0.3f),
+                    new ScoreDoc(4, 0.25f),
+                    new ScoreDoc(10, 0.2f),
+                    createStartStopElementForHybridSearchResults(4) }
+
             );
             querySearchResult.topDocs(new TopDocsAndMaxScore(topDocs, 0.5f), new DocValueFormat[0]);
             querySearchResult.setSearchShardTarget(searchShardTarget);
@@ -166,6 +175,73 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
 
             queryPhaseResultConsumer.consumeResult(querySearchResult, partialReduceLatch::countDown);
         }
+
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
+        normalizationProcessor.process(queryPhaseResultConsumer, searchPhaseContext);
+
+        List<QuerySearchResult> querySearchResults = queryPhaseResultConsumer.getAtomicArray()
+            .asList()
+            .stream()
+            .map(result -> result == null ? null : result.queryResult())
+            .collect(Collectors.toList());
+
+        TestUtils.assertQueryResultScores(querySearchResults);
+    }
+
+    public void testScoreCorrectness_whenCompoundDocs_thenDoNormalizationCombination() {
+        NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+        );
+        NormalizationProcessor normalizationProcessor = new NormalizationProcessor(
+            PROCESSOR_TAG,
+            DESCRIPTION,
+            new ScoreNormalizationFactory().createNormalization(NORMALIZATION_METHOD),
+            new ScoreCombinationFactory().createCombination(COMBINATION_METHOD),
+            normalizationProcessorWorkflow
+        );
+
+        SearchRequest searchRequest = new SearchRequest(INDEX_NAME);
+        searchRequest.setBatchedReduceSize(4);
+        AtomicReference<Exception> onPartialMergeFailure = new AtomicReference<>();
+        QueryPhaseResultConsumer queryPhaseResultConsumer = new QueryPhaseResultConsumer(
+            searchRequest,
+            executor,
+            new NoopCircuitBreaker(CircuitBreaker.REQUEST),
+            searchPhaseController,
+            SearchProgressListener.NOOP,
+            writableRegistry(),
+            10,
+            e -> onPartialMergeFailure.accumulateAndGet(e, (prev, curr) -> {
+                curr.addSuppressed(prev);
+                return curr;
+            })
+        );
+        CountDownLatch partialReduceLatch = new CountDownLatch(1);
+        int shardId = 0;
+        SearchShardTarget searchShardTarget = new SearchShardTarget("node", new ShardId("index", "uuid", 0), null, OriginalIndices.NONE);
+        QuerySearchResult querySearchResult = new QuerySearchResult();
+        TopDocs topDocs = new TopDocs(
+            new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+
+            new ScoreDoc[] {
+                createStartStopElementForHybridSearchResults(10),
+                createDelimiterElementForHybridSearchResults(10),
+                new ScoreDoc(2429, 0.028685084f),
+                new ScoreDoc(14, 0.025785536f),
+                new ScoreDoc(10, 0.024871103f),
+                createDelimiterElementForHybridSearchResults(10),
+                new ScoreDoc(2429, 25.438505f),
+                new ScoreDoc(10, 25.226639f),
+                new ScoreDoc(14, 24.935198f),
+                new ScoreDoc(2428, 21.614073f),
+                createStartStopElementForHybridSearchResults(10) }
+
+        );
+        querySearchResult.topDocs(new TopDocsAndMaxScore(topDocs, 25.438505f), new DocValueFormat[0]);
+        querySearchResult.setSearchShardTarget(searchShardTarget);
+        querySearchResult.setShardIndex(shardId);
+
+        queryPhaseResultConsumer.consumeResult(querySearchResult, partialReduceLatch::countDown);
 
         SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
         normalizationProcessor.process(queryPhaseResultConsumer, searchPhaseContext);
@@ -193,7 +269,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
         normalizationProcessor.process(null, searchPhaseContext);
 
-        verify(normalizationProcessorWorkflow, never()).execute(any(), any(), any());
+        verify(normalizationProcessorWorkflow, never()).execute(any(), any(), any(), any(), anyBoolean());
     }
 
     public void testNotHybridSearchResult_whenResultsNotEmptyAndNotHybridSearchResult_thenDoNotExecuteWorkflow() {
@@ -247,6 +323,26 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
         normalizationProcessor.process(queryPhaseResultConsumer, searchPhaseContext);
 
-        verify(normalizationProcessorWorkflow, never()).execute(any(), any(), any());
+        verify(normalizationProcessorWorkflow, never()).execute(any(), any(), any(), any(), anyBoolean());
+    }
+
+    public void testScoreDocsListElements_whenTestingListElements_thenCheckResultsAreCorrect() {
+        ScoreDoc validStartStopElement = new ScoreDoc(0, MAGIC_NUMBER_START_STOP);
+        assertTrue(NormalizationProcessor.isHybridQueryStartStopElement(validStartStopElement));
+
+        ScoreDoc validStartStopElement1 = new ScoreDoc(-1, MAGIC_NUMBER_START_STOP);
+        assertFalse(NormalizationProcessor.isHybridQueryStartStopElement(validStartStopElement1));
+
+        ScoreDoc validStartStopElement2 = new ScoreDoc(0, Randomness.get().nextFloat());
+        assertFalse(NormalizationProcessor.isHybridQueryStartStopElement(validStartStopElement2));
+
+        ScoreDoc validDelimiterElement = new ScoreDoc(0, MAGIC_NUMBER_DELIMITER);
+        assertTrue(NormalizationProcessor.isHybridQueryDelimiterElement(validDelimiterElement));
+
+        ScoreDoc validDelimiterElement1 = new ScoreDoc(-1, MAGIC_NUMBER_DELIMITER);
+        assertFalse(NormalizationProcessor.isHybridQueryDelimiterElement(validDelimiterElement1));
+
+        ScoreDoc validDelimiterElement2 = new ScoreDoc(0, Randomness.get().nextFloat());
+        assertFalse(NormalizationProcessor.isHybridQueryDelimiterElement(validDelimiterElement2));
     }
 }

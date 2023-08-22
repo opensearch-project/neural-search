@@ -14,8 +14,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.processor.NormalizationProcessor.isHybridQueryDelimiterElement;
+import static org.opensearch.neuralsearch.processor.NormalizationProcessor.isHybridQueryStartStopElement;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -48,7 +51,6 @@ import org.opensearch.index.shard.IndexShard;
 import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
-import org.opensearch.neuralsearch.search.CompoundTopDocs;
 import org.opensearch.search.SearchShardTarget;
 import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.SearchContext;
@@ -282,8 +284,12 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
         TopDocs topDocs = topDocsAndMaxScore.topDocs;
         assertEquals(1, topDocs.totalHits.value);
-        assertTrue(topDocs instanceof CompoundTopDocs);
-        List<TopDocs> compoundTopDocs = ((CompoundTopDocs) topDocs).getCompoundTopDocs();
+        ScoreDoc[] scoreDocs = topDocs.scoreDocs;
+        assertNotNull(scoreDocs);
+        assertEquals(4, scoreDocs.length);
+        assertTrue(isHybridQueryStartStopElement(scoreDocs[0]));
+        assertTrue(isHybridQueryStartStopElement(scoreDocs[scoreDocs.length - 1]));
+        List<TopDocs> compoundTopDocs = getSubQueryResultsForSingleShard(topDocs);
         assertNotNull(compoundTopDocs);
         assertEquals(1, compoundTopDocs.size());
         TopDocs subQueryTopDocs = compoundTopDocs.get(0);
@@ -374,8 +380,12 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
         TopDocs topDocs = topDocsAndMaxScore.topDocs;
         assertEquals(4, topDocs.totalHits.value);
-        assertTrue(topDocs instanceof CompoundTopDocs);
-        List<TopDocs> compoundTopDocs = ((CompoundTopDocs) topDocs).getCompoundTopDocs();
+        ScoreDoc[] scoreDocs = topDocs.scoreDocs;
+        assertNotNull(scoreDocs);
+        assertEquals(10, scoreDocs.length);
+        assertTrue(isHybridQueryStartStopElement(scoreDocs[0]));
+        assertTrue(isHybridQueryStartStopElement(scoreDocs[scoreDocs.length - 1]));
+        List<TopDocs> compoundTopDocs = getSubQueryResultsForSingleShard(topDocs);
         assertNotNull(compoundTopDocs);
         assertEquals(3, compoundTopDocs.size());
 
@@ -414,5 +424,27 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         w.close();
         reader.close();
         directory.close();
+    }
+
+    private List<TopDocs> getSubQueryResultsForSingleShard(final TopDocs topDocs) {
+        assertNotNull(topDocs);
+        List<TopDocs> topDocsList = new ArrayList<>();
+        ScoreDoc[] scoreDocs = topDocs.scoreDocs;
+        // skipping 0 element, it's a start-stop element
+        List<ScoreDoc> scoreDocList = new ArrayList<>();
+        for (int index = 2; index < scoreDocs.length; index++) {
+            // getting first element of score's series
+            ScoreDoc scoreDoc = scoreDocs[index];
+            if (isHybridQueryDelimiterElement(scoreDoc) || isHybridQueryStartStopElement(scoreDoc)) {
+                ScoreDoc[] subQueryScores = scoreDocList.toArray(new ScoreDoc[0]);
+                TotalHits totalHits = new TotalHits(subQueryScores.length, TotalHits.Relation.EQUAL_TO);
+                TopDocs subQueryTopDocs = new TopDocs(totalHits, subQueryScores);
+                topDocsList.add(subQueryTopDocs);
+                scoreDocList.clear();
+            } else {
+                scoreDocList.add(scoreDoc);
+            }
+        }
+        return topDocsList;
     }
 }

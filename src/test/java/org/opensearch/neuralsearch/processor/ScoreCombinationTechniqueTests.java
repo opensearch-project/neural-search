@@ -5,6 +5,8 @@
 
 package org.opensearch.neuralsearch.processor;
 
+import static org.opensearch.neuralsearch.TestUtils.DELTA_FOR_SCORE_ASSERTION;
+
 import java.util.List;
 
 import org.apache.lucene.search.ScoreDoc;
@@ -12,7 +14,6 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
-import org.opensearch.neuralsearch.search.CompoundTopDocs;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
@@ -63,24 +64,24 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
         assertNotNull(queryTopDocs);
         assertEquals(3, queryTopDocs.size());
 
-        assertEquals(3, queryTopDocs.get(0).scoreDocs.length);
-        assertEquals(1.0, queryTopDocs.get(0).scoreDocs[0].score, 0.001f);
-        assertEquals(1, queryTopDocs.get(0).scoreDocs[0].doc);
-        assertEquals(1.0, queryTopDocs.get(0).scoreDocs[1].score, 0.001f);
-        assertEquals(3, queryTopDocs.get(0).scoreDocs[1].doc);
-        assertEquals(0.25, queryTopDocs.get(0).scoreDocs[2].score, 0.001f);
-        assertEquals(2, queryTopDocs.get(0).scoreDocs[2].doc);
+        assertEquals(3, queryTopDocs.get(0).getScoreDocs().length);
+        assertEquals(.5, queryTopDocs.get(0).getScoreDocs()[0].score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(1, queryTopDocs.get(0).getScoreDocs()[0].doc);
+        assertEquals(.5, queryTopDocs.get(0).getScoreDocs()[1].score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(3, queryTopDocs.get(0).getScoreDocs()[1].doc);
+        assertEquals(0.125, queryTopDocs.get(0).getScoreDocs()[2].score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(2, queryTopDocs.get(0).getScoreDocs()[2].doc);
 
-        assertEquals(4, queryTopDocs.get(1).scoreDocs.length);
-        assertEquals(0.9, queryTopDocs.get(1).scoreDocs[0].score, 0.001f);
-        assertEquals(2, queryTopDocs.get(1).scoreDocs[0].doc);
-        assertEquals(0.6, queryTopDocs.get(1).scoreDocs[1].score, 0.001f);
-        assertEquals(4, queryTopDocs.get(1).scoreDocs[1].doc);
-        assertEquals(0.5, queryTopDocs.get(1).scoreDocs[2].score, 0.001f);
-        assertEquals(7, queryTopDocs.get(1).scoreDocs[2].doc);
-        assertEquals(0.01, queryTopDocs.get(1).scoreDocs[3].score, 0.001f);
-        assertEquals(9, queryTopDocs.get(1).scoreDocs[3].doc);
+        assertEquals(4, queryTopDocs.get(1).getScoreDocs().length);
+        assertEquals(0.45, queryTopDocs.get(1).getScoreDocs()[0].score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(2, queryTopDocs.get(1).getScoreDocs()[0].doc);
+        assertEquals(0.3, queryTopDocs.get(1).getScoreDocs()[1].score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(4, queryTopDocs.get(1).getScoreDocs()[1].doc);
+        assertEquals(0.25, queryTopDocs.get(1).getScoreDocs()[2].score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(7, queryTopDocs.get(1).getScoreDocs()[2].doc);
+        assertEquals(0.005, queryTopDocs.get(1).getScoreDocs()[3].score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(9, queryTopDocs.get(1).getScoreDocs()[3].doc);
 
-        assertEquals(0, queryTopDocs.get(2).scoreDocs.length);
+        assertEquals(0, queryTopDocs.get(2).getScoreDocs().length);
     }
 }

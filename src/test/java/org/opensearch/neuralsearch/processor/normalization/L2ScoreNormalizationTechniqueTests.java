@@ -11,8 +11,8 @@ import java.util.List;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
+import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
-import org.opensearch.neuralsearch.search.CompoundTopDocs;
 
 /**
  * Abstracts normalization of scores based on min-max method
@@ -50,7 +50,10 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
         assertNotNull(compoundTopDocs);
         assertEquals(1, compoundTopDocs.size());
         assertNotNull(compoundTopDocs.get(0).getCompoundTopDocs());
-        assertCompoundTopDocs(expectedCompoundDocs, compoundTopDocs.get(0).getCompoundTopDocs().get(0));
+        assertCompoundTopDocs(
+            new TopDocs(expectedCompoundDocs.getTotalHits(), expectedCompoundDocs.getScoreDocs()),
+            compoundTopDocs.get(0).getCompoundTopDocs().get(0)
+        );
     }
 
     public void testNormalization_whenResultFromOneShardMultipleSubQueries_thenSuccessful() {

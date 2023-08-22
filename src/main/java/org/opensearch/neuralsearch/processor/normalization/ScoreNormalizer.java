@@ -8,7 +8,7 @@ package org.opensearch.neuralsearch.processor.normalization;
 import java.util.List;
 import java.util.Objects;
 
-import org.opensearch.neuralsearch.search.CompoundTopDocs;
+import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 public class ScoreNormalizer {
 

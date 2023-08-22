@@ -15,7 +15,6 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
-import org.opensearch.neuralsearch.search.CompoundTopDocs;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {

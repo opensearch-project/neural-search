@@ -13,7 +13,7 @@ import lombok.ToString;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
-import org.opensearch.neuralsearch.search.CompoundTopDocs;
+import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import com.google.common.primitives.Floats;
 

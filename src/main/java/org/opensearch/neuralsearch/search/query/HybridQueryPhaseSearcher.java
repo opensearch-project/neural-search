@@ -8,8 +8,11 @@ package org.opensearch.neuralsearch.search.query;
 import static org.opensearch.search.query.TopDocsCollectorContext.createTopDocsCollectorContext;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 
 import lombok.extern.log4j.Log4j2;
 
@@ -21,7 +24,6 @@ import org.apache.lucene.search.TotalHitCountCollector;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.query.HybridQuery;
-import org.opensearch.neuralsearch.search.CompoundTopDocs;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 import org.opensearch.neuralsearch.search.HybridTopScoreDocCollector;
 import org.opensearch.search.DocValueFormat;
@@ -42,6 +44,9 @@ import com.google.common.annotations.VisibleForTesting;
  */
 @Log4j2
 public class HybridQueryPhaseSearcher extends QueryPhase.DefaultQueryPhaseSearcher {
+
+    public static final Float MAGIC_NUMBER_START_STOP = 9549511920.4881596047f;
+    public static final Float MAGIC_NUMBER_DELIMITER = 4422440593.9791198149f;
 
     public boolean searchWith(
         final SearchContext searchContext,
@@ -110,29 +115,84 @@ public class HybridQueryPhaseSearcher extends QueryPhase.DefaultQueryPhaseSearch
     ) {
         final List<TopDocs> topDocs = collector.topDocs();
         final float maxScore = getMaxScore(topDocs);
-        final TopDocs newTopDocs = new CompoundTopDocs(getTotalHits(searchContext, topDocs), topDocs);
+        boolean isSingleShard = searchContext.numberOfShards() == 1;
+        final TopDocs newTopDocs = getNewTopDocs(getTotalHits(searchContext, topDocs, isSingleShard), topDocs);
         final TopDocsAndMaxScore topDocsAndMaxScore = new TopDocsAndMaxScore(newTopDocs, maxScore);
         queryResult.topDocs(topDocsAndMaxScore, getSortValueFormats(searchContext.sort()));
     }
 
-    private TotalHits getTotalHits(final SearchContext searchContext, final List<TopDocs> topDocs) {
+    TopDocs getNewTopDocs(final TotalHits totalHits, final List<TopDocs> topDocs) {
+        ScoreDoc[] scoreDocs = new ScoreDoc[0];
+        if (Objects.nonNull(topDocs)) {
+            // for a single shard case we need to do score processing at coordinator level.
+            // this is workaround for current core behaviour, for single shard fetch phase is executed
+            // right after query phase and processors are called after actual fetch is done
+            // find any valid doc Id, or set it to -1 if there is not a single match
+            int delimiterDocId = topDocs.stream()
+                .filter(Objects::nonNull)
+                .filter(topDoc -> Objects.nonNull(topDoc.scoreDocs))
+                .map(topDoc -> topDoc.scoreDocs)
+                .filter(scoreDoc -> scoreDoc.length > 0)
+                .map(scoreDoc -> scoreDoc[0].doc)
+                .findFirst()
+                .orElse(-1);
+            if (delimiterDocId == -1) {
+                return new TopDocs(totalHits, scoreDocs);
+            }
+            // format scores using following template:
+            // doc_id | magic_number_1
+            // doc_id | magic_number_2
+            // ...
+            // doc_id | magic_number_2
+            // ...
+            // doc_id | magic_number_2
+            // ...
+            // doc_id | magic_number_1
+            List<ScoreDoc> result = new ArrayList<>();
+            result.add(createStartStopElementForHybridSearchResults(delimiterDocId));
+            for (TopDocs topDoc : topDocs) {
+                if (Objects.isNull(topDoc) || Objects.isNull(topDoc.scoreDocs)) {
+                    result.add(createDelimiterElementForHybridSearchResults(delimiterDocId));
+                    continue;
+                }
+                result.add(createDelimiterElementForHybridSearchResults(delimiterDocId));
+                result.addAll(Arrays.asList(topDoc.scoreDocs));
+            }
+            result.add(createStartStopElementForHybridSearchResults(delimiterDocId));
+            scoreDocs = result.stream().map(doc -> new ScoreDoc(doc.doc, doc.score, doc.shardIndex)).toArray(ScoreDoc[]::new);
+        }
+        return new TopDocs(totalHits, scoreDocs);
+    }
+
+    private TotalHits getTotalHits(final SearchContext searchContext, final List<TopDocs> topDocs, final boolean isSingleShard) {
         int trackTotalHitsUpTo = searchContext.trackTotalHitsUpTo();
         final TotalHits.Relation relation = trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED
             ? TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO
             : TotalHits.Relation.EQUAL_TO;
-        if (topDocs == null || topDocs.size() == 0) {
+        if (topDocs == null || topDocs.isEmpty()) {
             return new TotalHits(0, relation);
         }
         long maxTotalHits = topDocs.get(0).totalHits.value;
+        int totalSize = 0;
         for (TopDocs topDoc : topDocs) {
             maxTotalHits = Math.max(maxTotalHits, topDoc.totalHits.value);
+            if (isSingleShard) {
+                totalSize += topDoc.totalHits.value + 1;
+            }
         }
+        // add 1 qty per each sub-query and + 2 for start and stop delimiters
+        totalSize += 2;
+        if (isSingleShard) {
+            // for single shard we need to update total size as this is how many docs are fetched in Fetch phase
+            searchContext.size(totalSize);
+        }
+
         return new TotalHits(maxTotalHits, relation);
     }
 
     private float getMaxScore(final List<TopDocs> topDocs) {
-        if (topDocs.size() == 0) {
-            return Float.NaN;
+        if (topDocs.isEmpty()) {
+            return 0.0f;
         } else {
             return topDocs.stream()
                 .map(docs -> docs.scoreDocs.length == 0 ? new ScoreDoc(-1, 0.0f) : docs.scoreDocs[0])
@@ -144,5 +204,23 @@ public class HybridQueryPhaseSearcher extends QueryPhase.DefaultQueryPhaseSearch
 
     private DocValueFormat[] getSortValueFormats(final SortAndFormats sortAndFormats) {
         return sortAndFormats == null ? null : sortAndFormats.formats;
+    }
+
+    /**
+     * Create ScoreDoc object that is a start/stop element in case of hybrid search query results
+     * @param docId id of one of docs from actual result object, or -1 if there are no matches
+     * @return
+     */
+    public static ScoreDoc createStartStopElementForHybridSearchResults(final int docId) {
+        return new ScoreDoc(docId, MAGIC_NUMBER_START_STOP);
+    }
+
+    /**
+     * Create ScoreDoc object that is a delimiter element between sub-query results in hybrid search query results
+     * @param docId id of one of docs from actual result object, or -1 if there are no matches
+     * @return
+     */
+    public static ScoreDoc createDelimiterElementForHybridSearchResults(final int docId) {
+        return new ScoreDoc(docId, MAGIC_NUMBER_DELIMITER);
     }
 }

@@ -5,19 +5,25 @@
 
 package org.opensearch.neuralsearch.processor;
 
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
+import org.apache.lucene.search.TopDocs;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
-import org.opensearch.neuralsearch.search.CompoundTopDocs;
+import org.opensearch.search.SearchHit;
+import org.opensearch.search.SearchHits;
+import org.opensearch.search.fetch.FetchSearchResult;
 import org.opensearch.search.query.QuerySearchResult;
 
 /**
@@ -39,8 +45,10 @@ public class NormalizationProcessorWorkflow {
      */
     public void execute(
         final List<QuerySearchResult> querySearchResults,
+        final FetchSearchResult fetchSearchResult,
         final ScoreNormalizationTechnique normalizationTechnique,
-        final ScoreCombinationTechnique combinationTechnique
+        final ScoreCombinationTechnique combinationTechnique,
+        final boolean isSingleShard
     ) {
         // pre-process data
         log.debug("Pre-process query results");
@@ -56,7 +64,7 @@ public class NormalizationProcessorWorkflow {
 
         // post-process data
         log.debug("Post-process query results after score normalization and combination");
-        updateOriginalQueryResults(querySearchResults, queryTopDocs);
+        updateOriginalQueryResults(querySearchResults, fetchSearchResult, queryTopDocs, isSingleShard);
     }
 
     /**
@@ -67,22 +75,71 @@ public class NormalizationProcessorWorkflow {
     private List<CompoundTopDocs> getQueryTopDocs(final List<QuerySearchResult> querySearchResults) {
         List<CompoundTopDocs> queryTopDocs = querySearchResults.stream()
             .filter(searchResult -> Objects.nonNull(searchResult.topDocs()))
-            .filter(searchResult -> searchResult.topDocs().topDocs instanceof CompoundTopDocs)
-            .map(searchResult -> (CompoundTopDocs) searchResult.topDocs().topDocs)
+            .map(querySearchResult -> querySearchResult.topDocs().topDocs)
+            .map(CompoundTopDocs::create)
             .collect(Collectors.toList());
+        if (queryTopDocs.size() != querySearchResults.size()) {
+            log.debug("Some of querySearchResults are not produced by hybrid query");
+        }
         return queryTopDocs;
     }
 
-    private void updateOriginalQueryResults(final List<QuerySearchResult> querySearchResults, final List<CompoundTopDocs> queryTopDocs) {
-        for (int i = 0; i < querySearchResults.size(); i++) {
-            QuerySearchResult querySearchResult = querySearchResults.get(i);
-            if (!(querySearchResult.topDocs().topDocs instanceof CompoundTopDocs) || Objects.isNull(queryTopDocs.get(i))) {
-                continue;
-            }
-            CompoundTopDocs updatedTopDocs = queryTopDocs.get(i);
-            float maxScore = updatedTopDocs.totalHits.value > 0 ? updatedTopDocs.scoreDocs[0].score : 0.0f;
-            TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(updatedTopDocs, maxScore);
+    private void updateOriginalQueryResults(
+        final List<QuerySearchResult> querySearchResults,
+        final FetchSearchResult fetchSearchResult,
+        final List<CompoundTopDocs> queryTopDocs,
+        final boolean isSingleShard
+    ) {
+        int queryTopDocsIndex = 0;
+        for (QuerySearchResult querySearchResult : querySearchResults) {
+            CompoundTopDocs updatedTopDocs = queryTopDocs.get(queryTopDocsIndex++);
+            float maxScore = updatedTopDocs.getTotalHits().value > 0 ? updatedTopDocs.getScoreDocs()[0].score : 0.0f;
+
+            // create final version of top docs with all updated values
+            TopDocs topDocs = new TopDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs());
+
+            TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(topDocs, maxScore);
             querySearchResult.topDocs(updatedTopDocsAndMaxScore, null);
         }
+        // a workaround for a single shard case, fetch has happened, and we need to update both fetch and
+        // query results
+        if (isSingleShard && querySearchResults.size() == 1) {
+            updateFetchSearchResults(querySearchResults, fetchSearchResult);
+        }
+    }
+
+    private void updateFetchSearchResults(final List<QuerySearchResult> querySearchResults, final FetchSearchResult fetchSearchResult) {
+        if (Objects.isNull(fetchSearchResult)) {
+            return;
+        }
+        // fetch results have list of document content, that includes start/stop and
+        // delimiter elements. list is in original order from query searcher. We need to:
+        // 1. filter out start/stop and delimiter elements
+        // 2. filter out duplicates from different sub-queries
+        // 3. update original scores to normalized and combined values
+        // 4. order scores based on normalized and combined values
+        SearchHits searchHits = fetchSearchResult.hits();
+
+        // create map of docId to index of search hits
+        Map<Integer, SearchHit> docIdToSearchHit = new HashMap<>();
+        for (SearchHit searchHit : searchHits) {
+            docIdToSearchHit.put(searchHit.docId(), searchHit);
+        }
+        QuerySearchResult querySearchResult = querySearchResults.get(0);
+        TopDocs topDocs = querySearchResult.topDocs().topDocs;
+        // iterate over the normalized/combined scores, that solves (1), (2) and (3)
+        SearchHit[] updatedSearchHitArray = Arrays.stream(topDocs.scoreDocs).map(scoreDoc -> {
+            // get fetched hit content by doc_id
+            SearchHit searchHit = docIdToSearchHit.get(scoreDoc.doc);
+            // update score to normalized/combined value (3)
+            searchHit.score(scoreDoc.score);
+            return searchHit;
+        }).toArray(SearchHit[]::new);
+        SearchHits updatedSearchHits = new SearchHits(
+            updatedSearchHitArray,
+            querySearchResult.getTotalHits(),
+            querySearchResult.getMaxScore()
+        );
+        fetchSearchResult.hits(updatedSearchHits);
     }
 }
