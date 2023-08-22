@@ -25,8 +25,6 @@ import org.opensearch.indices.analysis.AnalysisModule;
 import org.opensearch.indices.analysis.AnalysisModule.AnalysisProvider;
 import org.opensearch.ingest.Processor;
 import org.opensearch.ml.client.MachineLearningNodeClient;
-import org.opensearch.neuralsearch.analyzer.BertAnalyzerProvider;
-import org.opensearch.neuralsearch.analyzer.BertTokenizerFactory;
 import org.opensearch.neuralsearch.analyzer.TermWeightAnalyzerProvider;
 import org.opensearch.neuralsearch.analyzer.TermWeightTokenizerFactory;
 import org.opensearch.neuralsearch.ml.MLCommonsTextEmbeddingClientAccessor;
@@ -99,7 +97,6 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     public Map<String, AnalysisProvider<TokenizerFactory>> getTokenizers() {
         Map<String, AnalysisModule.AnalysisProvider<TokenizerFactory>> extra = new HashMap<>();
 
-        extra.put("bert", BertTokenizerFactory::getBertTokenizerFactory);
         extra.put("term_weight", TermWeightTokenizerFactory::getTermWeightTokenizerFactory);
 
         return extra;
@@ -109,7 +106,6 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     public Map<String, AnalysisProvider<AnalyzerProvider<? extends Analyzer>>> getAnalyzers() {
         Map<String, AnalysisModule.AnalysisProvider<AnalyzerProvider<? extends Analyzer>>> extra = new HashMap<>();
 
-        extra.put("bert", BertAnalyzerProvider::getBertAnalyzerProvider);
         extra.put("term_weight", TermWeightAnalyzerProvider::geTermWeightAnalyzerProvider);
 
         return extra;

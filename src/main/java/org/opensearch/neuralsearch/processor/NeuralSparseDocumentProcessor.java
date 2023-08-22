@@ -46,8 +46,6 @@ public class NeuralSparseDocumentProcessor extends AbstractProcessor {
 
     private final MLCommonsNeuralSparseClientAccessor mlCommonsClientAccessor;
 
-    private final Environment environment;
-
     public NeuralSparseDocumentProcessor(
         String tag,
         String description,
@@ -63,7 +61,6 @@ public class NeuralSparseDocumentProcessor extends AbstractProcessor {
         this.modelId = modelId;
         this.fieldMap = fieldMap;
         this.mlCommonsClientAccessor = clientAccessor;
-        this.environment = environment;
     }
 
     private void validateExpansionConfiguration(Map<String, Object> fiedlMap) {

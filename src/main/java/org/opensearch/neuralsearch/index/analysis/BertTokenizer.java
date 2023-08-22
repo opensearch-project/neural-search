@@ -39,15 +39,6 @@ public class BertTokenizer extends Tokenizer {
 
     private int cursor = 0;
 
-    static {
-        try {
-            DJL_CACHE_DIR = "/tmp/djl_cache";
-            AccessController.doPrivileged((PrivilegedExceptionAction<Void>) () -> initalizeHuggingFaaceTokenizer(), null);
-        } catch (Exception e) {
-            log.error("Fail to create tokenizer, ", e);
-        }
-    }
-
     private static Void initalizeHuggingFaaceTokenizer() {
         try {
             /*System.setProperty("PYTORCH_PRECXX11", "true");
@@ -61,9 +52,6 @@ public class BertTokenizer extends Tokenizer {
             System.setProperty("DJL_CACHE_DIR", DJL_CACHE_DIR);
             Thread.currentThread().setContextClassLoader(ai.djl.Model.class.getClassLoader());
             Path path = Path.of("/Users/zhichaog/Desktop/repos/neural-search", "tokenizer.json");
-            File curDir = new File(".");
-            File[] fileList = curDir.listFiles();
-            System.out.println(fileList);
             tokenizer = HuggingFaceTokenizer.builder().optPadding(true).optTokenizerPath(path).build();
         } catch (Exception e) {
             log.error("Tail to create tokenizer, ", e);
