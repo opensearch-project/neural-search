@@ -5,6 +5,7 @@
 
 package org.opensearch.neuralsearch.ml;
 
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 
@@ -13,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.Before;
 import org.mockito.InjectMocks;
@@ -160,6 +162,98 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         Mockito.verify(resultListener).onFailure(illegalStateException);
     }
 
+    public void test_inferenceSentencesWithMapResult_whenValidInput_thenSuccess() {
+        final Map<String, String> map = ImmutableMap.of("key", "value");
+        final ActionListener<Map<String, ?>> resultListener = mock(ActionListener.class);
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createModelTensorOutput(map));
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        accessor.inferenceSentencesWithMapResult(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_LIST, resultListener);
+
+        Mockito.verify(client)
+            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        Mockito.verify(resultListener).onResponse(map);
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    public void test_inferenceSentencesWithMapResult_whenTensorOutputListEmpty_thenReturnNull() {
+        final ActionListener<Map<String, ?>> resultListener = mock(ActionListener.class);
+        final ModelTensorOutput modelTensorOutput = new ModelTensorOutput(Collections.emptyList());
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(modelTensorOutput);
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        accessor.inferenceSentencesWithMapResult(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_LIST, resultListener);
+
+        Mockito.verify(client)
+            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        Mockito.verify(resultListener).onResponse(null);
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    public void test_inferenceSentencesWithMapResult_whenModelTensorListEmpty_thenReturnNull() {
+        final ActionListener<Map<String, ?>> resultListener = mock(ActionListener.class);
+        final List<ModelTensors> tensorsList = new ArrayList<>();
+        final List<ModelTensor> mlModelTensorList = new ArrayList<>();
+        tensorsList.add(new ModelTensors(mlModelTensorList));
+        final ModelTensorOutput modelTensorOutput = new ModelTensorOutput(tensorsList);
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(modelTensorOutput);
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        accessor.inferenceSentencesWithMapResult(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_LIST, resultListener);
+
+        Mockito.verify(client)
+            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        Mockito.verify(resultListener).onResponse(null);
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    public void test_inferenceSentencesWithMapResult_whenRetryableException_retry3Times() {
+        final NodeNotConnectedException nodeNodeConnectedException = new NodeNotConnectedException(
+            mock(DiscoveryNode.class),
+            "Node not connected"
+        );
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onFailure(nodeNodeConnectedException);
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        final ActionListener<Map<String, ?>> resultListener = mock(ActionListener.class);
+        accessor.inferenceSentencesWithMapResult(
+            TestCommonConstants.MODEL_ID,
+            TestCommonConstants.SENTENCES_LIST,
+            resultListener
+        );
+
+        Mockito.verify(client, times(4))
+            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        Mockito.verify(resultListener).onFailure(nodeNodeConnectedException);
+    }
+
+    public void test_inferenceSentencesWithMapResult_whenNotRetryableException_thenFail() {
+        final IllegalStateException illegalStateException = new IllegalStateException("Illegal state");
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onFailure(illegalStateException);
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        final ActionListener<Map<String, ?>> resultListener = mock(ActionListener.class);
+        accessor.inferenceSentencesWithMapResult(
+            TestCommonConstants.MODEL_ID,
+            TestCommonConstants.SENTENCES_LIST,
+            resultListener
+        );
+
+        Mockito.verify(client, times(1))
+            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        Mockito.verify(resultListener).onFailure(illegalStateException);
+    }
+
     private ModelTensorOutput createModelTensorOutput(final Float[] output) {
         final List<ModelTensors> tensorsList = new ArrayList<>();
         final List<ModelTensor> mlModelTensorList = new ArrayList<>();
@@ -169,6 +263,24 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             new long[] { 1, 2 },
             MLResultDataType.FLOAT64,
             ByteBuffer.wrap(new byte[12])
+        );
+        mlModelTensorList.add(tensor);
+        final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
+        tensorsList.add(modelTensors);
+        return new ModelTensorOutput(tensorsList);
+    }
+
+    private ModelTensorOutput createModelTensorOutput(final Map<String, String> map) {
+        final List<ModelTensors> tensorsList = new ArrayList<>();
+        final List<ModelTensor> mlModelTensorList = new ArrayList<>();
+        final ModelTensor tensor = new ModelTensor(
+            "response",
+            null,
+            null,
+            null,
+            null,
+            null,
+            map
         );
         mlModelTensorList.add(tensor);
         final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
