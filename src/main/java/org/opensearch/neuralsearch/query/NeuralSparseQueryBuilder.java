@@ -186,6 +186,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             spanQuery = null;
         }
         PayloadFunction payloadFunction = new SumPayloadFunction();
+
         PayloadDecoder payloadDecoder = (BytesRef payload) -> payload == null
             ? 1
             : PayloadHelper.decodeFloat(payload.bytes, payload.offset);

@@ -109,8 +109,8 @@ public class MLCommonsNeuralSparseClientAccessor {
         final String modelId,
         final List<String> inputText,
         final int retryTime,
-//        final ActionListener<List<Map<String, Double>>> listener
-        final ActionListener<MLOutput> listener
+        final ActionListener<List<Map<String, Double>>> listener
+//        final ActionListener<MLOutput> listener
     ) {
         MLInput mlInput = createMLInput(targetResponseFilters, inputText);
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {

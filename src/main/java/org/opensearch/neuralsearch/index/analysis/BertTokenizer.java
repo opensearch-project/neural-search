@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.security.AccessController;
 import java.security.PrivilegedExceptionAction;
+import java.util.Arrays;
 import java.util.List;
 
 import org.apache.lucene.analysis.Tokenizer;
@@ -70,7 +71,7 @@ public class BertTokenizer extends Tokenizer {
         cursor = 0;
         try {
             String inputStr = CharStreams.toString(input);
-            tokens = tokenizer.tokenize(inputStr);
+            tokens = Arrays.asList("hello", "world");
         } catch (IOException e) {
             // e.printStackTrace();
         }
@@ -85,7 +86,7 @@ public class BertTokenizer extends Tokenizer {
         }
         
         termAtt.append(tokens.get(cursor));
-        int intBits = Float.floatToIntBits(1.0f);
+        int intBits = Float.floatToIntBits(10.0f);
         payloadAtt.setPayload(
             new BytesRef(new byte[] { (byte) (intBits >> 24), (byte) (intBits >> 16), (byte) (intBits >> 8), (byte) (intBits) })
         );
