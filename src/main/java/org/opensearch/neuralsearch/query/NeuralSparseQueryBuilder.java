@@ -6,6 +6,8 @@
 package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -20,7 +22,6 @@ import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.payloads.PayloadHelper;
 import org.apache.lucene.queries.payloads.PayloadDecoder;
 import org.apache.lucene.queries.payloads.PayloadFunction;
-import org.apache.lucene.queries.payloads.PayloadScoreQuery;
 import org.apache.lucene.queries.payloads.SumPayloadFunction;
 import org.apache.lucene.queries.spans.SpanQuery;
 import org.apache.lucene.queryparser.xml.ParserException;
@@ -192,7 +193,11 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             : PayloadHelper.decodeFloat(payload.bytes, payload.offset);
 
         log.info("last to building query");
-        return new PayloadScoreQuery(spanQuery, payloadFunction, payloadDecoder, false);
+        Map<String, Float> termWeights = new HashMap<>() {{
+            put("hello", 1.f);
+            put("world", 2.f);
+        }};
+        return new PayloadScoreQuery(spanQuery, payloadFunction, payloadDecoder, false, termWeights);
     }
 
     @Override
