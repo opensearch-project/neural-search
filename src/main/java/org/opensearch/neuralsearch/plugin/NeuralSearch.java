@@ -5,6 +5,7 @@
 
 package org.opensearch.neuralsearch.plugin;
 
+import org.opensearch.neuralsearch.processor.DefaultValueProcessor;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SEARCH_HYBRID_SEARCH_ENABLED;
 
 import java.util.Arrays;
@@ -50,6 +51,7 @@ import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.repositories.RepositoriesService;
 import org.opensearch.script.ScriptService;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
+import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.watcher.ResourceWatcherService;
@@ -124,5 +126,13 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     @Override
     public List<Setting<?>> getSettings() {
         return List.of(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED);
+    }
+
+    @Override
+    public Map<String, org.opensearch.search.pipeline.Processor.Factory<SearchRequestProcessor>> getRequestProcessors(Parameters parameters) {
+        return Map.of(
+                DefaultValueProcessor.TYPE,
+                new DefaultValueProcessor.Factory(parameters.namedXContentRegistry)
+        );
     }
 }
