@@ -1,0 +1,5 @@
+{
+  "name": "test_model_group_public",
+  "description": "This is a public model group",
+  "access_mode": "public"
+}

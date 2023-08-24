@@ -8,6 +8,7 @@ package org.opensearch.neuralsearch.common;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -76,6 +77,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         updateClusterSettings("plugins.ml_commons.only_run_on_ml_node", false);
         // default threshold for native circuit breaker is 90, it may be not enough on test runner machine
         updateClusterSettings("plugins.ml_commons.native_memory_threshold", 100);
+        updateClusterSettings("plugins.ml_commons.allow_registering_model_via_url", true);
     }
 
     @SneakyThrows
@@ -99,6 +101,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     protected String uploadModel(String requestBody) throws Exception {
+        String modelGroupId = registerModelGroup();
+        // model group id is dynamically generated, we need to update model update request body after group is registered
+        requestBody = requestBody.replace("<MODEL_GROUP_ID>", modelGroupId);
+
         Response uploadResponse = makeRequest(
             client(),
             "POST",
@@ -676,5 +682,28 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Set<String> modelIds = findDeployedModels();
         assertEquals(1, modelIds.size());
         return modelIds.iterator().next();
+    }
+
+    @SneakyThrows
+    private String registerModelGroup() throws IOException, URISyntaxException {
+        String modelGroupRegisterRequestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
+        );
+        Response modelGroupResponse = makeRequest(
+            client(),
+            "POST",
+            "/_plugins/_ml/model_groups/_register",
+            null,
+            toHttpEntity(modelGroupRegisterRequestBody),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+        );
+        Map<String, Object> modelGroupResJson = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(modelGroupResponse.getEntity()),
+            false
+        );
+        String modelGroupId = modelGroupResJson.get("model_group_id").toString();
+        assertNotNull(modelGroupId);
+        return modelGroupId;
     }
 }
