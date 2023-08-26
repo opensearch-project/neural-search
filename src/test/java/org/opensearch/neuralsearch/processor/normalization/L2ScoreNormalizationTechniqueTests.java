@@ -51,7 +51,7 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
         assertEquals(1, compoundTopDocs.size());
         assertNotNull(compoundTopDocs.get(0).getCompoundTopDocs());
         assertCompoundTopDocs(
-            new TopDocs(expectedCompoundDocs.getTotalHits(), expectedCompoundDocs.getScoreDocs()),
+            new TopDocs(expectedCompoundDocs.getTotalHits(), expectedCompoundDocs.getScoreDocs().toArray(new ScoreDoc[0])),
             compoundTopDocs.get(0).getCompoundTopDocs().get(0)
         );
     }

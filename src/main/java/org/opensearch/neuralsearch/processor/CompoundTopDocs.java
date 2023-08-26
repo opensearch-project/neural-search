@@ -5,13 +5,14 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import static org.opensearch.neuralsearch.processor.NormalizationProcessor.isHybridQueryDelimiterElement;
-import static org.opensearch.neuralsearch.processor.NormalizationProcessor.isHybridQueryStartStopElement;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryDelimiterElement;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryStartStopElement;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -35,34 +36,19 @@ public class CompoundTopDocs {
     @Setter
     private TotalHits totalHits;
     @Getter
-    private final List<TopDocs> compoundTopDocs;
+    private List<TopDocs> compoundTopDocs;
     @Getter
     @Setter
-    private ScoreDoc[] scoreDocs;
+    private List<ScoreDoc> scoreDocs;
 
     public CompoundTopDocs(final TotalHits totalHits, final List<TopDocs> compoundTopDocs) {
+        initialize(totalHits, compoundTopDocs);
+    }
+
+    private void initialize(TotalHits totalHits, List<TopDocs> compoundTopDocs) {
         this.totalHits = totalHits;
         this.compoundTopDocs = compoundTopDocs;
         scoreDocs = cloneLargestScoreDocs(compoundTopDocs);
-    }
-
-    private static ScoreDoc[] cloneLargestScoreDocs(List<TopDocs> docs) {
-        if (docs == null) {
-            return null;
-        }
-        ScoreDoc[] maxScoreDocs = new ScoreDoc[0];
-        int maxLength = -1;
-        for (TopDocs topDoc : docs) {
-            if (topDoc == null || topDoc.scoreDocs == null) {
-                continue;
-            }
-            if (topDoc.scoreDocs.length > maxLength) {
-                maxLength = topDoc.scoreDocs.length;
-                maxScoreDocs = topDoc.scoreDocs;
-            }
-        }
-        // do deep copy
-        return Arrays.stream(maxScoreDocs).map(doc -> new ScoreDoc(doc.doc, doc.score, doc.shardIndex)).toArray(ScoreDoc[]::new);
     }
 
     /**
@@ -76,15 +62,24 @@ public class CompoundTopDocs {
      *  ...
      *  doc_id | magic_number_1
      *
-     * where doc_id is one of valid ids from result
+     * where doc_id is one of valid ids from result. For example, this is list with results for there sub-queries
      *
-     * @param topDocs object with scores from multiple sub-queries
-     * @return compound TopDocs object that has results from all sub-queries
+     *  0, 9549511920.4881596047
+     *  0, 4422440593.9791198149
+     *  0, 0.8
+     *  2, 0.5
+     *  0, 4422440593.9791198149
+     *  0, 4422440593.9791198149
+     *  2, 0.7
+     *  5, 0.65
+     *  6, 0.15
+     *  0, 9549511920.4881596047
      */
-    public static CompoundTopDocs create(final TopDocs topDocs) {
+    public CompoundTopDocs(final TopDocs topDocs) {
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         if (Objects.isNull(scoreDocs) || scoreDocs.length < 2) {
-            return new CompoundTopDocs(topDocs.totalHits, new ArrayList<>());
+            initialize(topDocs.totalHits, new ArrayList<>());
+            return;
         }
         // skipping first two elements, it's a start-stop element and delimiter for first series
         List<TopDocs> topDocsList = new ArrayList<>();
@@ -102,6 +97,25 @@ public class CompoundTopDocs {
                 scoreDocList.add(scoreDoc);
             }
         }
-        return new CompoundTopDocs(topDocs.totalHits, topDocsList);
+        initialize(topDocs.totalHits, topDocsList);
+    }
+
+    private List<ScoreDoc> cloneLargestScoreDocs(final List<TopDocs> docs) {
+        if (docs == null) {
+            return null;
+        }
+        ScoreDoc[] maxScoreDocs = new ScoreDoc[0];
+        int maxLength = -1;
+        for (TopDocs topDoc : docs) {
+            if (topDoc == null || topDoc.scoreDocs == null) {
+                continue;
+            }
+            if (topDoc.scoreDocs.length > maxLength) {
+                maxLength = topDoc.scoreDocs.length;
+                maxScoreDocs = topDoc.scoreDocs;
+            }
+        }
+        // do deep copy
+        return Arrays.stream(maxScoreDocs).map(doc -> new ScoreDoc(doc.doc, doc.score, doc.shardIndex)).collect(Collectors.toList());
     }
 }

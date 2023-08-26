@@ -11,10 +11,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
-import static org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher.MAGIC_NUMBER_DELIMITER;
-import static org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher.MAGIC_NUMBER_START_STOP;
-import static org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher.createDelimiterElementForHybridSearchResults;
-import static org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher.createStartStopElementForHybridSearchResults;
+import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createDelimiterElementForHybridSearchResults;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -33,7 +32,6 @@ import org.opensearch.action.search.SearchPhaseController;
 import org.opensearch.action.search.SearchPhaseName;
 import org.opensearch.action.search.SearchProgressListener;
 import org.opensearch.action.search.SearchRequest;
-import org.opensearch.common.Randomness;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.common.util.BigArrays;
 import org.opensearch.common.util.concurrent.OpenSearchExecutors;
@@ -244,6 +242,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         queryPhaseResultConsumer.consumeResult(querySearchResult, partialReduceLatch::countDown);
 
         SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
+        when(searchPhaseContext.getNumShards()).thenReturn(1);
         normalizationProcessor.process(queryPhaseResultConsumer, searchPhaseContext);
 
         List<QuerySearchResult> querySearchResults = queryPhaseResultConsumer.getAtomicArray()
@@ -301,7 +300,8 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
             })
         );
         CountDownLatch partialReduceLatch = new CountDownLatch(5);
-        for (int shardId = 0; shardId < 4; shardId++) {
+        int numberOfShards = 4;
+        for (int shardId = 0; shardId < numberOfShards; shardId++) {
             SearchShardTarget searchShardTarget = new SearchShardTarget(
                 "node",
                 new ShardId("index", "uuid", shardId),
@@ -321,28 +321,9 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         }
 
         SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
+        when(searchPhaseContext.getNumShards()).thenReturn(numberOfShards);
         normalizationProcessor.process(queryPhaseResultConsumer, searchPhaseContext);
 
         verify(normalizationProcessorWorkflow, never()).execute(any(), any(), any(), any(), anyBoolean());
-    }
-
-    public void testScoreDocsListElements_whenTestingListElements_thenCheckResultsAreCorrect() {
-        ScoreDoc validStartStopElement = new ScoreDoc(0, MAGIC_NUMBER_START_STOP);
-        assertTrue(NormalizationProcessor.isHybridQueryStartStopElement(validStartStopElement));
-
-        ScoreDoc validStartStopElement1 = new ScoreDoc(-1, MAGIC_NUMBER_START_STOP);
-        assertFalse(NormalizationProcessor.isHybridQueryStartStopElement(validStartStopElement1));
-
-        ScoreDoc validStartStopElement2 = new ScoreDoc(0, Randomness.get().nextFloat());
-        assertFalse(NormalizationProcessor.isHybridQueryStartStopElement(validStartStopElement2));
-
-        ScoreDoc validDelimiterElement = new ScoreDoc(0, MAGIC_NUMBER_DELIMITER);
-        assertTrue(NormalizationProcessor.isHybridQueryDelimiterElement(validDelimiterElement));
-
-        ScoreDoc validDelimiterElement1 = new ScoreDoc(-1, MAGIC_NUMBER_DELIMITER);
-        assertFalse(NormalizationProcessor.isHybridQueryDelimiterElement(validDelimiterElement1));
-
-        ScoreDoc validDelimiterElement2 = new ScoreDoc(0, Randomness.get().nextFloat());
-        assertFalse(NormalizationProcessor.isHybridQueryDelimiterElement(validDelimiterElement2));
     }
 }

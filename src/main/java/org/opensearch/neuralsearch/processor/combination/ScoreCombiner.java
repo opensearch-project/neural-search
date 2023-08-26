@@ -6,6 +6,7 @@
 package org.opensearch.neuralsearch.processor.combination;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -75,7 +76,7 @@ public class ScoreCombiner {
         return sortedDocsIds;
     }
 
-    private ScoreDoc[] getCombinedScoreDocs(
+    private List<ScoreDoc> getCombinedScoreDocs(
         final CompoundTopDocs compoundQueryTopDocs,
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
         final List<Integer> sortedScores,
@@ -83,12 +84,12 @@ public class ScoreCombiner {
     ) {
         ScoreDoc[] finalScoreDocs = new ScoreDoc[maxHits];
 
-        int shardId = compoundQueryTopDocs.getScoreDocs()[0].shardIndex;
+        int shardId = compoundQueryTopDocs.getScoreDocs().get(0).shardIndex;
         for (int j = 0; j < maxHits && j < sortedScores.size(); j++) {
             int docId = sortedScores.get(j);
             finalScoreDocs[j] = new ScoreDoc(docId, combinedNormalizedScoresByDocId.get(docId), shardId);
         }
-        return finalScoreDocs;
+        return Arrays.stream(finalScoreDocs).collect(Collectors.toList());
     }
 
     public Map<Integer, float[]> getNormalizedScoresPerDocument(final List<TopDocs> topDocsPerSubQuery) {

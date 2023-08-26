@@ -5,6 +5,8 @@
 
 package org.opensearch.neuralsearch.search.query;
 
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createDelimiterElementForHybridSearchResults;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
 import static org.opensearch.search.query.TopDocsCollectorContext.createTopDocsCollectorContext;
 
 import java.io.IOException;
@@ -44,9 +46,6 @@ import com.google.common.annotations.VisibleForTesting;
  */
 @Log4j2
 public class HybridQueryPhaseSearcher extends QueryPhase.DefaultQueryPhaseSearcher {
-
-    public static final Float MAGIC_NUMBER_START_STOP = 9549511920.4881596047f;
-    public static final Float MAGIC_NUMBER_DELIMITER = 4422440593.9791198149f;
 
     public boolean searchWith(
         final SearchContext searchContext,
@@ -115,13 +114,13 @@ public class HybridQueryPhaseSearcher extends QueryPhase.DefaultQueryPhaseSearch
     ) {
         final List<TopDocs> topDocs = collector.topDocs();
         final float maxScore = getMaxScore(topDocs);
-        boolean isSingleShard = searchContext.numberOfShards() == 1;
+        final boolean isSingleShard = searchContext.numberOfShards() == 1;
         final TopDocs newTopDocs = getNewTopDocs(getTotalHits(searchContext, topDocs, isSingleShard), topDocs);
         final TopDocsAndMaxScore topDocsAndMaxScore = new TopDocsAndMaxScore(newTopDocs, maxScore);
         queryResult.topDocs(topDocsAndMaxScore, getSortValueFormats(searchContext.sort()));
     }
 
-    TopDocs getNewTopDocs(final TotalHits totalHits, final List<TopDocs> topDocs) {
+    private TopDocs getNewTopDocs(final TotalHits totalHits, final List<TopDocs> topDocs) {
         ScoreDoc[] scoreDocs = new ScoreDoc[0];
         if (Objects.nonNull(topDocs)) {
             // for a single shard case we need to do score processing at coordinator level.
@@ -204,23 +203,5 @@ public class HybridQueryPhaseSearcher extends QueryPhase.DefaultQueryPhaseSearch
 
     private DocValueFormat[] getSortValueFormats(final SortAndFormats sortAndFormats) {
         return sortAndFormats == null ? null : sortAndFormats.formats;
-    }
-
-    /**
-     * Create ScoreDoc object that is a start/stop element in case of hybrid search query results
-     * @param docId id of one of docs from actual result object, or -1 if there are no matches
-     * @return
-     */
-    public static ScoreDoc createStartStopElementForHybridSearchResults(final int docId) {
-        return new ScoreDoc(docId, MAGIC_NUMBER_START_STOP);
-    }
-
-    /**
-     * Create ScoreDoc object that is a delimiter element between sub-query results in hybrid search query results
-     * @param docId id of one of docs from actual result object, or -1 if there are no matches
-     * @return
-     */
-    public static ScoreDoc createDelimiterElementForHybridSearchResults(final int docId) {
-        return new ScoreDoc(docId, MAGIC_NUMBER_DELIMITER);
     }
 }

@@ -8,6 +8,7 @@ package org.opensearch.neuralsearch.processor;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -15,6 +16,7 @@ import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
+import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
@@ -64,7 +66,8 @@ public class NormalizationProcessorWorkflow {
 
         // post-process data
         log.debug("Post-process query results after score normalization and combination");
-        updateOriginalQueryResults(querySearchResults, fetchSearchResult, queryTopDocs, isSingleShard);
+        updateOriginalQueryResults(querySearchResults, fetchSearchResult, queryTopDocs);
+        updateOriginalFetchResults(querySearchResults, fetchSearchResult, isSingleShard);
     }
 
     /**
@@ -76,10 +79,10 @@ public class NormalizationProcessorWorkflow {
         List<CompoundTopDocs> queryTopDocs = querySearchResults.stream()
             .filter(searchResult -> Objects.nonNull(searchResult.topDocs()))
             .map(querySearchResult -> querySearchResult.topDocs().topDocs)
-            .map(CompoundTopDocs::create)
+            .map(CompoundTopDocs::new)
             .collect(Collectors.toList());
         if (queryTopDocs.size() != querySearchResults.size()) {
-            log.debug("Some of querySearchResults are not produced by hybrid query");
+            log.warn("Some of querySearchResults are not produced by hybrid query");
         }
         return queryTopDocs;
     }
@@ -87,29 +90,41 @@ public class NormalizationProcessorWorkflow {
     private void updateOriginalQueryResults(
         final List<QuerySearchResult> querySearchResults,
         final FetchSearchResult fetchSearchResult,
-        final List<CompoundTopDocs> queryTopDocs,
-        final boolean isSingleShard
+        final List<CompoundTopDocs> queryTopDocs
     ) {
-        int queryTopDocsIndex = 0;
-        for (QuerySearchResult querySearchResult : querySearchResults) {
-            CompoundTopDocs updatedTopDocs = queryTopDocs.get(queryTopDocsIndex++);
-            float maxScore = updatedTopDocs.getTotalHits().value > 0 ? updatedTopDocs.getScoreDocs()[0].score : 0.0f;
+        if (querySearchResults.size() != queryTopDocs.size()) {
+            log.error(
+                String.format(
+                    Locale.ROOT,
+                    "sizes of querySearchResults [%d] and queryTopDocs [%d] must match",
+                    querySearchResults.size(),
+                    queryTopDocs.size()
+                )
+            );
+            throw new IllegalStateException("found inconsistent system state while processing score normalization and combination");
+        }
+        for (int index = 0; index < querySearchResults.size(); index++) {
+            QuerySearchResult querySearchResult = querySearchResults.get(index);
+            CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
+            float maxScore = updatedTopDocs.getTotalHits().value > 0 ? updatedTopDocs.getScoreDocs().get(0).score : 0.0f;
 
             // create final version of top docs with all updated values
-            TopDocs topDocs = new TopDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs());
+            TopDocs topDocs = new TopDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new ScoreDoc[0]));
 
             TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(topDocs, maxScore);
             querySearchResult.topDocs(updatedTopDocsAndMaxScore, null);
         }
-        // a workaround for a single shard case, fetch has happened, and we need to update both fetch and
-        // query results
-        if (isSingleShard && querySearchResults.size() == 1) {
-            updateFetchSearchResults(querySearchResults, fetchSearchResult);
-        }
     }
 
-    private void updateFetchSearchResults(final List<QuerySearchResult> querySearchResults, final FetchSearchResult fetchSearchResult) {
-        if (Objects.isNull(fetchSearchResult)) {
+    /**
+     * A workaround for a single shard case, fetch has happened, and we need to update both fetch and query results
+     */
+    private void updateOriginalFetchResults(
+        final List<QuerySearchResult> querySearchResults,
+        final FetchSearchResult fetchSearchResult,
+        final boolean isSingleShard
+    ) {
+        if (!isSingleShard || querySearchResults.size() != 1 || Objects.isNull(fetchSearchResult)) {
             return;
         }
         // fetch results have list of document content, that includes start/stop and
@@ -120,14 +135,15 @@ public class NormalizationProcessorWorkflow {
         // 4. order scores based on normalized and combined values
         SearchHits searchHits = fetchSearchResult.hits();
 
-        // create map of docId to index of search hits
+        // create map of docId to index of search hits, handles (2)
         Map<Integer, SearchHit> docIdToSearchHit = new HashMap<>();
         for (SearchHit searchHit : searchHits) {
             docIdToSearchHit.put(searchHit.docId(), searchHit);
         }
+
         QuerySearchResult querySearchResult = querySearchResults.get(0);
         TopDocs topDocs = querySearchResult.topDocs().topDocs;
-        // iterate over the normalized/combined scores, that solves (1), (2) and (3)
+        // iterate over the normalized/combined scores, that solves (1) and (3)
         SearchHit[] updatedSearchHitArray = Arrays.stream(topDocs.scoreDocs).map(scoreDoc -> {
             // get fetched hit content by doc_id
             SearchHit searchHit = docIdToSearchHit.get(scoreDoc.doc);

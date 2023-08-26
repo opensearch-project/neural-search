@@ -5,8 +5,7 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import static org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher.MAGIC_NUMBER_DELIMITER;
-import static org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher.MAGIC_NUMBER_START_STOP;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryStartStopElement;
 
 import java.util.List;
 import java.util.Objects;
@@ -15,7 +14,6 @@ import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
-import org.apache.lucene.search.ScoreDoc;
 import org.opensearch.action.search.QueryPhaseResultConsumer;
 import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.action.search.SearchPhaseName;
@@ -130,13 +128,5 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
             .stream()
             .map(result -> result == null ? null : result.queryResult())
             .collect(Collectors.toList());
-    }
-
-    public static boolean isHybridQueryStartStopElement(final ScoreDoc scoreDoc) {
-        return Objects.nonNull(scoreDoc) && scoreDoc.doc >= 0 && Float.compare(scoreDoc.score, MAGIC_NUMBER_START_STOP) == 0;
-    }
-
-    public static boolean isHybridQueryDelimiterElement(final ScoreDoc scoreDoc) {
-        return Objects.nonNull(scoreDoc) && scoreDoc.doc >= 0 && Float.compare(scoreDoc.score, MAGIC_NUMBER_DELIMITER) == 0;
     }
 }

@@ -6,8 +6,8 @@
 package org.opensearch.neuralsearch.processor;
 
 import static org.mockito.Mockito.spy;
-import static org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher.createDelimiterElementForHybridSearchResults;
-import static org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher.createStartStopElementForHybridSearchResults;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createDelimiterElementForHybridSearchResults;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
 
 import java.util.ArrayList;
 import java.util.List;

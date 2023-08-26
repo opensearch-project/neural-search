@@ -62,7 +62,7 @@ public class CompoundTopDocsTests extends OpenSearchQueryTestCase {
         CompoundTopDocs compoundTopDocs = new CompoundTopDocs(new TotalHits(2, TotalHits.Relation.EQUAL_TO), topDocs);
         assertNotNull(compoundTopDocs);
         assertNotNull(compoundTopDocs.getScoreDocs());
-        assertEquals(2, compoundTopDocs.getScoreDocs().length);
+        assertEquals(2, compoundTopDocs.getScoreDocs().size());
     }
 
     public void testBasics_whenMultipleTopDocsIsNull_thenScoreDocsIsNull() {
@@ -76,6 +76,6 @@ public class CompoundTopDocsTests extends OpenSearchQueryTestCase {
         );
         assertNotNull(compoundTopDocsWithNullArray);
         assertNotNull(compoundTopDocsWithNullArray.getScoreDocs());
-        assertEquals(0, compoundTopDocsWithNullArray.getScoreDocs().length);
+        assertEquals(0, compoundTopDocsWithNullArray.getScoreDocs().size());
     }
 }
