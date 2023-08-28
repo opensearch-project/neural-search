@@ -6,6 +6,7 @@
 package org.opensearch.neuralsearch.plugin;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,12 +22,14 @@ import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
 import org.opensearch.index.analysis.AnalyzerProvider;
 import org.opensearch.index.analysis.TokenizerFactory;
+import org.opensearch.index.mapper.Mapper;
 import org.opensearch.indices.analysis.AnalysisModule;
 import org.opensearch.indices.analysis.AnalysisModule.AnalysisProvider;
 import org.opensearch.ingest.Processor;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.analyzer.TermWeightAnalyzerProvider;
 import org.opensearch.neuralsearch.analyzer.TermWeightTokenizerFactory;
+import org.opensearch.neuralsearch.index.NeuralSparseMapper;
 import org.opensearch.neuralsearch.ml.MLCommonsTextEmbeddingClientAccessor;
 import org.opensearch.neuralsearch.ml.MLCommonsNeuralSparseClientAccessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
@@ -35,10 +38,12 @@ import org.opensearch.neuralsearch.processor.NeuralSparseDocumentProcessor;
 import org.opensearch.neuralsearch.processor.factory.NeuralSparseProcessorFactory;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.query.SparseQueryBuilder;
 import org.opensearch.plugins.ActionPlugin;
 import org.opensearch.plugins.AnalysisPlugin;
 import org.opensearch.plugins.ExtensiblePlugin;
 import org.opensearch.plugins.IngestPlugin;
+import org.opensearch.plugins.MapperPlugin;
 import org.opensearch.plugins.Plugin;
 import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.repositories.RepositoriesService;
@@ -51,7 +56,14 @@ import com.google.common.collect.ImmutableMap;
 /**
  * Neural Search plugin class
  */
-public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, IngestPlugin, ExtensiblePlugin, AnalysisPlugin {
+public class NeuralSearch extends Plugin
+        implements
+        ActionPlugin,
+        SearchPlugin,
+        IngestPlugin,
+        ExtensiblePlugin,
+        AnalysisPlugin,
+        MapperPlugin {
 
     private MLCommonsTextEmbeddingClientAccessor clientTEAccessor;
     private MLCommonsNeuralSparseClientAccessor clientNSAccessor;
@@ -82,8 +94,21 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
                 NeuralSparseQueryBuilder::new,
                 NeuralSparseQueryBuilder::fromXContent
         );
+        var qs3 = new QuerySpec<>(
+                SparseQueryBuilder.NAME,
+                SparseQueryBuilder::new,
+                SparseQueryBuilder::fromXContent
+        );
 
-        return List.of(qs1, qs2);
+        return List.of(qs1, qs2, qs3);
+    }
+
+    @Override
+    public Map<String, Mapper.TypeParser> getMappers() {
+        return Collections.singletonMap(
+                NeuralSparseMapper.CONTENT_TYPE,
+                NeuralSparseMapper.PARSER
+        );
     }
 
     @Override
