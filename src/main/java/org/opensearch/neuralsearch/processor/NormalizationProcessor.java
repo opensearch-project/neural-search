@@ -58,13 +58,7 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
         }
         List<QuerySearchResult> querySearchResults = getQueryPhaseSearchResults(searchPhaseResult);
         FetchSearchResult fetchSearchResult = searchPhaseResult.getAtomicArray().asList().get(0).fetchResult();
-        normalizationWorkflow.execute(
-            querySearchResults,
-            fetchSearchResult,
-            normalizationTechnique,
-            combinationTechnique,
-            searchPhaseContext.getNumShards() == 1
-        );
+        normalizationWorkflow.execute(querySearchResults, fetchSearchResult, normalizationTechnique, combinationTechnique);
     }
 
     @Override

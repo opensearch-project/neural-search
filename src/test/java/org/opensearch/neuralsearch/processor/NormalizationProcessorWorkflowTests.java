@@ -74,8 +74,7 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
             querySearchResults,
             null,
             ScoreNormalizationFactory.DEFAULT_METHOD,
-            ScoreCombinationFactory.DEFAULT_METHOD,
-            false
+            ScoreCombinationFactory.DEFAULT_METHOD
         );
 
         TestUtils.assertQueryResultScores(querySearchResults);
@@ -117,8 +116,7 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
             querySearchResults,
             null,
             ScoreNormalizationFactory.DEFAULT_METHOD,
-            ScoreCombinationFactory.DEFAULT_METHOD,
-            false
+            ScoreCombinationFactory.DEFAULT_METHOD
         );
 
         TestUtils.assertQueryResultScoresWithNoMatches(querySearchResults);
@@ -174,8 +172,7 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
             querySearchResults,
             fetchSearchResult,
             ScoreNormalizationFactory.DEFAULT_METHOD,
-            ScoreCombinationFactory.DEFAULT_METHOD,
-            true
+            ScoreCombinationFactory.DEFAULT_METHOD
         );
 
         TestUtils.assertQueryResultScores(querySearchResults);

@@ -6,11 +6,12 @@
 package org.opensearch.neuralsearch.processor;
 
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import lombok.AllArgsConstructor;
@@ -49,8 +50,7 @@ public class NormalizationProcessorWorkflow {
         final List<QuerySearchResult> querySearchResults,
         final FetchSearchResult fetchSearchResult,
         final ScoreNormalizationTechnique normalizationTechnique,
-        final ScoreCombinationTechnique combinationTechnique,
-        final boolean isSingleShard
+        final ScoreCombinationTechnique combinationTechnique
     ) {
         // pre-process data
         log.debug("Pre-process query results");
@@ -66,8 +66,8 @@ public class NormalizationProcessorWorkflow {
 
         // post-process data
         log.debug("Post-process query results after score normalization and combination");
-        updateOriginalQueryResults(querySearchResults, fetchSearchResult, queryTopDocs);
-        updateOriginalFetchResults(querySearchResults, fetchSearchResult, isSingleShard);
+        updateOriginalQueryResults(querySearchResults, queryTopDocs);
+        updateOriginalFetchResults(querySearchResults, Optional.ofNullable(fetchSearchResult));
     }
 
     /**
@@ -87,11 +87,7 @@ public class NormalizationProcessorWorkflow {
         return queryTopDocs;
     }
 
-    private void updateOriginalQueryResults(
-        final List<QuerySearchResult> querySearchResults,
-        final FetchSearchResult fetchSearchResult,
-        final List<CompoundTopDocs> queryTopDocs
-    ) {
+    private void updateOriginalQueryResults(final List<QuerySearchResult> querySearchResults, final List<CompoundTopDocs> queryTopDocs) {
         if (querySearchResults.size() != queryTopDocs.size()) {
             log.error(
                 String.format(
@@ -121,10 +117,9 @@ public class NormalizationProcessorWorkflow {
      */
     private void updateOriginalFetchResults(
         final List<QuerySearchResult> querySearchResults,
-        final FetchSearchResult fetchSearchResult,
-        final boolean isSingleShard
+        final Optional<FetchSearchResult> fetchSearchResultOptional
     ) {
-        if (!isSingleShard || querySearchResults.size() != 1 || Objects.isNull(fetchSearchResult)) {
+        if (fetchSearchResultOptional.isEmpty()) {
             return;
         }
         // fetch results have list of document content, that includes start/stop and
@@ -133,13 +128,12 @@ public class NormalizationProcessorWorkflow {
         // 2. filter out duplicates from different sub-queries
         // 3. update original scores to normalized and combined values
         // 4. order scores based on normalized and combined values
+        FetchSearchResult fetchSearchResult = fetchSearchResultOptional.get();
         SearchHits searchHits = fetchSearchResult.hits();
 
         // create map of docId to index of search hits, handles (2)
-        Map<Integer, SearchHit> docIdToSearchHit = new HashMap<>();
-        for (SearchHit searchHit : searchHits) {
-            docIdToSearchHit.put(searchHit.docId(), searchHit);
-        }
+        Map<Integer, SearchHit> docIdToSearchHit = Arrays.stream(searchHits.getHits())
+            .collect(Collectors.toMap(SearchHit::docId, Function.identity(), (a1, a2) -> a1));
 
         QuerySearchResult querySearchResult = querySearchResults.get(0);
         TopDocs topDocs = querySearchResult.topDocs().topDocs;
