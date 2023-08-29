@@ -31,7 +31,7 @@ public class CompoundTopDocsTests extends OpenSearchQueryTestCase {
         List<TopDocs> topDocs = List.of(topDocs1, topDocs2);
         CompoundTopDocs compoundTopDocs = new CompoundTopDocs(new TotalHits(3, TotalHits.Relation.EQUAL_TO), topDocs);
         assertNotNull(compoundTopDocs);
-        assertEquals(topDocs, compoundTopDocs.getCompoundTopDocs());
+        assertEquals(topDocs, compoundTopDocs.getTopDocs());
     }
 
     public void testBasics_whenCreateWithoutTopDocs_thenTopDocsIsNull() {
@@ -49,7 +49,7 @@ public class CompoundTopDocsTests extends OpenSearchQueryTestCase {
         );
         assertNotNull(hybridQueryScoreTopDocs);
         assertNotNull(hybridQueryScoreTopDocs.getScoreDocs());
-        assertNotNull(hybridQueryScoreTopDocs.getCompoundTopDocs());
+        assertNotNull(hybridQueryScoreTopDocs.getTopDocs());
     }
 
     public void testBasics_whenMultipleTopDocsOfDifferentLength_thenReturnTopDocsWithMostHits() {

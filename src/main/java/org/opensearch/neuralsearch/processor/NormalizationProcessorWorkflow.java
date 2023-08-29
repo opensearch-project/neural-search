@@ -48,7 +48,7 @@ public class NormalizationProcessorWorkflow {
      */
     public void execute(
         final List<QuerySearchResult> querySearchResults,
-        final FetchSearchResult fetchSearchResult,
+        final Optional<FetchSearchResult> fetchSearchResultOptional,
         final ScoreNormalizationTechnique normalizationTechnique,
         final ScoreCombinationTechnique combinationTechnique
     ) {
@@ -67,7 +67,7 @@ public class NormalizationProcessorWorkflow {
         // post-process data
         log.debug("Post-process query results after score normalization and combination");
         updateOriginalQueryResults(querySearchResults, queryTopDocs);
-        updateOriginalFetchResults(querySearchResults, Optional.ofNullable(fetchSearchResult));
+        updateOriginalFetchResults(querySearchResults, fetchSearchResultOptional);
     }
 
     /**
@@ -82,7 +82,15 @@ public class NormalizationProcessorWorkflow {
             .map(CompoundTopDocs::new)
             .collect(Collectors.toList());
         if (queryTopDocs.size() != querySearchResults.size()) {
-            log.warn("Some of querySearchResults are not produced by hybrid query");
+            log.error(
+                String.format(
+                    Locale.ROOT,
+                    "sizes of querySearchResults [%d] and queryTopDocs [%d] must match. Most likely some of query results were not formatted correctly by the hybrid query",
+                    querySearchResults.size(),
+                    queryTopDocs.size()
+                )
+            );
+            throw new IllegalStateException("found inconsistent system state while processing score normalization and combination");
         }
         return queryTopDocs;
     }
@@ -131,7 +139,10 @@ public class NormalizationProcessorWorkflow {
         FetchSearchResult fetchSearchResult = fetchSearchResultOptional.get();
         SearchHits searchHits = fetchSearchResult.hits();
 
-        // create map of docId to index of search hits, handles (2)
+        // create map of docId to index of search hits. This solves (2), duplicates are from
+        // delimiter and start/stop elements, they all have same valid doc_id. For this map
+        // we use doc_id as a key, and all those special elements are collapsed into a single
+        // key-value pair.
         Map<Integer, SearchHit> docIdToSearchHit = Arrays.stream(searchHits.getHits())
             .collect(Collectors.toMap(SearchHit::docId, Function.identity(), (a1, a2) -> a1));
 

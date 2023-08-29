@@ -12,6 +12,7 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
@@ -72,7 +73,7 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
 
         normalizationProcessorWorkflow.execute(
             querySearchResults,
-            null,
+            Optional.empty(),
             ScoreNormalizationFactory.DEFAULT_METHOD,
             ScoreCombinationFactory.DEFAULT_METHOD
         );
@@ -114,7 +115,7 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
 
         normalizationProcessorWorkflow.execute(
             querySearchResults,
-            null,
+            Optional.empty(),
             ScoreNormalizationFactory.DEFAULT_METHOD,
             ScoreCombinationFactory.DEFAULT_METHOD
         );
@@ -170,7 +171,7 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
 
         normalizationProcessorWorkflow.execute(
             querySearchResults,
-            fetchSearchResult,
+            Optional.of(fetchSearchResult),
             ScoreNormalizationFactory.DEFAULT_METHOD,
             ScoreCombinationFactory.DEFAULT_METHOD
         );

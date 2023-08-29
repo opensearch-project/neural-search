@@ -25,30 +25,29 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 
 /**
- * Class stores collection of TodDocs for each sub query from hybrid query
+ * Class stores collection of TopDocs for each sub query from hybrid query. Collection of results is at shard level. We do store
+ * list of TopDocs and list of ScoreDoc as well as total hits for the shard.
  */
-@ToString(includeFieldNames = true)
 @AllArgsConstructor
+@Getter
+@ToString(includeFieldNames = true)
 @Log4j2
 public class CompoundTopDocs {
 
-    @Getter
     @Setter
     private TotalHits totalHits;
-    @Getter
-    private List<TopDocs> compoundTopDocs;
-    @Getter
+    private List<TopDocs> topDocs;
     @Setter
     private List<ScoreDoc> scoreDocs;
 
-    public CompoundTopDocs(final TotalHits totalHits, final List<TopDocs> compoundTopDocs) {
-        initialize(totalHits, compoundTopDocs);
+    public CompoundTopDocs(final TotalHits totalHits, final List<TopDocs> topDocs) {
+        initialize(totalHits, topDocs);
     }
 
-    private void initialize(TotalHits totalHits, List<TopDocs> compoundTopDocs) {
+    private void initialize(TotalHits totalHits, List<TopDocs> topDocs) {
         this.totalHits = totalHits;
-        this.compoundTopDocs = compoundTopDocs;
-        scoreDocs = cloneLargestScoreDocs(compoundTopDocs);
+        this.topDocs = topDocs;
+        scoreDocs = cloneLargestScoreDocs(topDocs);
     }
 
     /**

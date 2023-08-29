@@ -9,6 +9,7 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import lombok.AllArgsConstructor;
@@ -57,7 +58,7 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
             return;
         }
         List<QuerySearchResult> querySearchResults = getQueryPhaseSearchResults(searchPhaseResult);
-        FetchSearchResult fetchSearchResult = searchPhaseResult.getAtomicArray().asList().get(0).fetchResult();
+        Optional<FetchSearchResult> fetchSearchResult = getFetchSearchResults(searchPhaseResult);
         normalizationWorkflow.execute(querySearchResults, fetchSearchResult, normalizationTechnique, combinationTechnique);
     }
 
@@ -122,5 +123,12 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
             .stream()
             .map(result -> result == null ? null : result.queryResult())
             .collect(Collectors.toList());
+    }
+
+    private <Result extends SearchPhaseResult> Optional<FetchSearchResult> getFetchSearchResults(
+        final SearchPhaseResults<Result> searchPhaseResults
+    ) {
+        Optional<Result> optionalFirstSearchPhaseResult = searchPhaseResults.getAtomicArray().asList().stream().findFirst();
+        return optionalFirstSearchPhaseResult.map(SearchPhaseResult::fetchResult);
     }
 }

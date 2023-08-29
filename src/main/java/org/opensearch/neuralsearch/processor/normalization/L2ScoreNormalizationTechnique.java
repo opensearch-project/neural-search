@@ -41,7 +41,7 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
             if (Objects.isNull(compoundQueryTopDocs)) {
                 continue;
             }
-            List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getCompoundTopDocs();
+            List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
             for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
                 TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
@@ -57,17 +57,17 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
         // rest of sub-queries with zero total hits
         int numOfSubqueries = queryTopDocs.stream()
             .filter(Objects::nonNull)
-            .filter(topDocs -> topDocs.getCompoundTopDocs().size() > 0)
+            .filter(topDocs -> topDocs.getTopDocs().size() > 0)
             .findAny()
             .get()
-            .getCompoundTopDocs()
+            .getTopDocs()
             .size();
         float[] l2Norms = new float[numOfSubqueries];
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
             if (Objects.isNull(compoundQueryTopDocs)) {
                 continue;
             }
-            List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getCompoundTopDocs();
+            List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
             int bound = topDocsPerSubQuery.size();
             for (int index = 0; index < bound; index++) {
                 for (ScoreDoc scoreDocs : topDocsPerSubQuery.get(index).scoreDocs) {

@@ -51,7 +51,7 @@ public class ScoreCombiner {
         if (Objects.isNull(compoundQueryTopDocs) || compoundQueryTopDocs.getTotalHits().value == 0) {
             return;
         }
-        List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getCompoundTopDocs();
+        List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
         // - create map of normalized scores results returned from the single shard
         Map<Integer, float[]> normalizedScoresPerDoc = getNormalizedScoresPerDocument(topDocsPerSubQuery);
 
