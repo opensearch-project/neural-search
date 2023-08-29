@@ -8,7 +8,7 @@ package org.opensearch.neuralsearch.processor.normalization;
 import java.util.List;
 import java.util.Objects;
 
-import org.opensearch.neuralsearch.search.CompoundTopDocs;
+import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 public class ScoreNormalizer {
 
@@ -24,6 +24,6 @@ public class ScoreNormalizer {
     }
 
     private boolean canQueryResultsBeNormalized(final List<CompoundTopDocs> queryTopDocs) {
-        return queryTopDocs.stream().filter(Objects::nonNull).anyMatch(topDocs -> topDocs.getCompoundTopDocs().size() > 0);
+        return queryTopDocs.stream().filter(Objects::nonNull).anyMatch(topDocs -> topDocs.getTopDocs().size() > 0);
     }
 }
