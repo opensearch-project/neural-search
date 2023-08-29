@@ -6,6 +6,7 @@
 package org.opensearch.neuralsearch;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.opensearch.test.OpenSearchTestCase.randomFloat;
@@ -14,19 +15,25 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.IntStream;
 
 import org.apache.commons.lang3.Range;
+import org.apache.lucene.search.TotalHits;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.search.SearchHit;
+import org.opensearch.search.SearchHits;
+import org.opensearch.search.fetch.FetchSearchResult;
 import org.opensearch.search.query.QuerySearchResult;
 
 public class TestUtils {
 
-    private final static String RELATION_EQUAL_TO = "eq";
+    private static final String RELATION_EQUAL_TO = "eq";
+    public static final float DELTA_FOR_SCORE_ASSERTION = 0.001f;
 
     /**
      * Convert an xContentBuilder to a map
@@ -66,7 +73,7 @@ public class TestUtils {
     }
 
     /**
-     * Assert results of hyrdid query after score normalization and combination
+     * Assert results of hybrid query after score normalization and combination
      * @param querySearchResults collection of query search results after they processed by normalization processor
      */
     public static void assertQueryResultScores(List<QuerySearchResult> querySearchResults) {
@@ -75,12 +82,12 @@ public class TestUtils {
             .map(searchResult -> searchResult.topDocs().maxScore)
             .max(Float::compare)
             .orElse(Float.MAX_VALUE);
-        assertEquals(1.0f, maxScore, 0.0f);
+        assertEquals(1.0f, maxScore, DELTA_FOR_SCORE_ASSERTION);
         float totalMaxScore = querySearchResults.stream()
             .map(searchResult -> searchResult.getMaxScore())
             .max(Float::compare)
             .orElse(Float.MAX_VALUE);
-        assertEquals(1.0f, totalMaxScore, 0.0f);
+        assertEquals(1.0f, totalMaxScore, DELTA_FOR_SCORE_ASSERTION);
         float maxScoreScoreFromScoreDocs = querySearchResults.stream()
             .map(
                 searchResult -> Arrays.stream(searchResult.topDocs().topDocs.scoreDocs)
@@ -90,7 +97,7 @@ public class TestUtils {
             )
             .max(Float::compare)
             .orElse(Float.MAX_VALUE);
-        assertEquals(1.0f, maxScoreScoreFromScoreDocs, 0.0f);
+        assertEquals(1.0f, maxScoreScoreFromScoreDocs, DELTA_FOR_SCORE_ASSERTION);
         float minScoreScoreFromScoreDocs = querySearchResults.stream()
             .map(
                 searchResult -> Arrays.stream(searchResult.topDocs().topDocs.scoreDocs)
@@ -100,7 +107,50 @@ public class TestUtils {
             )
             .min(Float::compare)
             .orElse(Float.MAX_VALUE);
-        assertEquals(0.001f, minScoreScoreFromScoreDocs, 0.0f);
+        assertEquals(0.001f, minScoreScoreFromScoreDocs, DELTA_FOR_SCORE_ASSERTION);
+    }
+
+    /**
+     * Assert results of hybrid query after score normalization and combination
+     * @param querySearchResults collection of query search results after they processed by normalization processor
+     */
+    public static void assertQueryResultScoresWithNoMatches(List<QuerySearchResult> querySearchResults) {
+        assertNotNull(querySearchResults);
+        float maxScore = querySearchResults.stream()
+            .map(searchResult -> searchResult.topDocs().maxScore)
+            .max(Float::compare)
+            .orElse(Float.MAX_VALUE);
+        assertEquals(0.0f, maxScore, DELTA_FOR_SCORE_ASSERTION);
+        float totalMaxScore = querySearchResults.stream().map(QuerySearchResult::getMaxScore).max(Float::compare).orElse(Float.MAX_VALUE);
+        assertEquals(0.0f, totalMaxScore, DELTA_FOR_SCORE_ASSERTION);
+        float maxScoreScoreFromScoreDocs = querySearchResults.stream()
+            .map(
+                searchResult -> Arrays.stream(searchResult.topDocs().topDocs.scoreDocs)
+                    .map(scoreDoc -> scoreDoc.score)
+                    .max(Float::compare)
+                    .orElse(0.0f)
+            )
+            .max(Float::compare)
+            .orElse(0.0f);
+        assertEquals(0.0f, maxScoreScoreFromScoreDocs, DELTA_FOR_SCORE_ASSERTION);
+        float minScoreScoreFromScoreDocs = querySearchResults.stream()
+            .map(
+                searchResult -> Arrays.stream(searchResult.topDocs().topDocs.scoreDocs)
+                    .map(scoreDoc -> scoreDoc.score)
+                    .min(Float::compare)
+                    .orElse(0.0f)
+            )
+            .min(Float::compare)
+            .orElse(0.0f);
+        assertEquals(0.001f, minScoreScoreFromScoreDocs, DELTA_FOR_SCORE_ASSERTION);
+
+        assertFalse(
+            querySearchResults.stream()
+                .map(searchResult -> searchResult.topDocs().topDocs.totalHits)
+                .filter(totalHits -> Objects.isNull(totalHits.relation))
+                .filter(totalHits -> TotalHits.Relation.EQUAL_TO != totalHits.relation)
+                .anyMatch(totalHits -> 0 != totalHits.value)
+        );
     }
 
     /**
@@ -174,6 +224,34 @@ public class TestUtils {
 
         // verify that all ids are unique
         assertEquals(Set.copyOf(ids).size(), ids.size());
+    }
+
+    /**
+     * Assert results of a fetch phase for hybrid query
+     * @param fetchSearchResult results produced by fetch phase
+     * @param expectedNumberOfHits expected number of hits that should be in the fetch result object
+     */
+    public static void assertFetchResultScores(FetchSearchResult fetchSearchResult, int expectedNumberOfHits) {
+        assertNotNull(fetchSearchResult);
+        assertNotNull(fetchSearchResult.hits());
+        SearchHits searchHits = fetchSearchResult.hits();
+        float maxScore = searchHits.getMaxScore();
+        assertEquals(1.0f, maxScore, DELTA_FOR_SCORE_ASSERTION);
+        TotalHits totalHits = searchHits.getTotalHits();
+        assertNotNull(totalHits);
+        assertEquals(expectedNumberOfHits, totalHits.value);
+        assertNotNull(searchHits.getHits());
+        assertEquals(expectedNumberOfHits, searchHits.getHits().length);
+        float maxScoreScoreFromScoreDocs = Arrays.stream(searchHits.getHits())
+            .map(SearchHit::getScore)
+            .max(Float::compare)
+            .orElse(Float.MAX_VALUE);
+        assertEquals(1.0f, maxScoreScoreFromScoreDocs, DELTA_FOR_SCORE_ASSERTION);
+        float minScoreScoreFromScoreDocs = Arrays.stream(searchHits.getHits())
+            .map(SearchHit::getScore)
+            .min(Float::compare)
+            .orElse(Float.MAX_VALUE);
+        assertEquals(0.001f, minScoreScoreFromScoreDocs, DELTA_FOR_SCORE_ASSERTION);
     }
 
     private static List<Map<String, Object>> getNestedHits(Map<String, Object> searchResponseAsMap) {
