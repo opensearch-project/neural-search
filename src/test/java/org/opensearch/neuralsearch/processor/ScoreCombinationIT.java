@@ -5,6 +5,8 @@
 
 package org.opensearch.neuralsearch.processor;
 
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.containsString;
 import static org.opensearch.neuralsearch.TestUtils.assertHybridSearchResults;
 import static org.opensearch.neuralsearch.TestUtils.assertWeightedScores;
 import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
@@ -148,7 +150,14 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             ResponseException.class,
             () -> search(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, hybridQueryBuilder, null, 5, Map.of("search_pipeline", SEARCH_PIPELINE))
         );
-        assertTrue(exception1.getMessage().contains("number of weights must match number of sub-queries in hybrid query"));
+        org.hamcrest.MatcherAssert.assertThat(
+            exception1.getMessage(),
+            allOf(
+                containsString("number of weights"),
+                containsString("must match number of sub-queries"),
+                containsString("in hybrid query")
+            )
+        );
 
         // check case when number of weights is more than number of sub-queries
         // delete existing pipeline and create a new one with another set of weights
@@ -164,7 +173,14 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             ResponseException.class,
             () -> search(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, hybridQueryBuilder, null, 5, Map.of("search_pipeline", SEARCH_PIPELINE))
         );
-        assertTrue(exception2.getMessage().contains("number of weights must match number of sub-queries in hybrid query"));
+        org.hamcrest.MatcherAssert.assertThat(
+            exception2.getMessage(),
+            allOf(
+                containsString("number of weights"),
+                containsString("must match number of sub-queries"),
+                containsString("in hybrid query")
+            )
+        );
     }
 
     /**

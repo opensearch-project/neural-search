@@ -100,7 +100,7 @@ class ScoreCombinationUtil {
             return;
         }
         if (scores.length != weights.size()) {
-            log.error(
+            throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
                     "number of weights [%d] must match number of sub-queries [%d] in hybrid query",
@@ -108,7 +108,6 @@ class ScoreCombinationUtil {
                     scores.length
                 )
             );
-            throw new IllegalArgumentException("number of weights must match number of sub-queries in hybrid query");
         }
     }
 
@@ -121,25 +120,23 @@ class ScoreCombinationUtil {
     private void validateWeights(final List<Float> weightsList) {
         boolean isOutOfRange = weightsList.stream().anyMatch(weight -> !Range.between(0.0f, 1.0f).contains(weight));
         if (isOutOfRange) {
-            log.error(
+            throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
                     "all weights must be in range [0.0 ... 1.0], submitted weights: %s",
                     Arrays.toString(weightsList.toArray(new Float[0]))
                 )
             );
-            throw new IllegalArgumentException("all weights must be in range [0.0 ... 1.0]");
         }
         float sumOfWeights = weightsList.stream().reduce(0.0f, Float::sum);
         if (!DoubleMath.fuzzyEquals(1.0f, sumOfWeights, DELTA_FOR_SCORE_ASSERTION)) {
-            log.error(
+            throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
                     "sum of weights for combination must be equal to 1.0, submitted weights: %s",
                     Arrays.toString(weightsList.toArray(new Float[0]))
                 )
             );
-            throw new IllegalArgumentException("sum of weights for combination must be equal to 1.0");
         }
     }
 }

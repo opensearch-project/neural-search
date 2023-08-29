@@ -5,6 +5,9 @@
 
 package org.opensearch.neuralsearch.processor.combination;
 
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.containsString;
+
 import java.util.List;
 import java.util.Map;
 
@@ -49,6 +52,13 @@ public class ScoreCombinationUtilTests extends OpenSearchQueryTestCase {
             IllegalArgumentException.class,
             () -> scoreCombinationUtil.validateIfWeightsMatchScores(new float[] { 0.6f, 0.5f }, List.of(0.4f, 0.2f, 0.4f))
         );
-        assertTrue(exception1.getMessage().contains("number of weights must match number of sub-queries in hybrid query"));
+        org.hamcrest.MatcherAssert.assertThat(
+            exception1.getMessage(),
+            allOf(
+                containsString("number of weights"),
+                containsString("must match number of sub-queries"),
+                containsString("in hybrid query")
+            )
+        );
     }
 }
