@@ -82,30 +82,28 @@ public class NormalizationProcessorWorkflow {
             .map(CompoundTopDocs::new)
             .collect(Collectors.toList());
         if (queryTopDocs.size() != querySearchResults.size()) {
-            log.error(
+            throw new IllegalStateException(
                 String.format(
                     Locale.ROOT,
-                    "sizes of querySearchResults [%d] and queryTopDocs [%d] must match. Most likely some of query results were not formatted correctly by the hybrid query",
+                    "query results were not formatted correctly by the hybrid query; sizes of querySearchResults [%d] and queryTopDocs [%d] must match",
                     querySearchResults.size(),
                     queryTopDocs.size()
                 )
             );
-            throw new IllegalStateException("found inconsistent system state while processing score normalization and combination");
         }
         return queryTopDocs;
     }
 
     private void updateOriginalQueryResults(final List<QuerySearchResult> querySearchResults, final List<CompoundTopDocs> queryTopDocs) {
         if (querySearchResults.size() != queryTopDocs.size()) {
-            log.error(
+            throw new IllegalStateException(
                 String.format(
                     Locale.ROOT,
-                    "sizes of querySearchResults [%d] and queryTopDocs [%d] must match",
+                    "query results were not formatted correctly by the hybrid query; sizes of querySearchResults [%d] and queryTopDocs [%d] must match",
                     querySearchResults.size(),
                     queryTopDocs.size()
                 )
             );
-            throw new IllegalStateException("found inconsistent system state while processing score normalization and combination");
         }
         for (int index = 0; index < querySearchResults.size(); index++) {
             QuerySearchResult querySearchResult = querySearchResults.get(index);
