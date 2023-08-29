@@ -5,6 +5,7 @@
 
 package org.opensearch.neuralsearch.query;
 
+import static org.opensearch.neuralsearch.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
 
 import java.io.IOException;
@@ -32,7 +33,6 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_BASIC_INDEX_NAME = "test-neural-basic-index";
     private static final String TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME = "test-neural-vector-doc-field-index";
     private static final String TEST_MULTI_DOC_INDEX_NAME = "test-neural-multi-doc-index";
-    private static final int MAX_NUMBER_OF_DOCS_IN_MULTI_DOC_INDEX = 3;
     private static final String TEST_QUERY_TEXT = "greetings";
     private static final String TEST_QUERY_TEXT2 = "salute";
     private static final String TEST_QUERY_TEXT3 = "hello";
@@ -51,18 +51,21 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     private final float[] testVector2 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector3 = createRandomVector(TEST_DIMENSION);
     private final static String RELATION_EQUAL_TO = "eq";
+    private static final String SEARCH_PIPELINE = "phase-results-pipeline";
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
         updateClusterSettings();
         prepareModel();
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
     }
 
     @After
     @SneakyThrows
     public void tearDown() {
         super.tearDown();
+        deleteSearchPipeline(SEARCH_PIPELINE);
         /* this is required to minimize chance of model not being deployed due to open memory CB,
          * this happens in case we leave model from previous test case. We use new model for every test, and old model
          * can be undeployed and deleted to free resources after each test case execution.
@@ -78,61 +81,6 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     @Override
     protected boolean preserveClusterUponCompletion() {
         return true;
-    }
-
-    /**
-     * Tests basic query, example of query structure:
-     * {
-     *     "query": {
-     *         "hybrid": {
-     *              "queries": [
-     *                  {
-     *                      "neural": {
-     *                          "text_knn": {
-     *                              "query_text": "Hello world",
-     *                              "model_id": "dcsdcasd",
-     *                              "k": 1
-     *                          }
-     *                      }
-     *                  }
-     *              ]
-     *          }
-     *      }
-     * }
-     */
-    @SneakyThrows
-    public void testBasicQuery_whenOneSubQuery_thenSuccessful() {
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
-        String modelId = getDeployedModelId();
-
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId, 5, null, null);
-
-        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-        hybridQueryBuilder.add(neuralQueryBuilder);
-
-        Map<String, Object> searchResponseAsMap1 = search(TEST_MULTI_DOC_INDEX_NAME, hybridQueryBuilder, 10);
-
-        assertEquals(MAX_NUMBER_OF_DOCS_IN_MULTI_DOC_INDEX, getHitCount(searchResponseAsMap1));
-
-        List<Map<String, Object>> hits1NestedList = getNestedHits(searchResponseAsMap1);
-        List<String> ids = new ArrayList<>();
-        List<Double> scores = new ArrayList<>();
-        for (Map<String, Object> oneHit : hits1NestedList) {
-            ids.add((String) oneHit.get("_id"));
-            scores.add((Double) oneHit.get("_score"));
-        }
-
-        // verify that scores are in desc order
-        assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
-        // verify that all ids are unique
-        assertEquals(Set.copyOf(ids).size(), ids.size());
-
-        Map<String, Object> total = getTotalHits(searchResponseAsMap1);
-        assertNotNull(total.get("value"));
-        assertEquals(MAX_NUMBER_OF_DOCS_IN_MULTI_DOC_INDEX, total.get("value"));
-        assertNotNull(total.get("relation"));
-        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-        assertTrue(getMaxScore(searchResponseAsMap1).isPresent());
     }
 
     /**
@@ -181,7 +129,13 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder1);
         hybridQueryBuilderNeuralThenTerm.add(boolQueryBuilder);
 
-        Map<String, Object> searchResponseAsMap1 = search(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, hybridQueryBuilderNeuralThenTerm, 10);
+        Map<String, Object> searchResponseAsMap1 = search(
+            TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
+            hybridQueryBuilderNeuralThenTerm,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
 
         assertEquals(3, getHitCount(searchResponseAsMap1));
 
@@ -205,92 +159,6 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
 
-    /**
-     * Using queries similar to below to test sub-queries order:
-     * {
-     *     "query": {
-     *         "hybrid": {
-     *              "queries": [
-     *                  {
-     *                      "neural": {
-     *                          "text_knn": {
-     *                              "query_text": "Hello world",
-     *                              "model_id": "dcsdcasd",
-     *                              "k": 1
-     *                          }
-     *                      }
-     *                  },
-     *                  {
-     *                      "term": {
-     *                          "text": "word"
-     *                      }
-     *                  }
-     *              ]
-     *          }
-     *      }
-     * }
-     */
-    @SneakyThrows
-    public void testSubQuery_whenSubqueriesInDifferentOrder_thenResultIsSame() {
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
-        String modelId = getDeployedModelId();
-
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId, 5, null, null);
-        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
-
-        HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
-        hybridQueryBuilderNeuralThenTerm.add(neuralQueryBuilder);
-        hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder);
-
-        Map<String, Object> searchResponseAsMap1 = search(TEST_MULTI_DOC_INDEX_NAME, hybridQueryBuilderNeuralThenTerm, 10);
-
-        assertEquals(MAX_NUMBER_OF_DOCS_IN_MULTI_DOC_INDEX, getHitCount(searchResponseAsMap1));
-
-        List<Map<String, Object>> hits1NestedList = getNestedHits(searchResponseAsMap1);
-        List<String> ids1 = new ArrayList<>();
-        List<Double> scores1 = new ArrayList<>();
-        for (Map<String, Object> oneHit : hits1NestedList) {
-            ids1.add((String) oneHit.get("_id"));
-            scores1.add((Double) oneHit.get("_score"));
-        }
-
-        Map<String, Object> total = getTotalHits(searchResponseAsMap1);
-        assertNotNull(total.get("value"));
-        assertEquals(MAX_NUMBER_OF_DOCS_IN_MULTI_DOC_INDEX, total.get("value"));
-        assertNotNull(total.get("relation"));
-        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-
-        // verify that scores are in desc order
-        assertTrue(IntStream.range(0, scores1.size() - 1).noneMatch(idx -> scores1.get(idx) < scores1.get(idx + 1)));
-        // verify that all ids are unique
-        assertEquals(Set.copyOf(ids1).size(), ids1.size());
-
-        // check similar query when sub-queries are in reverse order, results must be same as in previous test case
-        HybridQueryBuilder hybridQueryBuilderTermThenNeural = new HybridQueryBuilder();
-        hybridQueryBuilderTermThenNeural.add(termQueryBuilder);
-        hybridQueryBuilderTermThenNeural.add(neuralQueryBuilder);
-
-        Map<String, Object> searchResponseAsMap2 = search(TEST_MULTI_DOC_INDEX_NAME, hybridQueryBuilderNeuralThenTerm, 10);
-
-        assertEquals(MAX_NUMBER_OF_DOCS_IN_MULTI_DOC_INDEX, getHitCount(searchResponseAsMap2));
-
-        List<String> ids2 = new ArrayList<>();
-        List<Double> scores2 = new ArrayList<>();
-        for (Map<String, Object> oneHit : hits1NestedList) {
-            ids2.add((String) oneHit.get("_id"));
-            scores2.add((Double) oneHit.get("_score"));
-        }
-
-        Map<String, Object> total2 = getTotalHits(searchResponseAsMap2);
-        assertNotNull(total.get("value"));
-        assertEquals(MAX_NUMBER_OF_DOCS_IN_MULTI_DOC_INDEX, total2.get("value"));
-        assertNotNull(total2.get("relation"));
-        assertEquals(RELATION_EQUAL_TO, total2.get("relation"));
-        // doc ids must match same from the previous query, order of sub-queries doesn't change the result
-        assertEquals(ids1, ids2);
-        assertEquals(scores1, scores2);
-    }
-
     @SneakyThrows
     public void testNoMatchResults_whenOnlyTermSubQueryWithoutMatch_thenEmptyResult() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
@@ -301,10 +169,17 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         hybridQueryBuilderOnlyTerm.add(termQueryBuilder);
         hybridQueryBuilderOnlyTerm.add(termQuery2Builder);
 
-        Map<String, Object> searchResponseAsMap = search(TEST_MULTI_DOC_INDEX_NAME, hybridQueryBuilderOnlyTerm, 10);
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_INDEX_NAME,
+            hybridQueryBuilderOnlyTerm,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
 
         assertEquals(0, getHitCount(searchResponseAsMap));
-        assertTrue(getMaxScore(searchResponseAsMap).isEmpty());
+        assertTrue(getMaxScore(searchResponseAsMap).isPresent());
+        assertEquals(0.0f, getMaxScore(searchResponseAsMap).get(), DELTA_FOR_SCORE_ASSERTION);
 
         Map<String, Object> total = getTotalHits(searchResponseAsMap);
         assertNotNull(total.get("value"));

@@ -5,6 +5,8 @@
 
 package org.opensearch.neuralsearch.processor;
 
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryStartStopElement;
+
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -19,8 +21,8 @@ import org.opensearch.action.search.SearchPhaseName;
 import org.opensearch.action.search.SearchPhaseResults;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
-import org.opensearch.neuralsearch.search.CompoundTopDocs;
 import org.opensearch.search.SearchPhaseResult;
+import org.opensearch.search.fetch.FetchSearchResult;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.query.QuerySearchResult;
@@ -56,7 +58,8 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
             return;
         }
         List<QuerySearchResult> querySearchResults = getQueryPhaseSearchResults(searchPhaseResult);
-        normalizationWorkflow.execute(querySearchResults, normalizationTechnique, combinationTechnique);
+        Optional<FetchSearchResult> fetchSearchResult = getFetchSearchResults(searchPhaseResult);
+        normalizationWorkflow.execute(querySearchResults, fetchSearchResult, normalizationTechnique, combinationTechnique);
     }
 
     @Override
@@ -95,19 +98,21 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
         }
 
         QueryPhaseResultConsumer queryPhaseResultConsumer = (QueryPhaseResultConsumer) searchPhaseResult;
-        Optional<SearchPhaseResult> optionalSearchPhaseResult = queryPhaseResultConsumer.getAtomicArray()
-            .asList()
-            .stream()
-            .filter(Objects::nonNull)
-            .findFirst();
-        return isNotHybridQuery(optionalSearchPhaseResult);
+        return queryPhaseResultConsumer.getAtomicArray().asList().stream().filter(Objects::nonNull).noneMatch(this::isHybridQuery);
     }
 
-    private boolean isNotHybridQuery(final Optional<SearchPhaseResult> optionalSearchPhaseResult) {
-        return optionalSearchPhaseResult.isEmpty()
-            || Objects.isNull(optionalSearchPhaseResult.get().queryResult())
-            || Objects.isNull(optionalSearchPhaseResult.get().queryResult().topDocs())
-            || !(optionalSearchPhaseResult.get().queryResult().topDocs().topDocs instanceof CompoundTopDocs);
+    /**
+     * Return true if results are from hybrid query.
+     * @param searchPhaseResult
+     * @return true if results are from hybrid query
+     */
+    private boolean isHybridQuery(final SearchPhaseResult searchPhaseResult) {
+        // check for delimiter at the end of the score docs.
+        return Objects.nonNull(searchPhaseResult.queryResult())
+            && Objects.nonNull(searchPhaseResult.queryResult().topDocs())
+            && Objects.nonNull(searchPhaseResult.queryResult().topDocs().topDocs.scoreDocs)
+            && searchPhaseResult.queryResult().topDocs().topDocs.scoreDocs.length > 0
+            && isHybridQueryStartStopElement(searchPhaseResult.queryResult().topDocs().topDocs.scoreDocs[0]);
     }
 
     private <Result extends SearchPhaseResult> List<QuerySearchResult> getQueryPhaseSearchResults(
@@ -118,5 +123,12 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
             .stream()
             .map(result -> result == null ? null : result.queryResult())
             .collect(Collectors.toList());
+    }
+
+    private <Result extends SearchPhaseResult> Optional<FetchSearchResult> getFetchSearchResults(
+        final SearchPhaseResults<Result> searchPhaseResults
+    ) {
+        Optional<Result> optionalFirstSearchPhaseResult = searchPhaseResults.getAtomicArray().asList().stream().findFirst();
+        return optionalFirstSearchPhaseResult.map(SearchPhaseResult::fetchResult);
     }
 }

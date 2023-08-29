@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Features
 * Added Score Normalization and Combination feature ([#241](https://github.com/opensearch-project/neural-search/pull/241/))
 ### Enhancements
+* Changed format for hybrid query results to a single list of scores with delimiter ([#259](https://github.com/opensearch-project/neural-search/pull/259))
 ### Bug Fixes
 ### Infrastructure
 ### Documentation
