@@ -38,6 +38,7 @@ public class ArithmeticMeanScoreCombinationTechnique implements ScoreCombination
      */
     @Override
     public float combine(final float[] scores) {
+        scoreCombinationUtil.validateIfWeightsMatchScores(scores, weights);
         float combinedScore = 0.0f;
         float sumOfWeights = 0;
         for (int indexOfSubQuery = 0; indexOfSubQuery < scores.length; indexOfSubQuery++) {
