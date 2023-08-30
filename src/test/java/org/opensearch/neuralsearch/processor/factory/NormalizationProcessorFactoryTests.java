@@ -132,17 +132,14 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         String tag = "tag";
         String description = "description";
         boolean ignoreFailure = false;
+        double weight1 = RandomizedTest.randomDouble();
+        double weight2 = 1.0f - weight1;
         Map<String, Object> config = new HashMap<>();
         config.put(NORMALIZATION_CLAUSE, new HashMap<>(Map.of("technique", "min_max")));
         config.put(
             COMBINATION_CLAUSE,
             new HashMap<>(
-                Map.of(
-                    TECHNIQUE,
-                    "arithmetic_mean",
-                    PARAMETERS,
-                    new HashMap<>(Map.of("weights", Arrays.asList(RandomizedTest.randomDouble(), RandomizedTest.randomDouble())))
-                )
+                Map.of(TECHNIQUE, "arithmetic_mean", PARAMETERS, new HashMap<>(Map.of("weights", Arrays.asList(weight1, weight2))))
             )
         );
         Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
@@ -158,6 +155,43 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         assertTrue(searchPhaseResultsProcessor instanceof NormalizationProcessor);
         NormalizationProcessor normalizationProcessor = (NormalizationProcessor) searchPhaseResultsProcessor;
         assertEquals("normalization-processor", normalizationProcessor.getType());
+    }
+
+    @SneakyThrows
+    public void testWeightsParams_whenInvalidValues_thenFail() {
+        NormalizationProcessorFactory normalizationProcessorFactory = new NormalizationProcessorFactory(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner()),
+            new ScoreNormalizationFactory(),
+            new ScoreCombinationFactory()
+        );
+        final Map<String, Processor.Factory<SearchPhaseResultsProcessor>> processorFactories = new HashMap<>();
+        String tag = "tag";
+        String description = "description";
+        boolean ignoreFailure = false;
+        Map<String, Object> config = new HashMap<>();
+        config.put(NORMALIZATION_CLAUSE, new HashMap<>(Map.of("technique", "min_max")));
+        config.put(
+            COMBINATION_CLAUSE,
+            new HashMap<>(
+                Map.of(
+                    TECHNIQUE,
+                    "arithmetic_mean",
+                    PARAMETERS,
+                    new HashMap<>(
+                        Map.of(
+                            "weights",
+                            Arrays.asList(RandomizedTest.randomDouble(), RandomizedTest.randomDouble(), RandomizedTest.randomDouble())
+                        )
+                    )
+                )
+            )
+        );
+        Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> normalizationProcessorFactory.create(processorFactories, tag, description, ignoreFailure, config, pipelineContext)
+        );
+        assertTrue(exception.getMessage().contains("sum of weights for combination must be equal to 1.0"));
     }
 
     public void testInputValidation_whenInvalidNormalizationClause_thenFail() {

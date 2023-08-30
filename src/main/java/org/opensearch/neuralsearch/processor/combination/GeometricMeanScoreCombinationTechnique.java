@@ -40,6 +40,7 @@ public class GeometricMeanScoreCombinationTechnique implements ScoreCombinationT
      */
     @Override
     public float combine(final float[] scores) {
+        scoreCombinationUtil.validateIfWeightsMatchScores(scores, weights);
         float weightedLnSum = 0;
         float sumOfWeights = 0;
         for (int indexOfSubQuery = 0; indexOfSubQuery < scores.length; indexOfSubQuery++) {

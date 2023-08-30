@@ -38,6 +38,7 @@ public class HarmonicMeanScoreCombinationTechnique implements ScoreCombinationTe
      */
     @Override
     public float combine(final float[] scores) {
+        scoreCombinationUtil.validateIfWeightsMatchScores(scores, weights);
         float sumOfWeights = 0;
         float sumOfHarmonics = 0;
         for (int indexOfSubQuery = 0; indexOfSubQuery < scores.length; indexOfSubQuery++) {
