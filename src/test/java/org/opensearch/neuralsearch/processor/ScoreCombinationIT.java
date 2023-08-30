@@ -115,7 +115,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
 
-        assertWeightedScores(searchResponseWithWeights1AsMap, 0.375, 0.3125, 0.001);
+        assertWeightedScores(searchResponseWithWeights1AsMap, 0.4, 0.3, 0.001);
 
         // delete existing pipeline and create a new one with another set of weights
         deleteSearchPipeline(SEARCH_PIPELINE);
@@ -134,7 +134,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
 
-        assertWeightedScores(searchResponseWithWeights2AsMap, 0.606, 0.242, 0.001);
+        assertWeightedScores(searchResponseWithWeights2AsMap, 0.6666, 0.2332, 0.001);
 
         // check case when number of weights is less than number of sub-queries
         // delete existing pipeline and create a new one with another set of weights
