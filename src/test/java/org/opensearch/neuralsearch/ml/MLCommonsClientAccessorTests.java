@@ -5,7 +5,6 @@
 
 package org.opensearch.neuralsearch.ml;
 
-import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 
@@ -163,7 +162,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     }
 
     public void test_inferenceSentencesWithMapResult_whenValidInput_thenSuccess() {
-        final Map<String, String> map = ImmutableMap.of("key", "value");
+        final Map<String, String> map = Map.of("key", "value");
         final ActionListener<Map<String, ?>> resultListener = mock(ActionListener.class);
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
@@ -262,7 +261,9 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             output,
             new long[] { 1, 2 },
             MLResultDataType.FLOAT64,
-            ByteBuffer.wrap(new byte[12])
+            ByteBuffer.wrap(new byte[12]),
+            "someValue",
+            Map.of()
         );
         mlModelTensorList.add(tensor);
         final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
