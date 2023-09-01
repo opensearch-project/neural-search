@@ -177,14 +177,16 @@ public class MLCommonsClientAccessor {
     private Map<String, ?> buildMapResultFromResponse(MLOutput mlOutput) {
         final ModelTensorOutput modelTensorOutput = (ModelTensorOutput) mlOutput;
         final List<ModelTensors> tensorOutputList = modelTensorOutput.getMlModelOutputs();
-        if (CollectionUtils.isEmpty(tensorOutputList)) {
-            log.error("No tensor output found!");
-            return null;
+        if (CollectionUtils.isEmpty(tensorOutputList) || CollectionUtils.isEmpty(tensorOutputList.get(0).getMlModelTensors())) {
+            throw new IllegalStateException(
+                "Empty model result produced. Expected 1 tensor output and 1 model tensor, but got [0]"
+            );
         }
         List<ModelTensor> tensorList = tensorOutputList.get(0).getMlModelTensors();
-        if (CollectionUtils.isEmpty(tensorList)) {
-            log.error("No tensor found!");
-            return null;
+        if (tensorList.size() != 1) {
+            throw new IllegalStateException(
+                "Unexpected number of map result produced. Expected 1 map result to be returned, but got [" + tensorList.size() + "]"
+            );
         }
         return tensorList.get(0).getDataAsMap();
     }
