@@ -38,18 +38,18 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
     public void testQueryPhaseSearcher() {
         NeuralSearch plugin = new NeuralSearch();
-        Optional<QueryPhaseSearcher> queryPhaseSearcher = plugin.getQueryPhaseSearcher();
-
-        assertNotNull(queryPhaseSearcher);
-        assertTrue(queryPhaseSearcher.isEmpty());
-
-        initFeatureFlags();
-
         Optional<QueryPhaseSearcher> queryPhaseSearcherWithFeatureFlagDisabled = plugin.getQueryPhaseSearcher();
 
         assertNotNull(queryPhaseSearcherWithFeatureFlagDisabled);
         assertFalse(queryPhaseSearcherWithFeatureFlagDisabled.isEmpty());
         assertTrue(queryPhaseSearcherWithFeatureFlagDisabled.get() instanceof HybridQueryPhaseSearcher);
+
+        initFeatureFlags();
+
+        Optional<QueryPhaseSearcher> queryPhaseSearcher = plugin.getQueryPhaseSearcher();
+
+        assertNotNull(queryPhaseSearcher);
+        assertTrue(queryPhaseSearcher.isEmpty());
     }
 
     public void testProcessors() {
