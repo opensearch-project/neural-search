@@ -21,8 +21,8 @@ public final class NeuralSearchSettings {
      * Currently query phase searcher added with hybrid search will conflict with concurrent search in core.
      * Once that problem is resolved this feature flag can be removed.
      */
-    public static final Setting<Boolean> NEURAL_SEARCH_HYBRID_SEARCH_ENABLED = Setting.boolSetting(
-        "plugins.neural_search.hybrid_search_enabled",
+    public static final Setting<Boolean> NEURAL_SEARCH_HYBRID_SEARCH_DISABLED = Setting.boolSetting(
+        "plugins.neural_search.hybrid_search_disabled",
         false,
         Setting.Property.NodeScope
     );

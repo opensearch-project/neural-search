@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Enhancements
 * Changed format for hybrid query results to a single list of scores with delimiter ([#259](https://github.com/opensearch-project/neural-search/pull/259))
 * Added validations for score combination weights in Hybrid Search ([#265](https://github.com/opensearch-project/neural-search/pull/265))
+* Made hybrid search active by default ([#274](https://github.com/opensearch-project/neural-search/pull/274))
 ### Bug Fixes
 ### Infrastructure
 ### Documentation
