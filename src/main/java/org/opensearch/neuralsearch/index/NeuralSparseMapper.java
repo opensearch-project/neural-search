@@ -24,6 +24,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * A FieldMapper that exposes Lucene's {@link FeatureField}.
+ * It is designed for learned sparse vectors, the expected for ingested content is a map of (token,weight) pairs, with String and Float type.
+ * In current version, this field doesn't support existing query clauses like "match" or "exists".
+ * The ingested documents can only be searched with our "sparse" query clause.
+ */
 public class NeuralSparseMapper extends ParametrizedFieldMapper {
     public static final String CONTENT_TYPE = "sparse_vector";
 
@@ -119,10 +125,24 @@ public class NeuralSparseMapper extends ParametrizedFieldMapper {
 
     @Override
     protected void parseCreateField(ParseContext context) throws IOException {
+        if (XContentParser.Token.START_OBJECT != context.parser().currentToken()) {
+            throw new IllegalArgumentException(
+                    "Wrong format for input data. Field type " + typeName() + " can only parse <String, Float> map object."
+
+            );
+        }
         final Map<String, Float> termWeight = context.parser().map(HashMap::new, XContentParser::floatValue);
         for (Map.Entry<String, Float> entry: termWeight.entrySet()) {
             context.doc().add(new FeatureField(fieldType().name(), entry.getKey(), entry.getValue()));
         }
+    }
+
+    // Users are not supposed to give an array for the input value.
+    // Here we set the return value of parsesArrayValue() as true,
+    // intercept the request and throw an exception in parseCreateField()
+    @Override
+    public final boolean parsesArrayValue() {
+        return true;
     }
 
     @Override
