@@ -6,13 +6,12 @@
 package org.opensearch.neuralsearch.index;
 
 import org.apache.lucene.document.FeatureField;
-import org.apache.lucene.search.DocValuesFieldExistsQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.mapper.ParametrizedFieldMapper;
 import org.opensearch.index.mapper.ParseContext;
-import org.opensearch.index.mapper.TermBasedFieldType;
+import org.opensearch.index.mapper.SourceValueFetcher;
 import org.opensearch.index.mapper.TextSearchInfo;
 import org.opensearch.index.mapper.ValueFetcher;
 import org.opensearch.index.query.QueryShardContext;
@@ -21,15 +20,14 @@ import org.opensearch.search.lookup.SearchLookup;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class NeuralSparseMapper extends ParametrizedFieldMapper {
-    public static final String CONTENT_TYPE = "neural_sparse";
+    public static final String CONTENT_TYPE = "sparse_vector";
 
-    public NeuralSparseMapper(
+    protected NeuralSparseMapper(
         String simpleName,
         MappedFieldType mappedFieldType,
         MultiFields multiFields,
@@ -40,6 +38,8 @@ public class NeuralSparseMapper extends ParametrizedFieldMapper {
 
     public static class NeuralSparseBuilder extends ParametrizedFieldMapper.Builder {
 
+        private final Parameter<Map<String, String>> meta = Parameter.metaParam();
+
         public NeuralSparseBuilder(
                 String name
         ) {
@@ -48,13 +48,17 @@ public class NeuralSparseMapper extends ParametrizedFieldMapper {
 
         @Override
         protected List<Parameter<?>> getParameters() {
-            return Arrays.asList();
+            return Arrays.asList(meta);
         }
 
         @Override
         public NeuralSparseMapper build(BuilderContext context) {
-            NeuralSparseFieldType ft = new NeuralSparseFieldType(buildFullName(context));
-            return new NeuralSparseMapper(name, ft, multiFieldsBuilder.build(this, context), copyTo.build());
+            return new NeuralSparseMapper(
+                    name,
+                    new NeuralSparseFieldType(buildFullName(context), meta.getValue()),
+                    multiFieldsBuilder.build(this, context),
+                    copyTo.build()
+            );
         }
     }
 
@@ -66,18 +70,16 @@ public class NeuralSparseMapper extends ParametrizedFieldMapper {
                 boolean isSearchable,
                 boolean isStored,
                 boolean hasDocValues,
-                Boolean nullValue,
                 Map<String, String> meta
         ) {
-            super(name, isSearchable, isStored, hasDocValues, TextSearchInfo.SIMPLE_MATCH_ONLY, meta);
+            super(name, isSearchable, isStored, hasDocValues, TextSearchInfo.NONE, meta);
         }
 
-        public NeuralSparseFieldType(String name) {
-            this(name, true, false, true, false, Collections.emptyMap());
-        }
-
-        public NeuralSparseFieldType(String name, boolean searchable) {
-            this(name, searchable, false, true, false, Collections.emptyMap());
+        public NeuralSparseFieldType(
+                String name,
+                Map<String, String> meta
+        ) {
+            this(name, true, false, true, meta);
         }
 
         @Override
@@ -87,43 +89,37 @@ public class NeuralSparseMapper extends ParametrizedFieldMapper {
 
         @Override
         public ValueFetcher valueFetcher(QueryShardContext context, SearchLookup searchLookup, String format) {
-            throw new UnsupportedOperationException("Now do not support fields search");
+            if (format != null) {
+                throw new IllegalArgumentException("Field [" + name() + "] of type [" + typeName() + "] does not support format");
+            }
+            return SourceValueFetcher.identity(name(), context, format);
         }
 
         @Override
         public Query existsQuery(QueryShardContext context) {
-            return new DocValuesFieldExistsQuery(name());
+            throw new QueryShardException(
+                    context,
+                    "Field [" + name() + "] of type [" + typeName() + "] does not support exists query for now"
+            );
         }
 
         @Override
         public Query termQuery(Object value, QueryShardContext context) {
             throw new QueryShardException(
                     context,
-                    String.format("Neural sparse do not support exact searching now")
+                    "Field [" + name() + "] of type [" + typeName() + "] does not support term query for now"
             );
         }
     }
 
     @Override
     public ParametrizedFieldMapper.Builder getMergeBuilder() {
-        return new NeuralSparseBuilder(simpleName());
+        return new NeuralSparseBuilder(simpleName()).init(this);
     }
 
     @Override
     protected void parseCreateField(ParseContext context) throws IOException {
-
-//        Boolean value = context.parseExternalValue(Boolean.class);
-//        if (value == null) {
-//            XContentParser.Token token = context.parser().currentToken();
-//            if (token == XContentParser.Token.VALUE_NULL) {
-//                if (nullValue != null) {
-//                    value = nullValue;
-//                }
-//            } else {
-//                value = context.parser().booleanValue();
-//            }
-//        }
-        final var termWeight = context.parser().map(HashMap::new, XContentParser::floatValue);
+        final Map<String, Float> termWeight = context.parser().map(HashMap::new, XContentParser::floatValue);
         for (Map.Entry<String, Float> entry: termWeight.entrySet()) {
             context.doc().add(new FeatureField(fieldType().name(), entry.getKey(), entry.getValue()));
         }
