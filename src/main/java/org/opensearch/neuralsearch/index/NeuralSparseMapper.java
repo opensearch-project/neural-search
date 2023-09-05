@@ -8,6 +8,7 @@ package org.opensearch.neuralsearch.index;
 import org.apache.lucene.document.FeatureField;
 import org.apache.lucene.search.Query;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.mapper.FieldMapper;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.mapper.ParametrizedFieldMapper;
 import org.opensearch.index.mapper.ParseContext;
@@ -33,18 +34,31 @@ import java.util.Map;
 public class NeuralSparseMapper extends ParametrizedFieldMapper {
     public static final String CONTENT_TYPE = "sparse_vector";
 
-    protected NeuralSparseMapper(
-        String simpleName,
-        MappedFieldType mappedFieldType,
-        MultiFields multiFields,
-        CopyTo copyTo
-    ) {
-        super(simpleName, mappedFieldType, multiFields, copyTo);
+    private static NeuralSparseMapper toType(FieldMapper in) {
+        return (NeuralSparseMapper) in;
     }
 
     public static class NeuralSparseBuilder extends ParametrizedFieldMapper.Builder {
 
         private final Parameter<Map<String, String>> meta = Parameter.metaParam();
+        // Both match query and our sparse query use lucene Boolean query to connect all term-level queries.
+        // lucene BooleanQuery use WAND (Weak AND) algorithm to accelerate the search, and WAND algorithm
+        // uses term's max possible value to skip unnecessary calculations. The max possible value in match clause is term idf value.
+        // However, The default behavior of lucene FeatureQuery is returning Float.MAX_VALUE for every term. Which will
+        // invalidate WAND algorithm.
+
+        // By setting maxTermScoreForSparseQuery, we'll use it as the term score upperbound to accelerate the search.
+        // Users can also overwrite this setting in sparse query. Our experiments show a proper maxTermScoreForSparseQuery
+        // value can reduce search latency by 4x while losing precision less than 0.5%.
+
+        // If user doesn't set the value explicitly, we'll degrade to the default behavior in lucene FeatureQuery,
+        // i.e. using Float.MAX_VALUE.
+        private final Parameter<Float> maxTermScoreForSparseQuery = Parameter.floatParam(
+                "max_term_score_for_sparse_query",
+                false,
+                m -> toType(m).maxTermScoreForSparseQuery,
+                Float.MAX_VALUE
+        );
 
         public NeuralSparseBuilder(
                 String name
@@ -54,16 +68,17 @@ public class NeuralSparseMapper extends ParametrizedFieldMapper {
 
         @Override
         protected List<Parameter<?>> getParameters() {
-            return Arrays.asList(meta);
+            return Arrays.asList(maxTermScoreForSparseQuery, meta);
         }
 
         @Override
         public NeuralSparseMapper build(BuilderContext context) {
             return new NeuralSparseMapper(
-                    name,
-                    new NeuralSparseFieldType(buildFullName(context), meta.getValue()),
-                    multiFieldsBuilder.build(this, context),
-                    copyTo.build()
+                name,
+                new NeuralSparseFieldType(buildFullName(context), meta.getValue(), maxTermScoreForSparseQuery.getValue()),
+                multiFieldsBuilder.build(this, context),
+                copyTo.build(),
+                maxTermScoreForSparseQuery.getValue()
             );
         }
     }
@@ -71,21 +86,19 @@ public class NeuralSparseMapper extends ParametrizedFieldMapper {
     public static final TypeParser PARSER = new TypeParser((n, c) -> new NeuralSparseBuilder(n));
 
     public static final class NeuralSparseFieldType extends MappedFieldType {
-        public NeuralSparseFieldType(
-                String name,
-                boolean isSearchable,
-                boolean isStored,
-                boolean hasDocValues,
-                Map<String, String> meta
-        ) {
-            super(name, isSearchable, isStored, hasDocValues, TextSearchInfo.NONE, meta);
-        }
+        private final float maxTermScoreForSparseQuery;
 
         public NeuralSparseFieldType(
                 String name,
-                Map<String, String> meta
+                Map<String, String> meta,
+                float maxTermScoreForSparseQuery
         ) {
-            this(name, true, false, true, meta);
+            super(name, true, false, true, TextSearchInfo.NONE, meta);
+            this.maxTermScoreForSparseQuery = maxTermScoreForSparseQuery;
+        }
+
+        public float maxTermScoreForSparseQuery() {
+            return maxTermScoreForSparseQuery;
         }
 
         @Override
@@ -116,6 +129,19 @@ public class NeuralSparseMapper extends ParametrizedFieldMapper {
                     "Field [" + name() + "] of type [" + typeName() + "] does not support term query for now"
             );
         }
+    }
+
+    private final float maxTermScoreForSparseQuery;
+
+    protected NeuralSparseMapper(
+            String simpleName,
+            MappedFieldType mappedFieldType,
+            MultiFields multiFields,
+            CopyTo copyTo,
+            float maxTermScoreForSparseQuery
+    ) {
+        super(simpleName, mappedFieldType, multiFields, copyTo);
+        this.maxTermScoreForSparseQuery = maxTermScoreForSparseQuery;
     }
 
     @Override
