@@ -29,7 +29,7 @@ import org.opensearch.ingest.Processor;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.analyzer.TermWeightAnalyzerProvider;
 import org.opensearch.neuralsearch.analyzer.TermWeightTokenizerFactory;
-import org.opensearch.neuralsearch.index.NeuralSparseMapper;
+import org.opensearch.neuralsearch.index.SparseVectorMapper;
 import org.opensearch.neuralsearch.ml.MLCommonsTextEmbeddingClientAccessor;
 import org.opensearch.neuralsearch.ml.MLCommonsNeuralSparseClientAccessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
@@ -106,8 +106,8 @@ public class NeuralSearch extends Plugin
     @Override
     public Map<String, Mapper.TypeParser> getMappers() {
         return Collections.singletonMap(
-                NeuralSparseMapper.CONTENT_TYPE,
-                NeuralSparseMapper.PARSER
+                SparseVectorMapper.CONTENT_TYPE,
+                SparseVectorMapper.PARSER
         );
     }
 

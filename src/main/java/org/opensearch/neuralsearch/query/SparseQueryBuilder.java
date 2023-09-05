@@ -18,9 +18,9 @@ import lombok.extern.log4j.Log4j2;
 
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
-import org.apache.lucene.document.FeatureField;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.BoostQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.common.ParsingException;
@@ -28,10 +28,12 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.query.AbstractQueryBuilder;
 import org.opensearch.index.query.QueryShardContext;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.opensearch.neuralsearch.index.SparseVectorMapper;
 
 @Log4j2
 @Getter
@@ -43,7 +45,7 @@ public class SparseQueryBuilder extends AbstractQueryBuilder<SparseQueryBuilder>
     public static final String NAME = "sparse";
 
     @VisibleForTesting
-    static final ParseField TERM_WEIGHT_FIELD = new ParseField("term_weight");
+    static final ParseField QUERY_TOKENS_FIELD = new ParseField("query_tokens");
 
     private String fieldName;
     // todo: if termWeight is null
@@ -65,12 +67,25 @@ public class SparseQueryBuilder extends AbstractQueryBuilder<SparseQueryBuilder>
     protected void doXContent(XContentBuilder xContentBuilder, Params params) throws IOException {
         xContentBuilder.startObject(NAME);
         xContentBuilder.startObject(fieldName);
-        xContentBuilder.field(TERM_WEIGHT_FIELD.getPreferredName(), termWeight);
+        xContentBuilder.field(QUERY_TOKENS_FIELD.getPreferredName(), termWeight);
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
         xContentBuilder.endObject();
     }
 
+    /**
+     * The expected parsing form looks like:
+     * {
+     *  "SAMPLE_FIELD": {
+     *    "query_tokens": {
+     *        "token_a": float,
+     *        "token_b": float,
+     *        ...
+     *    },
+     *    "max_term_score_for_sparse_query": float (optional)
+     *  }
+     * }
+     */
     public static SparseQueryBuilder fromXContent(XContentParser parser) throws IOException {
         SparseQueryBuilder sparseQueryBuilder = new SparseQueryBuilder();
         if (parser.currentToken() != XContentParser.Token.START_OBJECT) {
@@ -96,6 +111,7 @@ public class SparseQueryBuilder extends AbstractQueryBuilder<SparseQueryBuilder>
         return sparseQueryBuilder;
     }
 
+    // todo: refactor this to switch style
     private static void parseQueryParams(XContentParser parser, SparseQueryBuilder sparseQueryBuilder) throws IOException {
         XContentParser.Token token;
         String currentFieldName = "";
@@ -113,7 +129,7 @@ public class SparseQueryBuilder extends AbstractQueryBuilder<SparseQueryBuilder>
                             "[" + NAME + "] query does not support [" + currentFieldName + "]"
                     );
                 }
-            } else if (TERM_WEIGHT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+            } else if (QUERY_TOKENS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                 sparseQueryBuilder.termWeight(parser.map(HashMap::new, XContentParser::floatValue));
 //                sparseQueryBuilder.termWeight(castToTermWeight(parser.map()));
             } else {
@@ -127,12 +143,26 @@ public class SparseQueryBuilder extends AbstractQueryBuilder<SparseQueryBuilder>
 
     @Override
     protected Query doToQuery(QueryShardContext context) throws IOException {
+        final MappedFieldType ft = context.fieldMapper(fieldName);
+        if (!(ft instanceof SparseVectorMapper.SparseVectorFieldType)) {
+            throw new IllegalArgumentException(
+                    "[" + NAME + "] query only works on [" + SparseVectorMapper.CONTENT_TYPE + "] fields, "
+                            + "not ["  + ft.typeName() + "]"
+            );
+        }
+        final Float maxTermScoreForSparseQuery = ((SparseVectorMapper.SparseVectorFieldType) ft).maxTermScoreForSparseQuery();
+
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
         for (Map.Entry<String, Float> entry: termWeight.entrySet()) {
-                builder.add(FeatureField.newLinearQuery(
-                        fieldName,
-                        entry.getKey(),
-                        entry.getValue()),
+                builder.add(
+                        new BoostQuery(
+                            new BoundedLinearFeatureQuery(
+                                    fieldName,
+                                    entry.getKey(),
+                                    maxTermScoreForSparseQuery
+                            ),
+                            entry.getValue()
+                    ),
                         BooleanClause.Occur.SHOULD
                 );
         }

@@ -31,14 +31,14 @@ import java.util.Map;
  * In current version, this field doesn't support existing query clauses like "match" or "exists".
  * The ingested documents can only be searched with our "sparse" query clause.
  */
-public class NeuralSparseMapper extends ParametrizedFieldMapper {
+public class SparseVectorMapper extends ParametrizedFieldMapper {
     public static final String CONTENT_TYPE = "sparse_vector";
 
-    private static NeuralSparseMapper toType(FieldMapper in) {
-        return (NeuralSparseMapper) in;
+    private static SparseVectorMapper toType(FieldMapper in) {
+        return (SparseVectorMapper) in;
     }
 
-    public static class NeuralSparseBuilder extends ParametrizedFieldMapper.Builder {
+    public static class SparseVectorBuilder extends ParametrizedFieldMapper.Builder {
 
         private final Parameter<Map<String, String>> meta = Parameter.metaParam();
         // Both match query and our sparse query use lucene Boolean query to connect all term-level queries.
@@ -60,7 +60,7 @@ public class NeuralSparseMapper extends ParametrizedFieldMapper {
                 Float.MAX_VALUE
         );
 
-        public NeuralSparseBuilder(
+        public SparseVectorBuilder(
                 String name
         ) {
             super(name);
@@ -72,10 +72,10 @@ public class NeuralSparseMapper extends ParametrizedFieldMapper {
         }
 
         @Override
-        public NeuralSparseMapper build(BuilderContext context) {
-            return new NeuralSparseMapper(
+        public SparseVectorMapper build(BuilderContext context) {
+            return new SparseVectorMapper(
                 name,
-                new NeuralSparseFieldType(buildFullName(context), meta.getValue(), maxTermScoreForSparseQuery.getValue()),
+                new SparseVectorFieldType(buildFullName(context), meta.getValue(), maxTermScoreForSparseQuery.getValue()),
                 multiFieldsBuilder.build(this, context),
                 copyTo.build(),
                 maxTermScoreForSparseQuery.getValue()
@@ -83,12 +83,12 @@ public class NeuralSparseMapper extends ParametrizedFieldMapper {
         }
     }
 
-    public static final TypeParser PARSER = new TypeParser((n, c) -> new NeuralSparseBuilder(n));
+    public static final TypeParser PARSER = new TypeParser((n, c) -> new SparseVectorBuilder(n));
 
-    public static final class NeuralSparseFieldType extends MappedFieldType {
+    public static final class SparseVectorFieldType extends MappedFieldType {
         private final float maxTermScoreForSparseQuery;
 
-        public NeuralSparseFieldType(
+        public SparseVectorFieldType(
                 String name,
                 Map<String, String> meta,
                 float maxTermScoreForSparseQuery
@@ -133,7 +133,7 @@ public class NeuralSparseMapper extends ParametrizedFieldMapper {
 
     private final float maxTermScoreForSparseQuery;
 
-    protected NeuralSparseMapper(
+    protected SparseVectorMapper(
             String simpleName,
             MappedFieldType mappedFieldType,
             MultiFields multiFields,
@@ -146,7 +146,7 @@ public class NeuralSparseMapper extends ParametrizedFieldMapper {
 
     @Override
     public ParametrizedFieldMapper.Builder getMergeBuilder() {
-        return new NeuralSparseBuilder(simpleName()).init(this);
+        return new SparseVectorBuilder(simpleName()).init(this);
     }
 
     @Override
