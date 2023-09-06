@@ -72,7 +72,7 @@ public class NeuralSearch extends Plugin implements
     private MLCommonsClientAccessor clientAccessor;
     private NormalizationProcessorWorkflow normalizationProcessorWorkflow;
     private final ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
-    private final ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();;
+    private final ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();
 
     @Override
     public Collection<Object> createComponents(
