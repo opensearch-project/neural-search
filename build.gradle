@@ -151,7 +151,6 @@ dependencies {
     runtimeOnly group: 'org.reflections', name: 'reflections', version: '0.9.12'
     runtimeOnly group: 'org.javassist', name: 'javassist', version: '3.29.2-GA'
     runtimeOnly group: 'org.opensearch', name: 'common-utils', version: "${opensearch_build}"
-    runtimeOnly group: 'com.google.guava', name: 'guava', version: '32.0.1-jre'
 }
 
 // In order to add the jar to the classpath, we need to unzip the
