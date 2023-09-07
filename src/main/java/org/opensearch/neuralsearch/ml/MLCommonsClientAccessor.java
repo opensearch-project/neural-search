@@ -108,7 +108,7 @@ public class MLCommonsClientAccessor {
     public void inferenceSentencesWithMapResult(
         @NonNull final String modelId,
         @NonNull final List<String> inputText,
-        @NonNull final ActionListener<Map<String, ?>> listener) {
+        @NonNull final ActionListener<List<Map<String, ?>>> listener) {
         retryableInferenceSentencesWithMapResult(modelId, inputText, 0, listener);
     }
 
@@ -116,11 +116,11 @@ public class MLCommonsClientAccessor {
         final String modelId,
         final List<String> inputText,
         final int retryTime,
-        final ActionListener<Map<String, ?>> listener
+        final ActionListener<List<Map<String, ?>>> listener
     ) {
         MLInput mlInput = createMLInput(null, inputText);
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
-            final Map<String, ?> result = buildMapResultFromResponse(mlOutput);
+            final List<Map<String, ?>> result = buildMapResultFromResponse(mlOutput);
             log.debug("Inference Response for input sentence {} is : {} ", inputText, result);
             listener.onResponse(result);
         }, e -> {
@@ -174,7 +174,7 @@ public class MLCommonsClientAccessor {
         return vector;
     }
 
-    private Map<String, ?> buildMapResultFromResponse(MLOutput mlOutput) {
+    private List<Map<String, ?> > buildMapResultFromResponse(MLOutput mlOutput) {
         final ModelTensorOutput modelTensorOutput = (ModelTensorOutput) mlOutput;
         final List<ModelTensors> tensorOutputList = modelTensorOutput.getMlModelOutputs();
         if (CollectionUtils.isEmpty(tensorOutputList) || CollectionUtils.isEmpty(tensorOutputList.get(0).getMlModelTensors())) {
@@ -182,13 +182,16 @@ public class MLCommonsClientAccessor {
                 "Empty model result produced. Expected 1 tensor output and 1 model tensor, but got [0]"
             );
         }
-        List<ModelTensor> tensorList = tensorOutputList.get(0).getMlModelTensors();
-        if (tensorList.size() != 1) {
-            throw new IllegalStateException(
-                "Unexpected number of map result produced. Expected 1 map result to be returned, but got [" + tensorList.size() + "]"
-            );
+        List<Map<String, ?> > resultMaps = new ArrayList<>();
+        for (ModelTensors tensors: tensorOutputList)
+        {
+            List<ModelTensor> tensorList = tensors.getMlModelTensors();
+            for (ModelTensor tensor: tensorList)
+            {
+                resultMaps.add(tensor.getDataAsMap());
+            }
         }
-        return tensorList.get(0).getDataAsMap();
+        return resultMaps;
     }
 
 }

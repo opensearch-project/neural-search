@@ -165,7 +165,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
     public void test_inferenceSentencesWithMapResult_whenValidInput_thenSuccess() {
         final Map<String, String> map = Map.of("key", "value");
-        final ActionListener<Map<String, ?>> resultListener = mock(ActionListener.class);
+        final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onResponse(createModelTensorOutput(map));
@@ -180,7 +180,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     }
 
     public void test_inferenceSentencesWithMapResult_whenTensorOutputListEmpty_thenException() {
-        final ActionListener<Map<String, ?>> resultListener = mock(ActionListener.class);
+        final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
         final ModelTensorOutput modelTensorOutput = new ModelTensorOutput(Collections.emptyList());
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
@@ -198,7 +198,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     }
 
     public void test_inferenceSentencesWithMapResult_whenModelTensorListEmpty_thenException() {
-        final ActionListener<Map<String, ?>> resultListener = mock(ActionListener.class);
+        final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
         final List<ModelTensors> tensorsList = new ArrayList<>();
         final List<ModelTensor> mlModelTensorList = new ArrayList<>();
         tensorsList.add(new ModelTensors(mlModelTensorList));
@@ -219,7 +219,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     }
 
     public void test_inferenceSentencesWithMapResult_whenModelTensorListSizeBiggerThan1_thenException() {
-        final ActionListener<Map<String, ?>> resultListener = mock(ActionListener.class);
+        final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
         final List<ModelTensors> tensorsList = new ArrayList<>();
         final List<ModelTensor> mlModelTensorList = new ArrayList<>();
         final ModelTensor tensor = new ModelTensor(
@@ -260,7 +260,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             actionListener.onFailure(nodeNodeConnectedException);
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        final ActionListener<Map<String, ?>> resultListener = mock(ActionListener.class);
+        final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
         accessor.inferenceSentencesWithMapResult(
             TestCommonConstants.MODEL_ID,
             TestCommonConstants.SENTENCES_LIST,
@@ -279,7 +279,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             actionListener.onFailure(illegalStateException);
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        final ActionListener<Map<String, ?>> resultListener = mock(ActionListener.class);
+        final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
         accessor.inferenceSentencesWithMapResult(
             TestCommonConstants.MODEL_ID,
             TestCommonConstants.SENTENCES_LIST,

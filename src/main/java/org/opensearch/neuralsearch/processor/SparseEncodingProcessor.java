@@ -96,9 +96,7 @@ public class SparseEncodingProcessor extends AbstractProcessor {
             if (inferenceList.size() == 0) {
                 handler.accept(ingestDocument, null);
             } else {
-                mlCommonsClientAccessor.inferenceSentencesWithMapResult(this.modelId, inferenceList, ActionListener.wrap(resultMap -> {
-                    Map.Entry<String, List<Map<String, Float>>> entry = ((Map<String, List<Map<String, Float>>>)resultMap).entrySet().iterator().next();
-                    List<Map<String, Float> > resultTokenWeights = entry.getValue();
+                mlCommonsClientAccessor.inferenceSentencesWithMapResult(this.modelId, inferenceList, ActionListener.wrap(resultTokenWeights -> {
                     setVectorFieldsToDocument(ingestDocument, ProcessMap, resultTokenWeights);
                     handler.accept(ingestDocument, null);
                 }, e -> { handler.accept(null, e); }));
@@ -109,7 +107,7 @@ public class SparseEncodingProcessor extends AbstractProcessor {
 
     }
 
-    void setVectorFieldsToDocument(IngestDocument ingestDocument, Map<String, Object> processorMap, List<Map<String, Float> > resultTokenWeights) {
+    void setVectorFieldsToDocument(IngestDocument ingestDocument, Map<String, Object> processorMap, List<Map<String, ?> > resultTokenWeights) {
         Objects.requireNonNull(resultTokenWeights, "embedding failed, inference returns null result!");
         log.debug("Text embedding result fetched, starting build vector output!");
         Map<String, Object> sparseEncodingResult = buildSparseEncodingResult(processorMap, resultTokenWeights, ingestDocument.getSourceAndMetadata());
@@ -191,7 +189,7 @@ public class SparseEncodingProcessor extends AbstractProcessor {
     @VisibleForTesting
     Map<String, Object> buildSparseEncodingResult(
             Map<String, Object> processorMap,
-            List<Map<String, Float> > resultTokenWeights,
+            List<Map<String, ?> > resultTokenWeights,
             Map<String, Object> sourceAndMetadataMap
     ) {
         SparseEncodingProcessor.IndexWrapper indexWrapper = new SparseEncodingProcessor.IndexWrapper(0);
@@ -214,7 +212,7 @@ public class SparseEncodingProcessor extends AbstractProcessor {
     private void putSparseEncodingResultToSourceMapForMapType(
             String processorKey,
             Object sourceValue,
-            List<Map<String, Float> > resultTokenWeights,
+            List<Map<String, ?> > resultTokenWeights,
             SparseEncodingProcessor.IndexWrapper indexWrapper,
             Map<String, Object> sourceAndMetadataMap
     ) {
@@ -239,12 +237,12 @@ public class SparseEncodingProcessor extends AbstractProcessor {
         }
     }
 
-    private List<Map<String, Map<String, Float>>> buildSparseEncodingResultForListType(
+    private List<Map<String, Map<String, ?>>> buildSparseEncodingResultForListType(
             List<String> sourceValue,
-            List<Map<String, Float> > resultTokenWeights,
+            List<Map<String, ?> > resultTokenWeights,
             SparseEncodingProcessor.IndexWrapper indexWrapper
     ) {
-        List<Map<String, Map<String, Float>>> tokenWeights = new ArrayList<>();
+        List<Map<String, Map<String, ?>>> tokenWeights = new ArrayList<>();
         IntStream.range(0, sourceValue.size())
                 .forEachOrdered(x -> tokenWeights.add(ImmutableMap.of(LIST_TYPE_NESTED_MAP_KEY, resultTokenWeights.get(indexWrapper.index++))));
         return tokenWeights;
