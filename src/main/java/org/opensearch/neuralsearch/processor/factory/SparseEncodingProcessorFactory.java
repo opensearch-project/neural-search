@@ -5,6 +5,7 @@
 
 package org.opensearch.neuralsearch.processor.factory;
 
+import lombok.extern.log4j.Log4j2;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
@@ -16,7 +17,7 @@ import java.util.Map;
 import static org.opensearch.ingest.ConfigurationUtils.readMap;
 import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
 import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.*;
-
+@Log4j2
 public class SparseEncodingProcessorFactory implements Processor.Factory {
     private final MLCommonsClientAccessor clientAccessor;
     private final Environment environment;
@@ -27,7 +28,7 @@ public class SparseEncodingProcessorFactory implements Processor.Factory {
     }
 
     @Override
-    public DLProcessor create(
+    public SparseEncodingProcessor create(
             Map<String, Processor.Factory> registry,
             String processorTag,
             String description,
