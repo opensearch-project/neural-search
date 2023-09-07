@@ -8,7 +8,6 @@ package org.opensearch.neuralsearch.common;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 
 import java.io.IOException;
-import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -50,6 +49,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.neuralsearch.OpenSearchSecureRestTestCase;
 
+import com.carrotsearch.randomizedtesting.RandomizedTest;
 import com.google.common.collect.ImmutableList;
 
 public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
@@ -137,7 +137,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Response uploadResponse = makeRequest(
             client(),
             "POST",
-            String.format(LOCALE, "/_plugins/_ml/models/%s/_load", modelId),
+            String.format(LOCALE, "/_plugins/_ml/models/%s/_deploy", modelId),
             null,
             toHttpEntity(""),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
@@ -685,10 +685,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     @SneakyThrows
-    private String registerModelGroup() throws IOException, URISyntaxException {
+    private String registerModelGroup() {
         String modelGroupRegisterRequestBody = Files.readString(
             Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
-        );
+        ).replace("<MODEL_GROUP_NAME>", "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8));
         Response modelGroupResponse = makeRequest(
             client(),
             "POST",
