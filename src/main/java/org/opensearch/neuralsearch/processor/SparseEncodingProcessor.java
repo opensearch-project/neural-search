@@ -96,7 +96,13 @@ public class SparseEncodingProcessor extends AbstractProcessor {
             if (inferenceList.size() == 0) {
                 handler.accept(ingestDocument, null);
             } else {
-                mlCommonsClientAccessor.inferenceSentencesWithMapResult(this.modelId, inferenceList, ActionListener.wrap(resultTokenWeights -> {
+                mlCommonsClientAccessor.inferenceSentencesWithMapResult(this.modelId, inferenceList, ActionListener.wrap(resultMaps -> {
+                    List<Map<String, ?> > resultTokenWeights = new ArrayList<>();
+                    for (Map<String, ?> map: resultMaps)
+                    {
+                        resultTokenWeights.addAll((List<Map<String, ?>>)map.get("response") );
+                    }
+                    log.info(resultTokenWeights);
                     setVectorFieldsToDocument(ingestDocument, ProcessMap, resultTokenWeights);
                     handler.accept(ingestDocument, null);
                 }, e -> { handler.accept(null, e); }));
