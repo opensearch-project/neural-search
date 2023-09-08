@@ -5,7 +5,7 @@
 
 package org.opensearch.neuralsearch.plugin;
 
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SEARCH_HYBRID_SEARCH_ENABLED;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SEARCH_HYBRID_SEARCH_DISABLED;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -99,16 +99,18 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     @Override
     public Optional<QueryPhaseSearcher> getQueryPhaseSearcher() {
-        if (FeatureFlags.isEnabled(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED.getKey())) {
-            log.info("Registering hybrid query phase searcher with feature flag [{}]", NEURAL_SEARCH_HYBRID_SEARCH_ENABLED.getKey());
-            return Optional.of(new HybridQueryPhaseSearcher());
+        // we're using "is_disabled" flag as there are no proper implementation of FeatureFlags.isDisabled(). Both
+        // cases when flag is not set or it is "false" are interpretted in the same way. In such case core is reading
+        // the actual value from settings.
+        if (FeatureFlags.isEnabled(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED.getKey())) {
+            log.info(
+                "Not registering hybrid query phase searcher because feature flag [{}] is disabled",
+                NEURAL_SEARCH_HYBRID_SEARCH_DISABLED.getKey()
+            );
+            return Optional.empty();
         }
-        log.info(
-            "Not registering hybrid query phase searcher because feature flag [{}] is disabled",
-            NEURAL_SEARCH_HYBRID_SEARCH_ENABLED.getKey()
-        );
-        // we want feature be disabled by default due to risk of colliding and breaking concurrent search in core
-        return Optional.empty();
+        log.info("Registering hybrid query phase searcher with feature flag [{}]", NEURAL_SEARCH_HYBRID_SEARCH_DISABLED.getKey());
+        return Optional.of(new HybridQueryPhaseSearcher());
     }
 
     @Override
@@ -123,6 +125,6 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(NEURAL_SEARCH_HYBRID_SEARCH_ENABLED);
+        return List.of(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED);
     }
 }
