@@ -47,16 +47,16 @@ public class SparseVectorMapper extends ParametrizedFieldMapper {
         // However, The default behavior of lucene FeatureQuery is returning Float.MAX_VALUE for every term. Which will
         // invalidate WAND algorithm.
 
-        // By setting maxTermScoreForSparseQuery, we'll use it as the term score upperbound to accelerate the search.
-        // Users can also overwrite this setting in sparse query. Our experiments show a proper maxTermScoreForSparseQuery
+        // By setting tokenScoreUpperBound, we'll use it as the term score upperbound to accelerate the search.
+        // Users can also overwrite this setting in sparse query. Our experiments show a proper tokenScoreUpperBound
         // value can reduce search latency by 4x while losing precision less than 0.5%.
 
         // If user doesn't set the value explicitly, we'll degrade to the default behavior in lucene FeatureQuery,
         // i.e. using Float.MAX_VALUE.
-        private final Parameter<Float> maxTermScoreForSparseQuery = Parameter.floatParam(
-                "max_term_score_for_sparse_query",
+        private final Parameter<Float> tokenScoreUpperBound = Parameter.floatParam(
+                "token_score_upper_bound",
                 false,
-                m -> toType(m).maxTermScoreForSparseQuery,
+                m -> toType(m).tokenScoreUpperBound,
                 Float.MAX_VALUE
         );
 
@@ -68,17 +68,17 @@ public class SparseVectorMapper extends ParametrizedFieldMapper {
 
         @Override
         protected List<Parameter<?>> getParameters() {
-            return Arrays.asList(maxTermScoreForSparseQuery, meta);
+            return Arrays.asList(tokenScoreUpperBound, meta);
         }
 
         @Override
         public SparseVectorMapper build(BuilderContext context) {
             return new SparseVectorMapper(
                     name,
-                    new SparseVectorFieldType(buildFullName(context), meta.getValue(), maxTermScoreForSparseQuery.getValue()),
+                    new SparseVectorFieldType(buildFullName(context), meta.getValue(), tokenScoreUpperBound.getValue()),
                     multiFieldsBuilder.build(this, context),
                     copyTo.build(),
-                    maxTermScoreForSparseQuery.getValue()
+                    tokenScoreUpperBound.getValue()
             );
         }
     }
@@ -86,19 +86,19 @@ public class SparseVectorMapper extends ParametrizedFieldMapper {
     public static final TypeParser PARSER = new TypeParser((n, c) -> new SparseVectorBuilder(n));
 
     public static final class SparseVectorFieldType extends MappedFieldType {
-        private final float maxTermScoreForSparseQuery;
+        private final float tokenScoreUpperBound;
 
         public SparseVectorFieldType(
                 String name,
                 Map<String, String> meta,
-                float maxTermScoreForSparseQuery
+                float tokenScoreUpperBound
         ) {
             super(name, true, false, true, TextSearchInfo.NONE, meta);
-            this.maxTermScoreForSparseQuery = maxTermScoreForSparseQuery;
+            this.tokenScoreUpperBound = tokenScoreUpperBound;
         }
 
-        public float maxTermScoreForSparseQuery() {
-            return maxTermScoreForSparseQuery;
+        public float tokenScoreUpperBound() {
+            return tokenScoreUpperBound;
         }
 
         @Override
@@ -131,17 +131,17 @@ public class SparseVectorMapper extends ParametrizedFieldMapper {
         }
     }
 
-    private final float maxTermScoreForSparseQuery;
+    private final float tokenScoreUpperBound;
 
     protected SparseVectorMapper(
             String simpleName,
             MappedFieldType mappedFieldType,
             MultiFields multiFields,
             CopyTo copyTo,
-            float maxTermScoreForSparseQuery
+            float tokenScoreUpperBound
     ) {
         super(simpleName, mappedFieldType, multiFields, copyTo);
-        this.maxTermScoreForSparseQuery = maxTermScoreForSparseQuery;
+        this.tokenScoreUpperBound = tokenScoreUpperBound;
     }
 
     @Override

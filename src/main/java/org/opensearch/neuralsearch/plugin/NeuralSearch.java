@@ -86,6 +86,7 @@ public class NeuralSearch extends Plugin implements
         final Supplier<RepositoriesService> repositoriesServiceSupplier
     ) {
         NeuralQueryBuilder.initialize(clientAccessor);
+        SparseQueryBuilder.initialize(clientAccessor);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
         return List.of(clientAccessor);
     }
