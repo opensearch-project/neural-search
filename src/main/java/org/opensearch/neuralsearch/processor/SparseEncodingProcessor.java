@@ -44,7 +44,6 @@ public class SparseEncodingProcessor extends NLPProcessor {
             {
                 resultTokenWeights.addAll((List<Map<String, ?>>)map.get("response") );
             }
-            log.info(resultTokenWeights);
             setVectorFieldsToDocument(ingestDocument, ProcessMap, resultTokenWeights);
             handler.accept(ingestDocument, null);
         }, e -> { handler.accept(null, e); }));
@@ -56,18 +55,6 @@ public class SparseEncodingProcessor extends NLPProcessor {
         log.debug("Text embedding result fetched, starting build vector output!");
         Map<String, Object> sparseEncodingResult = buildSparseEncodingResult(processorMap, resultTokenWeights, ingestDocument.getSourceAndMetadata());
         sparseEncodingResult.forEach(ingestDocument::setFieldValue);
-    }
-
-    @SuppressWarnings("unchecked")
-    private void createInferenceListForMapTypeInput(Object sourceValue, List<String> texts) {
-        if (sourceValue instanceof Map) {
-            ((Map<String, Object>) sourceValue).forEach((k, v) -> createInferenceListForMapTypeInput(v, texts));
-        } else if (sourceValue instanceof List) {
-            texts.addAll(((List<String>) sourceValue));
-        } else {
-            if (sourceValue == null) return;
-            texts.add(sourceValue.toString());
-        }
     }
 
     @VisibleForTesting
