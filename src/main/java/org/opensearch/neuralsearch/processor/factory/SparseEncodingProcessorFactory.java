@@ -9,7 +9,6 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
-import org.opensearch.neuralsearch.processor.DLProcessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 
 import java.util.Map;

@@ -38,10 +38,10 @@ public class SparseEncodingProcessor extends NLPProcessor {
     @Override
     public void doExecute(IngestDocument ingestDocument, Map<String, Object> ProcessMap, List<String> inferenceList, BiConsumer<IngestDocument, Exception> handler) {
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(this.modelId, inferenceList, ActionListener.wrap(resultMaps -> {
-            List<Map<String, ?> > results = new ArrayList<>();
+            List<Map<String, Float> > results = new ArrayList<>();
             for (Map<String, ?> map: resultMaps)
             {
-                results.addAll((List<Map<String, ?>>)map.get("response") );
+                results.addAll((List<Map<String, Float>>)map.get("response") );
             }
             setVectorFieldsToDocument(ingestDocument, ProcessMap, results);
             handler.accept(ingestDocument, null);
