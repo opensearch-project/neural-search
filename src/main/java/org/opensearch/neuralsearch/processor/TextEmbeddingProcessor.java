@@ -50,18 +50,6 @@ public class TextEmbeddingProcessor extends NLPProcessor {
         this.LIST_TYPE_NESTED_MAP_KEY = "knn";
     }
 
-    private void validateEmbeddingConfiguration(Map<String, Object> fieldMap) {
-        if (fieldMap == null
-            || fieldMap.size() == 0
-            || fieldMap.entrySet()
-                .stream()
-                .anyMatch(
-                    x -> StringUtils.isBlank(x.getKey()) || Objects.isNull(x.getValue()) || StringUtils.isBlank(x.getValue().toString())
-                )) {
-            throw new IllegalArgumentException("Unable to create the TextEmbedding processor as field_map has invalid key or value");
-        }
-    }
-
     @Override
     public void doExecute(IngestDocument ingestDocument, Map<String, Object> ProcessMap, List<String> inferenceList, BiConsumer<IngestDocument, Exception> handler) {
         mlCommonsClientAccessor.inferenceSentences(this.modelId, inferenceList, ActionListener.wrap(vectors -> {
