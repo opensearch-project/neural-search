@@ -1,4 +1,12 @@
 /*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -15,7 +23,15 @@
  * limitations under the License.
  */
 
-/* This class is built based on lucene FeatureQuery. We use LinearFuntion and add an upperbound to it */
+/*
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
+/*
+ * This class is built based on lucene FeatureQuery. We use LinearFuntion to
+ * build the query and add an upperbound to it.
+ */
 
 package org.opensearch.neuralsearch.query.sparse;
 
