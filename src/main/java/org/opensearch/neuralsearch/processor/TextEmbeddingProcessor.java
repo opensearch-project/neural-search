@@ -38,9 +38,6 @@ public class TextEmbeddingProcessor extends NLPProcessor {
     public static final String MODEL_ID_FIELD = "model_id";
     public static final String FIELD_MAP_FIELD = "field_map";
 
-    private static final String LIST_TYPE_NESTED_MAP_KEY = "knn";
-
-
     public TextEmbeddingProcessor(
         String tag,
         String description,
@@ -50,6 +47,7 @@ public class TextEmbeddingProcessor extends NLPProcessor {
         Environment environment
     ) {
         super(tag, description, modelId, fieldMap, clientAccessor, environment);
+        this.LIST_TYPE_NESTED_MAP_KEY = "knn";
     }
 
     private void validateEmbeddingConfiguration(Map<String, Object> fieldMap) {
@@ -77,143 +75,8 @@ public class TextEmbeddingProcessor extends NLPProcessor {
         }, e -> { handler.accept(null, e); }));
     }
 
-
-    void setVectorFieldsToDocument(IngestDocument ingestDocument, Map<String, Object> knnMap, List<List<Float>> vectors) {
-        Objects.requireNonNull(vectors, "embedding failed, inference returns null result!");
-        log.debug("Text embedding result fetched, starting build vector output!");
-        Map<String, Object> textEmbeddingResult = buildTextEmbeddingResult(knnMap, vectors, ingestDocument.getSourceAndMetadata());
-        textEmbeddingResult.forEach(ingestDocument::setFieldValue);
-    }
-
-
-
-    @VisibleForTesting
-    Map<String, Object> buildMapWithKnnKeyAndOriginalValue(IngestDocument ingestDocument) {
-        Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
-        Map<String, Object> mapWithKnnKeys = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> fieldMapEntry : fieldMap.entrySet()) {
-            String originalKey = fieldMapEntry.getKey();
-            Object targetKey = fieldMapEntry.getValue();
-            if (targetKey instanceof Map) {
-                Map<String, Object> treeRes = new LinkedHashMap<>();
-                buildMapWithKnnKeyAndOriginalValueForMapType(originalKey, targetKey, sourceAndMetadataMap, treeRes);
-                mapWithKnnKeys.put(originalKey, treeRes.get(originalKey));
-            } else {
-                mapWithKnnKeys.put(String.valueOf(targetKey), sourceAndMetadataMap.get(originalKey));
-            }
-        }
-        return mapWithKnnKeys;
-    }
-
-    @SuppressWarnings({ "unchecked" })
-    private void buildMapWithKnnKeyAndOriginalValueForMapType(
-        String parentKey,
-        Object knnKey,
-        Map<String, Object> sourceAndMetadataMap,
-        Map<String, Object> treeRes
-    ) {
-        if (knnKey == null || sourceAndMetadataMap == null) return;
-        if (knnKey instanceof Map) {
-            Map<String, Object> next = new LinkedHashMap<>();
-            for (Map.Entry<String, Object> nestedFieldMapEntry : ((Map<String, Object>) knnKey).entrySet()) {
-                buildMapWithKnnKeyAndOriginalValueForMapType(
-                    nestedFieldMapEntry.getKey(),
-                    nestedFieldMapEntry.getValue(),
-                    (Map<String, Object>) sourceAndMetadataMap.get(parentKey),
-                    next
-                );
-            }
-            treeRes.put(parentKey, next);
-        } else {
-            String key = String.valueOf(knnKey);
-            treeRes.put(key, sourceAndMetadataMap.get(parentKey));
-        }
-    }
-
-    @SuppressWarnings({ "unchecked" })
-    @VisibleForTesting
-    Map<String, Object> buildTextEmbeddingResult(
-        Map<String, Object> knnMap,
-        List<List<Float>> modelTensorList,
-        Map<String, Object> sourceAndMetadataMap
-    ) {
-        IndexWrapper indexWrapper = new IndexWrapper(0);
-        Map<String, Object> result = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> knnMapEntry : knnMap.entrySet()) {
-            String knnKey = knnMapEntry.getKey();
-            Object sourceValue = knnMapEntry.getValue();
-            if (sourceValue instanceof String) {
-                List<Float> modelTensor = modelTensorList.get(indexWrapper.index++);
-                result.put(knnKey, modelTensor);
-            } else if (sourceValue instanceof List) {
-                result.put(knnKey, buildTextEmbeddingResultForListType((List<String>) sourceValue, modelTensorList, indexWrapper));
-            } else if (sourceValue instanceof Map) {
-                putTextEmbeddingResultToSourceMapForMapType(knnKey, sourceValue, modelTensorList, indexWrapper, sourceAndMetadataMap);
-            }
-        }
-        return result;
-    }
-
-    @SuppressWarnings({ "unchecked" })
-    private void putTextEmbeddingResultToSourceMapForMapType(
-        String knnKey,
-        Object sourceValue,
-        List<List<Float>> modelTensorList,
-        IndexWrapper indexWrapper,
-        Map<String, Object> sourceAndMetadataMap
-    ) {
-        if (knnKey == null || sourceAndMetadataMap == null || sourceValue == null) return;
-        if (sourceValue instanceof Map) {
-            for (Map.Entry<String, Object> inputNestedMapEntry : ((Map<String, Object>) sourceValue).entrySet()) {
-                putTextEmbeddingResultToSourceMapForMapType(
-                    inputNestedMapEntry.getKey(),
-                    inputNestedMapEntry.getValue(),
-                    modelTensorList,
-                    indexWrapper,
-                    (Map<String, Object>) sourceAndMetadataMap.get(knnKey)
-                );
-            }
-        } else if (sourceValue instanceof String) {
-            sourceAndMetadataMap.put(knnKey, modelTensorList.get(indexWrapper.index++));
-        } else if (sourceValue instanceof List) {
-            sourceAndMetadataMap.put(
-                knnKey,
-                buildTextEmbeddingResultForListType((List<String>) sourceValue, modelTensorList, indexWrapper)
-            );
-        }
-    }
-
-    private List<Map<String, List<Float>>> buildTextEmbeddingResultForListType(
-        List<String> sourceValue,
-        List<List<Float>> modelTensorList,
-        IndexWrapper indexWrapper
-    ) {
-        List<Map<String, List<Float>>> numbers = new ArrayList<>();
-        IntStream.range(0, sourceValue.size())
-            .forEachOrdered(x -> numbers.add(ImmutableMap.of(LIST_TYPE_NESTED_MAP_KEY, modelTensorList.get(indexWrapper.index++))));
-        return numbers;
-    }
-
-
     @Override
     public String getType() {
         return TYPE;
     }
-
-    /**
-     * Since we need to build a {@link List<String>} as the input for text embedding, and the result type is {@link List<Float>} of {@link List},
-     * we need to map the result back to the input one by one with exactly order. For nested map type input, we're performing a pre-order
-     * traversal to extract the input strings, so when mapping back to the nested map, we still need a pre-order traversal to ensure the
-     * order. And we also need to ensure the index pointer goes forward in the recursive, so here the IndexWrapper is to store and increase
-     * the index pointer during the recursive.
-     * index: the index pointer of the text embedding result.
-     */
-    static class IndexWrapper {
-        private int index;
-
-        protected IndexWrapper(int index) {
-            this.index = index;
-        }
-    }
-
 }

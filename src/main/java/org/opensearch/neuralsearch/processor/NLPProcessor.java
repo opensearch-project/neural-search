@@ -6,8 +6,9 @@
 package org.opensearch.neuralsearch.processor;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
+import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.StringUtils;
-import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.ingest.AbstractProcessor;
@@ -17,8 +18,9 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
+import java.util.stream.IntStream;
 
-
+@Log4j2
 public abstract class NLPProcessor extends AbstractProcessor {
 
     @VisibleForTesting
@@ -29,6 +31,8 @@ public abstract class NLPProcessor extends AbstractProcessor {
     protected final  MLCommonsClientAccessor mlCommonsClientAccessor;
 
     protected final  Environment environment;
+
+    protected String LIST_TYPE_NESTED_MAP_KEY = "NLP";
 
     public NLPProcessor(
             String tag,
@@ -216,8 +220,98 @@ public abstract class NLPProcessor extends AbstractProcessor {
 
     }
 
+
+    protected void setVectorFieldsToDocument(IngestDocument ingestDocument, Map<String, Object> processorMap, List<?> results) {
+        Objects.requireNonNull(results, "embedding failed, inference returns null result!");
+        log.debug("Text embedding result fetched, starting build vector output!");
+        Map<String, Object> nlpResult = buildNLPResult(processorMap, results, ingestDocument.getSourceAndMetadata());
+        nlpResult.forEach(ingestDocument::setFieldValue);
+    }
+
+
+    @SuppressWarnings({ "unchecked" })
+    @VisibleForTesting
+    Map<String, Object> buildNLPResult(
+            Map<String, Object> processorMap,
+            List<?> results,
+            Map<String, Object> sourceAndMetadataMap
+    ) {
+        NLPProcessor.IndexWrapper indexWrapper = new NLPProcessor.IndexWrapper(0);
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> knnMapEntry : processorMap.entrySet()) {
+            String knnKey = knnMapEntry.getKey();
+            Object sourceValue = knnMapEntry.getValue();
+            if (sourceValue instanceof String) {
+                result.put(knnKey, results.get(indexWrapper.index++));
+            } else if (sourceValue instanceof List) {
+                result.put(knnKey, buildNLPResultForListType((List<String>) sourceValue, results, indexWrapper));
+            } else if (sourceValue instanceof Map) {
+                putNLPResultToSourceMapForMapType(knnKey, sourceValue, results, indexWrapper, sourceAndMetadataMap);
+            }
+        }
+        return result;
+    }
+
+    @SuppressWarnings({ "unchecked" })
+    private void putNLPResultToSourceMapForMapType(
+            String processorKey,
+            Object sourceValue,
+            List<?> results,
+            NLPProcessor.IndexWrapper indexWrapper,
+            Map<String, Object> sourceAndMetadataMap
+    ) {
+        if (processorKey == null || sourceAndMetadataMap == null || sourceValue == null) return;
+        if (sourceValue instanceof Map) {
+            for (Map.Entry<String, Object> inputNestedMapEntry : ((Map<String, Object>) sourceValue).entrySet()) {
+                putNLPResultToSourceMapForMapType(
+                        inputNestedMapEntry.getKey(),
+                        inputNestedMapEntry.getValue(),
+                        results,
+                        indexWrapper,
+                        (Map<String, Object>) sourceAndMetadataMap.get(processorKey)
+                );
+            }
+        } else if (sourceValue instanceof String) {
+            sourceAndMetadataMap.put(processorKey, results.get(indexWrapper.index++));
+        } else if (sourceValue instanceof List) {
+            sourceAndMetadataMap.put(
+                    processorKey,
+                    buildNLPResultForListType((List<String>) sourceValue, results, indexWrapper)
+            );
+        }
+    }
+
+    private List<Map<String, Object>> buildNLPResultForListType(
+            List<String> sourceValue,
+            List<?> results,
+            NLPProcessor.IndexWrapper indexWrapper
+    ) {
+        List<Map<String, Object>> keyToResult = new ArrayList<>();
+        IntStream.range(0, sourceValue.size())
+                .forEachOrdered(x -> keyToResult.add(ImmutableMap.of(LIST_TYPE_NESTED_MAP_KEY, results.get(indexWrapper.index++))));
+        return keyToResult;
+    }
+
+
+
     @Override
     public String getType() {
         return null;
+    }
+
+    /**
+     * Since we need to build a {@link List<String>} as the input for text embedding, and the result type is {@link List<Float>} of {@link List},
+     * we need to map the result back to the input one by one with exactly order. For nested map type input, we're performing a pre-order
+     * traversal to extract the input strings, so when mapping back to the nested map, we still need a pre-order traversal to ensure the
+     * order. And we also need to ensure the index pointer goes forward in the recursive, so here the IndexWrapper is to store and increase
+     * the index pointer during the recursive.
+     * index: the index pointer of the text embedding result.
+     */
+    static class IndexWrapper {
+        private int index;
+
+        protected IndexWrapper(int index) {
+            this.index = index;
+        }
     }
 }
