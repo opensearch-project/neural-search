@@ -63,11 +63,6 @@ public class TextEmbeddingProcessor extends NLPProcessor {
     }
 
     @Override
-    public IngestDocument execute(IngestDocument ingestDocument) {
-        return ingestDocument;
-    }
-
-    @Override
     public void doExecute(IngestDocument ingestDocument, Map<String, Object> ProcessMap, List<String> inferenceList, BiConsumer<IngestDocument, Exception> handler) {
         mlCommonsClientAccessor.inferenceSentences(this.modelId, inferenceList, ActionListener.wrap(vectors -> {
             setVectorFieldsToDocument(ingestDocument, ProcessMap, vectors);

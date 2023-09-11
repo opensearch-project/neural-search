@@ -309,7 +309,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         return innerMap;
     }
 
-    public void testExecute_hybridTypeInput_successful() {
+    public void testExecute_hybridTypeInput_successful() throws Exception {
         List<String> list1 = ImmutableList.of("test1", "test2");
         Map<String, List<String>> map1 = ImmutableMap.of("test3", list1);
         Map<String, Object> sourceAndMetadata = new HashMap<>();
