@@ -24,7 +24,7 @@ import com.google.common.collect.ImmutableMap;
 
 
 @Log4j2
-public class SparseEncodingProcessor extends AbstractProcessor {
+public class SparseEncodingProcessor extends NLPProcessor {
 
     public static final String TYPE = "sparse_encoding";
     public static final String MODEL_ID_FIELD = "model_id";
@@ -32,108 +32,30 @@ public class SparseEncodingProcessor extends AbstractProcessor {
 
     private static final String LIST_TYPE_NESTED_MAP_KEY = "sparseEncoding";
 
-    @VisibleForTesting
-    private final String modelId;
-
-    private final Map<String, Object> fieldMap;
-
-    private final MLCommonsClientAccessor mlCommonsClientAccessor;
-
-    private final Environment environment;
-
-    public SparseEncodingProcessor(
-            String tag,
-            String description,
-            String modelId,
-            Map<String, Object> fieldMap,
-            MLCommonsClientAccessor clientAccessor,
-            Environment environment
-    ) {
-        super(tag, description);
-        if (StringUtils.isBlank(modelId)) throw new IllegalArgumentException("model_id is null or empty, can not process it");
-        validateEmbeddingConfiguration(fieldMap);
-
-        this.modelId = modelId;
-        this.fieldMap = fieldMap;
-        this.mlCommonsClientAccessor = clientAccessor;
-        this.environment = environment;
-    }
-
-    private void validateEmbeddingConfiguration(Map<String, Object> fieldMap) {
-        if (fieldMap == null
-                || fieldMap.size() == 0
-                || fieldMap.entrySet()
-                .stream()
-                .anyMatch(
-                        x -> StringUtils.isBlank(x.getKey()) || Objects.isNull(x.getValue()) || StringUtils.isBlank(x.getValue().toString())
-                )) {
-            throw new IllegalArgumentException("Unable to create the TextEmbedding processor as field_map has invalid key or value");
-        }
+    public SparseEncodingProcessor(String tag, String description, String modelId, Map<String, Object> fieldMap, MLCommonsClientAccessor clientAccessor, Environment environment) {
+        super(tag, description, modelId, fieldMap, clientAccessor, environment);
     }
 
     @Override
-    public IngestDocument execute(IngestDocument ingestDocument) {
-        return ingestDocument;
-    }
-
-    /**
-     * This method will be invoked by PipelineService to make async inference and then delegate the handler to
-     * process the inference response or failure.
-     * @param ingestDocument {@link IngestDocument} which is the document passed to processor.
-     * @param handler {@link BiConsumer} which is the handler which can be used after the inference task is done.
-     */
-    @Override
-    public void execute(IngestDocument ingestDocument, BiConsumer<IngestDocument, Exception> handler) {
-        // When received a bulk indexing request, the pipeline will be executed in this method, (see
-        // https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/action/bulk/TransportBulkAction.java#L226).
-        // Before the pipeline execution, the pipeline will be marked as resolved (means executed),
-        // and then this overriding method will be invoked when executing the text embedding processor.
-        // After the inference completes, the handler will invoke the doInternalExecute method again to run actual write operation.
-        try {
-            validateEmbeddingFieldsValue(ingestDocument);
-            Map<String, Object> ProcessMap = buildMapWithProcessorKeyAndOriginalValue(ingestDocument);
-            List<String> inferenceList = createInferenceList(ProcessMap);
-            if (inferenceList.size() == 0) {
-                handler.accept(ingestDocument, null);
-            } else {
-                mlCommonsClientAccessor.inferenceSentencesWithMapResult(this.modelId, inferenceList, ActionListener.wrap(resultMaps -> {
-                    List<Map<String, ?> > resultTokenWeights = new ArrayList<>();
-                    for (Map<String, ?> map: resultMaps)
-                    {
-                        resultTokenWeights.addAll((List<Map<String, ?>>)map.get("response") );
-                    }
-                    log.info(resultTokenWeights);
-                    setVectorFieldsToDocument(ingestDocument, ProcessMap, resultTokenWeights);
-                    handler.accept(ingestDocument, null);
-                }, e -> { handler.accept(null, e); }));
+    public void doExecute(IngestDocument ingestDocument, Map<String, Object> ProcessMap, List<String> inferenceList, BiConsumer<IngestDocument, Exception> handler) {
+        mlCommonsClientAccessor.inferenceSentencesWithMapResult(this.modelId, inferenceList, ActionListener.wrap(resultMaps -> {
+            List<Map<String, ?> > resultTokenWeights = new ArrayList<>();
+            for (Map<String, ?> map: resultMaps)
+            {
+                resultTokenWeights.addAll((List<Map<String, ?>>)map.get("response") );
             }
-        } catch (Exception e) {
-            handler.accept(null, e);
-        }
-
+            log.info(resultTokenWeights);
+            setVectorFieldsToDocument(ingestDocument, ProcessMap, resultTokenWeights);
+            handler.accept(ingestDocument, null);
+        }, e -> { handler.accept(null, e); }));
     }
+
 
     void setVectorFieldsToDocument(IngestDocument ingestDocument, Map<String, Object> processorMap, List<Map<String, ?> > resultTokenWeights) {
         Objects.requireNonNull(resultTokenWeights, "embedding failed, inference returns null result!");
         log.debug("Text embedding result fetched, starting build vector output!");
         Map<String, Object> sparseEncodingResult = buildSparseEncodingResult(processorMap, resultTokenWeights, ingestDocument.getSourceAndMetadata());
         sparseEncodingResult.forEach(ingestDocument::setFieldValue);
-    }
-
-    @SuppressWarnings({ "unchecked" })
-    private List<String> createInferenceList(Map<String, Object> knnKeyMap) {
-        List<String> texts = new ArrayList<>();
-        knnKeyMap.entrySet().stream().filter(knnMapEntry -> knnMapEntry.getValue() != null).forEach(knnMapEntry -> {
-            Object sourceValue = knnMapEntry.getValue();
-            if (sourceValue instanceof List) {
-                texts.addAll(((List<String>) sourceValue));
-            } else if (sourceValue instanceof Map) {
-                createInferenceListForMapTypeInput(sourceValue, texts);
-            } else {
-                texts.add(sourceValue.toString());
-            }
-        });
-        return texts;
     }
 
     @SuppressWarnings("unchecked")
@@ -252,56 +174,6 @@ public class SparseEncodingProcessor extends AbstractProcessor {
         IntStream.range(0, sourceValue.size())
                 .forEachOrdered(x -> tokenWeights.add(ImmutableMap.of(LIST_TYPE_NESTED_MAP_KEY, resultTokenWeights.get(indexWrapper.index++))));
         return tokenWeights;
-    }
-
-    private void validateEmbeddingFieldsValue(IngestDocument ingestDocument) {
-        Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
-        for (Map.Entry<String, Object> embeddingFieldsEntry : fieldMap.entrySet()) {
-            Object sourceValue = sourceAndMetadataMap.get(embeddingFieldsEntry.getKey());
-            if (sourceValue != null) {
-                String sourceKey = embeddingFieldsEntry.getKey();
-                Class<?> sourceValueClass = sourceValue.getClass();
-                if (List.class.isAssignableFrom(sourceValueClass) || Map.class.isAssignableFrom(sourceValueClass)) {
-                    validateNestedTypeValue(sourceKey, sourceValue, () -> 1);
-                } else if (!String.class.isAssignableFrom(sourceValueClass)) {
-                    throw new IllegalArgumentException("field [" + sourceKey + "] is neither string nor nested type, can not process it");
-                } else if (StringUtils.isBlank(sourceValue.toString())) {
-                    throw new IllegalArgumentException("field [" + sourceKey + "] has empty string value, can not process it");
-                }
-            }
-        }
-    }
-
-    @SuppressWarnings({ "rawtypes", "unchecked" })
-    private void validateNestedTypeValue(String sourceKey, Object sourceValue, Supplier<Integer> maxDepthSupplier) {
-        int maxDepth = maxDepthSupplier.get();
-        if (maxDepth > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())) {
-            throw new IllegalArgumentException("map type field [" + sourceKey + "] reached max depth limit, can not process it");
-        } else if ((List.class.isAssignableFrom(sourceValue.getClass()))) {
-            validateListTypeValue(sourceKey, sourceValue);
-        } else if (Map.class.isAssignableFrom(sourceValue.getClass())) {
-            ((Map) sourceValue).values()
-                    .stream()
-                    .filter(Objects::nonNull)
-                    .forEach(x -> validateNestedTypeValue(sourceKey, x, () -> maxDepth + 1));
-        } else if (!String.class.isAssignableFrom(sourceValue.getClass())) {
-            throw new IllegalArgumentException("map type field [" + sourceKey + "] has non-string type, can not process it");
-        } else if (StringUtils.isBlank(sourceValue.toString())) {
-            throw new IllegalArgumentException("map type field [" + sourceKey + "] has empty string, can not process it");
-        }
-    }
-
-    @SuppressWarnings({ "rawtypes" })
-    private static void validateListTypeValue(String sourceKey, Object sourceValue) {
-        for (Object value : (List) sourceValue) {
-            if (value == null) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has null, can not process it");
-            } else if (!(value instanceof String)) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has non string value, can not process it");
-            } else if (StringUtils.isBlank(value.toString())) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has empty string, can not process it");
-            }
-        }
     }
 
     @Override
