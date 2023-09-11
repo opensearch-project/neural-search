@@ -27,8 +27,6 @@ import com.google.common.collect.ImmutableMap;
 public class SparseEncodingProcessor extends NLPProcessor {
 
     public static final String TYPE = "sparse_encoding";
-    public static final String MODEL_ID_FIELD = "model_id";
-    public static final String FIELD_MAP_FIELD = "field_map";
 
     public SparseEncodingProcessor(String tag, String description, String modelId, Map<String, Object> fieldMap, MLCommonsClientAccessor clientAccessor, Environment environment) {
         super(tag, description, modelId, fieldMap, clientAccessor, environment);

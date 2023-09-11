@@ -26,6 +26,9 @@ public abstract class NLPProcessor extends AbstractProcessor {
     @VisibleForTesting
     protected final   String modelId;
 
+    public static final String MODEL_ID_FIELD = "model_id";
+    public static final String FIELD_MAP_FIELD = "field_map";
+
     protected final  Map<String, Object> fieldMap;
 
     protected final  MLCommonsClientAccessor mlCommonsClientAccessor;

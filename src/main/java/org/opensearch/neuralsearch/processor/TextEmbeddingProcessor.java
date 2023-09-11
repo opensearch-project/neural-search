@@ -35,8 +35,6 @@ import com.google.common.collect.ImmutableMap;
 public class TextEmbeddingProcessor extends NLPProcessor {
 
     public static final String TYPE = "text_embedding";
-    public static final String MODEL_ID_FIELD = "model_id";
-    public static final String FIELD_MAP_FIELD = "field_map";
 
     public TextEmbeddingProcessor(
         String tag,
