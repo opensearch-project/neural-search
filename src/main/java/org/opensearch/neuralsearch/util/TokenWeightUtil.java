@@ -27,15 +27,20 @@ public class TokenWeightUtil {
     @SuppressWarnings("unchecked")
     private static Map<String, Float> buildQueryTokensMap(Map<String, ?> mapResult) {
         Object response = mapResult.get(RESPONSE_KEY);
+        Map<String, Float> result = new HashMap<>();
         if (response instanceof Map) {
-            Map<String, Float> result = new HashMap<>();
             for (Map.Entry<String, ?> entry: ((Map<String, ?>) response).entrySet()) {
                 assert entry.getValue() instanceof Number;
                 result.put(entry.getKey(), ((Number) entry.getValue()).floatValue());
             }
             return result;
         } else {
-            throw new IllegalArgumentException("wrong type");
+            assert response instanceof List;
+            for (Map.Entry<String, ?> entry: ((Map<String, ?>) ((List<?>) response).get(0)).entrySet()) {
+                assert entry.getValue() instanceof Number;
+                result.put(entry.getKey(), ((Number) entry.getValue()).floatValue());
+            }
+            return result;
         }
     }
 }
