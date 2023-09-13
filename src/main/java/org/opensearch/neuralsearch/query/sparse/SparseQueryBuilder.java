@@ -39,7 +39,6 @@ import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.opensearch.neuralsearch.index.mapper.SparseVectorMapper;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 
@@ -243,8 +242,7 @@ public class SparseQueryBuilder extends AbstractQueryBuilder<SparseQueryBuilder>
         validateQueryTokens(queryTokens);
 
         // the tokenScoreUpperBound from query has higher priority
-        final Float scoreUpperBound = null != tokenScoreUpperBound? tokenScoreUpperBound:
-                ((SparseVectorMapper.SparseVectorFieldType) ft).tokenScoreUpperBound();
+        final Float scoreUpperBound = null != tokenScoreUpperBound? tokenScoreUpperBound: Float.MAX_VALUE;
 
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
         for (Map.Entry<String, Float> entry: queryTokens.entrySet()) {
@@ -274,9 +272,9 @@ public class SparseQueryBuilder extends AbstractQueryBuilder<SparseQueryBuilder>
     }
 
     private static void validateFieldType(MappedFieldType fieldType) {
-        if (!(fieldType instanceof SparseVectorMapper.SparseVectorFieldType)) {
+        if (!fieldType.typeName().equals("rank_features")) {
             throw new IllegalArgumentException(
-                    "[" + NAME + "] query only works on [" + SparseVectorMapper.CONTENT_TYPE + "] fields, "
+                    "[" + NAME + "] query only works on [rank_features] fields, "
                             + "not ["  + fieldType.typeName() + "]"
             );
         }
