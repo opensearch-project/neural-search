@@ -27,10 +27,10 @@ import com.google.common.collect.ImmutableMap;
 public class SparseEncodingProcessor extends NLPProcessor {
 
     public static final String TYPE = "sparse_encoding";
+    public static final String LIST_TYPE_NESTED_MAP_KEY = "sparseEncoding";
 
     public SparseEncodingProcessor(String tag, String description, String modelId, Map<String, Object> fieldMap, MLCommonsClientAccessor clientAccessor, Environment environment) {
-        super(tag, description, modelId, fieldMap, clientAccessor, environment);
-        this.LIST_TYPE_NESTED_MAP_KEY =  "sparseEncoding";
+        super(tag, description, TYPE, LIST_TYPE_NESTED_MAP_KEY, modelId, fieldMap, clientAccessor, environment);
     }
 
     @Override
@@ -44,10 +44,5 @@ public class SparseEncodingProcessor extends NLPProcessor {
             setVectorFieldsToDocument(ingestDocument, ProcessMap, results);
             handler.accept(ingestDocument, null);
         }, e -> { handler.accept(null, e); }));
-    }
-
-    @Override
-    public String getType() {
-        return TYPE;
     }
 }

@@ -35,6 +35,7 @@ import com.google.common.collect.ImmutableMap;
 public class TextEmbeddingProcessor extends NLPProcessor {
 
     public static final String TYPE = "text_embedding";
+    public static final String LIST_TYPE_NESTED_MAP_KEY = "knn";
 
     public TextEmbeddingProcessor(
         String tag,
@@ -44,8 +45,7 @@ public class TextEmbeddingProcessor extends NLPProcessor {
         MLCommonsClientAccessor clientAccessor,
         Environment environment
     ) {
-        super(tag, description, modelId, fieldMap, clientAccessor, environment);
-        this.LIST_TYPE_NESTED_MAP_KEY = "knn";
+        super(tag, description, TYPE, LIST_TYPE_NESTED_MAP_KEY, modelId, fieldMap, clientAccessor, environment);
     }
 
     @Override
@@ -54,10 +54,5 @@ public class TextEmbeddingProcessor extends NLPProcessor {
             setVectorFieldsToDocument(ingestDocument, ProcessMap, vectors);
             handler.accept(ingestDocument, null);
         }, e -> { handler.accept(null, e); }));
-    }
-
-    @Override
-    public String getType() {
-        return TYPE;
     }
 }

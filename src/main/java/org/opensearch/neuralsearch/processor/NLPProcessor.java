@@ -23,23 +23,27 @@ import java.util.stream.IntStream;
 @Log4j2
 public abstract class NLPProcessor extends AbstractProcessor {
 
-    @VisibleForTesting
-    protected final   String modelId;
-
     public static final String MODEL_ID_FIELD = "model_id";
     public static final String FIELD_MAP_FIELD = "field_map";
 
-    protected final  Map<String, Object> fieldMap;
+    protected final String type;
 
-    protected final  MLCommonsClientAccessor mlCommonsClientAccessor;
+    protected final String listTypeNestedMapKey;
 
-    protected final  Environment environment;
+    @VisibleForTesting
+    protected final String modelId;
 
-    protected String LIST_TYPE_NESTED_MAP_KEY = "NLP";
+    protected final Map<String, Object> fieldMap;
+
+    protected final MLCommonsClientAccessor mlCommonsClientAccessor;
+
+    protected final Environment environment;
 
     public NLPProcessor(
             String tag,
             String description,
+            String type,
+            String listTypeNestedMapKey,
             String modelId,
             Map<String, Object> fieldMap,
             MLCommonsClientAccessor clientAccessor,
@@ -49,13 +53,13 @@ public abstract class NLPProcessor extends AbstractProcessor {
         if (StringUtils.isBlank(modelId)) throw new IllegalArgumentException("model_id is null or empty, can not process it");
         validateEmbeddingConfiguration(fieldMap);
 
+        this.type = type;
+        this.listTypeNestedMapKey = listTypeNestedMapKey;
         this.modelId = modelId;
         this.fieldMap = fieldMap;
         this.mlCommonsClientAccessor = clientAccessor;
         this.environment = environment;
     }
-
-
 
     private void validateEmbeddingConfiguration(Map<String, Object> fieldMap) {
         if (fieldMap == null
@@ -82,7 +86,6 @@ public abstract class NLPProcessor extends AbstractProcessor {
         }
     }
 
-
     @SuppressWarnings({ "rawtypes", "unchecked" })
     private void validateNestedTypeValue(String sourceKey, Object sourceValue, Supplier<Integer> maxDepthSupplier) {
         int maxDepth = maxDepthSupplier.get();
@@ -102,7 +105,6 @@ public abstract class NLPProcessor extends AbstractProcessor {
         }
     }
 
-
     private void validateEmbeddingFieldsValue(IngestDocument ingestDocument) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
         for (Map.Entry<String, Object> embeddingFieldsEntry : fieldMap.entrySet()) {
@@ -120,7 +122,6 @@ public abstract class NLPProcessor extends AbstractProcessor {
             }
         }
     }
-
 
     private void buildMapWithProcessorKeyAndOriginalValueForMapType(
             String parentKey,
@@ -176,7 +177,6 @@ public abstract class NLPProcessor extends AbstractProcessor {
         }
     }
 
-
     @SuppressWarnings({ "unchecked" })
     private List<String> createInferenceList(Map<String, Object> knnKeyMap) {
         List<String> texts = new ArrayList<>();
@@ -220,9 +220,7 @@ public abstract class NLPProcessor extends AbstractProcessor {
         } catch (Exception e) {
             handler.accept(null, e);
         }
-
     }
-
 
     protected void setVectorFieldsToDocument(IngestDocument ingestDocument, Map<String, Object> processorMap, List<?> results) {
         Objects.requireNonNull(results, "embedding failed, inference returns null result!");
@@ -230,7 +228,6 @@ public abstract class NLPProcessor extends AbstractProcessor {
         Map<String, Object> nlpResult = buildNLPResult(processorMap, results, ingestDocument.getSourceAndMetadata());
         nlpResult.forEach(ingestDocument::setFieldValue);
     }
-
 
     @SuppressWarnings({ "unchecked" })
     @VisibleForTesting
@@ -291,15 +288,13 @@ public abstract class NLPProcessor extends AbstractProcessor {
     ) {
         List<Map<String, Object>> keyToResult = new ArrayList<>();
         IntStream.range(0, sourceValue.size())
-                .forEachOrdered(x -> keyToResult.add(ImmutableMap.of(LIST_TYPE_NESTED_MAP_KEY, results.get(indexWrapper.index++))));
+                .forEachOrdered(x -> keyToResult.add(ImmutableMap.of(listTypeNestedMapKey, results.get(indexWrapper.index++))));
         return keyToResult;
     }
 
-
-
     @Override
     public String getType() {
-        return null;
+        return type;
     }
 
     /**
