@@ -15,7 +15,11 @@ import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
@@ -69,12 +73,13 @@ public abstract class NLPProcessor extends AbstractProcessor {
                 .anyMatch(
                         x -> StringUtils.isBlank(x.getKey()) || Objects.isNull(x.getValue()) || StringUtils.isBlank(x.getValue().toString())
                 )) {
-            throw new IllegalArgumentException("Unable to create the TextEmbedding processor as field_map has invalid key or value");
+            throw new IllegalArgumentException("Unable to create the " + type
+                    + " processor as field_map has invalid key or value");
         }
     }
 
     @SuppressWarnings({ "rawtypes" })
-    private static void validateListTypeValue(String sourceKey, Object sourceValue) {
+    protected static void validateListTypeValue(String sourceKey, Object sourceValue) {
         for (Object value : (List) sourceValue) {
             if (value == null) {
                 throw new IllegalArgumentException("list type field [" + sourceKey + "] has null, can not process it");
@@ -87,7 +92,7 @@ public abstract class NLPProcessor extends AbstractProcessor {
     }
 
     @SuppressWarnings({ "rawtypes", "unchecked" })
-    private void validateNestedTypeValue(String sourceKey, Object sourceValue, Supplier<Integer> maxDepthSupplier) {
+    protected void validateNestedTypeValue(String sourceKey, Object sourceValue, Supplier<Integer> maxDepthSupplier) {
         int maxDepth = maxDepthSupplier.get();
         if (maxDepth > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())) {
             throw new IllegalArgumentException("map type field [" + sourceKey + "] reached max depth limit, can not process it");
@@ -224,7 +229,7 @@ public abstract class NLPProcessor extends AbstractProcessor {
 
     protected void setVectorFieldsToDocument(IngestDocument ingestDocument, Map<String, Object> processorMap, List<?> results) {
         Objects.requireNonNull(results, "embedding failed, inference returns null result!");
-        log.debug("Text embedding result fetched, starting build vector output!");
+        log.debug("Model inference result fetched, starting build vector output!");
         Map<String, Object> nlpResult = buildNLPResult(processorMap, results, ingestDocument.getSourceAndMetadata());
         nlpResult.forEach(ingestDocument::setFieldValue);
     }

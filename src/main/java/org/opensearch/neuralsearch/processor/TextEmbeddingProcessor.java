@@ -5,27 +5,16 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.BiConsumer;
-import java.util.function.Supplier;
-import java.util.stream.IntStream;
 
 import lombok.extern.log4j.Log4j2;
 
-import org.apache.commons.lang3.StringUtils;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
-
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableMap;
 
 /**
  * This processor is used for user input data text embedding processing, model_id can be used to indicate which model user use,

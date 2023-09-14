@@ -6,21 +6,16 @@
 package org.opensearch.neuralsearch.processor;
 
 import lombok.extern.log4j.Log4j2;
-import org.apache.commons.lang3.StringUtils;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
-import java.util.stream.IntStream;
-
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableMap;
 
 
 @Log4j2
@@ -44,5 +39,13 @@ public class SparseEncodingProcessor extends NLPProcessor {
             setVectorFieldsToDocument(ingestDocument, ProcessMap, results);
             handler.accept(ingestDocument, null);
         }, e -> { handler.accept(null, e); }));
+    }
+
+    @Override
+    protected void validateNestedTypeValue(String sourceKey, Object sourceValue, Supplier<Integer> maxDepthSupplier) {
+        throw new IllegalArgumentException(
+                "[ " + TYPE + " ] ingest processor can not process nested source value. " +
+                        "Please use plain string instead."
+        );
     }
 }

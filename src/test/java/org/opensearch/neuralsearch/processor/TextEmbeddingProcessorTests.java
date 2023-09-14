@@ -77,7 +77,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         try {
             textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
         } catch (IllegalArgumentException e) {
-            assertEquals("Unable to create the TextEmbedding processor as field_map has invalid key or value", e.getMessage());
+            assertEquals("Unable to create the text_embedding processor as field_map has invalid key or value", e.getMessage());
         }
     }
 
