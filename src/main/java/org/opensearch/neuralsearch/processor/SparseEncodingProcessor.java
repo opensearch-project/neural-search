@@ -22,7 +22,7 @@ import java.util.function.Supplier;
 public class SparseEncodingProcessor extends NLPProcessor {
 
     public static final String TYPE = "sparse_encoding";
-    public static final String LIST_TYPE_NESTED_MAP_KEY = "sparseEncoding";
+    public static final String LIST_TYPE_NESTED_MAP_KEY = "sparse_encoding";
 
     public SparseEncodingProcessor(String tag, String description, String modelId, Map<String, Object> fieldMap, MLCommonsClientAccessor clientAccessor, Environment environment) {
         super(tag, description, TYPE, LIST_TYPE_NESTED_MAP_KEY, modelId, fieldMap, clientAccessor, environment);
@@ -39,13 +39,5 @@ public class SparseEncodingProcessor extends NLPProcessor {
             setVectorFieldsToDocument(ingestDocument, ProcessMap, results);
             handler.accept(ingestDocument, null);
         }, e -> { handler.accept(null, e); }));
-    }
-
-    @Override
-    protected void validateNestedTypeValue(String sourceKey, Object sourceValue, Supplier<Integer> maxDepthSupplier) {
-        throw new IllegalArgumentException(
-                "[ " + TYPE + " ] ingest processor can not process nested source value. " +
-                        "Please use plain string instead."
-        );
     }
 }
