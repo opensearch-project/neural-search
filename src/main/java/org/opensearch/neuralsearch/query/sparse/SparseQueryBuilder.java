@@ -222,7 +222,7 @@ public class SparseQueryBuilder extends AbstractQueryBuilder<SparseQueryBuilder>
                         modelId(),
                         List.of(queryText),
                         ActionListener.wrap(mapResultList -> {
-                            queryTokensSetOnce.set(TokenWeightUtil.fetchQueryTokensList(mapResultList).get(0));
+                            queryTokensSetOnce.set(TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList).get(0));
                             actionListener.onResponse(null);
                         }, actionListener::onFailure))
                 )

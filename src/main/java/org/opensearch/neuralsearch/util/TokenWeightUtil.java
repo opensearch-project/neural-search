@@ -5,42 +5,69 @@
 
 package org.opensearch.neuralsearch.util;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 public class TokenWeightUtil {
-    //todo: change comments, add validation (throw exception)
-    /**
-     * Converts a Map result to Map<String, Float>
-     *
-     * @param mapResult {@link Map} of String and ?
-     * @return Map of String and Float
-     */
     public static String RESPONSE_KEY = "response";
 
-    public static List<Map<String, Float>> fetchQueryTokensList(List<Map<String, ?>> mapResultList) {
-        return mapResultList.stream().map(TokenWeightUtil::buildQueryTokensMap).collect(Collectors.toList());
+    /**
+     * possible input data format
+     * case remote inference:
+     * {
+     *     "response":{
+     *         [
+     *         { TOKEN_WEIGHT_MAP},
+     *         { TOKEN_WEIGHT_MAP}
+     *         ]
+     *     }
+     * }
+     * case local deploy:
+     * [{"response":{
+     *         [
+     *         { TOKEN_WEIGHT_MAP}
+     *         ]
+     *     }
+     * },{"response":{
+     *         [
+     *         { TOKEN_WEIGHT_MAP}
+     *         ]
+     *     }]
+     */
+    public static List<Map<String, Float>> fetchListOfTokenWeightMap(List<Map<String, ?>> mapResultList) {
+        List<Object> results = new ArrayList<>();
+        for (Map<String, ?> map: mapResultList)
+        {
+            if (!map.containsKey(RESPONSE_KEY)){
+                throw new IllegalArgumentException("The inference result should be associated with the field ["
+                        + RESPONSE_KEY + "].");
+            }
+            if (!List.class.isAssignableFrom(map.get(RESPONSE_KEY).getClass())) {
+                throw new IllegalArgumentException("The data object associated with field ["
+                        + RESPONSE_KEY + "] should be a list.");
+            }
+            results.addAll((List<?>) map.get("response"));
+        }
+        return results.stream().map(TokenWeightUtil::buildTokenWeightMap).collect(Collectors.toList());
     }
 
-    @SuppressWarnings("unchecked")
-    private static Map<String, Float> buildQueryTokensMap(Map<String, ?> mapResult) {
-        Object response = mapResult.get(RESPONSE_KEY);
-        Map<String, Float> result = new HashMap<>();
-        if (response instanceof Map) {
-            for (Map.Entry<String, ?> entry: ((Map<String, ?>) response).entrySet()) {
-                assert entry.getValue() instanceof Number;
-                result.put(entry.getKey(), ((Number) entry.getValue()).floatValue());
-            }
-            return result;
-        } else {
-            assert response instanceof List;
-            for (Map.Entry<String, ?> entry: ((Map<String, ?>) ((List<?>) response).get(0)).entrySet()) {
-                assert entry.getValue() instanceof Number;
-                result.put(entry.getKey(), ((Number) entry.getValue()).floatValue());
-            }
-            return result;
+    private static Map<String, Float> buildTokenWeightMap(Object uncastedMap) {
+        if (!Map.class.isAssignableFrom(uncastedMap.getClass())) {
+            throw new IllegalArgumentException("The expected inference result is a Map with String keys and  "
+                    + " Float values.");
         }
+        Map<String, Float> result = new HashMap<>();
+        for (Map.Entry<?, ?> entry: ((Map<?,?>) uncastedMap).entrySet()) {
+            if (!String.class.isAssignableFrom(entry.getKey().getClass())
+                    || !Number.class.isAssignableFrom(entry.getValue().getClass())){
+                throw new IllegalArgumentException("The expected inference result is a Map with String keys and  "
+                        + " Float values.");
+            }
+            result.put((String) entry.getKey(), ((Number) entry.getValue()).floatValue());
+        }
+        return result;
     }
 }
