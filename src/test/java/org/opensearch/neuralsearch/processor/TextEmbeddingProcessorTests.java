@@ -347,7 +347,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         IngestDocument ingestDocument = createPlainIngestDocument();
         TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
 
-        Map<String, Object> knnMap = processor.buildMapWithKnnKeyAndOriginalValue(ingestDocument);
+        Map<String, Object> knnMap = processor.buildMapWithProcessorKeyAndOriginalValue(ingestDocument);
 
         List<List<Float>> modelTensorList = createMockVectorResult();
         processor.setVectorFieldsToDocument(ingestDocument, knnMap, modelTensorList);
@@ -360,7 +360,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         IngestDocument ingestDocument = createPlainIngestDocument();
         TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
 
-        Map<String, Object> knnMap = processor.buildMapWithKnnKeyAndOriginalValue(ingestDocument);
+        Map<String, Object> knnMap = processor.buildMapWithProcessorKeyAndOriginalValue(ingestDocument);
 
         // To assert the order is not changed between config map and generated map.
         List<Object> configValueList = new LinkedList<>(config.values());
@@ -371,7 +371,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         assertEquals(knnKeyList.get(lastIndex), configValueList.get(lastIndex).toString());
 
         List<List<Float>> modelTensorList = createMockVectorResult();
-        Map<String, Object> result = processor.buildTextEmbeddingResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
+        Map<String, Object> result = processor.buildNLPResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
         assertTrue(result.containsKey("oriKey1_knn"));
         assertTrue(result.containsKey("oriKey2_knn"));
         assertTrue(result.containsKey("oriKey3_knn"));
@@ -386,9 +386,9 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> config = createNestedMapConfiguration();
         IngestDocument ingestDocument = createNestedMapIngestDocument();
         TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
-        Map<String, Object> knnMap = processor.buildMapWithKnnKeyAndOriginalValue(ingestDocument);
+        Map<String, Object> knnMap = processor.buildMapWithProcessorKeyAndOriginalValue(ingestDocument);
         List<List<Float>> modelTensorList = createMockVectorResult();
-        processor.buildTextEmbeddingResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
+        processor.buildNLPResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
         Map<String, Object> favoritesMap = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("favorites");
         assertNotNull(favoritesMap);
         Map<String, Object> favoriteGames = (Map<String, Object>) favoritesMap.get("favorite.games");
@@ -402,7 +402,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> config = createPlainStringConfiguration();
         IngestDocument ingestDocument = createPlainIngestDocument();
         TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
-        Map<String, Object> knnMap = processor.buildMapWithKnnKeyAndOriginalValue(ingestDocument);
+        Map<String, Object> knnMap = processor.buildMapWithProcessorKeyAndOriginalValue(ingestDocument);
         List<List<Float>> modelTensorList = createMockVectorResult();
         processor.setVectorFieldsToDocument(ingestDocument, knnMap, modelTensorList);
 

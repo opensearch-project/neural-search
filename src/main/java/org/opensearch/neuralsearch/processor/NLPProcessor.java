@@ -54,10 +54,10 @@ public abstract class NLPProcessor extends AbstractProcessor {
             Environment environment
     ) {
         super(tag, description);
+        this.type = type;
         if (StringUtils.isBlank(modelId)) throw new IllegalArgumentException("model_id is null or empty, can not process it");
         validateEmbeddingConfiguration(fieldMap);
 
-        this.type = type;
         this.listTypeNestedMapKey = listTypeNestedMapKey;
         this.modelId = modelId;
         this.fieldMap = fieldMap;

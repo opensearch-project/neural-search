@@ -164,6 +164,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     }
 
     public void test_inferenceSentencesWithMapResult_whenValidInput_thenSuccess() {
+//        final List<Map<String, String>> map = List.of(Map.of("key", "value"));
         final Map<String, String> map = Map.of("key", "value");
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
         Mockito.doAnswer(invocation -> {
@@ -175,7 +176,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
         Mockito.verify(client)
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        Mockito.verify(resultListener).onResponse(map);
+        Mockito.verify(resultListener).onResponse(List.of(map));
         Mockito.verifyNoMoreInteractions(resultListener);
     }
 
@@ -218,7 +219,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         Mockito.verifyNoMoreInteractions(resultListener);
     }
 
-    public void test_inferenceSentencesWithMapResult_whenModelTensorListSizeBiggerThan1_thenException() {
+    public void test_inferenceSentencesWithMapResult_whenModelTensorListSizeBiggerThan1_thenSuccess() {
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
         final List<ModelTensors> tensorsList = new ArrayList<>();
         final List<ModelTensor> mlModelTensorList = new ArrayList<>();
@@ -243,10 +244,8 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         accessor.inferenceSentencesWithMapResult(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_LIST, resultListener);
 
         Mockito.verify(client)
-            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        ArgumentCaptor<Exception> argumentCaptor = ArgumentCaptor.forClass(IllegalStateException.class);
-        Mockito.verify(resultListener).onFailure(argumentCaptor.capture());
-        assertEquals("Unexpected number of map result produced. Expected 1 map result to be returned, but got [2]", argumentCaptor.getValue().getMessage());
+                .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        Mockito.verify(resultListener).onResponse(List.of(Map.of("key","value"),Map.of("key","value")));
         Mockito.verifyNoMoreInteractions(resultListener);
     }
 
