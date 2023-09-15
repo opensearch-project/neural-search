@@ -48,8 +48,8 @@ import org.opensearch.neuralsearch.util.TokenWeightUtil;
 @Accessors(chain = true, fluent = true)
 @NoArgsConstructor
 @AllArgsConstructor
-public class SparseQueryBuilder extends AbstractQueryBuilder<SparseQueryBuilder> {
-    public static final String NAME = "sparse";
+public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncodingQueryBuilder> {
+    public static final String NAME = "sparse_encoding";
     @VisibleForTesting
     static final ParseField QUERY_TOKENS_FIELD = new ParseField("query_tokens");
     @VisibleForTesting
@@ -62,7 +62,7 @@ public class SparseQueryBuilder extends AbstractQueryBuilder<SparseQueryBuilder>
     private static MLCommonsClientAccessor ML_CLIENT;
 
     public static void initialize(MLCommonsClientAccessor mlClient) {
-        SparseQueryBuilder.ML_CLIENT = mlClient;
+        SparseEncodingQueryBuilder.ML_CLIENT = mlClient;
     }
 
     private String fieldName;
@@ -72,7 +72,7 @@ public class SparseQueryBuilder extends AbstractQueryBuilder<SparseQueryBuilder>
     private Float tokenScoreUpperBound;
     private Supplier<Map<String, Float>> queryTokensSupplier;
 
-    public SparseQueryBuilder(StreamInput in) throws IOException {
+    public SparseEncodingQueryBuilder(StreamInput in) throws IOException {
         super(in);
         this.fieldName = in.readString();
         // we don't have readOptionalMap or write, need to do it manually
@@ -132,8 +132,8 @@ public class SparseQueryBuilder extends AbstractQueryBuilder<SparseQueryBuilder>
      *  }
      *
      */
-    public static SparseQueryBuilder fromXContent(XContentParser parser) throws IOException {
-        SparseQueryBuilder sparseQueryBuilder = new SparseQueryBuilder();
+    public static SparseEncodingQueryBuilder fromXContent(XContentParser parser) throws IOException {
+        SparseEncodingQueryBuilder sparseEncodingQueryBuilder = new SparseEncodingQueryBuilder();
         if (parser.currentToken() != XContentParser.Token.START_OBJECT) {
             throw new ParsingException(
                     parser.getTokenLocation(),
@@ -141,28 +141,28 @@ public class SparseQueryBuilder extends AbstractQueryBuilder<SparseQueryBuilder>
             );
         }
         parser.nextToken();
-        sparseQueryBuilder.fieldName(parser.currentName());
+        sparseEncodingQueryBuilder.fieldName(parser.currentName());
         parser.nextToken();
-        parseQueryParams(parser, sparseQueryBuilder);
+        parseQueryParams(parser, sparseEncodingQueryBuilder);
         if (parser.nextToken() != XContentParser.Token.END_OBJECT) {
             throw new ParsingException(
                     parser.getTokenLocation(),
                     "["
                             + NAME
                             + "] query doesn't support multiple fields, found ["
-                            + sparseQueryBuilder.fieldName()
+                            + sparseEncodingQueryBuilder.fieldName()
                             + "] and ["
                             + parser.currentName()
                             + "]"
             );
         }
 
-        return sparseQueryBuilder;
+        return sparseEncodingQueryBuilder;
     }
 
     private static void parseQueryParams(
             XContentParser parser,
-            SparseQueryBuilder sparseQueryBuilder
+            SparseEncodingQueryBuilder sparseEncodingQueryBuilder
     ) throws IOException {
         XContentParser.Token token;
         String currentFieldName = "";
@@ -171,15 +171,15 @@ public class SparseQueryBuilder extends AbstractQueryBuilder<SparseQueryBuilder>
                 currentFieldName = parser.currentName();
             } else if (token.isValue()) {
                 if (NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    sparseQueryBuilder.queryName(parser.text());
+                    sparseEncodingQueryBuilder.queryName(parser.text());
                 } else if (BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    sparseQueryBuilder.boost(parser.floatValue());
+                    sparseEncodingQueryBuilder.boost(parser.floatValue());
                 } else if (QUERY_TEXT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    sparseQueryBuilder.queryText(parser.text());
+                    sparseEncodingQueryBuilder.queryText(parser.text());
                 } else if (MODEL_ID_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    sparseQueryBuilder.modelId(parser.text());
+                    sparseEncodingQueryBuilder.modelId(parser.text());
                 } else if (TOKEN_SCORE_UPPER_BOUND_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    sparseQueryBuilder.tokenScoreUpperBound(parser.floatValue());
+                    sparseEncodingQueryBuilder.tokenScoreUpperBound(parser.floatValue());
                 } else {
                     throw new ParsingException(
                             parser.getTokenLocation(),
@@ -187,7 +187,7 @@ public class SparseQueryBuilder extends AbstractQueryBuilder<SparseQueryBuilder>
                     );
                 }
             } else if (QUERY_TOKENS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                sparseQueryBuilder.queryTokens(parser.map(HashMap::new, XContentParser::floatValue));
+                sparseEncodingQueryBuilder.queryTokens(parser.map(HashMap::new, XContentParser::floatValue));
             } else {
                 throw new ParsingException(
                         parser.getTokenLocation(),
@@ -207,7 +207,7 @@ public class SparseQueryBuilder extends AbstractQueryBuilder<SparseQueryBuilder>
         }
         if (null != queryTokensSupplier) {
             return queryTokensSupplier.get() == null ? this :
-                    new SparseQueryBuilder()
+                    new SparseEncodingQueryBuilder()
                             .fieldName(fieldName)
                             .queryTokens(queryTokensSupplier.get())
                             .queryText(queryText)
@@ -227,7 +227,7 @@ public class SparseQueryBuilder extends AbstractQueryBuilder<SparseQueryBuilder>
                         }, actionListener::onFailure))
                 )
         );
-        return new SparseQueryBuilder()
+        return new SparseEncodingQueryBuilder()
                 .fieldName(fieldName)
                 .queryText(queryText)
                 .modelId(modelId)
@@ -295,7 +295,7 @@ public class SparseQueryBuilder extends AbstractQueryBuilder<SparseQueryBuilder>
     }
 
     @Override
-    protected boolean doEquals(SparseQueryBuilder obj) {
+    protected boolean doEquals(SparseEncodingQueryBuilder obj) {
         // todo: validate
         if (this == obj) return true;
         if (obj == null || getClass() != obj.getClass()) return false;

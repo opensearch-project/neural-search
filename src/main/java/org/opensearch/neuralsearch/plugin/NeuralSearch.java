@@ -42,7 +42,7 @@ import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFac
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
-import org.opensearch.neuralsearch.query.sparse.SparseQueryBuilder;
+import org.opensearch.neuralsearch.query.sparse.SparseEncodingQueryBuilder;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
 import org.opensearch.plugins.ActionPlugin;
 import org.opensearch.plugins.ExtensiblePlugin;
@@ -82,7 +82,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         final Supplier<RepositoriesService> repositoriesServiceSupplier
     ) {
         NeuralQueryBuilder.initialize(clientAccessor);
-        SparseQueryBuilder.initialize(clientAccessor);
+        SparseEncodingQueryBuilder.initialize(clientAccessor);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
         return List.of(clientAccessor);
     }
@@ -92,7 +92,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         return Arrays.asList(
             new QuerySpec<>(NeuralQueryBuilder.NAME, NeuralQueryBuilder::new, NeuralQueryBuilder::fromXContent),
             new QuerySpec<>(HybridQueryBuilder.NAME, HybridQueryBuilder::new, HybridQueryBuilder::fromXContent),
-            new QuerySpec<>(SparseQueryBuilder.NAME, SparseQueryBuilder::new, SparseQueryBuilder::fromXContent)
+            new QuerySpec<>(SparseEncodingQueryBuilder.NAME, SparseEncodingQueryBuilder::new, SparseEncodingQueryBuilder::fromXContent)
         );
     }
 
