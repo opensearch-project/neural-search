@@ -313,7 +313,6 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
 
     @Override
     protected boolean doEquals(SparseEncodingQueryBuilder obj) {
-        // todo: validate
         if (this == obj) return true;
         if (obj == null || getClass() != obj.getClass()) return false;
         EqualsBuilder equalsBuilder = new EqualsBuilder()
