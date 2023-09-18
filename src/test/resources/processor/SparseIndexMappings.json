@@ -1,0 +1,20 @@
+{
+  "settings":{
+    "default_pipeline": "pipeline-sparse-encoding"
+  },
+  "mappings": {
+    "properties": {
+      "passage_text": {
+        "type": "text"
+      },
+      "passage_sparse": {
+        "type": "nested",
+        "properties":{
+          "sparseEncoding":{
+            "type": "rank_features"
+          }
+        }
+      }
+    }
+  }
+}

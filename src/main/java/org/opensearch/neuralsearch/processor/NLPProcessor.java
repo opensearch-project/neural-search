@@ -73,8 +73,7 @@ public abstract class NLPProcessor extends AbstractProcessor {
                 .anyMatch(
                         x -> StringUtils.isBlank(x.getKey()) || Objects.isNull(x.getValue()) || StringUtils.isBlank(x.getValue().toString())
                 )) {
-            throw new IllegalArgumentException("Unable to create the " + type
-                    + " processor as field_map has invalid key or value");
+            throw new IllegalArgumentException("Unable to create the processor as field_map has invalid key or value");
         }
     }
 

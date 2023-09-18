@@ -1,0 +1,13 @@
+{
+  "description": "An example sparse Encoding pipeline",
+  "processors" : [
+    {
+      "sparse_encoding": {
+        "model_id": "%s",
+        "field_map": {
+          "passage_text": "passage_sparse"
+        }
+      }
+    }
+  ]
+}

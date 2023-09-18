@@ -64,7 +64,13 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     protected static final String DEFAULT_COMBINATION_METHOD = "arithmetic_mean";
     protected static final String PARAM_NAME_WEIGHTS = "weights";
 
+    protected String PIPELINE_CONFIGURATION_NAME = "processor/PipelineConfiguration.json";
+
     protected final ClassLoader classLoader = this.getClass().getClassLoader();
+
+    protected void setPipelineConfigurationName(String pipelineConfigurationName){
+        this.PIPELINE_CONFIGURATION_NAME = pipelineConfigurationName;
+    }
 
     @Before
     public void setupSettings() {
@@ -239,7 +245,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             toHttpEntity(
                 String.format(
                     LOCALE,
-                    Files.readString(Path.of(classLoader.getResource("processor/PipelineConfiguration.json").toURI())),
+                    Files.readString(Path.of(classLoader.getResource(PIPELINE_CONFIGURATION_NAME).toURI())),
                     modelId
                 )
             ),
