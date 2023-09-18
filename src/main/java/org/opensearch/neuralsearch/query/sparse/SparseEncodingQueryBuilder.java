@@ -157,6 +157,23 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
             );
         }
 
+        requireValue(
+                sparseEncodingQueryBuilder.fieldName(),
+                "Field name must be provided for " + NAME + " query"
+        );
+        if (null==sparseEncodingQueryBuilder.queryTokens()) {
+            requireValue(
+                    sparseEncodingQueryBuilder.queryText(),
+                    "Either " + QUERY_TOKENS_FIELD.getPreferredName() + " or " +
+                            QUERY_TEXT_FIELD.getPreferredName() + " must be provided for " + NAME + " query"
+            );
+            requireValue(
+                    sparseEncodingQueryBuilder.modelId(),
+                    MODEL_ID_FIELD.getPreferredName() + " must be provided for " + NAME +
+                            " query when using " + QUERY_TEXT_FIELD.getPreferredName()
+            );
+        }
+
         return sparseEncodingQueryBuilder;
     }
 
