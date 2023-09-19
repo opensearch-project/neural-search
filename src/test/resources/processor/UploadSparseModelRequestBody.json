@@ -4,6 +4,7 @@
   "function_name": "TOKENIZE",
   "description": "test model",
   "model_format": "TORCH_SCRIPT",
+  "model_group_id": "<MODEL_GROUP_ID>",
   "model_content_hash_value": "e23969f8bd417e7aec26f49201da4adfc6b74e6187d1ddfdfb98e473bdd95978",
   "url": "https://github.com/xinyual/demo/raw/main/tokenizer-idf-msmarco.zip"
 }

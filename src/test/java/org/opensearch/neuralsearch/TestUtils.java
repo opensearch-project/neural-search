@@ -11,8 +11,12 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.opensearch.test.OpenSearchTestCase.randomFloat;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -70,6 +74,26 @@ public class TestUtils {
             vector[j] = randomFloat();
         }
         return vector;
+    }
+
+    public static Float createFloatNumberWithEffectiveDigits(float inputNumber, int scale) {
+        BigDecimal bd = new BigDecimal(inputNumber);
+        return bd.setScale(scale, RoundingMode.HALF_UP).floatValue();
+    }
+
+    /**
+     * Create a map of provided tokens, the values will be random float numbers
+     *
+     * @param tokens of the created map keys
+     * @return token weight map with random weight > 0
+     */
+    public static Map<String, Float> createRandomTokenWeightMap(Collection<String> tokens) {
+        Map<String, Float> resultMap = new HashMap<>();
+        for (String token: tokens) {
+            // use a small shift to ensure value > 0
+            resultMap.put(token, createFloatNumberWithEffectiveDigits(Math.abs(randomFloat()) + 1e-3f, 3));
+        }
+        return resultMap;
     }
 
     /**

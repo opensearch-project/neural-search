@@ -15,13 +15,13 @@ import org.junit.Before;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.common.BaseSparseEncodingIT;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 
-public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
+public class SparseEncodingProcessIT extends BaseSparseEncodingIT {
 
     private static final String INDEX_NAME = "sparse_encoding_index";
 
@@ -44,20 +44,14 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
     }
 
     public void testSparseEncodingProcessor() throws Exception {
-        String modelId = uploadSparseEncodingModel();
-        loadModel(modelId);
+        String modelId = prepareModel();
         createPipelineProcessor(modelId, PIPELINE_NAME);
-        createTextEmbeddingIndex();
+        createSparseEncodingIndex();
         ingestDocument();
         assertEquals(1, getDocCount(INDEX_NAME));
     }
 
-    private String uploadSparseEncodingModel() throws Exception {
-        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadSparseModelRequestBody.json").toURI()));
-        return uploadModel(requestBody);
-    }
-
-    private void createTextEmbeddingIndex() throws Exception {
+    private void createSparseEncodingIndex() throws Exception {
         createIndexWithConfiguration(
                 INDEX_NAME,
                 Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),
