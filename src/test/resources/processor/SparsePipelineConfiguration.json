@@ -5,7 +5,12 @@
       "sparse_encoding": {
         "model_id": "%s",
         "field_map": {
-          "passage_text": "passage_sparse"
+          "title": "title_sparse",
+          "favor_list": "favor_list_sparse",
+          "favorites": {
+            "game": "game_sparse",
+            "movie": "movie_sparse"
+          }
         }
       }
     }

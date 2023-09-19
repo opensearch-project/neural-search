@@ -67,7 +67,17 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
 
     private void ingestDocument() throws Exception {
         String ingestDocument = "{\n"
-                + "\"passage_text\": \"This is a good day\""
+                + "  \"title\": \"This is a good day\",\n"
+                + "  \"description\": \"daily logging\",\n"
+                + "  \"favor_list\": [\n"
+                + "    \"test\",\n"
+                + "    \"hello\",\n"
+                + "    \"mock\"\n"
+                + "  ],\n"
+                + "  \"favorites\": {\n"
+                + "    \"game\": \"overwatch\",\n"
+                + "    \"movie\": null\n"
+                + "  }\n"
                 + "}\n";
         Response response = makeRequest(
                 client(),
@@ -84,6 +94,5 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
         );
         assertEquals("created", map.get("result"));
     }
-
 
 }

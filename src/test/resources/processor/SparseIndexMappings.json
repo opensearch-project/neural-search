@@ -4,16 +4,22 @@
   },
   "mappings": {
     "properties": {
-      "passage_text": {
-        "type": "text"
+      "title_sparse": {
+        "type": "rank_features"
       },
-      "passage_sparse": {
+      "favor_list_sparse": {
         "type": "nested",
         "properties":{
-          "sparseEncoding":{
+          "sparse_encoding":{
             "type": "rank_features"
           }
         }
+      },
+      "favorites.game_sparse": {
+        "type": "rank_features"
+      },
+      "favorites.movie_sparse": {
+        "type": "rank_features"
       }
     }
   }
