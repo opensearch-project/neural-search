@@ -17,14 +17,14 @@ public class TokenWeightUtil {
     /**
      * possible input data format
      * case remote inference:
-     * {
+     * [{
      *     "response":{
      *         [
      *         { TOKEN_WEIGHT_MAP},
      *         { TOKEN_WEIGHT_MAP}
      *         ]
      *     }
-     * }
+     * }]
      * case local deploy:
      * [{"response":{
      *         [
