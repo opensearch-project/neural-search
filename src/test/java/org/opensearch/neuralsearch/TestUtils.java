@@ -76,6 +76,8 @@ public class TestUtils {
         return vector;
     }
 
+    // When ingesting token weight map, float number will be decoded to json, which may lose precision
+    // To compute match score without losing precision, we limit the effective digits of float number
     public static Float createFloatNumberWithEffectiveDigits(float inputNumber, int scale) {
         BigDecimal bd = new BigDecimal(inputNumber);
         return bd.setScale(scale, RoundingMode.HALF_UP).floatValue();
