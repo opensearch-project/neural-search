@@ -502,7 +502,7 @@ public class SparseEncodingQueryBuilderTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testRewrite_whenVectorNull_thenReturnCopy() {
+    public void testRewrite_whenSupplierContentNull_thenReturnCopy() {
         Supplier<Map<String, Float>> nullSupplier = () -> null;
         SparseEncodingQueryBuilder sparseEncodingQueryBuilder = new SparseEncodingQueryBuilder().fieldName(FIELD_NAME)
                 .queryText(QUERY_TEXT)
