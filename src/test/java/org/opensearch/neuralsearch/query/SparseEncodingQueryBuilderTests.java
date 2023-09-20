@@ -41,7 +41,6 @@ import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
-import org.opensearch.neuralsearch.query.SparseEncodingQueryBuilder;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class SparseEncodingQueryBuilderTests extends OpenSearchTestCase {
