@@ -40,7 +40,7 @@ public class SparseEncodingProcessIT extends BaseSparseEncodingIT {
 
     @Before
     public void setPipelineName() {
-        this.setPipelineConfigurationName("processor/SparsePipelineConfiguration.json");
+        this.setPipelineConfigurationName("processor/SparseEncodingPipelineConfiguration.json");
     }
 
     public void testSparseEncodingProcessor() throws Exception {
@@ -54,7 +54,7 @@ public class SparseEncodingProcessIT extends BaseSparseEncodingIT {
     private void createSparseEncodingIndex() throws Exception {
         createIndexWithConfiguration(
                 INDEX_NAME,
-                Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),
+                Files.readString(Path.of(classLoader.getResource("processor/SparseEncodingIndexMappings.json").toURI())),
                 PIPELINE_NAME
         );
     }

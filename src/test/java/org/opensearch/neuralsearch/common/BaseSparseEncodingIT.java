@@ -31,7 +31,7 @@ public abstract class BaseSparseEncodingIT extends BaseNeuralSearchIT{
     @Override
     protected String prepareModel() {
         String requestBody = Files.readString(
-                Path.of(classLoader.getResource("processor/UploadSparseModelRequestBody.json").toURI())
+                Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
         );
         String modelId = uploadModel(requestBody);
         loadModel(modelId);
