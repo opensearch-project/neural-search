@@ -14,6 +14,7 @@ import lombok.SneakyThrows;
 
 import org.junit.After;
 import org.junit.Before;
+import org.opensearch.client.ResponseException;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
@@ -261,6 +262,18 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float minExpectedScore = computeExpectedScore(modelId, testTokenWeightMap, TEST_QUERY_TEXT);
         assertTrue(minExpectedScore < objectToFloat(firstInnerHit.get("_score")));
+    }
+
+    @SneakyThrows
+    public void testBasicQueryUsingQueryText_whenQueryWrongFieldType_thenFail() {
+        initializeIndexIfNotExist(TEST_TEXT_AND_SPARSE_ENCODING_FIELD_INDEX_NAME);
+        String modelId = getDeployedModelId();
+
+        SparseEncodingQueryBuilder sparseEncodingQueryBuilder = new SparseEncodingQueryBuilder().fieldName(TEST_TEXT_FIELD_NAME_1)
+            .queryText(TEST_QUERY_TEXT)
+            .modelId(modelId);
+
+        expectThrows(ResponseException.class, () -> search(TEST_TEXT_AND_SPARSE_ENCODING_FIELD_INDEX_NAME, sparseEncodingQueryBuilder, 1));
     }
 
     @SneakyThrows
