@@ -245,10 +245,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
 
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
         for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
-            builder.add(
-                    FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()),
-                    BooleanClause.Occur.SHOULD
-            );
+            builder.add(FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()), BooleanClause.Occur.SHOULD);
         }
         return builder.build();
     }
@@ -299,11 +296,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
 
     @Override
     protected int doHashCode() {
-        return new HashCodeBuilder().append(fieldName)
-            .append(queryTokens)
-            .append(queryText)
-            .append(modelId)
-            .toHashCode();
+        return new HashCodeBuilder().append(fieldName).append(queryTokens).append(queryText).append(modelId).toHashCode();
     }
 
     @Override
