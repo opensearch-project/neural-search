@@ -10,6 +10,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
+import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.neuralsearch.TestUtils;
 import org.opensearch.neuralsearch.common.BaseSparseEncodingIT;
 
@@ -23,7 +24,6 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
     private static final String TEST_MULTI_SPARSE_ENCODING_FIELD_INDEX_NAME = "test-sparse-multi-field-index";
     private static final String TEST_TEXT_AND_SPARSE_ENCODING_FIELD_INDEX_NAME = "test-sparse-text-and-field-index";
     private static final String TEST_NESTED_INDEX_NAME = "test-sparse-nested-index";
-    private static final String TEST_MULTI_DOC_INDEX_NAME = "test-sparse-multi-doc-index";
     private static final String TEST_QUERY_TEXT = "Hello world a b";
     private static final String TEST_SPARSE_ENCODING_FIELD_NAME_1 = "test-sparse-encoding-1";
     private static final String TEST_SPARSE_ENCODING_FIELD_NAME_2 = "test-sparse-encoding-2";
@@ -204,7 +204,7 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
      * }
      */
     @SneakyThrows
-    public void testBooleanQuery_withMultipleNeuralQueries() {
+    public void testBooleanQuery_withMultipleSparseEncodingQueries() {
         initializeIndexIfNotExist(TEST_MULTI_SPARSE_ENCODING_FIELD_INDEX_NAME);
         String modelId = getDeployedModelId();
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
@@ -226,6 +226,50 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = 2 * computeExpectedScore(modelId, testTokenWeightMap, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
+    }
+
+    /**
+     * Tests bool should query with query tokens:
+     * {
+     *     "query": {
+     *         "bool" : {
+     *             "should": [
+     *                "sparse_encoding": {
+     *                  "field1": {
+     *                      "query_text": "Hello world a b",
+     *                      "model_id": "dcsdcasd"
+     *                    }
+     *                 },
+     *                "sparse_encoding": {
+     *                  "field2": {
+     *                      "query_text": "Hello world a b",
+     *                      "model_id": "dcsdcasd"
+     *                    }
+     *                 }
+     *             ]
+     *         }
+     *     }
+     * }
+     */
+    @SneakyThrows
+    public void testBooleanQuery_withSparseEncodingAndBM25Queries() {
+        initializeIndexIfNotExist(TEST_TEXT_AND_SPARSE_ENCODING_FIELD_INDEX_NAME);
+        String modelId = getDeployedModelId();
+        BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
+
+        SparseEncodingQueryBuilder sparseEncodingQueryBuilder = new SparseEncodingQueryBuilder()
+                .fieldName(TEST_SPARSE_ENCODING_FIELD_NAME_1)
+                .queryText(TEST_QUERY_TEXT)
+                .modelId(modelId);
+        MatchQueryBuilder matchQueryBuilder = new MatchQueryBuilder(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
+        boolQueryBuilder.should(sparseEncodingQueryBuilder).should(matchQueryBuilder);
+
+        Map<String, Object> searchResponseAsMap = search(TEST_TEXT_AND_SPARSE_ENCODING_FIELD_INDEX_NAME, boolQueryBuilder, 1);
+        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+
+        assertEquals("1", firstInnerHit.get("_id"));
+        float minExpectedScore = computeExpectedScore(modelId, testTokenWeightMap, TEST_QUERY_TEXT);
+        assertTrue(minExpectedScore < objectToFloat(firstInnerHit.get("_score")));
     }
 
     @SneakyThrows
@@ -256,6 +300,36 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
                     List.of(testTokenWeightMap, testTokenWeightMap)
             );
             assertEquals(1, getDocCount(indexName));
+        }
+
+        if (TEST_TEXT_AND_SPARSE_ENCODING_FIELD_INDEX_NAME.equals(indexName) && !indexExists(indexName)) {
+            prepareSparseEncodingIndex(
+                    indexName,
+                    List.of(TEST_SPARSE_ENCODING_FIELD_NAME_1)
+            );
+            addSparseEncodingDoc(
+                    indexName,
+                    "1",
+                    List.of(TEST_SPARSE_ENCODING_FIELD_NAME_1),
+                    List.of(testTokenWeightMap),
+                    List.of(TEST_TEXT_FIELD_NAME_1),
+                    List.of(TEST_QUERY_TEXT)
+            );
+            assertEquals(1, getDocCount(indexName));
+        }
+
+        if (TEST_NESTED_INDEX_NAME.equals(indexName) && !indexExists(indexName)) {
+            prepareSparseEncodingIndex(
+                    indexName,
+                    List.of(TEST_SPARSE_ENCODING_FIELD_NAME_NESTED)
+            );
+            addSparseEncodingDoc(
+                    indexName,
+                    "1",
+                    List.of(TEST_SPARSE_ENCODING_FIELD_NAME_NESTED),
+                    List.of(testTokenWeightMap)
+            );
+            assertEquals(1, getDocCount(TEST_NESTED_INDEX_NAME));
         }
     }
 }

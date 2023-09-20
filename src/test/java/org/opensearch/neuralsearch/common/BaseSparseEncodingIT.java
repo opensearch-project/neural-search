@@ -21,6 +21,7 @@ import org.opensearch.neuralsearch.util.TokenWeightUtil;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -62,12 +63,27 @@ public abstract class BaseSparseEncodingIT extends BaseNeuralSearchIT{
             List<String> fieldNames,
             List<Map<String, Float>> docs
     ) {
+        addSparseEncodingDoc(index, docId, fieldNames, docs, Collections.emptyList(), Collections.emptyList());
+    }
+
+    @SneakyThrows
+    protected void addSparseEncodingDoc(
+            String index,
+            String docId,
+            List<String> fieldNames,
+            List<Map<String, Float>> docs,
+            List<String> textFieldNames,
+            List<String> texts
+    ) {
         Request request = new Request("POST", "/" + index + "/_doc/" + docId + "?refresh=true");
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
         for (int i = 0; i < fieldNames.size(); i++) {
             builder.field(fieldNames.get(i), docs.get(i));
         }
 
+        for (int i = 0; i < textFieldNames.size(); i++) {
+            builder.field(textFieldNames.get(i), texts.get(i));
+        }
         builder.endObject();
 
         request.setJsonEntity(builder.toString());
