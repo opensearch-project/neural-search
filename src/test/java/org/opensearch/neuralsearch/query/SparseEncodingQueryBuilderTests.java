@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package org.opensearch.neuralsearch.query.sparse;
+package org.opensearch.neuralsearch.query;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
@@ -11,10 +11,10 @@ import static org.mockito.Mockito.mock;
 import static org.opensearch.index.query.AbstractQueryBuilder.BOOST_FIELD;
 import static org.opensearch.index.query.AbstractQueryBuilder.NAME_FIELD;
 import static org.opensearch.neuralsearch.TestUtils.xContentBuilderToMap;
-import static org.opensearch.neuralsearch.query.sparse.SparseEncodingQueryBuilder.MODEL_ID_FIELD;
-import static org.opensearch.neuralsearch.query.sparse.SparseEncodingQueryBuilder.NAME;
-import static org.opensearch.neuralsearch.query.sparse.SparseEncodingQueryBuilder.QUERY_TEXT_FIELD;
-import static org.opensearch.neuralsearch.query.sparse.SparseEncodingQueryBuilder.QUERY_TOKENS_FIELD;
+import static org.opensearch.neuralsearch.query.SparseEncodingQueryBuilder.MODEL_ID_FIELD;
+import static org.opensearch.neuralsearch.query.SparseEncodingQueryBuilder.NAME;
+import static org.opensearch.neuralsearch.query.SparseEncodingQueryBuilder.QUERY_TEXT_FIELD;
+import static org.opensearch.neuralsearch.query.SparseEncodingQueryBuilder.QUERY_TOKENS_FIELD;
 
 import java.io.IOException;
 import java.util.List;
@@ -41,6 +41,7 @@ import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.query.SparseEncodingQueryBuilder;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class SparseEncodingQueryBuilderTests extends OpenSearchTestCase {

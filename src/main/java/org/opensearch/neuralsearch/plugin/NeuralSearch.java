@@ -42,7 +42,7 @@ import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFac
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
-import org.opensearch.neuralsearch.query.sparse.SparseEncodingQueryBuilder;
+import org.opensearch.neuralsearch.query.SparseEncodingQueryBuilder;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
 import org.opensearch.plugins.ActionPlugin;
 import org.opensearch.plugins.ExtensiblePlugin;

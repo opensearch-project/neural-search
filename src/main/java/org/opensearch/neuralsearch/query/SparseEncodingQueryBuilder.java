@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package org.opensearch.neuralsearch.query.sparse;
+package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
 import java.util.HashMap;
