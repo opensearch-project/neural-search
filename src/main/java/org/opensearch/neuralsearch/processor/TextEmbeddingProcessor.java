@@ -42,8 +42,7 @@ public class TextEmbeddingProcessor extends NLPProcessor {
         IngestDocument ingestDocument,
         Map<String, Object> ProcessMap,
         List<String> inferenceList,
-        BiConsumer<IngestDocument,
-        Exception> handler
+        BiConsumer<IngestDocument, Exception> handler
     ) {
         mlCommonsClientAccessor.inferenceSentences(this.modelId, inferenceList, ActionListener.wrap(vectors -> {
             setVectorFieldsToDocument(ingestDocument, ProcessMap, vectors);

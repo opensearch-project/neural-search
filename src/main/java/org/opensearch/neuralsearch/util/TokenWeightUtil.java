@@ -39,15 +39,12 @@ public class TokenWeightUtil {
      */
     public static List<Map<String, Float>> fetchListOfTokenWeightMap(List<Map<String, ?>> mapResultList) {
         List<Object> results = new ArrayList<>();
-        for (Map<String, ?> map: mapResultList)
-        {
-            if (!map.containsKey(RESPONSE_KEY)){
-                throw new IllegalArgumentException("The inference result should be associated with the field ["
-                        + RESPONSE_KEY + "].");
+        for (Map<String, ?> map : mapResultList) {
+            if (!map.containsKey(RESPONSE_KEY)) {
+                throw new IllegalArgumentException("The inference result should be associated with the field [" + RESPONSE_KEY + "].");
             }
             if (!List.class.isAssignableFrom(map.get(RESPONSE_KEY).getClass())) {
-                throw new IllegalArgumentException("The data object associated with field ["
-                        + RESPONSE_KEY + "] should be a list.");
+                throw new IllegalArgumentException("The data object associated with field [" + RESPONSE_KEY + "] should be a list.");
             }
             results.addAll((List<?>) map.get("response"));
         }
@@ -56,15 +53,12 @@ public class TokenWeightUtil {
 
     private static Map<String, Float> buildTokenWeightMap(Object uncastedMap) {
         if (!Map.class.isAssignableFrom(uncastedMap.getClass())) {
-            throw new IllegalArgumentException("The expected inference result is a Map with String keys and  "
-                    + " Float values.");
+            throw new IllegalArgumentException("The expected inference result is a Map with String keys and  " + " Float values.");
         }
         Map<String, Float> result = new HashMap<>();
-        for (Map.Entry<?, ?> entry: ((Map<?,?>) uncastedMap).entrySet()) {
-            if (!String.class.isAssignableFrom(entry.getKey().getClass())
-                    || !Number.class.isAssignableFrom(entry.getValue().getClass())){
-                throw new IllegalArgumentException("The expected inference result is a Map with String keys and  "
-                        + " Float values.");
+        for (Map.Entry<?, ?> entry : ((Map<?, ?>) uncastedMap).entrySet()) {
+            if (!String.class.isAssignableFrom(entry.getKey().getClass()) || !Number.class.isAssignableFrom(entry.getValue().getClass())) {
+                throw new IllegalArgumentException("The expected inference result is a Map with String keys and  " + " Float values.");
             }
             result.put((String) entry.getKey(), ((Number) entry.getValue()).floatValue());
         }

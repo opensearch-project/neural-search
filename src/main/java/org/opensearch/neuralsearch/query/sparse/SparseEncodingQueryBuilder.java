@@ -37,10 +37,10 @@ import org.opensearch.index.query.AbstractQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
-
-import com.google.common.annotations.VisibleForTesting;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
+
+import com.google.common.annotations.VisibleForTesting;
 
 @Log4j2
 @Getter
@@ -105,8 +105,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         if (null != queryTokens) xContentBuilder.field(QUERY_TOKENS_FIELD.getPreferredName(), queryTokens);
         if (null != queryText) xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
         if (null != modelId) xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
-        if (null != tokenScoreUpperBound)
-            xContentBuilder.field(TOKEN_SCORE_UPPER_BOUND_FIELD.getPreferredName(), tokenScoreUpperBound);
+        if (null != tokenScoreUpperBound) xContentBuilder.field(TOKEN_SCORE_UPPER_BOUND_FIELD.getPreferredName(), tokenScoreUpperBound);
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
         xContentBuilder.endObject();
@@ -135,10 +134,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
     public static SparseEncodingQueryBuilder fromXContent(XContentParser parser) throws IOException {
         SparseEncodingQueryBuilder sparseEncodingQueryBuilder = new SparseEncodingQueryBuilder();
         if (parser.currentToken() != XContentParser.Token.START_OBJECT) {
-            throw new ParsingException(
-                    parser.getTokenLocation(),
-                    "First token of " + NAME + "query must be START_OBJECT"
-            );
+            throw new ParsingException(parser.getTokenLocation(), "First token of " + NAME + "query must be START_OBJECT");
         }
         parser.nextToken();
         sparseEncodingQueryBuilder.fieldName(parser.currentName());
@@ -146,41 +142,43 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         parseQueryParams(parser, sparseEncodingQueryBuilder);
         if (parser.nextToken() != XContentParser.Token.END_OBJECT) {
             throw new ParsingException(
-                    parser.getTokenLocation(),
-                    "["
-                            + NAME
-                            + "] query doesn't support multiple fields, found ["
-                            + sparseEncodingQueryBuilder.fieldName()
-                            + "] and ["
-                            + parser.currentName()
-                            + "]"
+                parser.getTokenLocation(),
+                "["
+                    + NAME
+                    + "] query doesn't support multiple fields, found ["
+                    + sparseEncodingQueryBuilder.fieldName()
+                    + "] and ["
+                    + parser.currentName()
+                    + "]"
             );
         }
 
-        requireValue(
-                sparseEncodingQueryBuilder.fieldName(),
-                "Field name must be provided for " + NAME + " query"
-        );
-        if (null==sparseEncodingQueryBuilder.queryTokens()) {
+        requireValue(sparseEncodingQueryBuilder.fieldName(), "Field name must be provided for " + NAME + " query");
+        if (null == sparseEncodingQueryBuilder.queryTokens()) {
             requireValue(
-                    sparseEncodingQueryBuilder.queryText(),
-                    "Either " + QUERY_TOKENS_FIELD.getPreferredName() + " or " +
-                            QUERY_TEXT_FIELD.getPreferredName() + " must be provided for " + NAME + " query"
+                sparseEncodingQueryBuilder.queryText(),
+                "Either "
+                    + QUERY_TOKENS_FIELD.getPreferredName()
+                    + " or "
+                    + QUERY_TEXT_FIELD.getPreferredName()
+                    + " must be provided for "
+                    + NAME
+                    + " query"
             );
             requireValue(
-                    sparseEncodingQueryBuilder.modelId(),
-                    MODEL_ID_FIELD.getPreferredName() + " must be provided for " + NAME +
-                            " query when using " + QUERY_TEXT_FIELD.getPreferredName()
+                sparseEncodingQueryBuilder.modelId(),
+                MODEL_ID_FIELD.getPreferredName()
+                    + " must be provided for "
+                    + NAME
+                    + " query when using "
+                    + QUERY_TEXT_FIELD.getPreferredName()
             );
         }
 
         return sparseEncodingQueryBuilder;
     }
 
-    private static void parseQueryParams(
-            XContentParser parser,
-            SparseEncodingQueryBuilder sparseEncodingQueryBuilder
-    ) throws IOException {
+    private static void parseQueryParams(XContentParser parser, SparseEncodingQueryBuilder sparseEncodingQueryBuilder) throws IOException {
         XContentParser.Token token;
         String currentFieldName = "";
         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
@@ -199,16 +197,16 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
                     sparseEncodingQueryBuilder.tokenScoreUpperBound(parser.floatValue());
                 } else {
                     throw new ParsingException(
-                            parser.getTokenLocation(),
-                            "[" + NAME + "] query does not support [" + currentFieldName + "]"
+                        parser.getTokenLocation(),
+                        "[" + NAME + "] query does not support [" + currentFieldName + "]"
                     );
                 }
             } else if (QUERY_TOKENS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                 sparseEncodingQueryBuilder.queryTokens(parser.map(HashMap::new, XContentParser::floatValue));
             } else {
                 throw new ParsingException(
-                        parser.getTokenLocation(),
-                        "[" + NAME + "] unknown token [" + token + "] after [" + currentFieldName + "]"
+                    parser.getTokenLocation(),
+                    "[" + NAME + "] unknown token [" + token + "] after [" + currentFieldName + "]"
                 );
             }
         }
@@ -223,33 +221,32 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
             return this;
         }
         if (null != queryTokensSupplier) {
-            return queryTokensSupplier.get() == null ? this :
-                    new SparseEncodingQueryBuilder()
-                            .fieldName(fieldName)
-                            .queryTokens(queryTokensSupplier.get())
-                            .queryText(queryText)
-                            .modelId(modelId)
-                            .tokenScoreUpperBound(tokenScoreUpperBound);
+            return queryTokensSupplier.get() == null
+                ? this
+                : new SparseEncodingQueryBuilder().fieldName(fieldName)
+                    .queryTokens(queryTokensSupplier.get())
+                    .queryText(queryText)
+                    .modelId(modelId)
+                    .tokenScoreUpperBound(tokenScoreUpperBound);
         }
 
         validateForRewrite(queryText, modelId);
         SetOnce<Map<String, Float>> queryTokensSetOnce = new SetOnce<>();
         queryRewriteContext.registerAsyncAction(
-                ((client, actionListener) -> ML_CLIENT.inferenceSentencesWithMapResult(
-                        modelId(),
-                        List.of(queryText),
-                        ActionListener.wrap(mapResultList -> {
-                            queryTokensSetOnce.set(TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList).get(0));
-                            actionListener.onResponse(null);
-                        }, actionListener::onFailure))
-                )
+            ((client, actionListener) -> ML_CLIENT.inferenceSentencesWithMapResult(
+                modelId(),
+                List.of(queryText),
+                ActionListener.wrap(mapResultList -> {
+                    queryTokensSetOnce.set(TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList).get(0));
+                    actionListener.onResponse(null);
+                }, actionListener::onFailure)
+            ))
         );
-        return new SparseEncodingQueryBuilder()
-                .fieldName(fieldName)
-                .queryText(queryText)
-                .modelId(modelId)
-                .tokenScoreUpperBound(tokenScoreUpperBound)
-                .queryTokensSupplier(queryTokensSetOnce::get);
+        return new SparseEncodingQueryBuilder().fieldName(fieldName)
+            .queryText(queryText)
+            .modelId(modelId)
+            .tokenScoreUpperBound(tokenScoreUpperBound)
+            .queryTokensSupplier(queryTokensSetOnce::get);
     }
 
     @Override
@@ -259,31 +256,28 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         validateQueryTokens(queryTokens);
 
         // the tokenScoreUpperBound from query has higher priority
-        final Float scoreUpperBound = null != tokenScoreUpperBound? tokenScoreUpperBound: Float.MAX_VALUE;
+        final Float scoreUpperBound = null != tokenScoreUpperBound ? tokenScoreUpperBound : Float.MAX_VALUE;
 
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
-        for (Map.Entry<String, Float> entry: queryTokens.entrySet()) {
+        for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
             builder.add(
-                    new BoostQuery(
-                            new BoundedLinearFeatureQuery(
-                                    fieldName,
-                                    entry.getKey(),
-                                    scoreUpperBound
-                            ),
-                            entry.getValue()
-                    ),
-                    BooleanClause.Occur.SHOULD
+                new BoostQuery(new BoundedLinearFeatureQuery(fieldName, entry.getKey(), scoreUpperBound), entry.getValue()),
+                BooleanClause.Occur.SHOULD
             );
         }
         return builder.build();
     }
 
     private static void validateForRewrite(String queryText, String modelId) {
-        if (null == queryText||null == modelId) {
+        if (null == queryText || null == modelId) {
             throw new IllegalArgumentException(
-                    "When " + QUERY_TOKENS_FIELD.getPreferredName() + " are not provided," +
-                            QUERY_TEXT_FIELD.getPreferredName() + " and " + MODEL_ID_FIELD.getPreferredName() +
-                            " can not be null."
+                "When "
+                    + QUERY_TOKENS_FIELD.getPreferredName()
+                    + " are not provided,"
+                    + QUERY_TEXT_FIELD.getPreferredName()
+                    + " and "
+                    + MODEL_ID_FIELD.getPreferredName()
+                    + " can not be null."
             );
         }
     }
@@ -291,22 +285,18 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
     private static void validateFieldType(MappedFieldType fieldType) {
         if (!fieldType.typeName().equals("rank_features")) {
             throw new IllegalArgumentException(
-                    "[" + NAME + "] query only works on [rank_features] fields, "
-                            + "not ["  + fieldType.typeName() + "]"
+                "[" + NAME + "] query only works on [rank_features] fields, " + "not [" + fieldType.typeName() + "]"
             );
         }
     }
 
     private static void validateQueryTokens(Map<String, Float> queryTokens) {
         if (null == queryTokens) {
-            throw new IllegalArgumentException(
-                    QUERY_TOKENS_FIELD.getPreferredName() + " field can not be null."
-            );
+            throw new IllegalArgumentException(QUERY_TOKENS_FIELD.getPreferredName() + " field can not be null.");
         }
-        for (Map.Entry<String, Float> entry: queryTokens.entrySet()) {
+        for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
             if (entry.getValue() <= 0) {
-                throw new IllegalArgumentException(
-                        "weight must be larger than 0, got: " + entry.getValue() + "for key " + entry.getKey());
+                throw new IllegalArgumentException("weight must be larger than 0, got: " + entry.getValue() + "for key " + entry.getKey());
             }
         }
     }
@@ -315,24 +305,22 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
     protected boolean doEquals(SparseEncodingQueryBuilder obj) {
         if (this == obj) return true;
         if (obj == null || getClass() != obj.getClass()) return false;
-        EqualsBuilder equalsBuilder = new EqualsBuilder()
-                .append(fieldName, obj.fieldName)
-                .append(queryTokens, obj.queryTokens)
-                .append(queryText, obj.queryText)
-                .append(modelId, obj.modelId)
-                .append(tokenScoreUpperBound, obj.tokenScoreUpperBound);
+        EqualsBuilder equalsBuilder = new EqualsBuilder().append(fieldName, obj.fieldName)
+            .append(queryTokens, obj.queryTokens)
+            .append(queryText, obj.queryText)
+            .append(modelId, obj.modelId)
+            .append(tokenScoreUpperBound, obj.tokenScoreUpperBound);
         return equalsBuilder.isEquals();
     }
 
     @Override
     protected int doHashCode() {
-        return new HashCodeBuilder()
-                .append(fieldName)
-                .append(queryTokens)
-                .append(queryText)
-                .append(modelId)
-                .append(tokenScoreUpperBound)
-                .toHashCode();
+        return new HashCodeBuilder().append(fieldName)
+            .append(queryTokens)
+            .append(queryText)
+            .append(modelId)
+            .append(tokenScoreUpperBound)
+            .toHashCode();
     }
 
     @Override

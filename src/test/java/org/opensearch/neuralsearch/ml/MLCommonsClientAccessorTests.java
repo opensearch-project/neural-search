@@ -23,7 +23,6 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.core.action.ActionListener;
-import org.opensearch.index.IndexNotFoundException;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.input.MLInput;
 import org.opensearch.ml.common.output.MLOutput;
@@ -164,7 +163,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     }
 
     public void test_inferenceSentencesWithMapResult_whenValidInput_thenSuccess() {
-//        final List<Map<String, String>> map = List.of(Map.of("key", "value"));
+        // final List<Map<String, String>> map = List.of(Map.of("key", "value"));
         final Map<String, String> map = Map.of("key", "value");
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
         Mockito.doAnswer(invocation -> {
@@ -194,7 +193,10 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         ArgumentCaptor<Exception> argumentCaptor = ArgumentCaptor.forClass(IllegalStateException.class);
         Mockito.verify(resultListener).onFailure(argumentCaptor.capture());
-        assertEquals("Empty model result produced. Expected 1 tensor output and 1 model tensor, but got [0]", argumentCaptor.getValue().getMessage());
+        assertEquals(
+            "Empty model result produced. Expected 1 tensor output and 1 model tensor, but got [0]",
+            argumentCaptor.getValue().getMessage()
+        );
         Mockito.verifyNoMoreInteractions(resultListener);
     }
 
@@ -215,7 +217,10 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         ArgumentCaptor<Exception> argumentCaptor = ArgumentCaptor.forClass(IllegalStateException.class);
         Mockito.verify(resultListener).onFailure(argumentCaptor.capture());
-        assertEquals("Empty model result produced. Expected 1 tensor output and 1 model tensor, but got [0]", argumentCaptor.getValue().getMessage());
+        assertEquals(
+            "Empty model result produced. Expected 1 tensor output and 1 model tensor, but got [0]",
+            argumentCaptor.getValue().getMessage()
+        );
         Mockito.verifyNoMoreInteractions(resultListener);
     }
 
@@ -223,15 +228,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
         final List<ModelTensors> tensorsList = new ArrayList<>();
         final List<ModelTensor> mlModelTensorList = new ArrayList<>();
-        final ModelTensor tensor = new ModelTensor(
-            "response",
-            null,
-            null,
-            null,
-            null,
-            null,
-           Map.of("key", "value")
-        );
+        final ModelTensor tensor = new ModelTensor("response", null, null, null, null, null, Map.of("key", "value"));
         mlModelTensorList.add(tensor);
         mlModelTensorList.add(tensor);
         tensorsList.add(new ModelTensors(mlModelTensorList));
@@ -244,8 +241,8 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         accessor.inferenceSentencesWithMapResult(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_LIST, resultListener);
 
         Mockito.verify(client)
-                .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        Mockito.verify(resultListener).onResponse(List.of(Map.of("key","value"),Map.of("key","value")));
+            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        Mockito.verify(resultListener).onResponse(List.of(Map.of("key", "value"), Map.of("key", "value")));
         Mockito.verifyNoMoreInteractions(resultListener);
     }
 
@@ -260,11 +257,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
-        accessor.inferenceSentencesWithMapResult(
-            TestCommonConstants.MODEL_ID,
-            TestCommonConstants.SENTENCES_LIST,
-            resultListener
-        );
+        accessor.inferenceSentencesWithMapResult(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_LIST, resultListener);
 
         Mockito.verify(client, times(4))
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -279,11 +272,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
-        accessor.inferenceSentencesWithMapResult(
-            TestCommonConstants.MODEL_ID,
-            TestCommonConstants.SENTENCES_LIST,
-            resultListener
-        );
+        accessor.inferenceSentencesWithMapResult(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_LIST, resultListener);
 
         Mockito.verify(client, times(1))
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -311,15 +300,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     private ModelTensorOutput createModelTensorOutput(final Map<String, String> map) {
         final List<ModelTensors> tensorsList = new ArrayList<>();
         final List<ModelTensor> mlModelTensorList = new ArrayList<>();
-        final ModelTensor tensor = new ModelTensor(
-            "response",
-            null,
-            null,
-            null,
-            null,
-            null,
-            map
-        );
+        final ModelTensor tensor = new ModelTensor("response", null, null, null, null, null, map);
         mlModelTensorList.add(tensor);
         final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
         tensorsList.add(modelTensors);

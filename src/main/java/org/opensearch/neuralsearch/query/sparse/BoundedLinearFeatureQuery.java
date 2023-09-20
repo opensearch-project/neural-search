@@ -81,8 +81,8 @@ public final class BoundedLinearFeatureQuery extends Query {
         }
         BoundedLinearFeatureQuery that = (BoundedLinearFeatureQuery) obj;
         return Objects.equals(fieldName, that.fieldName)
-                && Objects.equals(featureName, that.featureName)
-                && Objects.equals(scoreUpperBound, that.scoreUpperBound);
+            && Objects.equals(featureName, that.featureName)
+            && Objects.equals(scoreUpperBound, that.scoreUpperBound);
     }
 
     @Override
@@ -95,8 +95,7 @@ public final class BoundedLinearFeatureQuery extends Query {
     }
 
     @Override
-    public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost)
-            throws IOException {
+    public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
         if (!scoreMode.needsScores()) {
             // We don't need scores (e.g. for faceting), and since features are stored as terms,
             // allow TermQuery to optimize in this case
@@ -133,14 +132,11 @@ public final class BoundedLinearFeatureQuery extends Query {
                 float featureValue = decodeFeatureValue(freq);
                 float score = boost * featureValue;
                 return Explanation.match(
-                        score,
-                        "Linear function on the "
-                                + fieldName
-                                + " field for the "
-                                + featureName
-                                + " feature, computed as w * S from:",
-                        Explanation.match(boost, "w, weight of this function"),
-                        Explanation.match(featureValue, "S, feature value"));
+                    score,
+                    "Linear function on the " + fieldName + " field for the " + featureName + " feature, computed as w * S from:",
+                    Explanation.match(boost, "w, weight of this function"),
+                    Explanation.match(featureValue, "S, feature value")
+                );
             }
 
             @Override
@@ -205,16 +201,11 @@ public final class BoundedLinearFeatureQuery extends Query {
 
     @Override
     public String toString(String field) {
-        return "BoundedLinearFeatureQuery(field="
-                + fieldName
-                + ", feature="
-                + featureName
-                + ", scoreUpperBound="
-                + scoreUpperBound
-                + ")";
+        return "BoundedLinearFeatureQuery(field=" + fieldName + ", feature=" + featureName + ", scoreUpperBound=" + scoreUpperBound + ")";
     }
 
     static final int MAX_FREQ = Float.floatToIntBits(Float.MAX_VALUE) >>> 15;
+
     private float decodeFeatureValue(float freq) {
         if (freq > MAX_FREQ) {
             return scoreUpperBound;

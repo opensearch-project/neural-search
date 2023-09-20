@@ -5,18 +5,17 @@
 
 package org.opensearch.neuralsearch.processor;
 
+import java.util.List;
+import java.util.Map;
+import java.util.function.BiConsumer;
+
 import lombok.extern.log4j.Log4j2;
+
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.function.BiConsumer;
-
 
 @Log4j2
 public class SparseEncodingProcessor extends NLPProcessor {
@@ -40,8 +39,7 @@ public class SparseEncodingProcessor extends NLPProcessor {
         IngestDocument ingestDocument,
         Map<String, Object> ProcessMap,
         List<String> inferenceList,
-        BiConsumer<IngestDocument,
-        Exception> handler
+        BiConsumer<IngestDocument, Exception> handler
     ) {
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(this.modelId, inferenceList, ActionListener.wrap(resultMaps -> {
             setVectorFieldsToDocument(ingestDocument, ProcessMap, TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps));

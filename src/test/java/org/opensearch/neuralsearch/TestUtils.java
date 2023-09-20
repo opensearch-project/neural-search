@@ -91,7 +91,7 @@ public class TestUtils {
      */
     public static Map<String, Float> createRandomTokenWeightMap(Collection<String> tokens) {
         Map<String, Float> resultMap = new HashMap<>();
-        for (String token: tokens) {
+        for (String token : tokens) {
             // use a small shift to ensure value > 0
             resultMap.put(token, createFloatNumberWithEffectiveDigits(Math.abs(randomFloat()) + 1e-3f, 3));
         }

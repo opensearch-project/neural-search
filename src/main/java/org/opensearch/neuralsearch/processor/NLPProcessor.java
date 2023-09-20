@@ -5,16 +5,6 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableMap;
-import lombok.extern.log4j.Log4j2;
-import org.apache.commons.lang3.StringUtils;
-import org.opensearch.env.Environment;
-import org.opensearch.index.mapper.MapperService;
-import org.opensearch.ingest.AbstractProcessor;
-import org.opensearch.ingest.IngestDocument;
-import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,6 +13,18 @@ import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
+
+import lombok.extern.log4j.Log4j2;
+
+import org.apache.commons.lang3.StringUtils;
+import org.opensearch.env.Environment;
+import org.opensearch.index.mapper.MapperService;
+import org.opensearch.ingest.AbstractProcessor;
+import org.opensearch.ingest.IngestDocument;
+import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
 
 @Log4j2
 public abstract class NLPProcessor extends AbstractProcessor {
@@ -44,14 +46,14 @@ public abstract class NLPProcessor extends AbstractProcessor {
     protected final Environment environment;
 
     public NLPProcessor(
-            String tag,
-            String description,
-            String type,
-            String listTypeNestedMapKey,
-            String modelId,
-            Map<String, Object> fieldMap,
-            MLCommonsClientAccessor clientAccessor,
-            Environment environment
+        String tag,
+        String description,
+        String type,
+        String listTypeNestedMapKey,
+        String modelId,
+        Map<String, Object> fieldMap,
+        MLCommonsClientAccessor clientAccessor,
+        Environment environment
     ) {
         super(tag, description);
         this.type = type;
@@ -67,11 +69,11 @@ public abstract class NLPProcessor extends AbstractProcessor {
 
     private void validateEmbeddingConfiguration(Map<String, Object> fieldMap) {
         if (fieldMap == null
-                || fieldMap.size() == 0
-                || fieldMap.entrySet()
+            || fieldMap.size() == 0
+            || fieldMap.entrySet()
                 .stream()
                 .anyMatch(
-                        x -> StringUtils.isBlank(x.getKey()) || Objects.isNull(x.getValue()) || StringUtils.isBlank(x.getValue().toString())
+                    x -> StringUtils.isBlank(x.getKey()) || Objects.isNull(x.getValue()) || StringUtils.isBlank(x.getValue().toString())
                 )) {
             throw new IllegalArgumentException("Unable to create the processor as field_map has invalid key or value");
         }
@@ -99,9 +101,9 @@ public abstract class NLPProcessor extends AbstractProcessor {
             validateListTypeValue(sourceKey, sourceValue);
         } else if (Map.class.isAssignableFrom(sourceValue.getClass())) {
             ((Map) sourceValue).values()
-                    .stream()
-                    .filter(Objects::nonNull)
-                    .forEach(x -> validateNestedTypeValue(sourceKey, x, () -> maxDepth + 1));
+                .stream()
+                .filter(Objects::nonNull)
+                .forEach(x -> validateNestedTypeValue(sourceKey, x, () -> maxDepth + 1));
         } else if (!String.class.isAssignableFrom(sourceValue.getClass())) {
             throw new IllegalArgumentException("map type field [" + sourceKey + "] has non-string type, can not process it");
         } else if (StringUtils.isBlank(sourceValue.toString())) {
@@ -128,20 +130,20 @@ public abstract class NLPProcessor extends AbstractProcessor {
     }
 
     private void buildMapWithProcessorKeyAndOriginalValueForMapType(
-            String parentKey,
-            Object processorKey,
-            Map<String, Object> sourceAndMetadataMap,
-            Map<String, Object> treeRes
+        String parentKey,
+        Object processorKey,
+        Map<String, Object> sourceAndMetadataMap,
+        Map<String, Object> treeRes
     ) {
         if (processorKey == null || sourceAndMetadataMap == null) return;
         if (processorKey instanceof Map) {
             Map<String, Object> next = new LinkedHashMap<>();
             for (Map.Entry<String, Object> nestedFieldMapEntry : ((Map<String, Object>) processorKey).entrySet()) {
                 buildMapWithProcessorKeyAndOriginalValueForMapType(
-                        nestedFieldMapEntry.getKey(),
-                        nestedFieldMapEntry.getValue(),
-                        (Map<String, Object>) sourceAndMetadataMap.get(parentKey),
-                        next
+                    nestedFieldMapEntry.getKey(),
+                    nestedFieldMapEntry.getValue(),
+                    (Map<String, Object>) sourceAndMetadataMap.get(parentKey),
+                    next
                 );
             }
             treeRes.put(parentKey, next);
@@ -197,7 +199,12 @@ public abstract class NLPProcessor extends AbstractProcessor {
         return texts;
     }
 
-    public abstract void doExecute(IngestDocument ingestDocument,Map<String, Object> ProcessMap, List<String> inferenceList, BiConsumer<IngestDocument, Exception> handler);
+    public abstract void doExecute(
+        IngestDocument ingestDocument,
+        Map<String, Object> ProcessMap,
+        List<String> inferenceList,
+        BiConsumer<IngestDocument, Exception> handler
+    );
 
     @Override
     public IngestDocument execute(IngestDocument ingestDocument) throws Exception {
@@ -211,7 +218,7 @@ public abstract class NLPProcessor extends AbstractProcessor {
      * @param handler {@link BiConsumer} which is the handler which can be used after the inference task is done.
      */
     @Override
-    public void execute(IngestDocument ingestDocument, BiConsumer<IngestDocument, Exception> handler){
+    public void execute(IngestDocument ingestDocument, BiConsumer<IngestDocument, Exception> handler) {
         try {
             validateEmbeddingFieldsValue(ingestDocument);
             Map<String, Object> ProcessMap = buildMapWithProcessorKeyAndOriginalValue(ingestDocument);
@@ -235,11 +242,7 @@ public abstract class NLPProcessor extends AbstractProcessor {
 
     @SuppressWarnings({ "unchecked" })
     @VisibleForTesting
-    Map<String, Object> buildNLPResult(
-            Map<String, Object> processorMap,
-            List<?> results,
-            Map<String, Object> sourceAndMetadataMap
-    ) {
+    Map<String, Object> buildNLPResult(Map<String, Object> processorMap, List<?> results, Map<String, Object> sourceAndMetadataMap) {
         NLPProcessor.IndexWrapper indexWrapper = new NLPProcessor.IndexWrapper(0);
         Map<String, Object> result = new LinkedHashMap<>();
         for (Map.Entry<String, Object> knnMapEntry : processorMap.entrySet()) {
@@ -258,41 +261,38 @@ public abstract class NLPProcessor extends AbstractProcessor {
 
     @SuppressWarnings({ "unchecked" })
     private void putNLPResultToSourceMapForMapType(
-            String processorKey,
-            Object sourceValue,
-            List<?> results,
-            NLPProcessor.IndexWrapper indexWrapper,
-            Map<String, Object> sourceAndMetadataMap
+        String processorKey,
+        Object sourceValue,
+        List<?> results,
+        NLPProcessor.IndexWrapper indexWrapper,
+        Map<String, Object> sourceAndMetadataMap
     ) {
         if (processorKey == null || sourceAndMetadataMap == null || sourceValue == null) return;
         if (sourceValue instanceof Map) {
             for (Map.Entry<String, Object> inputNestedMapEntry : ((Map<String, Object>) sourceValue).entrySet()) {
                 putNLPResultToSourceMapForMapType(
-                        inputNestedMapEntry.getKey(),
-                        inputNestedMapEntry.getValue(),
-                        results,
-                        indexWrapper,
-                        (Map<String, Object>) sourceAndMetadataMap.get(processorKey)
+                    inputNestedMapEntry.getKey(),
+                    inputNestedMapEntry.getValue(),
+                    results,
+                    indexWrapper,
+                    (Map<String, Object>) sourceAndMetadataMap.get(processorKey)
                 );
             }
         } else if (sourceValue instanceof String) {
             sourceAndMetadataMap.put(processorKey, results.get(indexWrapper.index++));
         } else if (sourceValue instanceof List) {
-            sourceAndMetadataMap.put(
-                    processorKey,
-                    buildNLPResultForListType((List<String>) sourceValue, results, indexWrapper)
-            );
+            sourceAndMetadataMap.put(processorKey, buildNLPResultForListType((List<String>) sourceValue, results, indexWrapper));
         }
     }
 
     private List<Map<String, Object>> buildNLPResultForListType(
-            List<String> sourceValue,
-            List<?> results,
-            NLPProcessor.IndexWrapper indexWrapper
+        List<String> sourceValue,
+        List<?> results,
+        NLPProcessor.IndexWrapper indexWrapper
     ) {
         List<Map<String, Object>> keyToResult = new ArrayList<>();
         IntStream.range(0, sourceValue.size())
-                .forEachOrdered(x -> keyToResult.add(ImmutableMap.of(listTypeNestedMapKey, results.get(indexWrapper.index++))));
+            .forEachOrdered(x -> keyToResult.add(ImmutableMap.of(listTypeNestedMapKey, results.get(indexWrapper.index++))));
         return keyToResult;
     }
 

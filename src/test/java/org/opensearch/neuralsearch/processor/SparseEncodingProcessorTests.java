@@ -5,9 +5,16 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.verify;
+
+import java.util.*;
+import java.util.function.BiConsumer;
+import java.util.stream.IntStream;
+
 import lombok.SneakyThrows;
+
 import org.junit.Before;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -19,16 +26,10 @@ import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.factory.SparseEncodingProcessorFactory;
-import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
 import org.opensearch.test.OpenSearchTestCase;
 
-import java.util.*;
-import java.util.function.BiConsumer;
-import java.util.stream.IntStream;
-
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
-import static org.mockito.Mockito.verify;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 
 public class SparseEncodingProcessorTests extends OpenSearchTestCase {
     @Mock
@@ -65,7 +66,7 @@ public class SparseEncodingProcessorTests extends OpenSearchTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         SparseEncodingProcessor processor = createInstance();
 
-        List<Map<String, ?> > dataAsMapList = createMockMapResult(2);
+        List<Map<String, ?>> dataAsMapList = createMockMapResult(2);
         doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
             listener.onResponse(dataAsMapList);
@@ -104,7 +105,7 @@ public class SparseEncodingProcessorTests extends OpenSearchTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         SparseEncodingProcessor processor = createInstance();
 
-        List<Map<String, ?> > dataAsMapList = createMockMapResult(6);
+        List<Map<String, ?>> dataAsMapList = createMockMapResult(6);
         doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
             listener.onResponse(dataAsMapList);
@@ -115,7 +116,6 @@ public class SparseEncodingProcessorTests extends OpenSearchTestCase {
         processor.execute(ingestDocument, handler);
         verify(handler).accept(any(IngestDocument.class), isNull());
     }
-
 
     public void testExecute_MLClientAccessorThrowFail_handlerFailure() {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
@@ -144,7 +144,7 @@ public class SparseEncodingProcessorTests extends OpenSearchTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         SparseEncodingProcessor processor = createInstance();
 
-        List<Map<String, ?> > dataAsMapList = createMockMapResult(2);
+        List<Map<String, ?>> dataAsMapList = createMockMapResult(2);
         doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
             listener.onResponse(dataAsMapList);
@@ -157,12 +157,9 @@ public class SparseEncodingProcessorTests extends OpenSearchTestCase {
 
     }
 
-
-    private List<Map<String, ?> > createMockMapResult(int number)
-    {
+    private List<Map<String, ?>> createMockMapResult(int number) {
         List<Map<String, Float>> mockSparseEncodingResult = new ArrayList<>();
-        IntStream.range(0, number)
-                .forEachOrdered(x -> mockSparseEncodingResult.add(ImmutableMap.of("hello", 1.0f)));
+        IntStream.range(0, number).forEachOrdered(x -> mockSparseEncodingResult.add(ImmutableMap.of("hello", 1.0f)));
 
         List<Map<String, ?>> mockMapResult = Collections.singletonList(Map.of("response", mockSparseEncodingResult));
         return mockMapResult;

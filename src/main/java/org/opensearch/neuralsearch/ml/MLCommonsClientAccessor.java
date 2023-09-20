@@ -47,16 +47,16 @@ public class MLCommonsClientAccessor {
      * @param listener {@link ActionListener} which will be called when prediction is completed or errored out
      */
     public void inferenceSentence(
-            @NonNull final String modelId,
-            @NonNull final String inputText,
-            @NonNull final ActionListener<List<Float>> listener
+        @NonNull final String modelId,
+        @NonNull final String inputText,
+        @NonNull final ActionListener<List<Float>> listener
     ) {
         inferenceSentences(TARGET_RESPONSE_FILTERS, modelId, List.of(inputText), ActionListener.wrap(response -> {
             if (response.size() != 1) {
                 listener.onFailure(
-                        new IllegalStateException(
-                                "Unexpected number of vectors produced. Expected 1 vector to be returned, but got [" + response.size() + "]"
-                        )
+                    new IllegalStateException(
+                        "Unexpected number of vectors produced. Expected 1 vector to be returned, but got [" + response.size() + "]"
+                    )
                 );
                 return;
             }
@@ -77,9 +77,9 @@ public class MLCommonsClientAccessor {
      * @param listener {@link ActionListener} which will be called when prediction is completed or errored out
      */
     public void inferenceSentences(
-            @NonNull final String modelId,
-            @NonNull final List<String> inputText,
-            @NonNull final ActionListener<List<List<Float>>> listener
+        @NonNull final String modelId,
+        @NonNull final List<String> inputText,
+        @NonNull final ActionListener<List<List<Float>>> listener
     ) {
         inferenceSentences(TARGET_RESPONSE_FILTERS, modelId, inputText, listener);
     }
@@ -97,10 +97,10 @@ public class MLCommonsClientAccessor {
      * @param listener {@link ActionListener} which will be called when prediction is completed or errored out.
      */
     public void inferenceSentences(
-            @NonNull final List<String> targetResponseFilters,
-            @NonNull final String modelId,
-            @NonNull final List<String> inputText,
-            @NonNull final ActionListener<List<List<Float>>> listener
+        @NonNull final List<String> targetResponseFilters,
+        @NonNull final String modelId,
+        @NonNull final List<String> inputText,
+        @NonNull final ActionListener<List<List<Float>>> listener
     ) {
         retryableInferenceSentencesWithVectorResult(targetResponseFilters, modelId, inputText, 0, listener);
     }
@@ -108,7 +108,8 @@ public class MLCommonsClientAccessor {
     public void inferenceSentencesWithMapResult(
         @NonNull final String modelId,
         @NonNull final List<String> inputText,
-        @NonNull final ActionListener<List<Map<String, ?>>> listener) {
+        @NonNull final ActionListener<List<Map<String, ?>>> listener
+    ) {
         retryableInferenceSentencesWithMapResult(modelId, inputText, 0, listener);
     }
 
@@ -134,11 +135,11 @@ public class MLCommonsClientAccessor {
     }
 
     private void retryableInferenceSentencesWithVectorResult(
-            final List<String> targetResponseFilters,
-            final String modelId,
-            final List<String> inputText,
-            final int retryTime,
-            final ActionListener<List<List<Float>>> listener
+        final List<String> targetResponseFilters,
+        final String modelId,
+        final List<String> inputText,
+        final int retryTime,
+        final ActionListener<List<List<Float>>> listener
     ) {
         MLInput mlInput = createMLInput(targetResponseFilters, inputText);
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
@@ -174,20 +175,16 @@ public class MLCommonsClientAccessor {
         return vector;
     }
 
-    private List<Map<String, ?> > buildMapResultFromResponse(MLOutput mlOutput) {
+    private List<Map<String, ?>> buildMapResultFromResponse(MLOutput mlOutput) {
         final ModelTensorOutput modelTensorOutput = (ModelTensorOutput) mlOutput;
         final List<ModelTensors> tensorOutputList = modelTensorOutput.getMlModelOutputs();
         if (CollectionUtils.isEmpty(tensorOutputList) || CollectionUtils.isEmpty(tensorOutputList.get(0).getMlModelTensors())) {
-            throw new IllegalStateException(
-                    "Empty model result produced. Expected 1 tensor output and 1 model tensor, but got [0]"
-            );
+            throw new IllegalStateException("Empty model result produced. Expected 1 tensor output and 1 model tensor, but got [0]");
         }
-        List<Map<String, ?> > resultMaps = new ArrayList<>();
-        for (ModelTensors tensors: tensorOutputList)
-        {
+        List<Map<String, ?>> resultMaps = new ArrayList<>();
+        for (ModelTensors tensors : tensorOutputList) {
             List<ModelTensor> tensorList = tensors.getMlModelTensors();
-            for (ModelTensor tensor: tensorList)
-            {
+            for (ModelTensor tensor : tensorList) {
                 resultMaps.add(tensor.getDataAsMap());
             }
         }

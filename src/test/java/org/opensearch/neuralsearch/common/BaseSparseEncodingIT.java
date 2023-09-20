@@ -5,8 +5,14 @@
 
 package org.opensearch.neuralsearch.common;
 
-import com.google.common.collect.ImmutableList;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
 import lombok.SneakyThrows;
+
 import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.message.BasicHeader;
@@ -19,19 +25,15 @@ import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import com.google.common.collect.ImmutableList;
 
-public abstract class BaseSparseEncodingIT extends BaseNeuralSearchIT{
+public abstract class BaseSparseEncodingIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     @Override
     protected String prepareModel() {
         String requestBody = Files.readString(
-                Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
+            Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
         );
         String modelId = uploadModel(requestBody);
         loadModel(modelId);
@@ -40,15 +42,10 @@ public abstract class BaseSparseEncodingIT extends BaseNeuralSearchIT{
 
     @SneakyThrows
     protected void prepareSparseEncodingIndex(String indexName, List<String> sparseEncodingFieldNames) {
-        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
-                .startObject()
-                .startObject("mappings")
-                .startObject("properties");
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder().startObject().startObject("mappings").startObject("properties");
 
-        for (String fieldName: sparseEncodingFieldNames) {
-            xContentBuilder.startObject(fieldName)
-                    .field("type", "rank_features")
-                    .endObject();
+        for (String fieldName : sparseEncodingFieldNames) {
+            xContentBuilder.startObject(fieldName).field("type", "rank_features").endObject();
         }
 
         xContentBuilder.endObject().endObject().endObject();
@@ -57,23 +54,18 @@ public abstract class BaseSparseEncodingIT extends BaseNeuralSearchIT{
     }
 
     @SneakyThrows
-    protected void addSparseEncodingDoc(
-            String index,
-            String docId,
-            List<String> fieldNames,
-            List<Map<String, Float>> docs
-    ) {
+    protected void addSparseEncodingDoc(String index, String docId, List<String> fieldNames, List<Map<String, Float>> docs) {
         addSparseEncodingDoc(index, docId, fieldNames, docs, Collections.emptyList(), Collections.emptyList());
     }
 
     @SneakyThrows
     protected void addSparseEncodingDoc(
-            String index,
-            String docId,
-            List<String> fieldNames,
-            List<Map<String, Float>> docs,
-            List<String> textFieldNames,
-            List<String> texts
+        String index,
+        String docId,
+        List<String> fieldNames,
+        List<Map<String, Float>> docs,
+        List<String> textFieldNames,
+        List<String> texts
     ) {
         Request request = new Request("POST", "/" + index + "/_doc/" + docId + "?refresh=true");
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
@@ -98,7 +90,7 @@ public abstract class BaseSparseEncodingIT extends BaseNeuralSearchIT{
 
     protected float computeExpectedScore(Map<String, Float> tokenWeightMap, Map<String, Float> queryTokens) {
         Float score = 0f;
-        for (Map.Entry<String, Float> entry: queryTokens.entrySet()) {
+        for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
             if (tokenWeightMap.containsKey(entry.getKey())) {
                 score += entry.getValue() * getFeatureFieldCompressedNumber(tokenWeightMap.get(entry.getKey()));
             }
@@ -109,18 +101,18 @@ public abstract class BaseSparseEncodingIT extends BaseNeuralSearchIT{
     @SneakyThrows
     protected Map<String, Float> runSparseModelInference(String modelId, String queryText) {
         Response inferenceResponse = makeRequest(
-                client(),
-                "POST",
-                String.format(LOCALE, "/_plugins/_ml/models/%s/_predict", modelId),
-                null,
-                toHttpEntity(String.format(LOCALE, "{\"text_docs\": [\"%s\"]}", queryText)),
-                ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+            client(),
+            "POST",
+            String.format(LOCALE, "/_plugins/_ml/models/%s/_predict", modelId),
+            null,
+            toHttpEntity(String.format(LOCALE, "{\"text_docs\": [\"%s\"]}", queryText)),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
 
         Map<String, Object> inferenceResJson = XContentHelper.convertToMap(
-                XContentType.JSON.xContent(),
-                EntityUtils.toString(inferenceResponse.getEntity()),
-                false
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(inferenceResponse.getEntity()),
+            false
         );
 
         Object inference_results = inferenceResJson.get("inference_results");

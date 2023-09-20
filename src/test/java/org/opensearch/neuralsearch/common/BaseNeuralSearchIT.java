@@ -68,7 +68,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     protected final ClassLoader classLoader = this.getClass().getClassLoader();
 
-    protected void setPipelineConfigurationName(String pipelineConfigurationName){
+    protected void setPipelineConfigurationName(String pipelineConfigurationName) {
         this.PIPELINE_CONFIGURATION_NAME = pipelineConfigurationName;
     }
 
@@ -243,11 +243,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             "/_ingest/pipeline/" + pipelineName,
             null,
             toHttpEntity(
-                String.format(
-                    LOCALE,
-                    Files.readString(Path.of(classLoader.getResource(PIPELINE_CONFIGURATION_NAME).toURI())),
-                    modelId
-                )
+                String.format(LOCALE, Files.readString(Path.of(classLoader.getResource(PIPELINE_CONFIGURATION_NAME).toURI())), modelId)
             ),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );

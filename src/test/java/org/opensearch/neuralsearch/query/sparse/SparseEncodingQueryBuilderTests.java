@@ -17,7 +17,16 @@ import static org.opensearch.neuralsearch.query.sparse.SparseEncodingQueryBuilde
 import static org.opensearch.neuralsearch.query.sparse.SparseEncodingQueryBuilder.QUERY_TOKENS_FIELD;
 import static org.opensearch.neuralsearch.query.sparse.SparseEncodingQueryBuilder.TOKEN_SCORE_UPPER_BOUND_FIELD;
 
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
+import java.util.function.Supplier;
+
 import lombok.SneakyThrows;
+
 import org.opensearch.client.Client;
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.common.xcontent.XContentFactory;
@@ -35,19 +44,11 @@ import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.test.OpenSearchTestCase;
 
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.function.BiConsumer;
-import java.util.function.Supplier;
-
 public class SparseEncodingQueryBuilderTests extends OpenSearchTestCase {
 
     private static final String FIELD_NAME = "testField";
     private static final String QUERY_TEXT = "Hello world!";
-    private static final Map<String,Float> QUERY_TOKENS = Map.of("hello", 1.f, "world", 2.f);
+    private static final Map<String, Float> QUERY_TOKENS = Map.of("hello", 1.f, "world", 2.f);
     private static final String MODEL_ID = "mfgfgdsfgfdgsde";
     private static final Float TOKEN_SCORE_UPPER_BOUND = 123f;
     private static final float BOOST = 1.8f;
@@ -65,12 +66,12 @@ public class SparseEncodingQueryBuilderTests extends OpenSearchTestCase {
           }
         */
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
-                .startObject()
-                .startObject(FIELD_NAME)
-                .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
-                .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
-                .endObject()
-                .endObject();
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .endObject()
+            .endObject();
 
         XContentParser contentParser = createParser(xContentBuilder);
         contentParser.nextToken();
@@ -93,11 +94,11 @@ public class SparseEncodingQueryBuilderTests extends OpenSearchTestCase {
           }
         */
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
-                .startObject()
-                .startObject(FIELD_NAME)
-                .field(QUERY_TOKENS_FIELD.getPreferredName(), QUERY_TOKENS)
-                .endObject()
-                .endObject();
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TOKENS_FIELD.getPreferredName(), QUERY_TOKENS)
+            .endObject()
+            .endObject();
 
         XContentParser contentParser = createParser(xContentBuilder);
         contentParser.nextToken();
@@ -121,15 +122,15 @@ public class SparseEncodingQueryBuilderTests extends OpenSearchTestCase {
           }
         */
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
-                .startObject()
-                .startObject(FIELD_NAME)
-                .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
-                .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
-                .field(TOKEN_SCORE_UPPER_BOUND_FIELD.getPreferredName(), TOKEN_SCORE_UPPER_BOUND)
-                .field(BOOST_FIELD.getPreferredName(), BOOST)
-                .field(NAME_FIELD.getPreferredName(), QUERY_NAME)
-                .endObject()
-                .endObject();
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .field(TOKEN_SCORE_UPPER_BOUND_FIELD.getPreferredName(), TOKEN_SCORE_UPPER_BOUND)
+            .field(BOOST_FIELD.getPreferredName(), BOOST)
+            .field(NAME_FIELD.getPreferredName(), QUERY_NAME)
+            .endObject()
+            .endObject();
 
         XContentParser contentParser = createParser(xContentBuilder);
         contentParser.nextToken();
@@ -157,15 +158,15 @@ public class SparseEncodingQueryBuilderTests extends OpenSearchTestCase {
           }
         */
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
-                .startObject()
-                .startObject(FIELD_NAME)
-                .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
-                .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
-                .field(BOOST_FIELD.getPreferredName(), BOOST)
-                .field(NAME_FIELD.getPreferredName(), QUERY_NAME)
-                .endObject()
-                .field("invalid", 10)
-                .endObject();
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .field(BOOST_FIELD.getPreferredName(), BOOST)
+            .field(NAME_FIELD.getPreferredName(), QUERY_NAME)
+            .endObject()
+            .field("invalid", 10)
+            .endObject();
 
         XContentParser contentParser = createParser(xContentBuilder);
         contentParser.nextToken();
@@ -182,11 +183,11 @@ public class SparseEncodingQueryBuilderTests extends OpenSearchTestCase {
           }
         */
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
-                .startObject()
-                .startObject(FIELD_NAME)
-                .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
-                .endObject()
-                .endObject();
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .endObject()
+            .endObject();
 
         XContentParser contentParser = createParser(xContentBuilder);
         contentParser.nextToken();
@@ -203,11 +204,11 @@ public class SparseEncodingQueryBuilderTests extends OpenSearchTestCase {
           }
         */
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
-                .startObject()
-                .startObject(FIELD_NAME)
-                .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
-                .endObject()
-                .endObject();
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .endObject()
+            .endObject();
 
         XContentParser contentParser = createParser(xContentBuilder);
         contentParser.nextToken();
@@ -227,14 +228,14 @@ public class SparseEncodingQueryBuilderTests extends OpenSearchTestCase {
           }
         */
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
-                .startObject()
-                .startObject(FIELD_NAME)
-                .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
-                .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
-                .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
-                .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
-                .endObject()
-                .endObject();
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .endObject()
+            .endObject();
 
         XContentParser contentParser = createParser(xContentBuilder);
         contentParser.nextToken();
@@ -245,10 +246,10 @@ public class SparseEncodingQueryBuilderTests extends OpenSearchTestCase {
     @SneakyThrows
     public void testToXContent() {
         SparseEncodingQueryBuilder sparseEncodingQueryBuilder = new SparseEncodingQueryBuilder().fieldName(FIELD_NAME)
-                .modelId(MODEL_ID)
-                .queryText(QUERY_TEXT)
-                .queryTokens(QUERY_TOKENS)
-                .tokenScoreUpperBound(TOKEN_SCORE_UPPER_BOUND);
+            .modelId(MODEL_ID)
+            .queryText(QUERY_TEXT)
+            .queryTokens(QUERY_TOKENS)
+            .tokenScoreUpperBound(TOKEN_SCORE_UPPER_BOUND);
 
         XContentBuilder builder = XContentFactory.jsonBuilder();
         builder = sparseEncodingQueryBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
@@ -276,13 +277,13 @@ public class SparseEncodingQueryBuilderTests extends OpenSearchTestCase {
         // QUERY_TOKENS is <String,Float> map, the converted one use <String, Double>
         Map<String, Double> convertedQueryTokensMap = (Map<String, Double>) secondInnerMap.get(QUERY_TOKENS_FIELD.getPreferredName());
         assertEquals(QUERY_TOKENS.size(), convertedQueryTokensMap.size());
-        for (Map.Entry<String, Float> entry: QUERY_TOKENS.entrySet()) {
+        for (Map.Entry<String, Float> entry : QUERY_TOKENS.entrySet()) {
             assertEquals(entry.getValue(), convertedQueryTokensMap.get(entry.getKey()).floatValue(), 0);
         }
         assertEquals(
-                TOKEN_SCORE_UPPER_BOUND,
-                ((Double) secondInnerMap.get(TOKEN_SCORE_UPPER_BOUND_FIELD.getPreferredName())).floatValue(),
-                0
+            TOKEN_SCORE_UPPER_BOUND,
+            ((Double) secondInnerMap.get(TOKEN_SCORE_UPPER_BOUND_FIELD.getPreferredName())).floatValue(),
+            0
         );
     }
 
@@ -301,10 +302,10 @@ public class SparseEncodingQueryBuilderTests extends OpenSearchTestCase {
         original.writeTo(streamOutput);
 
         FilterStreamInput filterStreamInput = new NamedWriteableAwareStreamInput(
-                streamOutput.bytes().streamInput(),
-                new NamedWriteableRegistry(
-                        List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, MatchAllQueryBuilder.NAME, MatchAllQueryBuilder::new))
-                )
+            streamOutput.bytes().streamInput(),
+            new NamedWriteableRegistry(
+                List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, MatchAllQueryBuilder.NAME, MatchAllQueryBuilder::new))
+            )
         );
 
         SparseEncodingQueryBuilder copy = new SparseEncodingQueryBuilder(filterStreamInput);
@@ -327,102 +328,92 @@ public class SparseEncodingQueryBuilderTests extends OpenSearchTestCase {
         float tokenScoreUpperBound1 = 1f;
         float tokenScoreUpperBound2 = 2f;
 
-        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_baseline = new SparseEncodingQueryBuilder()
-                .fieldName(fieldName1)
-                .queryText(queryText1)
-                .queryTokens(queryTokens1)
-                .modelId(modelId1)
-                .boost(boost1)
-                .queryName(queryName1)
-                .tokenScoreUpperBound(tokenScoreUpperBound1);
+        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_baseline = new SparseEncodingQueryBuilder().fieldName(fieldName1)
+            .queryText(queryText1)
+            .queryTokens(queryTokens1)
+            .modelId(modelId1)
+            .boost(boost1)
+            .queryName(queryName1)
+            .tokenScoreUpperBound(tokenScoreUpperBound1);
 
         // Identical to sparseEncodingQueryBuilder_baseline
-        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_baselineCopy = new SparseEncodingQueryBuilder()
-                .fieldName(fieldName1)
-                .queryText(queryText1)
-                .queryTokens(queryTokens1)
-                .modelId(modelId1)
-                .boost(boost1)
-                .queryName(queryName1)
-                .tokenScoreUpperBound(tokenScoreUpperBound1);
+        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_baselineCopy = new SparseEncodingQueryBuilder().fieldName(fieldName1)
+            .queryText(queryText1)
+            .queryTokens(queryTokens1)
+            .modelId(modelId1)
+            .boost(boost1)
+            .queryName(queryName1)
+            .tokenScoreUpperBound(tokenScoreUpperBound1);
 
         // Identical to sparseEncodingQueryBuilder_baseline except default boost and query name
-        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_defaultBoostAndQueryName = new SparseEncodingQueryBuilder()
-                .fieldName(fieldName1)
-                .queryText(queryText1)
-                .queryTokens(queryTokens1)
-                .modelId(modelId1)
-                .tokenScoreUpperBound(tokenScoreUpperBound1);
+        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_defaultBoostAndQueryName = new SparseEncodingQueryBuilder().fieldName(
+            fieldName1
+        ).queryText(queryText1).queryTokens(queryTokens1).modelId(modelId1).tokenScoreUpperBound(tokenScoreUpperBound1);
 
         // Identical to sparseEncodingQueryBuilder_baseline except diff field name
-        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_diffFieldName = new SparseEncodingQueryBuilder()
-                .fieldName(fieldName2)
-                .queryText(queryText1)
-                .queryTokens(queryTokens1)
-                .modelId(modelId1)
-                .boost(boost1)
-                .queryName(queryName1)
-                .tokenScoreUpperBound(tokenScoreUpperBound1);
+        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_diffFieldName = new SparseEncodingQueryBuilder().fieldName(fieldName2)
+            .queryText(queryText1)
+            .queryTokens(queryTokens1)
+            .modelId(modelId1)
+            .boost(boost1)
+            .queryName(queryName1)
+            .tokenScoreUpperBound(tokenScoreUpperBound1);
 
         // Identical to sparseEncodingQueryBuilder_baseline except diff query text
-        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_diffQueryText = new SparseEncodingQueryBuilder()
-                .fieldName(fieldName1)
-                .queryText(queryText2)
-                .queryTokens(queryTokens1)
-                .modelId(modelId1)
-                .boost(boost1)
-                .queryName(queryName1)
-                .tokenScoreUpperBound(tokenScoreUpperBound1);
+        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_diffQueryText = new SparseEncodingQueryBuilder().fieldName(fieldName1)
+            .queryText(queryText2)
+            .queryTokens(queryTokens1)
+            .modelId(modelId1)
+            .boost(boost1)
+            .queryName(queryName1)
+            .tokenScoreUpperBound(tokenScoreUpperBound1);
 
         // Identical to sparseEncodingQueryBuilder_baseline except diff model ID
-        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_diffModelId = new SparseEncodingQueryBuilder()
-                .fieldName(fieldName1)
-                .queryText(queryText1)
-                .queryTokens(queryTokens1)
-                .modelId(modelId2)
-                .boost(boost1)
-                .queryName(queryName1)
-                .tokenScoreUpperBound(tokenScoreUpperBound1);
+        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_diffModelId = new SparseEncodingQueryBuilder().fieldName(fieldName1)
+            .queryText(queryText1)
+            .queryTokens(queryTokens1)
+            .modelId(modelId2)
+            .boost(boost1)
+            .queryName(queryName1)
+            .tokenScoreUpperBound(tokenScoreUpperBound1);
 
         // Identical to sparseEncodingQueryBuilder_baseline except diff query tokens
-        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_diffQueryTokens = new SparseEncodingQueryBuilder()
-                .fieldName(fieldName1)
-                .queryText(queryText1)
-                .queryTokens(queryTokens2)
-                .modelId(modelId1)
-                .boost(boost1)
-                .queryName(queryName1)
-                .tokenScoreUpperBound(tokenScoreUpperBound1);
+        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_diffQueryTokens = new SparseEncodingQueryBuilder().fieldName(fieldName1)
+            .queryText(queryText1)
+            .queryTokens(queryTokens2)
+            .modelId(modelId1)
+            .boost(boost1)
+            .queryName(queryName1)
+            .tokenScoreUpperBound(tokenScoreUpperBound1);
 
         // Identical to sparseEncodingQueryBuilder_baseline except diff boost
-        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_diffBoost = new SparseEncodingQueryBuilder()
-                .fieldName(fieldName1)
-                .queryText(queryText1)
-                .queryTokens(queryTokens1)
-                .modelId(modelId1)
-                .boost(boost2)
-                .queryName(queryName1)
-                .tokenScoreUpperBound(tokenScoreUpperBound1);
+        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_diffBoost = new SparseEncodingQueryBuilder().fieldName(fieldName1)
+            .queryText(queryText1)
+            .queryTokens(queryTokens1)
+            .modelId(modelId1)
+            .boost(boost2)
+            .queryName(queryName1)
+            .tokenScoreUpperBound(tokenScoreUpperBound1);
 
         // Identical to sparseEncodingQueryBuilder_baseline except diff query name
-        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_diffQueryName = new SparseEncodingQueryBuilder()
-                .fieldName(fieldName1)
-                .queryText(queryText1)
-                .queryTokens(queryTokens1)
-                .modelId(modelId1)
-                .boost(boost1)
-                .queryName(queryName2)
-                .tokenScoreUpperBound(tokenScoreUpperBound1);
+        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_diffQueryName = new SparseEncodingQueryBuilder().fieldName(fieldName1)
+            .queryText(queryText1)
+            .queryTokens(queryTokens1)
+            .modelId(modelId1)
+            .boost(boost1)
+            .queryName(queryName2)
+            .tokenScoreUpperBound(tokenScoreUpperBound1);
 
         // Identical to sparseEncodingQueryBuilder_baseline except diff token_score_upper_bound
-        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_diffTokenScoreUpperBound = new SparseEncodingQueryBuilder()
-                .fieldName(fieldName1)
-                .queryText(queryText1)
-                .queryTokens(queryTokens1)
-                .modelId(modelId1)
-                .boost(boost1)
-                .queryName(queryName1)
-                .tokenScoreUpperBound(tokenScoreUpperBound2);
+        SparseEncodingQueryBuilder sparseEncodingQueryBuilder_diffTokenScoreUpperBound = new SparseEncodingQueryBuilder().fieldName(
+            fieldName1
+        )
+            .queryText(queryText1)
+            .queryTokens(queryTokens1)
+            .modelId(modelId1)
+            .boost(boost1)
+            .queryName(queryName1)
+            .tokenScoreUpperBound(tokenScoreUpperBound2);
 
         assertEquals(sparseEncodingQueryBuilder_baseline, sparseEncodingQueryBuilder_baseline);
         assertEquals(sparseEncodingQueryBuilder_baseline.hashCode(), sparseEncodingQueryBuilder_baseline.hashCode());
@@ -457,21 +448,19 @@ public class SparseEncodingQueryBuilderTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testRewrite_whenQueryTokensNotNull_thenRewriteToSelf() {
-        SparseEncodingQueryBuilder sparseEncodingQueryBuilder = new SparseEncodingQueryBuilder()
-                .queryTokens(QUERY_TOKENS)
-                .fieldName(FIELD_NAME)
-                .queryText(QUERY_TEXT)
-                .modelId(MODEL_ID);
+        SparseEncodingQueryBuilder sparseEncodingQueryBuilder = new SparseEncodingQueryBuilder().queryTokens(QUERY_TOKENS)
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID);
         QueryBuilder queryBuilder = sparseEncodingQueryBuilder.doRewrite(null);
         assert queryBuilder == sparseEncodingQueryBuilder;
     }
 
     @SneakyThrows
     public void testRewrite_whenQueryTokensSupplierNull_thenSetQueryTokensSupplier() {
-        SparseEncodingQueryBuilder sparseEncodingQueryBuilder = new SparseEncodingQueryBuilder()
-                .fieldName(FIELD_NAME)
-                .queryText(QUERY_TEXT)
-                .modelId(MODEL_ID);
+        SparseEncodingQueryBuilder sparseEncodingQueryBuilder = new SparseEncodingQueryBuilder().fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID);
         Map<String, Float> expectedMap = Map.of("1", 1f, "2", 2f);
         MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
         doAnswer(invocation -> {
@@ -486,11 +475,11 @@ public class SparseEncodingQueryBuilderTests extends OpenSearchTestCase {
         doAnswer(invocation -> {
             BiConsumer<Client, ActionListener<?>> biConsumer = invocation.getArgument(0);
             biConsumer.accept(
-                    null,
-                    ActionListener.wrap(
-                            response -> inProgressLatch.countDown(),
-                            err -> fail("Failed to set query tokens supplier: " + err.getMessage())
-                    )
+                null,
+                ActionListener.wrap(
+                    response -> inProgressLatch.countDown(),
+                    err -> fail("Failed to set query tokens supplier: " + err.getMessage())
+                )
             );
             return null;
         }).when(queryRewriteContext).registerAsyncAction(any());
@@ -505,26 +494,24 @@ public class SparseEncodingQueryBuilderTests extends OpenSearchTestCase {
     public void testRewrite_whenSupplierContentNull_thenReturnCopy() {
         Supplier<Map<String, Float>> nullSupplier = () -> null;
         SparseEncodingQueryBuilder sparseEncodingQueryBuilder = new SparseEncodingQueryBuilder().fieldName(FIELD_NAME)
-                .queryText(QUERY_TEXT)
-                .modelId(MODEL_ID)
-                .queryTokensSupplier(nullSupplier);
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensSupplier(nullSupplier);
         QueryBuilder queryBuilder = sparseEncodingQueryBuilder.doRewrite(null);
         assertEquals(sparseEncodingQueryBuilder, queryBuilder);
     }
 
     @SneakyThrows
     public void testRewrite_whenQueryTokensSupplierSet_thenSetQueryTokens() {
-        SparseEncodingQueryBuilder sparseEncodingQueryBuilder = new SparseEncodingQueryBuilder()
-                .fieldName(FIELD_NAME)
-                .queryText(QUERY_TEXT)
-                .modelId(MODEL_ID)
-                .queryTokensSupplier(QUERY_TOKENS_SUPPLIER);
+        SparseEncodingQueryBuilder sparseEncodingQueryBuilder = new SparseEncodingQueryBuilder().fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensSupplier(QUERY_TOKENS_SUPPLIER);
         QueryBuilder queryBuilder = sparseEncodingQueryBuilder.doRewrite(null);
-        SparseEncodingQueryBuilder targetQueryBuilder = new SparseEncodingQueryBuilder()
-                .fieldName(FIELD_NAME)
-                .queryText(QUERY_TEXT)
-                .modelId(MODEL_ID)
-                .queryTokens(QUERY_TOKENS_SUPPLIER.get());
+        SparseEncodingQueryBuilder targetQueryBuilder = new SparseEncodingQueryBuilder().fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokens(QUERY_TOKENS_SUPPLIER.get());
         assertEquals(queryBuilder, targetQueryBuilder);
     }
 }

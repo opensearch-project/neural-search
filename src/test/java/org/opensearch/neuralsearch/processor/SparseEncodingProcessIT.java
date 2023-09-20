@@ -5,8 +5,12 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import com.google.common.collect.ImmutableList;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Map;
+
 import lombok.SneakyThrows;
+
 import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.message.BasicHeader;
@@ -17,9 +21,7 @@ import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.neuralsearch.common.BaseSparseEncodingIT;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Map;
+import com.google.common.collect.ImmutableList;
 
 public class SparseEncodingProcessIT extends BaseSparseEncodingIT {
 
@@ -53,38 +55,38 @@ public class SparseEncodingProcessIT extends BaseSparseEncodingIT {
 
     private void createSparseEncodingIndex() throws Exception {
         createIndexWithConfiguration(
-                INDEX_NAME,
-                Files.readString(Path.of(classLoader.getResource("processor/SparseEncodingIndexMappings.json").toURI())),
-                PIPELINE_NAME
+            INDEX_NAME,
+            Files.readString(Path.of(classLoader.getResource("processor/SparseEncodingIndexMappings.json").toURI())),
+            PIPELINE_NAME
         );
     }
 
     private void ingestDocument() throws Exception {
         String ingestDocument = "{\n"
-                + "  \"title\": \"This is a good day\",\n"
-                + "  \"description\": \"daily logging\",\n"
-                + "  \"favor_list\": [\n"
-                + "    \"test\",\n"
-                + "    \"hello\",\n"
-                + "    \"mock\"\n"
-                + "  ],\n"
-                + "  \"favorites\": {\n"
-                + "    \"game\": \"overwatch\",\n"
-                + "    \"movie\": null\n"
-                + "  }\n"
-                + "}\n";
+            + "  \"title\": \"This is a good day\",\n"
+            + "  \"description\": \"daily logging\",\n"
+            + "  \"favor_list\": [\n"
+            + "    \"test\",\n"
+            + "    \"hello\",\n"
+            + "    \"mock\"\n"
+            + "  ],\n"
+            + "  \"favorites\": {\n"
+            + "    \"game\": \"overwatch\",\n"
+            + "    \"movie\": null\n"
+            + "  }\n"
+            + "}\n";
         Response response = makeRequest(
-                client(),
-                "POST",
-                INDEX_NAME + "/_doc?refresh",
-                null,
-                toHttpEntity(ingestDocument),
-                ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+            client(),
+            "POST",
+            INDEX_NAME + "/_doc?refresh",
+            null,
+            toHttpEntity(ingestDocument),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
         Map<String, Object> map = XContentHelper.convertToMap(
-                XContentType.JSON.xContent(),
-                EntityUtils.toString(response.getEntity()),
-                false
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(response.getEntity()),
+            false
         );
         assertEquals("created", map.get("result"));
     }
