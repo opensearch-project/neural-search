@@ -20,9 +20,9 @@ import lombok.extern.log4j.Log4j2;
 
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
+import org.apache.lucene.document.FeatureField;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.BoostQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.common.SetOnce;
 import org.opensearch.core.ParseField;
@@ -56,8 +56,6 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
     static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
     @VisibleForTesting
     static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
-    @VisibleForTesting
-    static final ParseField TOKEN_SCORE_UPPER_BOUND_FIELD = new ParseField("token_score_upper_bound");
 
     private static MLCommonsClientAccessor ML_CLIENT;
 
@@ -69,7 +67,6 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
     private Map<String, Float> queryTokens;
     private String queryText;
     private String modelId;
-    private Float tokenScoreUpperBound;
     private Supplier<Map<String, Float>> queryTokensSupplier;
 
     public SparseEncodingQueryBuilder(StreamInput in) throws IOException {
@@ -81,7 +78,6 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         }
         this.queryText = in.readOptionalString();
         this.modelId = in.readOptionalString();
-        this.tokenScoreUpperBound = in.readOptionalFloat();
     }
 
     @Override
@@ -95,7 +91,6 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         }
         out.writeOptionalString(queryText);
         out.writeOptionalString(modelId);
-        out.writeOptionalFloat(tokenScoreUpperBound);
     }
 
     @Override
@@ -105,7 +100,6 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         if (null != queryTokens) xContentBuilder.field(QUERY_TOKENS_FIELD.getPreferredName(), queryTokens);
         if (null != queryText) xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
         if (null != modelId) xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
-        if (null != tokenScoreUpperBound) xContentBuilder.field(TOKEN_SCORE_UPPER_BOUND_FIELD.getPreferredName(), tokenScoreUpperBound);
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
         xContentBuilder.endObject();
@@ -119,15 +113,13 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
      *        "token_a": float,
      *        "token_b": float,
      *        ...
-     *    },
-     *    "token_score_upper_bound": float (optional)
+     *    }
      *  }
      * }
      * or
      *  "SAMPLE_FIELD": {
      *    "query_text": "string",
-     *    "model_id": "string",
-     *    "token_score_upper_bound": float (optional)
+     *    "model_id": "string"
      *  }
      *
      */
@@ -193,8 +185,6 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
                     sparseEncodingQueryBuilder.queryText(parser.text());
                 } else if (MODEL_ID_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     sparseEncodingQueryBuilder.modelId(parser.text());
-                } else if (TOKEN_SCORE_UPPER_BOUND_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    sparseEncodingQueryBuilder.tokenScoreUpperBound(parser.floatValue());
                 } else {
                     throw new ParsingException(
                         parser.getTokenLocation(),
@@ -226,8 +216,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
                 : new SparseEncodingQueryBuilder().fieldName(fieldName)
                     .queryTokens(queryTokensSupplier.get())
                     .queryText(queryText)
-                    .modelId(modelId)
-                    .tokenScoreUpperBound(tokenScoreUpperBound);
+                    .modelId(modelId);
         }
 
         validateForRewrite(queryText, modelId);
@@ -245,7 +234,6 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         return new SparseEncodingQueryBuilder().fieldName(fieldName)
             .queryText(queryText)
             .modelId(modelId)
-            .tokenScoreUpperBound(tokenScoreUpperBound)
             .queryTokensSupplier(queryTokensSetOnce::get);
     }
 
@@ -255,14 +243,11 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         validateFieldType(ft);
         validateQueryTokens(queryTokens);
 
-        // the tokenScoreUpperBound from query has higher priority
-        final Float scoreUpperBound = null != tokenScoreUpperBound ? tokenScoreUpperBound : Float.MAX_VALUE;
-
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
         for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
             builder.add(
-                new BoostQuery(new BoundedLinearFeatureQuery(fieldName, entry.getKey(), scoreUpperBound), entry.getValue()),
-                BooleanClause.Occur.SHOULD
+                    FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()),
+                    BooleanClause.Occur.SHOULD
             );
         }
         return builder.build();
@@ -308,8 +293,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         EqualsBuilder equalsBuilder = new EqualsBuilder().append(fieldName, obj.fieldName)
             .append(queryTokens, obj.queryTokens)
             .append(queryText, obj.queryText)
-            .append(modelId, obj.modelId)
-            .append(tokenScoreUpperBound, obj.tokenScoreUpperBound);
+            .append(modelId, obj.modelId);
         return equalsBuilder.isEquals();
     }
 
@@ -319,7 +303,6 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
             .append(queryTokens)
             .append(queryText)
             .append(modelId)
-            .append(tokenScoreUpperBound)
             .toHashCode();
     }
 
