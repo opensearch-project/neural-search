@@ -76,13 +76,6 @@ public class TestUtils {
         return vector;
     }
 
-    // When ingesting token weight map, float number will be decoded to json, which may lose precision
-    // To compute match score without losing precision, we limit the effective digits of float number
-    public static Float createFloatNumberWithEffectiveDigits(float inputNumber, int scale) {
-        BigDecimal bd = new BigDecimal(inputNumber);
-        return bd.setScale(scale, RoundingMode.HALF_UP).floatValue();
-    }
-
     /**
      * Create a map of provided tokens, the values will be random float numbers
      *
@@ -93,7 +86,7 @@ public class TestUtils {
         Map<String, Float> resultMap = new HashMap<>();
         for (String token : tokens) {
             // use a small shift to ensure value > 0
-            resultMap.put(token, createFloatNumberWithEffectiveDigits(Math.abs(randomFloat()) + 1e-3f, 3));
+            resultMap.put(token, Math.abs(randomFloat()) + 1e-3f);
         }
         return resultMap;
     }

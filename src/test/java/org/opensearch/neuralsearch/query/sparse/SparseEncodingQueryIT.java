@@ -32,6 +32,8 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
     private static final String TEST_SPARSE_ENCODING_FIELD_NAME_NESTED = "nested.sparse_encoding.field";
 
     private static final List<String> TEST_TOKENS = List.of("hello", "world", "a", "b", "c");
+
+    private static final Float DELTA = 1e-5f;
     private final Map<String, Float> testTokenWeightMap = TestUtils.createRandomTokenWeightMap(TEST_TOKENS);
 
     @Before
@@ -73,7 +75,7 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
 
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = computeExpectedScore(modelId, testTokenWeightMap, TEST_QUERY_TEXT);
-        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
+        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
     }
 
     /**
@@ -104,7 +106,7 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
 
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = computeExpectedScore(testTokenWeightMap, queryTokens);
-        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
+        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
     }
 
     /**
@@ -133,7 +135,7 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
 
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = 2 * computeExpectedScore(modelId, testTokenWeightMap, TEST_QUERY_TEXT);
-        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
+        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
     }
 
     /**
@@ -169,7 +171,7 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
 
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = computeExpectedScore(modelId, testTokenWeightMap, TEST_QUERY_TEXT);
-        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
+        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
     }
 
     /**
@@ -215,7 +217,7 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
 
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = 2 * computeExpectedScore(modelId, testTokenWeightMap, TEST_QUERY_TEXT);
-        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
+        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
     }
 
     /**
