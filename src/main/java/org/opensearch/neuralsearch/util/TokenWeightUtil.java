@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class TokenWeightUtil {
+    //todo: change comments, add validation (throw exception)
     /**
      * Converts a Map result to Map<String, Float>
      *
@@ -19,18 +20,22 @@ public class TokenWeightUtil {
      */
     public static String RESPONSE_KEY = "response";
 
-    public static List<Map<String, Float>> fetchQueryTokensList(Map<String, ?> mapResult) {
-        assert mapResult.get(RESPONSE_KEY) instanceof List;
-        List<Map<String, ?>> responseList = (List) mapResult.get(RESPONSE_KEY);
-        return responseList.stream().map(TokenWeightUtil::buildQueryTokensMap).collect(Collectors.toList());
+    public static List<Map<String, Float>> fetchQueryTokensList(List<Map<String, ?>> mapResultList) {
+        return mapResultList.stream().map(TokenWeightUtil::buildQueryTokensMap).collect(Collectors.toList());
     }
 
+    @SuppressWarnings("unchecked")
     private static Map<String, Float> buildQueryTokensMap(Map<String, ?> mapResult) {
-        Map<String, Float> result = new HashMap<>();
-        for (Map.Entry<String, ?> entry: mapResult.entrySet()) {
-            assert entry.getValue() instanceof Number;
-            result.put(entry.getKey(), ((Number) entry.getValue()).floatValue());
+        Object response = mapResult.get(RESPONSE_KEY);
+        if (response instanceof Map) {
+            Map<String, Float> result = new HashMap<>();
+            for (Map.Entry<String, ?> entry: ((Map<String, ?>) response).entrySet()) {
+                assert entry.getValue() instanceof Number;
+                result.put(entry.getKey(), ((Number) entry.getValue()).floatValue());
+            }
+            return result;
+        } else {
+            throw new IllegalArgumentException("wrong type");
         }
-        return result;
     }
 }

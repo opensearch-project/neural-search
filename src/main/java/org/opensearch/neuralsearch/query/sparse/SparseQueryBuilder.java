@@ -222,8 +222,8 @@ public class SparseQueryBuilder extends AbstractQueryBuilder<SparseQueryBuilder>
                 ((client, actionListener) -> ML_CLIENT.inferenceSentencesWithMapResult(
                         modelId(),
                         List.of(queryText),
-                        ActionListener.wrap(mapResult -> {
-                            queryTokensSetOnce.set(TokenWeightUtil.fetchQueryTokensList(mapResult).get(0));
+                        ActionListener.wrap(mapResultList -> {
+                            queryTokensSetOnce.set(TokenWeightUtil.fetchQueryTokensList(mapResultList).get(0));
                             actionListener.onResponse(null);
                         }, actionListener::onFailure))
                 )
