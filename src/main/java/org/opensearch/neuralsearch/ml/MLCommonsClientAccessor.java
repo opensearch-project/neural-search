@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.ml;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -21,6 +22,7 @@ import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.dataset.MLInputDataset;
 import org.opensearch.ml.common.dataset.TextDocsInputDataSet;
+import org.opensearch.ml.common.dataset.remote.RemoteInferenceInputDataSet;
 import org.opensearch.ml.common.input.MLInput;
 import org.opensearch.ml.common.output.MLOutput;
 import org.opensearch.ml.common.output.model.ModelResultFilter;
@@ -140,7 +142,7 @@ public class MLCommonsClientAccessor {
         final int retryTime,
         final ActionListener<List<List<Float>>> listener
     ) {
-        MLInput mlInput = createMLInput(targetResponseFilters, inputText);
+        MLInput mlInput = createMLTextInput(targetResponseFilters, inputText);
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
             final List<List<Float>> vector = buildVectorFromResponse(mlOutput);
             listener.onResponse(vector);
@@ -152,6 +154,12 @@ public class MLCommonsClientAccessor {
                 listener.onFailure(e);
             }
         }));
+    }
+
+    private MLInput createMLTextInput(final List<String> targetResponseFilters, List<String> inputText) {
+        final ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
+        final MLInputDataset inputDataset = new TextDocsInputDataSet(inputText, modelResultFilter);
+        return new MLInput(FunctionName.TEXT_EMBEDDING, null, inputDataset);
     }
 
     private MLInput createMLInput(final List<String> targetResponseFilters, List<String> inputText) {
@@ -190,5 +198,4 @@ public class MLCommonsClientAccessor {
         }
         return resultMaps;
     }
-
 }
