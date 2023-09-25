@@ -34,6 +34,8 @@ public abstract class NLPProcessor extends AbstractProcessor {
 
     private final String type;
 
+    // This field is used for nested knn_vector/rank_features field. The value of the field will be used as the
+    // default key for the nested object.
     private final String listTypeNestedMapKey;
 
     protected final String modelId;
