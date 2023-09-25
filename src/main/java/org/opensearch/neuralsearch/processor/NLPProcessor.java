@@ -32,18 +32,17 @@ public abstract class NLPProcessor extends AbstractProcessor {
     public static final String MODEL_ID_FIELD = "model_id";
     public static final String FIELD_MAP_FIELD = "field_map";
 
-    protected final String type;
+    private final String type;
 
-    protected final String listTypeNestedMapKey;
+    private final String listTypeNestedMapKey;
 
-    @VisibleForTesting
     protected final String modelId;
 
-    protected final Map<String, Object> fieldMap;
+    private final Map<String, Object> fieldMap;
 
     protected final MLCommonsClientAccessor mlCommonsClientAccessor;
 
-    protected final Environment environment;
+    private final Environment environment;
 
     public NLPProcessor(
         String tag,
