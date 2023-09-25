@@ -49,6 +49,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.neuralsearch.OpenSearchSecureRestTestCase;
 
+import com.carrotsearch.randomizedtesting.RandomizedTest;
 import com.google.common.collect.ImmutableList;
 
 public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
@@ -76,6 +77,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         updateClusterSettings("plugins.ml_commons.only_run_on_ml_node", false);
         // default threshold for native circuit breaker is 90, it may be not enough on test runner machine
         updateClusterSettings("plugins.ml_commons.native_memory_threshold", 100);
+        updateClusterSettings("plugins.ml_commons.allow_registering_model_via_url", true);
     }
 
     @SneakyThrows
@@ -99,6 +101,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     protected String uploadModel(String requestBody) throws Exception {
+        String modelGroupId = registerModelGroup();
+        // model group id is dynamically generated, we need to update model update request body after group is registered
+        requestBody = requestBody.replace("<MODEL_GROUP_ID>", modelGroupId);
+
         Response uploadResponse = makeRequest(
             client(),
             "POST",
@@ -131,7 +137,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Response uploadResponse = makeRequest(
             client(),
             "POST",
-            String.format(LOCALE, "/_plugins/_ml/models/%s/_load", modelId),
+            String.format(LOCALE, "/_plugins/_ml/models/%s/_deploy", modelId),
             null,
             toHttpEntity(""),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
@@ -676,5 +682,28 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Set<String> modelIds = findDeployedModels();
         assertEquals(1, modelIds.size());
         return modelIds.iterator().next();
+    }
+
+    @SneakyThrows
+    private String registerModelGroup() {
+        String modelGroupRegisterRequestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
+        ).replace("<MODEL_GROUP_NAME>", "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8));
+        Response modelGroupResponse = makeRequest(
+            client(),
+            "POST",
+            "/_plugins/_ml/model_groups/_register",
+            null,
+            toHttpEntity(modelGroupRegisterRequestBody),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+        );
+        Map<String, Object> modelGroupResJson = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(modelGroupResponse.getEntity()),
+            false
+        );
+        String modelGroupId = modelGroupResJson.get("model_group_id").toString();
+        assertNotNull(modelGroupId);
+        return modelGroupId;
     }
 }

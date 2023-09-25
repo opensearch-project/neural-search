@@ -10,8 +10,8 @@ import java.util.List;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
+import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
-import org.opensearch.neuralsearch.search.CompoundTopDocs;
 
 /**
  * Abstracts normalization of scores based on min-max method
@@ -45,8 +45,11 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         );
         assertNotNull(compoundTopDocs);
         assertEquals(1, compoundTopDocs.size());
-        assertNotNull(compoundTopDocs.get(0).getCompoundTopDocs());
-        assertCompoundTopDocs(expectedCompoundDocs, compoundTopDocs.get(0).getCompoundTopDocs().get(0));
+        assertNotNull(compoundTopDocs.get(0).getTopDocs());
+        assertCompoundTopDocs(
+            new TopDocs(expectedCompoundDocs.getTotalHits(), expectedCompoundDocs.getScoreDocs().toArray(new ScoreDoc[0])),
+            compoundTopDocs.get(0).getTopDocs().get(0)
+        );
     }
 
     public void testNormalization_whenResultFromOneShardMultipleSubQueries_thenSuccessful() {
@@ -85,9 +88,9 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         );
         assertNotNull(compoundTopDocs);
         assertEquals(1, compoundTopDocs.size());
-        assertNotNull(compoundTopDocs.get(0).getCompoundTopDocs());
-        for (int i = 0; i < expectedCompoundDocs.getCompoundTopDocs().size(); i++) {
-            assertCompoundTopDocs(expectedCompoundDocs.getCompoundTopDocs().get(i), compoundTopDocs.get(0).getCompoundTopDocs().get(i));
+        assertNotNull(compoundTopDocs.get(0).getTopDocs());
+        for (int i = 0; i < expectedCompoundDocs.getTopDocs().size(); i++) {
+            assertCompoundTopDocs(expectedCompoundDocs.getTopDocs().get(i), compoundTopDocs.get(0).getTopDocs().get(i));
         }
     }
 
@@ -149,19 +152,13 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
 
         assertNotNull(compoundTopDocs);
         assertEquals(2, compoundTopDocs.size());
-        assertNotNull(compoundTopDocs.get(0).getCompoundTopDocs());
-        for (int i = 0; i < expectedCompoundDocsShard1.getCompoundTopDocs().size(); i++) {
-            assertCompoundTopDocs(
-                expectedCompoundDocsShard1.getCompoundTopDocs().get(i),
-                compoundTopDocs.get(0).getCompoundTopDocs().get(i)
-            );
+        assertNotNull(compoundTopDocs.get(0).getTopDocs());
+        for (int i = 0; i < expectedCompoundDocsShard1.getTopDocs().size(); i++) {
+            assertCompoundTopDocs(expectedCompoundDocsShard1.getTopDocs().get(i), compoundTopDocs.get(0).getTopDocs().get(i));
         }
-        assertNotNull(compoundTopDocs.get(1).getCompoundTopDocs());
-        for (int i = 0; i < expectedCompoundDocsShard2.getCompoundTopDocs().size(); i++) {
-            assertCompoundTopDocs(
-                expectedCompoundDocsShard2.getCompoundTopDocs().get(i),
-                compoundTopDocs.get(1).getCompoundTopDocs().get(i)
-            );
+        assertNotNull(compoundTopDocs.get(1).getTopDocs());
+        for (int i = 0; i < expectedCompoundDocsShard2.getTopDocs().size(); i++) {
+            assertCompoundTopDocs(expectedCompoundDocsShard2.getTopDocs().get(i), compoundTopDocs.get(1).getTopDocs().get(i));
         }
     }
 

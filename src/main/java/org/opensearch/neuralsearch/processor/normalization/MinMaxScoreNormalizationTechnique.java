@@ -13,7 +13,7 @@ import lombok.ToString;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
-import org.opensearch.neuralsearch.search.CompoundTopDocs;
+import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import com.google.common.primitives.Floats;
 
@@ -38,10 +38,10 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
     public void normalize(final List<CompoundTopDocs> queryTopDocs) {
         int numOfSubqueries = queryTopDocs.stream()
             .filter(Objects::nonNull)
-            .filter(topDocs -> topDocs.getCompoundTopDocs().size() > 0)
+            .filter(topDocs -> topDocs.getTopDocs().size() > 0)
             .findAny()
             .get()
-            .getCompoundTopDocs()
+            .getTopDocs()
             .size();
         // get min scores for each sub query
         float[] minScoresPerSubquery = getMinScores(queryTopDocs, numOfSubqueries);
@@ -54,7 +54,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
             if (Objects.isNull(compoundQueryTopDocs)) {
                 continue;
             }
-            List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getCompoundTopDocs();
+            List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
             for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
                 TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
@@ -71,7 +71,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
             if (Objects.isNull(compoundQueryTopDocs)) {
                 continue;
             }
-            List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getCompoundTopDocs();
+            List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
             for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
                 maxScores[j] = Math.max(
                     maxScores[j],
@@ -92,7 +92,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
             if (Objects.isNull(compoundQueryTopDocs)) {
                 continue;
             }
-            List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getCompoundTopDocs();
+            List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
             for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
                 minScores[j] = Math.min(
                     minScores[j],
