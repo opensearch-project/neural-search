@@ -266,7 +266,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
     }
 
     private static void validateFieldType(MappedFieldType fieldType) {
-        if (!fieldType.typeName().equals("rank_features")) {
+        if (null == fieldType || !fieldType.typeName().equals("rank_features")) {
             throw new IllegalArgumentException(
                 "[" + NAME + "] query only works on [rank_features] fields, " + "not [" + fieldType.typeName() + "]"
             );
