@@ -22,6 +22,7 @@ import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.apache.lucene.search.Query;
+import org.opensearch.Version;
 import org.opensearch.common.SetOnce;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.action.ActionListener;
@@ -31,12 +32,10 @@ import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.mapper.NumberFieldMapper;
-import org.opensearch.index.query.AbstractQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryRewriteContext;
-import org.opensearch.index.query.QueryShardContext;
+import org.opensearch.index.query.*;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -82,6 +81,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     @Setter(AccessLevel.PACKAGE)
     private Supplier<float[]> vectorSupplier;
     private QueryBuilder filter;
+    private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_11_0;
 
     /**
      * Constructor from stream input
@@ -93,7 +93,11 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         super(in);
         this.fieldName = in.readString();
         this.queryText = in.readString();
-        this.modelId = in.readString();
+        if (isClusterOnOrAfterMinRequiredVersion()) {
+            this.modelId = in.readOptionalString();
+        } else {
+            this.modelId = in.readString();
+        }
         this.k = in.readVInt();
         this.filter = in.readOptionalNamedWriteable(QueryBuilder.class);
     }
@@ -102,7 +106,11 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     protected void doWriteTo(StreamOutput out) throws IOException {
         out.writeString(this.fieldName);
         out.writeString(this.queryText);
-        out.writeString(this.modelId);
+        if (isClusterOnOrAfterMinRequiredVersion()) {
+            out.writeOptionalString(this.modelId);
+        } else {
+            out.writeString(this.modelId);
+        }
         out.writeVInt(this.k);
         out.writeOptionalNamedWriteable(this.filter);
     }
@@ -152,20 +160,21 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         parseQueryParams(parser, neuralQueryBuilder);
         if (parser.nextToken() != XContentParser.Token.END_OBJECT) {
             throw new ParsingException(
-                parser.getTokenLocation(),
-                "["
-                    + NAME
-                    + "] query doesn't support multiple fields, found ["
-                    + neuralQueryBuilder.fieldName()
-                    + "] and ["
-                    + parser.currentName()
-                    + "]"
+                    parser.getTokenLocation(),
+                    "["
+                            + NAME
+                            + "] query doesn't support multiple fields, found ["
+                            + neuralQueryBuilder.fieldName()
+                            + "] and ["
+                            + parser.currentName()
+                            + "]"
             );
         }
         requireValue(neuralQueryBuilder.queryText(), "Query text must be provided for neural query");
         requireValue(neuralQueryBuilder.fieldName(), "Field name must be provided for neural query");
-        requireValue(neuralQueryBuilder.modelId(), "Model ID must be provided for neural query");
-
+        if (!isClusterOnOrAfterMinRequiredVersion()) {
+            requireValue(neuralQueryBuilder.modelId(), "Model ID must be provided for neural query");
+        }
         return neuralQueryBuilder;
     }
 
@@ -188,8 +197,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                     neuralQueryBuilder.boost(parser.floatValue());
                 } else {
                     throw new ParsingException(
-                        parser.getTokenLocation(),
-                        "[" + NAME + "] query does not support [" + currentFieldName + "]"
+                            parser.getTokenLocation(),
+                            "[" + NAME + "] query does not support [" + currentFieldName + "]"
                     );
                 }
             } else if (token == XContentParser.Token.START_OBJECT) {
@@ -198,8 +207,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 }
             } else {
                 throw new ParsingException(
-                    parser.getTokenLocation(),
-                    "[" + NAME + "] unknown token [" + token + "] after [" + currentFieldName + "]"
+                        parser.getTokenLocation(),
+                        "[" + NAME + "] unknown token [" + token + "] after [" + currentFieldName + "]"
                 );
             }
         }
@@ -222,10 +231,10 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
 
         SetOnce<float[]> vectorSetOnce = new SetOnce<>();
         queryRewriteContext.registerAsyncAction(
-            ((client, actionListener) -> ML_CLIENT.inferenceSentence(modelId(), queryText(), ActionListener.wrap(floatList -> {
-                vectorSetOnce.set(vectorAsListToArray(floatList));
-                actionListener.onResponse(null);
-            }, actionListener::onFailure)))
+                ((client, actionListener) -> ML_CLIENT.inferenceSentence(modelId(), queryText(), ActionListener.wrap(floatList -> {
+                    vectorSetOnce.set(vectorAsListToArray(floatList));
+                    actionListener.onResponse(null);
+                }, actionListener::onFailure)))
         );
         return new NeuralQueryBuilder(fieldName(), queryText(), modelId(), k(), vectorSetOnce::get, filter());
     }
@@ -257,5 +266,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     @Override
     public String getWriteableName() {
         return NAME;
+    }
+
+    private static boolean isClusterOnOrAfterMinRequiredVersion() {
+        return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID);
     }
 }

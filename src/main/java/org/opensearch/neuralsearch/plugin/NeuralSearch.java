@@ -5,7 +5,7 @@
 
 package org.opensearch.neuralsearch.plugin;
 
-import org.opensearch.neuralsearch.processor.DefaultValueProcessor;
+import org.opensearch.neuralsearch.processor.NeuralQueryProcessor;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SEARCH_HYBRID_SEARCH_ENABLED;
 
 import java.util.Arrays;
@@ -42,6 +42,7 @@ import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.plugins.ActionPlugin;
 import org.opensearch.plugins.ExtensiblePlugin;
 import org.opensearch.plugins.IngestPlugin;
@@ -80,6 +81,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         final IndexNameExpressionResolver indexNameExpressionResolver,
         final Supplier<RepositoriesService> repositoriesServiceSupplier
     ) {
+        NeuralSearchClusterUtil.instance().initialize(clusterService);
         NeuralQueryBuilder.initialize(clientAccessor);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
         return List.of(clientAccessor);
@@ -131,8 +133,8 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     @Override
     public Map<String, org.opensearch.search.pipeline.Processor.Factory<SearchRequestProcessor>> getRequestProcessors(Parameters parameters) {
         return Map.of(
-                DefaultValueProcessor.TYPE,
-                new DefaultValueProcessor.Factory(parameters.namedXContentRegistry)
+                NeuralQueryProcessor.TYPE,
+                new NeuralQueryProcessor.Factory()
         );
     }
 }
