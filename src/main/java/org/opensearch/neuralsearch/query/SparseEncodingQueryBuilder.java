@@ -18,6 +18,7 @@ import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.log4j.Log4j2;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.apache.lucene.document.FeatureField;
@@ -251,7 +252,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
     }
 
     private static void validateForRewrite(String queryText, String modelId) {
-        if (null == queryText || null == modelId) {
+        if (StringUtils.isBlank(queryText) || StringUtils.isBlank(modelId)) {
             throw new IllegalArgumentException(
                 "When "
                     + QUERY_TOKENS_FIELD.getPreferredName()
