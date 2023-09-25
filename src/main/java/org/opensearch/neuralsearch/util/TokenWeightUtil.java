@@ -53,7 +53,7 @@ public class TokenWeightUtil {
 
     private static Map<String, Float> buildTokenWeightMap(Object uncastedMap) {
         if (!Map.class.isAssignableFrom(uncastedMap.getClass())) {
-            throw new IllegalArgumentException("The expected inference result is a Map with String keys and  " + " Float values.");
+            throw new IllegalArgumentException("The expected inference result is a Map with String keys and Float values.");
         }
         Map<String, Float> result = new HashMap<>();
         for (Map.Entry<?, ?> entry : ((Map<?, ?>) uncastedMap).entrySet()) {
