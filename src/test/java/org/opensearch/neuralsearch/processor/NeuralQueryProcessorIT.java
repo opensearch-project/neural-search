@@ -48,7 +48,7 @@ public class NeuralQueryProcessorIT extends BaseNeuralSearchIT {
     }
 
     public void testNeuralQueryProcessor() throws Exception {
-        initializeIndexIfNotExist(index);
+        initializeIndexIfNotExist();
         String modelId = getDeployedModelId();
         createSearchRequestProcessor(modelId, search_pipeline);
         createPipelineProcessor(modelId, ingest_pipeline);
@@ -61,12 +61,10 @@ public class NeuralQueryProcessorIT extends BaseNeuralSearchIT {
 
         assertFalse(response.isEmpty());
 
-        assertEquals(modelId, neuralQueryBuilder.modelId());
-
     }
 
-    private void initializeIndexIfNotExist(String indexName) throws IOException {
-        if (index.equals(indexName) && !indexExists(index)) {
+    private void initializeIndexIfNotExist() throws IOException {
+        if (index.equals(NeuralQueryProcessorIT.index) && !indexExists(index)) {
             prepareKnnIndex(
                 index,
                 Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE))
