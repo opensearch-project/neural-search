@@ -1,7 +1,7 @@
 {
   "name": "tokenize-idf-0915",
   "version": "1.0.0",
-  "function_name": "TOKENIZE",
+  "function_name": "SPARSE_TOKENIZE",
   "description": "test model",
   "model_format": "TORCH_SCRIPT",
   "model_group_id": "<MODEL_GROUP_ID>",
