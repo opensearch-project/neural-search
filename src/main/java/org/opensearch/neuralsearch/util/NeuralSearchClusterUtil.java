@@ -14,6 +14,9 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.Version;
 import org.opensearch.cluster.service.ClusterService;
 
+/**
+ * Class abstracts information related to underlying OpenSearch cluster
+ */
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 @Log4j2
 public class NeuralSearchClusterUtil {

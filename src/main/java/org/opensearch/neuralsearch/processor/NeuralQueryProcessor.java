@@ -15,6 +15,9 @@ import org.opensearch.search.pipeline.AbstractProcessor;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 
+/**
+ * Neural Search Query Request Processor
+ */
 public class NeuralQueryProcessor extends AbstractProcessor implements SearchRequestProcessor {
 
     /**
@@ -48,6 +51,11 @@ public class NeuralQueryProcessor extends AbstractProcessor implements SearchReq
         this.neuralFieldDefaultIdMap = neuralFieldDefaultIdMap;
     }
 
+    /**
+     * Processes the Search Request.
+     *
+     * @return The Search Request.
+     */
     @Override
     public SearchRequest processRequest(SearchRequest searchRequest) {
         QueryBuilder queryBuilder = searchRequest.source().query();
@@ -59,6 +67,11 @@ public class NeuralQueryProcessor extends AbstractProcessor implements SearchReq
         private static final String DEFAULT_MODEL_ID = "default_model_id";
         private static final String NEURAL_FIELD_DEFAULT_ID = "neural_field_default_id";
 
+        /**
+         * Create the processor object.
+         *
+         * @return NeuralQueryProcessor
+         */
         @Override
         public NeuralQueryProcessor create(
             Map<String, Processor.Factory<SearchRequestProcessor>> processorFactories,
