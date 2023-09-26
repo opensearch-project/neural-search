@@ -20,7 +20,7 @@ public class NeuralQueryProcessorTests extends OpenSearchTestCase {
         NeuralQueryProcessor.Factory factory = new NeuralQueryProcessor.Factory();
         NeuralQueryProcessor processor = createTestProcessor(factory);
         assertEquals("vasdcvkcjkbldbjkd", processor.modelId);
-        assertEquals("bahbkcdkacb", processor.neuralFieldMap.get("fieldName").toString());
+        assertEquals("bahbkcdkacb", processor.neuralFieldDefaultIdMap.get("fieldName").toString());
 
         // Missing "query" parameter:
         expectThrows(

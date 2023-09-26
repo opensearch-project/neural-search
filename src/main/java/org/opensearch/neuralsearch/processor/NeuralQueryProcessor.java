@@ -24,7 +24,7 @@ public class NeuralQueryProcessor extends AbstractProcessor implements SearchReq
 
     final String modelId;
 
-    final Map<String, Object> neuralFieldMap;
+    final Map<String, Object> neuralFieldDefaultIdMap;
 
     /**
      * Returns the type of the processor.
@@ -41,17 +41,17 @@ public class NeuralQueryProcessor extends AbstractProcessor implements SearchReq
         String description,
         boolean ignoreFailure,
         String modelId,
-        Map<String, Object> fieldInfoMap
+        Map<String, Object> neuralFieldDefaultIdMap
     ) {
         super(tag, description, ignoreFailure);
         this.modelId = modelId;
-        this.neuralFieldMap = fieldInfoMap;
+        this.neuralFieldDefaultIdMap = neuralFieldDefaultIdMap;
     }
 
     @Override
-    public SearchRequest processRequest(SearchRequest searchRequest) throws Exception {
+    public SearchRequest processRequest(SearchRequest searchRequest) {
         QueryBuilder queryBuilder = searchRequest.source().query();
-        queryBuilder.visit(new NeuralSearchQueryVisitor(modelId, neuralFieldMap));
+        queryBuilder.visit(new NeuralSearchQueryVisitor(modelId, neuralFieldDefaultIdMap));
         return searchRequest;
     }
 
