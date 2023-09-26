@@ -35,7 +35,7 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
     private static final List<String> TEST_TOKENS = List.of("hello", "world", "a", "b", "c");
 
     private static final Float DELTA = 1e-5f;
-    private final Map<String, Float> testTokenWeightMap = TestUtils.createRandomTokenWeightMap(TEST_TOKENS);
+    private final Map<String, Float> testRankFeaturesDoc = TestUtils.createRandomTokenWeightMap(TEST_TOKENS);
 
     @Before
     public void setUp() throws Exception {
@@ -75,38 +75,7 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
         Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
 
         assertEquals("1", firstInnerHit.get("_id"));
-        float expectedScore = computeExpectedScore(modelId, testTokenWeightMap, TEST_QUERY_TEXT);
-        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
-    }
-
-    /**
-     * Tests basic query:
-     * {
-     *     "query": {
-     *         "sparse_encoding": {
-     *             "text_sparse": {
-     *                 "query_tokens": {
-     *                     "hello": float,
-     *                     "a": float,
-     *                     "c": float
-     *                 }
-     *             }
-     *         }
-     *     }
-     * }
-     */
-    @SneakyThrows
-    public void testBasicQueryUsingQueryTokens() {
-        initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-        Map<String, Float> queryTokens = TestUtils.createRandomTokenWeightMap(List.of("hello", "a", "b"));
-        SparseEncodingQueryBuilder sparseEncodingQueryBuilder = new SparseEncodingQueryBuilder().fieldName(
-            TEST_SPARSE_ENCODING_FIELD_NAME_1
-        ).queryTokens(queryTokens);
-        Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, sparseEncodingQueryBuilder, 1);
-        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
-
-        assertEquals("1", firstInnerHit.get("_id"));
-        float expectedScore = computeExpectedScore(testTokenWeightMap, queryTokens);
+        float expectedScore = computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
     }
 
@@ -135,7 +104,7 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
         Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
 
         assertEquals("1", firstInnerHit.get("_id"));
-        float expectedScore = 2 * computeExpectedScore(modelId, testTokenWeightMap, TEST_QUERY_TEXT);
+        float expectedScore = 2 * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
     }
 
@@ -171,12 +140,12 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
         Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
 
         assertEquals("1", firstInnerHit.get("_id"));
-        float expectedScore = computeExpectedScore(modelId, testTokenWeightMap, TEST_QUERY_TEXT);
+        float expectedScore = computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
     }
 
     /**
-     * Tests bool should query with query tokens:
+     * Tests bool should query with query text:
      * {
      *     "query": {
      *         "bool" : {
@@ -217,12 +186,12 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
         Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
 
         assertEquals("1", firstInnerHit.get("_id"));
-        float expectedScore = 2 * computeExpectedScore(modelId, testTokenWeightMap, TEST_QUERY_TEXT);
+        float expectedScore = 2 * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
     }
 
     /**
-     * Tests bool should query with query tokens:
+     * Tests bool should query with query text:
      * {
      *     "query": {
      *         "bool" : {
@@ -260,7 +229,7 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
         Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
 
         assertEquals("1", firstInnerHit.get("_id"));
-        float minExpectedScore = computeExpectedScore(modelId, testTokenWeightMap, TEST_QUERY_TEXT);
+        float minExpectedScore = computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
         assertTrue(minExpectedScore < objectToFloat(firstInnerHit.get("_score")));
     }
 
@@ -280,7 +249,7 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
     protected void initializeIndexIfNotExist(String indexName) {
         if (TEST_BASIC_INDEX_NAME.equals(indexName) && !indexExists(indexName)) {
             prepareSparseEncodingIndex(indexName, List.of(TEST_SPARSE_ENCODING_FIELD_NAME_1));
-            addSparseEncodingDoc(indexName, "1", List.of(TEST_SPARSE_ENCODING_FIELD_NAME_1), List.of(testTokenWeightMap));
+            addSparseEncodingDoc(indexName, "1", List.of(TEST_SPARSE_ENCODING_FIELD_NAME_1), List.of(testRankFeaturesDoc));
             assertEquals(1, getDocCount(indexName));
         }
 
@@ -290,7 +259,7 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
                 indexName,
                 "1",
                 List.of(TEST_SPARSE_ENCODING_FIELD_NAME_1, TEST_SPARSE_ENCODING_FIELD_NAME_2),
-                List.of(testTokenWeightMap, testTokenWeightMap)
+                List.of(testRankFeaturesDoc, testRankFeaturesDoc)
             );
             assertEquals(1, getDocCount(indexName));
         }
@@ -301,7 +270,7 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
                 indexName,
                 "1",
                 List.of(TEST_SPARSE_ENCODING_FIELD_NAME_1),
-                List.of(testTokenWeightMap),
+                List.of(testRankFeaturesDoc),
                 List.of(TEST_TEXT_FIELD_NAME_1),
                 List.of(TEST_QUERY_TEXT)
             );
@@ -310,7 +279,7 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
 
         if (TEST_NESTED_INDEX_NAME.equals(indexName) && !indexExists(indexName)) {
             prepareSparseEncodingIndex(indexName, List.of(TEST_SPARSE_ENCODING_FIELD_NAME_NESTED));
-            addSparseEncodingDoc(indexName, "1", List.of(TEST_SPARSE_ENCODING_FIELD_NAME_NESTED), List.of(testTokenWeightMap));
+            addSparseEncodingDoc(indexName, "1", List.of(TEST_SPARSE_ENCODING_FIELD_NAME_NESTED), List.of(testRankFeaturesDoc));
             assertEquals(1, getDocCount(TEST_NESTED_INDEX_NAME));
         }
     }
