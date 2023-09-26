@@ -193,7 +193,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         ArgumentCaptor<Exception> argumentCaptor = ArgumentCaptor.forClass(IllegalStateException.class);
         Mockito.verify(resultListener).onFailure(argumentCaptor.capture());
         assertEquals(
-            "Empty model result produced. Expected 1 tensor output and 1 model tensor, but got [0]",
+            "Empty model result produced. Expected at least [1] tensor output and [1] model tensor, but got [0]",
             argumentCaptor.getValue().getMessage()
         );
         Mockito.verifyNoMoreInteractions(resultListener);
@@ -217,7 +217,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         ArgumentCaptor<Exception> argumentCaptor = ArgumentCaptor.forClass(IllegalStateException.class);
         Mockito.verify(resultListener).onFailure(argumentCaptor.capture());
         assertEquals(
-            "Empty model result produced. Expected 1 tensor output and 1 model tensor, but got [0]",
+                "Empty model result produced. Expected at least [1] tensor output and [1] model tensor, but got [0]",
             argumentCaptor.getValue().getMessage()
         );
         Mockito.verifyNoMoreInteractions(resultListener);
