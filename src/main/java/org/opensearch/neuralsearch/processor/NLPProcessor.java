@@ -164,20 +164,20 @@ public abstract class NLPProcessor extends AbstractProcessor {
     }
 
     private void buildMapWithProcessorKeyAndOriginalValueForMapType(
-            String parentKey,
-            Object processorKey,
-            Map<String, Object> sourceAndMetadataMap,
-            Map<String, Object> treeRes
+        String parentKey,
+        Object processorKey,
+        Map<String, Object> sourceAndMetadataMap,
+        Map<String, Object> treeRes
     ) {
         if (processorKey == null || sourceAndMetadataMap == null) return;
         if (processorKey instanceof Map) {
             Map<String, Object> next = new LinkedHashMap<>();
             for (Map.Entry<String, Object> nestedFieldMapEntry : ((Map<String, Object>) processorKey).entrySet()) {
                 buildMapWithProcessorKeyAndOriginalValueForMapType(
-                        nestedFieldMapEntry.getKey(),
-                        nestedFieldMapEntry.getValue(),
-                        (Map<String, Object>) sourceAndMetadataMap.get(parentKey),
-                        next
+                    nestedFieldMapEntry.getKey(),
+                    nestedFieldMapEntry.getValue(),
+                    (Map<String, Object>) sourceAndMetadataMap.get(parentKey),
+                    next
                 );
             }
             treeRes.put(parentKey, next);
@@ -214,9 +214,9 @@ public abstract class NLPProcessor extends AbstractProcessor {
             validateListTypeValue(sourceKey, sourceValue);
         } else if (Map.class.isAssignableFrom(sourceValue.getClass())) {
             ((Map) sourceValue).values()
-                    .stream()
-                    .filter(Objects::nonNull)
-                    .forEach(x -> validateNestedTypeValue(sourceKey, x, () -> maxDepth + 1));
+                .stream()
+                .filter(Objects::nonNull)
+                .forEach(x -> validateNestedTypeValue(sourceKey, x, () -> maxDepth + 1));
         } else if (!String.class.isAssignableFrom(sourceValue.getClass())) {
             throw new IllegalArgumentException("map type field [" + sourceKey + "] has non-string type, cannot process it");
         } else if (StringUtils.isBlank(sourceValue.toString())) {

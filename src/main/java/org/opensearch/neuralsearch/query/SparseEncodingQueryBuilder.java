@@ -6,7 +6,6 @@
 package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -125,18 +124,9 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         requireValue(sparseEncodingQueryBuilder.fieldName(), "Field name must be provided for " + NAME + " query");
         requireValue(
             sparseEncodingQueryBuilder.queryText(),
-                QUERY_TEXT_FIELD.getPreferredName()
-                + " must be provided for "
-                + NAME
-                + " query"
+            QUERY_TEXT_FIELD.getPreferredName() + " must be provided for " + NAME + " query"
         );
-        requireValue(
-            sparseEncodingQueryBuilder.modelId(),
-            MODEL_ID_FIELD.getPreferredName()
-                + " must be provided for "
-                + NAME
-                + " query"
-        );
+        requireValue(sparseEncodingQueryBuilder.modelId(), MODEL_ID_FIELD.getPreferredName() + " must be provided for " + NAME + " query");
 
         return sparseEncodingQueryBuilder;
     }
@@ -215,19 +205,14 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
     private static void validateForRewrite(String queryText, String modelId) {
         if (StringUtils.isBlank(queryText) || StringUtils.isBlank(modelId)) {
             throw new IllegalArgumentException(
-                    QUERY_TEXT_FIELD.getPreferredName()
-                    + " and "
-                    + MODEL_ID_FIELD.getPreferredName()
-                    + " cannot be null."
+                QUERY_TEXT_FIELD.getPreferredName() + " and " + MODEL_ID_FIELD.getPreferredName() + " cannot be null."
             );
         }
     }
 
     private static void validateFieldType(MappedFieldType fieldType) {
         if (null == fieldType || !fieldType.typeName().equals("rank_features")) {
-            throw new IllegalArgumentException(
-                "[" + NAME + "] query only works on [rank_features] fields"
-            );
+            throw new IllegalArgumentException("[" + NAME + "] query only works on [rank_features] fields");
         }
     }
 
@@ -237,7 +222,9 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         }
         for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
             if (entry.getValue() <= 0) {
-                throw new IllegalArgumentException("Feature weight must be larger than 0, got: " + entry.getValue() + "for key " + entry.getKey());
+                throw new IllegalArgumentException(
+                    "Feature weight must be larger than 0, got: " + entry.getValue() + "for key " + entry.getKey()
+                );
             }
         }
     }

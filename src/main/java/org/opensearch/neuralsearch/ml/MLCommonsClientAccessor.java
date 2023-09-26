@@ -179,7 +179,9 @@ public class MLCommonsClientAccessor {
         final ModelTensorOutput modelTensorOutput = (ModelTensorOutput) mlOutput;
         final List<ModelTensors> tensorOutputList = modelTensorOutput.getMlModelOutputs();
         if (CollectionUtils.isEmpty(tensorOutputList) || CollectionUtils.isEmpty(tensorOutputList.get(0).getMlModelTensors())) {
-            throw new IllegalStateException("Empty model result produced. Expected at least [1] tensor output and [1] model tensor, but got [0]");
+            throw new IllegalStateException(
+                "Empty model result produced. Expected at least [1] tensor output and [1] model tensor, but got [0]"
+            );
         }
         List<Map<String, ?>> resultMaps = new ArrayList<>();
         for (ModelTensors tensors : tensorOutputList) {

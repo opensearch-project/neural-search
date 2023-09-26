@@ -9,7 +9,6 @@ import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_S
 
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -100,10 +99,10 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     public Map<String, Processor.Factory> getProcessors(Processor.Parameters parameters) {
         clientAccessor = new MLCommonsClientAccessor(new MachineLearningNodeClient(parameters.client));
         return Map.of(
-                TextEmbeddingProcessor.TYPE,
-                new TextEmbeddingProcessorFactory(clientAccessor, parameters.env),
-                SparseEncodingProcessor.TYPE,
-                new SparseEncodingProcessorFactory(clientAccessor, parameters.env)
+            TextEmbeddingProcessor.TYPE,
+            new TextEmbeddingProcessorFactory(clientAccessor, parameters.env),
+            SparseEncodingProcessor.TYPE,
+            new SparseEncodingProcessorFactory(clientAccessor, parameters.env)
         );
     }
 
