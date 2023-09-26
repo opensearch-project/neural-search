@@ -42,6 +42,12 @@ import org.opensearch.neuralsearch.util.TokenWeightUtil;
 
 import com.google.common.annotations.VisibleForTesting;
 
+/**
+ * SparseEncodingQueryBuilder is responsible for handling "sparse_encoding" query types. It uses an ML SPARSE_ENCODING model
+ * or SPARSE_TOKENIZE model to produce a Map with String keys and Float values for input text. Then it will be transformed
+ * to Lucene FeatureQuery wrapped by Lucene BooleanQuery.
+ */
+
 @Log4j2
 @Getter
 @Setter
@@ -66,6 +72,12 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
     private String modelId;
     private Supplier<Map<String, Float>> queryTokensSupplier;
 
+    /**
+     * Constructor from stream input
+     *
+     * @param in StreamInput to initialize object from
+     * @throws IOException thrown if unable to read from input stream
+     */
     public SparseEncodingQueryBuilder(StreamInput in) throws IOException {
         super(in);
         this.fieldName = in.readString();
@@ -98,6 +110,9 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
      *    "model_id": "string"
      *  }
      *
+     * @param parser XContentParser
+     * @return NeuralQueryBuilder
+     * @throws IOException can be thrown by parser
      */
     public static SparseEncodingQueryBuilder fromXContent(XContentParser parser) throws IOException {
         SparseEncodingQueryBuilder sparseEncodingQueryBuilder = new SparseEncodingQueryBuilder();

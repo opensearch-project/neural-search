@@ -26,9 +26,11 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 
-// The abstract class for text processing use cases. Users provide a field name map
-// and a model id. During ingestion, the processor will use the corresponding model
-// to inference the input texts, and set the target fields according to the field name map.
+/**
+ * The abstract class for text processing use cases. Users provide a field name map and a model id.
+ * During ingestion, the processor will use the corresponding model to inference the input texts,
+ * and set the target fields according to the field name map.
+ */
 @Log4j2
 public abstract class NLPProcessor extends AbstractProcessor {
 

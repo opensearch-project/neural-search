@@ -17,6 +17,10 @@ import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 
+/**
+ * This processor is used for user input data text sparse encoding processing, model_id can be used to indicate which model user use,
+ * and field_map can be used to indicate which fields needs text embedding and the corresponding keys for the sparse encoding results.
+ */
 @Log4j2
 public class SparseEncodingProcessor extends NLPProcessor {
 

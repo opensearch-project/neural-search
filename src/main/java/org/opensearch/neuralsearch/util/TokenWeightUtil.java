@@ -11,6 +11,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Utility class for working with sparse_encoding queries and ingest processor.
+ * Used to fetch the (token, weight) Map from the response returned by {@link org.opensearch.neuralsearch.ml.MLCommonsClientAccessor}
+ *
+ */
+
 public class TokenWeightUtil {
     public static String RESPONSE_KEY = "response";
 
@@ -36,6 +42,8 @@ public class TokenWeightUtil {
      *         { TOKEN_WEIGHT_MAP}
      *         ]
      *     }]
+     *
+     * @param mapResultList {@link Map} which is the response from {@link org.opensearch.neuralsearch.ml.MLCommonsClientAccessor}
      */
     public static List<Map<String, Float>> fetchListOfTokenWeightMap(List<Map<String, ?>> mapResultList) {
         List<Object> results = new ArrayList<>();
