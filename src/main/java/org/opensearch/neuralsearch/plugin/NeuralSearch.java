@@ -99,10 +99,12 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     @Override
     public Map<String, Processor.Factory> getProcessors(Processor.Parameters parameters) {
         clientAccessor = new MLCommonsClientAccessor(new MachineLearningNodeClient(parameters.client));
-        Map<String, Processor.Factory> allProcessors = new HashMap<>();
-        allProcessors.put(TextEmbeddingProcessor.TYPE, new TextEmbeddingProcessorFactory(clientAccessor, parameters.env));
-        allProcessors.put(SparseEncodingProcessor.TYPE, new SparseEncodingProcessorFactory(clientAccessor, parameters.env));
-        return allProcessors;
+        return Map.of(
+                TextEmbeddingProcessor.TYPE,
+                new TextEmbeddingProcessorFactory(clientAccessor, parameters.env),
+                SparseEncodingProcessor.TYPE,
+                new SparseEncodingProcessorFactory(clientAccessor, parameters.env)
+        );
     }
 
     @Override

@@ -162,8 +162,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         Mockito.verify(resultListener).onFailure(illegalStateException);
     }
 
-    public void test_inferenceSentencesWithMapResult_whenValidInput_thenSuccess() {
-        // final List<Map<String, String>> map = List.of(Map.of("key", "value"));
+    public void testInferenceSentencesWithMapResult_whenValidInput_thenSuccess() {
         final Map<String, String> map = Map.of("key", "value");
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
         Mockito.doAnswer(invocation -> {
@@ -179,7 +178,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         Mockito.verifyNoMoreInteractions(resultListener);
     }
 
-    public void test_inferenceSentencesWithMapResult_whenTensorOutputListEmpty_thenException() {
+    public void testInferenceSentencesWithMapResult_whenTensorOutputListEmpty_thenException() {
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
         final ModelTensorOutput modelTensorOutput = new ModelTensorOutput(Collections.emptyList());
         Mockito.doAnswer(invocation -> {
@@ -200,7 +199,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         Mockito.verifyNoMoreInteractions(resultListener);
     }
 
-    public void test_inferenceSentencesWithMapResult_whenModelTensorListEmpty_thenException() {
+    public void testInferenceSentencesWithMapResult_whenModelTensorListEmpty_thenException() {
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
         final List<ModelTensors> tensorsList = new ArrayList<>();
         final List<ModelTensor> mlModelTensorList = new ArrayList<>();
@@ -224,7 +223,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         Mockito.verifyNoMoreInteractions(resultListener);
     }
 
-    public void test_inferenceSentencesWithMapResult_whenModelTensorListSizeBiggerThan1_thenSuccess() {
+    public void testInferenceSentencesWithMapResult_whenModelTensorListSizeBiggerThan1_thenSuccess() {
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
         final List<ModelTensors> tensorsList = new ArrayList<>();
         final List<ModelTensor> mlModelTensorList = new ArrayList<>();
@@ -246,7 +245,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         Mockito.verifyNoMoreInteractions(resultListener);
     }
 
-    public void test_inferenceSentencesWithMapResult_whenRetryableException_retry3Times() {
+    public void testInferenceSentencesWithMapResult_whenRetryableException_retry3Times() {
         final NodeNotConnectedException nodeNodeConnectedException = new NodeNotConnectedException(
             mock(DiscoveryNode.class),
             "Node not connected"
@@ -264,7 +263,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         Mockito.verify(resultListener).onFailure(nodeNodeConnectedException);
     }
 
-    public void test_inferenceSentencesWithMapResult_whenNotRetryableException_thenFail() {
+    public void testInferenceSentencesWithMapResult_whenNotRetryableException_thenFail() {
         final IllegalStateException illegalStateException = new IllegalStateException("Illegal state");
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);

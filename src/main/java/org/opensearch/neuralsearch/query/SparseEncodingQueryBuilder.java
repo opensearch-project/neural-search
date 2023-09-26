@@ -260,7 +260,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
                     + QUERY_TEXT_FIELD.getPreferredName()
                     + " and "
                     + MODEL_ID_FIELD.getPreferredName()
-                    + " can not be null."
+                    + " cannot be null."
             );
         }
     }
@@ -275,7 +275,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
 
     private static void validateQueryTokens(Map<String, Float> queryTokens) {
         if (null == queryTokens) {
-            throw new IllegalArgumentException(QUERY_TOKENS_FIELD.getPreferredName() + " field can not be null.");
+            throw new IllegalArgumentException(QUERY_TOKENS_FIELD.getPreferredName() + " field cannot be null.");
         }
         for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
             if (entry.getValue() <= 0) {

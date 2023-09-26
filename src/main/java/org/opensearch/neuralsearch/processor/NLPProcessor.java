@@ -26,6 +26,9 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 
+// The abstract class for text processing use cases. Users provide a field name map
+// and a model id. During ingestion, the processor will use the corresponding model
+// to inference the input texts, and set the target fields according to the field name map.
 @Log4j2
 public abstract class NLPProcessor extends AbstractProcessor {
 
@@ -58,7 +61,7 @@ public abstract class NLPProcessor extends AbstractProcessor {
     ) {
         super(tag, description);
         this.type = type;
-        if (StringUtils.isBlank(modelId)) throw new IllegalArgumentException("model_id is null or empty, can not process it");
+        if (StringUtils.isBlank(modelId)) throw new IllegalArgumentException("model_id is null or empty, cannot process it");
         validateEmbeddingConfiguration(fieldMap);
 
         this.listTypeNestedMapKey = listTypeNestedMapKey;
@@ -81,14 +84,14 @@ public abstract class NLPProcessor extends AbstractProcessor {
     }
 
     @SuppressWarnings({ "rawtypes" })
-    private static void validateListTypeValue(String sourceKey, Object sourceValue) {
+    private void validateListTypeValue(String sourceKey, Object sourceValue) {
         for (Object value : (List) sourceValue) {
             if (value == null) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has null, can not process it");
+                throw new IllegalArgumentException("list type field [" + sourceKey + "] has null, cannot process it");
             } else if (!(value instanceof String)) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has non string value, can not process it");
+                throw new IllegalArgumentException("list type field [" + sourceKey + "] has non string value, cannot process it");
             } else if (StringUtils.isBlank(value.toString())) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has empty string, can not process it");
+                throw new IllegalArgumentException("list type field [" + sourceKey + "] has empty string, cannot process it");
             }
         }
     }
@@ -97,7 +100,7 @@ public abstract class NLPProcessor extends AbstractProcessor {
     private void validateNestedTypeValue(String sourceKey, Object sourceValue, Supplier<Integer> maxDepthSupplier) {
         int maxDepth = maxDepthSupplier.get();
         if (maxDepth > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())) {
-            throw new IllegalArgumentException("map type field [" + sourceKey + "] reached max depth limit, can not process it");
+            throw new IllegalArgumentException("map type field [" + sourceKey + "] reached max depth limit, cannot process it");
         } else if ((List.class.isAssignableFrom(sourceValue.getClass()))) {
             validateListTypeValue(sourceKey, sourceValue);
         } else if (Map.class.isAssignableFrom(sourceValue.getClass())) {
@@ -106,9 +109,9 @@ public abstract class NLPProcessor extends AbstractProcessor {
                 .filter(Objects::nonNull)
                 .forEach(x -> validateNestedTypeValue(sourceKey, x, () -> maxDepth + 1));
         } else if (!String.class.isAssignableFrom(sourceValue.getClass())) {
-            throw new IllegalArgumentException("map type field [" + sourceKey + "] has non-string type, can not process it");
+            throw new IllegalArgumentException("map type field [" + sourceKey + "] has non-string type, cannot process it");
         } else if (StringUtils.isBlank(sourceValue.toString())) {
-            throw new IllegalArgumentException("map type field [" + sourceKey + "] has empty string, can not process it");
+            throw new IllegalArgumentException("map type field [" + sourceKey + "] has empty string, cannot process it");
         }
     }
 
@@ -122,9 +125,9 @@ public abstract class NLPProcessor extends AbstractProcessor {
                 if (List.class.isAssignableFrom(sourceValueClass) || Map.class.isAssignableFrom(sourceValueClass)) {
                     validateNestedTypeValue(sourceKey, sourceValue, () -> 1);
                 } else if (!String.class.isAssignableFrom(sourceValueClass)) {
-                    throw new IllegalArgumentException("field [" + sourceKey + "] is neither string nor nested type, can not process it");
+                    throw new IllegalArgumentException("field [" + sourceKey + "] is neither string nor nested type, cannot process it");
                 } else if (StringUtils.isBlank(sourceValue.toString())) {
-                    throw new IllegalArgumentException("field [" + sourceKey + "] has empty string value, can not process it");
+                    throw new IllegalArgumentException("field [" + sourceKey + "] has empty string value, cannot process it");
                 }
             }
         }
