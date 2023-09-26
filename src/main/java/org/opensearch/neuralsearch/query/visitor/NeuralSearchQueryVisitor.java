@@ -27,15 +27,15 @@ public class NeuralSearchQueryVisitor implements QueryBuilderVisitor {
         if (queryBuilder instanceof NeuralQueryBuilder) {
             NeuralQueryBuilder neuralQueryBuilder = (NeuralQueryBuilder) queryBuilder;
             if (neuralFieldMap != null
-                    && neuralQueryBuilder.fieldName() != null
-                    && neuralFieldMap.get(neuralQueryBuilder.fieldName()) != null) {
+                && neuralQueryBuilder.fieldName() != null
+                && neuralFieldMap.get(neuralQueryBuilder.fieldName()) != null) {
                 String fieldDefaultModelId = (String) neuralFieldMap.get(neuralQueryBuilder.fieldName());
                 neuralQueryBuilder.modelId(fieldDefaultModelId);
             } else if (modelId != null) {
                 neuralQueryBuilder.modelId(modelId);
             } else {
                 throw new IllegalArgumentException(
-                        "model id must be provided in neural query or a default model id must be set in search request processor"
+                    "model id must be provided in neural query or a default model id must be set in search request processor"
                 );
             }
         }

@@ -1,0 +1,11 @@
+{
+  "request_processors": [
+    {
+      "default_query": {
+        "tag": "tag1",
+        "description": "This processor is going to restrict to publicly visible documents",
+        "default_model_id": "%s"
+      }
+    }
+  ]
+}

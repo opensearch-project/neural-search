@@ -160,14 +160,14 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         parseQueryParams(parser, neuralQueryBuilder);
         if (parser.nextToken() != XContentParser.Token.END_OBJECT) {
             throw new ParsingException(
-                    parser.getTokenLocation(),
-                    "["
-                            + NAME
-                            + "] query doesn't support multiple fields, found ["
-                            + neuralQueryBuilder.fieldName()
-                            + "] and ["
-                            + parser.currentName()
-                            + "]"
+                parser.getTokenLocation(),
+                "["
+                    + NAME
+                    + "] query doesn't support multiple fields, found ["
+                    + neuralQueryBuilder.fieldName()
+                    + "] and ["
+                    + parser.currentName()
+                    + "]"
             );
         }
         requireValue(neuralQueryBuilder.queryText(), "Query text must be provided for neural query");
@@ -197,8 +197,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                     neuralQueryBuilder.boost(parser.floatValue());
                 } else {
                     throw new ParsingException(
-                            parser.getTokenLocation(),
-                            "[" + NAME + "] query does not support [" + currentFieldName + "]"
+                        parser.getTokenLocation(),
+                        "[" + NAME + "] query does not support [" + currentFieldName + "]"
                     );
                 }
             } else if (token == XContentParser.Token.START_OBJECT) {
@@ -207,8 +207,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 }
             } else {
                 throw new ParsingException(
-                        parser.getTokenLocation(),
-                        "[" + NAME + "] unknown token [" + token + "] after [" + currentFieldName + "]"
+                    parser.getTokenLocation(),
+                    "[" + NAME + "] unknown token [" + token + "] after [" + currentFieldName + "]"
                 );
             }
         }
@@ -231,10 +231,10 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
 
         SetOnce<float[]> vectorSetOnce = new SetOnce<>();
         queryRewriteContext.registerAsyncAction(
-                ((client, actionListener) -> ML_CLIENT.inferenceSentence(modelId(), queryText(), ActionListener.wrap(floatList -> {
-                    vectorSetOnce.set(vectorAsListToArray(floatList));
-                    actionListener.onResponse(null);
-                }, actionListener::onFailure)))
+            ((client, actionListener) -> ML_CLIENT.inferenceSentence(modelId(), queryText(), ActionListener.wrap(floatList -> {
+                vectorSetOnce.set(vectorAsListToArray(floatList));
+                actionListener.onResponse(null);
+            }, actionListener::onFailure)))
         );
         return new NeuralQueryBuilder(fieldName(), queryText(), modelId(), k(), vectorSetOnce::get, filter());
     }

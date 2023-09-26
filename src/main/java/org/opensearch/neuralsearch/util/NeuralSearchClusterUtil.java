@@ -5,6 +5,8 @@
 
 package org.opensearch.neuralsearch.util;
 
+import java.util.Locale;
+
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -47,8 +49,12 @@ public class NeuralSearchClusterUtil {
             return this.clusterService.state().getNodes().getMinNodeVersion();
         } catch (Exception exception) {
             log.error(
-                    String.format("Failed to get cluster minimum node version, returning current node version %s instead.", Version.CURRENT),
-                    exception
+                String.format(
+                    Locale.ROOT,
+                    "Failed to get cluster minimum node version, returning current node version %s instead.",
+                    Version.CURRENT
+                ),
+                exception
             );
             return Version.CURRENT;
         }

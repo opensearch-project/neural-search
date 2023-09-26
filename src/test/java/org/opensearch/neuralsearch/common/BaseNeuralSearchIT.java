@@ -253,6 +253,29 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertEquals("true", node.get("acknowledged").toString());
     }
 
+    protected void createSearchRequestProcessor(String modelId, String pipelineName) throws Exception {
+        Response pipelineCreateResponse = makeRequest(
+            client(),
+            "PUT",
+            "/_search/pipeline/" + pipelineName,
+            null,
+            toHttpEntity(
+                String.format(
+                    LOCALE,
+                    Files.readString(Path.of(classLoader.getResource("processor/SearchRequestPipelineConfiguration.json").toURI())),
+                    modelId
+                )
+            ),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+        Map<String, Object> node = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(pipelineCreateResponse.getEntity()),
+            false
+        );
+        assertEquals("true", node.get("acknowledged").toString());
+    }
+
     /**
      * Get the number of documents in a particular index
      *

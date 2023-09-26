@@ -5,8 +5,8 @@
 
 package org.opensearch.neuralsearch.plugin;
 
-import org.opensearch.neuralsearch.processor.NeuralQueryProcessor;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SEARCH_HYBRID_SEARCH_DISABLED;
+
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -29,6 +29,7 @@ import org.opensearch.env.NodeEnvironment;
 import org.opensearch.ingest.Processor;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.processor.NeuralQueryProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
@@ -132,10 +133,9 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     }
 
     @Override
-    public Map<String, org.opensearch.search.pipeline.Processor.Factory<SearchRequestProcessor>> getRequestProcessors(Parameters parameters) {
-        return Map.of(
-                NeuralQueryProcessor.TYPE,
-                new NeuralQueryProcessor.Factory()
-        );
+    public Map<String, org.opensearch.search.pipeline.Processor.Factory<SearchRequestProcessor>> getRequestProcessors(
+        Parameters parameters
+    ) {
+        return Map.of(NeuralQueryProcessor.TYPE, new NeuralQueryProcessor.Factory());
     }
 }
