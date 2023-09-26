@@ -123,7 +123,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         xContentBuilder.startObject(NAME);
         xContentBuilder.startObject(fieldName);
         xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
-        xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
+        if (!isClusterOnOrAfterMinRequiredVersion() || (isClusterOnOrAfterMinRequiredVersion() && modelId != null)) {
+            xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
+        }
         xContentBuilder.field(K_FIELD.getPreferredName(), k);
         if (filter != null) {
             xContentBuilder.field(FILTER_FIELD.getPreferredName(), filter);

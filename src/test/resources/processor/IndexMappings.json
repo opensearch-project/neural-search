@@ -67,6 +67,13 @@
             }
           }
         }
+      },
+      "passage_embedding": {
+        "type": "knn_vector",
+        "dimension": 768
+      },
+      "passage_text": {
+        "type": "text"
       }
     }
   }

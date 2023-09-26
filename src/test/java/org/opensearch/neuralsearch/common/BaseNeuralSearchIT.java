@@ -39,6 +39,8 @@ import org.opensearch.client.RequestOptions;
 import org.opensearch.client.Response;
 import org.opensearch.client.RestClient;
 import org.opensearch.client.WarningsHandler;
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
@@ -48,10 +50,16 @@ import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.neuralsearch.OpenSearchSecureRestTestCase;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
+import org.opensearch.test.ClusterServiceUtils;
+import org.opensearch.threadpool.TestThreadPool;
+import org.opensearch.threadpool.ThreadPool;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import com.google.common.collect.ImmutableList;
 
+@ThreadLeakScope(ThreadLeakScope.Scope.NONE)
 public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     private static final Locale LOCALE = Locale.ROOT;
@@ -66,11 +74,29 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     protected final ClassLoader classLoader = this.getClass().getClassLoader();
 
+    protected ThreadPool threadPool;
+    protected ClusterService clusterService;
+
     @Before
     public void setupSettings() {
+        threadPool = setUpThreadPool();
+        clusterService = createClusterService(threadPool);
         if (isUpdateClusterSettings()) {
             updateClusterSettings();
         }
+        NeuralSearchClusterUtil.instance().initialize(clusterService);
+    }
+
+    protected ThreadPool setUpThreadPool() {
+        return new TestThreadPool(getClass().getName(), threadPoolSettings());
+    }
+
+    public Settings threadPoolSettings() {
+        return Settings.EMPTY;
+    }
+
+    public static ClusterService createClusterService(ThreadPool threadPool) {
+        return ClusterServiceUtils.createClusterService(threadPool);
     }
 
     protected void updateClusterSettings() {
