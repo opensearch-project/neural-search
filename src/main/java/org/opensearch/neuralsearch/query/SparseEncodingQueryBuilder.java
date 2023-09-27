@@ -81,23 +81,23 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
     public SparseEncodingQueryBuilder(StreamInput in) throws IOException {
         super(in);
         this.fieldName = in.readString();
-        this.queryText = in.readOptionalString();
-        this.modelId = in.readOptionalString();
+        this.queryText = in.readString();
+        this.modelId = in.readString();
     }
 
     @Override
     protected void doWriteTo(StreamOutput out) throws IOException {
         out.writeString(fieldName);
-        out.writeOptionalString(queryText);
-        out.writeOptionalString(modelId);
+        out.writeString(queryText);
+        out.writeString(modelId);
     }
 
     @Override
     protected void doXContent(XContentBuilder xContentBuilder, Params params) throws IOException {
         xContentBuilder.startObject(NAME);
         xContentBuilder.startObject(fieldName);
-        if (null != queryText) xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
-        if (null != modelId) xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
+        xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
+        xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
         xContentBuilder.endObject();
