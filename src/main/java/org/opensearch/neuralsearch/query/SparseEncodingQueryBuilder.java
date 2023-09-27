@@ -153,6 +153,9 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
             sparseEncodingQueryBuilder.modelId(),
             String.format(Locale.ROOT, "%s field must be provided for [%s] query", MODEL_ID_FIELD.getPreferredName(), NAME)
         );
+        if (null != sparseEncodingQueryBuilder.maxTokenScore && sparseEncodingQueryBuilder.maxTokenScore <= 0) {
+            throw new IllegalArgumentException(MAX_TOKEN_SCORE_FIELD.getPreferredName() + " must be larger than 0.");
+        }
 
         return sparseEncodingQueryBuilder;
     }

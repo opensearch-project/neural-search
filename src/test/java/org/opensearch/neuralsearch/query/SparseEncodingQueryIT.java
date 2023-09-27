@@ -87,6 +87,45 @@ public class SparseEncodingQueryIT extends BaseSparseEncodingIT {
      *             "text_sparse": {
      *                 "query_text": "Hello world a b",
      *                 "model_id": "dcsdcasd",
+     *                 "max_token_score": float
+     *             }
+     *         }
+     *     }
+     * }
+     */
+    @SneakyThrows
+    public void testBasicQueryWithMaxTokenScore() {
+        float maxTokenScore = 0.00001f;
+        initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
+        String modelId = getDeployedModelId();
+        SparseEncodingQueryBuilder sparseEncodingQueryBuilder = new SparseEncodingQueryBuilder().fieldName(
+            TEST_SPARSE_ENCODING_FIELD_NAME_1
+        ).queryText(TEST_QUERY_TEXT).modelId(modelId).maxTokenScore(maxTokenScore);
+        Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, sparseEncodingQueryBuilder, 1);
+        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+
+        assertEquals("1", firstInnerHit.get("_id"));
+        Map<String, Float> queryTokens = runSparseModelInference(modelId, TEST_QUERY_TEXT);
+        float expectedScore = 0f;
+        for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
+            if (testRankFeaturesDoc.containsKey(entry.getKey())) {
+                expectedScore += entry.getValue() * Math.min(
+                    getFeatureFieldCompressedNumber(testRankFeaturesDoc.get(entry.getKey())),
+                    maxTokenScore
+                );
+            }
+        }
+        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
+    }
+
+    /**
+     * Tests basic query:
+     * {
+     *     "query": {
+     *         "sparse_encoding": {
+     *             "text_sparse": {
+     *                 "query_text": "Hello world a b",
+     *                 "model_id": "dcsdcasd",
      *                 "boost": 2
      *             }
      *         }
