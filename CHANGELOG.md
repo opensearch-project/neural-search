@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Features
 Support sparse semantic retrieval by introducing `sparse_encoding` ingest processor and query builder ([#333](https://github.com/opensearch-project/neural-search/pull/333))
 ### Enhancements
+Add `max_token_score` parameter to improve the execution efficiency for `sparse_encoding` query clause ([#348](https://github.com/opensearch-project/neural-search/pull/348))
 ### Bug Fixes
 ### Infrastructure
 ### Documentation
