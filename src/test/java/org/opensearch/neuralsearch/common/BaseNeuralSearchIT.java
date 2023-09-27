@@ -551,11 +551,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         );
 
         // after model undeploy returns, the max interval to update model status is 3s in ml-commons CronJob.
-        try {
-            Thread.sleep(3000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+        Thread.sleep(3000);
 
         makeRequest(
             client(),
