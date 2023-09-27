@@ -1,4 +1,12 @@
 /*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -14,11 +22,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.lucene.document;
+
+/*
+ * Modifications Copyright OpenSearch Contributors. See
+ * GitHub history for details.
+ */
+
+/*
+ * This class is built based on lucene FeatureQuery. We use LinearFuntion to
+ * build the query and add an upperbound to it.
+ */
+
+package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
 import java.util.Objects;
-import org.apache.lucene.document.FeatureField.FeatureFunction;
+
 import org.apache.lucene.index.ImpactsEnum;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.PostingsEnum;
@@ -38,24 +57,20 @@ import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.similarities.Similarity.SimScorer;
 import org.apache.lucene.util.BytesRef;
 
-final class FeatureQuery extends Query {
+public final class BoundedLinearFeatureQuery extends Query {
 
     private final String fieldName;
     private final String featureName;
-    private final FeatureFunction function;
+    private final Float scoreUpperBound;
 
-    FeatureQuery(String fieldName, String featureName, FeatureFunction function) {
+    public BoundedLinearFeatureQuery(String fieldName, String featureName, Float scoreUpperBound) {
         this.fieldName = Objects.requireNonNull(fieldName);
         this.featureName = Objects.requireNonNull(featureName);
-        this.function = Objects.requireNonNull(function);
+        this.scoreUpperBound = Objects.requireNonNull(scoreUpperBound);
     }
 
     @Override
     public Query rewrite(IndexSearcher indexSearcher) throws IOException {
-        FeatureFunction rewritten = function.rewrite(indexSearcher);
-        if (function != rewritten) {
-            return new FeatureQuery(fieldName, featureName, rewritten);
-        }
         return super.rewrite(indexSearcher);
     }
 
@@ -64,10 +79,10 @@ final class FeatureQuery extends Query {
         if (obj == null || getClass() != obj.getClass()) {
             return false;
         }
-        FeatureQuery that = (FeatureQuery) obj;
+        BoundedLinearFeatureQuery that = (BoundedLinearFeatureQuery) obj;
         return Objects.equals(fieldName, that.fieldName)
-                && Objects.equals(featureName, that.featureName)
-                && Objects.equals(function, that.function);
+            && Objects.equals(featureName, that.featureName)
+            && Objects.equals(scoreUpperBound, that.scoreUpperBound);
     }
 
     @Override
@@ -75,13 +90,12 @@ final class FeatureQuery extends Query {
         int h = getClass().hashCode();
         h = 31 * h + fieldName.hashCode();
         h = 31 * h + featureName.hashCode();
-        h = 31 * h + function.hashCode();
+        h = 31 * h + scoreUpperBound.hashCode();
         return h;
     }
 
     @Override
-    public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost)
-            throws IOException {
+    public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
         if (!scoreMode.needsScores()) {
             // We don't need scores (e.g. for faceting), and since features are stored as terms,
             // allow TermQuery to optimize in this case
@@ -93,12 +107,12 @@ final class FeatureQuery extends Query {
 
             @Override
             public boolean isCacheable(LeafReaderContext ctx) {
-                return false;
+                return true;
             }
 
             @Override
             public Explanation explain(LeafReaderContext context, int doc) throws IOException {
-                String desc = "weight(" + getQuery() + " in " + doc + ") [" + function + "]";
+                String desc = "weight(" + getQuery() + " in " + doc + ") [\" BoundedLinearFeatureQuery \"]";
 
                 Terms terms = context.reader().terms(fieldName);
                 if (terms == null) {
@@ -114,7 +128,15 @@ final class FeatureQuery extends Query {
                     return Explanation.noMatch(desc + ". Feature " + featureName + " isn't set.");
                 }
 
-                return function.explain(fieldName, featureName, boost, postings.freq());
+                int freq = postings.freq();
+                float featureValue = decodeFeatureValue(freq);
+                float score = boost * featureValue;
+                return Explanation.match(
+                    score,
+                    "Linear function on the " + fieldName + " field for the " + featureName + " feature, computed as w * S from:",
+                    Explanation.match(boost, "w, weight of this function"),
+                    Explanation.match(featureValue, "S, feature value")
+                );
             }
 
             @Override
@@ -125,7 +147,12 @@ final class FeatureQuery extends Query {
                     return null;
                 }
 
-                final SimScorer scorer = function.scorer(boost);
+                final SimScorer scorer = new SimScorer() {
+                    @Override
+                    public float score(float freq, long norm) {
+                        return boost * decodeFeatureValue(freq);
+                    }
+                };
                 final ImpactsEnum impacts = termsEnum.impacts(PostingsEnum.FREQS);
                 final ImpactsDISI impactsDisi = new ImpactsDISI(impacts, impacts, scorer);
 
@@ -174,12 +201,17 @@ final class FeatureQuery extends Query {
 
     @Override
     public String toString(String field) {
-        return "FeatureQuery(field="
-                + fieldName
-                + ", feature="
-                + featureName
-                + ", function="
-                + function
-                + ")";
+        return "BoundedLinearFeatureQuery(field=" + fieldName + ", feature=" + featureName + ", scoreUpperBound=" + scoreUpperBound + ")";
+    }
+
+    static final int MAX_FREQ = Float.floatToIntBits(Float.MAX_VALUE) >>> 15;
+
+    private float decodeFeatureValue(float freq) {
+        if (freq > MAX_FREQ) {
+            return scoreUpperBound;
+        }
+        int tf = (int) freq; // lossless
+        int featureBits = tf << 15;
+        return Math.min(Float.intBitsToFloat(featureBits), scoreUpperBound);
     }
 }

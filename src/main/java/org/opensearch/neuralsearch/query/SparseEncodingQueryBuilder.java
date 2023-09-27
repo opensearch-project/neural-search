@@ -21,9 +21,9 @@ import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
-import org.apache.lucene.document.FeatureField;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.BoostQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.common.SetOnce;
 import org.opensearch.core.ParseField;
@@ -61,6 +61,8 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
     static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
     @VisibleForTesting
     static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
+    @VisibleForTesting
+    static final ParseField MAX_TOKEN_SCORE_FIELD = new ParseField("max_token_score");
 
     private static MLCommonsClientAccessor ML_CLIENT;
 
@@ -71,6 +73,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
     private String fieldName;
     private String queryText;
     private String modelId;
+    private Float maxTokenScore;
     private Supplier<Map<String, Float>> queryTokensSupplier;
 
     /**
@@ -84,6 +87,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         this.fieldName = in.readString();
         this.queryText = in.readString();
         this.modelId = in.readString();
+        this.maxTokenScore = in.readOptionalFloat();
     }
 
     @Override
@@ -91,6 +95,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         out.writeString(fieldName);
         out.writeString(queryText);
         out.writeString(modelId);
+        out.writeOptionalFloat(maxTokenScore);
     }
 
     @Override
@@ -99,6 +104,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         xContentBuilder.startObject(fieldName);
         xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
         xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
+        if (null != maxTokenScore) xContentBuilder.field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), maxTokenScore);
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
         xContentBuilder.endObject();
@@ -108,7 +114,8 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
      * The expected parsing form looks like:
      *  "SAMPLE_FIELD": {
      *    "query_text": "string",
-     *    "model_id": "string"
+     *    "model_id": "string",
+     *    "token_score_upper_bound": float (optional)
      *  }
      *
      * @param parser XContentParser
@@ -165,6 +172,8 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
                     sparseEncodingQueryBuilder.queryText(parser.text());
                 } else if (MODEL_ID_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     sparseEncodingQueryBuilder.modelId(parser.text());
+                } else if (MAX_TOKEN_SCORE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    sparseEncodingQueryBuilder.maxTokenScore(parser.floatValue());
                 } else {
                     throw new ParsingException(
                         parser.getTokenLocation(),
@@ -203,6 +212,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         return new SparseEncodingQueryBuilder().fieldName(fieldName)
             .queryText(queryText)
             .modelId(modelId)
+            .maxTokenScore(maxTokenScore)
             .queryTokensSupplier(queryTokensSetOnce::get);
     }
 
@@ -214,9 +224,14 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         Map<String, Float> queryTokens = queryTokensSupplier.get();
         validateQueryTokens(queryTokens);
 
+        final Float scoreUpperBound = null != maxTokenScore ? maxTokenScore : Float.MAX_VALUE;
+
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
         for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
-            builder.add(FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()), BooleanClause.Occur.SHOULD);
+            builder.add(
+                new BoostQuery(new BoundedLinearFeatureQuery(fieldName, entry.getKey(), scoreUpperBound), entry.getValue()),
+                BooleanClause.Occur.SHOULD
+            );
         }
         return builder.build();
     }
@@ -259,13 +274,14 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         if (obj == null || getClass() != obj.getClass()) return false;
         EqualsBuilder equalsBuilder = new EqualsBuilder().append(fieldName, obj.fieldName)
             .append(queryText, obj.queryText)
-            .append(modelId, obj.modelId);
+            .append(modelId, obj.modelId)
+            .append(maxTokenScore, obj.maxTokenScore);
         return equalsBuilder.isEquals();
     }
 
     @Override
     protected int doHashCode() {
-        return new HashCodeBuilder().append(fieldName).append(queryText).append(modelId).toHashCode();
+        return new HashCodeBuilder().append(fieldName).append(queryText).append(modelId).append(maxTokenScore).toHashCode();
     }
 
     @Override
