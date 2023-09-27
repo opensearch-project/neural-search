@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.Supplier;
 
@@ -127,6 +128,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
             throw new ParsingException(
                 parser.getTokenLocation(),
                 String.format(
+                    Locale.ROOT,
                     "[%s] query doesn't support multiple fields, found [%s] and [%s]",
                     NAME,
                     sparseEncodingQueryBuilder.fieldName(),
@@ -138,11 +140,11 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         requireValue(sparseEncodingQueryBuilder.fieldName(), "Field name must be provided for " + NAME + " query");
         requireValue(
             sparseEncodingQueryBuilder.queryText(),
-            String.format("%s field must be provided for [%s] query", QUERY_TEXT_FIELD.getPreferredName(), NAME)
+            String.format(Locale.ROOT, "%s field must be provided for [%s] query", QUERY_TEXT_FIELD.getPreferredName(), NAME)
         );
         requireValue(
             sparseEncodingQueryBuilder.modelId(),
-            String.format("%s field must be provided for [%s] query", MODEL_ID_FIELD.getPreferredName(), NAME)
+            String.format(Locale.ROOT, "%s field must be provided for [%s] query", MODEL_ID_FIELD.getPreferredName(), NAME)
         );
 
         return sparseEncodingQueryBuilder;
@@ -166,13 +168,13 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
                 } else {
                     throw new ParsingException(
                         parser.getTokenLocation(),
-                        String.format("[%s] query does not support [%s] field", NAME, currentFieldName)
+                        String.format(Locale.ROOT, "[%s] query does not support [%s] field", NAME, currentFieldName)
                     );
                 }
             } else {
                 throw new ParsingException(
                     parser.getTokenLocation(),
-                    String.format("[%s] unknown token [%s] after [%s]", NAME, token, currentFieldName)
+                    String.format(Locale.ROOT, "[%s] unknown token [%s] after [%s]", NAME, token, currentFieldName)
                 );
             }
         }
@@ -222,7 +224,12 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
     private static void validateForRewrite(String queryText, String modelId) {
         if (StringUtils.isBlank(queryText) || StringUtils.isBlank(modelId)) {
             throw new IllegalArgumentException(
-                String.format("%s and %s cannot be null", QUERY_TEXT_FIELD.getPreferredName(), MODEL_ID_FIELD.getPreferredName())
+                String.format(
+                    Locale.ROOT,
+                    "%s and %s cannot be null",
+                    QUERY_TEXT_FIELD.getPreferredName(),
+                    MODEL_ID_FIELD.getPreferredName()
+                )
             );
         }
     }
