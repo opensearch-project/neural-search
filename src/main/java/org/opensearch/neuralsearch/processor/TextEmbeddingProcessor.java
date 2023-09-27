@@ -21,7 +21,7 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
  * and field_map can be used to indicate which fields needs text embedding and the corresponding keys for the text embedding results.
  */
 @Log4j2
-public class TextEmbeddingProcessor extends NLPProcessor {
+public final class TextEmbeddingProcessor extends NLPProcessor {
 
     public static final String TYPE = "text_embedding";
     public static final String LIST_TYPE_NESTED_MAP_KEY = "knn";

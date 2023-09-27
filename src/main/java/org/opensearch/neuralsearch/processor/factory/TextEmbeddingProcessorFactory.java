@@ -16,6 +16,9 @@ import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 
+/**
+ * Factory for text embedding ingest processor for ingestion pipeline. Instantiates processor based on user provided input.
+ */
 public class TextEmbeddingProcessorFactory implements Processor.Factory {
 
     private final MLCommonsClientAccessor clientAccessor;

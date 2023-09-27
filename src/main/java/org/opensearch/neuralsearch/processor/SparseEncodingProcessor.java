@@ -22,7 +22,7 @@ import org.opensearch.neuralsearch.util.TokenWeightUtil;
  * and field_map can be used to indicate which fields needs text embedding and the corresponding keys for the sparse encoding results.
  */
 @Log4j2
-public class SparseEncodingProcessor extends NLPProcessor {
+public final class SparseEncodingProcessor extends NLPProcessor {
 
     public static final String TYPE = "sparse_encoding";
     public static final String LIST_TYPE_NESTED_MAP_KEY = "sparse_encoding";

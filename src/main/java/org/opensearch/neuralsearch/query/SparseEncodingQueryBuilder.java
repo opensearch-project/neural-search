@@ -126,22 +126,24 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         if (parser.nextToken() != XContentParser.Token.END_OBJECT) {
             throw new ParsingException(
                 parser.getTokenLocation(),
-                "["
-                    + NAME
-                    + "] query doesn't support multiple fields, found ["
-                    + sparseEncodingQueryBuilder.fieldName()
-                    + "] and ["
-                    + parser.currentName()
-                    + "]"
+                String.format(
+                    "[%s] query doesn't support multiple fields, found [%s] and [%s]",
+                    NAME,
+                    sparseEncodingQueryBuilder.fieldName(),
+                    parser.currentName()
+                )
             );
         }
 
         requireValue(sparseEncodingQueryBuilder.fieldName(), "Field name must be provided for " + NAME + " query");
         requireValue(
             sparseEncodingQueryBuilder.queryText(),
-            QUERY_TEXT_FIELD.getPreferredName() + " must be provided for " + NAME + " query"
+            String.format("%s field must be provided for [%s] query", QUERY_TEXT_FIELD.getPreferredName(), NAME)
         );
-        requireValue(sparseEncodingQueryBuilder.modelId(), MODEL_ID_FIELD.getPreferredName() + " must be provided for " + NAME + " query");
+        requireValue(
+            sparseEncodingQueryBuilder.modelId(),
+            String.format("%s field must be provided for [%s] query", MODEL_ID_FIELD.getPreferredName(), NAME)
+        );
 
         return sparseEncodingQueryBuilder;
     }
@@ -164,13 +166,13 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
                 } else {
                     throw new ParsingException(
                         parser.getTokenLocation(),
-                        "[" + NAME + "] query does not support [" + currentFieldName + "]"
+                        String.format("[%s] query does not support [%s] field", NAME, currentFieldName)
                     );
                 }
             } else {
                 throw new ParsingException(
                     parser.getTokenLocation(),
-                    "[" + NAME + "] unknown token [" + token + "] after [" + currentFieldName + "]"
+                    String.format("[%s] unknown token [%s] after [%s]", NAME, token, currentFieldName)
                 );
             }
         }
@@ -220,7 +222,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
     private static void validateForRewrite(String queryText, String modelId) {
         if (StringUtils.isBlank(queryText) || StringUtils.isBlank(modelId)) {
             throw new IllegalArgumentException(
-                QUERY_TEXT_FIELD.getPreferredName() + " and " + MODEL_ID_FIELD.getPreferredName() + " cannot be null."
+                String.format("%s and %s cannot be null", QUERY_TEXT_FIELD.getPreferredName(), MODEL_ID_FIELD.getPreferredName())
             );
         }
     }
@@ -238,7 +240,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
             if (entry.getValue() <= 0) {
                 throw new IllegalArgumentException(
-                    "Feature weight must be larger than 0, got: " + entry.getValue() + "for key " + entry.getKey()
+                    "Feature weight must be larger than 0, feature [" + entry.getValue() + "] has negative weight."
                 );
             }
         }

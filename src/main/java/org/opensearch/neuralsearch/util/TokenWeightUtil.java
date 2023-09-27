@@ -46,6 +46,9 @@ public class TokenWeightUtil {
      * @param mapResultList {@link Map} which is the response from {@link org.opensearch.neuralsearch.ml.MLCommonsClientAccessor}
      */
     public static List<Map<String, Float>> fetchListOfTokenWeightMap(List<Map<String, ?>> mapResultList) {
+        if (null == mapResultList || mapResultList.isEmpty()) {
+            throw new IllegalArgumentException("The inference result can not be null or empty.");
+        }
         List<Object> results = new ArrayList<>();
         for (Map<String, ?> map : mapResultList) {
             if (!map.containsKey(RESPONSE_KEY)) {
@@ -66,7 +69,7 @@ public class TokenWeightUtil {
         Map<String, Float> result = new HashMap<>();
         for (Map.Entry<?, ?> entry : ((Map<?, ?>) uncastedMap).entrySet()) {
             if (!String.class.isAssignableFrom(entry.getKey().getClass()) || !Number.class.isAssignableFrom(entry.getValue().getClass())) {
-                throw new IllegalArgumentException("The expected inference result is a Map with String keys and  " + " Float values.");
+                throw new IllegalArgumentException("The expected inference result is a Map with String keys and Float values.");
             }
             result.put((String) entry.getKey(), ((Number) entry.getValue()).floatValue());
         }

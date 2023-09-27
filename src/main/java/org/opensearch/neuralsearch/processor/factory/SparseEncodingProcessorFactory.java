@@ -18,6 +18,9 @@ import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 
+/**
+ * Factory for sparse encoding ingest processor for ingestion pipeline. Instantiates processor based on user provided input.
+ */
 @Log4j2
 public class SparseEncodingProcessorFactory implements Processor.Factory {
     private final MLCommonsClientAccessor clientAccessor;
