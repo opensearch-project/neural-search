@@ -1,0 +1,26 @@
+{
+  "settings":{
+    "default_pipeline": "pipeline-sparse-encoding"
+  },
+  "mappings": {
+    "properties": {
+      "title_sparse": {
+        "type": "rank_features"
+      },
+      "favor_list_sparse": {
+        "type": "nested",
+        "properties":{
+          "sparse_encoding":{
+            "type": "rank_features"
+          }
+        }
+      },
+      "favorites.game_sparse": {
+        "type": "rank_features"
+      },
+      "favorites.movie_sparse": {
+        "type": "rank_features"
+      }
+    }
+  }
+}

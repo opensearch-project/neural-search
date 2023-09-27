@@ -62,20 +62,26 @@ import com.google.common.collect.ImmutableList;
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
 public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
-    private static final Locale LOCALE = Locale.ROOT;
+    protected static final Locale LOCALE = Locale.ROOT;
 
     private static final int MAX_TASK_RESULT_QUERY_TIME_IN_SECOND = 60 * 5;
 
     private static final int DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND = 1000;
-    private static final String DEFAULT_USER_AGENT = "Kibana";
+    protected static final String DEFAULT_USER_AGENT = "Kibana";
     protected static final String DEFAULT_NORMALIZATION_METHOD = "min_max";
     protected static final String DEFAULT_COMBINATION_METHOD = "arithmetic_mean";
     protected static final String PARAM_NAME_WEIGHTS = "weights";
+
+    protected String PIPELINE_CONFIGURATION_NAME = "processor/PipelineConfiguration.json";
 
     protected final ClassLoader classLoader = this.getClass().getClassLoader();
 
     protected ThreadPool threadPool;
     protected ClusterService clusterService;
+
+    protected void setPipelineConfigurationName(String pipelineConfigurationName) {
+        this.PIPELINE_CONFIGURATION_NAME = pipelineConfigurationName;
+    }
 
     @Before
     public void setupSettings() {
@@ -263,11 +269,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             "/_ingest/pipeline/" + pipelineName,
             null,
             toHttpEntity(
-                String.format(
-                    LOCALE,
-                    Files.readString(Path.of(classLoader.getResource("processor/PipelineConfiguration.json").toURI())),
-                    modelId
-                )
+                String.format(LOCALE, Files.readString(Path.of(classLoader.getResource(PIPELINE_CONFIGURATION_NAME).toURI())), modelId)
             ),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
