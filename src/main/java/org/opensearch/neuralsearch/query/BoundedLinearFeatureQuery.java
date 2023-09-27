@@ -71,6 +71,7 @@ public final class BoundedLinearFeatureQuery extends Query {
 
     @Override
     public Query rewrite(IndexSearcher indexSearcher) throws IOException {
+        // LinearFunction return same object for rewrite
         return super.rewrite(indexSearcher);
     }
 
@@ -107,7 +108,7 @@ public final class BoundedLinearFeatureQuery extends Query {
 
             @Override
             public boolean isCacheable(LeafReaderContext ctx) {
-                return true;
+                return false;
             }
 
             @Override
@@ -204,6 +205,7 @@ public final class BoundedLinearFeatureQuery extends Query {
         return "BoundedLinearFeatureQuery(field=" + fieldName + ", feature=" + featureName + ", scoreUpperBound=" + scoreUpperBound + ")";
     }
 
+    // the field and decodeFeatureValue are modified from FeatureField.decodeFeatureValue
     static final int MAX_FREQ = Float.floatToIntBits(Float.MAX_VALUE) >>> 15;
 
     private float decodeFeatureValue(float freq) {
