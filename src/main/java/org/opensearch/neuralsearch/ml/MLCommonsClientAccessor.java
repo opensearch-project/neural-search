@@ -122,7 +122,6 @@ public class MLCommonsClientAccessor {
         MLInput mlInput = createMLInput(null, inputText);
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
             final List<Map<String, ?>> result = buildMapResultFromResponse(mlOutput);
-            log.debug("Inference Response for input sentence {} is : {} ", inputText, result);
             listener.onResponse(result);
         }, e -> {
             if (RetryUtil.shouldRetry(e, retryTime)) {
@@ -144,7 +143,6 @@ public class MLCommonsClientAccessor {
         MLInput mlInput = createMLInput(targetResponseFilters, inputText);
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
             final List<List<Float>> vector = buildVectorFromResponse(mlOutput);
-            log.debug("Inference Response for input sentence {} is : {} ", inputText, vector);
             listener.onResponse(vector);
         }, e -> {
             if (RetryUtil.shouldRetry(e, retryTime)) {
