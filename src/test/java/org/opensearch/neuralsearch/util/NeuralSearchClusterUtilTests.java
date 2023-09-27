@@ -15,7 +15,7 @@ import org.opensearch.test.OpenSearchTestCase;
 
 public class NeuralSearchClusterUtilTests extends OpenSearchTestCase {
 
-    public void testSingleNodeCluster() {
+    public void testMinNodeVersion_whenSingleNodeCluster_thenSuccess() {
         ClusterService clusterService = mockClusterService(Version.V_2_4_0);
 
         final NeuralSearchClusterUtil neuralSearchClusterUtil = NeuralSearchClusterUtil.instance();
@@ -26,7 +26,7 @@ public class NeuralSearchClusterUtilTests extends OpenSearchTestCase {
         assertTrue(Version.V_2_4_0.equals(minVersion));
     }
 
-    public void testMultipleNodesCluster() {
+    public void testMinNodeVersion_whenMultipleNodesCluster_thenSuccess() {
         ClusterService clusterService = mockClusterService(Version.V_2_3_0);
 
         final NeuralSearchClusterUtil neuralSearchClusterUtil = NeuralSearchClusterUtil.instance();
@@ -37,7 +37,7 @@ public class NeuralSearchClusterUtilTests extends OpenSearchTestCase {
         assertTrue(Version.V_2_3_0.equals(minVersion));
     }
 
-    public void testWhenErrorOnClusterStateDiscover() {
+    public void testMinNodeVersion_WhenErrorOnClusterState_thenMatchCurrentVersion() {
         ClusterService clusterService = mock(ClusterService.class);
         when(clusterService.state()).thenThrow(new RuntimeException("Cluster state is not ready"));
 

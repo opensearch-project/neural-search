@@ -24,9 +24,9 @@ import com.google.common.primitives.Floats;
 
 public class NeuralQueryProcessorIT extends BaseNeuralSearchIT {
 
-    public static final String index = "my-nlp-index";
-    public static final String search_pipeline = "search-pipeline";
-    public static final String ingest_pipeline = "nlp-pipeline";
+    private static final String index = "my-nlp-index";
+    private static final String search_pipeline = "search-pipeline";
+    private static final String ingest_pipeline = "nlp-pipeline";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_1 = "test-knn-vector-1";
     private static final int TEST_DIMENSION = 768;
     private static final SpaceType TEST_SPACE_TYPE = SpaceType.L2;
@@ -47,6 +47,7 @@ public class NeuralQueryProcessorIT extends BaseNeuralSearchIT {
         findDeployedModels().forEach(this::deleteModel);
     }
 
+    @SneakyThrows
     public void testNeuralQueryProcessor() throws Exception {
         initializeIndexIfNotExist();
         String modelId = getDeployedModelId();
