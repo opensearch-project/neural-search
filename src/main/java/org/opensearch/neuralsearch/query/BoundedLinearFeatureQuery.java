@@ -57,6 +57,17 @@ import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.similarities.Similarity.SimScorer;
 import org.apache.lucene.util.BytesRef;
 
+/**
+ * The feature queries of input tokens are wrapped by lucene BooleanQuery, which use WAND algorithm
+ * to accelerate the execution. The WAND algorithm leverage the score upper bound of sub-queries to
+ * skip non-competitive tokens. However, origin lucene FeatureQuery use Float.MAX_VALUE as the score
+ * upper bound, and this invalidates WAND.
+ *
+ * To mitigate this issue, we rewrite the FeatureQuery to BoundedLinearFeatureQuery. The caller can
+ * set the token score upperbound of this query. And according to our use case, we use LinearFunction
+ * as the score function.
+ */
+
 public final class BoundedLinearFeatureQuery extends Query {
 
     private final String fieldName;
