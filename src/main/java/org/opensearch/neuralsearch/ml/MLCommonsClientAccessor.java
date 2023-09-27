@@ -8,6 +8,7 @@ package org.opensearch.neuralsearch.ml;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import lombok.NonNull;
@@ -15,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.dataset.MLInputDataset;
@@ -100,10 +102,38 @@ public class MLCommonsClientAccessor {
         @NonNull final List<String> inputText,
         @NonNull final ActionListener<List<List<Float>>> listener
     ) {
-        inferenceSentencesWithRetry(targetResponseFilters, modelId, inputText, 0, listener);
+        retryableInferenceSentencesWithVectorResult(targetResponseFilters, modelId, inputText, 0, listener);
     }
 
-    private void inferenceSentencesWithRetry(
+    public void inferenceSentencesWithMapResult(
+        @NonNull final String modelId,
+        @NonNull final List<String> inputText,
+        @NonNull final ActionListener<List<Map<String, ?>>> listener
+    ) {
+        retryableInferenceSentencesWithMapResult(modelId, inputText, 0, listener);
+    }
+
+    private void retryableInferenceSentencesWithMapResult(
+        final String modelId,
+        final List<String> inputText,
+        final int retryTime,
+        final ActionListener<List<Map<String, ?>>> listener
+    ) {
+        MLInput mlInput = createMLInput(null, inputText);
+        mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
+            final List<Map<String, ?>> result = buildMapResultFromResponse(mlOutput);
+            listener.onResponse(result);
+        }, e -> {
+            if (RetryUtil.shouldRetry(e, retryTime)) {
+                final int retryTimeAdd = retryTime + 1;
+                retryableInferenceSentencesWithMapResult(modelId, inputText, retryTimeAdd, listener);
+            } else {
+                listener.onFailure(e);
+            }
+        }));
+    }
+
+    private void retryableInferenceSentencesWithVectorResult(
         final List<String> targetResponseFilters,
         final String modelId,
         final List<String> inputText,
@@ -113,12 +143,11 @@ public class MLCommonsClientAccessor {
         MLInput mlInput = createMLInput(targetResponseFilters, inputText);
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
             final List<List<Float>> vector = buildVectorFromResponse(mlOutput);
-            log.debug("Inference Response for input sentence {} is : {} ", inputText, vector);
             listener.onResponse(vector);
         }, e -> {
             if (RetryUtil.shouldRetry(e, retryTime)) {
                 final int retryTimeAdd = retryTime + 1;
-                inferenceSentencesWithRetry(targetResponseFilters, modelId, inputText, retryTimeAdd, listener);
+                retryableInferenceSentencesWithVectorResult(targetResponseFilters, modelId, inputText, retryTimeAdd, listener);
             } else {
                 listener.onFailure(e);
             }
@@ -142,6 +171,24 @@ public class MLCommonsClientAccessor {
             }
         }
         return vector;
+    }
+
+    private List<Map<String, ?>> buildMapResultFromResponse(MLOutput mlOutput) {
+        final ModelTensorOutput modelTensorOutput = (ModelTensorOutput) mlOutput;
+        final List<ModelTensors> tensorOutputList = modelTensorOutput.getMlModelOutputs();
+        if (CollectionUtils.isEmpty(tensorOutputList) || CollectionUtils.isEmpty(tensorOutputList.get(0).getMlModelTensors())) {
+            throw new IllegalStateException(
+                "Empty model result produced. Expected at least [1] tensor output and [1] model tensor, but got [0]"
+            );
+        }
+        List<Map<String, ?>> resultMaps = new ArrayList<>();
+        for (ModelTensors tensors : tensorOutputList) {
+            List<ModelTensor> tensorList = tensors.getMlModelTensors();
+            for (ModelTensor tensor : tensorList) {
+                resultMaps.add(tensor.getDataAsMap());
+            }
+        }
+        return resultMaps;
     }
 
 }
