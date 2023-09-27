@@ -13,9 +13,9 @@ import java.util.Map;
 
 import lombok.SneakyThrows;
 
-import org.apache.hc.core5.http.HttpHeaders;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.hc.core5.http.message.BasicHeader;
+import org.apache.http.HttpHeaders;
+import org.apache.http.message.BasicHeader;
+import org.apache.http.util.EntityUtils;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentFactory;
