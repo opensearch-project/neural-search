@@ -11,27 +11,28 @@ import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.*;
 
 import java.util.Map;
 
+import lombok.extern.log4j.Log4j2;
+
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
-import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
+import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 
 /**
- * Factory for text embedding ingest processor for ingestion pipeline. Instantiates processor based on user provided input.
+ * Factory for sparse encoding ingest processor for ingestion pipeline. Instantiates processor based on user provided input.
  */
-public class TextEmbeddingProcessorFactory implements Processor.Factory {
-
+@Log4j2
+public class SparseEncodingProcessorFactory implements Processor.Factory {
     private final MLCommonsClientAccessor clientAccessor;
-
     private final Environment environment;
 
-    public TextEmbeddingProcessorFactory(MLCommonsClientAccessor clientAccessor, Environment environment) {
+    public SparseEncodingProcessorFactory(MLCommonsClientAccessor clientAccessor, Environment environment) {
         this.clientAccessor = clientAccessor;
         this.environment = environment;
     }
 
     @Override
-    public TextEmbeddingProcessor create(
+    public SparseEncodingProcessor create(
         Map<String, Processor.Factory> registry,
         String processorTag,
         String description,
@@ -39,6 +40,7 @@ public class TextEmbeddingProcessorFactory implements Processor.Factory {
     ) throws Exception {
         String modelId = readStringProperty(TYPE, processorTag, config, MODEL_ID_FIELD);
         Map<String, Object> filedMap = readMap(TYPE, processorTag, config, FIELD_MAP_FIELD);
-        return new TextEmbeddingProcessor(processorTag, description, modelId, filedMap, clientAccessor, environment);
+
+        return new SparseEncodingProcessor(processorTag, description, modelId, filedMap, clientAccessor, environment);
     }
 }
