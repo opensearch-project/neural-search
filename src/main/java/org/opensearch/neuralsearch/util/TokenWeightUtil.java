@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Utility class for working with sparse_encoding queries and ingest processor.
+ * Utility class for working with neural_sparse queries and ingest processor.
  * Used to fetch the (token, weight) Map from the response returned by {@link org.opensearch.neuralsearch.ml.MLCommonsClientAccessor}
  *
  */
