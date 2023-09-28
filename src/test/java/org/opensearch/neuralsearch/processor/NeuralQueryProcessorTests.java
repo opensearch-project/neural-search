@@ -19,8 +19,8 @@ public class NeuralQueryProcessorTests extends OpenSearchTestCase {
     public void testFactory() throws Exception {
         NeuralQueryProcessor.Factory factory = new NeuralQueryProcessor.Factory();
         NeuralQueryProcessor processor = createTestProcessor(factory);
-        assertEquals("vasdcvkcjkbldbjkd", processor.modelId);
-        assertEquals("bahbkcdkacb", processor.neuralFieldDefaultIdMap.get("fieldName").toString());
+        assertEquals("vasdcvkcjkbldbjkd", processor.getModelId());
+        assertEquals("bahbkcdkacb", processor.getNeuralFieldDefaultIdMap().get("fieldName").toString());
 
         // Missing "query" parameter:
         expectThrows(
@@ -39,7 +39,7 @@ public class NeuralQueryProcessorTests extends OpenSearchTestCase {
         assertEquals(processSearchRequest, searchRequest);
     }
 
-    public NeuralQueryProcessor createTestProcessor(NeuralQueryProcessor.Factory factory) throws Exception {
+    private NeuralQueryProcessor createTestProcessor(NeuralQueryProcessor.Factory factory) throws Exception {
         Map<String, Object> configMap = new HashMap<>();
         configMap.put("default_model_id", "vasdcvkcjkbldbjkd");
         configMap.put("neural_field_default_id", Map.of("fieldName", "bahbkcdkacb"));

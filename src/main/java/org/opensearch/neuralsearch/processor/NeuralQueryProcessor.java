@@ -7,7 +7,11 @@ package org.opensearch.neuralsearch.processor;
 
 import java.util.Map;
 
+import lombok.Getter;
+import lombok.Setter;
+
 import org.opensearch.action.search.SearchRequest;
+import org.opensearch.common.Nullable;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.ingest.ConfigurationUtils;
 import org.opensearch.neuralsearch.query.visitor.NeuralSearchQueryVisitor;
@@ -16,18 +20,21 @@ import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 
 /**
- * Neural Search Query Request Processor
+ * Neural Search Query Request Processor, It modifies the search request with neural query clause
+ * and adds model Id if not present in the search query.
  */
+@Setter
+@Getter
 public class NeuralQueryProcessor extends AbstractProcessor implements SearchRequestProcessor {
 
     /**
      * Key to reference this processor type from a search pipeline.
      */
-    public static final String TYPE = "neural_query";
+    public static final String TYPE = "enriching_query_defaults";
 
-    final String modelId;
+    private final String modelId;
 
-    final Map<String, Object> neuralFieldDefaultIdMap;
+    private final Map<String, Object> neuralFieldDefaultIdMap;
 
     /**
      * Returns the type of the processor.
@@ -39,12 +46,12 @@ public class NeuralQueryProcessor extends AbstractProcessor implements SearchReq
         return TYPE;
     }
 
-    protected NeuralQueryProcessor(
+    private NeuralQueryProcessor(
         String tag,
         String description,
         boolean ignoreFailure,
-        String modelId,
-        Map<String, Object> neuralFieldDefaultIdMap
+        @Nullable String modelId,
+        @Nullable Map<String, Object> neuralFieldDefaultIdMap
     ) {
         super(tag, description, ignoreFailure);
         this.modelId = modelId;
@@ -81,7 +88,12 @@ public class NeuralQueryProcessor extends AbstractProcessor implements SearchReq
             Map<String, Object> config,
             PipelineContext pipelineContext
         ) throws IllegalArgumentException {
-            String modelId = (String) config.remove(DEFAULT_MODEL_ID);
+            String modelId;
+            try {
+                modelId = (String) config.remove(DEFAULT_MODEL_ID);
+            } catch (ClassCastException e) {
+                throw new IllegalArgumentException("model Id must of String type");
+            }
             Map<String, Object> neuralInfoMap = ConfigurationUtils.readOptionalMap(TYPE, tag, config, NEURAL_FIELD_DEFAULT_ID);
 
             if (modelId == null && neuralInfoMap == null) {

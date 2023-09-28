@@ -20,8 +20,8 @@ import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 @AllArgsConstructor
 public class NeuralSearchQueryVisitor implements QueryBuilderVisitor {
 
-    private String modelId;
-    private Map<String, Object> neuralFieldMap;
+    private final String modelId;
+    private final Map<String, Object> neuralFieldMap;
 
     /**
      * Accept method accepts every query builder from the search request,

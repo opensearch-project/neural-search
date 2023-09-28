@@ -96,6 +96,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         super(in);
         this.fieldName = in.readString();
         this.queryText = in.readString();
+        // If cluster version is on or after 2.11 then default model Id support is enabled
         if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
             this.modelId = in.readOptionalString();
         } else {
@@ -109,6 +110,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     protected void doWriteTo(StreamOutput out) throws IOException {
         out.writeString(this.fieldName);
         out.writeString(this.queryText);
+        // If cluster version is on or after 2.11 then default model Id support is enabled
         if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
             out.writeOptionalString(this.modelId);
         } else {
