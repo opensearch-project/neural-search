@@ -29,6 +29,13 @@ public class NeuralQueryProcessorTests extends OpenSearchTestCase {
         );
     }
 
+    public void testFactory_whenModelIdIsNotString_thenFail() {
+        NeuralQueryProcessor.Factory factory = new NeuralQueryProcessor.Factory();
+        Map<String, Object> configMap = new HashMap<>();
+        configMap.put("default_model_id", 55555L);
+        expectThrows(IllegalArgumentException.class, () -> factory.create(Collections.emptyMap(), null, null, false, configMap, null));
+    }
+
     public void testProcessRequest() throws Exception {
         NeuralQueryProcessor.Factory factory = new NeuralQueryProcessor.Factory();
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
@@ -39,6 +46,12 @@ public class NeuralQueryProcessorTests extends OpenSearchTestCase {
         assertEquals(processSearchRequest, searchRequest);
     }
 
+    public void testType() throws Exception {
+        NeuralQueryProcessor.Factory factory = new NeuralQueryProcessor.Factory();
+        NeuralQueryProcessor processor = createTestProcessor(factory);
+        assertEquals(NeuralQueryProcessor.TYPE, processor.getType());
+    }
+
     private NeuralQueryProcessor createTestProcessor(NeuralQueryProcessor.Factory factory) throws Exception {
         Map<String, Object> configMap = new HashMap<>();
         configMap.put("default_model_id", "vasdcvkcjkbldbjkd");
@@ -46,5 +59,4 @@ public class NeuralQueryProcessorTests extends OpenSearchTestCase {
         NeuralQueryProcessor processor = factory.create(Collections.emptyMap(), null, null, false, configMap, null);
         return processor;
     }
-
 }

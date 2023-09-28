@@ -79,7 +79,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
               }
           }
         */
-        setUpClusterService();
+        setUpClusterService(Version.V_2_10_0);
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject(FIELD_NAME)
@@ -112,7 +112,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
               }
           }
         */
-        setUpClusterService();
+        setUpClusterService(Version.CURRENT);
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject(FIELD_NAME)
@@ -152,7 +152,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
               }
           }
         */
-        setUpClusterService();
+        setUpClusterService(Version.CURRENT);
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject(FIELD_NAME)
@@ -340,8 +340,15 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testStreams() {
-        setUpClusterService();
+    public void testStreams_whenClusterServiceWithDifferentVersions() {
+        setUpClusterService(Version.V_2_10_0);
+        testStreams();
+        setUpClusterService(Version.CURRENT);
+        testStreams();
+    }
+
+    @SneakyThrows
+    private void testStreams() {
         NeuralQueryBuilder original = new NeuralQueryBuilder();
         original.fieldName(FIELD_NAME);
         original.queryText(QUERY_TEXT);
@@ -581,8 +588,8 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(neuralQueryBuilder.filter(), knnQueryBuilder.getFilter());
     }
 
-    private void setUpClusterService() {
-        ClusterService clusterService = NeuralSearchClusterTestUtils.mockClusterService(Version.CURRENT);
+    private void setUpClusterService(Version version) {
+        ClusterService clusterService = NeuralSearchClusterTestUtils.mockClusterService(version);
         NeuralSearchClusterUtil.instance().initialize(clusterService);
     }
 }
