@@ -290,9 +290,9 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .queryName(queryName1);
 
         // Identical to sparseEncodingQueryBuilder_baseline except default boost and query name
-        NeuralSparseQueryBuilder sparseEncodingQueryBuilder_defaultBoostAndQueryName = new NeuralSparseQueryBuilder().fieldName(
-            fieldName1
-        ).queryText(queryText1).modelId(modelId1);
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder_defaultBoostAndQueryName = new NeuralSparseQueryBuilder().fieldName(fieldName1)
+            .queryText(queryText1)
+            .modelId(modelId1);
 
         // Identical to sparseEncodingQueryBuilder_baseline except diff field name
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder_diffFieldName = new NeuralSparseQueryBuilder().fieldName(fieldName2)
