@@ -576,7 +576,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             toHttpEntity(""),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
-        Thread.sleep(DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND);
+
+        // after model undeploy returns, the max interval to update model status is 3s in ml-commons CronJob.
+        Thread.sleep(3000);
+
         makeRequest(
             client(),
             "DELETE",
