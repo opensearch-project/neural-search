@@ -5,9 +5,11 @@
 
 package org.opensearch.neuralsearch.ml;
 
+import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.INPUT_IMAGE;
+import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.INPUT_TEXT;
+
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -22,7 +24,6 @@ import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.dataset.MLInputDataset;
 import org.opensearch.ml.common.dataset.TextDocsInputDataSet;
-import org.opensearch.ml.common.dataset.remote.RemoteInferenceInputDataSet;
 import org.opensearch.ml.common.input.MLInput;
 import org.opensearch.ml.common.output.MLOutput;
 import org.opensearch.ml.common.output.model.ModelResultFilter;
@@ -115,6 +116,24 @@ public class MLCommonsClientAccessor {
         retryableInferenceSentencesWithMapResult(modelId, inputText, 0, listener);
     }
 
+    /**
+     * Abstraction to call predict function of api of MLClient with provided targetResponse filters. It uses the
+     * custom model provided as modelId and run the {@link FunctionName#TEXT_EMBEDDING}. The return will be sent
+     * using the actionListener which will have a {@link List} of {@link List} of {@link Float} in the order of
+     * inputText.
+     *
+     * @param modelId {@link String}
+     * @param inputObjects {@link Map} of {@link String}, {@link String} on which inference needs to happen
+     * @param listener {@link ActionListener} which will be called when prediction is completed or errored out.
+     */
+    public void inferenceSentences(
+        @NonNull final String modelId,
+        @NonNull final Map<String, String> inputObjects,
+        @NonNull final ActionListener<List<Float>> listener
+    ) {
+        inferenceSentencesWithRetry(TARGET_RESPONSE_FILTERS, modelId, inputObjects, 0, listener);
+    }
+
     private void retryableInferenceSentencesWithMapResult(
         final String modelId,
         final List<String> inputText,
@@ -197,5 +216,43 @@ public class MLCommonsClientAccessor {
             }
         }
         return resultMaps;
+    }
+
+    private List<Float> buildSingleVectorFromResponse(MLOutput mlOutput) {
+        final List<List<Float>> vector = buildVectorFromResponse(mlOutput);
+        return vector.isEmpty() ? new ArrayList<>() : vector.get(0);
+    }
+
+    private void inferenceSentencesWithRetry(
+        @NonNull final List<String> targetResponseFilters,
+        final String modelId,
+        final Map<String, String> inputObjects,
+        final int retryTime,
+        final ActionListener<List<Float>> listener
+    ) {
+        MLInput mlInput = createMLMultimodalInput(targetResponseFilters, inputObjects);
+        mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
+            final List<Float> vector = buildSingleVectorFromResponse(mlOutput);
+            log.debug("Inference Response for input sentence {} is : {} ", inputObjects, vector);
+            listener.onResponse(vector);
+        }, e -> {
+            if (RetryUtil.shouldRetry(e, retryTime)) {
+                final int retryTimeAdd = retryTime + 1;
+                inferenceSentencesWithRetry(targetResponseFilters, modelId, inputObjects, retryTimeAdd, listener);
+            } else {
+                listener.onFailure(e);
+            }
+        }));
+    }
+
+    private MLInput createMLMultimodalInput(final List<String> targetResponseFilters, Map<String, String> input) {
+        List<String> inputText = new ArrayList<>();
+        inputText.add(input.get(INPUT_TEXT));
+        if (input.containsKey(INPUT_IMAGE)) {
+            inputText.add(input.get(INPUT_IMAGE));
+        }
+        final ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
+        final MLInputDataset inputDataset = new TextDocsInputDataSet(inputText, modelResultFilter);
+        return new MLInput(FunctionName.TEXT_EMBEDDING, null, inputDataset);
     }
 }

@@ -7,8 +7,12 @@ package org.opensearch.neuralsearch.query;
 
 import static org.opensearch.knn.index.query.KNNQueryBuilder.FILTER_FIELD;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
+import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.INPUT_IMAGE;
+import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.INPUT_TEXT;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Supplier;
 
 import lombok.AccessLevel;
@@ -19,6 +23,7 @@ import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.log4j.Log4j2;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.apache.lucene.search.Query;
@@ -62,6 +67,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
 
     @VisibleForTesting
+    static final ParseField QUERY_IMAGE_FIELD = new ParseField("query_image");
+
+    @VisibleForTesting
     static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
 
     @VisibleForTesting
@@ -77,6 +85,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
 
     private String fieldName;
     private String queryText;
+    private String queryImage;
     private String modelId;
     private int k = DEFAULT_K;
     @VisibleForTesting
@@ -177,7 +186,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                     + "]"
             );
         }
-        requireValue(neuralQueryBuilder.queryText(), "Query text must be provided for neural query");
+        if (StringUtils.isBlank(neuralQueryBuilder.queryText()) && StringUtils.isBlank(neuralQueryBuilder.queryImage())) {
+            throw new IllegalArgumentException("Either query text or image text must be provided for neural query");
+        }
         requireValue(neuralQueryBuilder.fieldName(), "Field name must be provided for neural query");
         if (!isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
             requireValue(neuralQueryBuilder.modelId(), "Model ID must be provided for neural query");
@@ -194,6 +205,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             } else if (token.isValue()) {
                 if (QUERY_TEXT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     neuralQueryBuilder.queryText(parser.text());
+                } else if (QUERY_IMAGE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    neuralQueryBuilder.queryImage(parser.text());
                 } else if (MODEL_ID_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     neuralQueryBuilder.modelId(parser.text());
                 } else if (K_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
@@ -237,13 +250,20 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         }
 
         SetOnce<float[]> vectorSetOnce = new SetOnce<>();
+        Map<String, String> inferenceInput = new HashMap<>();
+        if (StringUtils.isNotBlank(queryText())) {
+            inferenceInput.put(INPUT_TEXT, queryText());
+        }
+        if (StringUtils.isNotBlank(queryImage())) {
+            inferenceInput.put(INPUT_IMAGE, queryImage());
+        }
         queryRewriteContext.registerAsyncAction(
-            ((client, actionListener) -> ML_CLIENT.inferenceSentence(modelId(), queryText(), ActionListener.wrap(floatList -> {
+            ((client, actionListener) -> ML_CLIENT.inferenceSentences(modelId(), inferenceInput, ActionListener.wrap(floatList -> {
                 vectorSetOnce.set(vectorAsListToArray(floatList));
                 actionListener.onResponse(null);
             }, actionListener::onFailure)))
         );
-        return new NeuralQueryBuilder(fieldName(), queryText(), modelId(), k(), vectorSetOnce::get, filter());
+        return new NeuralQueryBuilder(fieldName(), queryText(), queryImage(), modelId(), k(), vectorSetOnce::get, filter());
     }
 
     @Override

@@ -1,0 +1,115 @@
+/*
+ * Copyright OpenSearch Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+package org.opensearch.neuralsearch.processor.factory;
+
+import static org.mockito.Mockito.mock;
+import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.FIELD_MAP_FIELD;
+import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.MODEL_ID_FIELD;
+import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.EMBEDDING_FIELD;
+import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.IMAGE_FIELD_NAME;
+import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.TEXT_FIELD_NAME;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import lombok.SneakyThrows;
+
+import org.opensearch.env.Environment;
+import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor;
+import org.opensearch.test.OpenSearchTestCase;
+
+public class TextImageEmbeddingProcessorFactoryTests extends OpenSearchTestCase {
+
+    @SneakyThrows
+    public void testNormalizationProcessor_whenAllParamsPassed_thenSuccessful() {
+        TextImageEmbeddingProcessorFactory textImageEmbeddingProcessorFactory = new TextImageEmbeddingProcessorFactory(
+            mock(MLCommonsClientAccessor.class),
+            mock(Environment.class)
+        );
+
+        final Map<String, org.opensearch.ingest.Processor.Factory> processorFactories = new HashMap<>();
+        String tag = "tag";
+        String description = "description";
+        boolean ignoreFailure = false;
+        Map<String, Object> config = new HashMap<>();
+        config.put(MODEL_ID_FIELD, "1234567678");
+        config.put(EMBEDDING_FIELD, "embedding_field");
+        config.put(FIELD_MAP_FIELD, Map.of(TEXT_FIELD_NAME, "my_text_field", IMAGE_FIELD_NAME, "my_image_field"));
+        TextImageEmbeddingProcessor inferenceProcessor = textImageEmbeddingProcessorFactory.create(
+            processorFactories,
+            tag,
+            description,
+            config
+        );
+        assertNotNull(inferenceProcessor);
+        assertEquals("text_image_embedding", inferenceProcessor.getType());
+    }
+
+    @SneakyThrows
+    public void testNormalizationProcessor_whenOnlyOneParamSet_thenSuccessful() {
+        TextImageEmbeddingProcessorFactory textImageEmbeddingProcessorFactory = new TextImageEmbeddingProcessorFactory(
+            mock(MLCommonsClientAccessor.class),
+            mock(Environment.class)
+        );
+
+        final Map<String, org.opensearch.ingest.Processor.Factory> processorFactories = new HashMap<>();
+        String tag = "tag";
+        String description = "description";
+        boolean ignoreFailure = false;
+        Map<String, Object> configOnlyTextField = new HashMap<>();
+        configOnlyTextField.put(MODEL_ID_FIELD, "1234567678");
+        configOnlyTextField.put(EMBEDDING_FIELD, "embedding_field");
+        configOnlyTextField.put(FIELD_MAP_FIELD, Map.of(TEXT_FIELD_NAME, "my_text_field"));
+        TextImageEmbeddingProcessor processor = textImageEmbeddingProcessorFactory.create(
+            processorFactories,
+            tag,
+            description,
+            configOnlyTextField
+        );
+        assertNotNull(processor);
+        assertEquals("text_image_embedding", processor.getType());
+
+        Map<String, Object> configOnlyImageField = new HashMap<>();
+        configOnlyImageField.put(MODEL_ID_FIELD, "1234567678");
+        configOnlyImageField.put(EMBEDDING_FIELD, "embedding_field");
+        configOnlyImageField.put(FIELD_MAP_FIELD, Map.of(TEXT_FIELD_NAME, "my_text_field"));
+        processor = textImageEmbeddingProcessorFactory.create(processorFactories, tag, description, configOnlyImageField);
+        assertNotNull(processor);
+        assertEquals("text_image_embedding", processor.getType());
+    }
+
+    @SneakyThrows
+    public void testNormalizationProcessor_whenMixOfParamsOrEmptyParams_thenFail() {
+        TextImageEmbeddingProcessorFactory textImageEmbeddingProcessorFactory = new TextImageEmbeddingProcessorFactory(
+            mock(MLCommonsClientAccessor.class),
+            mock(Environment.class)
+        );
+
+        final Map<String, org.opensearch.ingest.Processor.Factory> processorFactories = new HashMap<>();
+        String tag = "tag";
+        String description = "description";
+        boolean ignoreFailure = false;
+        Map<String, Object> configMixOfFields = new HashMap<>();
+        configMixOfFields.put(MODEL_ID_FIELD, "1234567678");
+        configMixOfFields.put(EMBEDDING_FIELD, "embedding_field");
+        configMixOfFields.put(FIELD_MAP_FIELD, Map.of(TEXT_FIELD_NAME, "my_text_field", "random_field_name", "random_field"));
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> textImageEmbeddingProcessorFactory.create(processorFactories, tag, description, configMixOfFields)
+        );
+        assertEquals(exception.getMessage(), "Unable to create the TextImageEmbedding processor as field_map has unsupported field name");
+        Map<String, Object> configNoFields = new HashMap<>();
+        configNoFields.put(MODEL_ID_FIELD, "1234567678");
+        configNoFields.put(EMBEDDING_FIELD, "embedding_field");
+        configNoFields.put(FIELD_MAP_FIELD, Map.of());
+        exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> textImageEmbeddingProcessorFactory.create(processorFactories, tag, description, configNoFields)
+        );
+        assertEquals(exception.getMessage(), "Unable to create the TextImageEmbedding processor as field_map has invalid key or value");
+    }
+}

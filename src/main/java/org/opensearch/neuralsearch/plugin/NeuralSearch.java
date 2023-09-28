@@ -29,17 +29,17 @@ import org.opensearch.ingest.Processor;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
-import org.opensearch.neuralsearch.processor.InferenceProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
+import org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
-import org.opensearch.neuralsearch.processor.factory.InferenceProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.SparseEncodingProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
+import org.opensearch.neuralsearch.processor.factory.TextImageEmbeddingProcessorFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
@@ -109,8 +109,8 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
             new TextEmbeddingProcessorFactory(clientAccessor, parameters.env),
             SparseEncodingProcessor.TYPE,
             new SparseEncodingProcessorFactory(clientAccessor, parameters.env),
-            InferenceProcessor.TYPE,
-            new InferenceProcessorFactory(clientAccessor, parameters.env)
+            TextImageEmbeddingProcessor.TYPE,
+            new TextImageEmbeddingProcessorFactory(clientAccessor, parameters.env)
         );
     }
 
