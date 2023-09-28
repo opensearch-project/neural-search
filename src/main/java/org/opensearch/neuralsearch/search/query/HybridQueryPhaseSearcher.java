@@ -33,6 +33,7 @@ import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.QueryCollectorContext;
 import org.opensearch.search.query.QueryPhase;
+import org.opensearch.search.query.QueryPhaseSearcherWrapper;
 import org.opensearch.search.query.QuerySearchResult;
 import org.opensearch.search.query.TopDocsCollectorContext;
 import org.opensearch.search.rescore.RescoreContext;
@@ -45,7 +46,11 @@ import com.google.common.annotations.VisibleForTesting;
  * upstream standard implementation of searcher is called.
  */
 @Log4j2
-public class HybridQueryPhaseSearcher extends QueryPhase.DefaultQueryPhaseSearcher {
+public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
+
+    public HybridQueryPhaseSearcher() {
+        super();
+    }
 
     public boolean searchWith(
         final SearchContext searchContext,
@@ -58,7 +63,7 @@ public class HybridQueryPhaseSearcher extends QueryPhase.DefaultQueryPhaseSearch
         if (query instanceof HybridQuery) {
             return searchWithCollector(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);
         }
-        return super.searchWithCollector(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);
+        return super.searchWith(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);
     }
 
     @VisibleForTesting
