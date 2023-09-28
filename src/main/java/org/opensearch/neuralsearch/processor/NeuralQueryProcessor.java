@@ -80,7 +80,7 @@ public class NeuralQueryProcessor extends AbstractProcessor implements SearchReq
             boolean ignoreFailure,
             Map<String, Object> config,
             PipelineContext pipelineContext
-        ) throws Exception {
+        ) throws IllegalArgumentException {
             String modelId = (String) config.remove(DEFAULT_MODEL_ID);
             Map<String, Object> neuralInfoMap = ConfigurationUtils.readOptionalMap(TYPE, tag, config, NEURAL_FIELD_DEFAULT_ID);
 

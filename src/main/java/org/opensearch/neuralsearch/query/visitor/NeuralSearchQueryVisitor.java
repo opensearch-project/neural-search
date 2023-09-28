@@ -15,7 +15,7 @@ import org.opensearch.index.query.QueryBuilderVisitor;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 /**
- * Neural Search Query Visitor. It visits the each and every component of query buikder tree.
+ * Neural Search Query Visitor. It visits each and every component of query buikder tree.
  */
 @AllArgsConstructor
 public class NeuralSearchQueryVisitor implements QueryBuilderVisitor {

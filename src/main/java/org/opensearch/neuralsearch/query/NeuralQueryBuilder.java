@@ -96,7 +96,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         super(in);
         this.fieldName = in.readString();
         this.queryText = in.readString();
-        if (isClusterOnOrAfterMinRequiredVersion()) {
+        if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
             this.modelId = in.readOptionalString();
         } else {
             this.modelId = in.readString();
@@ -109,7 +109,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     protected void doWriteTo(StreamOutput out) throws IOException {
         out.writeString(this.fieldName);
         out.writeString(this.queryText);
-        if (isClusterOnOrAfterMinRequiredVersion()) {
+        if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
             out.writeOptionalString(this.modelId);
         } else {
             out.writeString(this.modelId);
@@ -123,7 +123,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         xContentBuilder.startObject(NAME);
         xContentBuilder.startObject(fieldName);
         xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
-        if (!isClusterOnOrAfterMinRequiredVersion() || (isClusterOnOrAfterMinRequiredVersion() && modelId != null)) {
+        if (modelId != null) {
             xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
         }
         xContentBuilder.field(K_FIELD.getPreferredName(), k);
@@ -177,7 +177,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         }
         requireValue(neuralQueryBuilder.queryText(), "Query text must be provided for neural query");
         requireValue(neuralQueryBuilder.fieldName(), "Field name must be provided for neural query");
-        if (!isClusterOnOrAfterMinRequiredVersion()) {
+        if (!isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
             requireValue(neuralQueryBuilder.modelId(), "Model ID must be provided for neural query");
         }
         return neuralQueryBuilder;
@@ -273,7 +273,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         return NAME;
     }
 
-    private static boolean isClusterOnOrAfterMinRequiredVersion() {
+    private static boolean isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport() {
         return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID);
     }
 }
