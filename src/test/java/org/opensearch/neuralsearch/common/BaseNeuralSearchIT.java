@@ -56,7 +56,7 @@ import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.test.ClusterServiceUtils;
 import org.opensearch.threadpool.TestThreadPool;
 import org.opensearch.threadpool.ThreadPool;
-import com.carrotsearch.randomizedtesting.RandomizedTest;
+
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import com.google.common.collect.ImmutableList;
 
