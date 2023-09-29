@@ -29,7 +29,9 @@ import java.util.function.Supplier;
 
 import lombok.SneakyThrows;
 
+import org.opensearch.Version;
 import org.opensearch.client.Client;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.ParseField;
@@ -50,6 +52,8 @@ import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.neuralsearch.common.VectorUtil;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class NeuralQueryBuilderTests extends OpenSearchTestCase {
@@ -75,6 +79,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
               }
           }
         */
+        setUpClusterService(Version.V_2_10_0);
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject(FIELD_NAME)
@@ -107,6 +112,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
               }
           }
         */
+        setUpClusterService(Version.CURRENT);
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject(FIELD_NAME)
@@ -146,6 +152,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
               }
           }
         */
+        setUpClusterService(Version.CURRENT);
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject(FIELD_NAME)
@@ -333,7 +340,15 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testStreams() {
+    public void testStreams_whenClusterServiceWithDifferentVersions() {
+        setUpClusterService(Version.V_2_10_0);
+        testStreams();
+        setUpClusterService(Version.CURRENT);
+        testStreams();
+    }
+
+    @SneakyThrows
+    private void testStreams() {
         NeuralQueryBuilder original = new NeuralQueryBuilder();
         original.fieldName(FIELD_NAME);
         original.queryText(QUERY_TEXT);
@@ -571,5 +586,10 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         assertTrue(queryBuilder instanceof KNNQueryBuilder);
         KNNQueryBuilder knnQueryBuilder = (KNNQueryBuilder) queryBuilder;
         assertEquals(neuralQueryBuilder.filter(), knnQueryBuilder.getFilter());
+    }
+
+    private void setUpClusterService(Version version) {
+        ClusterService clusterService = NeuralSearchClusterTestUtils.mockClusterService(version);
+        NeuralSearchClusterUtil.instance().initialize(clusterService);
     }
 }
