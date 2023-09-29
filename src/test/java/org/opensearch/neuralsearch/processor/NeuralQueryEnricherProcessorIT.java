@@ -44,6 +44,7 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
         super.tearDown();
         deleteSearchPipeline(search_pipeline);
         findDeployedModels().forEach(this::deleteModel);
+        deleteIndex(index);
     }
 
     @SneakyThrows
