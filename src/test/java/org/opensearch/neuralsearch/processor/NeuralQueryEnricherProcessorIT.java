@@ -21,7 +21,7 @@ import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 import com.google.common.primitives.Floats;
 
-public class EnrichingQueryDefaultProcessorIT extends BaseNeuralSearchIT {
+public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
 
     private static final String index = "my-nlp-index";
     private static final String search_pipeline = "search-pipeline";
@@ -47,7 +47,7 @@ public class EnrichingQueryDefaultProcessorIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    public void testEnrichingQueryProcessor_whenNoModelIdPassed_thenSuccess() {
+    public void testNeuralQueryEnricherProcessor_whenNoModelIdPassed_thenSuccess() {
         initializeIndexIfNotExist();
         String modelId = getDeployedModelId();
         createSearchRequestProcessor(modelId, search_pipeline);
@@ -65,7 +65,7 @@ public class EnrichingQueryDefaultProcessorIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     private void initializeIndexIfNotExist() {
-        if (index.equals(EnrichingQueryDefaultProcessorIT.index) && !indexExists(index)) {
+        if (index.equals(NeuralQueryEnricherProcessorIT.index) && !indexExists(index)) {
             prepareKnnIndex(
                 index,
                 Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE))

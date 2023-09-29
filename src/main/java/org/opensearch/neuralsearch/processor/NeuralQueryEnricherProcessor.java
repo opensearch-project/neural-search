@@ -5,6 +5,9 @@
 
 package org.opensearch.neuralsearch.processor;
 
+import static org.opensearch.ingest.ConfigurationUtils.*;
+import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.TYPE;
+
 import java.util.Map;
 
 import lombok.Getter;
@@ -25,12 +28,12 @@ import org.opensearch.search.pipeline.SearchRequestProcessor;
  */
 @Setter
 @Getter
-public class EnrichingQueryDefaultProcessor extends AbstractProcessor implements SearchRequestProcessor {
+public class NeuralQueryEnricherProcessor extends AbstractProcessor implements SearchRequestProcessor {
 
     /**
      * Key to reference this processor type from a search pipeline.
      */
-    public static final String TYPE = "enriching_query_defaults";
+    public static final String TYPE = "neural_query_enricher";
 
     private final String modelId;
 
@@ -46,7 +49,7 @@ public class EnrichingQueryDefaultProcessor extends AbstractProcessor implements
         return TYPE;
     }
 
-    private EnrichingQueryDefaultProcessor(
+    private NeuralQueryEnricherProcessor(
         String tag,
         String description,
         boolean ignoreFailure,
@@ -77,10 +80,10 @@ public class EnrichingQueryDefaultProcessor extends AbstractProcessor implements
         /**
          * Create the processor object.
          *
-         * @return EnrichingQueryDefaultProcessor
+         * @return NeuralQueryEnricherProcessor
          */
         @Override
-        public EnrichingQueryDefaultProcessor create(
+        public NeuralQueryEnricherProcessor create(
             Map<String, Processor.Factory<SearchRequestProcessor>> processorFactories,
             String tag,
             String description,
@@ -88,19 +91,14 @@ public class EnrichingQueryDefaultProcessor extends AbstractProcessor implements
             Map<String, Object> config,
             PipelineContext pipelineContext
         ) throws IllegalArgumentException {
-            String modelId;
-            try {
-                modelId = (String) config.remove(DEFAULT_MODEL_ID);
-            } catch (ClassCastException e) {
-                throw new IllegalArgumentException("model Id must of String type");
-            }
+            String modelId = readOptionalStringProperty(TYPE, tag, config, DEFAULT_MODEL_ID);
             Map<String, Object> neuralInfoMap = ConfigurationUtils.readOptionalMap(TYPE, tag, config, NEURAL_FIELD_DEFAULT_ID);
 
             if (modelId == null && neuralInfoMap == null) {
                 throw new IllegalArgumentException("model Id or neural info map either of them should be provided");
             }
 
-            return new EnrichingQueryDefaultProcessor(tag, description, ignoreFailure, modelId, neuralInfoMap);
+            return new NeuralQueryEnricherProcessor(tag, description, ignoreFailure, modelId, neuralInfoMap);
         }
     }
 }
