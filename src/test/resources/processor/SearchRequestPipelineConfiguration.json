@@ -1,0 +1,11 @@
+{
+  "request_processors": [
+    {
+      "neural_query_enricher": {
+        "tag": "tag1",
+        "description": "This processor is going to restrict to publicly visible documents",
+        "default_model_id": "%s"
+      }
+    }
+  ]
+}

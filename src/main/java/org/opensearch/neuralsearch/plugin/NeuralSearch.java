@@ -28,6 +28,7 @@ import org.opensearch.env.NodeEnvironment;
 import org.opensearch.ingest.Processor;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
@@ -43,6 +44,7 @@ import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.SparseEncodingQueryBuilder;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.plugins.ActionPlugin;
 import org.opensearch.plugins.ExtensiblePlugin;
 import org.opensearch.plugins.IngestPlugin;
@@ -52,6 +54,7 @@ import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.repositories.RepositoriesService;
 import org.opensearch.script.ScriptService;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
+import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.watcher.ResourceWatcherService;
@@ -80,6 +83,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         final IndexNameExpressionResolver indexNameExpressionResolver,
         final Supplier<RepositoriesService> repositoriesServiceSupplier
     ) {
+        NeuralSearchClusterUtil.instance().initialize(clusterService);
         NeuralQueryBuilder.initialize(clientAccessor);
         SparseEncodingQueryBuilder.initialize(clientAccessor);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
@@ -135,5 +139,12 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     @Override
     public List<Setting<?>> getSettings() {
         return List.of(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED);
+    }
+
+    @Override
+    public Map<String, org.opensearch.search.pipeline.Processor.Factory<SearchRequestProcessor>> getRequestProcessors(
+        Parameters parameters
+    ) {
+        return Map.of(NeuralQueryEnricherProcessor.TYPE, new NeuralQueryEnricherProcessor.Factory());
     }
 }

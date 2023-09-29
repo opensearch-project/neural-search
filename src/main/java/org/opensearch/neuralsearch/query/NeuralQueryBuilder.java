@@ -22,6 +22,7 @@ import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.apache.lucene.search.Query;
+import org.opensearch.Version;
 import org.opensearch.common.SetOnce;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.action.ActionListener;
@@ -37,6 +38,7 @@ import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -82,6 +84,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     @Setter(AccessLevel.PACKAGE)
     private Supplier<float[]> vectorSupplier;
     private QueryBuilder filter;
+    private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_11_0;
 
     /**
      * Constructor from stream input
@@ -93,7 +96,12 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         super(in);
         this.fieldName = in.readString();
         this.queryText = in.readString();
-        this.modelId = in.readString();
+        // If cluster version is on or after 2.11 then default model Id support is enabled
+        if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
+            this.modelId = in.readOptionalString();
+        } else {
+            this.modelId = in.readString();
+        }
         this.k = in.readVInt();
         this.filter = in.readOptionalNamedWriteable(QueryBuilder.class);
     }
@@ -102,7 +110,12 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     protected void doWriteTo(StreamOutput out) throws IOException {
         out.writeString(this.fieldName);
         out.writeString(this.queryText);
-        out.writeString(this.modelId);
+        // If cluster version is on or after 2.11 then default model Id support is enabled
+        if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
+            out.writeOptionalString(this.modelId);
+        } else {
+            out.writeString(this.modelId);
+        }
         out.writeVInt(this.k);
         out.writeOptionalNamedWriteable(this.filter);
     }
@@ -112,7 +125,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         xContentBuilder.startObject(NAME);
         xContentBuilder.startObject(fieldName);
         xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
-        xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
+        if (modelId != null) {
+            xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
+        }
         xContentBuilder.field(K_FIELD.getPreferredName(), k);
         if (filter != null) {
             xContentBuilder.field(FILTER_FIELD.getPreferredName(), filter);
@@ -164,8 +179,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         }
         requireValue(neuralQueryBuilder.queryText(), "Query text must be provided for neural query");
         requireValue(neuralQueryBuilder.fieldName(), "Field name must be provided for neural query");
-        requireValue(neuralQueryBuilder.modelId(), "Model ID must be provided for neural query");
-
+        if (!isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
+            requireValue(neuralQueryBuilder.modelId(), "Model ID must be provided for neural query");
+        }
         return neuralQueryBuilder;
     }
 
@@ -257,5 +273,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     @Override
     public String getWriteableName() {
         return NAME;
+    }
+
+    private static boolean isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport() {
+        return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID);
     }
 }
