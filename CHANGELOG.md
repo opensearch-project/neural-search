@@ -20,4 +20,5 @@ Support sparse semantic retrieval by introducing `sparse_encoding` ingest proces
 ### Infrastructure
 ### Documentation
 ### Maintenance
+Consumed latest changes from core, use QueryPhaseSearcherWrapper as parent class for Hybrid QPS ([#356](https://github.com/opensearch-project/neural-search/pull/356))
 ### Refactoring
