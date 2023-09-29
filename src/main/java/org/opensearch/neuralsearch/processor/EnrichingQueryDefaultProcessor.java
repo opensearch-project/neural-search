@@ -25,7 +25,7 @@ import org.opensearch.search.pipeline.SearchRequestProcessor;
  */
 @Setter
 @Getter
-public class NeuralQueryProcessor extends AbstractProcessor implements SearchRequestProcessor {
+public class EnrichingQueryDefaultProcessor extends AbstractProcessor implements SearchRequestProcessor {
 
     /**
      * Key to reference this processor type from a search pipeline.
@@ -46,7 +46,7 @@ public class NeuralQueryProcessor extends AbstractProcessor implements SearchReq
         return TYPE;
     }
 
-    private NeuralQueryProcessor(
+    private EnrichingQueryDefaultProcessor(
         String tag,
         String description,
         boolean ignoreFailure,
@@ -77,10 +77,10 @@ public class NeuralQueryProcessor extends AbstractProcessor implements SearchReq
         /**
          * Create the processor object.
          *
-         * @return NeuralQueryProcessor
+         * @return EnrichingQueryDefaultProcessor
          */
         @Override
-        public NeuralQueryProcessor create(
+        public EnrichingQueryDefaultProcessor create(
             Map<String, Processor.Factory<SearchRequestProcessor>> processorFactories,
             String tag,
             String description,
@@ -100,7 +100,7 @@ public class NeuralQueryProcessor extends AbstractProcessor implements SearchReq
                 throw new IllegalArgumentException("model Id or neural info map either of them should be provided");
             }
 
-            return new NeuralQueryProcessor(tag, description, ignoreFailure, modelId, neuralInfoMap);
+            return new EnrichingQueryDefaultProcessor(tag, description, ignoreFailure, modelId, neuralInfoMap);
         }
     }
 }

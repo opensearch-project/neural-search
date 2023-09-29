@@ -7,7 +7,6 @@ package org.opensearch.neuralsearch.processor;
 
 import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
 
-import java.io.IOException;
 import java.util.Collections;
 import java.util.Map;
 
@@ -22,7 +21,7 @@ import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 import com.google.common.primitives.Floats;
 
-public class NeuralQueryProcessorIT extends BaseNeuralSearchIT {
+public class EnrichingQueryDefaultProcessorIT extends BaseNeuralSearchIT {
 
     private static final String index = "my-nlp-index";
     private static final String search_pipeline = "search-pipeline";
@@ -48,7 +47,7 @@ public class NeuralQueryProcessorIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    public void testNeuralQueryProcessor() throws Exception {
+    public void testEnrichingQueryProcessor_whenNoModelIdPassed_thenSuccess() {
         initializeIndexIfNotExist();
         String modelId = getDeployedModelId();
         createSearchRequestProcessor(modelId, search_pipeline);
@@ -64,8 +63,9 @@ public class NeuralQueryProcessorIT extends BaseNeuralSearchIT {
 
     }
 
-    private void initializeIndexIfNotExist() throws IOException {
-        if (index.equals(NeuralQueryProcessorIT.index) && !indexExists(index)) {
+    @SneakyThrows
+    private void initializeIndexIfNotExist() {
+        if (index.equals(EnrichingQueryDefaultProcessorIT.index) && !indexExists(index)) {
             prepareKnnIndex(
                 index,
                 Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE))

@@ -14,11 +14,11 @@ import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.test.OpenSearchTestCase;
 
-public class NeuralQueryProcessorTests extends OpenSearchTestCase {
+public class EnrichingQueryDefaultProcessorTests extends OpenSearchTestCase {
 
-    public void testFactory() throws Exception {
-        NeuralQueryProcessor.Factory factory = new NeuralQueryProcessor.Factory();
-        NeuralQueryProcessor processor = createTestProcessor(factory);
+    public void testFactory_whenMissingQueryParam_thenThrowException() throws Exception {
+        EnrichingQueryDefaultProcessor.Factory factory = new EnrichingQueryDefaultProcessor.Factory();
+        EnrichingQueryDefaultProcessor processor = createTestProcessor(factory);
         assertEquals("vasdcvkcjkbldbjkd", processor.getModelId());
         assertEquals("bahbkcdkacb", processor.getNeuralFieldDefaultIdMap().get("fieldName").toString());
 
@@ -30,33 +30,33 @@ public class NeuralQueryProcessorTests extends OpenSearchTestCase {
     }
 
     public void testFactory_whenModelIdIsNotString_thenFail() {
-        NeuralQueryProcessor.Factory factory = new NeuralQueryProcessor.Factory();
+        EnrichingQueryDefaultProcessor.Factory factory = new EnrichingQueryDefaultProcessor.Factory();
         Map<String, Object> configMap = new HashMap<>();
         configMap.put("default_model_id", 55555L);
         expectThrows(IllegalArgumentException.class, () -> factory.create(Collections.emptyMap(), null, null, false, configMap, null));
     }
 
-    public void testProcessRequest() throws Exception {
-        NeuralQueryProcessor.Factory factory = new NeuralQueryProcessor.Factory();
+    public void testProcessRequest_whenVisitingQueryBuilder_thenSuccess() throws Exception {
+        EnrichingQueryDefaultProcessor.Factory factory = new EnrichingQueryDefaultProcessor.Factory();
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.source(new SearchSourceBuilder().query(neuralQueryBuilder));
-        NeuralQueryProcessor processor = createTestProcessor(factory);
+        EnrichingQueryDefaultProcessor processor = createTestProcessor(factory);
         SearchRequest processSearchRequest = processor.processRequest(searchRequest);
         assertEquals(processSearchRequest, searchRequest);
     }
 
     public void testType() throws Exception {
-        NeuralQueryProcessor.Factory factory = new NeuralQueryProcessor.Factory();
-        NeuralQueryProcessor processor = createTestProcessor(factory);
-        assertEquals(NeuralQueryProcessor.TYPE, processor.getType());
+        EnrichingQueryDefaultProcessor.Factory factory = new EnrichingQueryDefaultProcessor.Factory();
+        EnrichingQueryDefaultProcessor processor = createTestProcessor(factory);
+        assertEquals(EnrichingQueryDefaultProcessor.TYPE, processor.getType());
     }
 
-    private NeuralQueryProcessor createTestProcessor(NeuralQueryProcessor.Factory factory) throws Exception {
+    private EnrichingQueryDefaultProcessor createTestProcessor(EnrichingQueryDefaultProcessor.Factory factory) throws Exception {
         Map<String, Object> configMap = new HashMap<>();
         configMap.put("default_model_id", "vasdcvkcjkbldbjkd");
         configMap.put("neural_field_default_id", Map.of("fieldName", "bahbkcdkacb"));
-        NeuralQueryProcessor processor = factory.create(Collections.emptyMap(), null, null, false, configMap, null);
+        EnrichingQueryDefaultProcessor processor = factory.create(Collections.emptyMap(), null, null, false, configMap, null);
         return processor;
     }
 }

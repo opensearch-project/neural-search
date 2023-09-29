@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.opensearch.ingest.Processor;
-import org.opensearch.neuralsearch.processor.NeuralQueryProcessor;
+import org.opensearch.neuralsearch.processor.EnrichingQueryDefaultProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
@@ -83,6 +83,6 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
             parameters
         );
         assertNotNull(processors);
-        assertNotNull(processors.get(NeuralQueryProcessor.TYPE));
+        assertNotNull(processors.get(EnrichingQueryDefaultProcessor.TYPE));
     }
 }
