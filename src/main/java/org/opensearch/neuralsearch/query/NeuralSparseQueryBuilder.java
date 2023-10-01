@@ -21,9 +21,10 @@ import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
-import org.apache.lucene.document.FeatureField;
+import org.apache.lucene.BoundedLinearFeatureQuery;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.BoostQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.common.SetOnce;
 import org.opensearch.core.ParseField;
@@ -44,7 +45,7 @@ import org.opensearch.neuralsearch.util.TokenWeightUtil;
 import com.google.common.annotations.VisibleForTesting;
 
 /**
- * SparseEncodingQueryBuilder is responsible for handling "sparse_encoding" query types. It uses an ML SPARSE_ENCODING model
+ * SparseEncodingQueryBuilder is responsible for handling "neural_sparse" query types. It uses an ML NEURAL_SPARSE model
  * or SPARSE_TOKENIZE model to produce a Map with String keys and Float values for input text. Then it will be transformed
  * to Lucene FeatureQuery wrapped by Lucene BooleanQuery.
  */
@@ -55,22 +56,25 @@ import com.google.common.annotations.VisibleForTesting;
 @Accessors(chain = true, fluent = true)
 @NoArgsConstructor
 @AllArgsConstructor
-public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncodingQueryBuilder> {
-    public static final String NAME = "sparse_encoding";
+public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQueryBuilder> {
+    public static final String NAME = "neural_sparse";
     @VisibleForTesting
     static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
     @VisibleForTesting
     static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
+    @VisibleForTesting
+    static final ParseField MAX_TOKEN_SCORE_FIELD = new ParseField("max_token_score");
 
     private static MLCommonsClientAccessor ML_CLIENT;
 
     public static void initialize(MLCommonsClientAccessor mlClient) {
-        SparseEncodingQueryBuilder.ML_CLIENT = mlClient;
+        NeuralSparseQueryBuilder.ML_CLIENT = mlClient;
     }
 
     private String fieldName;
     private String queryText;
     private String modelId;
+    private Float maxTokenScore;
     private Supplier<Map<String, Float>> queryTokensSupplier;
 
     /**
@@ -79,11 +83,12 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
      * @param in StreamInput to initialize object from
      * @throws IOException thrown if unable to read from input stream
      */
-    public SparseEncodingQueryBuilder(StreamInput in) throws IOException {
+    public NeuralSparseQueryBuilder(StreamInput in) throws IOException {
         super(in);
         this.fieldName = in.readString();
         this.queryText = in.readString();
         this.modelId = in.readString();
+        this.maxTokenScore = in.readOptionalFloat();
     }
 
     @Override
@@ -91,6 +96,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         out.writeString(fieldName);
         out.writeString(queryText);
         out.writeString(modelId);
+        out.writeOptionalFloat(maxTokenScore);
     }
 
     @Override
@@ -99,6 +105,7 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         xContentBuilder.startObject(fieldName);
         xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
         xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
+        if (maxTokenScore != null) xContentBuilder.field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), maxTokenScore);
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
         xContentBuilder.endObject();
@@ -108,15 +115,16 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
      * The expected parsing form looks like:
      *  "SAMPLE_FIELD": {
      *    "query_text": "string",
-     *    "model_id": "string"
+     *    "model_id": "string",
+     *    "token_score_upper_bound": float (optional)
      *  }
      *
      * @param parser XContentParser
      * @return NeuralQueryBuilder
      * @throws IOException can be thrown by parser
      */
-    public static SparseEncodingQueryBuilder fromXContent(XContentParser parser) throws IOException {
-        SparseEncodingQueryBuilder sparseEncodingQueryBuilder = new SparseEncodingQueryBuilder();
+    public static NeuralSparseQueryBuilder fromXContent(XContentParser parser) throws IOException {
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder();
         if (parser.currentToken() != XContentParser.Token.START_OBJECT) {
             throw new ParsingException(parser.getTokenLocation(), "First token of " + NAME + "query must be START_OBJECT");
         }
@@ -146,11 +154,14 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
             sparseEncodingQueryBuilder.modelId(),
             String.format(Locale.ROOT, "%s field must be provided for [%s] query", MODEL_ID_FIELD.getPreferredName(), NAME)
         );
+        if (sparseEncodingQueryBuilder.maxTokenScore != null && sparseEncodingQueryBuilder.maxTokenScore <= 0) {
+            throw new IllegalArgumentException(MAX_TOKEN_SCORE_FIELD.getPreferredName() + " must be larger than 0.");
+        }
 
         return sparseEncodingQueryBuilder;
     }
 
-    private static void parseQueryParams(XContentParser parser, SparseEncodingQueryBuilder sparseEncodingQueryBuilder) throws IOException {
+    private static void parseQueryParams(XContentParser parser, NeuralSparseQueryBuilder sparseEncodingQueryBuilder) throws IOException {
         XContentParser.Token token;
         String currentFieldName = "";
         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
@@ -165,6 +176,8 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
                     sparseEncodingQueryBuilder.queryText(parser.text());
                 } else if (MODEL_ID_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     sparseEncodingQueryBuilder.modelId(parser.text());
+                } else if (MAX_TOKEN_SCORE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    sparseEncodingQueryBuilder.maxTokenScore(parser.floatValue());
                 } else {
                     throw new ParsingException(
                         parser.getTokenLocation(),
@@ -200,9 +213,10 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
                 }, actionListener::onFailure)
             ))
         );
-        return new SparseEncodingQueryBuilder().fieldName(fieldName)
+        return new NeuralSparseQueryBuilder().fieldName(fieldName)
             .queryText(queryText)
             .modelId(modelId)
+            .maxTokenScore(maxTokenScore)
             .queryTokensSupplier(queryTokensSetOnce::get);
     }
 
@@ -214,9 +228,14 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
         Map<String, Float> queryTokens = queryTokensSupplier.get();
         validateQueryTokens(queryTokens);
 
+        final Float scoreUpperBound = maxTokenScore != null ? maxTokenScore : Float.MAX_VALUE;
+
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
         for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
-            builder.add(FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()), BooleanClause.Occur.SHOULD);
+            builder.add(
+                new BoostQuery(new BoundedLinearFeatureQuery(fieldName, entry.getKey(), scoreUpperBound), entry.getValue()),
+                BooleanClause.Occur.SHOULD
+            );
         }
         return builder.build();
     }
@@ -254,18 +273,19 @@ public class SparseEncodingQueryBuilder extends AbstractQueryBuilder<SparseEncod
     }
 
     @Override
-    protected boolean doEquals(SparseEncodingQueryBuilder obj) {
+    protected boolean doEquals(NeuralSparseQueryBuilder obj) {
         if (this == obj) return true;
         if (obj == null || getClass() != obj.getClass()) return false;
         EqualsBuilder equalsBuilder = new EqualsBuilder().append(fieldName, obj.fieldName)
             .append(queryText, obj.queryText)
-            .append(modelId, obj.modelId);
+            .append(modelId, obj.modelId)
+            .append(maxTokenScore, obj.maxTokenScore);
         return equalsBuilder.isEquals();
     }
 
     @Override
     protected int doHashCode() {
-        return new HashCodeBuilder().append(fieldName).append(queryText).append(modelId).toHashCode();
+        return new HashCodeBuilder().append(fieldName).append(queryText).append(modelId).append(maxTokenScore).toHashCode();
     }
 
     @Override
