@@ -131,7 +131,7 @@ public class MLCommonsClientAccessor {
         @NonNull final Map<String, String> inputObjects,
         @NonNull final ActionListener<List<Float>> listener
     ) {
-        inferenceSentencesWithRetry(TARGET_RESPONSE_FILTERS, modelId, inputObjects, 0, listener);
+        retryableInferenceSentencesWithSingleVectorResult(TARGET_RESPONSE_FILTERS, modelId, inputObjects, 0, listener);
     }
 
     private void retryableInferenceSentencesWithMapResult(
@@ -140,7 +140,7 @@ public class MLCommonsClientAccessor {
         final int retryTime,
         final ActionListener<List<Map<String, ?>>> listener
     ) {
-        MLInput mlInput = createMLInput(null, inputText);
+        MLInput mlInput = createMLTextInput(null, inputText);
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
             final List<Map<String, ?>> result = buildMapResultFromResponse(mlOutput);
             listener.onResponse(result);
@@ -176,12 +176,6 @@ public class MLCommonsClientAccessor {
     }
 
     private MLInput createMLTextInput(final List<String> targetResponseFilters, List<String> inputText) {
-        final ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
-        final MLInputDataset inputDataset = new TextDocsInputDataSet(inputText, modelResultFilter);
-        return new MLInput(FunctionName.TEXT_EMBEDDING, null, inputDataset);
-    }
-
-    private MLInput createMLInput(final List<String> targetResponseFilters, List<String> inputText) {
         final ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
         final MLInputDataset inputDataset = new TextDocsInputDataSet(inputText, modelResultFilter);
         return new MLInput(FunctionName.TEXT_EMBEDDING, null, inputDataset);
@@ -223,8 +217,8 @@ public class MLCommonsClientAccessor {
         return vector.isEmpty() ? new ArrayList<>() : vector.get(0);
     }
 
-    private void inferenceSentencesWithRetry(
-        @NonNull final List<String> targetResponseFilters,
+    private void retryableInferenceSentencesWithSingleVectorResult(
+        final List<String> targetResponseFilters,
         final String modelId,
         final Map<String, String> inputObjects,
         final int retryTime,
@@ -238,7 +232,7 @@ public class MLCommonsClientAccessor {
         }, e -> {
             if (RetryUtil.shouldRetry(e, retryTime)) {
                 final int retryTimeAdd = retryTime + 1;
-                inferenceSentencesWithRetry(targetResponseFilters, modelId, inputObjects, retryTimeAdd, listener);
+                retryableInferenceSentencesWithSingleVectorResult(targetResponseFilters, modelId, inputObjects, retryTimeAdd, listener);
             } else {
                 listener.onFailure(e);
             }
