@@ -8,7 +8,6 @@ package org.opensearch.neuralsearch.processor;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -50,9 +49,6 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
 
     private final MLCommonsClientAccessor mlCommonsClientAccessor;
     private final Environment environment;
-    // limit of 16Mb per field value. This is from current bedrock model, calculated as 2048*2048 pixels (24 bit),
-    // image to base64 encoding assumed to have 4/3 ratio, assuming UTF-8 encoding average of 1 byte per character
-    private static final int MAX_CONTENT_LENGTH_IN_BYTES = 16 * 1024 * 1024;
 
     public TextImageEmbeddingProcessor(
         String tag,
@@ -151,11 +147,6 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
             }
             if (!(sourceAndMetadataMap.get(originalKey) instanceof String)) {
                 throw new IllegalArgumentException("Unsupported format of the field in the document, value must be a string");
-            }
-            if (((String) sourceAndMetadataMap.get(originalKey)).length() > MAX_CONTENT_LENGTH_IN_BYTES) {
-                throw new IllegalArgumentException(
-                    String.format(Locale.ROOT, "content cannot be longer than a %d bytes", MAX_CONTENT_LENGTH_IN_BYTES)
-                );
             }
             mapWithKnnKeys.put(originalKey, (String) sourceAndMetadataMap.get(originalKey));
         }
