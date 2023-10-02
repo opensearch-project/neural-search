@@ -65,7 +65,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    private TextImageEmbeddingProcessor createInstance(List<List<Float>> vector) {
+    private TextImageEmbeddingProcessor createInstance() {
         Map<String, Processor.Factory> registry = new HashMap<>();
         Map<String, Object> config = new HashMap<>();
         config.put(TextImageEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
@@ -112,7 +112,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put("my_text_field", "value2");
         sourceAndMetadata.put("key3", "value3");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextImageEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
+        TextImageEmbeddingProcessor processor = createInstance();
 
         List<List<Float>> modelTensorList = createMockVectorResult();
         doAnswer(invocation -> {
@@ -157,7 +157,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put("my_text_field", "value1");
         sourceAndMetadata.put("another_text_field", "value2");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextImageEmbeddingProcessor processor = createInstance(createMockVectorWithLength(6));
+        TextImageEmbeddingProcessor processor = createInstance();
 
         List<List<Float>> modelTensorList = createMockVectorResult();
         doAnswer(invocation -> {
@@ -177,7 +177,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put("key1", "hello world");
         sourceAndMetadata.put("my_text_field", ret);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextImageEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
+        TextImageEmbeddingProcessor processor = createInstance();
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
         verify(handler).accept(isNull(), any(IllegalArgumentException.class));
@@ -188,7 +188,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put("my_text_field", "value1");
         sourceAndMetadata.put("key2", "value2");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextImageEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
+        TextImageEmbeddingProcessor processor = createInstance();
 
         doAnswer(invocation -> {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
@@ -208,7 +208,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put("key1", map1);
         sourceAndMetadata.put("my_text_field", map2);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextImageEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
+        TextImageEmbeddingProcessor processor = createInstance();
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
         verify(handler).accept(isNull(), any(IllegalArgumentException.class));
@@ -221,10 +221,21 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put("key1", map1);
         sourceAndMetadata.put("my_text_field", map2);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextImageEmbeddingProcessor processor = createInstance(createMockVectorWithLength(2));
+        TextImageEmbeddingProcessor processor = createInstance();
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
         verify(handler).accept(isNull(), any(IllegalArgumentException.class));
+    }
+
+    public void testExecute_hybridTypeInput_successful() throws Exception {
+        List<String> list1 = ImmutableList.of("test1", "test2");
+        Map<String, List<String>> map1 = ImmutableMap.of("test3", list1);
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put("key2", map1);
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        TextImageEmbeddingProcessor processor = createInstance();
+        IngestDocument document = processor.execute(ingestDocument);
+        assert document.getSourceAndMetadata().containsKey("key2");
     }
 
     private List<List<Float>> createMockVectorResult() {

@@ -311,6 +311,23 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
     }
 
+    public void testInferenceSentencesMultimodal_whenNodeNotConnectedException_thenRetryThreeTimes() {
+        final NodeNotConnectedException nodeNodeConnectedException = new NodeNotConnectedException(
+            mock(DiscoveryNode.class),
+            "Node not connected"
+        );
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onFailure(nodeNodeConnectedException);
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        accessor.inferenceSentences(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_MAP, singleSentenceResultListener);
+
+        Mockito.verify(client, times(4))
+            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        Mockito.verify(singleSentenceResultListener).onFailure(nodeNodeConnectedException);
+    }
+
     private ModelTensorOutput createModelTensorOutput(final Float[] output) {
         final List<ModelTensors> tensorsList = new ArrayList<>();
         final List<ModelTensor> mlModelTensorList = new ArrayList<>();
