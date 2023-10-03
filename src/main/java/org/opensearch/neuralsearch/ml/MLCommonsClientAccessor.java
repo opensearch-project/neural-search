@@ -226,7 +226,7 @@ public class MLCommonsClientAccessor {
         MLInput mlInput = createMLMultimodalInput(targetResponseFilters, inputObjects);
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
             final List<Float> vector = buildSingleVectorFromResponse(mlOutput);
-            log.debug("Inference Response for input sentence {} is : {} ", inputObjects, vector);
+            log.debug("Inference Response for input sentence is : {} ", vector);
             listener.onResponse(vector);
         }, e -> {
             if (RetryUtil.shouldRetry(e, retryTime)) {

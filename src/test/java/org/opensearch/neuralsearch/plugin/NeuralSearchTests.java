@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.opensearch.ingest.IngestService;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
@@ -56,7 +57,17 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
     public void testProcessors() {
         NeuralSearch plugin = new NeuralSearch();
-        Processor.Parameters processorParams = mock(Processor.Parameters.class);
+        Processor.Parameters processorParams = new Processor.Parameters(
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            mock(IngestService.class),
+            null,
+            null
+        );
         Map<String, Processor.Factory> processors = plugin.getProcessors(processorParams);
         assertNotNull(processors);
         assertNotNull(processors.get(TextEmbeddingProcessor.TYPE));

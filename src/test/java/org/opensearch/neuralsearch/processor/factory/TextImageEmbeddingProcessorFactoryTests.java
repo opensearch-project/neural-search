@@ -19,6 +19,7 @@ import java.util.Map;
 
 import lombok.SneakyThrows;
 
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor;
@@ -30,7 +31,8 @@ public class TextImageEmbeddingProcessorFactoryTests extends OpenSearchTestCase 
     public void testNormalizationProcessor_whenAllParamsPassed_thenSuccessful() {
         TextImageEmbeddingProcessorFactory textImageEmbeddingProcessorFactory = new TextImageEmbeddingProcessorFactory(
             mock(MLCommonsClientAccessor.class),
-            mock(Environment.class)
+            mock(Environment.class),
+            mock(ClusterService.class)
         );
 
         final Map<String, org.opensearch.ingest.Processor.Factory> processorFactories = new HashMap<>();
@@ -55,7 +57,8 @@ public class TextImageEmbeddingProcessorFactoryTests extends OpenSearchTestCase 
     public void testNormalizationProcessor_whenOnlyOneParamSet_thenSuccessful() {
         TextImageEmbeddingProcessorFactory textImageEmbeddingProcessorFactory = new TextImageEmbeddingProcessorFactory(
             mock(MLCommonsClientAccessor.class),
-            mock(Environment.class)
+            mock(Environment.class),
+            mock(ClusterService.class)
         );
 
         final Map<String, org.opensearch.ingest.Processor.Factory> processorFactories = new HashMap<>();
@@ -88,7 +91,8 @@ public class TextImageEmbeddingProcessorFactoryTests extends OpenSearchTestCase 
     public void testNormalizationProcessor_whenMixOfParamsOrEmptyParams_thenFail() {
         TextImageEmbeddingProcessorFactory textImageEmbeddingProcessorFactory = new TextImageEmbeddingProcessorFactory(
             mock(MLCommonsClientAccessor.class),
-            mock(Environment.class)
+            mock(Environment.class),
+            mock(ClusterService.class)
         );
 
         final Map<String, org.opensearch.ingest.Processor.Factory> processorFactories = new HashMap<>();

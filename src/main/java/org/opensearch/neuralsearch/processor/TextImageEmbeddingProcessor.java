@@ -18,8 +18,11 @@ import java.util.function.Supplier;
 import lombok.extern.log4j.Log4j2;
 
 import org.apache.commons.lang3.StringUtils;
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
+import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
@@ -50,6 +53,7 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
 
     private final MLCommonsClientAccessor mlCommonsClientAccessor;
     private final Environment environment;
+    private final ClusterService clusterService;
 
     public TextImageEmbeddingProcessor(
         final String tag,
@@ -58,7 +62,8 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
         final String embedding,
         final Map<String, String> fieldMap,
         final MLCommonsClientAccessor clientAccessor,
-        final Environment environment
+        final Environment environment,
+        final ClusterService clusterService
     ) {
         super(tag, description);
         if (StringUtils.isBlank(modelId)) throw new IllegalArgumentException("model_id is null or empty, can not process it");
@@ -69,6 +74,7 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
         this.fieldMap = fieldMap;
         this.mlCommonsClientAccessor = clientAccessor;
         this.environment = environment;
+        this.clusterService = clusterService;
     }
 
     private void validateEmbeddingConfiguration(final Map<String, String> fieldMap) {
@@ -176,7 +182,8 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
             }
             Class<?> sourceValueClass = sourceValue.getClass();
             if (List.class.isAssignableFrom(sourceValueClass) || Map.class.isAssignableFrom(sourceValueClass)) {
-                validateNestedTypeValue(mappedSourceKey, sourceValue, () -> 1);
+                String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
+                validateNestedTypeValue(mappedSourceKey, sourceValue, () -> 1, indexName);
             } else if (!String.class.isAssignableFrom(sourceValueClass)) {
                 throw new IllegalArgumentException("field [" + mappedSourceKey + "] is neither string nor nested type, can not process it");
             } else if (StringUtils.isBlank(sourceValue.toString())) {
@@ -187,9 +194,15 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
     }
 
     @SuppressWarnings({ "rawtypes", "unchecked" })
-    private void validateNestedTypeValue(final String sourceKey, final Object sourceValue, final Supplier<Integer> maxDepthSupplier) {
+    private void validateNestedTypeValue(
+        final String sourceKey,
+        final Object sourceValue,
+        final Supplier<Integer> maxDepthSupplier,
+        final String indexName
+    ) {
         int maxDepth = maxDepthSupplier.get();
-        if (maxDepth > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())) {
+        Settings indexSettings = clusterService.state().metadata().index(indexName).getSettings();
+        if (maxDepth > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(indexSettings)) {
             throw new IllegalArgumentException("map type field [" + sourceKey + "] reached max depth limit, can not process it");
         } else if ((List.class.isAssignableFrom(sourceValue.getClass()))) {
             validateListTypeValue(sourceKey, (List) sourceValue);
@@ -197,7 +210,7 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
             ((Map) sourceValue).values()
                 .stream()
                 .filter(Objects::nonNull)
-                .forEach(x -> validateNestedTypeValue(sourceKey, x, () -> maxDepth + 1));
+                .forEach(x -> validateNestedTypeValue(sourceKey, x, () -> maxDepth + 1, indexName));
         } else if (!String.class.isAssignableFrom(sourceValue.getClass())) {
             throw new IllegalArgumentException("map type field [" + sourceKey + "] has non-string type, can not process it");
         } else if (StringUtils.isBlank(sourceValue.toString())) {

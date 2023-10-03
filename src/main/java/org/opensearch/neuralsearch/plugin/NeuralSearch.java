@@ -110,7 +110,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
             SparseEncodingProcessor.TYPE,
             new SparseEncodingProcessorFactory(clientAccessor, parameters.env),
             TextImageEmbeddingProcessor.TYPE,
-            new TextImageEmbeddingProcessorFactory(clientAccessor, parameters.env)
+            new TextImageEmbeddingProcessorFactory(clientAccessor, parameters.env, parameters.ingestService.getClusterService())
         );
     }
 

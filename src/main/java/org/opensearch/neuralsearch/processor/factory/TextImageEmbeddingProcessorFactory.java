@@ -15,6 +15,9 @@ import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.
 
 import java.util.Map;
 
+import lombok.AllArgsConstructor;
+
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor;
@@ -22,16 +25,12 @@ import org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor;
 /**
  * Factory for text_image embedding ingest processor for ingestion pipeline. Instantiates processor based on user provided input.
  */
+@AllArgsConstructor
 public class TextImageEmbeddingProcessorFactory implements Factory {
 
     private final MLCommonsClientAccessor clientAccessor;
-
     private final Environment environment;
-
-    public TextImageEmbeddingProcessorFactory(final MLCommonsClientAccessor clientAccessor, final Environment environment) {
-        this.clientAccessor = clientAccessor;
-        this.environment = environment;
-    }
+    private final ClusterService clusterService;
 
     @Override
     public TextImageEmbeddingProcessor create(
@@ -43,6 +42,15 @@ public class TextImageEmbeddingProcessorFactory implements Factory {
         String modelId = readStringProperty(TYPE, processorTag, config, MODEL_ID_FIELD);
         String embedding = readStringProperty(TYPE, processorTag, config, EMBEDDING_FIELD);
         Map<String, String> filedMap = readMap(TYPE, processorTag, config, FIELD_MAP_FIELD);
-        return new TextImageEmbeddingProcessor(processorTag, description, modelId, embedding, filedMap, clientAccessor, environment);
+        return new TextImageEmbeddingProcessor(
+            processorTag,
+            description,
+            modelId,
+            embedding,
+            filedMap,
+            clientAccessor,
+            environment,
+            clusterService
+        );
     }
 }

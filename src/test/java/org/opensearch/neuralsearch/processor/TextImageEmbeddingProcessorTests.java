@@ -32,9 +32,14 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.OpenSearchParseException;
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.cluster.metadata.Metadata;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
+import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
@@ -48,9 +53,16 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
 
     @Mock
     private MLCommonsClientAccessor mlCommonsClientAccessor;
-
     @Mock
     private Environment env;
+    @Mock
+    private ClusterService clusterService;
+    @Mock
+    private ClusterState clusterState;
+    @Mock
+    private Metadata metadata;
+    @Mock
+    private IndexMetadata indexMetadata;
 
     @InjectMocks
     private TextImageEmbeddingProcessorFactory textImageEmbeddingProcessorFactory;
@@ -62,6 +74,10 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
         MockitoAnnotations.openMocks(this);
         Settings settings = Settings.builder().put("index.mapping.depth.limit", 20).build();
         when(env.settings()).thenReturn(settings);
+        when(clusterService.state()).thenReturn(clusterState);
+        when(clusterState.metadata()).thenReturn(metadata);
+        when(metadata.index(anyString())).thenReturn(indexMetadata);
+        when(indexMetadata.getSettings()).thenReturn(settings);
     }
 
     @SneakyThrows
@@ -98,7 +114,16 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
         // create with null type mapping
         IllegalArgumentException exception = expectThrows(
             IllegalArgumentException.class,
-            () -> new TextImageEmbeddingProcessor(PROCESSOR_TAG, DESCRIPTION, modelId, embeddingField, null, mlCommonsClientAccessor, env)
+            () -> new TextImageEmbeddingProcessor(
+                PROCESSOR_TAG,
+                DESCRIPTION,
+                modelId,
+                embeddingField,
+                null,
+                mlCommonsClientAccessor,
+                env,
+                clusterService
+            )
         );
         assertEquals("Unable to create the TextImageEmbedding processor as field_map has invalid key or value", exception.getMessage());
 
@@ -112,7 +137,8 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
                 embeddingField,
                 Map.of("", "my_field"),
                 mlCommonsClientAccessor,
-                env
+                env,
+                clusterService
             )
         );
         assertEquals("Unable to create the TextImageEmbedding processor as field_map has invalid key or value", exception.getMessage());
@@ -131,7 +157,8 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
                 embeddingField,
                 typeMapping,
                 mlCommonsClientAccessor,
-                env
+                env,
+                clusterService
             )
         );
         assertEquals("Unable to create the TextImageEmbedding processor as field_map has invalid key or value", exception.getMessage());
@@ -183,7 +210,11 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         Map<String, Processor.Factory> registry = new HashMap<>();
         MLCommonsClientAccessor accessor = mock(MLCommonsClientAccessor.class);
-        TextImageEmbeddingProcessorFactory textImageEmbeddingProcessorFactory = new TextImageEmbeddingProcessorFactory(accessor, env);
+        TextImageEmbeddingProcessorFactory textImageEmbeddingProcessorFactory = new TextImageEmbeddingProcessorFactory(
+            accessor,
+            env,
+            clusterService
+        );
 
         Map<String, Object> config = new HashMap<>();
         config.put(TextImageEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
@@ -223,6 +254,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put("key1", "hello world");
         sourceAndMetadata.put("my_text_field", ret);
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextImageEmbeddingProcessor processor = createInstance();
         BiConsumer handler = mock(BiConsumer.class);
@@ -254,6 +286,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put("key1", map1);
         sourceAndMetadata.put("my_text_field", map2);
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextImageEmbeddingProcessor processor = createInstance();
         BiConsumer handler = mock(BiConsumer.class);
@@ -267,6 +300,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put("key1", map1);
         sourceAndMetadata.put("my_text_field", map2);
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextImageEmbeddingProcessor processor = createInstance();
         BiConsumer handler = mock(BiConsumer.class);
