@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.opensearch.ingest.Processor;
+import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
@@ -22,6 +23,7 @@ import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
 import org.opensearch.plugins.SearchPipelinePlugin;
 import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
+import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.query.QueryPhaseSearcher;
 
 public class NeuralSearchTests extends OpenSearchQueryTestCase {
@@ -72,5 +74,15 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
             NormalizationProcessor.TYPE
         );
         assertTrue(scoringProcessor instanceof NormalizationProcessorFactory);
+    }
+
+    public void testRequestProcessors() {
+        NeuralSearch plugin = new NeuralSearch();
+        SearchPipelinePlugin.Parameters parameters = mock(SearchPipelinePlugin.Parameters.class);
+        Map<String, org.opensearch.search.pipeline.Processor.Factory<SearchRequestProcessor>> processors = plugin.getRequestProcessors(
+            parameters
+        );
+        assertNotNull(processors);
+        assertNotNull(processors.get(NeuralQueryEnricherProcessor.TYPE));
     }
 }
