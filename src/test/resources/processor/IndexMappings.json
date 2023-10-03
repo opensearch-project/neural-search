@@ -70,7 +70,16 @@
       },
       "passage_embedding": {
         "type": "knn_vector",
-        "dimension": 768
+        "dimension": 768,
+        "method": {
+          "name": "hnsw",
+          "space_type": "l2",
+          "engine": "lucene",
+          "parameters": {
+            "ef_construction": 128,
+            "m": 24
+          }
+        }
       },
       "passage_text": {
         "type": "text"
