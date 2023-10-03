@@ -81,7 +81,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         ProcessorType.TEXT_IMAGE_EMBEDDING,
         "processor/PipelineForTextImageEmbeddingProcessorConfiguration.json"
     );
-    // protected String PIPELINE_CONFIGURATION_NAME = "processor/PipelineConfiguration.json";
 
     protected final ClassLoader classLoader = this.getClass().getClassLoader();
 
