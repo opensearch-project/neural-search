@@ -28,17 +28,17 @@ public class TextImageEmbeddingProcessorFactory implements Factory {
 
     private final Environment environment;
 
-    public TextImageEmbeddingProcessorFactory(MLCommonsClientAccessor clientAccessor, Environment environment) {
+    public TextImageEmbeddingProcessorFactory(final MLCommonsClientAccessor clientAccessor, final Environment environment) {
         this.clientAccessor = clientAccessor;
         this.environment = environment;
     }
 
     @Override
     public TextImageEmbeddingProcessor create(
-        Map<String, Factory> registry,
-        String processorTag,
-        String description,
-        Map<String, Object> config
+        final Map<String, Factory> registry,
+        final String processorTag,
+        final String description,
+        final Map<String, Object> config
     ) throws Exception {
         String modelId = readStringProperty(TYPE, processorTag, config, MODEL_ID_FIELD);
         String embedding = readStringProperty(TYPE, processorTag, config, EMBEDDING_FIELD);
