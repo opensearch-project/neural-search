@@ -25,17 +25,17 @@ public class TextEmbeddingProcessorFactory implements Processor.Factory {
 
     private final Environment environment;
 
-    public TextEmbeddingProcessorFactory(MLCommonsClientAccessor clientAccessor, Environment environment) {
+    public TextEmbeddingProcessorFactory(final MLCommonsClientAccessor clientAccessor, final Environment environment) {
         this.clientAccessor = clientAccessor;
         this.environment = environment;
     }
 
     @Override
     public TextEmbeddingProcessor create(
-        Map<String, Processor.Factory> registry,
-        String processorTag,
-        String description,
-        Map<String, Object> config
+        final Map<String, Processor.Factory> registry,
+        final String processorTag,
+        final String description,
+        final Map<String, Object> config
     ) throws Exception {
         String modelId = readStringProperty(TYPE, processorTag, config, MODEL_ID_FIELD);
         Map<String, Object> filedMap = readMap(TYPE, processorTag, config, FIELD_MAP_FIELD);

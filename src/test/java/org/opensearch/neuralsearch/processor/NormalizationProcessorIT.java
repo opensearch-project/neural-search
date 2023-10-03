@@ -94,7 +94,15 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
         createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
         String modelId = getDeployedModelId();
 
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId, 5, null, null);
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
+            TEST_KNN_VECTOR_FIELD_NAME_1,
+            TEST_DOC_TEXT1,
+            "",
+            modelId,
+            5,
+            null,
+            null
+        );
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
 
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
@@ -129,7 +137,15 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
         createSearchPipelineWithDefaultResultsPostProcessor(SEARCH_PIPELINE);
         String modelId = getDeployedModelId();
 
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId, 5, null, null);
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
+            TEST_KNN_VECTOR_FIELD_NAME_1,
+            TEST_DOC_TEXT1,
+            "",
+            modelId,
+            5,
+            null,
+            null
+        );
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
 
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
@@ -153,7 +169,15 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
         String modelId = getDeployedModelId();
         int totalExpectedDocQty = 6;
 
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, "", modelId, 6, null, null);
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
+            TEST_KNN_VECTOR_FIELD_NAME_1,
+            TEST_DOC_TEXT1,
+            "",
+            modelId,
+            6,
+            null,
+            null
+        );
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
 
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
