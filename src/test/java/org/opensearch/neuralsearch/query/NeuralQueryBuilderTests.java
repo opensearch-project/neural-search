@@ -665,15 +665,15 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
 
     public void testQueryCreation_whenCreateQueryWithDoToQuery_thenFail() {
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(FIELD_NAME)
-                .queryText(QUERY_TEXT)
-                .modelId(MODEL_ID)
-                .k(K)
-                .vectorSupplier(TEST_VECTOR_SUPPLIER)
-                .filter(TEST_FILTER);
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .k(K)
+            .vectorSupplier(TEST_VECTOR_SUPPLIER)
+            .filter(TEST_FILTER);
         QueryShardContext queryShardContext = mock(QueryShardContext.class);
         UnsupportedOperationException exception = expectThrows(
-                UnsupportedOperationException.class,
-                () -> neuralQueryBuilder.doToQuery(queryShardContext)
+            UnsupportedOperationException.class,
+            () -> neuralQueryBuilder.doToQuery(queryShardContext)
         );
         assertEquals("Query cannot be created by NeuralQueryBuilder directly", exception.getMessage());
     }
