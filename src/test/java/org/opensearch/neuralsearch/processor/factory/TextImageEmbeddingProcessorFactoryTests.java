@@ -5,6 +5,8 @@
 
 package org.opensearch.neuralsearch.processor.factory;
 
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.mock;
 import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.FIELD_MAP_FIELD;
 import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.MODEL_ID_FIELD;
@@ -101,7 +103,16 @@ public class TextImageEmbeddingProcessorFactoryTests extends OpenSearchTestCase 
             IllegalArgumentException.class,
             () -> textImageEmbeddingProcessorFactory.create(processorFactories, tag, description, configMixOfFields)
         );
-        assertEquals(exception.getMessage(), "Unable to create the TextImageEmbedding processor as field_map has unsupported field name");
+        org.hamcrest.MatcherAssert.assertThat(
+            exception.getMessage(),
+            allOf(
+                containsString(
+                    "Unable to create the TextImageEmbedding processor with provided field name(s). Following names are supported ["
+                ),
+                containsString("image"),
+                containsString("text")
+            )
+        );
         Map<String, Object> configNoFields = new HashMap<>();
         configNoFields.put(MODEL_ID_FIELD, "1234567678");
         configNoFields.put(EMBEDDING_FIELD, "embedding_field");

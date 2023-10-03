@@ -8,6 +8,7 @@ package org.opensearch.neuralsearch.processor;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -41,8 +42,8 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
     public static final String IMAGE_FIELD_NAME = "image";
     public static final String INPUT_TEXT = "inputText";
     public static final String INPUT_IMAGE = "inputImage";
+    private static final Set<String> VALID_FIELD_NAMES = Set.of(TEXT_FIELD_NAME, IMAGE_FIELD_NAME);
 
-    @VisibleForTesting
     private final String modelId;
     private final String embedding;
     private final Map<String, String> fieldMap;
@@ -51,13 +52,13 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
     private final Environment environment;
 
     public TextImageEmbeddingProcessor(
-        String tag,
-        String description,
-        String modelId,
-        String embedding,
-        Map<String, String> fieldMap,
-        MLCommonsClientAccessor clientAccessor,
-        Environment environment
+        final String tag,
+        final String description,
+        final String modelId,
+        final String embedding,
+        final Map<String, String> fieldMap,
+        final MLCommonsClientAccessor clientAccessor,
+        final Environment environment
     ) {
         super(tag, description);
         if (StringUtils.isBlank(modelId)) throw new IllegalArgumentException("model_id is null or empty, can not process it");
@@ -70,17 +71,21 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
         this.environment = environment;
     }
 
-    private void validateEmbeddingConfiguration(Map<String, String> fieldMap) {
+    private void validateEmbeddingConfiguration(final Map<String, String> fieldMap) {
         if (fieldMap == null
             || fieldMap.isEmpty()
-            || fieldMap.entrySet()
-                .stream()
-                .anyMatch(x -> StringUtils.isBlank(x.getKey()) || Objects.isNull(x.getValue()) || StringUtils.isBlank(x.getValue()))) {
+            || fieldMap.entrySet().stream().anyMatch(x -> StringUtils.isBlank(x.getKey()) || Objects.isNull(x.getValue()))) {
             throw new IllegalArgumentException("Unable to create the TextImageEmbedding processor as field_map has invalid key or value");
         }
 
-        if (fieldMap.entrySet().stream().anyMatch(entry -> !Set.of(TEXT_FIELD_NAME, IMAGE_FIELD_NAME).contains(entry.getKey()))) {
-            throw new IllegalArgumentException("Unable to create the TextImageEmbedding processor as field_map has unsupported field name");
+        if (fieldMap.entrySet().stream().anyMatch(entry -> !VALID_FIELD_NAMES.contains(entry.getKey()))) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "Unable to create the TextImageEmbedding processor with provided field name(s). Following names are supported [%s]",
+                    String.join(",", VALID_FIELD_NAMES)
+                )
+            );
         }
     }
 
@@ -115,7 +120,7 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
 
     }
 
-    private void setVectorFieldsToDocument(IngestDocument ingestDocument, List<Float> vectors) {
+    private void setVectorFieldsToDocument(final IngestDocument ingestDocument, final List<Float> vectors) {
         Objects.requireNonNull(vectors, "embedding failed, inference returns null result!");
         log.debug("Text embedding result fetched, starting build vector output!");
         Map<String, Object> textEmbeddingResult = buildTextEmbeddingResult(this.embedding, vectors);
@@ -123,7 +128,7 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
     }
 
     @SuppressWarnings({ "unchecked" })
-    private Map<String, String> createInferences(Map<String, String> knnKeyMap) {
+    private Map<String, String> createInferences(final Map<String, String> knnKeyMap) {
         Map<String, String> texts = new HashMap<>();
         if (fieldMap.containsKey(TEXT_FIELD_NAME) && knnKeyMap.containsKey(fieldMap.get(TEXT_FIELD_NAME))) {
             texts.put(INPUT_TEXT, knnKeyMap.get(fieldMap.get(TEXT_FIELD_NAME)));
@@ -135,7 +140,7 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
     }
 
     @VisibleForTesting
-    Map<String, String> buildMapWithKnnKeyAndOriginalValue(IngestDocument ingestDocument) {
+    Map<String, String> buildMapWithKnnKeyAndOriginalValue(final IngestDocument ingestDocument) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
         Map<String, String> mapWithKnnKeys = new LinkedHashMap<>();
         for (Map.Entry<String, String> fieldMapEntry : fieldMap.entrySet()) {
@@ -155,37 +160,39 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
 
     @SuppressWarnings({ "unchecked" })
     @VisibleForTesting
-    Map<String, Object> buildTextEmbeddingResult(String knnKey, List<Float> modelTensorList) {
+    Map<String, Object> buildTextEmbeddingResult(final String knnKey, List<Float> modelTensorList) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put(knnKey, modelTensorList);
         return result;
     }
 
-    private void validateEmbeddingFieldsValue(IngestDocument ingestDocument) {
+    private void validateEmbeddingFieldsValue(final IngestDocument ingestDocument) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
         for (Map.Entry<String, String> embeddingFieldsEntry : fieldMap.entrySet()) {
             Object sourceValue = sourceAndMetadataMap.get(embeddingFieldsEntry.getKey());
-            if (sourceValue != null) {
-                String sourceKey = embeddingFieldsEntry.getKey();
-                Class<?> sourceValueClass = sourceValue.getClass();
-                if (List.class.isAssignableFrom(sourceValueClass) || Map.class.isAssignableFrom(sourceValueClass)) {
-                    validateNestedTypeValue(sourceKey, sourceValue, () -> 1);
-                } else if (!String.class.isAssignableFrom(sourceValueClass)) {
-                    throw new IllegalArgumentException("field [" + sourceKey + "] is neither string nor nested type, can not process it");
-                } else if (StringUtils.isBlank(sourceValue.toString())) {
-                    throw new IllegalArgumentException("field [" + sourceKey + "] has empty string value, can not process it");
-                }
+            if (Objects.isNull(sourceValue)) {
+                continue;
             }
+            String sourceKey = embeddingFieldsEntry.getKey();
+            Class<?> sourceValueClass = sourceValue.getClass();
+            if (List.class.isAssignableFrom(sourceValueClass) || Map.class.isAssignableFrom(sourceValueClass)) {
+                validateNestedTypeValue(sourceKey, sourceValue, () -> 1);
+            } else if (!String.class.isAssignableFrom(sourceValueClass)) {
+                throw new IllegalArgumentException("field [" + sourceKey + "] is neither string nor nested type, can not process it");
+            } else if (StringUtils.isBlank(sourceValue.toString())) {
+                throw new IllegalArgumentException("field [" + sourceKey + "] has empty string value, can not process it");
+            }
+
         }
     }
 
     @SuppressWarnings({ "rawtypes", "unchecked" })
-    private void validateNestedTypeValue(String sourceKey, Object sourceValue, Supplier<Integer> maxDepthSupplier) {
+    private void validateNestedTypeValue(final String sourceKey, final Object sourceValue, final Supplier<Integer> maxDepthSupplier) {
         int maxDepth = maxDepthSupplier.get();
         if (maxDepth > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())) {
             throw new IllegalArgumentException("map type field [" + sourceKey + "] reached max depth limit, can not process it");
         } else if ((List.class.isAssignableFrom(sourceValue.getClass()))) {
-            validateListTypeValue(sourceKey, sourceValue);
+            validateListTypeValue(sourceKey, (List) sourceValue);
         } else if (Map.class.isAssignableFrom(sourceValue.getClass())) {
             ((Map) sourceValue).values()
                 .stream()
@@ -199,8 +206,8 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
     }
 
     @SuppressWarnings({ "rawtypes" })
-    private static void validateListTypeValue(String sourceKey, Object sourceValue) {
-        for (Object value : (List) sourceValue) {
+    private static void validateListTypeValue(final String sourceKey, final List<Object> sourceValue) {
+        for (Object value : sourceValue) {
             if (value == null) {
                 throw new IllegalArgumentException("list type field [" + sourceKey + "] has null, can not process it");
             } else if (!(value instanceof String)) {

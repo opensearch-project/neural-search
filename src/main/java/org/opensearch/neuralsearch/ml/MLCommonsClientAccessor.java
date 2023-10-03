@@ -119,8 +119,7 @@ public class MLCommonsClientAccessor {
     /**
      * Abstraction to call predict function of api of MLClient with provided targetResponse filters. It uses the
      * custom model provided as modelId and run the {@link FunctionName#TEXT_EMBEDDING}. The return will be sent
-     * using the actionListener which will have a {@link List} of {@link List} of {@link Float} in the order of
-     * inputText.
+     * using the actionListener which will have a list of floats in the order of inputText.
      *
      * @param modelId {@link String}
      * @param inputObjects {@link Map} of {@link String}, {@link String} on which inference needs to happen
@@ -212,7 +211,7 @@ public class MLCommonsClientAccessor {
         return resultMaps;
     }
 
-    private List<Float> buildSingleVectorFromResponse(MLOutput mlOutput) {
+    private List<Float> buildSingleVectorFromResponse(final MLOutput mlOutput) {
         final List<List<Float>> vector = buildVectorFromResponse(mlOutput);
         return vector.isEmpty() ? new ArrayList<>() : vector.get(0);
     }
@@ -239,7 +238,7 @@ public class MLCommonsClientAccessor {
         }));
     }
 
-    private MLInput createMLMultimodalInput(final List<String> targetResponseFilters, Map<String, String> input) {
+    private MLInput createMLMultimodalInput(final List<String> targetResponseFilters, final Map<String, String> input) {
         List<String> inputText = new ArrayList<>();
         inputText.add(input.get(INPUT_TEXT));
         if (input.containsKey(INPUT_IMAGE)) {
