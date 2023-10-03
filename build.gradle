@@ -151,6 +151,7 @@ dependencies {
     runtimeOnly group: 'org.reflections', name: 'reflections', version: '0.9.12'
     runtimeOnly group: 'org.javassist', name: 'javassist', version: '3.29.2-GA'
     runtimeOnly group: 'org.opensearch', name: 'common-utils', version: "${opensearch_build}"
+    runtimeOnly group: 'org.apache.commons', name: 'commons-text', version: '1.10.0'
     runtimeOnly group: 'com.google.code.gson', name: 'gson', version: '2.10.1'
     runtimeOnly group: 'org.json', name: 'json', version: '20230227'
 }
