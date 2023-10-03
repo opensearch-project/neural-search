@@ -90,6 +90,54 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
+    public void testTextEmbeddingProcessConstructor_whenTypeMappingIsNullOrInvalid_throwIllegalArgumentException() {
+        boolean ignoreFailure = false;
+        String modelId = "mockModelId";
+        String embeddingField = "my_embedding_field";
+
+        // create with null type mapping
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> new TextImageEmbeddingProcessor(PROCESSOR_TAG, DESCRIPTION, modelId, embeddingField, null, mlCommonsClientAccessor, env)
+        );
+        assertEquals("Unable to create the TextImageEmbedding processor as field_map has invalid key or value", exception.getMessage());
+
+        // type mapping has empty key
+        exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> new TextImageEmbeddingProcessor(
+                PROCESSOR_TAG,
+                DESCRIPTION,
+                modelId,
+                embeddingField,
+                Map.of("", "my_field"),
+                mlCommonsClientAccessor,
+                env
+            )
+        );
+        assertEquals("Unable to create the TextImageEmbedding processor as field_map has invalid key or value", exception.getMessage());
+
+        // type mapping has empty value
+        // use vanila java syntax because it allows null values
+        Map<String, String> typeMapping = new HashMap<>();
+        typeMapping.put("my_field", null);
+
+        exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> new TextImageEmbeddingProcessor(
+                PROCESSOR_TAG,
+                DESCRIPTION,
+                modelId,
+                embeddingField,
+                typeMapping,
+                mlCommonsClientAccessor,
+                env
+            )
+        );
+        assertEquals("Unable to create the TextImageEmbedding processor as field_map has invalid key or value", exception.getMessage());
+    }
+
+    @SneakyThrows
     public void testTextEmbeddingProcessConstructor_whenEmptyModelId_throwIllegalArgumentException() {
         Map<String, Processor.Factory> registry = new HashMap<>();
         Map<String, Object> config = new HashMap<>();
@@ -111,6 +159,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put("key1", "value1");
         sourceAndMetadata.put("my_text_field", "value2");
         sourceAndMetadata.put("key3", "value3");
+        sourceAndMetadata.put("image_field", "base64_of_image_1234567890");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextImageEmbeddingProcessor processor = createInstance();
 
@@ -151,8 +200,6 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
     }
 
     public void testExecute_withListTypeInput_successful() {
-        List<String> list1 = ImmutableList.of("test1", "test2", "test3");
-        List<String> list2 = ImmutableList.of("test4", "test5", "test6");
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put("my_text_field", "value1");
         sourceAndMetadata.put("another_text_field", "value2");
@@ -236,6 +283,25 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
         TextImageEmbeddingProcessor processor = createInstance();
         IngestDocument document = processor.execute(ingestDocument);
         assert document.getSourceAndMetadata().containsKey("key2");
+    }
+
+    public void testExecute_whenInferencesAreEmpty_thenSuccessful() {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put("my_field", "value1");
+        sourceAndMetadata.put("another_text_field", "value2");
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        TextImageEmbeddingProcessor processor = createInstance();
+
+        List<List<Float>> modelTensorList = createMockVectorResult();
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            listener.onResponse(modelTensorList);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyMap(), isA(ActionListener.class));
+
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(any(IngestDocument.class), isNull());
     }
 
     private List<List<Float>> createMockVectorResult() {

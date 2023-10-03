@@ -169,18 +169,18 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
     private void validateEmbeddingFieldsValue(final IngestDocument ingestDocument) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
         for (Map.Entry<String, String> embeddingFieldsEntry : fieldMap.entrySet()) {
-            Object sourceValue = sourceAndMetadataMap.get(embeddingFieldsEntry.getKey());
+            String mappedSourceKey = embeddingFieldsEntry.getValue();
+            Object sourceValue = sourceAndMetadataMap.get(mappedSourceKey);
             if (Objects.isNull(sourceValue)) {
                 continue;
             }
-            String sourceKey = embeddingFieldsEntry.getKey();
             Class<?> sourceValueClass = sourceValue.getClass();
             if (List.class.isAssignableFrom(sourceValueClass) || Map.class.isAssignableFrom(sourceValueClass)) {
-                validateNestedTypeValue(sourceKey, sourceValue, () -> 1);
+                validateNestedTypeValue(mappedSourceKey, sourceValue, () -> 1);
             } else if (!String.class.isAssignableFrom(sourceValueClass)) {
-                throw new IllegalArgumentException("field [" + sourceKey + "] is neither string nor nested type, can not process it");
+                throw new IllegalArgumentException("field [" + mappedSourceKey + "] is neither string nor nested type, can not process it");
             } else if (StringUtils.isBlank(sourceValue.toString())) {
-                throw new IllegalArgumentException("field [" + sourceKey + "] has empty string value, can not process it");
+                throw new IllegalArgumentException("field [" + mappedSourceKey + "] has empty string value, can not process it");
             }
 
         }
