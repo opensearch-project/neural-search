@@ -15,7 +15,6 @@ import org.apache.http.HttpHeaders;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
 import org.junit.After;
-import org.junit.Before;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
@@ -40,14 +39,9 @@ public class SparseEncodingProcessIT extends BaseSparseEncodingIT {
         findDeployedModels().forEach(this::deleteModel);
     }
 
-    @Before
-    public void setPipelineName() {
-        this.setPipelineConfigurationName("processor/SparseEncodingPipelineConfiguration.json");
-    }
-
     public void testSparseEncodingProcessor() throws Exception {
         String modelId = prepareModel();
-        createPipelineProcessor(modelId, PIPELINE_NAME);
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING);
         createSparseEncodingIndex();
         ingestDocument();
         assertEquals(1, getDocCount(INDEX_NAME));

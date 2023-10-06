@@ -179,4 +179,117 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
         TestUtils.assertQueryResultScores(querySearchResults);
         TestUtils.assertFetchResultScores(fetchSearchResult, 4);
     }
+
+    public void testFetchResults_whenOneShardAndMultipleNodes_thenDoNormalizationCombination() {
+        NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+        );
+
+        List<QuerySearchResult> querySearchResults = new ArrayList<>();
+        FetchSearchResult fetchSearchResult = new FetchSearchResult();
+        int shardId = 0;
+        SearchShardTarget searchShardTarget = new SearchShardTarget(
+            "node",
+            new ShardId("index", "uuid", shardId),
+            null,
+            OriginalIndices.NONE
+        );
+        QuerySearchResult querySearchResult = new QuerySearchResult();
+        querySearchResult.topDocs(
+            new TopDocsAndMaxScore(
+                new TopDocs(
+                    new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+                    new ScoreDoc[] {
+                        createStartStopElementForHybridSearchResults(0),
+                        createDelimiterElementForHybridSearchResults(0),
+                        new ScoreDoc(0, 0.5f),
+                        new ScoreDoc(2, 0.3f),
+                        new ScoreDoc(4, 0.25f),
+                        new ScoreDoc(10, 0.2f),
+                        createStartStopElementForHybridSearchResults(0) }
+                ),
+                0.5f
+            ),
+            new DocValueFormat[0]
+        );
+        querySearchResult.setSearchShardTarget(searchShardTarget);
+        querySearchResult.setShardIndex(shardId);
+        querySearchResults.add(querySearchResult);
+        SearchHit[] searchHitArray = new SearchHit[] {
+            new SearchHit(-1, "10", Map.of(), Map.of()),
+            new SearchHit(-1, "10", Map.of(), Map.of()),
+            new SearchHit(-1, "10", Map.of(), Map.of()),
+            new SearchHit(-1, "1", Map.of(), Map.of()),
+            new SearchHit(-1, "2", Map.of(), Map.of()),
+            new SearchHit(-1, "3", Map.of(), Map.of()),
+            new SearchHit(-1, "10", Map.of(), Map.of()), };
+        SearchHits searchHits = new SearchHits(searchHitArray, new TotalHits(7, TotalHits.Relation.EQUAL_TO), 10);
+        fetchSearchResult.hits(searchHits);
+
+        normalizationProcessorWorkflow.execute(
+            querySearchResults,
+            Optional.of(fetchSearchResult),
+            ScoreNormalizationFactory.DEFAULT_METHOD,
+            ScoreCombinationFactory.DEFAULT_METHOD
+        );
+
+        TestUtils.assertQueryResultScores(querySearchResults);
+        TestUtils.assertFetchResultScores(fetchSearchResult, 4);
+    }
+
+    public void testFetchResults_whenOneShardAndMultipleNodesAndMismatchResults_thenFail() {
+        NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+        );
+
+        List<QuerySearchResult> querySearchResults = new ArrayList<>();
+        FetchSearchResult fetchSearchResult = new FetchSearchResult();
+        int shardId = 0;
+        SearchShardTarget searchShardTarget = new SearchShardTarget(
+            "node",
+            new ShardId("index", "uuid", shardId),
+            null,
+            OriginalIndices.NONE
+        );
+        QuerySearchResult querySearchResult = new QuerySearchResult();
+        querySearchResult.topDocs(
+            new TopDocsAndMaxScore(
+                new TopDocs(
+                    new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+                    new ScoreDoc[] {
+                        createStartStopElementForHybridSearchResults(0),
+                        createDelimiterElementForHybridSearchResults(0),
+                        new ScoreDoc(0, 0.5f),
+                        new ScoreDoc(2, 0.3f),
+                        new ScoreDoc(4, 0.25f),
+                        new ScoreDoc(10, 0.2f),
+                        createStartStopElementForHybridSearchResults(0) }
+                ),
+                0.5f
+            ),
+            new DocValueFormat[0]
+        );
+        querySearchResult.setSearchShardTarget(searchShardTarget);
+        querySearchResult.setShardIndex(shardId);
+        querySearchResults.add(querySearchResult);
+        SearchHit[] searchHitArray = new SearchHit[] {
+            new SearchHit(-1, "10", Map.of(), Map.of()),
+            new SearchHit(-1, "10", Map.of(), Map.of()),
+            new SearchHit(-1, "10", Map.of(), Map.of()),
+            new SearchHit(-1, "1", Map.of(), Map.of()),
+            new SearchHit(-1, "2", Map.of(), Map.of()),
+            new SearchHit(-1, "3", Map.of(), Map.of()) };
+        SearchHits searchHits = new SearchHits(searchHitArray, new TotalHits(7, TotalHits.Relation.EQUAL_TO), 10);
+        fetchSearchResult.hits(searchHits);
+
+        expectThrows(
+            IllegalStateException.class,
+            () -> normalizationProcessorWorkflow.execute(
+                querySearchResults,
+                Optional.of(fetchSearchResult),
+                ScoreNormalizationFactory.DEFAULT_METHOD,
+                ScoreCombinationFactory.DEFAULT_METHOD
+            )
+        );
+    }
 }

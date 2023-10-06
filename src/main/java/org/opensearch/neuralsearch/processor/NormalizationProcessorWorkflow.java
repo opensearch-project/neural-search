@@ -6,12 +6,12 @@
 package org.opensearch.neuralsearch.processor;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import lombok.AllArgsConstructor;
@@ -52,6 +52,9 @@ public class NormalizationProcessorWorkflow {
         final ScoreNormalizationTechnique normalizationTechnique,
         final ScoreCombinationTechnique combinationTechnique
     ) {
+        // save original state
+        List<Integer> unprocessedDocIds = unprocessedDocIds(querySearchResults);
+
         // pre-process data
         log.debug("Pre-process query results");
         List<CompoundTopDocs> queryTopDocs = getQueryTopDocs(querySearchResults);
@@ -67,7 +70,7 @@ public class NormalizationProcessorWorkflow {
         // post-process data
         log.debug("Post-process query results after score normalization and combination");
         updateOriginalQueryResults(querySearchResults, queryTopDocs);
-        updateOriginalFetchResults(querySearchResults, fetchSearchResultOptional);
+        updateOriginalFetchResults(querySearchResults, fetchSearchResultOptional, unprocessedDocIds);
     }
 
     /**
@@ -123,7 +126,8 @@ public class NormalizationProcessorWorkflow {
      */
     private void updateOriginalFetchResults(
         final List<QuerySearchResult> querySearchResults,
-        final Optional<FetchSearchResult> fetchSearchResultOptional
+        final Optional<FetchSearchResult> fetchSearchResultOptional,
+        final List<Integer> docIds
     ) {
         if (fetchSearchResultOptional.isEmpty()) {
             return;
@@ -135,14 +139,17 @@ public class NormalizationProcessorWorkflow {
         // 3. update original scores to normalized and combined values
         // 4. order scores based on normalized and combined values
         FetchSearchResult fetchSearchResult = fetchSearchResultOptional.get();
-        SearchHits searchHits = fetchSearchResult.hits();
+        SearchHit[] searchHitArray = getSearchHits(docIds, fetchSearchResult);
 
         // create map of docId to index of search hits. This solves (2), duplicates are from
         // delimiter and start/stop elements, they all have same valid doc_id. For this map
         // we use doc_id as a key, and all those special elements are collapsed into a single
         // key-value pair.
-        Map<Integer, SearchHit> docIdToSearchHit = Arrays.stream(searchHits.getHits())
-            .collect(Collectors.toMap(SearchHit::docId, Function.identity(), (a1, a2) -> a1));
+        Map<Integer, SearchHit> docIdToSearchHit = new HashMap<>();
+        for (int i = 0; i < searchHitArray.length; i++) {
+            int originalDocId = docIds.get(i);
+            docIdToSearchHit.put(originalDocId, searchHitArray[i]);
+        }
 
         QuerySearchResult querySearchResult = querySearchResults.get(0);
         TopDocs topDocs = querySearchResult.topDocs().topDocs;
@@ -160,5 +167,24 @@ public class NormalizationProcessorWorkflow {
             querySearchResult.getMaxScore()
         );
         fetchSearchResult.hits(updatedSearchHits);
+    }
+
+    private SearchHit[] getSearchHits(final List<Integer> docIds, final FetchSearchResult fetchSearchResult) {
+        SearchHits searchHits = fetchSearchResult.hits();
+        SearchHit[] searchHitArray = searchHits.getHits();
+        // validate the both collections are of the same size
+        if (Objects.isNull(searchHitArray) || searchHitArray.length != docIds.size()) {
+            throw new IllegalStateException("Score normalization processor cannot produce final query result");
+        }
+        return searchHitArray;
+    }
+
+    private List<Integer> unprocessedDocIds(final List<QuerySearchResult> querySearchResults) {
+        List<Integer> docIds = querySearchResults.isEmpty()
+            ? List.of()
+            : Arrays.stream(querySearchResults.get(0).topDocs().topDocs.scoreDocs)
+                .map(scoreDoc -> scoreDoc.doc)
+                .collect(Collectors.toList());
+        return docIds;
     }
 }
