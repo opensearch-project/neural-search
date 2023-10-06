@@ -169,7 +169,7 @@ public class NormalizationProcessorWorkflow {
         fetchSearchResult.hits(updatedSearchHits);
     }
 
-    private SearchHit[] getSearchHits(List<Integer> docIds, FetchSearchResult fetchSearchResult) {
+    private SearchHit[] getSearchHits(final List<Integer> docIds, final FetchSearchResult fetchSearchResult) {
         SearchHits searchHits = fetchSearchResult.hits();
         SearchHit[] searchHitArray = searchHits.getHits();
         // validate the both collections are of the same size
@@ -179,7 +179,7 @@ public class NormalizationProcessorWorkflow {
         return searchHitArray;
     }
 
-    private List<Integer> unprocessedDocIds(List<QuerySearchResult> querySearchResults) {
+    private List<Integer> unprocessedDocIds(final List<QuerySearchResult> querySearchResults) {
         List<Integer> docIds = querySearchResults.isEmpty()
             ? List.of()
             : Arrays.stream(querySearchResults.get(0).topDocs().topDocs.scoreDocs)
