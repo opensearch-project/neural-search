@@ -5,6 +5,7 @@
 
 package org.opensearch.neuralsearch.ml;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 
@@ -328,6 +329,21 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         Mockito.verify(singleSentenceResultListener).onFailure(nodeNodeConnectedException);
     }
 
+    public void testInferenceMultimodal_whenInvalidInputAndEmptyTensorOutput_thenFail() {
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createEmptyModelTensorOutput());
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentences(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_MAP, singleSentenceResultListener);
+
+        Mockito.verify(client)
+            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        Mockito.verify(singleSentenceResultListener).onFailure(any());
+        Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
+    }
+
     private ModelTensorOutput createModelTensorOutput(final Float[] output) {
         final List<ModelTensors> tensorsList = new ArrayList<>();
         final List<ModelTensor> mlModelTensorList = new ArrayList<>();
@@ -350,6 +366,24 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         final List<ModelTensors> tensorsList = new ArrayList<>();
         final List<ModelTensor> mlModelTensorList = new ArrayList<>();
         final ModelTensor tensor = new ModelTensor("response", null, null, null, null, null, map);
+        mlModelTensorList.add(tensor);
+        final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
+        tensorsList.add(modelTensors);
+        return new ModelTensorOutput(tensorsList);
+    }
+
+    private ModelTensorOutput createEmptyModelTensorOutput() {
+        final List<ModelTensors> tensorsList = new ArrayList<>();
+        final List<ModelTensor> mlModelTensorList = new ArrayList<>();
+        final ModelTensor tensor = new ModelTensor(
+            "someValue",
+            null,
+            new long[] { 1, 2 },
+            MLResultDataType.FLOAT64,
+            ByteBuffer.wrap(new byte[12]),
+            "mockResult",
+            ImmutableMap.of("message", "The system encountered an unexpected error during processing. Try your request again.")
+        );
         mlModelTensorList.add(tensor);
         final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
         tensorsList.add(modelTensors);
