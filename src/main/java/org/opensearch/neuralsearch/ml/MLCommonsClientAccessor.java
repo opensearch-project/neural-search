@@ -11,13 +11,16 @@ import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
+import org.apache.logging.log4j.util.Strings;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.ml.client.MachineLearningNodeClient;
@@ -40,6 +43,8 @@ import org.opensearch.neuralsearch.util.RetryUtil;
 public class MLCommonsClientAccessor {
     private static final List<String> TARGET_RESPONSE_FILTERS = List.of("sentence_embedding");
     private final MachineLearningNodeClient mlClient;
+    private static final String EXCEPTION_MESSAGE_MODEL_PREDICT_FAILED = "failed while calling model, check error log for details";
+    private static final String EXCEPTION_MESSAGE_PREFIX_MODEL_PREDICT_FAILED = "encountered following error while calling a model";
 
     /**
      * Wrapper around {@link #inferenceSentences} that expected a single input text and produces a single floating
@@ -187,6 +192,20 @@ public class MLCommonsClientAccessor {
         for (final ModelTensors tensors : tensorOutputList) {
             final List<ModelTensor> tensorsList = tensors.getMlModelTensors();
             for (final ModelTensor tensor : tensorsList) {
+                if (Objects.isNull(tensor.getData())) {
+                    if (Objects.nonNull(tensor.getDataAsMap()) && Strings.isNotBlank((String) tensor.getDataAsMap().get("message"))) {
+                        String errorFromModel = (String) tensor.getDataAsMap().get("message");
+                        throw new IllegalStateException(
+                            String.format(Locale.ROOT, "%s: %s", EXCEPTION_MESSAGE_PREFIX_MODEL_PREDICT_FAILED, errorFromModel)
+                        );
+                    } else {
+                        log.error(
+                            "Received following output tensor from a model, there is no detailed error message: {}",
+                            tensor.toString()
+                        );
+                        throw new IllegalStateException(EXCEPTION_MESSAGE_MODEL_PREDICT_FAILED);
+                    }
+                }
                 vector.add(Arrays.stream(tensor.getData()).map(value -> (Float) value).collect(Collectors.toList()));
             }
         }
