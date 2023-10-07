@@ -52,6 +52,7 @@ public class NormalizationProcessorWorkflow {
         final ScoreNormalizationTechnique normalizationTechnique,
         final ScoreCombinationTechnique combinationTechnique
     ) {
+        log.info("Entering normalization processor workflow");
         // save original state
         List<Integer> unprocessedDocIds = unprocessedDocIds(querySearchResults);
 

@@ -218,6 +218,12 @@ integTest {
     if (System.getProperty("test.debug") != null) {
         jvmArgs '-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005'
     }
+
+    systemProperty 'log4j2.configurationFile', "${projectDir}/src/test/resources/log4j2-test.xml"
+
+    // Set this to true this if you want to see the logs in the terminal test output.
+    // note: if left false the log output will still show in your IDE
+    testLogging.showStandardStreams = true
 }
 
 testClusters.integTest {
