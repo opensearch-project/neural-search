@@ -752,20 +752,20 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     @SneakyThrows
     private String registerModelGroup() {
         String modelGroupRegisterRequestBody = Files.readString(
-                Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
+            Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
         ).replace("<MODEL_GROUP_NAME>", "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8));
         Response modelGroupResponse = makeRequest(
-                client(),
-                "POST",
-                "/_plugins/_ml/model_groups/_register",
-                null,
-                toHttpEntity(modelGroupRegisterRequestBody),
-                ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+            client(),
+            "POST",
+            "/_plugins/_ml/model_groups/_register",
+            null,
+            toHttpEntity(modelGroupRegisterRequestBody),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
         Map<String, Object> modelGroupResJson = XContentHelper.convertToMap(
-                XContentType.JSON.xContent(),
-                EntityUtils.toString(modelGroupResponse.getEntity()),
-                false
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(modelGroupResponse.getEntity()),
+            false
         );
         String modelGroupId = modelGroupResJson.get("model_group_id").toString();
         assertNotNull(modelGroupId);

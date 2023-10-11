@@ -14,7 +14,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased 2.x](https://github.com/opensearch-project/neural-search/compare/2.11...2.x)
 ### Features
-Added Multimodal semantic search feature ([#359](https://github.com/opensearch-project/neural-search/pull/359))
 ### Enhancements
 ### Bug Fixes
 ### Infrastructure
