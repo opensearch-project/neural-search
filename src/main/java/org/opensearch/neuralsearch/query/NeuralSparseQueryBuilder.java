@@ -89,6 +89,10 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         this.queryText = in.readString();
         this.modelId = in.readString();
         this.maxTokenScore = in.readOptionalFloat();
+        if (in.readBoolean()) {
+            Map<String, Float> queryTokens = in.readMap(StreamInput::readString, StreamInput::readFloat);
+            this.queryTokensSupplier = () -> queryTokens;
+        }
     }
 
     @Override
@@ -97,6 +101,12 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         out.writeString(queryText);
         out.writeString(modelId);
         out.writeOptionalFloat(maxTokenScore);
+        if (queryTokensSupplier != null && queryTokensSupplier.get() != null) {
+            out.writeBoolean(true);
+            out.writeMap(queryTokensSupplier.get(), StreamOutput::writeString, StreamOutput::writeFloat);
+        } else {
+            out.writeBoolean(false);
+        }
     }
 
     @Override
@@ -276,16 +286,25 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     protected boolean doEquals(NeuralSparseQueryBuilder obj) {
         if (this == obj) return true;
         if (obj == null || getClass() != obj.getClass()) return false;
+        if (queryTokensSupplier == null && obj.queryTokensSupplier != null) return false;
+        if (queryTokensSupplier != null && obj.queryTokensSupplier == null) return false;
         EqualsBuilder equalsBuilder = new EqualsBuilder().append(fieldName, obj.fieldName)
             .append(queryText, obj.queryText)
             .append(modelId, obj.modelId)
             .append(maxTokenScore, obj.maxTokenScore);
+        if (queryTokensSupplier != null) {
+            equalsBuilder.append(queryTokensSupplier.get(), obj.queryTokensSupplier.get());
+        }
         return equalsBuilder.isEquals();
     }
 
     @Override
     protected int doHashCode() {
-        return new HashCodeBuilder().append(fieldName).append(queryText).append(modelId).append(maxTokenScore).toHashCode();
+        HashCodeBuilder builder = new HashCodeBuilder().append(fieldName).append(queryText).append(modelId).append(maxTokenScore);
+        if (queryTokensSupplier != null) {
+            builder.append(queryTokensSupplier.get());
+        }
+        return builder.toHashCode();
     }
 
     @Override
