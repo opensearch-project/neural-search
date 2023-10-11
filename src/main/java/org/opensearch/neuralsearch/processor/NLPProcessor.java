@@ -249,7 +249,7 @@ public abstract class NLPProcessor extends AbstractProcessor {
     @SuppressWarnings({ "unchecked" })
     @VisibleForTesting
     Map<String, Object> buildNLPResult(Map<String, Object> processorMap, List<?> results, Map<String, Object> sourceAndMetadataMap) {
-        NLPProcessor.IndexWrapper indexWrapper = new NLPProcessor.IndexWrapper(0);
+        IndexWrapper indexWrapper = new IndexWrapper(0);
         Map<String, Object> result = new LinkedHashMap<>();
         for (Map.Entry<String, Object> knnMapEntry : processorMap.entrySet()) {
             String knnKey = knnMapEntry.getKey();
@@ -270,7 +270,7 @@ public abstract class NLPProcessor extends AbstractProcessor {
         String processorKey,
         Object sourceValue,
         List<?> results,
-        NLPProcessor.IndexWrapper indexWrapper,
+        IndexWrapper indexWrapper,
         Map<String, Object> sourceAndMetadataMap
     ) {
         if (processorKey == null || sourceAndMetadataMap == null || sourceValue == null) return;
@@ -291,11 +291,7 @@ public abstract class NLPProcessor extends AbstractProcessor {
         }
     }
 
-    private List<Map<String, Object>> buildNLPResultForListType(
-        List<String> sourceValue,
-        List<?> results,
-        NLPProcessor.IndexWrapper indexWrapper
-    ) {
+    private List<Map<String, Object>> buildNLPResultForListType(List<String> sourceValue, List<?> results, IndexWrapper indexWrapper) {
         List<Map<String, Object>> keyToResult = new ArrayList<>();
         IntStream.range(0, sourceValue.size())
             .forEachOrdered(x -> keyToResult.add(ImmutableMap.of(listTypeNestedMapKey, results.get(indexWrapper.index++))));
