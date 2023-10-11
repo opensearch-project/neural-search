@@ -282,9 +282,6 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         original.modelId(MODEL_ID);
         original.boost(BOOST);
         original.queryName(QUERY_NAME);
-        SetOnce<Map<String, Float>> queryTokensSetOnce = new SetOnce<>();
-        queryTokensSetOnce.set(Map.of("hello", 1.0f, "world", 2.0f));
-        original.queryTokensSupplier(queryTokensSetOnce::get);
 
         BytesStreamOutput streamOutput = new BytesStreamOutput();
         original.writeTo(streamOutput);
@@ -297,6 +294,23 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         );
 
         NeuralSparseQueryBuilder copy = new NeuralSparseQueryBuilder(filterStreamInput);
+        assertEquals(original, copy);
+
+        SetOnce<Map<String, Float>> queryTokensSetOnce = new SetOnce<>();
+        queryTokensSetOnce.set(Map.of("hello", 1.0f, "world", 2.0f));
+        original.queryTokensSupplier(queryTokensSetOnce::get);
+
+        streamOutput = new BytesStreamOutput();
+        original.writeTo(streamOutput);
+
+        filterStreamInput = new NamedWriteableAwareStreamInput(
+            streamOutput.bytes().streamInput(),
+            new NamedWriteableRegistry(
+                List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, MatchAllQueryBuilder.NAME, MatchAllQueryBuilder::new))
+            )
+        );
+
+        copy = new NeuralSparseQueryBuilder(filterStreamInput);
         assertEquals(original, copy);
     }
 
