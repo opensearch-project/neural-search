@@ -6,7 +6,6 @@
 package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;

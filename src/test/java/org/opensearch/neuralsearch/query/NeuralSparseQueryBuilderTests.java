@@ -387,21 +387,21 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
 
         // Identical to sparseEncodingQueryBuilder_baseline except non-null query tokens supplier
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder_nonNullQueryTokens = new NeuralSparseQueryBuilder().fieldName(fieldName1)
-                .queryText(queryText1)
-                .modelId(modelId1)
-                .maxTokenScore(maxTokenScore1)
-                .boost(boost1)
-                .queryName(queryName1)
-                .queryTokensSupplier(()->queryTokens1);
+            .queryText(queryText1)
+            .modelId(modelId1)
+            .maxTokenScore(maxTokenScore1)
+            .boost(boost1)
+            .queryName(queryName1)
+            .queryTokensSupplier(() -> queryTokens1);
 
         // Identical to sparseEncodingQueryBuilder_baseline except non-null query tokens supplier
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder_diffQueryTokens = new NeuralSparseQueryBuilder().fieldName(fieldName1)
-                .queryText(queryText1)
-                .modelId(modelId1)
-                .maxTokenScore(maxTokenScore1)
-                .boost(boost1)
-                .queryName(queryName1)
-                .queryTokensSupplier(()->queryTokens2);
+            .queryText(queryText1)
+            .modelId(modelId1)
+            .maxTokenScore(maxTokenScore1)
+            .boost(boost1)
+            .queryName(queryName1)
+            .queryTokensSupplier(() -> queryTokens2);
 
         assertEquals(sparseEncodingQueryBuilder_baseline, sparseEncodingQueryBuilder_baseline);
         assertEquals(sparseEncodingQueryBuilder_baseline.hashCode(), sparseEncodingQueryBuilder_baseline.hashCode());
