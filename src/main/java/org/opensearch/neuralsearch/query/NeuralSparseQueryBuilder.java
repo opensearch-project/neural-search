@@ -6,6 +6,7 @@
 package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -286,16 +287,25 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     protected boolean doEquals(NeuralSparseQueryBuilder obj) {
         if (this == obj) return true;
         if (obj == null || getClass() != obj.getClass()) return false;
+        if (queryTokensSupplier == null && obj.queryTokensSupplier != null) return false;
+        if (queryTokensSupplier != null && obj.queryTokensSupplier == null) return false;
         EqualsBuilder equalsBuilder = new EqualsBuilder().append(fieldName, obj.fieldName)
             .append(queryText, obj.queryText)
             .append(modelId, obj.modelId)
             .append(maxTokenScore, obj.maxTokenScore);
+        if (queryTokensSupplier != null) {
+            equalsBuilder.append(queryTokensSupplier.get(), obj.queryTokensSupplier.get());
+        }
         return equalsBuilder.isEquals();
     }
 
     @Override
     protected int doHashCode() {
-        return new HashCodeBuilder().append(fieldName).append(queryText).append(modelId).append(maxTokenScore).toHashCode();
+        HashCodeBuilder builder = new HashCodeBuilder().append(fieldName).append(queryText).append(modelId).append(maxTokenScore);
+        if (queryTokensSupplier != null) {
+            builder.append(queryTokensSupplier.get());
+        }
+        return builder.toHashCode();
     }
 
     @Override
