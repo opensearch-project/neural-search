@@ -26,6 +26,7 @@ import java.util.function.Supplier;
 import lombok.SneakyThrows;
 
 import org.opensearch.client.Client;
+import org.opensearch.common.SetOnce;
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.action.ActionListener;
@@ -262,6 +263,23 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
 
         NeuralSparseQueryBuilder copy = new NeuralSparseQueryBuilder(filterStreamInput);
         assertEquals(original, copy);
+
+        SetOnce<Map<String, Float>> queryTokensSetOnce = new SetOnce<>();
+        queryTokensSetOnce.set(Map.of("hello", 1.0f, "world", 2.0f));
+        original.queryTokensSupplier(queryTokensSetOnce::get);
+
+        streamOutput = new BytesStreamOutput();
+        original.writeTo(streamOutput);
+
+        filterStreamInput = new NamedWriteableAwareStreamInput(
+            streamOutput.bytes().streamInput(),
+            new NamedWriteableRegistry(
+                List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, MatchAllQueryBuilder.NAME, MatchAllQueryBuilder::new))
+            )
+        );
+
+        copy = new NeuralSparseQueryBuilder(filterStreamInput);
+        assertEquals(original, copy);
     }
 
     public void testHashAndEquals() {
@@ -275,6 +293,8 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         float boost2 = 3.8f;
         String queryName1 = "query-1";
         String queryName2 = "query-2";
+        Map<String, Float> queryTokens1 = Map.of("hello", 1.0f, "world", 2.0f);
+        Map<String, Float> queryTokens2 = Map.of("hello", 1.0f, "world", 2.2f);
 
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder_baseline = new NeuralSparseQueryBuilder().fieldName(fieldName1)
             .queryText(queryText1)
@@ -329,6 +349,22 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .boost(boost1)
             .queryName(queryName2);
 
+        // Identical to sparseEncodingQueryBuilder_baseline except non-null query tokens supplier
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder_nonNullQueryTokens = new NeuralSparseQueryBuilder().fieldName(fieldName1)
+            .queryText(queryText1)
+            .modelId(modelId1)
+            .boost(boost1)
+            .queryName(queryName1)
+            .queryTokensSupplier(() -> queryTokens1);
+
+        // Identical to sparseEncodingQueryBuilder_baseline except non-null query tokens supplier
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder_diffQueryTokens = new NeuralSparseQueryBuilder().fieldName(fieldName1)
+            .queryText(queryText1)
+            .modelId(modelId1)
+            .boost(boost1)
+            .queryName(queryName1)
+            .queryTokensSupplier(() -> queryTokens2);
+
         assertEquals(sparseEncodingQueryBuilder_baseline, sparseEncodingQueryBuilder_baseline);
         assertEquals(sparseEncodingQueryBuilder_baseline.hashCode(), sparseEncodingQueryBuilder_baseline.hashCode());
 
@@ -352,6 +388,12 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
 
         assertNotEquals(sparseEncodingQueryBuilder_baseline, sparseEncodingQueryBuilder_diffQueryName);
         assertNotEquals(sparseEncodingQueryBuilder_baseline.hashCode(), sparseEncodingQueryBuilder_diffQueryName.hashCode());
+
+        assertNotEquals(sparseEncodingQueryBuilder_baseline, sparseEncodingQueryBuilder_nonNullQueryTokens);
+        assertNotEquals(sparseEncodingQueryBuilder_baseline.hashCode(), sparseEncodingQueryBuilder_nonNullQueryTokens.hashCode());
+
+        assertNotEquals(sparseEncodingQueryBuilder_nonNullQueryTokens, sparseEncodingQueryBuilder_diffQueryTokens);
+        assertNotEquals(sparseEncodingQueryBuilder_nonNullQueryTokens.hashCode(), sparseEncodingQueryBuilder_diffQueryTokens.hashCode());
     }
 
     @SneakyThrows
