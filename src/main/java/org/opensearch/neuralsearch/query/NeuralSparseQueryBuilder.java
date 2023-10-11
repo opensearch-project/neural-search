@@ -89,6 +89,10 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         this.queryText = in.readString();
         this.modelId = in.readString();
         this.maxTokenScore = in.readOptionalFloat();
+        if (in.readBoolean()) {
+            Map<String, Float> queryTokens = in.readMap(StreamInput::readString, StreamInput::readFloat);
+            this.queryTokensSupplier = () -> queryTokens;
+        }
     }
 
     @Override
@@ -97,6 +101,12 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         out.writeString(queryText);
         out.writeString(modelId);
         out.writeOptionalFloat(maxTokenScore);
+        if (queryTokensSupplier != null && queryTokensSupplier.get() != null) {
+            out.writeBoolean(true);
+            out.writeMap(queryTokensSupplier.get(), StreamOutput::writeString, StreamOutput::writeFloat);
+        } else {
+            out.writeBoolean(false);
+        }
     }
 
     @Override
