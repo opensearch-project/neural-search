@@ -2,13 +2,16 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
+
 package org.opensearch.neuralsearch.processor;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import org.junit.Before;
-import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+import lombok.SneakyThrows;
+
+import org.junit.After;
+import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
 
 public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
@@ -30,16 +33,21 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         + "  }\n"
         + "}\n";
 
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();
-        updateClusterSettings();
+    @After
+    @SneakyThrows
+    public void tearDown() {
+        super.tearDown();
+        /* this is required to minimize chance of model not being deployed due to open memory CB,
+         * this happens in case we leave model from previous test case. We use new model for every test, and old model
+         * can be undeployed and deleted to free resources after each test case execution.
+         */
+        findDeployedModels().forEach(this::deleteModel);
     }
 
     public void testTextEmbeddingProcessor() throws Exception {
         String modelId = uploadTextEmbeddingModel();
         loadModel(modelId);
-        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
+        createPipelineProcessor(modelId, PIPELINE_NAME);
         createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
         String result = ingestDocument(INDEX_NAME, TEXT_EMBEDDING_DOCUMENT);
         assertEquals("created", result);
@@ -57,7 +65,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         loadModel(modelId);
         String toIndexName = "test-reindex-to";
         String pipelineName = "pipeline-text-embedding";
-        createPipelineProcessor(modelId, pipelineName, ProcessorType.TEXT_EMBEDDING);
+        createPipelineProcessor(modelId, pipelineName);
         createIndexWithPipeline(toIndexName, "IndexMappings.json", pipelineName);
         reindex(fromIndexName, toIndexName);
         assertEquals(1, getDocCount(toIndexName));
@@ -65,7 +73,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     private String uploadTextEmbeddingModel() throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        return registerModelGroupAndUploadModel(requestBody);
+        return uploadModel(requestBody);
     }
 
 }
