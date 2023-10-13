@@ -4,26 +4,28 @@
  */
 package org.opensearch.neuralsearch.processor;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Map;
-
-import org.apache.hc.core5.http.HttpHeaders;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.hc.core5.http.message.BasicHeader;
 import org.junit.Before;
-import org.opensearch.client.Response;
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
-
-import com.google.common.collect.ImmutableList;
 
 public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
 
     private static final String INDEX_NAME = "sparse_encoding_index";
 
     private static final String PIPELINE_NAME = "pipeline-sparse-encoding";
+
+    private static final String INGEST_DOCUMENT = "{\n"
+        + "  \"title\": \"This is a good day\",\n"
+        + "  \"description\": \"daily logging\",\n"
+        + "  \"favor_list\": [\n"
+        + "    \"test\",\n"
+        + "    \"hello\",\n"
+        + "    \"mock\"\n"
+        + "  ],\n"
+        + "  \"favorites\": {\n"
+        + "    \"game\": \"overwatch\",\n"
+        + "    \"movie\": null\n"
+        + "  }\n"
+        + "}\n";
 
     @Before
     public void setUp() throws Exception {
@@ -36,50 +38,33 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
         try {
             modelId = prepareSparseEncodingModel();
             createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING);
-            createSparseEncodingIndex();
-            ingestDocument();
+            createIndexWithPipeline(INDEX_NAME, "SparseEncodingIndexMappings.json", PIPELINE_NAME);
+            String result = ingestDocument(INDEX_NAME, INGEST_DOCUMENT);
+            assertEquals("created", result);
             assertEquals(1, getDocCount(INDEX_NAME));
         } finally {
             wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
         }
     }
 
-    private void createSparseEncodingIndex() throws Exception {
-        createIndexWithConfiguration(
-            INDEX_NAME,
-            Files.readString(Path.of(classLoader.getResource("processor/SparseEncodingIndexMappings.json").toURI())),
-            PIPELINE_NAME
-        );
-    }
-
-    private void ingestDocument() throws Exception {
-        String ingestDocument = "{\n"
-            + "  \"title\": \"This is a good day\",\n"
-            + "  \"description\": \"daily logging\",\n"
-            + "  \"favor_list\": [\n"
-            + "    \"test\",\n"
-            + "    \"hello\",\n"
-            + "    \"mock\"\n"
-            + "  ],\n"
-            + "  \"favorites\": {\n"
-            + "    \"game\": \"overwatch\",\n"
-            + "    \"movie\": null\n"
-            + "  }\n"
-            + "}\n";
-        Response response = makeRequest(
-            client(),
-            "POST",
-            INDEX_NAME + "/_doc?refresh",
-            null,
-            toHttpEntity(ingestDocument),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
-        );
-        Map<String, Object> map = XContentHelper.convertToMap(
-            XContentType.JSON.xContent(),
-            EntityUtils.toString(response.getEntity()),
-            false
-        );
-        assertEquals("created", map.get("result"));
+    public void testSparseEncodingProcessorWithReindex() throws Exception {
+        // create a simple index and indexing data into this index.
+        String fromIndexName = "test-reindex-from";
+        createIndexWithConfiguration(fromIndexName, "{ \"settings\": { \"number_of_shards\": 1, \"number_of_replicas\": 0 } }", null);
+        String result = ingestDocument(fromIndexName, "{ \"text\": \"hello world\" }");
+        assertEquals("created", result);
+        // create text embedding index for reindex
+        String modelId = null;
+        try {
+            modelId = prepareSparseEncodingModel();
+            String toIndexName = "test-reindex-to";
+            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING);
+            createIndexWithPipeline(toIndexName, "SparseEncodingIndexMappings.json", PIPELINE_NAME);
+            reindex(fromIndexName, toIndexName);
+            assertEquals(1, getDocCount(toIndexName));
+        } finally {
+            wipeOfTestResources(fromIndexName, PIPELINE_NAME, modelId, null);
+        }
     }
 
 }
