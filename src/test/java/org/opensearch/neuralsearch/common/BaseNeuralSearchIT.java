@@ -815,7 +815,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             "POST",
             "/_reindex?refresh",
             null,
-            toHttpEntity("{\"source\":{\"index\":\""+ fromIndexName +"\"},\"dest\":{\"index\":\"" + toIndexName + "\"}}"),
+            toHttpEntity("{\"source\":{\"index\":\"" + fromIndexName + "\"},\"dest\":{\"index\":\"" + toIndexName + "\"}}"),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
         Map<String, Object> map = XContentHelper.convertToMap(
@@ -823,7 +823,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             EntityUtils.toString(response.getEntity()),
             false
         );
-        assertEquals(0, ((List)map.get("failures")).size());
+        assertEquals(0, ((List) map.get("failures")).size());
     }
 
     /**

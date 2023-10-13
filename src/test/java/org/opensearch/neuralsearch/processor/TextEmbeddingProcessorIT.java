@@ -13,7 +13,6 @@ import lombok.SneakyThrows;
 import org.junit.After;
 import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
 
-
 public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     private static final String INDEX_NAME = "text_embedding_index";

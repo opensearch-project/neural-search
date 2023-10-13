@@ -66,5 +66,4 @@ public class SparseEncodingProcessIT extends BaseSparseEncodingIT {
         assertEquals(1, getDocCount(toIndexName));
     }
 
-
 }
