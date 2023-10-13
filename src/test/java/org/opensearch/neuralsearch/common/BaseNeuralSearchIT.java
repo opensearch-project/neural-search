@@ -772,6 +772,60 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return modelGroupId;
     }
 
+    protected void createIndexWithPipeline(String indexName, String indexMappingFileName, String pipelineName) throws Exception {
+        createIndexWithConfiguration(
+            indexName,
+            Files.readString(Path.of(classLoader.getResource("processor/" + indexMappingFileName).toURI())),
+            pipelineName
+        );
+    }
+
+    /**
+     *  Ingest a document to index.
+     * @param indexName
+     * @param ingestDocument
+     * @throws Exception
+     */
+    protected String ingestDocument(String indexName, String ingestDocument) throws Exception {
+        Response response = makeRequest(
+            client(),
+            "POST",
+            indexName + "/_doc?refresh",
+            null,
+            toHttpEntity(ingestDocument),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+        );
+        Map<String, Object> map = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(response.getEntity()),
+            false
+        );
+        return (String) map.get("result");
+    }
+
+    /**
+     * Reindex from one index to another
+     * @param fromIndexName
+     * @param toIndexName
+     * @throws Exception
+     */
+    protected void reindex(String fromIndexName, String toIndexName) throws Exception {
+        Response response = makeRequest(
+            client(),
+            "POST",
+            "/_reindex?refresh",
+            null,
+            toHttpEntity("{\"source\":{\"index\":\""+ fromIndexName +"\"},\"dest\":{\"index\":\"" + toIndexName + "\"}}"),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+        );
+        Map<String, Object> map = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(response.getEntity()),
+            false
+        );
+        assertEquals(0, ((List)map.get("failures")).size());
+    }
+
     /**
      * Enumeration for types of pipeline processors, used to lookup resources like create
      * processor request as those are type specific
