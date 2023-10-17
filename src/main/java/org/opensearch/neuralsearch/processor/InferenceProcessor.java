@@ -32,7 +32,7 @@ import com.google.common.collect.ImmutableMap;
  * and set the target fields according to the field name map.
  */
 @Log4j2
-public abstract class NLPProcessor extends AbstractProcessor {
+public abstract class InferenceProcessor extends AbstractProcessor {
 
     public static final String MODEL_ID_FIELD = "model_id";
     public static final String FIELD_MAP_FIELD = "field_map";
@@ -51,7 +51,7 @@ public abstract class NLPProcessor extends AbstractProcessor {
 
     private final Environment environment;
 
-    public NLPProcessor(
+    public InferenceProcessor(
         String tag,
         String description,
         String type,
