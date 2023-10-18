@@ -30,7 +30,6 @@ TODO: Some todo items that apply here but also on the original normalization tec
 public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique {
     @ToString.Include
     public static final String TECHNIQUE_NAME = "z_score";
-    private static final float MIN_SCORE = 0.001f;
     private static final float SINGLE_RESULT_SCORE = 1.0f;
     @Override
     public void normalize(List<CompoundTopDocs> queryTopDocs) {
@@ -162,7 +161,6 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
         if (Floats.compare(mean, score) == 0) {
             return SINGLE_RESULT_SCORE;
         }
-        float normalizedScore = (score - mean) / standardDeviation;
-        return normalizedScore == 0.0f ? MIN_SCORE : normalizedScore;
+        return  (score - mean) / standardDeviation;
     }
 }

@@ -26,8 +26,6 @@ import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 @Log4j2
 public class ScoreCombiner {
 
-    private static final Float ZERO_SCORE = 0.0f;
-
     /**
      * Performs score combination based on input combination technique. Mutates input object by updating combined scores
      * Main steps we're doing for combination:
