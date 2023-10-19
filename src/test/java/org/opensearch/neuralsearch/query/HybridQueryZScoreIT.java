@@ -146,10 +146,10 @@ public class HybridQueryZScoreIT extends BaseNeuralSearchIT {
         }
 
         assertEquals(2, scores.size());
-        // since it's z-score normalized we would expect 1 , -1 to be the corresponding score, by design when there are only two results with z score
-        // furthermore the combination logic with weights should make it doc1Score: (1 * w1 + 0.98 * w2)/(w1 + w2), -1 * w2/w2
+        // by design when there are only two results with z score since it's z-score normalized we would expect 1 , -1 to be the corresponding score,
+        // furthermore the combination logic with weights should make it doc1Score: (1 * w1 + 0.98 * w2)/(w1 + w2), doc2Score: -1 ~ 0
         assertEquals(0.9999, scores.get(0).floatValue(), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals(-1 , scores.get(1).floatValue(), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(0 , scores.get(1).floatValue(), DELTA_FOR_SCORE_ASSERTION);
 
         // verify that scores are in desc order
         assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
