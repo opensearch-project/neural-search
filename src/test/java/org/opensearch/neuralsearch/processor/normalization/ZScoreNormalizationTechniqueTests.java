@@ -5,83 +5,88 @@
 
 package org.opensearch.neuralsearch.processor.normalization;
 
+import java.util.List;
+
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 
-import java.util.List;
-
 public class ZScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     private static final float DELTA_FOR_ASSERTION = 0.0001f;
 
+    /**
+     * Z score will check the relative distance from the center of distribution and hence can also be negative.
+     * When only two values are available their z-score numbers will be 1 and -1 correspondingly.
+     * For more information regarding z-score you can check this link
+     * https://www.z-table.com/
+     *
+     */
     public void testNormalization_whenResultFromOneShardOneSubQuery_thenSuccessful() {
         ZScoreNormalizationTechnique normalizationTechnique = new ZScoreNormalizationTechnique();
         List<CompoundTopDocs> compoundTopDocs = List.of(
-                new CompoundTopDocs(
+            new CompoundTopDocs(
+                new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(
                         new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                        List.of(
-                                new TopDocs(
-                                        new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                                        new ScoreDoc[] { new ScoreDoc(2, 0.5f), new ScoreDoc(4, 0.2f) }
-                                )
-                        )
+                        new ScoreDoc[] { new ScoreDoc(2, 0.5f), new ScoreDoc(4, 0.2f) }
+                    )
                 )
+            )
         );
         normalizationTechnique.normalize(compoundTopDocs);
 
+        // since we only have two scores of 0.5 and 0.2 their z-score numbers will be 1 and -1
         CompoundTopDocs expectedCompoundDocs = new CompoundTopDocs(
-                new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                List.of(
-                        new TopDocs(
-                                new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                                new ScoreDoc[] { new ScoreDoc(2, 1.0f), new ScoreDoc(4, -1.0f) }
-                        )
-                )
+            new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+            List.of(
+                new TopDocs(new TotalHits(2, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(2, 1.0f), new ScoreDoc(4, -1.0f) })
+            )
         );
         assertNotNull(compoundTopDocs);
         assertEquals(1, compoundTopDocs.size());
         assertNotNull(compoundTopDocs.get(0).getTopDocs());
         assertCompoundTopDocs(
-                new TopDocs(expectedCompoundDocs.getTotalHits(), expectedCompoundDocs.getScoreDocs().toArray(new ScoreDoc[0])),
-                compoundTopDocs.get(0).getTopDocs().get(0)
+            new TopDocs(expectedCompoundDocs.getTotalHits(), expectedCompoundDocs.getScoreDocs().toArray(new ScoreDoc[0])),
+            compoundTopDocs.get(0).getTopDocs().get(0)
         );
     }
 
     public void testNormalization_whenResultFromOneShardMultipleSubQueries_thenSuccessful() {
         ZScoreNormalizationTechnique normalizationTechnique = new ZScoreNormalizationTechnique();
         List<CompoundTopDocs> compoundTopDocs = List.of(
-                new CompoundTopDocs(
+            new CompoundTopDocs(
+                new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(
+                        new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] { new ScoreDoc(2, 0.5f), new ScoreDoc(4, 0.2f) }
+                    ),
+                    new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
+                    new TopDocs(
                         new TotalHits(3, TotalHits.Relation.EQUAL_TO),
-                        List.of(
-                                new TopDocs(
-                                        new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                                        new ScoreDoc[] { new ScoreDoc(2, 0.5f), new ScoreDoc(4, 0.2f) }
-                                ),
-                                new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
-                                new TopDocs(
-                                        new TotalHits(3, TotalHits.Relation.EQUAL_TO),
-                                        new ScoreDoc[] { new ScoreDoc(3, 0.9f), new ScoreDoc(4, 0.7f), new ScoreDoc(2, 0.1f) }
-                                )
-                        )
+                        new ScoreDoc[] { new ScoreDoc(3, 0.9f), new ScoreDoc(4, 0.7f), new ScoreDoc(2, 0.1f) }
+                    )
                 )
+            )
         );
         normalizationTechnique.normalize(compoundTopDocs);
 
         CompoundTopDocs expectedCompoundDocs = new CompoundTopDocs(
-                new TotalHits(3, TotalHits.Relation.EQUAL_TO),
-                List.of(
-                        new TopDocs(
-                                new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                                new ScoreDoc[] { new ScoreDoc(2, 1.0f), new ScoreDoc(4, -1.0f) }
-                        ),
-                        new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
-                        new TopDocs(
-                                new TotalHits(3, TotalHits.Relation.EQUAL_TO),
-                                new ScoreDoc[] { new ScoreDoc(3, 0.98058068f), new ScoreDoc(4, 0.39223227f), new ScoreDoc(2, -1.37281295f) }
-                        )
+            new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+            List.of(
+                new TopDocs(
+                    new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                    new ScoreDoc[] { new ScoreDoc(2, 1.0f), new ScoreDoc(4, -1.0f) }
+                ),
+                new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
+                new TopDocs(
+                    new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                    new ScoreDoc[] { new ScoreDoc(3, 0.98058068f), new ScoreDoc(4, 0.39223227f), new ScoreDoc(2, -1.37281295f) }
                 )
+            )
         );
         assertNotNull(compoundTopDocs);
         assertEquals(1, compoundTopDocs.size());
@@ -94,57 +99,54 @@ public class ZScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     public void testNormalization_whenResultFromMultipleShardsMultipleSubQueries_thenSuccessful() {
         ZScoreNormalizationTechnique normalizationTechnique = new ZScoreNormalizationTechnique();
         List<CompoundTopDocs> compoundTopDocs = List.of(
-                new CompoundTopDocs(
-                        new TotalHits(3, TotalHits.Relation.EQUAL_TO),
-                        List.of(
-                                new TopDocs(
-                                        new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                                        new ScoreDoc[] { new ScoreDoc(2, 0.5f), new ScoreDoc(4, 0.2f) }
-                                ),
-                                new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
-                                new TopDocs(
-                                        new TotalHits(3, TotalHits.Relation.EQUAL_TO),
-                                        new ScoreDoc[] { new ScoreDoc(3, 0.9f), new ScoreDoc(4, 0.7f), new ScoreDoc(2, 0.1f) }
-                                )
-                        )
-                ),
-                new CompoundTopDocs(
+            new CompoundTopDocs(
+                new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(
                         new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                        List.of(
-                                new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
-                                new TopDocs(
-                                        new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                                        new ScoreDoc[] { new ScoreDoc(7, 2.9f), new ScoreDoc(9, 0.7f) }
-                                )
-                        )
+                        new ScoreDoc[] { new ScoreDoc(2, 0.5f), new ScoreDoc(4, 0.2f) }
+                    ),
+                    new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
+                    new TopDocs(
+                        new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] { new ScoreDoc(3, 0.9f), new ScoreDoc(4, 0.7f), new ScoreDoc(2, 0.1f) }
+                    )
                 )
+            ),
+            new CompoundTopDocs(
+                new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
+                    new TopDocs(
+                        new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] { new ScoreDoc(7, 2.9f), new ScoreDoc(9, 0.7f) }
+                    )
+                )
+            )
         );
         normalizationTechnique.normalize(compoundTopDocs);
 
         CompoundTopDocs expectedCompoundDocsShard1 = new CompoundTopDocs(
-                new TotalHits(3, TotalHits.Relation.EQUAL_TO),
-                List.of(
-                        new TopDocs(
-                                new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                                new ScoreDoc[] { new ScoreDoc(2, 1.0f), new ScoreDoc(4, -1.0f) }
-                        ),
-                        new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
-                        new TopDocs(
-                                new TotalHits(3, TotalHits.Relation.EQUAL_TO),
-                                new ScoreDoc[] { new ScoreDoc(3, 0.98058068f), new ScoreDoc(4, 0.39223227f), new ScoreDoc(2, -1.37281295f) }
-                        )
+            new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+            List.of(
+                new TopDocs(
+                    new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                    new ScoreDoc[] { new ScoreDoc(2, 1.0f), new ScoreDoc(4, -1.0f) }
+                ),
+                new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
+                new TopDocs(
+                    new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                    new ScoreDoc[] { new ScoreDoc(3, 0.98058068f), new ScoreDoc(4, 0.39223227f), new ScoreDoc(2, -1.37281295f) }
                 )
+            )
         );
 
         CompoundTopDocs expectedCompoundDocsShard2 = new CompoundTopDocs(
-                new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                List.of(
-                        new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
-                        new TopDocs(
-                                new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                                new ScoreDoc[] { new ScoreDoc(7, 1.0f), new ScoreDoc(9, -1.0f) }
-                        )
-                )
+            new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+            List.of(
+                new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
+                new TopDocs(new TotalHits(2, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(7, 1.0f), new ScoreDoc(9, -1.0f) })
+            )
         );
 
         assertNotNull(compoundTopDocs);

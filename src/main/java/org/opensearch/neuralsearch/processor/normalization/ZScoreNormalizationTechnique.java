@@ -5,15 +5,18 @@
 
 package org.opensearch.neuralsearch.processor.normalization;
 
-import com.google.common.primitives.Floats;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+
 import lombok.ToString;
+
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
+import com.google.common.primitives.Floats;
 
 /**
  * Implementation of z-score normalization technique for hybrid query
@@ -24,24 +27,26 @@ import java.util.Objects;
 TODO: Some todo items that apply here but also on the original normalization techniques on which it is modeled {@link L2ScoreNormalizationTechnique} and {@link MinMaxScoreNormalizationTechnique}
 1. Random access to abstract list object is a bad practice both stylistically and from performance perspective and should be removed
 2. Identical sub queries and their distribution between shards is currently completely implicit based on ordering and should be explicit based on identifier
-3. Weird calculation of numOfSubQueries instead of having a more explicit indicator
+3. Implicit calculation of numOfSubQueries instead of having a more explicit upstream indicator/metadata regarding it
  */
 @ToString(onlyExplicitlyIncluded = true)
 public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique {
     @ToString.Include
     public static final String TECHNIQUE_NAME = "z_score";
     private static final float SINGLE_RESULT_SCORE = 1.0f;
+
     @Override
-    public void normalize(List<CompoundTopDocs> queryTopDocs) {
-        // why are we doing that? is List<CompoundTopDocs> the list of subqueries for a single shard? or a global list of all subqueries across shards?
-        // If a subquery comes from each shard then when is it combined? that seems weird that combination will do combination of normalized results that each is normalized just based on shard level result
-        int numOfSubQueries = queryTopDocs.stream()
-                .filter(Objects::nonNull)
-                .filter(topDocs -> topDocs.getTopDocs().size() > 0)
-                .findAny()
-                .get()
-                .getTopDocs()
-                .size();
+    public void normalize(final List<CompoundTopDocs> queryTopDocs) {
+        /*
+           TODO: There is an implicit assumption in this calculation that probably need to be made clearer by passing some metadata with the results.
+           Currently assuming that finding a single non empty shard result will contain all sub query results with 0 hits.
+         */
+        final Optional<CompoundTopDocs> maybeCompoundTopDocs = queryTopDocs.stream()
+            .filter(Objects::nonNull)
+            .filter(topDocs -> topDocs.getTopDocs().size() > 0)
+            .findAny();
+
+        final int numOfSubQueries = maybeCompoundTopDocs.map(compoundTopDocs -> compoundTopDocs.getTopDocs().size()).orElse(0);
 
         // to be done for each subquery
         float[] sumPerSubquery = findScoreSumPerSubQuery(queryTopDocs, numOfSubQueries);
@@ -67,9 +72,7 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
     static private float[] findScoreSumPerSubQuery(final List<CompoundTopDocs> queryTopDocs, final int numOfScores) {
         final float[] sumOfScorePerSubQuery = new float[numOfScores];
         Arrays.fill(sumOfScorePerSubQuery, 0);
-        //TODO: make this better, currently
-        // this is a horrible implementation in particular when it comes to the topDocsPerSubQuery.get(j)
-        // which does a random search on an abstract list type.
+        // TODO: make this syntactically clearer regarding performance by avoiding List.get(j) with an abstract List type
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
             if (Objects.isNull(compoundQueryTopDocs)) {
                 continue;
@@ -86,9 +89,7 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
     static private long[] findNumberOfElementsPerSubQuery(final List<CompoundTopDocs> queryTopDocs, final int numOfScores) {
         final long[] numberOfElementsPerSubQuery = new long[numOfScores];
         Arrays.fill(numberOfElementsPerSubQuery, 0);
-        //TODO: make this better, currently
-        // this is a horrible implementation in particular when it comes to the topDocsPerSubQuery.get(j)
-        // which does a random search on an abstract list type.
+        // TODO: make this syntactically clearer regarding performance by avoiding List.get(j) with an abstract List type
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
             if (Objects.isNull(compoundQueryTopDocs)) {
                 continue;
@@ -108,21 +109,22 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
             if (elementsPerSubquery[i] == 0) {
                 meanPerSubQuery[i] = 0;
             } else {
-                meanPerSubQuery[i] = sumPerSubquery[i]/elementsPerSubquery[i];
+                meanPerSubQuery[i] = sumPerSubquery[i] / elementsPerSubquery[i];
             }
         }
 
         return meanPerSubQuery;
     }
 
-    static private float[] findStdPerSubquery(final List<CompoundTopDocs> queryTopDocs, final float[] meanPerSubQuery, final long[] elementsPerSubquery, final int numOfScores) {
+    static private float[] findStdPerSubquery(
+        final List<CompoundTopDocs> queryTopDocs,
+        final float[] meanPerSubQuery,
+        final long[] elementsPerSubquery,
+        final int numOfScores
+    ) {
         final double[] deltaSumPerSubquery = new double[numOfScores];
         Arrays.fill(deltaSumPerSubquery, 0);
-
-
-        //TODO: make this better, currently
-        // this is a horrible implementation in particular when it comes to the topDocsPerSubQuery.get(j)
-        // which does a random search on an abstract list type.
+        // TODO: make this syntactically clearer regarding performance by avoiding List.get(j) with an abstract List type
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
             if (Objects.isNull(compoundQueryTopDocs)) {
                 continue;
@@ -147,7 +149,7 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
         return stdPerSubQuery;
     }
 
-    static private float sumScoreDocsArray(ScoreDoc[] scoreDocs) {
+    static private float sumScoreDocsArray(final ScoreDoc[] scoreDocs) {
         float sum = 0;
         for (ScoreDoc scoreDoc : scoreDocs) {
             sum += scoreDoc.score;
@@ -161,6 +163,6 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
         if (Floats.compare(mean, score) == 0) {
             return SINGLE_RESULT_SCORE;
         }
-        return  (score - mean) / standardDeviation;
+        return (score - mean) / standardDeviation;
     }
 }

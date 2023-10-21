@@ -3,10 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package org.opensearch.neuralsearch.query;
+package org.opensearch.neuralsearch.processor;
 
-import com.google.common.primitives.Floats;
+import static org.opensearch.neuralsearch.TestUtils.DELTA_FOR_SCORE_ASSERTION;
+import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
+
+import java.io.IOException;
+import java.util.*;
+import java.util.stream.IntStream;
+
 import lombok.SneakyThrows;
+
 import org.junit.After;
 import org.junit.Before;
 import org.opensearch.index.query.BoolQueryBuilder;
@@ -15,13 +22,10 @@ import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.processor.normalization.ZScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
-import java.io.IOException;
-import java.util.*;
-import java.util.stream.IntStream;
-
-import static org.opensearch.neuralsearch.TestUtils.DELTA_FOR_SCORE_ASSERTION;
-import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
+import com.google.common.primitives.Floats;
 
 public class HybridQueryZScoreIT extends BaseNeuralSearchIT {
     private static final String TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME = "test-neural-vector-doc-field-index";
@@ -46,7 +50,12 @@ public class HybridQueryZScoreIT extends BaseNeuralSearchIT {
         super.setUp();
         updateClusterSettings();
         prepareModel();
-        createSearchPipeline(SEARCH_PIPELINE, ZScoreNormalizationTechnique.TECHNIQUE_NAME, DEFAULT_COMBINATION_METHOD, Map.of(PARAM_NAME_WEIGHTS,  "[0.5,0.5]"));
+        createSearchPipeline(
+            SEARCH_PIPELINE,
+            ZScoreNormalizationTechnique.TECHNIQUE_NAME,
+            DEFAULT_COMBINATION_METHOD,
+            Map.of(PARAM_NAME_WEIGHTS, "[0.5,0.5]")
+        );
     }
 
     @After
@@ -114,25 +123,24 @@ public class HybridQueryZScoreIT extends BaseNeuralSearchIT {
 
         String modelId = getDeployedModelId();
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
-                TEST_KNN_VECTOR_FIELD_NAME_1,
-                TEST_QUERY_TEXT,
-                modelId,
-                5,
-                null,
-                null
+            TEST_KNN_VECTOR_FIELD_NAME_1,
+            TEST_QUERY_TEXT,
+            modelId,
+            5,
+            null,
+            null
         );
 
         HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
         hybridQueryBuilderNeuralThenTerm.add(neuralQueryBuilder);
         hybridQueryBuilderNeuralThenTerm.add(boolQueryBuilder);
 
-
         final Map<String, Object> searchResponseAsMap = search(
-                TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
-                hybridQueryBuilderNeuralThenTerm,
-                null,
-                5,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
+            TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
+            hybridQueryBuilderNeuralThenTerm,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
         );
 
         assertEquals(2, getHitCount(searchResponseAsMap));
@@ -146,10 +154,11 @@ public class HybridQueryZScoreIT extends BaseNeuralSearchIT {
         }
 
         assertEquals(2, scores.size());
-        // by design when there are only two results with z score since it's z-score normalized we would expect 1 , -1 to be the corresponding score,
+        // by design when there are only two results with z score since it's z-score normalized we would expect 1 , -1 to be the
+        // corresponding score,
         // furthermore the combination logic with weights should make it doc1Score: (1 * w1 + 0.98 * w2)/(w1 + w2), doc2Score: -1 ~ 0
         assertEquals(0.9999, scores.get(0).floatValue(), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals(0 , scores.get(1).floatValue(), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(0, scores.get(1).floatValue(), DELTA_FOR_SCORE_ASSERTION);
 
         // verify that scores are in desc order
         assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
@@ -192,20 +201,5 @@ public class HybridQueryZScoreIT extends BaseNeuralSearchIT {
             );
             assertEquals(2, getDocCount(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME));
         }
-    }
-
-    private List<Map<String, Object>> getNestedHits(Map<String, Object> searchResponseAsMap) {
-        Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
-        return (List<Map<String, Object>>) hitsMap.get("hits");
-    }
-
-    private Map<String, Object> getTotalHits(Map<String, Object> searchResponseAsMap) {
-        Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
-        return (Map<String, Object>) hitsMap.get("total");
-    }
-
-    private Optional<Float> getMaxScore(Map<String, Object> searchResponseAsMap) {
-        Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
-        return hitsMap.get("max_score") == null ? Optional.empty() : Optional.of(((Double) hitsMap.get("max_score")).floatValue());
     }
 }

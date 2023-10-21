@@ -760,4 +760,19 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertNotNull(modelGroupId);
         return modelGroupId;
     }
+
+    protected List<Map<String, Object>> getNestedHits(Map<String, Object> searchResponseAsMap) {
+        Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
+        return (List<Map<String, Object>>) hitsMap.get("hits");
+    }
+
+    protected Map<String, Object> getTotalHits(Map<String, Object> searchResponseAsMap) {
+        Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
+        return (Map<String, Object>) hitsMap.get("total");
+    }
+
+    protected Optional<Float> getMaxScore(Map<String, Object> searchResponseAsMap) {
+        Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
+        return hitsMap.get("max_score") == null ? Optional.empty() : Optional.of(((Double) hitsMap.get("max_score")).floatValue());
+    }
 }

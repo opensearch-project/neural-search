@@ -13,7 +13,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.IntStream;
 
@@ -266,20 +265,5 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             );
             assertEquals(3, getDocCount(TEST_MULTI_DOC_INDEX_NAME));
         }
-    }
-
-    private List<Map<String, Object>> getNestedHits(Map<String, Object> searchResponseAsMap) {
-        Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
-        return (List<Map<String, Object>>) hitsMap.get("hits");
-    }
-
-    private Map<String, Object> getTotalHits(Map<String, Object> searchResponseAsMap) {
-        Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
-        return (Map<String, Object>) hitsMap.get("total");
-    }
-
-    private Optional<Float> getMaxScore(Map<String, Object> searchResponseAsMap) {
-        Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
-        return hitsMap.get("max_score") == null ? Optional.empty() : Optional.of(((Double) hitsMap.get("max_score")).floatValue());
     }
 }
