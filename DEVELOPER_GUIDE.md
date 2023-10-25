@@ -131,7 +131,7 @@ curl localhost:9200
 ```
 ### Run Multi-node Cluster Locally
 
-It can be useful to test and debug on a multi-node cluster. In order to launch a 3 node cluster with the KNN plugin installed, run the following command:
+It can be useful to test and debug on a multi-node cluster. In order to launch a 3 node cluster with the neural-search plugin installed, run the following command:
 
 ```
 ./gradlew run -PnumNodes=3
@@ -186,7 +186,7 @@ Additionally, it is possible to attach one debugger to the cluster JVM and anoth
 
 ### Supported configurations
 
-Be default neural-search plugin supports `lucene` k-NN engine for local runs. Below is the sample request for creating of new index  using this engine:
+By default, neural-search plugin supports `lucene` k-NN engine for local runs. Below is the sample request for creating of new index using this engine:
 
 ```
 {
@@ -213,7 +213,7 @@ Be default neural-search plugin supports `lucene` k-NN engine for local runs. Be
 }
 ```
 
-The reason for this is that neural-search uses k-NN zip artifact from maven, and that artifact doesn't have native libraries. It's possible to install k-NN locally and build those native libraries (like Nmslib). For intruction on how to do this please check instruction from [k-NN plugin repository.](https://github.com/opensearch-project/k-NN)
+The reason for this is that neural-search uses k-NN zip artifact from maven, and that artifact doesn't have native libraries. It's possible to install k-NN locally and build those native libraries (like Nmslib). For instructions on how to do this please check dev guide in [k-NN plugin repository.](https://github.com/opensearch-project/k-NN)
 
 ## Submitting Changes
 
