@@ -21,10 +21,9 @@ import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
-import org.apache.lucene.BoundedLinearFeatureQuery;
+import org.apache.lucene.document.FeatureField;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.BoostQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.common.SetOnce;
 import org.opensearch.core.ParseField;
@@ -238,14 +237,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         Map<String, Float> queryTokens = queryTokensSupplier.get();
         validateQueryTokens(queryTokens);
 
-        final Float scoreUpperBound = maxTokenScore != null ? maxTokenScore : Float.MAX_VALUE;
-
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
         for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
-            builder.add(
-                new BoostQuery(new BoundedLinearFeatureQuery(fieldName, entry.getKey(), scoreUpperBound), entry.getValue()),
-                BooleanClause.Occur.SHOULD
-            );
+            builder.add(FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()), BooleanClause.Occur.SHOULD);
         }
         return builder.build();
     }
