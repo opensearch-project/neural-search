@@ -5,13 +5,10 @@
 
 package org.opensearch.neuralsearch.processor;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import lombok.extern.log4j.Log4j2;
@@ -106,12 +103,15 @@ public abstract class InferenceProcessor extends AbstractProcessor {
     @Override
     public void execute(IngestDocument ingestDocument, BiConsumer<IngestDocument, Exception> handler) {
         try {
-            validateEmbeddingFieldsValue(ingestDocument);
+            // validateEmbeddingFieldsValue(ingestDocument);
             Map<String, Object> ProcessMap = buildMapWithProcessorKeyAndOriginalValue(ingestDocument);
             List<String> inferenceList = createInferenceList(ProcessMap);
             if (inferenceList.size() == 0) {
                 handler.accept(ingestDocument, null);
             } else {
+                log.info("Processmap = " + ProcessMap.toString());
+                log.info("Inference List = " + inferenceList.toString());
+                log.info("Handler = " + handler.toString());
                 doExecute(ingestDocument, ProcessMap, inferenceList, handler);
             }
         } catch (Exception e) {
@@ -174,13 +174,28 @@ public abstract class InferenceProcessor extends AbstractProcessor {
         if (processorKey == null || sourceAndMetadataMap == null) return;
         if (processorKey instanceof Map) {
             Map<String, Object> next = new LinkedHashMap<>();
-            for (Map.Entry<String, Object> nestedFieldMapEntry : ((Map<String, Object>) processorKey).entrySet()) {
-                buildMapWithProcessorKeyAndOriginalValueForMapType(
-                    nestedFieldMapEntry.getKey(),
-                    nestedFieldMapEntry.getValue(),
-                    (Map<String, Object>) sourceAndMetadataMap.get(parentKey),
-                    next
-                );
+            if (sourceAndMetadataMap.get(parentKey) instanceof Map) {
+                for (Map.Entry<String, Object> nestedFieldMapEntry : ((Map<String, Object>) processorKey).entrySet()) {
+                    buildMapWithProcessorKeyAndOriginalValueForMapType(
+                        nestedFieldMapEntry.getKey(),
+                        nestedFieldMapEntry.getValue(),
+                        (Map<String, Object>) sourceAndMetadataMap.get(parentKey),
+                        next
+                    );
+                }
+            } else if (sourceAndMetadataMap.get(parentKey) instanceof List) {
+                for (Map.Entry<String, Object> nestedFieldMapEntry : ((Map<String, Object>) processorKey).entrySet()) {
+                    List<Map<String, Object>> list = (List<Map<String, Object>>) sourceAndMetadataMap.get(parentKey);
+                    List<Object> listOfStrings = list.stream().map(x -> x.get(nestedFieldMapEntry.getKey())).collect(Collectors.toList());
+                    Map<String, Object> map = new HashMap();
+                    map.put(nestedFieldMapEntry.getKey(), listOfStrings);
+                    buildMapWithProcessorKeyAndOriginalValueForMapType(
+                        nestedFieldMapEntry.getKey(),
+                        nestedFieldMapEntry.getValue(),
+                        map,
+                        next
+                    );
+                }
             }
             treeRes.put(parentKey, next);
         } else {
@@ -253,7 +268,9 @@ public abstract class InferenceProcessor extends AbstractProcessor {
         Map<String, Object> result = new LinkedHashMap<>();
         for (Map.Entry<String, Object> knnMapEntry : processorMap.entrySet()) {
             String knnKey = knnMapEntry.getKey();
+            log.info("knnKey = " + knnMapEntry.getKey());
             Object sourceValue = knnMapEntry.getValue();
+            log.info("knnValue = " + knnMapEntry.getValue());
             if (sourceValue instanceof String) {
                 result.put(knnKey, results.get(indexWrapper.index++));
             } else if (sourceValue instanceof List) {
@@ -276,13 +293,22 @@ public abstract class InferenceProcessor extends AbstractProcessor {
         if (processorKey == null || sourceAndMetadataMap == null || sourceValue == null) return;
         if (sourceValue instanceof Map) {
             for (Map.Entry<String, Object> inputNestedMapEntry : ((Map<String, Object>) sourceValue).entrySet()) {
-                putNLPResultToSourceMapForMapType(
-                    inputNestedMapEntry.getKey(),
-                    inputNestedMapEntry.getValue(),
-                    results,
-                    indexWrapper,
-                    (Map<String, Object>) sourceAndMetadataMap.get(processorKey)
-                );
+                if (sourceAndMetadataMap.get(processorKey) instanceof List) {
+                    // build nlp output for list of nested objects
+                    for (Map<String, Object> nestedElement : (List<Map<String, Object>>) sourceAndMetadataMap.get(processorKey)) {
+                        log.info("Before = " + nestedElement.toString());
+                        nestedElement.put(inputNestedMapEntry.getKey(), results.get(indexWrapper.index++));
+                        log.info("After = " + nestedElement.toString());
+                    }
+                } else {
+                    putNLPResultToSourceMapForMapType(
+                        inputNestedMapEntry.getKey(),
+                        inputNestedMapEntry.getValue(),
+                        results,
+                        indexWrapper,
+                        (Map<String, Object>) sourceAndMetadataMap.get(processorKey)
+                    );
+                }
             }
         } else if (sourceValue instanceof String) {
             sourceAndMetadataMap.put(processorKey, results.get(indexWrapper.index++));
