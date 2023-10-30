@@ -84,7 +84,6 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         this.fieldName = in.readString();
         this.queryText = in.readString();
         this.modelId = in.readString();
-        this.maxTokenScore = in.readOptionalFloat();
         if (in.readBoolean()) {
             Map<String, Float> queryTokens = in.readMap(StreamInput::readString, StreamInput::readFloat);
             this.queryTokensSupplier = () -> queryTokens;
@@ -96,7 +95,6 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         out.writeString(fieldName);
         out.writeString(queryText);
         out.writeString(modelId);
-        out.writeOptionalFloat(maxTokenScore);
         if (queryTokensSupplier != null && queryTokensSupplier.get() != null) {
             out.writeBoolean(true);
             out.writeMap(queryTokensSupplier.get(), StreamOutput::writeString, StreamOutput::writeFloat);
@@ -273,8 +271,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (queryTokensSupplier != null && obj.queryTokensSupplier == null) return false;
         EqualsBuilder equalsBuilder = new EqualsBuilder().append(fieldName, obj.fieldName)
             .append(queryText, obj.queryText)
-            .append(modelId, obj.modelId)
-            .append(maxTokenScore, obj.maxTokenScore);
+            .append(modelId, obj.modelId);
         if (queryTokensSupplier != null) {
             equalsBuilder.append(queryTokensSupplier.get(), obj.queryTokensSupplier.get());
         }
@@ -283,7 +280,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
 
     @Override
     protected int doHashCode() {
-        HashCodeBuilder builder = new HashCodeBuilder().append(fieldName).append(queryText).append(modelId).append(maxTokenScore);
+        HashCodeBuilder builder = new HashCodeBuilder().append(fieldName).append(queryText).append(modelId);
         if (queryTokensSupplier != null) {
             builder.append(queryTokensSupplier.get());
         }
