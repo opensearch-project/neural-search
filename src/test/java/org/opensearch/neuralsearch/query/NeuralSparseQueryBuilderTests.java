@@ -129,13 +129,13 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
           }
         */
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
-                .startObject()
-                .startObject(FIELD_NAME)
-                .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
-                .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
-                .field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), MAX_TOKEN_SCORE)
-                .endObject()
-                .endObject();
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), MAX_TOKEN_SCORE)
+            .endObject()
+            .endObject();
 
         XContentParser contentParser = createParser(xContentBuilder);
         contentParser.nextToken();
