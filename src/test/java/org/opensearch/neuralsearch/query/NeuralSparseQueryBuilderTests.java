@@ -88,7 +88,6 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
               "VECTOR_FIELD": {
                 "query_text": "string",
                 "model_id": "string",
-                "max_token_score": 123.0,
                 "boost": 10.0,
                 "_name": "something",
               }
@@ -99,7 +98,6 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .startObject(FIELD_NAME)
             .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
             .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
-            .field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), MAX_TOKEN_SCORE)
             .field(BOOST_FIELD.getPreferredName(), BOOST)
             .field(NAME_FIELD.getPreferredName(), QUERY_NAME)
             .endObject()
@@ -112,7 +110,6 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(FIELD_NAME, sparseEncodingQueryBuilder.fieldName());
         assertEquals(QUERY_TEXT, sparseEncodingQueryBuilder.queryText());
         assertEquals(MODEL_ID, sparseEncodingQueryBuilder.modelId());
-        assertEquals(MAX_TOKEN_SCORE, sparseEncodingQueryBuilder.maxTokenScore(), 0.0);
         assertEquals(BOOST, sparseEncodingQueryBuilder.boost(), 0.0);
         assertEquals(QUERY_NAME, sparseEncodingQueryBuilder.queryName());
     }
@@ -185,30 +182,6 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .startObject()
             .startObject(FIELD_NAME)
             .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
-            .endObject()
-            .endObject();
-
-        XContentParser contentParser = createParser(xContentBuilder);
-        contentParser.nextToken();
-        expectThrows(IllegalArgumentException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser));
-    }
-
-    @SneakyThrows
-    public void testFromXContent_whenBuildWithNegativeMaxTokenScore_thenFail() {
-        /*
-          {
-              "VECTOR_FIELD": {
-                "query_text": "string",
-                "model_id": "string",
-                "max_token_score": -1
-              }
-          }
-        */
-        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject(FIELD_NAME)
-            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
-            .field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), -1f)
             .endObject()
             .endObject();
 
