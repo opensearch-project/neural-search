@@ -118,6 +118,32 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
+    public void testFromXContent_whenBuiltWithMaxTokenScore_thenThrowWarning() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": "string",
+                "model_id": "string",
+                "max_token_score": 123.0
+              }
+          }
+        */
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+                .startObject()
+                .startObject(FIELD_NAME)
+                .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+                .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+                .field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), MAX_TOKEN_SCORE)
+                .endObject()
+                .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = NeuralSparseQueryBuilder.fromXContent(contentParser);
+        assertWarnings("Deprecated field [max_token_score] used, this field is unused and will be removed entirely");
+    }
+
+    @SneakyThrows
     public void testFromXContent_whenBuildWithMultipleRootFields_thenFail() {
         /*
           {

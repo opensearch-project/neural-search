@@ -106,16 +106,7 @@ public class NeuralSparseQueryIT extends BaseSparseEncodingIT {
         Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
 
         assertEquals("1", firstInnerHit.get("_id"));
-        Map<String, Float> queryTokens = runSparseModelInference(modelId, TEST_QUERY_TEXT);
-        float expectedScore = 0f;
-        for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
-            if (testRankFeaturesDoc.containsKey(entry.getKey())) {
-                expectedScore += entry.getValue() * Math.min(
-                    getFeatureFieldCompressedNumber(testRankFeaturesDoc.get(entry.getKey())),
-                    maxTokenScore
-                );
-            }
-        }
+        float expectedScore = computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
     }
 

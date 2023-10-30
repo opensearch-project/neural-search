@@ -61,8 +61,10 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
     @VisibleForTesting
     static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
+    // We use max_token_score field to help WAND scorer prune query clause in lucene 9.7. But in lucene 9.8 the inner
+    // logics change, this field is not needed any more.
     @VisibleForTesting
-    static final ParseField MAX_TOKEN_SCORE_FIELD = new ParseField("max_token_score");
+    static final ParseField MAX_TOKEN_SCORE_FIELD = new ParseField("max_token_score").withAllDeprecated();
 
     private static MLCommonsClientAccessor ML_CLIENT;
 
@@ -163,9 +165,6 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             sparseEncodingQueryBuilder.modelId(),
             String.format(Locale.ROOT, "%s field must be provided for [%s] query", MODEL_ID_FIELD.getPreferredName(), NAME)
         );
-        if (sparseEncodingQueryBuilder.maxTokenScore != null && sparseEncodingQueryBuilder.maxTokenScore <= 0) {
-            throw new IllegalArgumentException(MAX_TOKEN_SCORE_FIELD.getPreferredName() + " must be larger than 0.");
-        }
 
         return sparseEncodingQueryBuilder;
     }
