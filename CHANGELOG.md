@@ -21,3 +21,4 @@ Fixed exception for case when Hybrid query being wrapped into bool query ([#490]
 ### Documentation
 ### Maintenance
 ### Refactoring
+Deprecate the `max_token_score` field in `neural_sparse` query clause ([#478](https://github.com/opensearch-project/neural-search/pull/478))
