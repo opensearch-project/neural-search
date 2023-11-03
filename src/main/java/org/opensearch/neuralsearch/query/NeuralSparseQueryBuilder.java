@@ -64,6 +64,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     // We use max_token_score field to help WAND scorer prune query clause in lucene 9.7. But in lucene 9.8 the inner
     // logics change, this field is not needed any more.
     @VisibleForTesting
+    @Deprecated
     static final ParseField MAX_TOKEN_SCORE_FIELD = new ParseField("max_token_score").withAllDeprecated();
 
     private static MLCommonsClientAccessor ML_CLIENT;
