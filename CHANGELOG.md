@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Features
 ### Enhancements
 ### Bug Fixes
+- Fixed flaky integration tests caused by model_state transition latency. 
 ### Infrastructure
 ### Documentation
 ### Maintenance

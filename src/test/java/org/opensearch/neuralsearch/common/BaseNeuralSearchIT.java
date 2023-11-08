@@ -193,6 +193,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             isComplete = checkComplete(taskQueryResult);
             Thread.sleep(DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND);
         }
+        // wait for model state update to DEPLOYED
+        pollForModelState(modelId, Set.of(MLModelState.DEPLOYED), 3000, 5);
     }
 
     /**
@@ -612,7 +614,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         );
 
         // wait for model undeploy to complete
-        pollForModelState(modelId, MLModelState.UNDEPLOYED, 3000, 5);
+        pollForModelState(modelId, Set.of(MLModelState.UNDEPLOYED, MLModelState.DEPLOY_FAILED), 3000, 5);
 
         makeRequest(
             client(),
@@ -624,14 +626,26 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         );
     }
 
-    @SneakyThrows
-    protected void pollForModelState(String modelId, MLModelState expectedModelState, int intervalMs, int maxAttempts) {
+    protected void pollForModelState(String modelId, Set<MLModelState> exitModelStates, int intervalMs, int maxAttempts)
+        throws InterruptedException {
+        MLModelState currentState = null;
         for (int i = 0; i < maxAttempts; i++) {
             Thread.sleep(intervalMs);
-            if (expectedModelState.equals(getModelState(modelId))) {
+            currentState = getModelState(modelId);
+            if (exitModelStates.contains(currentState)) {
                 return;
             }
         }
+        fail(
+            String.format(
+                LOCALE,
+                "Model state does not reached exit states %s after %d attempts with interval of %d ms, latest model state: %s.",
+                StringUtils.join(exitModelStates, ","),
+                maxAttempts,
+                intervalMs,
+                currentState
+            )
+        );
     }
 
     public boolean isUpdateClusterSettings() {
@@ -747,7 +761,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             .filter(
                 hitsMap -> !Objects.isNull(hitsMap)
                     && hitsMap.containsKey("model_id")
-                    && MLModelState.DEPLOYED.equals(getModelState(hitsMap.get("model_id").toString()))
+                    && getModelState(hitsMap.get("model_id").toString()) == MLModelState.DEPLOYED
             )
             .map(hitsMap -> (String) hitsMap.get("model_id"))
             .collect(Collectors.toSet());
