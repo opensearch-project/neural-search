@@ -154,7 +154,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
         for (Map.Entry<String, Object> fieldMapEntry : fieldMap.entrySet()) {
             String originalKey = fieldMapEntry.getKey();
             Object targetKey = fieldMapEntry.getValue();
-            
+
             int nestedDotIndex = originalKey.indexOf('.');
             if (nestedDotIndex != -1) {
                 Map<String, Object> temp = new LinkedHashMap<>();
@@ -163,7 +163,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
 
                 originalKey = originalKey.substring(0, nestedDotIndex);
             }
-            
+
             if (targetKey instanceof Map) {
                 Map<String, Object> treeRes = new LinkedHashMap<>();
                 buildMapWithProcessorKeyAndOriginalValueForMapType(originalKey, targetKey, sourceAndMetadataMap, treeRes);
