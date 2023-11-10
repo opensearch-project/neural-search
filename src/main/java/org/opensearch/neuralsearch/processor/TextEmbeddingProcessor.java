@@ -45,7 +45,6 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
         BiConsumer<IngestDocument, Exception> handler
     ) {
         mlCommonsClientAccessor.inferenceSentences(this.modelId, inferenceList, ActionListener.wrap(vectors -> {
-            log.info("Vectors = " + vectors);
             setVectorFieldsToDocument(ingestDocument, ProcessMap, vectors);
             handler.accept(ingestDocument, null);
         }, e -> { handler.accept(null, e); }));

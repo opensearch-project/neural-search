@@ -103,15 +103,12 @@ public abstract class InferenceProcessor extends AbstractProcessor {
     @Override
     public void execute(IngestDocument ingestDocument, BiConsumer<IngestDocument, Exception> handler) {
         try {
-            // validateEmbeddingFieldsValue(ingestDocument);
+            validateEmbeddingFieldsValue(ingestDocument);
             Map<String, Object> ProcessMap = buildMapWithProcessorKeyAndOriginalValue(ingestDocument);
             List<String> inferenceList = createInferenceList(ProcessMap);
             if (inferenceList.size() == 0) {
                 handler.accept(ingestDocument, null);
             } else {
-                log.info("Processmap = " + ProcessMap.toString());
-                log.info("Inference List = " + inferenceList.toString());
-                log.info("Handler = " + handler.toString());
                 doExecute(ingestDocument, ProcessMap, inferenceList, handler);
             }
         } catch (Exception e) {
@@ -212,7 +209,14 @@ public abstract class InferenceProcessor extends AbstractProcessor {
                 String sourceKey = embeddingFieldsEntry.getKey();
                 Class<?> sourceValueClass = sourceValue.getClass();
                 if (List.class.isAssignableFrom(sourceValueClass) || Map.class.isAssignableFrom(sourceValueClass)) {
-                    validateNestedTypeValue(sourceKey, sourceValue, () -> 1);
+                    if(Map.class.isAssignableFrom(embeddingFieldsEntry.getValue().getClass())){
+                        Map<String, Object> innerFieldsEntry = (Map<String, Object>) embeddingFieldsEntry.getValue();
+                        for(Map.Entry<String, Object> innerKey: innerFieldsEntry.entrySet()){
+                            validateNestedTypeValue(innerKey.getKey(), sourceValue, () -> 2);
+                        }
+                    }else{
+                        validateNestedTypeValue(sourceKey, sourceValue, () -> 1);
+                    }
                 } else if (!String.class.isAssignableFrom(sourceValueClass)) {
                     throw new IllegalArgumentException("field [" + sourceKey + "] is neither string nor nested type, cannot process it");
                 } else if (StringUtils.isBlank(sourceValue.toString())) {
@@ -244,7 +248,9 @@ public abstract class InferenceProcessor extends AbstractProcessor {
     @SuppressWarnings({ "rawtypes" })
     private void validateListTypeValue(String sourceKey, Object sourceValue) {
         for (Object value : (List) sourceValue) {
-            if (value == null) {
+            if(value instanceof Map){
+                validateNestedTypeValue(sourceKey, value, () -> 1);
+            }else if (value == null) {
                 throw new IllegalArgumentException("list type field [" + sourceKey + "] has null, cannot process it");
             } else if (!(value instanceof String)) {
                 throw new IllegalArgumentException("list type field [" + sourceKey + "] has non string value, cannot process it");
@@ -268,9 +274,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
         Map<String, Object> result = new LinkedHashMap<>();
         for (Map.Entry<String, Object> knnMapEntry : processorMap.entrySet()) {
             String knnKey = knnMapEntry.getKey();
-            log.info("knnKey = " + knnMapEntry.getKey());
             Object sourceValue = knnMapEntry.getValue();
-            log.info("knnValue = " + knnMapEntry.getValue());
             if (sourceValue instanceof String) {
                 result.put(knnKey, results.get(indexWrapper.index++));
             } else if (sourceValue instanceof List) {
@@ -296,9 +300,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
                 if (sourceAndMetadataMap.get(processorKey) instanceof List) {
                     // build nlp output for list of nested objects
                     for (Map<String, Object> nestedElement : (List<Map<String, Object>>) sourceAndMetadataMap.get(processorKey)) {
-                        log.info("Before = " + nestedElement.toString());
                         nestedElement.put(inputNestedMapEntry.getKey(), results.get(indexWrapper.index++));
-                        log.info("After = " + nestedElement.toString());
                     }
                 } else {
                     putNLPResultToSourceMapForMapType(
