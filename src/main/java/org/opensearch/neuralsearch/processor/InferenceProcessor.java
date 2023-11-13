@@ -6,6 +6,7 @@
 package org.opensearch.neuralsearch.processor;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,7 +83,9 @@ public abstract class InferenceProcessor extends AbstractProcessor {
                 || fieldMap.entrySet()
                         .stream()
                         .anyMatch(
-                                x -> StringUtils.isBlank(x.getKey()) || Objects.isNull(x.getValue())
+                                x -> StringUtils.startsWith(x.getKey(), ".") || StringUtils.endsWith(x.getKey(), ".")
+                                        || Arrays.stream(x.getKey().split("\\.")).anyMatch(y -> StringUtils.isBlank(y))
+                                        || Objects.isNull(x.getValue())
                                         || StringUtils.isBlank(x.getValue().toString()))) {
             throw new IllegalArgumentException("Unable to create the processor as field_map has invalid key or value");
         }
