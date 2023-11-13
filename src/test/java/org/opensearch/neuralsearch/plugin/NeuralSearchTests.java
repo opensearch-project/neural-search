@@ -7,12 +7,22 @@ package org.opensearch.neuralsearch.plugin;
 
 import static org.mockito.Mockito.mock;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 
+import org.opensearch.client.Client;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.env.Environment;
+import org.opensearch.env.NodeEnvironment;
 import org.opensearch.ingest.IngestService;
 import org.opensearch.ingest.Processor;
+import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
@@ -23,9 +33,13 @@ import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
 import org.opensearch.plugins.SearchPipelinePlugin;
 import org.opensearch.plugins.SearchPlugin;
+import org.opensearch.repositories.RepositoriesService;
+import org.opensearch.script.ScriptService;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.query.QueryPhaseSearcher;
+import org.opensearch.threadpool.ThreadPool;
+import org.opensearch.watcher.ResourceWatcherService;
 
 public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
@@ -96,4 +110,35 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         assertNotNull(processors);
         assertNotNull(processors.get(NeuralQueryEnricherProcessor.TYPE));
     }
+
+    public void testCreateComponentsInitialization() {
+            
+        NeuralSearch plugin = new NeuralSearch();
+        ClusterService mockClusterService = mock(ClusterService.class);
+        MLCommonsClientAccessor mockClientAccessor = mock(MLCommonsClientAccessor.class);
+        
+        // Mocking dependencies
+        Client mockClient = mock(Client.class);
+        ThreadPool mockThreadPool = mock(ThreadPool.class);
+        ResourceWatcherService mockResourceWatcherService = mock(ResourceWatcherService.class);
+        ScriptService mockScriptService = mock(ScriptService.class);
+        NamedXContentRegistry mockXContentRegistry = mock(NamedXContentRegistry.class);
+        Environment mockEnvironment = mock(Environment.class);
+        NodeEnvironment mockNodeEnvironment = mock(NodeEnvironment.class);
+        NamedWriteableRegistry mockNamedWriteableRegistry = mock(NamedWriteableRegistry.class);
+        IndexNameExpressionResolver mockIndexNameExpressionResolver = mock(IndexNameExpressionResolver.class);
+        Supplier<RepositoriesService> mockRepositoriesServiceSupplier = mock(Supplier.class);
+
+        Collection<Object> components = plugin.createComponents(
+            mockClient, mockClusterService, mockThreadPool, mockResourceWatcherService,
+            mockScriptService, mockXContentRegistry, mockEnvironment, mockNodeEnvironment,
+            mockNamedWriteableRegistry, mockIndexNameExpressionResolver, mockRepositoriesServiceSupplier
+        );
+
+        // Verify that the components are initialized
+        assertNotNull(components);
+        assertTrue(components.contains(mockClientAccessor));
+       
+}
+
 }
