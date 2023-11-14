@@ -48,7 +48,7 @@ public abstract class RescoringRerankProcessor implements RerankProcessor {
 
     @Override
     public String getType() {
-        return "rerank-" + type.getLabel();
+        return TYPE;
     }
 
     @Override

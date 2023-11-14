@@ -26,6 +26,8 @@ import org.opensearch.search.pipeline.SearchResponseProcessor;
 
 public interface RerankProcessor extends SearchResponseProcessor {
 
+    public static final String TYPE = "rerank";
+
     /**
      * Generate the information that this processor needs in order to rerank.
      * That could be as simple as grabbing a field from the search request or

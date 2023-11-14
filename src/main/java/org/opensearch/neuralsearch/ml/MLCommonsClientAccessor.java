@@ -13,12 +13,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.log4j.Log4j2;
+
+import org.apache.commons.lang3.tuple.Pair;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.dataset.MLInputDataset;
 import org.opensearch.ml.common.dataset.TextDocsInputDataSet;
+import org.opensearch.ml.common.dataset.TextSimilarityInputDataSet;
 import org.opensearch.ml.common.input.MLInput;
 import org.opensearch.ml.common.output.MLOutput;
 import org.opensearch.ml.common.output.model.ModelResultFilter;
@@ -132,6 +138,25 @@ public class MLCommonsClientAccessor {
         retryableInferenceSentencesWithSingleVectorResult(TARGET_RESPONSE_FILTERS, modelId, inputObjects, 0, listener);
     }
 
+    /**
+     * Abstraction to call predict function of api of MLClient. It uses the custom model provided as modelId and the
+     * {@link FunctionName#TEXT_SIMILARITY}. The return will be sent via actionListener as a list of floats representing
+     * the similarity scores of the texts w.r.t. the query text, in the order of the input texts.
+     *
+     * @param modelId {@link String} ML-Commons Model Id
+     * @param queryText {@link String} The query to compare all the inputText to
+     * @param inputText {@link List} of {@link String} The texts to compare to the query
+     * @param listener {@link ActionListener} receives the result of the inference
+     */
+    public void inferenceSimilarity(
+        @NonNull final String modelId,
+        @NonNull final String queryText,
+        @NonNull final List<String> inputText,
+        @NonNull final ActionListener<List<Float>> listener
+    ) {
+        retryableInferenceSimilarityWithVectorResult(modelId, queryText, inputText, 0, listener);
+    }
+
     private void retryableInferenceSentencesWithMapResult(
         final String modelId,
         final List<String> inputText,
@@ -173,10 +198,40 @@ public class MLCommonsClientAccessor {
         }));
     }
 
+    private void retryableInferenceSimilarityWithVectorResult(
+        final String modelId,
+        final String queryText,
+        final List<String> inputText,
+        final int retryTime,
+        final ActionListener<List<Float>> listener
+    ) {
+        MLInput mlInput = createMLTextPairsInput(queryText, inputText);
+        mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
+            final List<Float> scores = buildVectorFromResponse(mlOutput).stream().map(v -> v.get(0)).collect(Collectors.toList());
+            listener.onResponse(scores);
+        }, e -> {
+            if (RetryUtil.shouldRetry(e, retryTime)) {
+                retryableInferenceSimilarityWithVectorResult(modelId, queryText, inputText, retryTime + 1, listener);
+            } else {
+                listener.onFailure(e);
+            }
+        }));
+    }
+
     private MLInput createMLTextInput(final List<String> targetResponseFilters, List<String> inputText) {
         final ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
         final MLInputDataset inputDataset = new TextDocsInputDataSet(inputText, modelResultFilter);
         return new MLInput(FunctionName.TEXT_EMBEDDING, null, inputDataset);
+    }
+
+    private MLInput createMLTextPairsInput(final List<Pair<String, String>> pairs) {
+        final MLInputDataset inputDataset = new TextSimilarityInputDataSet(pairs);
+        return new MLInput(FunctionName.TEXT_SIMILARITY, null, inputDataset);
+    }
+
+    private MLInput createMLTextPairsInput(final String query, final List<String> inputText) {
+        List<Pair<String, String>> pairs = inputText.stream().map(text -> Pair.of(query, text)).collect(Collectors.toList());
+        return createMLTextPairsInput(pairs);
     }
 
     private List<List<Float>> buildVectorFromResponse(MLOutput mlOutput) {

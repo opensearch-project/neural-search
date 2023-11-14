@@ -19,6 +19,7 @@ package org.opensearch.neuralsearch.processor.rerank;
 
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,10 +33,10 @@ import org.opensearch.core.xcontent.ObjectPath;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.env.Environment;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.search.SearchExtBuilder;
+import org.opensearch.search.SearchHit;
 
 public class CrossEncoderRerankProcessor extends RescoringRerankProcessor {
 
@@ -45,26 +46,22 @@ public class CrossEncoderRerankProcessor extends RescoringRerankProcessor {
     public static final String RERANK_CONTEXT_FIELD = "rerank_context_field";
 
     protected final String modelId;
-    protected final String rerank_context;
+    protected final String rerankContext;
 
     protected final MLCommonsClientAccessor mlCommonsClientAccessor;
-
-    private final Environment environment;
 
     public CrossEncoderRerankProcessor(
         String description,
         String tag,
         boolean ignoreFailure,
         String modelId,
-        String rerank_context,
-        MLCommonsClientAccessor mlCommonsClientAccessor,
-        Environment environment
+        String rerankContext,
+        MLCommonsClientAccessor mlCommonsClientAccessor
     ) {
         super(RerankType.CROSS_ENCODER, description, tag, ignoreFailure);
         this.modelId = modelId;
-        this.rerank_context = rerank_context;
+        this.rerankContext = rerankContext;
         this.mlCommonsClientAccessor = mlCommonsClientAccessor;
-        this.environment = environment;
     }
 
     @Override
@@ -108,8 +105,21 @@ public class CrossEncoderRerankProcessor extends RescoringRerankProcessor {
 
     @Override
     public void rescoreSearchResponse(SearchResponse response, Map<String, Object> scoringContext, ActionListener<List<Float>> listener) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'rescoreSearchResponse'");
+        List<String> contexts = new ArrayList<>();
+        for (SearchHit hit : response.getHits()) {
+            contexts.add(contextFromSearchHit(hit));
+        }
+        mlCommonsClientAccessor.inferenceSimilarity(modelId, (String) scoringContext.get(QUERY_TEXT_FIELD), contexts, listener);
+    }
+
+    private String contextFromSearchHit(final SearchHit hit) {
+        if (hit.getFields().containsKey(this.rerankContext)) {
+            return (String) hit.field(this.rerankContext).getValue();
+        } else if (hit.getSourceAsMap().containsKey(this.rerankContext)) {
+            return (String) hit.getSourceAsMap().get(this.rerankContext);
+        } else {
+            return null;
+        }
     }
 
 }
