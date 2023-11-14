@@ -268,11 +268,11 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         queryTokensSetOnce.set(Map.of("hello", 1.0f, "world", 2.0f));
         original.queryTokensSupplier(queryTokensSetOnce::get);
 
-        streamOutput = new BytesStreamOutput();
-        original.writeTo(streamOutput);
+        BytesStreamOutput streamOutput2 = new BytesStreamOutput();
+        original.writeTo(streamOutput2);
 
         filterStreamInput = new NamedWriteableAwareStreamInput(
-            streamOutput.bytes().streamInput(),
+            streamOutput2.bytes().streamInput(),
             new NamedWriteableRegistry(
                 List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, MatchAllQueryBuilder.NAME, MatchAllQueryBuilder::new))
             )

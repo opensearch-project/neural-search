@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Supplier;
 
 import lombok.AllArgsConstructor;
@@ -95,7 +96,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         out.writeString(fieldName);
         out.writeString(queryText);
         out.writeString(modelId);
-        if (queryTokensSupplier != null && queryTokensSupplier.get() != null) {
+        if (!Objects.isNull(queryTokensSupplier) && !Objects.isNull(queryTokensSupplier.get())) {
             out.writeBoolean(true);
             out.writeMap(queryTokensSupplier.get(), StreamOutput::writeString, StreamOutput::writeFloat);
         } else {
@@ -266,13 +267,13 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     @Override
     protected boolean doEquals(NeuralSparseQueryBuilder obj) {
         if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        if (queryTokensSupplier == null && obj.queryTokensSupplier != null) return false;
-        if (queryTokensSupplier != null && obj.queryTokensSupplier == null) return false;
+        if (Objects.isNull(obj) || getClass() != obj.getClass()) return false;
+        if (Objects.isNull(queryTokensSupplier) && !Objects.isNull(obj.queryTokensSupplier)) return false;
+        if (!Objects.isNull(queryTokensSupplier) && Objects.isNull(obj.queryTokensSupplier)) return false;
         EqualsBuilder equalsBuilder = new EqualsBuilder().append(fieldName, obj.fieldName)
             .append(queryText, obj.queryText)
             .append(modelId, obj.modelId);
-        if (queryTokensSupplier != null) {
+        if (!Objects.isNull(queryTokensSupplier)) {
             equalsBuilder.append(queryTokensSupplier.get(), obj.queryTokensSupplier.get());
         }
         return equalsBuilder.isEquals();
@@ -281,7 +282,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     @Override
     protected int doHashCode() {
         HashCodeBuilder builder = new HashCodeBuilder().append(fieldName).append(queryText).append(modelId);
-        if (queryTokensSupplier != null) {
+        if (!Objects.isNull(queryTokensSupplier)) {
             builder.append(queryTokensSupplier.get());
         }
         return builder.toHashCode();
