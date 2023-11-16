@@ -55,10 +55,7 @@ public class RerankSearchExtBuilder extends SearchExtBuilder {
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
-        builder.field(PARAM_FIELD_NAME, this.params);
-        builder.endObject();
-        return builder;
+        return builder.field(PARAM_FIELD_NAME, this.params);
     }
 
     @Override
@@ -92,7 +89,9 @@ public class RerankSearchExtBuilder extends SearchExtBuilder {
      * @throws IOException if problems parsing
      */
     public static RerankSearchExtBuilder parse(XContentParser parser) throws IOException {
-        return new RerankSearchExtBuilder(parser.map());
+        @SuppressWarnings("unchecked")
+        RerankSearchExtBuilder ans = new RerankSearchExtBuilder((Map<String, Object>) parser.map().get(PARAM_FIELD_NAME));
+        return ans;
     }
 
 }

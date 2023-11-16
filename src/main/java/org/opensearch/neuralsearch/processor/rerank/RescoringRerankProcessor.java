@@ -84,7 +84,9 @@ public abstract class RescoringRerankProcessor implements RerankProcessor {
             rescoreSearchResponse(searchResponse, scoringContext, ActionListener.wrap(scores -> {
                 // Assign new scores
                 SearchHit[] hits = searchResponse.getHits().getHits();
-                assert (hits.length == scores.size());
+                if (hits.length != scores.size()) {
+                    throw new Exception("scores and hits are not the same length");
+                }
                 for (int i = 0; i < hits.length; i++) {
                     hits[i].score(scores.get(i));
                 }
@@ -92,7 +94,8 @@ public abstract class RescoringRerankProcessor implements RerankProcessor {
                 Collections.sort(Arrays.asList(hits), new Comparator<SearchHit>() {
                     @Override
                     public int compare(SearchHit hit1, SearchHit hit2) {
-                        return Float.compare(hit1.getScore(), hit2.getScore());
+                        // backwards to sort DESC
+                        return Float.compare(hit2.getScore(), hit1.getScore());
                     }
                 });
                 // Reconstruct the search response, replacing the max score

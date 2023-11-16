@@ -17,6 +17,9 @@
  */
 package org.opensearch.neuralsearch.processor.rerank;
 
+import java.util.Arrays;
+import java.util.Optional;
+
 import lombok.Getter;
 
 /**
@@ -39,9 +42,10 @@ public enum RerankType {
      * @return RerankType represented by the label
      */
     public static RerankType from(String label) {
-        try {
-            return RerankType.valueOf(label);
-        } catch (Exception e) {
+        Optional<RerankType> typeMaybe = Arrays.stream(RerankType.values()).filter(rrt -> rrt.label.equals(label)).findFirst();
+        if (typeMaybe.isPresent()) {
+            return typeMaybe.get();
+        } else {
             throw new IllegalArgumentException("Wrong rerank type name: " + label);
         }
     }

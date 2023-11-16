@@ -17,12 +17,14 @@
  */
 package org.opensearch.neuralsearch.processor.rerank;
 
-import java.io.PipedInputStream;
-import java.io.PipedOutputStream;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import lombok.extern.log4j.Log4j2;
 
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
@@ -38,6 +40,7 @@ import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.search.SearchExtBuilder;
 import org.opensearch.search.SearchHit;
 
+@Log4j2
 public class CrossEncoderRerankProcessor extends RescoringRerankProcessor {
 
     public static final String MODEL_ID_FIELD = "model_id";
@@ -76,26 +79,29 @@ public class CrossEncoderRerankProcessor extends RescoringRerankProcessor {
             Map<String, Object> scoringContext = new HashMap<>();
             if (params.containsKey(QUERY_TEXT_FIELD)) {
                 if (params.containsKey(QUERY_TEXT_PATH_FIELD)) {
-                    throw new IllegalArgumentException("Cannot specify both \"query_text\" and \"query_text_path\"");
+                    throw new IllegalArgumentException(
+                        "Cannot specify both \"" + QUERY_TEXT_FIELD + "\" and \"" + QUERY_TEXT_PATH_FIELD + "\""
+                    );
                 }
                 scoringContext.put(QUERY_TEXT_FIELD, (String) params.get(QUERY_TEXT_FIELD));
             } else if (params.containsKey(QUERY_TEXT_PATH_FIELD)) {
                 String path = (String) params.get(QUERY_TEXT_PATH_FIELD);
                 // Convert query to a map with io/xcontent shenanigans
-                PipedOutputStream os = new PipedOutputStream();
-                XContentBuilder builder = XContentType.CBOR.contentBuilder(os);
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                XContentBuilder builder = XContentType.CBOR.contentBuilder(baos);
                 searchRequest.source().toXContent(builder, ToXContent.EMPTY_PARAMS);
-                PipedInputStream is = new PipedInputStream(os);
-                XContentParser parser = XContentType.CBOR.xContent().createParser(NamedXContentRegistry.EMPTY, null, is);
+                builder.close();
+                ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+                XContentParser parser = XContentType.CBOR.xContent().createParser(NamedXContentRegistry.EMPTY, null, bais);
                 Map<String, Object> map = parser.map();
                 // Get the text at the path
                 Object queryText = ObjectPath.eval(path, map);
                 if (!(queryText instanceof String)) {
-                    throw new IllegalArgumentException("query_text_path must point to a string field");
+                    throw new IllegalArgumentException(QUERY_TEXT_PATH_FIELD + " must point to a string field");
                 }
                 scoringContext.put(QUERY_TEXT_FIELD, (String) queryText);
             } else {
-                throw new IllegalArgumentException("Must specify either \"query_text\" or \"query_text_path\"");
+                throw new IllegalArgumentException("Must specify either \"" + QUERY_TEXT_FIELD + "\" or \"" + QUERY_TEXT_PATH_FIELD + "\"");
             }
             listener.onResponse(scoringContext);
         } catch (Exception e) {
@@ -115,7 +121,7 @@ public class CrossEncoderRerankProcessor extends RescoringRerankProcessor {
     private String contextFromSearchHit(final SearchHit hit) {
         if (hit.getFields().containsKey(this.rerankContext)) {
             return (String) hit.field(this.rerankContext).getValue();
-        } else if (hit.getSourceAsMap().containsKey(this.rerankContext)) {
+        } else if (hit.hasSource() && hit.getSourceAsMap().containsKey(this.rerankContext)) {
             return (String) hit.getSourceAsMap().get(this.rerankContext);
         } else {
             return null;

@@ -27,6 +27,8 @@ import org.opensearch.neuralsearch.processor.rerank.RerankType;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 
+import com.google.common.annotations.VisibleForTesting;
+
 @AllArgsConstructor
 public class RerankProcessorFactory implements Processor.Factory<SearchResponseProcessor> {
 
@@ -49,14 +51,21 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
                 @SuppressWarnings("unchecked")
                 Map<String, String> rerankerConfig = (Map<String, String>) config.get(type.getLabel());
                 String modelId = rerankerConfig.get(CrossEncoderRerankProcessor.MODEL_ID_FIELD);
+                if (modelId == null) {
+                    throw new IllegalArgumentException(CrossEncoderRerankProcessor.MODEL_ID_FIELD + " must be specified");
+                }
                 String rerankContext = rerankerConfig.get(CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD);
+                if (rerankContext == null) {
+                    throw new IllegalArgumentException(CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD + " must be specified");
+                }
                 return new CrossEncoderRerankProcessor(description, tag, ignoreFailure, modelId, rerankContext, clientAccessor);
             default:
                 throw new IllegalArgumentException("could not find constructor for reranker type " + type.getLabel());
         }
     }
 
-    private RerankType findRerankType(final Map<String, Object> config) throws IllegalArgumentException {
+    @VisibleForTesting
+    RerankType findRerankType(final Map<String, Object> config) throws IllegalArgumentException {
         for (String key : config.keySet()) {
             try {
                 RerankType attempt = RerankType.from(key);
