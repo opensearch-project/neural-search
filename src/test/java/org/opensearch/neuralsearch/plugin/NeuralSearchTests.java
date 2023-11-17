@@ -66,6 +66,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
             null,
             mock(IngestService.class),
             null,
+            null,
             null
         );
         Map<String, Processor.Factory> processors = plugin.getProcessors(processorParams);

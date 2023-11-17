@@ -125,6 +125,7 @@ public class HybridQueryZScoreIT extends BaseNeuralSearchIT {
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_1,
             TEST_QUERY_TEXT,
+            "",
             modelId,
             5,
             null,

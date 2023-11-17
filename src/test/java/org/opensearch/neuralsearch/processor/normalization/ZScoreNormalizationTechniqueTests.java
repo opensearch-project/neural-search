@@ -95,7 +95,8 @@ public class ZScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase {
                 new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
                 new TopDocs(
                     new TotalHits(3, TotalHits.Relation.EQUAL_TO),
-                        // Calculated based on the formula (score - mean_score)/std for the values of mean_score = (0.9 + 0.7 + 0.1)/3 ~ 0.56, std = sqrt(((0.9 - 0.56)^2 + (0.7 - 0.56)^2 + (0.1 - 0.56)^2)/3)
+                    // Calculated based on the formula (score - mean_score)/std for the values of mean_score = (0.9 + 0.7 + 0.1)/3 ~ 0.56,
+                    // std = sqrt(((0.9 - 0.56)^2 + (0.7 - 0.56)^2 + (0.1 - 0.56)^2)/3)
                     new ScoreDoc[] { new ScoreDoc(3, 0.98058068f), new ScoreDoc(4, 0.39223227f), new ScoreDoc(2, -1.37281295f) }
                 )
             )
