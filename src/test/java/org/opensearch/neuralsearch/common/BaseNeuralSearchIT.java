@@ -72,16 +72,19 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     protected static final String DEFAULT_COMBINATION_METHOD = "arithmetic_mean";
     protected static final String PARAM_NAME_WEIGHTS = "weights";
 
-    protected String PIPELINE_CONFIGURATION_NAME = "processor/PipelineConfiguration.json";
+    protected static final Map<ProcessorType, String> PIPELINE_CONFIGS_BY_TYPE = Map.of(
+        ProcessorType.TEXT_EMBEDDING,
+        "processor/PipelineConfiguration.json",
+        ProcessorType.SPARSE_ENCODING,
+        "processor/SparseEncodingPipelineConfiguration.json",
+        ProcessorType.TEXT_IMAGE_EMBEDDING,
+        "processor/PipelineForTextImageEmbeddingProcessorConfiguration.json"
+    );
 
     protected final ClassLoader classLoader = this.getClass().getClassLoader();
 
     protected ThreadPool threadPool;
     protected ClusterService clusterService;
-
-    protected void setPipelineConfigurationName(String pipelineConfigurationName) {
-        this.PIPELINE_CONFIGURATION_NAME = pipelineConfigurationName;
-    }
 
     @Before
     public void setupSettings() {
@@ -263,13 +266,21 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     protected void createPipelineProcessor(String modelId, String pipelineName) throws Exception {
+        createPipelineProcessor(modelId, pipelineName, ProcessorType.TEXT_EMBEDDING);
+    }
+
+    protected void createPipelineProcessor(String modelId, String pipelineName, ProcessorType processorType) throws Exception {
         Response pipelineCreateResponse = makeRequest(
             client(),
             "PUT",
             "/_ingest/pipeline/" + pipelineName,
             null,
             toHttpEntity(
-                String.format(LOCALE, Files.readString(Path.of(classLoader.getResource(PIPELINE_CONFIGURATION_NAME).toURI())), modelId)
+                String.format(
+                    LOCALE,
+                    Files.readString(Path.of(classLoader.getResource(PIPELINE_CONFIGS_BY_TYPE.get(processorType)).toURI())),
+                    modelId
+                )
             ),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
@@ -761,6 +772,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return modelGroupId;
     }
 
+
     protected List<Map<String, Object>> getNestedHits(Map<String, Object> searchResponseAsMap) {
         Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
         return (List<Map<String, Object>>) hitsMap.get("hits");
@@ -774,5 +786,15 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     protected Optional<Float> getMaxScore(Map<String, Object> searchResponseAsMap) {
         Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
         return hitsMap.get("max_score") == null ? Optional.empty() : Optional.of(((Double) hitsMap.get("max_score")).floatValue());
+    }
+  
+    /**
+     * Enumeration for types of pipeline processors, used to lookup resources like create
+     * processor request as those are type specific
+     */
+    protected enum ProcessorType {
+        TEXT_EMBEDDING,
+        TEXT_IMAGE_EMBEDDING,
+        SPARSE_ENCODING
     }
 }

@@ -33,16 +33,18 @@ import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
+import org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.SparseEncodingProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
+import org.opensearch.neuralsearch.processor.factory.TextImageEmbeddingProcessorFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
-import org.opensearch.neuralsearch.query.SparseEncodingQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.plugins.ActionPlugin;
@@ -85,7 +87,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     ) {
         NeuralSearchClusterUtil.instance().initialize(clusterService);
         NeuralQueryBuilder.initialize(clientAccessor);
-        SparseEncodingQueryBuilder.initialize(clientAccessor);
+        NeuralSparseQueryBuilder.initialize(clientAccessor);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
         return List.of(clientAccessor);
     }
@@ -95,7 +97,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         return Arrays.asList(
             new QuerySpec<>(NeuralQueryBuilder.NAME, NeuralQueryBuilder::new, NeuralQueryBuilder::fromXContent),
             new QuerySpec<>(HybridQueryBuilder.NAME, HybridQueryBuilder::new, HybridQueryBuilder::fromXContent),
-            new QuerySpec<>(SparseEncodingQueryBuilder.NAME, SparseEncodingQueryBuilder::new, SparseEncodingQueryBuilder::fromXContent)
+            new QuerySpec<>(NeuralSparseQueryBuilder.NAME, NeuralSparseQueryBuilder::new, NeuralSparseQueryBuilder::fromXContent)
         );
     }
 
@@ -106,7 +108,9 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
             TextEmbeddingProcessor.TYPE,
             new TextEmbeddingProcessorFactory(clientAccessor, parameters.env),
             SparseEncodingProcessor.TYPE,
-            new SparseEncodingProcessorFactory(clientAccessor, parameters.env)
+            new SparseEncodingProcessorFactory(clientAccessor, parameters.env),
+            TextImageEmbeddingProcessor.TYPE,
+            new TextImageEmbeddingProcessorFactory(clientAccessor, parameters.env, parameters.ingestService.getClusterService())
         );
     }
 
