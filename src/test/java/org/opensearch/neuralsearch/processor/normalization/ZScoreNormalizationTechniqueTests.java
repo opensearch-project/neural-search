@@ -17,7 +17,8 @@ public class ZScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     private static final float DELTA_FOR_ASSERTION = 0.0001f;
 
     /**
-     * Z score will check the relative distance from the center of distribution and hence can also be negative.
+     * Z score will check the relative distance from the center of distribution in units of standard deviation
+     * and hence can also be negative. It is using the formula of (score - mean_score)/std
      * When only two values are available their z-score numbers will be 1 and -1 correspondingly.
      * For more information regarding z-score you can check this link
      * https://www.z-table.com/
@@ -54,6 +55,15 @@ public class ZScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         );
     }
 
+    /**
+     * Z score will check the relative distance from the center of distribution in units of standard deviation
+     * and hence can also be negative. It is using the formula of (score - mean_score)/std
+     * When only two values are available their z-score numbers will be 1 and -1 correspondingly as we see in the first query that returns only two document scores.
+     * When we have more than two documents scores as in the second query the distribution will not be binary and will have different results based on where the center of gravity of the distribution is.
+     * For more information regarding z-score you can check this link
+     * https://www.z-table.com/
+     *
+     */
     public void testNormalization_whenResultFromOneShardMultipleSubQueries_thenSuccessful() {
         ZScoreNormalizationTechnique normalizationTechnique = new ZScoreNormalizationTechnique();
         List<CompoundTopDocs> compoundTopDocs = List.of(
@@ -79,11 +89,13 @@ public class ZScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase {
             List.of(
                 new TopDocs(
                     new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                    // Calculated based on the formula (score - mean_score)/std
                     new ScoreDoc[] { new ScoreDoc(2, 1.0f), new ScoreDoc(4, -1.0f) }
                 ),
                 new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
                 new TopDocs(
                     new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                        // Calculated based on the formula (score - mean_score)/std for the values of mean_score = (0.9 + 0.7 + 0.1)/3 ~ 0.56, std = sqrt(((0.9 - 0.56)^2 + (0.7 - 0.56)^2 + (0.1 - 0.56)^2)/3)
                     new ScoreDoc[] { new ScoreDoc(3, 0.98058068f), new ScoreDoc(4, 0.39223227f), new ScoreDoc(2, -1.37281295f) }
                 )
             )
