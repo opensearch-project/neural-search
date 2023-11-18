@@ -1,0 +1,16 @@
+{
+    "name": "ms-marco-TinyBERT-L-2-v2",
+    "version": "1.0.0",
+    "function_name": "TEXT_SIMILARITY",
+    "description": "test model",
+    "model_format": "TORCH_SCRIPT",
+    "model_group_id": "<MODEL_GROUP_ID>",
+    "model_content_hash_value": "90e39a926101d1a4e542aade0794319404689b12acfd5d7e65c03d91c668b5cf",
+    "model_config": {
+        "model_type": "bert",
+        "embedding_dimension": 1,
+        "framework_type": "huggingface_transformers",
+        "all_config": "nobody will read this"
+    },
+    "url": "https://github.com/HenryL27/ml-commons/blob/cross-encoder/ml-algorithms/src/test/resources/org/opensearch/ml/engine/algorithms/text_similarity/TinyBERT-CE.zip?raw=true"
+}

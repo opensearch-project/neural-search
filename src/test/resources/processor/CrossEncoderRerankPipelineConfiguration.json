@@ -1,0 +1,13 @@
+{
+    "description": "Pipeline for reranking with a cross encoder",
+    "response_processors": [
+        {
+            "rerank": {
+                "cross-encoder": {
+                    "model_id": "%s",
+                    "rerank_context_field": "text_representation"
+                }
+            }
+        }
+    ]
+}

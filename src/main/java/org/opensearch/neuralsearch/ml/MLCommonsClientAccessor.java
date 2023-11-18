@@ -17,7 +17,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
-import org.apache.commons.lang3.tuple.Pair;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.ml.client.MachineLearningNodeClient;
@@ -224,14 +223,9 @@ public class MLCommonsClientAccessor {
         return new MLInput(FunctionName.TEXT_EMBEDDING, null, inputDataset);
     }
 
-    private MLInput createMLTextPairsInput(final List<Pair<String, String>> pairs) {
-        final MLInputDataset inputDataset = new TextSimilarityInputDataSet(pairs);
-        return new MLInput(FunctionName.TEXT_SIMILARITY, null, inputDataset);
-    }
-
     private MLInput createMLTextPairsInput(final String query, final List<String> inputText) {
-        List<Pair<String, String>> pairs = inputText.stream().map(text -> Pair.of(query, text)).collect(Collectors.toList());
-        return createMLTextPairsInput(pairs);
+        final MLInputDataset inputDataset = new TextSimilarityInputDataSet(query, inputText);
+        return new MLInput(FunctionName.TEXT_SIMILARITY, null, inputDataset);
     }
 
     private List<List<Float>> buildVectorFromResponse(MLOutput mlOutput) {

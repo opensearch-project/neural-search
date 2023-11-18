@@ -19,6 +19,7 @@ package org.opensearch.neuralsearch.processor.factory;
 
 import static org.mockito.Mockito.mock;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import lombok.extern.log4j.Log4j2;
@@ -55,7 +56,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
     }
 
     public void testRerankProcessorFactory_EmptyConfig_ThenFail() {
-        Map<String, Object> config = Map.of();
+        Map<String, Object> config = new HashMap<>(Map.of());
         assertThrows(
             "no rerank type found",
             IllegalArgumentException.class,
@@ -64,7 +65,9 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
     }
 
     public void testRerankProcessorFactory_NonExistentType_ThenFail() {
-        Map<String, Object> config = Map.of("jpeo rvgh we iorgn", Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id"));
+        Map<String, Object> config = new HashMap<>(
+            Map.of("jpeo rvgh we iorgn", Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id"))
+        );
         assertThrows(
             "no rerank type found",
             IllegalArgumentException.class,
@@ -73,13 +76,17 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
     }
 
     public void testRerankProcessorFactory_CrossEncoder_HappyPath() {
-        Map<String, Object> config = Map.of(
-            RerankType.CROSS_ENCODER.getLabel(),
+        Map<String, Object> config = new HashMap<>(
             Map.of(
-                CrossEncoderRerankProcessor.MODEL_ID_FIELD,
-                "model-id",
-                CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD,
-                "text_representation"
+                RerankType.CROSS_ENCODER.getLabel(),
+                new HashMap<>(
+                    Map.of(
+                        CrossEncoderRerankProcessor.MODEL_ID_FIELD,
+                        "model-id",
+                        CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD,
+                        "text_representation"
+                    )
+                )
             )
         );
         SearchResponseProcessor processor = factory.create(Map.of(), TAG, DESC, false, config, pipelineContext);
@@ -89,17 +96,21 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
     }
 
     public void testRerankProcessorFactory_CrossEncoder_MessyConfig_ThenHappy() {
-        Map<String, Object> config = Map.of(
-            "poafn aorr;anv",
-            Map.of(";oawhls", "aowirhg "),
-            RerankType.CROSS_ENCODER.getLabel(),
+        Map<String, Object> config = new HashMap<>(
             Map.of(
-                CrossEncoderRerankProcessor.MODEL_ID_FIELD,
-                "model-id",
-                CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD,
-                "text_representation",
-                "pqiohg rpowierhg",
-                "pw;oith4pt3ih go"
+                "poafn aorr;anv",
+                Map.of(";oawhls", "aowirhg "),
+                RerankType.CROSS_ENCODER.getLabel(),
+                new HashMap<>(
+                    Map.of(
+                        CrossEncoderRerankProcessor.MODEL_ID_FIELD,
+                        "model-id",
+                        CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD,
+                        "text_representation",
+                        "pqiohg rpowierhg",
+                        "pw;oith4pt3ih go"
+                    )
+                )
             )
         );
         SearchResponseProcessor processor = factory.create(Map.of(), TAG, DESC, false, config, pipelineContext);
@@ -109,7 +120,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
     }
 
     public void testRerankProcessorFactory_CrossEncoder_EmptySubConfig_ThenFail() {
-        Map<String, Object> config = Map.of(RerankType.CROSS_ENCODER.getLabel(), Map.of());
+        Map<String, Object> config = new HashMap<>(Map.of(RerankType.CROSS_ENCODER.getLabel(), Map.of()));
         assertThrows(
             CrossEncoderRerankProcessor.MODEL_ID_FIELD + " must be specified",
             IllegalArgumentException.class,
@@ -118,9 +129,8 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
     }
 
     public void testRerankProcessorFactory_CrossEncoder_NoContextField_ThenFail() {
-        Map<String, Object> config = Map.of(
-            RerankType.CROSS_ENCODER.getLabel(),
-            Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id")
+        Map<String, Object> config = new HashMap<>(
+            Map.of(RerankType.CROSS_ENCODER.getLabel(), new HashMap<>(Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id")))
         );
         assertThrows(
             CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD + " must be specified",
@@ -130,9 +140,11 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
     }
 
     public void testRerankProcessorFactory_CrossEncoder_NoModelId_ThenFail() {
-        Map<String, Object> config = Map.of(
-            RerankType.CROSS_ENCODER.getLabel(),
-            Map.of(CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD, "text_representation")
+        Map<String, Object> config = new HashMap<>(
+            Map.of(
+                RerankType.CROSS_ENCODER.getLabel(),
+                new HashMap<>(Map.of(CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD, "text_representation"))
+            )
         );
         assertThrows(
             CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD + " must be specified",

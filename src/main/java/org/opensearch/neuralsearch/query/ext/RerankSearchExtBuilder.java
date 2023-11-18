@@ -25,6 +25,7 @@ import java.util.Optional;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.extern.log4j.Log4j2;
 
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
@@ -32,6 +33,7 @@ import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.search.SearchExtBuilder;
 
+@Log4j2
 @AllArgsConstructor
 public class RerankSearchExtBuilder extends SearchExtBuilder {
 
@@ -89,8 +91,7 @@ public class RerankSearchExtBuilder extends SearchExtBuilder {
      * @throws IOException if problems parsing
      */
     public static RerankSearchExtBuilder parse(XContentParser parser) throws IOException {
-        @SuppressWarnings("unchecked")
-        RerankSearchExtBuilder ans = new RerankSearchExtBuilder((Map<String, Object>) parser.map().get(PARAM_FIELD_NAME));
+        RerankSearchExtBuilder ans = new RerankSearchExtBuilder((Map<String, Object>) parser.map());
         return ans;
     }
 

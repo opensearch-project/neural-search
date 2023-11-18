@@ -20,6 +20,7 @@ package org.opensearch.neuralsearch.processor.factory;
 import java.util.Map;
 
 import lombok.AllArgsConstructor;
+import lombok.extern.log4j.Log4j2;
 
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.rerank.CrossEncoderRerankProcessor;
@@ -29,6 +30,7 @@ import org.opensearch.search.pipeline.SearchResponseProcessor;
 
 import com.google.common.annotations.VisibleForTesting;
 
+@Log4j2
 @AllArgsConstructor
 public class RerankProcessorFactory implements Processor.Factory<SearchResponseProcessor> {
 
@@ -49,7 +51,7 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
         switch (type) {
             case CROSS_ENCODER:
                 @SuppressWarnings("unchecked")
-                Map<String, String> rerankerConfig = (Map<String, String>) config.get(type.getLabel());
+                Map<String, String> rerankerConfig = (Map<String, String>) config.remove(type.getLabel());
                 String modelId = rerankerConfig.get(CrossEncoderRerankProcessor.MODEL_ID_FIELD);
                 if (modelId == null) {
                     throw new IllegalArgumentException(CrossEncoderRerankProcessor.MODEL_ID_FIELD + " must be specified");

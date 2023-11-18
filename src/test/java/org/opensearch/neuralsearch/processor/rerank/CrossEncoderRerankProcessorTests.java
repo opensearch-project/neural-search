@@ -27,6 +27,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -79,13 +80,17 @@ public class CrossEncoderRerankProcessorTests extends OpenSearchTestCase {
     public void setup() {
         MockitoAnnotations.openMocks(this);
         factory = new RerankProcessorFactory(mlCommonsClientAccessor);
-        Map<String, Object> config = Map.of(
-            RerankType.CROSS_ENCODER.getLabel(),
+        Map<String, Object> config = new HashMap<>(
             Map.of(
-                CrossEncoderRerankProcessor.MODEL_ID_FIELD,
-                "model-id",
-                CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD,
-                "text_representation"
+                RerankType.CROSS_ENCODER.getLabel(),
+                new HashMap<>(
+                    Map.of(
+                        CrossEncoderRerankProcessor.MODEL_ID_FIELD,
+                        "model-id",
+                        CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD,
+                        "text_representation"
+                    )
+                )
             )
         );
         processor = (CrossEncoderRerankProcessor) factory.create(
@@ -103,7 +108,7 @@ public class CrossEncoderRerankProcessorTests extends OpenSearchTestCase {
         NeuralQueryBuilder nqb = new NeuralQueryBuilder();
         nqb.fieldName("embedding").k(3).modelId("embedding_id").queryText("Question about dolphins");
         ssb.query(nqb);
-        List<SearchExtBuilder> exts = List.of(new RerankSearchExtBuilder(params));
+        List<SearchExtBuilder> exts = List.of(new RerankSearchExtBuilder(new HashMap<>(params)));
         ssb.ext(exts);
         doReturn(ssb).when(request).source();
     }

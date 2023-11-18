@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 
 import lombok.AllArgsConstructor;
+import lombok.extern.log4j.Log4j2;
 
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
@@ -33,6 +34,7 @@ import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.profile.SearchProfileShardResults;
 
+@Log4j2
 @AllArgsConstructor
 public abstract class RescoringRerankProcessor implements RerankProcessor {
 
@@ -80,6 +82,7 @@ public abstract class RescoringRerankProcessor implements RerankProcessor {
 
     @Override
     public void rerank(SearchResponse searchResponse, Map<String, Object> scoringContext, ActionListener<SearchResponse> listener) {
+        log.info("==================RERANKING==================");
         try {
             rescoreSearchResponse(searchResponse, scoringContext, ActionListener.wrap(scores -> {
                 // Assign new scores
