@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased 2.x](https://github.com/opensearch-project/neural-search/compare/2.11...2.x)
 ### Features
+adding z-score normalization for hybrid query [#470](https://github.com/opensearch-project/neural-search/pull/470)
 ### Enhancements
 ### Bug Fixes
 ### Infrastructure
