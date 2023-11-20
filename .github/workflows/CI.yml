@@ -12,13 +12,53 @@ on:
       - "feature/**"
 
 jobs:
-  Check-neural-search:
+  Get-CI-Image-Tag:
+    uses: opensearch-project/opensearch-build/.github/workflows/get-ci-image-tag.yml@main
+    with:
+      product: opensearch
+
+  Check-neural-search-linux:
+    needs: Get-CI-Image-Tag
     strategy:
       matrix:
         java: [11, 17]
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]
 
-    name: Run Gradle Check on neural-search Plugin
+    name: Gradle Check Linux
+    runs-on: ${{ matrix.os }}
+    container:
+      # using the same image which is used by opensearch-build team to build the OpenSearch Distribution
+      # this image tag is subject to change as more dependencies and updates will arrive over time
+      image: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-version-linux }}
+      # need to switch to root so that github actions can install runner binary on container without permission issues.
+      options: --user root
+
+    steps:
+      - name: Checkout neural-search
+        uses: actions/checkout@v1
+
+      - name: Setup Java ${{ matrix.java }}
+        uses: actions/setup-java@v1
+        with:
+          java-version: ${{ matrix.java }}
+
+      - name: Run build
+        run: |
+          chown -R 1000:1000 `pwd`
+          su `id -un 1000` -c "./gradlew check"
+
+      - name: Upload Coverage Report
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  Check-neural-search-windows:
+    strategy:
+      matrix:
+        java: [11, 17]
+        os: [windows-latest]
+
+    name: Gradle Check Windows
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -39,13 +79,48 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
-  Precommit-neural-search:
+  Precommit-neural-search-linux:
+    needs: Get-CI-Image-Tag
     strategy:
       matrix:
         java: [11, 17]
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]
 
-    name: Pre-commit neural-search Plugin
+    name: Pre-commit Linux
+    runs-on: ${{ matrix.os }}
+    container:
+      # using the same image which is used by opensearch-build team to build the OpenSearch Distribution
+      # this image tag is subject to change as more dependencies and updates will arrive over time
+      image: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-version-linux }}
+      # need to switch to root so that github actions can install runner binary on container without permission issues.
+      options: --user root
+
+    steps:
+      - name: Checkout neural-search
+        uses: actions/checkout@v1
+
+      - name: Setup Java ${{ matrix.java }}
+        uses: actions/setup-java@v1
+        with:
+          java-version: ${{ matrix.java }}
+
+      - name: Run build
+        run: |
+          chown -R 1000:1000 `pwd`
+          su `id -un 1000` -c "./gradlew precommit --parallel"
+
+      - name: Upload Coverage Report
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  Precommit-neural-search-windows:
+    strategy:
+      matrix:
+        java: [11, 17]
+        os: [windows-latest]
+
+    name: Pre-commit Windows
     runs-on: ${{ matrix.os }}
 
     steps:
