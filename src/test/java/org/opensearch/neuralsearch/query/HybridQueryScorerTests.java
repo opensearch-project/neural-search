@@ -6,7 +6,9 @@
 package org.opensearch.neuralsearch.query;
 
 import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -21,6 +23,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.MatchNoDocsQuery;
+import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.tests.util.TestUtil;
 
@@ -167,6 +170,63 @@ public class HybridQueryScorerTests extends OpenSearchQueryTestCase {
         );
 
         testWithQuery(docs, scores, hybridQueryScorer);
+    }
+
+    @SneakyThrows
+    public void testMaxScore_whenMultipleScorers_thenSuccessful() {
+        int maxDocId = TestUtil.nextInt(random(), 10, 10_000);
+        Pair<int[], float[]> docsAndScores = generateDocuments(maxDocId);
+        int[] docs = docsAndScores.getLeft();
+        float[] scores = docsAndScores.getRight();
+
+        Weight weight = mock(Weight.class);
+
+        HybridQueryScorer hybridQueryScorerWithAllNonNullSubScorers = new HybridQueryScorer(
+            weight,
+            Arrays.asList(
+                scorer(docs, scores, fakeWeight(new MatchAllDocsQuery())),
+                scorer(docs, scores, fakeWeight(new MatchNoDocsQuery()))
+            )
+        );
+
+        float maxScore = hybridQueryScorerWithAllNonNullSubScorers.getMaxScore(Integer.MAX_VALUE);
+        assertTrue(maxScore > 0.0f);
+
+        HybridQueryScorer hybridQueryScorerWithSomeNullSubScorers = new HybridQueryScorer(
+            weight,
+            Arrays.asList(null, scorer(docs, scores, fakeWeight(new MatchAllDocsQuery())), null)
+        );
+
+        maxScore = hybridQueryScorerWithSomeNullSubScorers.getMaxScore(Integer.MAX_VALUE);
+        assertTrue(maxScore > 0.0f);
+
+        HybridQueryScorer hybridQueryScorerWithAllNullSubScorers = new HybridQueryScorer(weight, Arrays.asList(null, null));
+
+        maxScore = hybridQueryScorerWithAllNullSubScorers.getMaxScore(Integer.MAX_VALUE);
+        assertEquals(0.0f, maxScore, 0.0f);
+    }
+
+    @SneakyThrows
+    public void testMaxScoreFailures_whenScorerThrowsException_thenFail() {
+        int maxDocId = TestUtil.nextInt(random(), 10, 10_000);
+        Pair<int[], float[]> docsAndScores = generateDocuments(maxDocId);
+        int[] docs = docsAndScores.getLeft();
+        float[] scores = docsAndScores.getRight();
+
+        Weight weight = mock(Weight.class);
+
+        Scorer scorer = mock(Scorer.class);
+        when(scorer.getWeight()).thenReturn(fakeWeight(new MatchAllDocsQuery()));
+        when(scorer.iterator()).thenReturn(iterator(docs));
+        when(scorer.getMaxScore(anyInt())).thenThrow(new IOException("Test exception"));
+
+        HybridQueryScorer hybridQueryScorerWithAllNonNullSubScorers = new HybridQueryScorer(weight, Arrays.asList(scorer));
+
+        RuntimeException runtimeException = expectThrows(
+            RuntimeException.class,
+            () -> hybridQueryScorerWithAllNonNullSubScorers.getMaxScore(Integer.MAX_VALUE)
+        );
+        assertTrue(runtimeException.getMessage().contains("Test exception"));
     }
 
     private Pair<int[], float[]> generateDocuments(int maxDocId) {
