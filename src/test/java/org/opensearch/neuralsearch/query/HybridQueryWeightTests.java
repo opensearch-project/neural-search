@@ -61,11 +61,11 @@ public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
             List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext))
         );
         IndexSearcher searcher = newSearcher(reader);
-        Weight weight = searcher.createWeight(hybridQueryWithTerm, ScoreMode.COMPLETE, 1.0f);
+        Weight weight = hybridQueryWithTerm.createWeight(searcher, ScoreMode.TOP_SCORES, 1.0f);
 
         assertNotNull(weight);
 
-        LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
+        LeafReaderContext leafReaderContext = searcher.getIndexReader().leaves().get(0);
         Scorer scorer = weight.scorer(leafReaderContext);
 
         assertNotNull(scorer);
