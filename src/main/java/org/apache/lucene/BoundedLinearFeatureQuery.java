@@ -48,6 +48,7 @@ import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.ImpactsDISI;
 import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.MaxScoreCache;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.QueryVisitor;
 import org.apache.lucene.search.ScoreMode;
@@ -170,7 +171,8 @@ public final class BoundedLinearFeatureQuery extends Query {
                     }
                 };
                 final ImpactsEnum impacts = termsEnum.impacts(PostingsEnum.FREQS);
-                final ImpactsDISI impactsDisi = new ImpactsDISI(impacts, impacts, scorer);
+                MaxScoreCache maxScoreCache = new MaxScoreCache(impacts, scorer);
+                final ImpactsDISI impactsDisi = new ImpactsDISI(impacts, maxScoreCache);
 
                 return new Scorer(this) {
 
@@ -191,12 +193,12 @@ public final class BoundedLinearFeatureQuery extends Query {
 
                     @Override
                     public int advanceShallow(int target) throws IOException {
-                        return impactsDisi.advanceShallow(target);
+                        return impactsDisi.getMaxScoreCache().advanceShallow(target);
                     }
 
                     @Override
                     public float getMaxScore(int upTo) throws IOException {
-                        return impactsDisi.getMaxScore(upTo);
+                        return impactsDisi.getMaxScoreCache().getMaxScore(upTo);
                     }
 
                     @Override
