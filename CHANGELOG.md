@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Features
 ### Enhancements
 ### Bug Fixes
+Fix async actions are left in neural_sparse query ([438](https://github.com/opensearch-project/neural-search/pull/438))
+Fixed exception for case when Hybrid query being wrapped into bool query ([#490](https://github.com/opensearch-project/neural-search/pull/490)
 ### Infrastructure
 ### Documentation
 ### Maintenance

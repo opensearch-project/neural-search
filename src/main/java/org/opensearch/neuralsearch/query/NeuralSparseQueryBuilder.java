@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Supplier;
 
 import lombok.AllArgsConstructor;
@@ -84,6 +85,10 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         this.fieldName = in.readString();
         this.queryText = in.readString();
         this.modelId = in.readString();
+        if (in.readBoolean()) {
+            Map<String, Float> queryTokens = in.readMap(StreamInput::readString, StreamInput::readFloat);
+            this.queryTokensSupplier = () -> queryTokens;
+        }
     }
 
     @Override
@@ -91,6 +96,12 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         out.writeString(fieldName);
         out.writeString(queryText);
         out.writeString(modelId);
+        if (!Objects.isNull(queryTokensSupplier) && !Objects.isNull(queryTokensSupplier.get())) {
+            out.writeBoolean(true);
+            out.writeMap(queryTokensSupplier.get(), StreamOutput::writeString, StreamOutput::writeFloat);
+        } else {
+            out.writeBoolean(false);
+        }
     }
 
     @Override
@@ -256,16 +267,25 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     @Override
     protected boolean doEquals(NeuralSparseQueryBuilder obj) {
         if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
+        if (Objects.isNull(obj) || getClass() != obj.getClass()) return false;
+        if (Objects.isNull(queryTokensSupplier) && !Objects.isNull(obj.queryTokensSupplier)) return false;
+        if (!Objects.isNull(queryTokensSupplier) && Objects.isNull(obj.queryTokensSupplier)) return false;
         EqualsBuilder equalsBuilder = new EqualsBuilder().append(fieldName, obj.fieldName)
             .append(queryText, obj.queryText)
             .append(modelId, obj.modelId);
+        if (!Objects.isNull(queryTokensSupplier)) {
+            equalsBuilder.append(queryTokensSupplier.get(), obj.queryTokensSupplier.get());
+        }
         return equalsBuilder.isEquals();
     }
 
     @Override
     protected int doHashCode() {
-        return new HashCodeBuilder().append(fieldName).append(queryText).append(modelId).toHashCode();
+        HashCodeBuilder builder = new HashCodeBuilder().append(fieldName).append(queryText).append(modelId);
+        if (!Objects.isNull(queryTokensSupplier)) {
+            builder.append(queryTokensSupplier.get());
+        }
+        return builder.toHashCode();
     }
 
     @Override
