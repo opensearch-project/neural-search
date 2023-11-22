@@ -26,6 +26,9 @@ import java.util.function.Supplier;
 
 import lombok.SneakyThrows;
 
+import org.apache.lucene.document.FeatureField;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
 import org.opensearch.client.Client;
 import org.opensearch.common.SetOnce;
 import org.opensearch.common.io.stream.BytesStreamOutput;
@@ -38,9 +41,11 @@ import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
+import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.test.OpenSearchTestCase;
 
@@ -88,7 +93,6 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
               "VECTOR_FIELD": {
                 "query_text": "string",
                 "model_id": "string",
-                "max_token_score": 123.0,
                 "boost": 10.0,
                 "_name": "something",
               }
@@ -99,7 +103,6 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .startObject(FIELD_NAME)
             .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
             .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
-            .field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), MAX_TOKEN_SCORE)
             .field(BOOST_FIELD.getPreferredName(), BOOST)
             .field(NAME_FIELD.getPreferredName(), QUERY_NAME)
             .endObject()
@@ -112,9 +115,34 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(FIELD_NAME, sparseEncodingQueryBuilder.fieldName());
         assertEquals(QUERY_TEXT, sparseEncodingQueryBuilder.queryText());
         assertEquals(MODEL_ID, sparseEncodingQueryBuilder.modelId());
-        assertEquals(MAX_TOKEN_SCORE, sparseEncodingQueryBuilder.maxTokenScore(), 0.0);
         assertEquals(BOOST, sparseEncodingQueryBuilder.boost(), 0.0);
         assertEquals(QUERY_NAME, sparseEncodingQueryBuilder.queryName());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuiltWithMaxTokenScore_thenThrowWarning() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": "string",
+                "model_id": "string",
+                "max_token_score": 123.0
+              }
+          }
+        */
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), MAX_TOKEN_SCORE)
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = NeuralSparseQueryBuilder.fromXContent(contentParser);
+        assertWarnings("Deprecated field [max_token_score] used, this field is unused and will be removed entirely");
     }
 
     @SneakyThrows
@@ -159,30 +187,6 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .startObject()
             .startObject(FIELD_NAME)
             .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
-            .endObject()
-            .endObject();
-
-        XContentParser contentParser = createParser(xContentBuilder);
-        contentParser.nextToken();
-        expectThrows(IllegalArgumentException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser));
-    }
-
-    @SneakyThrows
-    public void testFromXContent_whenBuildWithNegativeMaxTokenScore_thenFail() {
-        /*
-          {
-              "VECTOR_FIELD": {
-                "query_text": "string",
-                "model_id": "string",
-                "max_token_score": -1
-              }
-          }
-        */
-        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject(FIELD_NAME)
-            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
-            .field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), -1f)
             .endObject()
             .endObject();
 
@@ -497,5 +501,24 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         sparseEncodingQueryBuilder.queryTokensSupplier(() -> null);
         queryBuilder = sparseEncodingQueryBuilder.doRewrite(null);
         assertTrue(queryBuilder == sparseEncodingQueryBuilder);
+    }
+
+    @SneakyThrows
+    public void testDoToQuery_successfulDoToQuery() {
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensSupplier(QUERY_TOKENS_SUPPLIER);
+        QueryShardContext mockedQueryShardContext = mock(QueryShardContext.class);
+        MappedFieldType mockedMappedFieldType = mock(MappedFieldType.class);
+        doAnswer(invocation -> "rank_features").when(mockedMappedFieldType).typeName();
+        doAnswer(invocation -> mockedMappedFieldType).when(mockedQueryShardContext).fieldMapper(any());
+
+        BooleanQuery.Builder targetQueryBuilder = new BooleanQuery.Builder();
+        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "hello", 1.f), BooleanClause.Occur.SHOULD);
+        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "world", 2.f), BooleanClause.Occur.SHOULD);
+
+        assertEquals(sparseEncodingQueryBuilder.doToQuery(mockedQueryShardContext), targetQueryBuilder.build());
     }
 }

@@ -21,10 +21,9 @@ import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
-import org.apache.lucene.BoundedLinearFeatureQuery;
+import org.apache.lucene.document.FeatureField;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.BoostQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.common.SetOnce;
 import org.opensearch.core.ParseField;
@@ -62,8 +61,11 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
     @VisibleForTesting
     static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
+    // We use max_token_score field to help WAND scorer prune query clause in lucene 9.7. But in lucene 9.8 the inner
+    // logics change, this field is not needed any more.
     @VisibleForTesting
-    static final ParseField MAX_TOKEN_SCORE_FIELD = new ParseField("max_token_score");
+    @Deprecated
+    static final ParseField MAX_TOKEN_SCORE_FIELD = new ParseField("max_token_score").withAllDeprecated();
 
     private static MLCommonsClientAccessor ML_CLIENT;
 
@@ -164,9 +166,6 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             sparseEncodingQueryBuilder.modelId(),
             String.format(Locale.ROOT, "%s field must be provided for [%s] query", MODEL_ID_FIELD.getPreferredName(), NAME)
         );
-        if (sparseEncodingQueryBuilder.maxTokenScore != null && sparseEncodingQueryBuilder.maxTokenScore <= 0) {
-            throw new IllegalArgumentException(MAX_TOKEN_SCORE_FIELD.getPreferredName() + " must be larger than 0.");
-        }
 
         return sparseEncodingQueryBuilder;
     }
@@ -238,14 +237,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         Map<String, Float> queryTokens = queryTokensSupplier.get();
         validateQueryTokens(queryTokens);
 
-        final Float scoreUpperBound = maxTokenScore != null ? maxTokenScore : Float.MAX_VALUE;
-
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
         for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
-            builder.add(
-                new BoostQuery(new BoundedLinearFeatureQuery(fieldName, entry.getKey(), scoreUpperBound), entry.getValue()),
-                BooleanClause.Occur.SHOULD
-            );
+            builder.add(FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()), BooleanClause.Occur.SHOULD);
         }
         return builder.build();
     }
