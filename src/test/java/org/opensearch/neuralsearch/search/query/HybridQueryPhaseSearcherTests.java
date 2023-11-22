@@ -41,6 +41,7 @@ import org.opensearch.action.OriginalIndices;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.core.index.Index;
 import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
@@ -204,6 +205,8 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         Query query = termSubQuery.toQuery(mockQueryShardContext);
         when(searchContext.query()).thenReturn(query);
+        MapperService mapperService = mock(MapperService.class);
+        when(searchContext.mapperService()).thenReturn(mapperService);
 
         hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
 
@@ -217,7 +220,8 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         HybridQueryPhaseSearcher hybridQueryPhaseSearcher = spy(new HybridQueryPhaseSearcher());
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         when(mockQueryShardContext.index()).thenReturn(dummyIndex);
-        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        MapperService mapperService = createMapperService();
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) mapperService.fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
 
         Directory directory = newDirectory();
@@ -265,6 +269,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         QuerySearchResult querySearchResult = new QuerySearchResult();
         when(searchContext.queryResult()).thenReturn(querySearchResult);
         when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
+        when(searchContext.mapperService()).thenReturn(mapperService);
 
         LinkedList<QueryCollectorContext> collectors = new LinkedList<>();
         boolean hasFilterCollector = randomBoolean();

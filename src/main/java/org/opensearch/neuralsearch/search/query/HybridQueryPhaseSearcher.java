@@ -19,12 +19,17 @@ import java.util.Objects;
 import lombok.extern.log4j.Log4j2;
 
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.FieldExistsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHitCountCollector;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
+import org.opensearch.index.mapper.SeqNoFieldMapper;
+import org.opensearch.index.search.NestedHelper;
 import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 import org.opensearch.neuralsearch.search.HybridTopScoreDocCollector;
@@ -48,6 +53,8 @@ import com.google.common.annotations.VisibleForTesting;
 @Log4j2
 public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
 
+    final static int MAX_NESTED_SUBQUERY_LIMIT = 20;
+
     public HybridQueryPhaseSearcher() {
         super();
     }
@@ -55,15 +62,77 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
     public boolean searchWith(
         final SearchContext searchContext,
         final ContextIndexSearcher searcher,
-        final Query query,
+        Query query,
         final LinkedList<QueryCollectorContext> collectors,
         final boolean hasFilterCollector,
         final boolean hasTimeout
     ) throws IOException {
-        if (query instanceof HybridQuery) {
+        if (isHybridQuery(query, searchContext)) {
+            query = extractHybridQuery(searchContext, query);
             return searchWithCollector(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);
         }
+        validateHybridQuery(query);
         return super.searchWith(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);
+    }
+
+    private boolean isHybridQuery(final Query query, final SearchContext searchContext) {
+        if (query instanceof HybridQuery) {
+            return true;
+        } else if (hasNestedFieldOrNestedDocs(query, searchContext) && mightBeWrappedHybridQuery(query)) {
+            BooleanQuery booleanQuery = (BooleanQuery) query;
+            return booleanQuery.clauses()
+                .stream()
+                .filter(clause -> clause.getQuery() instanceof HybridQuery == false)
+                .allMatch(
+                    clause -> clause.getOccur() == BooleanClause.Occur.FILTER
+                        && clause.getQuery() instanceof FieldExistsQuery
+                        && SeqNoFieldMapper.PRIMARY_TERM_NAME.equals(((FieldExistsQuery) clause.getQuery()).getField())
+                );
+        }
+        return false;
+    }
+
+    private boolean hasNestedFieldOrNestedDocs(final Query query, final SearchContext searchContext) {
+        return searchContext.mapperService().hasNested() && new NestedHelper(searchContext.mapperService()).mightMatchNestedDocs(query);
+    }
+
+    private boolean mightBeWrappedHybridQuery(final Query query) {
+        return query instanceof BooleanQuery
+            && ((BooleanQuery) query).clauses().stream().anyMatch(clauseQuery -> clauseQuery.getQuery() instanceof HybridQuery);
+    }
+
+    private Query extractHybridQuery(final SearchContext searchContext, final Query query) {
+        if (hasNestedFieldOrNestedDocs(query, searchContext)
+            && mightBeWrappedHybridQuery(query)
+            && ((BooleanQuery) query).clauses().size() > 0) {
+            // extract hybrid query and replace bool with hybrid query
+            List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
+            return booleanClauses.stream().findFirst().get().getQuery();
+        }
+        return query;
+    }
+
+    private void validateHybridQuery(final Query query) {
+        if (query instanceof BooleanQuery) {
+            List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
+            for (BooleanClause booleanClause : booleanClauses) {
+                validateNestedBooleanQuery(booleanClause.getQuery(), 1);
+            }
+        }
+    }
+
+    private void validateNestedBooleanQuery(final Query query, int level) {
+        if (query instanceof HybridQuery) {
+            throw new IllegalArgumentException("hybrid query must be a top level query and cannot be wrapped into other queries");
+        }
+        if (level >= MAX_NESTED_SUBQUERY_LIMIT) {
+            throw new IllegalStateException("reached max nested query limit, cannot process query");
+        }
+        if (query instanceof BooleanQuery) {
+            for (BooleanClause booleanClause : ((BooleanQuery) query).clauses()) {
+                validateNestedBooleanQuery(booleanClause.getQuery(), level + 1);
+            }
+        }
     }
 
     @VisibleForTesting

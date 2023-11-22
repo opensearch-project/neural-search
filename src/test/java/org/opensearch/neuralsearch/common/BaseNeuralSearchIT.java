@@ -523,7 +523,16 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     @SneakyThrows
-    private String buildIndexConfiguration(List<KNNFieldConfig> knnFieldConfigs, int numberOfShards) {
+    protected String buildIndexConfiguration(final List<KNNFieldConfig> knnFieldConfigs, final int numberOfShards) {
+        return buildIndexConfiguration(knnFieldConfigs, Collections.emptyList(), numberOfShards);
+    }
+
+    @SneakyThrows
+    protected String buildIndexConfiguration(
+        final List<KNNFieldConfig> knnFieldConfigs,
+        final List<String> nestedFields,
+        final int numberOfShards
+    ) {
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject("settings")
@@ -544,6 +553,11 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
                 .endObject()
                 .endObject();
         }
+
+        for (String nestedField : nestedFields) {
+            xContentBuilder.startObject(nestedField).field("type", "nested").endObject();
+        }
+
         xContentBuilder.endObject().endObject().endObject();
         return xContentBuilder.toString();
     }

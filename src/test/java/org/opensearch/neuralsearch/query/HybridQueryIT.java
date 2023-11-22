@@ -5,6 +5,8 @@
 
 package org.opensearch.neuralsearch.query;
 
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.containsString;
 import static org.opensearch.neuralsearch.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
 
@@ -21,6 +23,7 @@ import lombok.SneakyThrows;
 
 import org.junit.After;
 import org.junit.Before;
+import org.opensearch.client.ResponseException;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
@@ -35,6 +38,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME = "test-neural-vector-doc-field-index";
     private static final String TEST_MULTI_DOC_INDEX_NAME = "test-neural-multi-doc-index";
     private static final String TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD = "test-neural-multi-doc-single-shard-index";
+    private static final String TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD =
+        "test-neural-multi-doc-nested-type--single-shard-index";
     private static final String TEST_QUERY_TEXT = "greetings";
     private static final String TEST_QUERY_TEXT2 = "salute";
     private static final String TEST_QUERY_TEXT3 = "hello";
@@ -191,7 +196,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    public void testNestedQuery_whenHybridQueryIsWrappedIntoOtherQuery_thenSuccess() {
+    public void testNestedQuery_whenHybridQueryIsWrappedIntoOtherQuery_thenFail() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
 
         MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
@@ -202,23 +207,71 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         MatchQueryBuilder matchQuery3Builder = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
         BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery().should(hybridQueryBuilderOnlyTerm).should(matchQuery3Builder);
 
+        ResponseException exceptionNoNestedTypes = expectThrows(
+            ResponseException.class,
+            () -> search(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, boolQueryBuilder, null, 10, Map.of("search_pipeline", SEARCH_PIPELINE))
+        );
+
+        org.hamcrest.MatcherAssert.assertThat(
+            exceptionNoNestedTypes.getMessage(),
+            allOf(
+                containsString("hybrid query must be a top level query and cannot be wrapped into other queries"),
+                containsString("illegal_argument_exception")
+            )
+        );
+
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
+
+        ResponseException exceptionQWithNestedTypes = expectThrows(
+            ResponseException.class,
+            () -> search(
+                TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD,
+                boolQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            )
+        );
+
+        org.hamcrest.MatcherAssert.assertThat(
+            exceptionQWithNestedTypes.getMessage(),
+            allOf(
+                containsString("hybrid query must be a top level query and cannot be wrapped into other queries"),
+                containsString("illegal_argument_exception")
+            )
+        );
+    }
+
+    @SneakyThrows
+    public void testIndexWithNestedFields_whenHybridQuery_thenSuccess() {
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
+
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
+        TermQueryBuilder termQuery2Builder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT2);
+        HybridQueryBuilder hybridQueryBuilderOnlyTerm = new HybridQueryBuilder();
+        hybridQueryBuilderOnlyTerm.add(termQueryBuilder);
+        hybridQueryBuilderOnlyTerm.add(termQuery2Builder);
+
         Map<String, Object> searchResponseAsMap = search(
-            TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD,
-            boolQueryBuilder,
+            TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD,
+            hybridQueryBuilderOnlyTerm,
             null,
             10,
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
 
-        assertTrue(getHitCount(searchResponseAsMap) > 0);
+        assertEquals(0, getHitCount(searchResponseAsMap));
         assertTrue(getMaxScore(searchResponseAsMap).isPresent());
-        assertTrue(getMaxScore(searchResponseAsMap).get() > 0.0f);
+        assertEquals(0.0f, getMaxScore(searchResponseAsMap).get(), DELTA_FOR_SCORE_ASSERTION);
 
         Map<String, Object> total = getTotalHits(searchResponseAsMap);
         assertNotNull(total.get("value"));
-        assertTrue((int) total.get("value") > 0);
+        assertEquals(0, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
 
+    @SneakyThrows
     private void initializeIndexIfNotExist(String indexName) throws IOException {
         if (TEST_BASIC_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_INDEX_NAME)) {
             prepareKnnIndex(
@@ -283,6 +336,21 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 1
             );
             addDocsToIndex(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+        }
+
+        if (TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD.equals(indexName)
+            && !indexExists(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD)) {
+            createIndexWithConfiguration(
+                indexName,
+                buildIndexConfiguration(
+                    Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)),
+                    List.of("user"),
+                    1
+                ),
+                ""
+            );
+
+            addDocsToIndex(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
         }
     }
 

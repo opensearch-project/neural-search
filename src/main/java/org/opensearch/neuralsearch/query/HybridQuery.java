@@ -148,6 +148,11 @@ public final class HybridQuery extends Query implements Iterable<Query> {
         return Collections.unmodifiableCollection(subQueries);
     }
 
+    public void addSubQuery(final Query query) {
+        Objects.requireNonNull(subQueries, "collection of queries must not be null");
+        subQueries.add(query);
+    }
+
     /**
      * Create the Weight used to score this query
      *
