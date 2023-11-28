@@ -71,7 +71,7 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             query = extractHybridQuery(searchContext, query);
             return searchWithCollector(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);
         }
-        validateHybridQuery(query);
+        validateQuery(query);
         return super.searchWith(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);
     }
 
@@ -112,7 +112,7 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
         return query;
     }
 
-    private void validateHybridQuery(final Query query) {
+    private void validateQuery(final Query query) {
         if (query instanceof BooleanQuery) {
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
             for (BooleanClause booleanClause : booleanClauses) {

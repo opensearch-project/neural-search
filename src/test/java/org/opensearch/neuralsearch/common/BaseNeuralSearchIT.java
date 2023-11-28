@@ -413,16 +413,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         addKnnDoc(index, docId, vectorFieldNames, vectors, Collections.emptyList(), Collections.emptyList());
     }
 
-    /**
-     * Add a set of knn vectors and text to an index
-     *
-     * @param index Name of the index
-     * @param docId ID of document to be added
-     * @param vectorFieldNames List of vectir fields to be added
-     * @param vectors List of vectors corresponding to those fields
-     * @param textFieldNames List of text fields to be added
-     * @param texts List of text corresponding to those fields
-     */
     @SneakyThrows
     protected void addKnnDoc(
         String index,
@@ -432,6 +422,32 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         List<String> textFieldNames,
         List<String> texts
     ) {
+        addKnnDoc(index, docId, vectorFieldNames, vectors, textFieldNames, texts, Collections.emptyList(), Collections.emptyList());
+    }
+
+    /**
+     * Add a set of knn vectors and text to an index
+     *
+     * @param index Name of the index
+     * @param docId ID of document to be added
+     * @param vectorFieldNames List of vectir fields to be added
+     * @param vectors List of vectors corresponding to those fields
+     * @param textFieldNames List of text fields to be added
+     * @param texts List of text corresponding to those fields
+     * @param nestedFieldNames List of nested fields to be added
+     * @param nestedFields List of fields and values corresponding to those fields
+     */
+    @SneakyThrows
+    protected void addKnnDoc(
+        String index,
+        String docId,
+        List<String> vectorFieldNames,
+        List<Object[]> vectors,
+        List<String> textFieldNames,
+        List<String> texts,
+        List<String> nestedFieldNames,
+        List<Map<String, String>> nestedFields
+    ) {
         Request request = new Request("POST", "/" + index + "/_doc/" + docId + "?refresh=true");
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
         for (int i = 0; i < vectorFieldNames.size(); i++) {
@@ -440,6 +456,16 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
         for (int i = 0; i < textFieldNames.size(); i++) {
             builder.field(textFieldNames.get(i), texts.get(i));
+        }
+
+        for (int i = 0; i < nestedFieldNames.size(); i++) {
+            builder.field(nestedFieldNames.get(i));
+            builder.startObject();
+            Map<String, String> nestedValues = nestedFields.get(i);
+            for (Map.Entry<String, String> entry : nestedValues.entrySet()) {
+                builder.field(entry.getKey(), entry.getValue());
+            }
+            builder.endObject();
         }
         builder.endObject();
 

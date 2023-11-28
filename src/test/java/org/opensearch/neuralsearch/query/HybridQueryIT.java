@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.query;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
+import static org.opensearch.index.query.QueryBuilders.matchQuery;
 import static org.opensearch.neuralsearch.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
 
@@ -21,11 +22,13 @@ import java.util.stream.IntStream;
 
 import lombok.SneakyThrows;
 
+import org.apache.lucene.search.join.ScoreMode;
 import org.junit.After;
 import org.junit.Before;
 import org.opensearch.client.ResponseException;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.knn.index.SpaceType;
@@ -51,9 +54,14 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_KNN_VECTOR_FIELD_NAME_1 = "test-knn-vector-1";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_2 = "test-knn-vector-2";
     private static final String TEST_TEXT_FIELD_NAME_1 = "test-text-field-1";
+    private static final String TEST_NESTED_TYPE_FIELD_NAME_1 = "user";
 
     private static final int TEST_DIMENSION = 768;
     private static final SpaceType TEST_SPACE_TYPE = SpaceType.L2;
+    private static final String NESTED_FIELD_1 = "firstname";
+    private static final String NESTED_FIELD_2 = "lastname";
+    private static final String NESTED_FIELD_1_VALUE = "john";
+    private static final String NESTED_FIELD_2_VALUE = "black";
     private final float[] testVector1 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector2 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector3 = createRandomVector(TEST_DIMENSION);
@@ -272,6 +280,39 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
+    public void testIndexWithNestedFields_whenHybridQueryIncludesNested_thenSuccess() {
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
+
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
+        NestedQueryBuilder nestedQueryBuilder = QueryBuilders.nestedQuery(
+            TEST_NESTED_TYPE_FIELD_NAME_1,
+            matchQuery(TEST_NESTED_TYPE_FIELD_NAME_1 + "." + NESTED_FIELD_1, NESTED_FIELD_1_VALUE),
+            ScoreMode.Total
+        );
+        HybridQueryBuilder hybridQueryBuilderOnlyTerm = new HybridQueryBuilder();
+        hybridQueryBuilderOnlyTerm.add(termQueryBuilder);
+        hybridQueryBuilderOnlyTerm.add(nestedQueryBuilder);
+
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD,
+            hybridQueryBuilderOnlyTerm,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
+
+        assertEquals(1, getHitCount(searchResponseAsMap));
+        assertTrue(getMaxScore(searchResponseAsMap).isPresent());
+        assertTrue(getMaxScore(searchResponseAsMap).get() > 0);
+
+        Map<String, Object> total = getTotalHits(searchResponseAsMap);
+        assertNotNull(total.get("value"));
+        assertEquals(1, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+    }
+
+    @SneakyThrows
     private void initializeIndexIfNotExist(String indexName) throws IOException {
         if (TEST_BASIC_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_INDEX_NAME)) {
             prepareKnnIndex(
@@ -344,13 +385,23 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 indexName,
                 buildIndexConfiguration(
                     Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)),
-                    List.of("user"),
+                    List.of(TEST_NESTED_TYPE_FIELD_NAME_1),
                     1
                 ),
                 ""
             );
 
             addDocsToIndex(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD,
+                "4",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector1).toArray()),
+                List.of(),
+                List.of(),
+                List.of(TEST_NESTED_TYPE_FIELD_NAME_1),
+                List.of(Map.of(NESTED_FIELD_1, NESTED_FIELD_1_VALUE, NESTED_FIELD_2, NESTED_FIELD_2_VALUE))
+            );
         }
     }
 
