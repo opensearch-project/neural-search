@@ -104,6 +104,7 @@ public class TestUtils {
     public static final String TEST_NESTED_SPARSE_INDEX_NAME = "test-sparse-nested-index";
     public static final String TEXT_EMBEDDING_INDEX_NAME = "text_embedding_index";
     public static final String TEXT_IMAGE_EMBEDDING_INDEX_NAME = "text_image_embedding_index";
+    public static final String TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD = "test-neural-multi-doc-single-shard-index";
 
     /**
      * Convert an xContentBuilder to a map

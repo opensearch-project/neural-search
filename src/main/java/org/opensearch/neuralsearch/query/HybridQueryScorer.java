@@ -83,7 +83,7 @@ public final class HybridQueryScorer extends Scorer {
      */
     @Override
     public float getMaxScore(int upTo) throws IOException {
-        return subScorers.stream().filter(scorer -> scorer.docID() <= upTo).map(scorer -> {
+        return subScorers.stream().filter(Objects::nonNull).filter(scorer -> scorer.docID() <= upTo).map(scorer -> {
             try {
                 return scorer.getMaxScore(upTo);
             } catch (IOException e) {

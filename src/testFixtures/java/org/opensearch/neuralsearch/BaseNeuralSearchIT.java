@@ -826,29 +826,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
                 TEST_MULTI_DOC_INDEX_NAME,
                 Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE))
             );
-            addKnnDoc(
-                TEST_MULTI_DOC_INDEX_NAME,
-                "1",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector1).toArray()),
-                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
-                Collections.singletonList(TEST_DOC_TEXT1)
-            );
-            addKnnDoc(
-                TEST_MULTI_DOC_INDEX_NAME,
-                "2",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector2).toArray())
-            );
-            addKnnDoc(
-                TEST_MULTI_DOC_INDEX_NAME,
-                "3",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector3).toArray()),
-                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
-                Collections.singletonList(TEST_DOC_TEXT2)
-            );
-            assertEquals(3, getDocCount(TEST_MULTI_DOC_INDEX_NAME));
+            addDocsToIndex(TEST_MULTI_DOC_INDEX_NAME);
         }
 
         if (TEST_MULTI_VECTOR_FIELD_INDEX_NAME.equals(indexName) && !indexExists(TEST_MULTI_VECTOR_FIELD_INDEX_NAME)) {
@@ -897,6 +875,41 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             );
             assertEquals(1, getDocCount(TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME));
         }
+
+        if (TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD.equals(indexName) && !indexExists(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD)) {
+            prepareKnnIndex(
+                TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD,
+                Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)),
+                1
+            );
+            addDocsToIndex(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+        }
+    }
+
+    private void addDocsToIndex(final String testMultiDocIndexName) {
+        addKnnDoc(
+            testMultiDocIndexName,
+            "1",
+            Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+            Collections.singletonList(Floats.asList(testVector1).toArray()),
+            Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+            Collections.singletonList(TEST_DOC_TEXT1)
+        );
+        addKnnDoc(
+            testMultiDocIndexName,
+            "2",
+            Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+            Collections.singletonList(Floats.asList(testVector2).toArray())
+        );
+        addKnnDoc(
+            testMultiDocIndexName,
+            "3",
+            Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+            Collections.singletonList(Floats.asList(testVector3).toArray()),
+            Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+            Collections.singletonList(TEST_DOC_TEXT2)
+        );
+        assertEquals(3, getDocCount(testMultiDocIndexName));
     }
 
     @SneakyThrows

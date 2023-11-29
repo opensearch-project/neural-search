@@ -10,6 +10,7 @@ import static org.opensearch.neuralsearch.TestUtils.RELATION_EQUAL_TO;
 import static org.opensearch.neuralsearch.TestUtils.SEARCH_PIPELINE;
 import static org.opensearch.neuralsearch.TestUtils.TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME;
 import static org.opensearch.neuralsearch.TestUtils.TEST_MULTI_DOC_INDEX_NAME;
+import static org.opensearch.neuralsearch.TestUtils.TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD;
 import static org.opensearch.neuralsearch.TestUtils.TEST_QUERY_TEXT;
 import static org.opensearch.neuralsearch.TestUtils.TEST_QUERY_TEXT2;
 import static org.opensearch.neuralsearch.TestUtils.TEST_QUERY_TEXT3;
@@ -29,6 +30,7 @@ import lombok.SneakyThrows;
 import org.junit.After;
 import org.junit.Before;
 import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
@@ -168,6 +170,35 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         assertEquals(0, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+    }
+
+    @SneakyThrows
+    public void testNestedQuery_whenHybridQueryIsWrappedIntoOtherQuery_thenSuccess() {
+        initializeBasicIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+
+        MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        MatchQueryBuilder matchQuery2Builder = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
+        HybridQueryBuilder hybridQueryBuilderOnlyTerm = new HybridQueryBuilder();
+        hybridQueryBuilderOnlyTerm.add(matchQueryBuilder);
+        hybridQueryBuilderOnlyTerm.add(matchQuery2Builder);
+        MatchQueryBuilder matchQuery3Builder = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery().should(hybridQueryBuilderOnlyTerm).should(matchQuery3Builder);
+
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD,
+            boolQueryBuilder,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
+
+        assertTrue(getHitCount(searchResponseAsMap) > 0);
+        assertTrue(getMaxScore(searchResponseAsMap).isPresent());
+        assertTrue(getMaxScore(searchResponseAsMap).get() > 0.0f);
+
+        Map<String, Object> total = getTotalHits(searchResponseAsMap);
+        assertNotNull(total.get("value"));
+        assertTrue((int) total.get("value") > 0);
     }
 
     private List<Map<String, Object>> getNestedHits(Map<String, Object> searchResponseAsMap) {
