@@ -158,11 +158,9 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
      */
     private void validateQuery(final SearchContext searchContext, final Query query) {
         if (query instanceof BooleanQuery) {
-            Settings indexSettings = searchContext.getQueryShardContext().getIndexSettings().getSettings();
-            int maxDepthLimit = MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(indexSettings).intValue();
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
             for (BooleanClause booleanClause : booleanClauses) {
-                validateNestedBooleanQuery(booleanClause.getQuery(), maxDepthLimit);
+                validateNestedBooleanQuery(booleanClause.getQuery(), getMaxDepthLimit(searchContext));
             }
         }
     }
@@ -172,7 +170,11 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             throw new IllegalArgumentException("hybrid query must be a top level query and cannot be wrapped into other queries");
         }
         if (level <= 0) {
-            throw new IllegalStateException("reached max nested query limit, cannot process query");
+            // ideally we should throw an error here but this code is on the main search workflow path and that might block
+            // execution of some queries. Instead, we're silently exit and allow such query to execute and potentially produce incorrect
+            // results in case hybrid query is wrapped into such bool query
+            log.error("reached max nested query limit, cannot process bool query with that many nested clauses");
+            return;
         }
         if (query instanceof BooleanQuery) {
             for (BooleanClause booleanClause : ((BooleanQuery) query).clauses()) {
@@ -323,5 +325,10 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
 
     private DocValueFormat[] getSortValueFormats(final SortAndFormats sortAndFormats) {
         return sortAndFormats == null ? null : sortAndFormats.formats;
+    }
+
+    private int getMaxDepthLimit(final SearchContext searchContext) {
+        Settings indexSettings = searchContext.getQueryShardContext().getIndexSettings().getSettings();
+        return MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(indexSettings).intValue();
     }
 }

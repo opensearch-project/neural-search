@@ -746,7 +746,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
-    public void testBoolQuery_whenTooManyNestedLevels_thenFail() {
+    public void testBoolQuery_whenTooManyNestedLevels_thenSuccess() {
         HybridQueryPhaseSearcher hybridQueryPhaseSearcher = new HybridQueryPhaseSearcher();
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         when(mockQueryShardContext.index()).thenReturn(dummyIndex);
@@ -817,22 +817,17 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         when(searchContext.query()).thenReturn(query);
 
-        IllegalStateException exception = expectThrows(
-            IllegalStateException.class,
-            () -> hybridQueryPhaseSearcher.searchWith(
-                searchContext,
-                contextIndexSearcher,
-                query,
-                collectors,
-                hasFilterCollector,
-                hasTimeout
-            )
-        );
+        hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
 
-        org.hamcrest.MatcherAssert.assertThat(
-            exception.getMessage(),
-            containsString("reached max nested query limit, cannot process quer")
-        );
+        assertNotNull(querySearchResult.topDocs());
+        TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
+        TopDocs topDocs = topDocsAndMaxScore.topDocs;
+        assertTrue(topDocs.totalHits.value > 0);
+        ScoreDoc[] scoreDocs = topDocs.scoreDocs;
+        assertNotNull(scoreDocs);
+        assertTrue(scoreDocs.length > 0);
+        assertFalse(isHybridQueryStartStopElement(scoreDocs[0]));
+        assertFalse(isHybridQueryStartStopElement(scoreDocs[scoreDocs.length - 1]));
 
         releaseResources(directory, w, reader);
     }
