@@ -53,7 +53,7 @@ import com.google.common.annotations.VisibleForTesting;
 @Log4j2
 public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
 
-    final static int MAX_NESTED_SUBQUERY_LIMIT = 20;
+    final static int MAX_NESTED_SUBQUERY_LIMIT = 50;
 
     public HybridQueryPhaseSearcher() {
         super();
@@ -130,7 +130,11 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             && ((BooleanQuery) query).clauses().size() > 0) {
             // extract hybrid query and replace bool with hybrid query
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
-            return booleanClauses.stream().findFirst().get().getQuery();
+            Query hybridQuery = booleanClauses.stream().findFirst().get().getQuery();
+            if (!(hybridQuery instanceof HybridQuery)) {
+                throw new IllegalStateException("cannot find hybrid type query in expected location");
+            }
+            return hybridQuery;
         }
         return query;
     }

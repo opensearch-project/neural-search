@@ -254,7 +254,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     public void testIndexWithNestedFields_whenHybridQuery_thenSuccess() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
 
-        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
         TermQueryBuilder termQuery2Builder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT2);
         HybridQueryBuilder hybridQueryBuilderOnlyTerm = new HybridQueryBuilder();
         hybridQueryBuilderOnlyTerm.add(termQueryBuilder);
@@ -268,13 +268,13 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
 
-        assertEquals(0, getHitCount(searchResponseAsMap));
+        assertEquals(1, getHitCount(searchResponseAsMap));
         assertTrue(getMaxScore(searchResponseAsMap).isPresent());
-        assertEquals(0.0f, getMaxScore(searchResponseAsMap).get(), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(0.5f, getMaxScore(searchResponseAsMap).get(), DELTA_FOR_SCORE_ASSERTION);
 
         Map<String, Object> total = getTotalHits(searchResponseAsMap);
         assertNotNull(total.get("value"));
-        assertEquals(0, total.get("value"));
+        assertEquals(1, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
@@ -303,7 +303,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
 
         assertEquals(1, getHitCount(searchResponseAsMap));
         assertTrue(getMaxScore(searchResponseAsMap).isPresent());
-        assertTrue(getMaxScore(searchResponseAsMap).get() > 0);
+        assertEquals(0.5f, getMaxScore(searchResponseAsMap).get(), DELTA_FOR_SCORE_ASSERTION);
 
         Map<String, Object> total = getTotalHits(searchResponseAsMap);
         assertNotNull(total.get("value"));
