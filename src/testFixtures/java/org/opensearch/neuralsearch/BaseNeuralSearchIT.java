@@ -871,7 +871,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
                 Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
                 Collections.singletonList(Floats.asList(testVector).toArray()),
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_3),
-                Collections.singletonList(TEST_QUERY_TEXT)
+                Collections.singletonList(TEST_QUERY_TEXT8)
             );
             assertEquals(1, getDocCount(TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME));
         }
