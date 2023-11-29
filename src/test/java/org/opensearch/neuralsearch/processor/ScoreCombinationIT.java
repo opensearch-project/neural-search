@@ -7,13 +7,22 @@ package org.opensearch.neuralsearch.processor;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
+import static org.opensearch.neuralsearch.TestUtils.GEOMETRIC_MEAN_COMBINATION_METHOD;
+import static org.opensearch.neuralsearch.TestUtils.HARMONIC_MEAN_COMBINATION_METHOD;
+import static org.opensearch.neuralsearch.TestUtils.L2_NORMALIZATION_METHOD;
+import static org.opensearch.neuralsearch.TestUtils.SEARCH_PIPELINE;
+import static org.opensearch.neuralsearch.TestUtils.TEST_DOC_TEXT1;
+import static org.opensearch.neuralsearch.TestUtils.TEST_KNN_VECTOR_FIELD_NAME_1;
+import static org.opensearch.neuralsearch.TestUtils.TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME;
+import static org.opensearch.neuralsearch.TestUtils.TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME;
+import static org.opensearch.neuralsearch.TestUtils.TEST_QUERY_TEXT3;
+import static org.opensearch.neuralsearch.TestUtils.TEST_QUERY_TEXT4;
+import static org.opensearch.neuralsearch.TestUtils.TEST_QUERY_TEXT7;
+import static org.opensearch.neuralsearch.TestUtils.TEST_TEXT_FIELD_NAME_1;
 import static org.opensearch.neuralsearch.TestUtils.assertHybridSearchResults;
 import static org.opensearch.neuralsearch.TestUtils.assertWeightedScores;
-import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
 
-import java.io.IOException;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Map;
 
 import lombok.SneakyThrows;
@@ -22,37 +31,11 @@ import org.junit.After;
 import org.junit.Before;
 import org.opensearch.client.ResponseException;
 import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.knn.index.SpaceType;
-import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
-import com.google.common.primitives.Floats;
-
 public class ScoreCombinationIT extends BaseNeuralSearchIT {
-    private static final String TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME = "test-neural-multi-doc-one-shard-index";
-    private static final String TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME = "test-neural-multi-doc-three-shards-index";
-    private static final String TEST_QUERY_TEXT3 = "hello";
-    private static final String TEST_QUERY_TEXT4 = "place";
-    private static final String TEST_QUERY_TEXT7 = "notexistingwordtwo";
-    private static final String TEST_DOC_TEXT1 = "Hello world";
-    private static final String TEST_DOC_TEXT2 = "Hi to this place";
-    private static final String TEST_DOC_TEXT3 = "We would like to welcome everyone";
-    private static final String TEST_DOC_TEXT4 = "Hello, I'm glad to you see you pal";
-    private static final String TEST_DOC_TEXT5 = "Say hello and enter my friend";
-    private static final String TEST_KNN_VECTOR_FIELD_NAME_1 = "test-knn-vector-1";
-    private static final String TEST_TEXT_FIELD_NAME_1 = "test-text-field-1";
-    private static final int TEST_DIMENSION = 768;
-    private static final SpaceType TEST_SPACE_TYPE = SpaceType.L2;
-    private static final String SEARCH_PIPELINE = "phase-results-pipeline";
-    private final float[] testVector1 = createRandomVector(TEST_DIMENSION);
-    private final float[] testVector2 = createRandomVector(TEST_DIMENSION);
-    private final float[] testVector3 = createRandomVector(TEST_DIMENSION);
-    private final float[] testVector4 = createRandomVector(TEST_DIMENSION);
-
-    private static final String L2_NORMALIZATION_METHOD = "l2";
-    private static final String HARMONIC_MEAN_COMBINATION_METHOD = "harmonic_mean";
-    private static final String GEOMETRIC_MEAN_COMBINATION_METHOD = "geometric_mean";
 
     @Before
     public void setUp() throws Exception {
@@ -93,7 +76,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testArithmeticWeightedMean_whenWeightsPassed_thenSuccessful() {
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
+        initializeMultiDocIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
         // check case when number of weights and sub-queries are same
         createSearchPipeline(
             SEARCH_PIPELINE,
@@ -203,7 +186,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testHarmonicMeanCombination_whenOneShardAndQueryMatches_thenSuccessful() {
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+        initializeMultiDocIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
         createSearchPipeline(
             SEARCH_PIPELINE,
             DEFAULT_NORMALIZATION_METHOD,
@@ -269,7 +252,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testGeometricMeanCombination_whenOneShardAndQueryMatches_thenSuccessful() {
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+        initializeMultiDocIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
         createSearchPipeline(
             SEARCH_PIPELINE,
             DEFAULT_NORMALIZATION_METHOD,
@@ -313,109 +296,5 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertHybridSearchResults(searchResponseAsMapL2Norm, 5, new float[] { 0.5f, 1.0f });
-    }
-
-    private void initializeIndexIfNotExist(String indexName) throws IOException {
-        if (TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME.equalsIgnoreCase(indexName) && !indexExists(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME)) {
-            prepareKnnIndex(
-                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-                Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)),
-                1
-            );
-            addKnnDoc(
-                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-                "1",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector1).toArray()),
-                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
-                Collections.singletonList(TEST_DOC_TEXT1)
-            );
-            addKnnDoc(
-                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-                "2",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector2).toArray())
-            );
-            addKnnDoc(
-                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-                "3",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector3).toArray()),
-                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
-                Collections.singletonList(TEST_DOC_TEXT2)
-            );
-            addKnnDoc(
-                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-                "4",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector4).toArray()),
-                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
-                Collections.singletonList(TEST_DOC_TEXT3)
-            );
-            addKnnDoc(
-                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-                "5",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector4).toArray()),
-                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
-                Collections.singletonList(TEST_DOC_TEXT4)
-            );
-            assertEquals(5, getDocCount(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME));
-        }
-
-        if (TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME.equalsIgnoreCase(indexName) && !indexExists(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME)) {
-            prepareKnnIndex(
-                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-                Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)),
-                3
-            );
-            addKnnDoc(
-                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-                "1",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector1).toArray()),
-                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
-                Collections.singletonList(TEST_DOC_TEXT1)
-            );
-            addKnnDoc(
-                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-                "2",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector2).toArray())
-            );
-            addKnnDoc(
-                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-                "3",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector3).toArray()),
-                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
-                Collections.singletonList(TEST_DOC_TEXT2)
-            );
-            addKnnDoc(
-                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-                "4",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector4).toArray()),
-                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
-                Collections.singletonList(TEST_DOC_TEXT3)
-            );
-            addKnnDoc(
-                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-                "5",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector4).toArray()),
-                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
-                Collections.singletonList(TEST_DOC_TEXT4)
-            );
-            addKnnDoc(
-                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-                "6",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector4).toArray()),
-                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
-                Collections.singletonList(TEST_DOC_TEXT5)
-            );
-            assertEquals(6, getDocCount(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME));
-        }
     }
 }

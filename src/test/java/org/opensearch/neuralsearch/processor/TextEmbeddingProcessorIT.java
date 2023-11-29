@@ -5,6 +5,8 @@
 
 package org.opensearch.neuralsearch.processor;
 
+import static org.opensearch.neuralsearch.TestUtils.TEXT_EMBEDDING_INDEX_NAME;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -18,14 +20,11 @@ import org.junit.After;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 import com.google.common.collect.ImmutableList;
 
 public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
-
-    private static final String INDEX_NAME = "text_embedding_index";
-
     private static final String PIPELINE_NAME = "pipeline-hybrid";
 
     @After
@@ -43,22 +42,14 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         String modelId = uploadTextEmbeddingModel();
         loadModel(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME);
-        createTextEmbeddingIndex();
+        createTextEmbeddingIndex(TEXT_EMBEDDING_INDEX_NAME, PIPELINE_NAME);
         ingestDocument();
-        assertEquals(1, getDocCount(INDEX_NAME));
+        assertEquals(1, getDocCount(TEXT_EMBEDDING_INDEX_NAME));
     }
 
     private String uploadTextEmbeddingModel() throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
         return uploadModel(requestBody);
-    }
-
-    private void createTextEmbeddingIndex() throws Exception {
-        createIndexWithConfiguration(
-            INDEX_NAME,
-            Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
-            PIPELINE_NAME
-        );
     }
 
     private void ingestDocument() throws Exception {
@@ -78,7 +69,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         Response response = makeRequest(
             client(),
             "POST",
-            INDEX_NAME + "/_doc?refresh",
+            TEXT_EMBEDDING_INDEX_NAME + "/_doc?refresh",
             null,
             toHttpEntity(ingestDocument),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))

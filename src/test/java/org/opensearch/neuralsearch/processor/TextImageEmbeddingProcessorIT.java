@@ -5,6 +5,8 @@
 
 package org.opensearch.neuralsearch.processor;
 
+import static org.opensearch.neuralsearch.TestUtils.TEXT_IMAGE_EMBEDDING_INDEX_NAME;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -18,7 +20,7 @@ import org.junit.After;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 import com.google.common.collect.ImmutableList;
 
@@ -28,7 +30,6 @@ import com.google.common.collect.ImmutableList;
  */
 public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
-    private static final String INDEX_NAME = "text_image_embedding_index";
     private static final String PIPELINE_NAME = "ingest-pipeline";
 
     @After
@@ -42,31 +43,23 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
         String modelId = uploadModel();
         loadModel(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
-        createTextImageEmbeddingIndex();
+        createTextEmbeddingIndex(TEXT_IMAGE_EMBEDDING_INDEX_NAME, PIPELINE_NAME);
         ingestDocumentWithTextMappedToEmbeddingField();
-        assertEquals(1, getDocCount(INDEX_NAME));
+        assertEquals(1, getDocCount(TEXT_IMAGE_EMBEDDING_INDEX_NAME));
     }
 
     public void testEmbeddingProcessor_whenIngestingDocumentWithSourceWithoutMatchingInMapping_thenSuccessful() throws Exception {
         String modelId = uploadModel();
         loadModel(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
-        createTextImageEmbeddingIndex();
+        createTextEmbeddingIndex(TEXT_IMAGE_EMBEDDING_INDEX_NAME, PIPELINE_NAME);
         ingestDocumentWithoutMappedFields();
-        assertEquals(1, getDocCount(INDEX_NAME));
+        assertEquals(1, getDocCount(TEXT_IMAGE_EMBEDDING_INDEX_NAME));
     }
 
     private String uploadModel() throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
         return uploadModel(requestBody);
-    }
-
-    private void createTextImageEmbeddingIndex() throws Exception {
-        createIndexWithConfiguration(
-            INDEX_NAME,
-            Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
-            PIPELINE_NAME
-        );
     }
 
     private void ingestDocumentWithTextMappedToEmbeddingField() throws Exception {
@@ -95,7 +88,7 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
         Response response = makeRequest(
             client(),
             "POST",
-            INDEX_NAME + "/_doc?refresh",
+            TEXT_IMAGE_EMBEDDING_INDEX_NAME + "/_doc?refresh",
             null,
             toHttpEntity(ingestDocument),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))

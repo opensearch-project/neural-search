@@ -9,6 +9,7 @@ import java.nio.file.Files
 apply plugin: 'opensearch.testclusters'
 apply plugin: 'opensearch.build'
 apply plugin: 'opensearch.rest-test'
+apply plugin: 'io.freefair.lombok'
 
 // Disable a few tasks that come with build
 build.enabled = false
@@ -19,11 +20,10 @@ dependenciesInfo.enabled = false
 
 dependencies {
     api "org.opensearch:opensearch:${opensearch_version}"
-    //compileOnly "org.opensearch.plugin:opensearch-scripting-painless-spi:${versions.opensearch}"
-    //api group: 'commons-lang', name: 'commons-lang', version: '2.6'
-
+    api group: 'commons-lang', name: 'commons-lang', version: '2.6'
     api "org.apache.logging.log4j:log4j-api:${versions.log4j}"
     api "org.apache.logging.log4j:log4j-core:${versions.log4j}"
+    api "junit:junit:${versions.junit}"
 
     testImplementation "org.opensearch.test:framework:${opensearch_version}"
     testImplementation(testFixtures(rootProject))

@@ -3,7 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package org.opensearch.neuralsearch.common;
+package org.opensearch.neuralsearch;
+
+import static org.opensearch.neuralsearch.TestUtils.TEST_BASIC_SPARSE_INDEX_NAME;
+import static org.opensearch.neuralsearch.TestUtils.TEST_MULTI_NEURAL_SPARSE_FIELD_INDEX_NAME;
+import static org.opensearch.neuralsearch.TestUtils.TEST_NESTED_INDEX_NAME;
+import static org.opensearch.neuralsearch.TestUtils.TEST_NEURAL_SPARSE_FIELD_NAME_1;
+import static org.opensearch.neuralsearch.TestUtils.TEST_NEURAL_SPARSE_FIELD_NAME_2;
+import static org.opensearch.neuralsearch.TestUtils.TEST_NEURAL_SPARSE_FIELD_NAME_NESTED;
+import static org.opensearch.neuralsearch.TestUtils.TEST_QUERY_TEXT9;
+import static org.opensearch.neuralsearch.TestUtils.TEST_TEXT_AND_NEURAL_SPARSE_FIELD_INDEX_NAME;
+import static org.opensearch.neuralsearch.TestUtils.TEST_TEXT_FIELD_NAME_3;
+import static org.opensearch.neuralsearch.TestUtils.testRankFeaturesDoc;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -135,5 +146,44 @@ public abstract class BaseSparseEncodingIT extends BaseNeuralSearchIT {
         freqBits = freqBits >> 15;
         freqBits = ((int) ((float) freqBits)) << 15;
         return Float.intBitsToFloat(freqBits);
+    }
+
+    @SneakyThrows
+    protected void initializeSparseIndexIfNotExist(String indexName) {
+        if (TEST_BASIC_SPARSE_INDEX_NAME.equals(indexName) && !indexExists(indexName)) {
+            prepareSparseEncodingIndex(indexName, List.of(TEST_NEURAL_SPARSE_FIELD_NAME_1));
+            addSparseEncodingDoc(indexName, "1", List.of(TEST_NEURAL_SPARSE_FIELD_NAME_1), List.of(testRankFeaturesDoc));
+            assertEquals(1, getDocCount(indexName));
+        }
+
+        if (TEST_MULTI_NEURAL_SPARSE_FIELD_INDEX_NAME.equals(indexName) && !indexExists(indexName)) {
+            prepareSparseEncodingIndex(indexName, List.of(TEST_NEURAL_SPARSE_FIELD_NAME_1, TEST_NEURAL_SPARSE_FIELD_NAME_2));
+            addSparseEncodingDoc(
+                indexName,
+                "1",
+                List.of(TEST_NEURAL_SPARSE_FIELD_NAME_1, TEST_NEURAL_SPARSE_FIELD_NAME_2),
+                List.of(testRankFeaturesDoc, testRankFeaturesDoc)
+            );
+            assertEquals(1, getDocCount(indexName));
+        }
+
+        if (TEST_TEXT_AND_NEURAL_SPARSE_FIELD_INDEX_NAME.equals(indexName) && !indexExists(indexName)) {
+            prepareSparseEncodingIndex(indexName, List.of(TEST_NEURAL_SPARSE_FIELD_NAME_1));
+            addSparseEncodingDoc(
+                indexName,
+                "1",
+                List.of(TEST_NEURAL_SPARSE_FIELD_NAME_1),
+                List.of(testRankFeaturesDoc),
+                List.of(TEST_TEXT_FIELD_NAME_3),
+                List.of(TEST_QUERY_TEXT9)
+            );
+            assertEquals(1, getDocCount(indexName));
+        }
+
+        if (TEST_NESTED_INDEX_NAME.equals(indexName) && !indexExists(indexName)) {
+            prepareSparseEncodingIndex(indexName, List.of(TEST_NEURAL_SPARSE_FIELD_NAME_NESTED));
+            addSparseEncodingDoc(indexName, "1", List.of(TEST_NEURAL_SPARSE_FIELD_NAME_NESTED), List.of(testRankFeaturesDoc));
+            assertEquals(1, getDocCount(TEST_NESTED_INDEX_NAME));
+        }
     }
 }

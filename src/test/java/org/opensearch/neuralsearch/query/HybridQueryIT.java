@@ -6,11 +6,18 @@
 package org.opensearch.neuralsearch.query;
 
 import static org.opensearch.neuralsearch.TestUtils.DELTA_FOR_SCORE_ASSERTION;
-import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
+import static org.opensearch.neuralsearch.TestUtils.RELATION_EQUAL_TO;
+import static org.opensearch.neuralsearch.TestUtils.SEARCH_PIPELINE;
+import static org.opensearch.neuralsearch.TestUtils.TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME;
+import static org.opensearch.neuralsearch.TestUtils.TEST_MULTI_DOC_INDEX_NAME;
+import static org.opensearch.neuralsearch.TestUtils.TEST_QUERY_TEXT;
+import static org.opensearch.neuralsearch.TestUtils.TEST_QUERY_TEXT2;
+import static org.opensearch.neuralsearch.TestUtils.TEST_QUERY_TEXT3;
+import static org.opensearch.neuralsearch.TestUtils.TEST_QUERY_TEXT4;
+import static org.opensearch.neuralsearch.TestUtils.TEST_QUERY_TEXT5;
+import static org.opensearch.neuralsearch.TestUtils.TEST_TEXT_FIELD_NAME_1;
 
-import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -24,34 +31,9 @@ import org.junit.Before;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.TermQueryBuilder;
-import org.opensearch.knn.index.SpaceType;
-import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
-
-import com.google.common.primitives.Floats;
+import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 public class HybridQueryIT extends BaseNeuralSearchIT {
-    private static final String TEST_BASIC_INDEX_NAME = "test-neural-basic-index";
-    private static final String TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME = "test-neural-vector-doc-field-index";
-    private static final String TEST_MULTI_DOC_INDEX_NAME = "test-neural-multi-doc-index";
-    private static final String TEST_QUERY_TEXT = "greetings";
-    private static final String TEST_QUERY_TEXT2 = "salute";
-    private static final String TEST_QUERY_TEXT3 = "hello";
-    private static final String TEST_QUERY_TEXT4 = "place";
-    private static final String TEST_QUERY_TEXT5 = "welcome";
-    private static final String TEST_DOC_TEXT1 = "Hello world";
-    private static final String TEST_DOC_TEXT2 = "Hi to this place";
-    private static final String TEST_DOC_TEXT3 = "We would like to welcome everyone";
-    private static final String TEST_KNN_VECTOR_FIELD_NAME_1 = "test-knn-vector-1";
-    private static final String TEST_KNN_VECTOR_FIELD_NAME_2 = "test-knn-vector-2";
-    private static final String TEST_TEXT_FIELD_NAME_1 = "test-text-field-1";
-
-    private static final int TEST_DIMENSION = 768;
-    private static final SpaceType TEST_SPACE_TYPE = SpaceType.L2;
-    private final float[] testVector1 = createRandomVector(TEST_DIMENSION);
-    private final float[] testVector2 = createRandomVector(TEST_DIMENSION);
-    private final float[] testVector3 = createRandomVector(TEST_DIMENSION);
-    private final static String RELATION_EQUAL_TO = "eq";
-    private static final String SEARCH_PIPELINE = "phase-results-pipeline";
 
     @Before
     public void setUp() throws Exception {
@@ -117,7 +99,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testComplexQuery_whenMultipleSubqueries_thenSuccessful() {
-        initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
+        initializeBasicIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
 
         TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
         TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
@@ -161,7 +143,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testNoMatchResults_whenOnlyTermSubQueryWithoutMatch_thenEmptyResult() {
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
+        initializeBasicIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
 
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
         TermQueryBuilder termQuery2Builder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT2);
@@ -186,86 +168,6 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         assertEquals(0, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-    }
-
-    private void initializeIndexIfNotExist(String indexName) throws IOException {
-        if (TEST_BASIC_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_INDEX_NAME)) {
-            prepareKnnIndex(
-                TEST_BASIC_INDEX_NAME,
-                Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE))
-            );
-            addKnnDoc(
-                TEST_BASIC_INDEX_NAME,
-                "1",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector1).toArray())
-            );
-            assertEquals(1, getDocCount(TEST_BASIC_INDEX_NAME));
-        }
-        if (TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME)) {
-            prepareKnnIndex(
-                TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
-                List.of(
-                    new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE),
-                    new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_2, TEST_DIMENSION, TEST_SPACE_TYPE)
-                )
-            );
-            addKnnDoc(
-                TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
-                "1",
-                List.of(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_KNN_VECTOR_FIELD_NAME_2),
-                List.of(Floats.asList(testVector1).toArray(), Floats.asList(testVector1).toArray()),
-                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
-                Collections.singletonList(TEST_DOC_TEXT1)
-            );
-            addKnnDoc(
-                TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
-                "2",
-                List.of(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_KNN_VECTOR_FIELD_NAME_2),
-                List.of(Floats.asList(testVector2).toArray(), Floats.asList(testVector2).toArray()),
-                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
-                Collections.singletonList(TEST_DOC_TEXT2)
-            );
-            addKnnDoc(
-                TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
-                "3",
-                List.of(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_KNN_VECTOR_FIELD_NAME_2),
-                List.of(Floats.asList(testVector3).toArray(), Floats.asList(testVector3).toArray()),
-                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
-                Collections.singletonList(TEST_DOC_TEXT3)
-            );
-            assertEquals(3, getDocCount(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME));
-        }
-
-        if (TEST_MULTI_DOC_INDEX_NAME.equals(indexName) && !indexExists(TEST_MULTI_DOC_INDEX_NAME)) {
-            prepareKnnIndex(
-                TEST_MULTI_DOC_INDEX_NAME,
-                Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE))
-            );
-            addKnnDoc(
-                TEST_MULTI_DOC_INDEX_NAME,
-                "1",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector1).toArray()),
-                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
-                Collections.singletonList(TEST_DOC_TEXT1)
-            );
-            addKnnDoc(
-                TEST_MULTI_DOC_INDEX_NAME,
-                "2",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector2).toArray())
-            );
-            addKnnDoc(
-                TEST_MULTI_DOC_INDEX_NAME,
-                "3",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector3).toArray()),
-                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
-                Collections.singletonList(TEST_DOC_TEXT2)
-            );
-            assertEquals(3, getDocCount(TEST_MULTI_DOC_INDEX_NAME));
-        }
     }
 
     private List<Map<String, Object>> getNestedHits(Map<String, Object> searchResponseAsMap) {

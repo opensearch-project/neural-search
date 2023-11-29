@@ -3,21 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package org.opensearch.neuralsearch.common;
+package org.opensearch.neuralsearch;
 
+import static org.opensearch.neuralsearch.TestUtils.*;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -34,11 +28,7 @@ import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.http.message.BasicHeader;
 import org.junit.Before;
-import org.opensearch.client.Request;
-import org.opensearch.client.RequestOptions;
-import org.opensearch.client.Response;
-import org.opensearch.client.RestClient;
-import org.opensearch.client.WarningsHandler;
+import org.opensearch.client.*;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.XContentFactory;
@@ -49,7 +39,6 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
-import org.opensearch.neuralsearch.OpenSearchSecureRestTestCase;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.test.ClusterServiceUtils;
 import org.opensearch.threadpool.TestThreadPool;
@@ -58,6 +47,7 @@ import org.opensearch.threadpool.ThreadPool;
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import com.google.common.collect.ImmutableList;
+import com.google.common.primitives.Floats;
 
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
 public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
@@ -770,6 +760,283 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         String modelGroupId = modelGroupResJson.get("model_group_id").toString();
         assertNotNull(modelGroupId);
         return modelGroupId;
+    }
+
+    // Method that waits till the health of nodes in the cluster goes green
+    public void waitForClusterHealthGreen(String numOfNodes) throws IOException {
+        Request waitForGreen = new Request("GET", "/_cluster/health");
+        waitForGreen.addParameter("wait_for_nodes", numOfNodes);
+        waitForGreen.addParameter("wait_for_status", "green");
+        client().performRequest(waitForGreen);
+    }
+
+    @SneakyThrows
+    protected void initializeBasicIndexIfNotExist(String indexName) {
+        if (TEST_BASIC_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_INDEX_NAME)) {
+            prepareKnnIndex(
+                TEST_BASIC_INDEX_NAME,
+                Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE))
+            );
+            addKnnDoc(
+                TEST_BASIC_INDEX_NAME,
+                "1",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector).toArray())
+            );
+            assertEquals(1, getDocCount(TEST_BASIC_INDEX_NAME));
+        }
+
+        if (TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME)) {
+            prepareKnnIndex(
+                TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
+                List.of(
+                    new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE),
+                    new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_2, TEST_DIMENSION, TEST_SPACE_TYPE)
+                )
+            );
+            addKnnDoc(
+                TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
+                "1",
+                List.of(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_KNN_VECTOR_FIELD_NAME_2),
+                List.of(Floats.asList(testVector1).toArray(), Floats.asList(testVector1).toArray()),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+                Collections.singletonList(TEST_DOC_TEXT1)
+            );
+            addKnnDoc(
+                TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
+                "2",
+                List.of(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_KNN_VECTOR_FIELD_NAME_2),
+                List.of(Floats.asList(testVector2).toArray(), Floats.asList(testVector2).toArray()),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+                Collections.singletonList(TEST_DOC_TEXT2)
+            );
+            addKnnDoc(
+                TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
+                "3",
+                List.of(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_KNN_VECTOR_FIELD_NAME_2),
+                List.of(Floats.asList(testVector3).toArray(), Floats.asList(testVector3).toArray()),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+                Collections.singletonList(TEST_DOC_TEXT3)
+            );
+            assertEquals(3, getDocCount(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME));
+        }
+
+        if (TEST_MULTI_DOC_INDEX_NAME.equals(indexName) && !indexExists(TEST_MULTI_DOC_INDEX_NAME)) {
+            prepareKnnIndex(
+                TEST_MULTI_DOC_INDEX_NAME,
+                Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE))
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_NAME,
+                "1",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector1).toArray()),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+                Collections.singletonList(TEST_DOC_TEXT1)
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_NAME,
+                "2",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector2).toArray())
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_NAME,
+                "3",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector3).toArray()),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+                Collections.singletonList(TEST_DOC_TEXT2)
+            );
+            assertEquals(3, getDocCount(TEST_MULTI_DOC_INDEX_NAME));
+        }
+
+        if (TEST_MULTI_VECTOR_FIELD_INDEX_NAME.equals(indexName) && !indexExists(TEST_MULTI_VECTOR_FIELD_INDEX_NAME)) {
+            prepareKnnIndex(
+                TEST_MULTI_VECTOR_FIELD_INDEX_NAME,
+                List.of(
+                    new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE),
+                    new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_2, TEST_DIMENSION, TEST_SPACE_TYPE)
+                )
+            );
+            addKnnDoc(
+                TEST_MULTI_VECTOR_FIELD_INDEX_NAME,
+                "1",
+                List.of(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_KNN_VECTOR_FIELD_NAME_2),
+                List.of(Floats.asList(testVector).toArray(), Floats.asList(testVector).toArray())
+            );
+            assertEquals(1, getDocCount(TEST_MULTI_VECTOR_FIELD_INDEX_NAME));
+        }
+
+        if (TEST_NESTED_INDEX_NAME.equals(indexName) && !indexExists(TEST_NESTED_INDEX_NAME)) {
+            prepareKnnIndex(
+                TEST_NESTED_INDEX_NAME,
+                Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_NESTED, TEST_DIMENSION, TEST_SPACE_TYPE))
+            );
+            addKnnDoc(
+                TEST_NESTED_INDEX_NAME,
+                "1",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_NESTED),
+                Collections.singletonList(Floats.asList(testVector).toArray())
+            );
+            assertEquals(1, getDocCount(TEST_NESTED_INDEX_NAME));
+        }
+
+        if (TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME.equals(indexName) && !indexExists(TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME)) {
+            prepareKnnIndex(
+                TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME,
+                Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE))
+            );
+            addKnnDoc(
+                TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME,
+                "1",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector).toArray()),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_3),
+                Collections.singletonList(TEST_QUERY_TEXT)
+            );
+            assertEquals(1, getDocCount(TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME));
+        }
+    }
+
+    @SneakyThrows
+    protected void initializeMultiDocIndexIfNotExist(String indexName) {
+        if (TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME.equalsIgnoreCase(indexName) && !indexExists(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME)) {
+            prepareKnnIndex(
+                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+                Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)),
+                1
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+                "1",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector1).toArray()),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+                Collections.singletonList(TEST_DOC_TEXT1)
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+                "2",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector2).toArray())
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+                "3",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector3).toArray()),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+                Collections.singletonList(TEST_DOC_TEXT2)
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+                "4",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector4).toArray()),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+                Collections.singletonList(TEST_DOC_TEXT3)
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+                "5",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector4).toArray()),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+                Collections.singletonList(TEST_DOC_TEXT4)
+            );
+            assertEquals(5, getDocCount(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME));
+        }
+
+        if (TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME.equalsIgnoreCase(indexName) && !indexExists(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME)) {
+            prepareKnnIndex(
+                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+                Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)),
+                3
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+                "1",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector1).toArray()),
+                List.of(TEST_TEXT_FIELD_NAME_1, TEST_TEXT_FIELD_NAME_2),
+                List.of(TEST_DOC_TEXT1, TEST_DOC_TEXT6)
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+                "2",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector2).toArray())
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+                "3",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector3).toArray()),
+                List.of(TEST_TEXT_FIELD_NAME_1, TEST_TEXT_FIELD_NAME_2),
+                List.of(TEST_DOC_TEXT2, TEST_DOC_TEXT7)
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+                "4",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector4).toArray()),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+                Collections.singletonList(TEST_DOC_TEXT3)
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+                "5",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector4).toArray()),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+                Collections.singletonList(TEST_DOC_TEXT4)
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+                "6",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector4).toArray()),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+                Collections.singletonList(TEST_DOC_TEXT5)
+            );
+            assertEquals(6, getDocCount(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME));
+        }
+
+        if (TEST_MULTI_DOC_INDEX_NAME.equals(indexName) && !indexExists(TEST_MULTI_DOC_INDEX_NAME)) {
+            prepareKnnIndex(
+                TEST_MULTI_DOC_INDEX_NAME,
+                Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE))
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_NAME,
+                "1",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector).toArray())
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_NAME,
+                "2",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector).toArray())
+            );
+            addKnnDoc(
+                TEST_MULTI_DOC_INDEX_NAME,
+                "3",
+                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                Collections.singletonList(Floats.asList(testVector).toArray())
+            );
+            assertEquals(3, getDocCount(TEST_MULTI_DOC_INDEX_NAME));
+        }
+
+    }
+
+    public void createTextEmbeddingIndex(String indexName, String pipelineName) throws Exception {
+        createIndexWithConfiguration(
+            indexName,
+            Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
+            pipelineName
+        );
     }
 
     /**
