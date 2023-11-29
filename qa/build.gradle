@@ -20,11 +20,11 @@ dependenciesInfo.enabled = false
 
 dependencies {
     api "org.opensearch:opensearch:${opensearch_version}"
+    compileOnly group: 'org.opensearch.plugin', name: 'opensearch-knn', version: "${opensearch_build}"
     api group: 'commons-lang', name: 'commons-lang', version: '2.6'
     api "org.apache.logging.log4j:log4j-api:${versions.log4j}"
     api "org.apache.logging.log4j:log4j-core:${versions.log4j}"
     api "junit:junit:${versions.junit}"
-
     testImplementation "org.opensearch.test:framework:${opensearch_version}"
     testImplementation(testFixtures(rootProject))
 }
