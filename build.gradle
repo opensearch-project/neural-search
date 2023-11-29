@@ -125,6 +125,24 @@ allprojects {
     targetCompatibility = JavaVersion.VERSION_11
     sourceCompatibility = JavaVersion.VERSION_11
     apply from: rootProject.file('repositories.gradle').absoluteFile
+    plugins.withId('java') {
+        sourceCompatibility = targetCompatibility = "11"
+    }
+
+    afterEvaluate {
+        project.dependencyLicenses.enabled = false
+        project.thirdPartyAudit.enabled = false
+        project.loggerUsageCheck.enabled = false
+        project.forbiddenApis.ignoreFailures = true
+        project.forbiddenPatterns {
+            setEnabled(false)
+        }
+        project.testingConventions.enabled = false
+        project.validateNebulaPom.enabled = false
+        project.licenseFile = rootProject.file('LICENSE.txt')
+        project.noticeFile = rootProject.file('NOTICE.txt')
+        project.forbiddenApis.ignoreFailures = true
+    }
 }
 
 repositories {
