@@ -209,12 +209,12 @@ public abstract class InferenceProcessor extends AbstractProcessor {
                 String sourceKey = embeddingFieldsEntry.getKey();
                 Class<?> sourceValueClass = sourceValue.getClass();
                 if (List.class.isAssignableFrom(sourceValueClass) || Map.class.isAssignableFrom(sourceValueClass)) {
-                    if(Map.class.isAssignableFrom(embeddingFieldsEntry.getValue().getClass())){
+                    if (Map.class.isAssignableFrom(embeddingFieldsEntry.getValue().getClass())) {
                         Map<String, Object> innerFieldsEntry = (Map<String, Object>) embeddingFieldsEntry.getValue();
-                        for(Map.Entry<String, Object> innerKey: innerFieldsEntry.entrySet()){
+                        for (Map.Entry<String, Object> innerKey : innerFieldsEntry.entrySet()) {
                             validateNestedTypeValue(innerKey.getKey(), sourceValue, () -> 2);
                         }
-                    }else{
+                    } else {
                         validateNestedTypeValue(sourceKey, sourceValue, () -> 1);
                     }
                 } else if (!String.class.isAssignableFrom(sourceValueClass)) {
@@ -232,7 +232,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
         if (maxDepth > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())) {
             throw new IllegalArgumentException("map type field [" + sourceKey + "] reached max depth limit, cannot process it");
         } else if ((List.class.isAssignableFrom(sourceValue.getClass()))) {
-            validateListTypeValue(sourceKey, sourceValue);
+            validateListTypeValue(sourceKey, sourceValue, maxDepthSupplier);
         } else if (Map.class.isAssignableFrom(sourceValue.getClass())) {
             ((Map) sourceValue).values()
                 .stream()
@@ -246,11 +246,11 @@ public abstract class InferenceProcessor extends AbstractProcessor {
     }
 
     @SuppressWarnings({ "rawtypes" })
-    private void validateListTypeValue(String sourceKey, Object sourceValue) {
+    private void validateListTypeValue(String sourceKey, Object sourceValue, Supplier<Integer> maxDepthSupplier) {
         for (Object value : (List) sourceValue) {
-            if(value instanceof Map){
-                validateNestedTypeValue(sourceKey, value, () -> 1);
-            }else if (value == null) {
+            if (value instanceof Map) {
+                validateNestedTypeValue(sourceKey, value, () -> maxDepthSupplier.get() + 1);
+            } else if (value == null) {
                 throw new IllegalArgumentException("list type field [" + sourceKey + "] has null, cannot process it");
             } else if (!(value instanceof String)) {
                 throw new IllegalArgumentException("list type field [" + sourceKey + "] has non string value, cannot process it");
