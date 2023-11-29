@@ -28,6 +28,8 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHitCountCollector;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.mapper.SeqNoFieldMapper;
 import org.opensearch.index.search.NestedHelper;
 import org.opensearch.neuralsearch.query.HybridQuery;
@@ -53,8 +55,6 @@ import com.google.common.annotations.VisibleForTesting;
 @Log4j2
 public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
 
-    final static int MAX_NESTED_SUBQUERY_LIMIT = 50;
-
     public HybridQueryPhaseSearcher() {
         super();
     }
@@ -71,7 +71,7 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             query = extractHybridQuery(searchContext, query);
             return searchWithCollector(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);
         }
-        validateQuery(query);
+        validateQuery(searchContext, query);
         return super.searchWith(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);
     }
 
@@ -100,17 +100,18 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             // }
             // }
             // }
+            // TODO Need to add logic for passing hybrid sub-queries through the same logic in core to ensure there is no latency regression
             if (query instanceof BooleanQuery == false) {
                 return false;
             }
             return ((BooleanQuery) query).clauses()
                 .stream()
                 .filter(clause -> clause.getQuery() instanceof HybridQuery == false)
-                .allMatch(
-                    clause -> clause.getOccur() == BooleanClause.Occur.FILTER
+                .allMatch(clause -> {
+                    return clause.getOccur() == BooleanClause.Occur.FILTER
                         && clause.getQuery() instanceof FieldExistsQuery
-                        && SeqNoFieldMapper.PRIMARY_TERM_NAME.equals(((FieldExistsQuery) clause.getQuery()).getField())
-                );
+                        && SeqNoFieldMapper.PRIMARY_TERM_NAME.equals(((FieldExistsQuery) clause.getQuery()).getField());
+                });
         }
         return false;
     }
@@ -130,20 +131,38 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             && ((BooleanQuery) query).clauses().size() > 0) {
             // extract hybrid query and replace bool with hybrid query
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
-            Query hybridQuery = booleanClauses.stream().findFirst().get().getQuery();
-            if (!(hybridQuery instanceof HybridQuery)) {
-                throw new IllegalStateException("cannot find hybrid type query in expected location");
+            if (booleanClauses.isEmpty() || booleanClauses.get(0).getQuery() instanceof HybridQuery == false) {
+                throw new IllegalStateException("cannot process hybrid query due to incorrect structure of top level bool query");
             }
-            return hybridQuery;
+            return booleanClauses.get(0).getQuery();
         }
         return query;
     }
 
-    private void validateQuery(final Query query) {
+    /**
+     * Validate the query from neural-search plugin point of view. Current main goal for validation is to block cases
+     * when hybrid query is wrapped into other compound queries.
+     * For example, if we have Bool query like below we need to throw an error
+     * bool: {
+     *   should: [
+     *      match: {},
+     *      hybrid: {
+     *        sub_query1 {}
+     *        sub_query2 {}
+     *      }
+     *   ]
+     * }
+     * TODO add similar validation for other compound type queries like dis_max, constant_score etc.
+     *
+     * @param query query to validate
+     */
+    private void validateQuery(final SearchContext searchContext, final Query query) {
         if (query instanceof BooleanQuery) {
+            Settings indexSettings = searchContext.getQueryShardContext().getIndexSettings().getSettings();
+            int maxDepthLimit = MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(indexSettings).intValue();
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
             for (BooleanClause booleanClause : booleanClauses) {
-                validateNestedBooleanQuery(booleanClause.getQuery(), 1);
+                validateNestedBooleanQuery(booleanClause.getQuery(), maxDepthLimit);
             }
         }
     }
@@ -152,12 +171,12 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
         if (query instanceof HybridQuery) {
             throw new IllegalArgumentException("hybrid query must be a top level query and cannot be wrapped into other queries");
         }
-        if (level >= MAX_NESTED_SUBQUERY_LIMIT) {
+        if (level <= 0) {
             throw new IllegalStateException("reached max nested query limit, cannot process query");
         }
         if (query instanceof BooleanQuery) {
             for (BooleanClause booleanClause : ((BooleanQuery) query).clauses()) {
-                validateNestedBooleanQuery(booleanClause.getQuery(), level + 1);
+                validateNestedBooleanQuery(booleanClause.getQuery(), level - 1);
             }
         }
     }
