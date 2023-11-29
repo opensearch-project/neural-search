@@ -79,8 +79,31 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
         if (query instanceof HybridQuery) {
             return true;
         } else if (hasNestedFieldOrNestedDocs(query, searchContext) && mightBeWrappedHybridQuery(query)) {
-            BooleanQuery booleanQuery = (BooleanQuery) query;
-            return booleanQuery.clauses()
+            // checking if this is a hybrid query that is wrapped into a Bool query by core Opensearch code
+            // https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/search/DefaultSearchContext.java#L367-L370.
+            // main reason for that is performance optimization, at time of writing we are ok with loosing on performance if that's unblocks
+            // hybrid query for indexes with nested field types.
+            // in such case we consider query a valid hybrid query. Later in the code we will extract it and execute as a main query for
+            // this search request.
+            // below is sample structure of such query:
+            //
+            // Boolean {
+            // should: {
+            // hybrid: {
+            // sub_query1 {}
+            // sub_query2 {}
+            // }
+            // }
+            // filter: {
+            // exists: {
+            // field: "_primary_term"
+            // }
+            // }
+            // }
+            if (query instanceof BooleanQuery == false) {
+                return false;
+            }
+            return ((BooleanQuery) query).clauses()
                 .stream()
                 .filter(clause -> clause.getQuery() instanceof HybridQuery == false)
                 .allMatch(
