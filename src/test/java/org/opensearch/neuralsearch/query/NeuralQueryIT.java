@@ -5,6 +5,7 @@
 
 package org.opensearch.neuralsearch.query;
 
+import static org.opensearch.neuralsearch.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
 import static org.opensearch.neuralsearch.TestUtils.objectToFloat;
 
@@ -91,7 +92,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
 
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
-        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), 0.0);
+        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
     }
 
     /**

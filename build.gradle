@@ -110,7 +110,7 @@ buildscript {
     dependencies {
         classpath "${opensearch_group}.gradle:build-tools:${opensearch_version}"
         classpath "com.diffplug.spotless:spotless-plugin-gradle:5.6.1"
-        classpath "io.freefair.gradle:lombok-plugin:8.0.1"
+        classpath "io.freefair.gradle:lombok-plugin:8.4"
     }
 }
 

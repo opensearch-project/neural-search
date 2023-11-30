@@ -12,6 +12,7 @@ Fixed exception for case when Hybrid query being wrapped into bool query ([#490]
 ### Infrastructure
 ### Documentation
 ### Maintenance
+Added support for jdk-21 ([#500](https://github.com/opensearch-project/neural-search/pull/500)))
 ### Refactoring
 
 ## [Unreleased 2.x](https://github.com/opensearch-project/neural-search/compare/2.11...2.x)
