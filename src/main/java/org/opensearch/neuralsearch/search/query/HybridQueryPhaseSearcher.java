@@ -78,29 +78,29 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
     private boolean isHybridQuery(final Query query, final SearchContext searchContext) {
         if (query instanceof HybridQuery) {
             return true;
-        } else if (hasNestedFieldOrNestedDocs(query, searchContext) && mightBeWrappedHybridQuery(query)) {
-            // checking if this is a hybrid query that is wrapped into a Bool query by core Opensearch code
-            // https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/search/DefaultSearchContext.java#L367-L370.
-            // main reason for that is performance optimization, at time of writing we are ok with loosing on performance if that's unblocks
-            // hybrid query for indexes with nested field types.
-            // in such case we consider query a valid hybrid query. Later in the code we will extract it and execute as a main query for
-            // this search request.
-            // below is sample structure of such query:
-            //
-            // Boolean {
-            // should: {
-            // hybrid: {
-            // sub_query1 {}
-            // sub_query2 {}
-            // }
-            // }
-            // filter: {
-            // exists: {
-            // field: "_primary_term"
-            // }
-            // }
-            // }
-            // TODO Need to add logic for passing hybrid sub-queries through the same logic in core to ensure there is no latency regression
+        } else if (hasNestedFieldOrNestedDocs(query, searchContext) && isWrappedHybridQuery(query)) {
+            /* Checking if this is a hybrid query that is wrapped into a Bool query by core Opensearch code
+            https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/search/DefaultSearchContext.java#L367-L370.
+            main reason for that is performance optimization, at time of writing we are ok with loosing on performance if that's unblocks
+            hybrid query for indexes with nested field types.
+            in such case we consider query a valid hybrid query. Later in the code we will extract it and execute as a main query for
+            this search request.
+            below is sample structure of such query:
+
+            Boolean {
+               should: {
+                   hybrid: {
+                       sub_query1 {}
+                       sub_query2 {}
+                   }
+               }
+               filter: {
+                   exists: {
+                       field: "_primary_term"
+                   }
+               }
+            }
+            TODO Need to add logic for passing hybrid sub-queries through the same logic in core to ensure there is no latency regression */
             if (query instanceof BooleanQuery == false) {
                 return false;
             }
@@ -120,14 +120,14 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
         return searchContext.mapperService().hasNested() && new NestedHelper(searchContext.mapperService()).mightMatchNestedDocs(query);
     }
 
-    private boolean mightBeWrappedHybridQuery(final Query query) {
+    private boolean isWrappedHybridQuery(final Query query) {
         return query instanceof BooleanQuery
             && ((BooleanQuery) query).clauses().stream().anyMatch(clauseQuery -> clauseQuery.getQuery() instanceof HybridQuery);
     }
 
     private Query extractHybridQuery(final SearchContext searchContext, final Query query) {
         if (hasNestedFieldOrNestedDocs(query, searchContext)
-            && mightBeWrappedHybridQuery(query)
+            && isWrappedHybridQuery(query)
             && ((BooleanQuery) query).clauses().size() > 0) {
             // extract hybrid query and replace bool with hybrid query
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
@@ -165,7 +165,7 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
         }
     }
 
-    private void validateNestedBooleanQuery(final Query query, int level) {
+    private void validateNestedBooleanQuery(final Query query, final int level) {
         if (query instanceof HybridQuery) {
             throw new IllegalArgumentException("hybrid query must be a top level query and cannot be wrapped into other queries");
         }
