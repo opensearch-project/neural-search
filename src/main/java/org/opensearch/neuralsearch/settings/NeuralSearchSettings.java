@@ -5,10 +5,10 @@
 
 package org.opensearch.neuralsearch.settings;
 
+import org.opensearch.common.settings.Setting;
+
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
-
-import org.opensearch.common.settings.Setting;
 
 /**
  * Class defines settings specific to neural-search plugin

@@ -7,9 +7,9 @@ package org.opensearch.neuralsearch.search;
 
 import java.util.Locale;
 
-import lombok.Getter;
-
 import org.apache.lucene.search.ScoreMode;
+
+import lombok.Getter;
 
 /**
  *  Abstracts algorithm that allows early termination for the search flow if number of hits reached
