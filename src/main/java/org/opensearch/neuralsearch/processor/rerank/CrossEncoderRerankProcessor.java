@@ -22,6 +22,7 @@ import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import lombok.extern.log4j.Log4j2;
@@ -80,7 +81,7 @@ public class CrossEncoderRerankProcessor extends RescoringRerankProcessor {
             if (params.containsKey(QUERY_TEXT_FIELD)) {
                 if (params.containsKey(QUERY_TEXT_PATH_FIELD)) {
                     throw new IllegalArgumentException(
-                        "Cannot specify both \"" + QUERY_TEXT_FIELD + "\" and \"" + QUERY_TEXT_PATH_FIELD + "\""
+                        String.format(Locale.ROOT, "Cannot specify both \"%s\" and \"%s\"", QUERY_TEXT_FIELD, QUERY_TEXT_PATH_FIELD)
                     );
                 }
                 scoringContext.put(QUERY_TEXT_FIELD, (String) params.get(QUERY_TEXT_FIELD));
@@ -97,11 +98,15 @@ public class CrossEncoderRerankProcessor extends RescoringRerankProcessor {
                 // Get the text at the path
                 Object queryText = ObjectPath.eval(path, map);
                 if (!(queryText instanceof String)) {
-                    throw new IllegalArgumentException(QUERY_TEXT_PATH_FIELD + " must point to a string field");
+                    throw new IllegalArgumentException(
+                        String.format(Locale.ROOT, "%s must point to a string field", QUERY_TEXT_PATH_FIELD)
+                    );
                 }
                 scoringContext.put(QUERY_TEXT_FIELD, (String) queryText);
             } else {
-                throw new IllegalArgumentException("Must specify either \"" + QUERY_TEXT_FIELD + "\" or \"" + QUERY_TEXT_PATH_FIELD + "\"");
+                throw new IllegalArgumentException(
+                    String.format(Locale.ROOT, "Must specify either \"%s\" or \"%s\"", QUERY_TEXT_FIELD, QUERY_TEXT_PATH_FIELD)
+                );
             }
             listener.onResponse(scoringContext);
         } catch (Exception e) {

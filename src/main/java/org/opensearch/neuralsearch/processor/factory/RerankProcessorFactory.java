@@ -17,6 +17,7 @@
  */
 package org.opensearch.neuralsearch.processor.factory;
 
+import java.util.Locale;
 import java.util.Map;
 
 import lombok.AllArgsConstructor;
@@ -54,15 +55,21 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
                 Map<String, String> rerankerConfig = (Map<String, String>) config.remove(type.getLabel());
                 String modelId = rerankerConfig.get(CrossEncoderRerankProcessor.MODEL_ID_FIELD);
                 if (modelId == null) {
-                    throw new IllegalArgumentException(CrossEncoderRerankProcessor.MODEL_ID_FIELD + " must be specified");
+                    throw new IllegalArgumentException(
+                        String.format(Locale.ROOT, "%s must be specified", CrossEncoderRerankProcessor.MODEL_ID_FIELD)
+                    );
                 }
                 String rerankContext = rerankerConfig.get(CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD);
                 if (rerankContext == null) {
-                    throw new IllegalArgumentException(CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD + " must be specified");
+                    throw new IllegalArgumentException(
+                        String.format(Locale.ROOT, "%s must be specified", CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD)
+                    );
                 }
                 return new CrossEncoderRerankProcessor(description, tag, ignoreFailure, modelId, rerankContext, clientAccessor);
             default:
-                throw new IllegalArgumentException("could not find constructor for reranker type " + type.getLabel());
+                throw new IllegalArgumentException(
+                    String.format(Locale.ROOT, "could not find constructor for reranker type %s", type.getLabel())
+                );
         }
     }
 

@@ -82,7 +82,6 @@ public abstract class RescoringRerankProcessor implements RerankProcessor {
 
     @Override
     public void rerank(SearchResponse searchResponse, Map<String, Object> scoringContext, ActionListener<SearchResponse> listener) {
-        log.info("==================RERANKING==================");
         try {
             rescoreSearchResponse(searchResponse, scoringContext, ActionListener.wrap(scores -> {
                 // Assign new scores

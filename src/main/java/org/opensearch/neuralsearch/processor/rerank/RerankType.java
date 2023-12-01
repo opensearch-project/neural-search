@@ -18,6 +18,7 @@
 package org.opensearch.neuralsearch.processor.rerank;
 
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.Optional;
 
 import lombok.Getter;
@@ -46,7 +47,7 @@ public enum RerankType {
         if (typeMaybe.isPresent()) {
             return typeMaybe.get();
         } else {
-            throw new IllegalArgumentException("Wrong rerank type name: " + label);
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "Wrong rerank type name: %s", label));
         }
     }
 }
