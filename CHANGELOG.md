@@ -7,7 +7,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Features
 ### Enhancements
 ### Bug Fixes
-Fixed exception for case when Hybrid query being wrapped into bool query ([#490](https://github.com/opensearch-project/neural-search/pull/490)
 ### Infrastructure
 ### Documentation
 ### Maintenance
@@ -17,6 +16,8 @@ Fixed exception for case when Hybrid query being wrapped into bool query ([#490]
 ### Features
 ### Enhancements
 ### Bug Fixes
+- Fixed exception for case when Hybrid query being wrapped into bool query ([#490](https://github.com/opensearch-project/neural-search/pull/490))
+- Hybrid query and nested type fields ([#498](https://github.com/opensearch-project/neural-search/pull/498))
 ### Infrastructure
 ### Documentation
 ### Maintenance
