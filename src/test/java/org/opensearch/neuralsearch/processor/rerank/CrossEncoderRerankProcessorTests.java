@@ -149,7 +149,7 @@ public class CrossEncoderRerankProcessorTests extends OpenSearchTestCase {
         setupParams(Map.of(CrossEncoderRerankProcessor.QUERY_TEXT_FIELD, "query text"));
         @SuppressWarnings("unchecked")
         ActionListener<Map<String, Object>> listener = mock(ActionListener.class);
-        processor.generateScoringContext(request, response, listener);
+        processor.generateRerankingContext(request, response, listener);
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, Object>> argCaptor = ArgumentCaptor.forClass(Map.class);
         verify(listener, times(1)).onResponse(argCaptor.capture());
@@ -161,7 +161,7 @@ public class CrossEncoderRerankProcessorTests extends OpenSearchTestCase {
         setupParams(Map.of(CrossEncoderRerankProcessor.QUERY_TEXT_PATH_FIELD, "query.neural.embedding.query_text"));
         @SuppressWarnings("unchecked")
         ActionListener<Map<String, Object>> listener = mock(ActionListener.class);
-        processor.generateScoringContext(request, response, listener);
+        processor.generateRerankingContext(request, response, listener);
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, Object>> argCaptor = ArgumentCaptor.forClass(Map.class);
         verify(listener, times(1)).onResponse(argCaptor.capture());
@@ -180,7 +180,7 @@ public class CrossEncoderRerankProcessorTests extends OpenSearchTestCase {
         );
         @SuppressWarnings("unchecked")
         ActionListener<Map<String, Object>> listener = mock(ActionListener.class);
-        processor.generateScoringContext(request, response, listener);
+        processor.generateRerankingContext(request, response, listener);
         ArgumentCaptor<Exception> argCaptor = ArgumentCaptor.forClass(Exception.class);
         verify(listener, times(1)).onFailure(argCaptor.capture());
         assert (argCaptor.getValue() instanceof IllegalArgumentException);
@@ -199,7 +199,7 @@ public class CrossEncoderRerankProcessorTests extends OpenSearchTestCase {
         setupParams(Map.of());
         @SuppressWarnings("unchecked")
         ActionListener<Map<String, Object>> listener = mock(ActionListener.class);
-        processor.generateScoringContext(request, response, listener);
+        processor.generateRerankingContext(request, response, listener);
         ArgumentCaptor<Exception> argCaptor = ArgumentCaptor.forClass(Exception.class);
         verify(listener, times(1)).onFailure(argCaptor.capture());
         assert (argCaptor.getValue() instanceof IllegalArgumentException);
@@ -218,7 +218,7 @@ public class CrossEncoderRerankProcessorTests extends OpenSearchTestCase {
         setupParams(Map.of(CrossEncoderRerankProcessor.QUERY_TEXT_PATH_FIELD, "query.neural.embedding"));
         @SuppressWarnings("unchecked")
         ActionListener<Map<String, Object>> listener = mock(ActionListener.class);
-        processor.generateScoringContext(request, response, listener);
+        processor.generateRerankingContext(request, response, listener);
         ArgumentCaptor<Exception> argCaptor = ArgumentCaptor.forClass(Exception.class);
         verify(listener, times(1)).onFailure(argCaptor.capture());
         assert (argCaptor.getValue() instanceof IllegalArgumentException);
