@@ -62,14 +62,14 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
     public boolean searchWith(
         final SearchContext searchContext,
         final ContextIndexSearcher searcher,
-        Query query,
+        final Query query,
         final LinkedList<QueryCollectorContext> collectors,
         final boolean hasFilterCollector,
         final boolean hasTimeout
     ) throws IOException {
         if (isHybridQuery(query, searchContext)) {
-            query = extractHybridQuery(searchContext, query);
-            return searchWithCollector(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);
+            Query hybridQuery = extractHybridQuery(searchContext, query);
+            return searchWithCollector(searchContext, searcher, hybridQuery, collectors, hasFilterCollector, hasTimeout);
         }
         validateQuery(searchContext, query);
         return super.searchWith(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);
@@ -78,7 +78,7 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
     private boolean isHybridQuery(final Query query, final SearchContext searchContext) {
         if (query instanceof HybridQuery) {
             return true;
-        } else if (hasNestedFieldOrNestedDocs(query, searchContext) && isWrappedHybridQuery(query)) {
+        } else if (isWrappedHybridQuery(query) && hasNestedFieldOrNestedDocs(query, searchContext)) {
             /* Checking if this is a hybrid query that is wrapped into a Bool query by core Opensearch code
             https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/search/DefaultSearchContext.java#L367-L370.
             main reason for that is performance optimization, at time of writing we are ok with loosing on performance if that's unblocks
@@ -101,9 +101,7 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
                }
             }
             TODO Need to add logic for passing hybrid sub-queries through the same logic in core to ensure there is no latency regression */
-            if (query instanceof BooleanQuery == false) {
-                return false;
-            }
+            // we have already checked if query in instance of Boolean in higher level else if condition
             return ((BooleanQuery) query).clauses()
                 .stream()
                 .filter(clause -> clause.getQuery() instanceof HybridQuery == false)
