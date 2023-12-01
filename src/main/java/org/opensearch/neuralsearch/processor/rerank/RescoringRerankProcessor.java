@@ -71,19 +71,19 @@ public abstract class RescoringRerankProcessor implements RerankProcessor {
     /**
      * Generate a list of new scores for all of the documents, given the scoring context
      * @param response search results to rescore
-     * @param scoringContext extra information needed to score the search results; e.g. model id
+     * @param rerankingContext extra information needed to score the search results; e.g. model id
      * @param listener be async. recieves the list of new scores
      */
     public abstract void rescoreSearchResponse(
         SearchResponse response,
-        Map<String, Object> scoringContext,
+        Map<String, Object> rerankingContext,
         ActionListener<List<Float>> listener
     );
 
     @Override
-    public void rerank(SearchResponse searchResponse, Map<String, Object> scoringContext, ActionListener<SearchResponse> listener) {
+    public void rerank(SearchResponse searchResponse, Map<String, Object> rerankingContext, ActionListener<SearchResponse> listener) {
         try {
-            rescoreSearchResponse(searchResponse, scoringContext, ActionListener.wrap(scores -> {
+            rescoreSearchResponse(searchResponse, rerankingContext, ActionListener.wrap(scores -> {
                 // Assign new scores
                 SearchHit[] hits = searchResponse.getHits().getHits();
                 if (hits.length != scores.size()) {

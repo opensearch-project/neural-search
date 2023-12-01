@@ -69,7 +69,7 @@ public class CrossEncoderRerankProcessor extends RescoringRerankProcessor {
     }
 
     @Override
-    public void generateScoringContext(
+    public void generateRerankingContext(
         SearchRequest searchRequest,
         SearchResponse searchResponse,
         ActionListener<Map<String, Object>> listener
@@ -77,14 +77,14 @@ public class CrossEncoderRerankProcessor extends RescoringRerankProcessor {
         try {
             List<SearchExtBuilder> exts = searchRequest.source().ext();
             Map<String, Object> params = RerankSearchExtBuilder.fromExtBuilderList(exts).getParams();
-            Map<String, Object> scoringContext = new HashMap<>();
+            Map<String, Object> rerankingContext = new HashMap<>();
             if (params.containsKey(QUERY_TEXT_FIELD)) {
                 if (params.containsKey(QUERY_TEXT_PATH_FIELD)) {
                     throw new IllegalArgumentException(
                         String.format(Locale.ROOT, "Cannot specify both \"%s\" and \"%s\"", QUERY_TEXT_FIELD, QUERY_TEXT_PATH_FIELD)
                     );
                 }
-                scoringContext.put(QUERY_TEXT_FIELD, (String) params.get(QUERY_TEXT_FIELD));
+                rerankingContext.put(QUERY_TEXT_FIELD, (String) params.get(QUERY_TEXT_FIELD));
             } else if (params.containsKey(QUERY_TEXT_PATH_FIELD)) {
                 String path = (String) params.get(QUERY_TEXT_PATH_FIELD);
                 // Convert query to a map with io/xcontent shenanigans
@@ -102,25 +102,25 @@ public class CrossEncoderRerankProcessor extends RescoringRerankProcessor {
                         String.format(Locale.ROOT, "%s must point to a string field", QUERY_TEXT_PATH_FIELD)
                     );
                 }
-                scoringContext.put(QUERY_TEXT_FIELD, (String) queryText);
+                rerankingContext.put(QUERY_TEXT_FIELD, (String) queryText);
             } else {
                 throw new IllegalArgumentException(
                     String.format(Locale.ROOT, "Must specify either \"%s\" or \"%s\"", QUERY_TEXT_FIELD, QUERY_TEXT_PATH_FIELD)
                 );
             }
-            listener.onResponse(scoringContext);
+            listener.onResponse(rerankingContext);
         } catch (Exception e) {
             listener.onFailure(e);
         }
     }
 
     @Override
-    public void rescoreSearchResponse(SearchResponse response, Map<String, Object> scoringContext, ActionListener<List<Float>> listener) {
+    public void rescoreSearchResponse(SearchResponse response, Map<String, Object> rerankingContext, ActionListener<List<Float>> listener) {
         List<String> contexts = new ArrayList<>();
         for (SearchHit hit : response.getHits()) {
             contexts.add(contextFromSearchHit(hit));
         }
-        mlCommonsClientAccessor.inferenceSimilarity(modelId, (String) scoringContext.get(QUERY_TEXT_FIELD), contexts, listener);
+        mlCommonsClientAccessor.inferenceSimilarity(modelId, (String) rerankingContext.get(QUERY_TEXT_FIELD), contexts, listener);
     }
 
     private String contextFromSearchHit(final SearchHit hit) {
