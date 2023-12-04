@@ -36,17 +36,13 @@ import org.opensearch.search.profile.SearchProfileShardResults;
 
 @Log4j2
 @AllArgsConstructor
-public abstract class RescoringRerankProcessor implements RerankProcessor {
+public abstract class RescoringRerankProcessor extends RerankProcessor {
 
     private final RerankType type;
     private final String description;
     private final String tag;
     private final boolean ignoreFailure;
 
-    @Override
-    public SearchResponse processResponse(SearchRequest request, SearchResponse response) throws Exception {
-        throw new UnsupportedOperationException("Use asyncProcessResponse unless you can guarantee to not deadlock yourself");
-    }
 
     @Override
     public String getType() {
