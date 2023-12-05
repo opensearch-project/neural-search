@@ -27,7 +27,7 @@ import org.opensearch.core.action.ActionListener;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
 
-public class CrossEncoderRerankProcessor extends RescoringRerankProcessor {
+public class TextSimilarityRerankProcessor extends RescoringRerankProcessor {
 
     public static final String MODEL_ID_FIELD = "model_id";
 
@@ -35,7 +35,7 @@ public class CrossEncoderRerankProcessor extends RescoringRerankProcessor {
 
     protected final MLCommonsClientAccessor mlCommonsClientAccessor;
 
-    public CrossEncoderRerankProcessor(
+    public TextSimilarityRerankProcessor(
         String description,
         String tag,
         boolean ignoreFailure,

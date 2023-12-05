@@ -30,10 +30,10 @@ import lombok.extern.log4j.Log4j2;
 import org.junit.Before;
 import org.mockito.Mock;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
-import org.opensearch.neuralsearch.processor.rerank.CrossEncoderRerankProcessor;
 import org.opensearch.neuralsearch.processor.rerank.DocumentContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
 import org.opensearch.neuralsearch.processor.rerank.RerankType;
+import org.opensearch.neuralsearch.processor.rerank.TextSimilarityRerankProcessor;
 import org.opensearch.search.pipeline.Processor.PipelineContext;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 import org.opensearch.test.OpenSearchTestCase;
@@ -70,7 +70,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
 
     public void testRerankProcessorFactory_NonExistentType_ThenFail() {
         Map<String, Object> config = new HashMap<>(
-            Map.of("jpeo rvgh we iorgn", Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id"))
+            Map.of("jpeo rvgh we iorgn", Map.of(TextSimilarityRerankProcessor.MODEL_ID_FIELD, "model-id"))
         );
         assertThrows(
             "no rerank type found",
@@ -83,14 +83,14 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
         Map<String, Object> config = new HashMap<>(
             Map.of(
                 RerankType.TEXT_SIMILARITY.getLabel(),
-                new HashMap<>(Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id")),
+                new HashMap<>(Map.of(TextSimilarityRerankProcessor.MODEL_ID_FIELD, "model-id")),
                 RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
                 new HashMap<>(Map.of(DocumentContextSourceFetcher.NAME, new ArrayList<>(List.of("text_representation"))))
             )
         );
         SearchResponseProcessor processor = factory.create(Map.of(), TAG, DESC, false, config, pipelineContext);
         assert (processor instanceof RerankProcessor);
-        assert (processor instanceof CrossEncoderRerankProcessor);
+        assert (processor instanceof TextSimilarityRerankProcessor);
         assert (processor.getType().equals(RerankProcessor.TYPE));
     }
 
@@ -100,14 +100,14 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
                 "poafn aorr;anv",
                 Map.of(";oawhls", "aowirhg "),
                 RerankType.TEXT_SIMILARITY.getLabel(),
-                new HashMap<>(Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id", "pqiohg rpowierhg", "pw;oith4pt3ih go")),
+                new HashMap<>(Map.of(TextSimilarityRerankProcessor.MODEL_ID_FIELD, "model-id", "pqiohg rpowierhg", "pw;oith4pt3ih go")),
                 RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
                 new HashMap<>(Map.of(DocumentContextSourceFetcher.NAME, new ArrayList<>(List.of("text_representation"))))
             )
         );
         SearchResponseProcessor processor = factory.create(Map.of(), TAG, DESC, false, config, pipelineContext);
         assert (processor instanceof RerankProcessor);
-        assert (processor instanceof CrossEncoderRerankProcessor);
+        assert (processor instanceof TextSimilarityRerankProcessor);
         assert (processor.getType().equals(RerankProcessor.TYPE));
     }
 
@@ -115,7 +115,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
         Map<String, Object> config = new HashMap<>(
             Map.of(
                 RerankType.TEXT_SIMILARITY.getLabel(),
-                new HashMap<>(Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id")),
+                new HashMap<>(Map.of(TextSimilarityRerankProcessor.MODEL_ID_FIELD, "model-id")),
                 RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
                 new HashMap<>(
                     Map.of(
@@ -137,7 +137,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
     public void testRerankProcessorFactory_CrossEncoder_EmptySubConfig_ThenFail() {
         Map<String, Object> config = new HashMap<>(Map.of(RerankType.TEXT_SIMILARITY.getLabel(), Map.of()));
         assertThrows(
-            CrossEncoderRerankProcessor.MODEL_ID_FIELD + " must be specified",
+            TextSimilarityRerankProcessor.MODEL_ID_FIELD + " must be specified",
             IllegalArgumentException.class,
             () -> factory.create(Map.of(), TAG, DESC, false, config, pipelineContext)
         );
@@ -145,7 +145,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
 
     public void testRerankProcessorFactory_CrossEncoder_NoContextField_ThenFail() {
         Map<String, Object> config = new HashMap<>(
-            Map.of(RerankType.TEXT_SIMILARITY.getLabel(), new HashMap<>(Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id")))
+            Map.of(RerankType.TEXT_SIMILARITY.getLabel(), new HashMap<>(Map.of(TextSimilarityRerankProcessor.MODEL_ID_FIELD, "model-id")))
         );
         assertThrows(
             String.format(Locale.ROOT, "%s field must be provided", RerankProcessorFactory.CONTEXT_CONFIG_FIELD),
@@ -164,7 +164,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
             )
         );
         assertThrows(
-            CrossEncoderRerankProcessor.MODEL_ID_FIELD + " must be specified",
+            TextSimilarityRerankProcessor.MODEL_ID_FIELD + " must be specified",
             IllegalArgumentException.class,
             () -> factory.create(Map.of(), TAG, DESC, false, config, pipelineContext)
         );
@@ -174,7 +174,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
         Map<String, Object> config = new HashMap<>(
             Map.of(
                 RerankType.TEXT_SIMILARITY.getLabel(),
-                new HashMap<>(Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id")),
+                new HashMap<>(Map.of(TextSimilarityRerankProcessor.MODEL_ID_FIELD, "model-id")),
                 RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
                 new HashMap<>(Map.of(DocumentContextSourceFetcher.NAME, "text_representation"))
             )
@@ -190,7 +190,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
         Map<String, Object> config = new HashMap<>(
             Map.of(
                 RerankType.TEXT_SIMILARITY.getLabel(),
-                new HashMap<>(Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id")),
+                new HashMap<>(Map.of(TextSimilarityRerankProcessor.MODEL_ID_FIELD, "model-id")),
                 RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
                 new HashMap<>(Map.of(DocumentContextSourceFetcher.NAME, new ArrayList<>()))
             )

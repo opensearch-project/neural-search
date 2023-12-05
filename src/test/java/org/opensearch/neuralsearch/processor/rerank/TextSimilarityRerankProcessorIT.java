@@ -39,9 +39,9 @@ import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
 import com.google.common.collect.ImmutableList;
 
 @Log4j2
-public class CrossEncoderRerankProcessorIT extends BaseNeuralSearchIT {
+public class TextSimilarityRerankProcessorIT extends BaseNeuralSearchIT {
 
-    final static String PIPELINE_NAME = "rerank-ce-pipeline";
+    final static String PIPELINE_NAME = "rerank-ts-pipeline";
     final static String INDEX_NAME = "rerank-test";
     final static String TEXT_REP_1 = "Jacques loves fish. Fish make Jacques happy";
     final static String TEXT_REP_2 = "Fish like to eat plankton";
@@ -61,16 +61,16 @@ public class CrossEncoderRerankProcessorIT extends BaseNeuralSearchIT {
     }
 
     public void testCrossEncoderRerankProcessor() throws Exception {
-        String modelId = uploadCrossEncoderModel();
+        String modelId = uploadTextSimilarityModel();
         loadModel(modelId);
-        createSearchPipelineViaConfig(modelId, PIPELINE_NAME, "processor/CrossEncoderRerankPipelineConfiguration.json");
+        createSearchPipelineViaConfig(modelId, PIPELINE_NAME, "processor/TextSimilarityRerankPipelineConfiguration.json");
         setupIndex();
         runQueries();
     }
 
-    private String uploadCrossEncoderModel() throws Exception {
+    private String uploadTextSimilarityModel() throws Exception {
         String requestBody = Files.readString(
-            Path.of(classLoader.getResource("processor/UploadCrossEncoderModelRequestBody.json").toURI())
+            Path.of(classLoader.getResource("processor/UploadTextSimilarityModelRequestBody.json").toURI())
         );
         return uploadModel(requestBody);
     }

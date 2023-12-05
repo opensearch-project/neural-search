@@ -28,10 +28,10 @@ import lombok.extern.log4j.Log4j2;
 
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.rerank.ContextSourceFetcher;
-import org.opensearch.neuralsearch.processor.rerank.CrossEncoderRerankProcessor;
 import org.opensearch.neuralsearch.processor.rerank.DocumentContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.QueryContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.RerankType;
+import org.opensearch.neuralsearch.processor.rerank.TextSimilarityRerankProcessor;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 
@@ -62,13 +62,13 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
             case TEXT_SIMILARITY:
                 @SuppressWarnings("unchecked")
                 Map<String, String> rerankerConfig = (Map<String, String>) config.remove(type.getLabel());
-                String modelId = rerankerConfig.get(CrossEncoderRerankProcessor.MODEL_ID_FIELD);
+                String modelId = rerankerConfig.get(TextSimilarityRerankProcessor.MODEL_ID_FIELD);
                 if (modelId == null) {
                     throw new IllegalArgumentException(
-                        String.format(Locale.ROOT, "%s must be specified", CrossEncoderRerankProcessor.MODEL_ID_FIELD)
+                        String.format(Locale.ROOT, "%s must be specified", TextSimilarityRerankProcessor.MODEL_ID_FIELD)
                     );
                 }
-                return new CrossEncoderRerankProcessor(description, tag, ignoreFailure, modelId, contextFetchers, clientAccessor);
+                return new TextSimilarityRerankProcessor(description, tag, ignoreFailure, modelId, contextFetchers, clientAccessor);
             default:
                 throw new IllegalArgumentException(
                     String.format(Locale.ROOT, "could not find constructor for reranker type %s", type.getLabel())

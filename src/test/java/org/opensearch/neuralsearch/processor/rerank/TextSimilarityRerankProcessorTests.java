@@ -61,7 +61,7 @@ import org.opensearch.search.pipeline.Processor.PipelineContext;
 import org.opensearch.test.OpenSearchTestCase;
 
 @Log4j2
-public class CrossEncoderRerankProcessorTests extends OpenSearchTestCase {
+public class TextSimilarityRerankProcessorTests extends OpenSearchTestCase {
 
     @Mock
     SearchRequest request;
@@ -76,7 +76,7 @@ public class CrossEncoderRerankProcessorTests extends OpenSearchTestCase {
 
     RerankProcessorFactory factory;
 
-    CrossEncoderRerankProcessor processor;
+    TextSimilarityRerankProcessor processor;
 
     @Before
     public void setup() {
@@ -85,12 +85,12 @@ public class CrossEncoderRerankProcessorTests extends OpenSearchTestCase {
         Map<String, Object> config = new HashMap<>(
             Map.of(
                 RerankType.TEXT_SIMILARITY.getLabel(),
-                new HashMap<>(Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id")),
+                new HashMap<>(Map.of(TextSimilarityRerankProcessor.MODEL_ID_FIELD, "model-id")),
                 RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
                 new HashMap<>(Map.of(DocumentContextSourceFetcher.NAME, new ArrayList<>(List.of("text_representation"))))
             )
         );
-        processor = (CrossEncoderRerankProcessor) factory.create(
+        processor = (TextSimilarityRerankProcessor) factory.create(
             Map.of(),
             "rerank processor",
             "processor for reranking with a cross encoder",
