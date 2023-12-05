@@ -17,14 +17,20 @@
  */
 package org.opensearch.neuralsearch.processor.factory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.processor.rerank.ContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.CrossEncoderRerankProcessor;
+import org.opensearch.neuralsearch.processor.rerank.DocumentContextSourceFetcher;
+import org.opensearch.neuralsearch.processor.rerank.QueryContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.RerankType;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
@@ -36,6 +42,7 @@ import com.google.common.annotations.VisibleForTesting;
 public class RerankProcessorFactory implements Processor.Factory<SearchResponseProcessor> {
 
     public static final String RERANK_PROCESSOR_TYPE = "rerank";
+    public static final String CONTEXT_CONFIG_FIELD = "context";
 
     private final MLCommonsClientAccessor clientAccessor;
 
@@ -49,8 +56,10 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
         final Processor.PipelineContext pipelineContext
     ) {
         RerankType type = findRerankType(config);
+        boolean includeQueryContextFetcher = ContextFetcherFactory.shouldIncludeQueryContextFetcher(type);
+        List<ContextSourceFetcher> contextFetchers = ContextFetcherFactory.createFetchers(config, includeQueryContextFetcher);
         switch (type) {
-            case CROSS_ENCODER:
+            case TEXT_SIMILARITY:
                 @SuppressWarnings("unchecked")
                 Map<String, String> rerankerConfig = (Map<String, String>) config.remove(type.getLabel());
                 String modelId = rerankerConfig.get(CrossEncoderRerankProcessor.MODEL_ID_FIELD);
@@ -59,13 +68,7 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
                         String.format(Locale.ROOT, "%s must be specified", CrossEncoderRerankProcessor.MODEL_ID_FIELD)
                     );
                 }
-                String rerankContext = rerankerConfig.get(CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD);
-                if (rerankContext == null) {
-                    throw new IllegalArgumentException(
-                        String.format(Locale.ROOT, "%s must be specified", CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD)
-                    );
-                }
-                return new CrossEncoderRerankProcessor(description, tag, ignoreFailure, modelId, rerankContext, clientAccessor);
+                return new CrossEncoderRerankProcessor(description, tag, ignoreFailure, modelId, contextFetchers, clientAccessor);
             default:
                 throw new IllegalArgumentException(
                     String.format(Locale.ROOT, "could not find constructor for reranker type %s", type.getLabel())
@@ -85,5 +88,48 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
             }
         }
         throw new IllegalArgumentException("no rerank type found");
+    }
+
+    protected static class ContextFetcherFactory {
+
+        public static boolean shouldIncludeQueryContextFetcher(RerankType type) {
+            switch (type) {
+                case TEXT_SIMILARITY:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        public static List<ContextSourceFetcher> createFetchers(Map<String, Object> config, boolean includeQueryContextFetcher) {
+            List<ContextSourceFetcher> fetchers = new ArrayList<>();
+            @SuppressWarnings("unchecked")
+            Map<String, Object> contextConfig = (Map<String, Object>) config.remove(CONTEXT_CONFIG_FIELD);
+            if (contextConfig == null) {
+                throw new IllegalArgumentException(String.format(Locale.ROOT, "%s field must be provided", CONTEXT_CONFIG_FIELD));
+            }
+            for (String key : contextConfig.keySet()) {
+                switch (key) {
+                    case DocumentContextSourceFetcher.NAME:
+                        Object cfg = contextConfig.get(key);
+                        if (!(cfg instanceof List<?>)) {
+                            throw new IllegalArgumentException(String.format(Locale.ROOT, "%s must be a list of strings", key));
+                        }
+                        List<?> fields = (List<?>) contextConfig.get(key);
+                        if (fields.size() == 0) {
+                            throw new IllegalArgumentException(String.format(Locale.ROOT, "%s must be nonempty", key));
+                        }
+                        List<String> strfields = fields.stream().map(field -> (String) field).collect(Collectors.toList());
+                        fetchers.add(new DocumentContextSourceFetcher(strfields));
+                        break;
+                    default:
+                        throw new IllegalArgumentException(String.format(Locale.ROOT, "unrecognized context field: %s", key));
+                }
+            }
+            if (includeQueryContextFetcher) {
+                fetchers.add(new QueryContextSourceFetcher());
+            }
+            return fetchers;
+        }
     }
 }

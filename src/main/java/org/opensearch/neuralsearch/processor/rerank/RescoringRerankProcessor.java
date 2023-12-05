@@ -23,10 +23,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
-import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
-import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.SearchResponseSections;
 import org.opensearch.core.action.ActionListener;
@@ -35,33 +33,16 @@ import org.opensearch.search.SearchHits;
 import org.opensearch.search.profile.SearchProfileShardResults;
 
 @Log4j2
-@AllArgsConstructor
 public abstract class RescoringRerankProcessor extends RerankProcessor {
 
-    private final RerankType type;
-    private final String description;
-    private final String tag;
-    private final boolean ignoreFailure;
-
-
-    @Override
-    public String getType() {
-        return TYPE;
-    }
-
-    @Override
-    public String getTag() {
-        return tag;
-    }
-
-    @Override
-    public String getDescription() {
-        return description;
-    }
-
-    @Override
-    public boolean isIgnoreFailure() {
-        return ignoreFailure;
+    public RescoringRerankProcessor(
+        RerankType type,
+        String description,
+        String tag,
+        boolean ignoreFailure,
+        List<ContextSourceFetcher> contextSourceFetchers
+    ) {
+        super(type, description, tag, ignoreFailure, contextSourceFetchers);
     }
 
     /**

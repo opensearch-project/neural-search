@@ -22,18 +22,28 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.extern.log4j.Log4j2;
+
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 
-import lombok.AllArgsConstructor;
-
+@Log4j2
 @AllArgsConstructor
 public abstract class RerankProcessor implements SearchResponseProcessor {
 
     public static final String TYPE = "rerank";
 
+    protected final RerankType subType;
+    @Getter
+    private final String description;
+    @Getter
+    private final String tag;
+    @Getter
+    private final boolean ignoreFailure;
     protected List<ContextSourceFetcher> contextSourceFetchers;
 
     /**
@@ -50,18 +60,19 @@ public abstract class RerankProcessor implements SearchResponseProcessor {
     ) {
         Map<String, Object> overallContext = new ConcurrentHashMap<>();
         AtomicInteger successfulContexts = new AtomicInteger(contextSourceFetchers.size());
-        for(ContextSourceFetcher csf : contextSourceFetchers) {
-            csf.fetchContext(searchRequest, searchResponse, ActionListener.wrap(
-                context -> {
-                    overallContext.putAll(context);
-                    if (successfulContexts.decrementAndGet() == 0) {
-                        listener.onResponse(overallContext);
-                    }
-                }, e -> {
-                    listener.onFailure(e);
+        for (ContextSourceFetcher csf : contextSourceFetchers) {
+            csf.fetchContext(searchRequest, searchResponse, ActionListener.wrap(context -> {
+                overallContext.putAll(context);
+                if (successfulContexts.decrementAndGet() == 0) {
+                    listener.onResponse(overallContext);
                 }
-            ));
+            }, e -> { listener.onFailure(e); }));
         }
+    }
+
+    @Override
+    public String getType() {
+        return TYPE;
     }
 
     /**
@@ -71,7 +82,11 @@ public abstract class RerankProcessor implements SearchResponseProcessor {
      * @param rerankingContext the information this processor needs in order to rerank
      * @param listener be async
      */
-    public abstract void rerank(SearchResponse searchResponse, Map<String, Object> rerankingContext, ActionListener<SearchResponse> listener);
+    public abstract void rerank(
+        SearchResponse searchResponse,
+        Map<String, Object> rerankingContext,
+        ActionListener<SearchResponse> listener
+    );
 
     @Override
     public SearchResponse processResponse(SearchRequest request, SearchResponse response) throws Exception {

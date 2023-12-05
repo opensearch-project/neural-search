@@ -28,7 +28,7 @@ import lombok.Getter;
  */
 public enum RerankType {
 
-    CROSS_ENCODER("cross-encoder");
+    TEXT_SIMILARITY("text_similarity");
 
     @Getter
     private final String label;

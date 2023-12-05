@@ -19,7 +19,10 @@ package org.opensearch.neuralsearch.processor.factory;
 
 import static org.mockito.Mockito.mock;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import lombok.extern.log4j.Log4j2;
@@ -28,6 +31,7 @@ import org.junit.Before;
 import org.mockito.Mock;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.rerank.CrossEncoderRerankProcessor;
+import org.opensearch.neuralsearch.processor.rerank.DocumentContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
 import org.opensearch.neuralsearch.processor.rerank.RerankType;
 import org.opensearch.search.pipeline.Processor.PipelineContext;
@@ -78,15 +82,10 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
     public void testRerankProcessorFactory_CrossEncoder_HappyPath() {
         Map<String, Object> config = new HashMap<>(
             Map.of(
-                RerankType.CROSS_ENCODER.getLabel(),
-                new HashMap<>(
-                    Map.of(
-                        CrossEncoderRerankProcessor.MODEL_ID_FIELD,
-                        "model-id",
-                        CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD,
-                        "text_representation"
-                    )
-                )
+                RerankType.TEXT_SIMILARITY.getLabel(),
+                new HashMap<>(Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id")),
+                RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
+                new HashMap<>(Map.of(DocumentContextSourceFetcher.NAME, new ArrayList<>(List.of("text_representation"))))
             )
         );
         SearchResponseProcessor processor = factory.create(Map.of(), TAG, DESC, false, config, pipelineContext);
@@ -100,17 +99,10 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
             Map.of(
                 "poafn aorr;anv",
                 Map.of(";oawhls", "aowirhg "),
-                RerankType.CROSS_ENCODER.getLabel(),
-                new HashMap<>(
-                    Map.of(
-                        CrossEncoderRerankProcessor.MODEL_ID_FIELD,
-                        "model-id",
-                        CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD,
-                        "text_representation",
-                        "pqiohg rpowierhg",
-                        "pw;oith4pt3ih go"
-                    )
-                )
+                RerankType.TEXT_SIMILARITY.getLabel(),
+                new HashMap<>(Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id", "pqiohg rpowierhg", "pw;oith4pt3ih go")),
+                RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
+                new HashMap<>(Map.of(DocumentContextSourceFetcher.NAME, new ArrayList<>(List.of("text_representation"))))
             )
         );
         SearchResponseProcessor processor = factory.create(Map.of(), TAG, DESC, false, config, pipelineContext);
@@ -119,8 +111,31 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
         assert (processor.getType().equals(RerankProcessor.TYPE));
     }
 
+    public void testRerankProcessorFactory_CrossEncoder_MessyContext_ThenFail() {
+        Map<String, Object> config = new HashMap<>(
+            Map.of(
+                RerankType.TEXT_SIMILARITY.getLabel(),
+                new HashMap<>(Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id")),
+                RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
+                new HashMap<>(
+                    Map.of(
+                        DocumentContextSourceFetcher.NAME,
+                        new ArrayList<>(List.of("text_representation")),
+                        "pqiohg rpowierhg",
+                        "pw;oith4pt3ih go"
+                    )
+                )
+            )
+        );
+        assertThrows(
+            String.format(Locale.ROOT, "unrecognized context field: %s", "pqiohg rpowierhg"),
+            IllegalArgumentException.class,
+            () -> factory.create(Map.of(), TAG, DESC, false, config, pipelineContext)
+        );
+    }
+
     public void testRerankProcessorFactory_CrossEncoder_EmptySubConfig_ThenFail() {
-        Map<String, Object> config = new HashMap<>(Map.of(RerankType.CROSS_ENCODER.getLabel(), Map.of()));
+        Map<String, Object> config = new HashMap<>(Map.of(RerankType.TEXT_SIMILARITY.getLabel(), Map.of()));
         assertThrows(
             CrossEncoderRerankProcessor.MODEL_ID_FIELD + " must be specified",
             IllegalArgumentException.class,
@@ -130,10 +145,10 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
 
     public void testRerankProcessorFactory_CrossEncoder_NoContextField_ThenFail() {
         Map<String, Object> config = new HashMap<>(
-            Map.of(RerankType.CROSS_ENCODER.getLabel(), new HashMap<>(Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id")))
+            Map.of(RerankType.TEXT_SIMILARITY.getLabel(), new HashMap<>(Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id")))
         );
         assertThrows(
-            CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD + " must be specified",
+            String.format(Locale.ROOT, "%s field must be provided", RerankProcessorFactory.CONTEXT_CONFIG_FIELD),
             IllegalArgumentException.class,
             () -> factory.create(Map.of(), TAG, DESC, false, config, pipelineContext)
         );
@@ -142,12 +157,46 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
     public void testRerankProcessorFactory_CrossEncoder_NoModelId_ThenFail() {
         Map<String, Object> config = new HashMap<>(
             Map.of(
-                RerankType.CROSS_ENCODER.getLabel(),
-                new HashMap<>(Map.of(CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD, "text_representation"))
+                RerankType.TEXT_SIMILARITY.getLabel(),
+                new HashMap<>(),
+                RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
+                new HashMap<>(Map.of(DocumentContextSourceFetcher.NAME, new ArrayList<>(List.of("text_representation"))))
             )
         );
         assertThrows(
-            CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD + " must be specified",
+            CrossEncoderRerankProcessor.MODEL_ID_FIELD + " must be specified",
+            IllegalArgumentException.class,
+            () -> factory.create(Map.of(), TAG, DESC, false, config, pipelineContext)
+        );
+    }
+
+    public void testRerankProcessorFactory_CrossEncoder_BadContextDocField_ThenFail() {
+        Map<String, Object> config = new HashMap<>(
+            Map.of(
+                RerankType.TEXT_SIMILARITY.getLabel(),
+                new HashMap<>(Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id")),
+                RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
+                new HashMap<>(Map.of(DocumentContextSourceFetcher.NAME, "text_representation"))
+            )
+        );
+        assertThrows(
+            String.format(Locale.ROOT, "%s must be a list of strings", DocumentContextSourceFetcher.NAME),
+            IllegalArgumentException.class,
+            () -> factory.create(Map.of(), TAG, DESC, false, config, pipelineContext)
+        );
+    }
+
+    public void testRerankProcessorFactory_CrossEncoder_EmptyContextDocField_ThenFail() {
+        Map<String, Object> config = new HashMap<>(
+            Map.of(
+                RerankType.TEXT_SIMILARITY.getLabel(),
+                new HashMap<>(Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id")),
+                RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
+                new HashMap<>(Map.of(DocumentContextSourceFetcher.NAME, new ArrayList<>()))
+            )
+        );
+        assertThrows(
+            String.format(Locale.ROOT, "%s must be nonempty", DocumentContextSourceFetcher.NAME),
             IllegalArgumentException.class,
             () -> factory.create(Map.of(), TAG, DESC, false, config, pipelineContext)
         );

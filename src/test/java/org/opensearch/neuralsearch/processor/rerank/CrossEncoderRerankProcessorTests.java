@@ -27,8 +27,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import lombok.extern.log4j.Log4j2;
@@ -82,15 +84,10 @@ public class CrossEncoderRerankProcessorTests extends OpenSearchTestCase {
         factory = new RerankProcessorFactory(mlCommonsClientAccessor);
         Map<String, Object> config = new HashMap<>(
             Map.of(
-                RerankType.CROSS_ENCODER.getLabel(),
-                new HashMap<>(
-                    Map.of(
-                        CrossEncoderRerankProcessor.MODEL_ID_FIELD,
-                        "model-id",
-                        CrossEncoderRerankProcessor.RERANK_CONTEXT_FIELD,
-                        "text_representation"
-                    )
-                )
+                RerankType.TEXT_SIMILARITY.getLabel(),
+                new HashMap<>(Map.of(CrossEncoderRerankProcessor.MODEL_ID_FIELD, "model-id")),
+                RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
+                new HashMap<>(Map.of(DocumentContextSourceFetcher.NAME, new ArrayList<>(List.of("text_representation"))))
             )
         );
         processor = (CrossEncoderRerankProcessor) factory.create(
@@ -145,39 +142,42 @@ public class CrossEncoderRerankProcessorTests extends OpenSearchTestCase {
         response = new SearchResponse(internal, null, 1, 1, 0, 1, new ShardSearchFailure[0], new Clusters(1, 1, 0), null);
     }
 
-    public void testScoringContext_QueryText_ThenSucceed() {
-        setupParams(Map.of(CrossEncoderRerankProcessor.QUERY_TEXT_FIELD, "query text"));
+    public void testScoringContext_QueryText_ThenSucceed() throws IOException {
+        setupParams(Map.of(QueryContextSourceFetcher.QUERY_TEXT_FIELD, "query text"));
+        setupSearchResults();
         @SuppressWarnings("unchecked")
         ActionListener<Map<String, Object>> listener = mock(ActionListener.class);
         processor.generateRerankingContext(request, response, listener);
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, Object>> argCaptor = ArgumentCaptor.forClass(Map.class);
         verify(listener, times(1)).onResponse(argCaptor.capture());
-        assert (argCaptor.getValue().containsKey(CrossEncoderRerankProcessor.QUERY_TEXT_FIELD));
-        assert (argCaptor.getValue().get(CrossEncoderRerankProcessor.QUERY_TEXT_FIELD).equals("query text"));
+        assert (argCaptor.getValue().containsKey(QueryContextSourceFetcher.QUERY_TEXT_FIELD));
+        assert (argCaptor.getValue().get(QueryContextSourceFetcher.QUERY_TEXT_FIELD).equals("query text"));
     }
 
-    public void testScoringContext_QueryTextPath_ThenSucceed() {
-        setupParams(Map.of(CrossEncoderRerankProcessor.QUERY_TEXT_PATH_FIELD, "query.neural.embedding.query_text"));
+    public void testScoringContext_QueryTextPath_ThenSucceed() throws IOException {
+        setupParams(Map.of(QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD, "query.neural.embedding.query_text"));
+        setupSearchResults();
         @SuppressWarnings("unchecked")
         ActionListener<Map<String, Object>> listener = mock(ActionListener.class);
         processor.generateRerankingContext(request, response, listener);
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, Object>> argCaptor = ArgumentCaptor.forClass(Map.class);
         verify(listener, times(1)).onResponse(argCaptor.capture());
-        assert (argCaptor.getValue().containsKey(CrossEncoderRerankProcessor.QUERY_TEXT_FIELD));
-        assert (argCaptor.getValue().get(CrossEncoderRerankProcessor.QUERY_TEXT_FIELD).equals("Question about dolphins"));
+        assert (argCaptor.getValue().containsKey(QueryContextSourceFetcher.QUERY_TEXT_FIELD));
+        assert (argCaptor.getValue().get(QueryContextSourceFetcher.QUERY_TEXT_FIELD).equals("Question about dolphins"));
     }
 
-    public void testScoringContext_QueryTextAndPath_ThenFail() {
+    public void testScoringContext_QueryTextAndPath_ThenFail() throws IOException {
         setupParams(
             Map.of(
-                CrossEncoderRerankProcessor.QUERY_TEXT_PATH_FIELD,
+                QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD,
                 "query.neural.embedding.query_text",
-                CrossEncoderRerankProcessor.QUERY_TEXT_FIELD,
+                QueryContextSourceFetcher.QUERY_TEXT_FIELD,
                 "query text"
             )
         );
+        setupSearchResults();
         @SuppressWarnings("unchecked")
         ActionListener<Map<String, Object>> listener = mock(ActionListener.class);
         processor.generateRerankingContext(request, response, listener);
@@ -188,15 +188,16 @@ public class CrossEncoderRerankProcessorTests extends OpenSearchTestCase {
             .getMessage()
             .equals(
                 "Cannot specify both \""
-                    + CrossEncoderRerankProcessor.QUERY_TEXT_FIELD
+                    + QueryContextSourceFetcher.QUERY_TEXT_FIELD
                     + "\" and \""
-                    + CrossEncoderRerankProcessor.QUERY_TEXT_PATH_FIELD
+                    + QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD
                     + "\""
             ));
     }
 
-    public void testScoringContext_NoQueryInfo_ThenFail() {
+    public void testScoringContext_NoQueryInfo_ThenFail() throws IOException {
         setupParams(Map.of());
+        setupSearchResults();
         @SuppressWarnings("unchecked")
         ActionListener<Map<String, Object>> listener = mock(ActionListener.class);
         processor.generateRerankingContext(request, response, listener);
@@ -207,15 +208,16 @@ public class CrossEncoderRerankProcessorTests extends OpenSearchTestCase {
             .getMessage()
             .equals(
                 "Must specify either \""
-                    + CrossEncoderRerankProcessor.QUERY_TEXT_FIELD
+                    + QueryContextSourceFetcher.QUERY_TEXT_FIELD
                     + "\" or \""
-                    + CrossEncoderRerankProcessor.QUERY_TEXT_PATH_FIELD
+                    + QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD
                     + "\""
             ));
     }
 
-    public void testScoringContext_QueryTextPath_BadPointer_ThenFail() {
-        setupParams(Map.of(CrossEncoderRerankProcessor.QUERY_TEXT_PATH_FIELD, "query.neural.embedding"));
+    public void testScoringContext_QueryTextPath_BadPointer_ThenFail() throws IOException {
+        setupParams(Map.of(QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD, "query.neural.embedding"));
+        setupSearchResults();
         @SuppressWarnings("unchecked")
         ActionListener<Map<String, Object>> listener = mock(ActionListener.class);
         processor.generateRerankingContext(request, response, listener);
@@ -224,7 +226,7 @@ public class CrossEncoderRerankProcessorTests extends OpenSearchTestCase {
         assert (argCaptor.getValue() instanceof IllegalArgumentException);
         assert (argCaptor.getValue()
             .getMessage()
-            .equals(CrossEncoderRerankProcessor.QUERY_TEXT_PATH_FIELD + " must point to a string field"));
+            .equals(QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD + " must point to a string field"));
     }
 
     public void testRescoreSearchResponse_HappyPath() throws IOException {
@@ -232,7 +234,12 @@ public class CrossEncoderRerankProcessorTests extends OpenSearchTestCase {
         setupSearchResults();
         @SuppressWarnings("unchecked")
         ActionListener<List<Float>> listener = mock(ActionListener.class);
-        Map<String, Object> scoringContext = Map.of(CrossEncoderRerankProcessor.QUERY_TEXT_FIELD, "query text");
+        Map<String, Object> scoringContext = Map.of(
+            QueryContextSourceFetcher.QUERY_TEXT_FIELD,
+            "query text",
+            DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD,
+            new ArrayList<>(List.of("dummy", "dummy", "dummy"))
+        );
         processor.rescoreSearchResponse(response, scoringContext, listener);
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<Float>> argCaptor = ArgumentCaptor.forClass(List.class);
@@ -243,12 +250,39 @@ public class CrossEncoderRerankProcessorTests extends OpenSearchTestCase {
         assert (argCaptor.getValue().get(2) == 3f);
     }
 
+    public void testRescoreSearchResponse_NoContextList_ThenFail() throws IOException {
+        setupSimilarityRescoring();
+        setupSearchResults();
+        @SuppressWarnings("unchecked")
+        ActionListener<List<Float>> listener = mock(ActionListener.class);
+        Map<String, Object> scoringContext = Map.of(QueryContextSourceFetcher.QUERY_TEXT_FIELD, "query text");
+        processor.rescoreSearchResponse(response, scoringContext, listener);
+        ArgumentCaptor<Exception> argCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener, times(1)).onFailure(argCaptor.capture());
+        assert (argCaptor.getValue() instanceof IllegalStateException);
+        assert (argCaptor.getValue()
+            .getMessage()
+            .equals(
+                String.format(
+                    Locale.ROOT,
+                    "No document context found! Perhaps \"%s.%s\" is missing from the pipeline definition?",
+                    RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
+                    DocumentContextSourceFetcher.NAME
+                )
+            ));
+    }
+
     public void testRerank_HappyPath() throws IOException {
         setupSimilarityRescoring();
         setupSearchResults();
         @SuppressWarnings("unchecked")
         ActionListener<SearchResponse> listener = mock(ActionListener.class);
-        Map<String, Object> scoringContext = Map.of(CrossEncoderRerankProcessor.QUERY_TEXT_FIELD, "query text");
+        Map<String, Object> scoringContext = Map.of(
+            QueryContextSourceFetcher.QUERY_TEXT_FIELD,
+            "query text",
+            DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD,
+            new ArrayList<>(List.of("dummy", "dummy", "dummy"))
+        );
         processor.rerank(response, scoringContext, listener);
         ArgumentCaptor<SearchResponse> argCaptor = ArgumentCaptor.forClass(SearchResponse.class);
         verify(listener, times(1)).onResponse(argCaptor.capture());
@@ -271,7 +305,12 @@ public class CrossEncoderRerankProcessorTests extends OpenSearchTestCase {
         setupSearchResults();
         @SuppressWarnings("unchecked")
         ActionListener<SearchResponse> listener = mock(ActionListener.class);
-        Map<String, Object> scoringContext = Map.of(CrossEncoderRerankProcessor.QUERY_TEXT_FIELD, "query text");
+        Map<String, Object> scoringContext = Map.of(
+            QueryContextSourceFetcher.QUERY_TEXT_FIELD,
+            "query text",
+            DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD,
+            new ArrayList<>(List.of("dummy", "dummy", "dummy"))
+        );
         processor.rerank(response, scoringContext, listener);
         ArgumentCaptor<Exception> argCaptor = ArgumentCaptor.forClass(Exception.class);
         verify(listener, times(1)).onFailure(argCaptor.capture());
@@ -290,7 +329,7 @@ public class CrossEncoderRerankProcessorTests extends OpenSearchTestCase {
     }
 
     public void testProcessResponseAsync() throws IOException {
-        setupParams(Map.of(CrossEncoderRerankProcessor.QUERY_TEXT_FIELD, "query text"));
+        setupParams(Map.of(QueryContextSourceFetcher.QUERY_TEXT_FIELD, "query text"));
         setupSimilarityRescoring();
         setupSearchResults();
         @SuppressWarnings("unchecked")

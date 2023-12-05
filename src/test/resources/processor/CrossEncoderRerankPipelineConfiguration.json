@@ -3,9 +3,11 @@
     "response_processors": [
         {
             "rerank": {
-                "cross-encoder": {
-                    "model_id": "%s",
-                    "rerank_context_field": "text_representation"
+                "text_similarity": {
+                    "model_id": "%s"
+                },
+                "context": {
+                    "document_fields": ["text_representation"]
                 }
             }
         }
