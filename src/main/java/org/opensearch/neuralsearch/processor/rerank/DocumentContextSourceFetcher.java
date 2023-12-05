@@ -23,14 +23,15 @@ import java.util.List;
 import java.util.Map;
 
 import lombok.AllArgsConstructor;
-import lombok.extern.log4j.Log4j2;
 
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.search.SearchHit;
 
-@Log4j2
+/**
+ * Context Source Fetcher that gets context from the search results (documents)
+ */
 @AllArgsConstructor
 public class DocumentContextSourceFetcher implements ContextSourceFetcher {
 
@@ -47,6 +48,7 @@ public class DocumentContextSourceFetcher implements ContextSourceFetcher {
      * @param searchResponse the search results, in case they're relevant
      * @param listener be async
      */
+    @Override
     public void fetchContext(SearchRequest searchRequest, SearchResponse searchResponse, ActionListener<Map<String, Object>> listener) {
         List<String> contexts = new ArrayList<>();
         for (SearchHit hit : searchResponse.getHits()) {
@@ -69,6 +71,7 @@ public class DocumentContextSourceFetcher implements ContextSourceFetcher {
         }
     }
 
+    @Override
     public String getName() {
         return NAME;
     }

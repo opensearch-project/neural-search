@@ -24,7 +24,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import lombok.AllArgsConstructor;
-import lombok.extern.log4j.Log4j2;
 
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.rerank.ContextSourceFetcher;
@@ -37,7 +36,11 @@ import org.opensearch.search.pipeline.SearchResponseProcessor;
 
 import com.google.common.annotations.VisibleForTesting;
 
-@Log4j2
+/**
+ * Factory for rerank processors. Must:
+ * - Instantiate the right kind of rerank processor
+ * - Instantiate the appropriate context source fetchers
+ */
 @AllArgsConstructor
 public class RerankProcessorFactory implements Processor.Factory<SearchResponseProcessor> {
 
@@ -90,8 +93,17 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
         throw new IllegalArgumentException("no rerank type found");
     }
 
+    /**
+     * Factory class for context fetchers. Constructs a list of context fetchers
+     * specified in the pipeline config (and maybe the query context fetcher)
+     */
     protected static class ContextFetcherFactory {
 
+        /**
+         * Map rerank types to whether they should include the query context source fetcher
+         * @param type the constructing RerankType
+         * @return does this RerankType depend on the QueryContextSourceFetcher?
+         */
         public static boolean shouldIncludeQueryContextFetcher(RerankType type) {
             switch (type) {
                 case TEXT_SIMILARITY:
@@ -101,6 +113,12 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
             }
         }
 
+        /**
+         * Create necessary queryContextFetchers for this processor
+         * @param config processor config object. Look for "context" field to find fetchers
+         * @param includeQueryContextFetcher should I include the queryContextFetcher?
+         * @return list of contextFetchers for the processor to use
+         */
         public static List<ContextSourceFetcher> createFetchers(Map<String, Object> config, boolean includeQueryContextFetcher) {
             List<ContextSourceFetcher> fetchers = new ArrayList<>();
             @SuppressWarnings("unchecked")

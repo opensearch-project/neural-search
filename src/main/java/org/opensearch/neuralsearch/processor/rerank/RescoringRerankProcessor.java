@@ -23,8 +23,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
-import lombok.extern.log4j.Log4j2;
-
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.SearchResponseSections;
 import org.opensearch.core.action.ActionListener;
@@ -32,9 +30,19 @@ import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.profile.SearchProfileShardResults;
 
-@Log4j2
+/**
+ * RerankProcessor that rescores all the documents and re-sorts them using the new scores
+ */
 public abstract class RescoringRerankProcessor extends RerankProcessor {
 
+    /**
+     * Constructor. pass through to RerankProcessor ctor.
+     * @param type
+     * @param description
+     * @param tag
+     * @param ignoreFailure
+     * @param contextSourceFetchers
+     */
     public RescoringRerankProcessor(
         RerankType type,
         String description,

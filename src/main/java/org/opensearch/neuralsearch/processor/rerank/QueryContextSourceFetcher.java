@@ -36,6 +36,9 @@ import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.search.SearchExtBuilder;
 
+/**
+ * Context Source Fetcher that gets context from the rerank query ext.
+ */
 public class QueryContextSourceFetcher implements ContextSourceFetcher {
 
     public static final String NAME = "query_context";
@@ -93,6 +96,7 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
         }
     }
 
+    @Override
     public String getName() {
         return NAME;
     }

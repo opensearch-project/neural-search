@@ -27,6 +27,9 @@ import org.opensearch.core.action.ActionListener;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
 
+/**
+ * Rescoring Rerank Processor that uses a TextSimilarity model in ml-commons to rescore
+ */
 public class TextSimilarityRerankProcessor extends RescoringRerankProcessor {
 
     public static final String MODEL_ID_FIELD = "model_id";
@@ -35,6 +38,15 @@ public class TextSimilarityRerankProcessor extends RescoringRerankProcessor {
 
     protected final MLCommonsClientAccessor mlCommonsClientAccessor;
 
+    /**
+     * Constructor
+     * @param description
+     * @param tag
+     * @param ignoreFailure
+     * @param modelId id of TEXT_SIMILARITY model
+     * @param contextSourceFetchers
+     * @param mlCommonsClientAccessor
+     */
     public TextSimilarityRerankProcessor(
         String description,
         String tag,

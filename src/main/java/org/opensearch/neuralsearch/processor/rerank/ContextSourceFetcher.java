@@ -23,6 +23,10 @@ import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.core.action.ActionListener;
 
+/**
+ * Interface that gets context from some source and puts it in a map
+ * for a reranking processor to use
+ */
 public interface ContextSourceFetcher {
 
     /**
@@ -35,5 +39,10 @@ public interface ContextSourceFetcher {
      */
     public void fetchContext(SearchRequest searchRequest, SearchResponse searchResponse, ActionListener<Map<String, Object>> listener);
 
+    /**
+     * Get the name of the contextSourceFetcher. This will be used as the field
+     * name in the context config for the pipeline
+     * @return Name of the fetcher
+     */
     public String getName();
 }

@@ -24,14 +24,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
-import lombok.extern.log4j.Log4j2;
 
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 
-@Log4j2
+/**
+ * Abstract base class for reranking processors
+ */
 @AllArgsConstructor
 public abstract class RerankProcessor implements SearchResponseProcessor {
 
