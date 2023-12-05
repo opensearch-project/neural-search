@@ -126,7 +126,7 @@ public class TextSimilarityRerankProcessorIT extends BaseNeuralSearchIT {
     }
 
     private Map<String, Object> search(String queryText) throws Exception {
-        String jsonQueryFrame = "{\"query\":{\"match_all\":{}},\"ext\":{\"rerank\":{\"query_text\":\"%s\"}}}";
+        String jsonQueryFrame = "{\"query\":{\"match_all\":{}},\"ext\":{\"rerank\":{\"query_context\": {\"query_text\":\"%s\"}}}}";
         String jsonQuery = String.format(LOCALE, jsonQueryFrame, queryText);
         log.info(jsonQuery);
         Request request = new Request("POST", "/" + INDEX_NAME + "/_search");

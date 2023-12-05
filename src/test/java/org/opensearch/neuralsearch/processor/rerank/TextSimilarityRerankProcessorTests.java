@@ -105,7 +105,9 @@ public class TextSimilarityRerankProcessorTests extends OpenSearchTestCase {
         NeuralQueryBuilder nqb = new NeuralQueryBuilder();
         nqb.fieldName("embedding").k(3).modelId("embedding_id").queryText("Question about dolphins");
         ssb.query(nqb);
-        List<SearchExtBuilder> exts = List.of(new RerankSearchExtBuilder(new HashMap<>(params)));
+        List<SearchExtBuilder> exts = List.of(
+            new RerankSearchExtBuilder(new HashMap<>(Map.of(QueryContextSourceFetcher.NAME, new HashMap<>(params))))
+        );
         ssb.ext(exts);
         doReturn(ssb).when(request).source();
     }

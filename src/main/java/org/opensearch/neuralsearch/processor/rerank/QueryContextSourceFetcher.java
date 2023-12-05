@@ -48,15 +48,24 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
             List<SearchExtBuilder> exts = searchRequest.source().ext();
             Map<String, Object> params = RerankSearchExtBuilder.fromExtBuilderList(exts).getParams();
             Map<String, Object> scoringContext = new HashMap<>();
-            if (params.containsKey(QUERY_TEXT_FIELD)) {
-                if (params.containsKey(QUERY_TEXT_PATH_FIELD)) {
+            if (!params.containsKey(NAME)) {
+                throw new IllegalArgumentException(String.format(Locale.ROOT, "must specify %s", NAME));
+            }
+            Object ctxObj = params.remove(NAME);
+            if (!(ctxObj instanceof Map<?, ?>)) {
+                throw new IllegalArgumentException(String.format(Locale.ROOT, "%s must be a map", NAME));
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> ctxMap = (Map<String, Object>) ctxObj;
+            if (ctxMap.containsKey(QUERY_TEXT_FIELD)) {
+                if (ctxMap.containsKey(QUERY_TEXT_PATH_FIELD)) {
                     throw new IllegalArgumentException(
                         String.format(Locale.ROOT, "Cannot specify both \"%s\" and \"%s\"", QUERY_TEXT_FIELD, QUERY_TEXT_PATH_FIELD)
                     );
                 }
-                scoringContext.put(QUERY_TEXT_FIELD, (String) params.get(QUERY_TEXT_FIELD));
-            } else if (params.containsKey(QUERY_TEXT_PATH_FIELD)) {
-                String path = (String) params.get(QUERY_TEXT_PATH_FIELD);
+                scoringContext.put(QUERY_TEXT_FIELD, (String) ctxMap.get(QUERY_TEXT_FIELD));
+            } else if (ctxMap.containsKey(QUERY_TEXT_PATH_FIELD)) {
+                String path = (String) ctxMap.get(QUERY_TEXT_PATH_FIELD);
                 // Convert query to a map with io/xcontent shenanigans
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 XContentBuilder builder = XContentType.CBOR.contentBuilder(baos);
