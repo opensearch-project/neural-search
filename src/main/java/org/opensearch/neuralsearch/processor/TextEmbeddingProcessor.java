@@ -9,12 +9,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
 
-import lombok.extern.log4j.Log4j2;
-
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+
+import lombok.extern.log4j.Log4j2;
 
 /**
  * This processor is used for user input data text embedding processing, model_id can be used to indicate which model user use,

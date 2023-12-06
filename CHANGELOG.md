@@ -21,5 +21,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Infrastructure
 ### Documentation
 ### Maintenance
+- Added support for jdk-21 ([#500](https://github.com/opensearch-project/neural-search/pull/500)))
 ### Refactoring
 Deprecate the `max_token_score` field in `neural_sparse` query clause ([#478](https://github.com/opensearch-project/neural-search/pull/478))

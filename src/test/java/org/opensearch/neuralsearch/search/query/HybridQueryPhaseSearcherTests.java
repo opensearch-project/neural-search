@@ -26,8 +26,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import lombok.SneakyThrows;
-
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
@@ -70,6 +68,8 @@ import org.opensearch.search.query.QueryCollectorContext;
 import org.opensearch.search.query.QuerySearchResult;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
+
+import lombok.SneakyThrows;
 
 public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
     private static final String VECTOR_FIELD_NAME = "vectorField";

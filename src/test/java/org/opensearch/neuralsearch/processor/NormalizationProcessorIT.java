@@ -16,8 +16,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.IntStream;
 
-import lombok.SneakyThrows;
-
 import org.apache.commons.lang3.Range;
 import org.junit.After;
 import org.junit.Before;
@@ -29,6 +27,8 @@ import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 import com.google.common.primitives.Floats;
+
+import lombok.SneakyThrows;
 
 public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     private static final String TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME = "test-neural-multi-doc-one-shard-index";

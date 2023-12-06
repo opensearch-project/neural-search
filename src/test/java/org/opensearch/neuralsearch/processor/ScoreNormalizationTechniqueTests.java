@@ -7,8 +7,6 @@ package org.opensearch.neuralsearch.processor;
 
 import java.util.List;
 
-import lombok.SneakyThrows;
-
 import org.apache.commons.lang3.Range;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
@@ -16,6 +14,8 @@ import org.apache.lucene.search.TotalHits;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.test.OpenSearchTestCase;
+
+import lombok.SneakyThrows;
 
 public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
 

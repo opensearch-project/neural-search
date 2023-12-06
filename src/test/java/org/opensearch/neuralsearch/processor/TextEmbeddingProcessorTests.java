@@ -24,8 +24,6 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
-import lombok.SneakyThrows;
-
 import org.junit.Before;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -42,6 +40,8 @@ import org.opensearch.test.OpenSearchTestCase;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+
+import lombok.SneakyThrows;
 
 public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
 
