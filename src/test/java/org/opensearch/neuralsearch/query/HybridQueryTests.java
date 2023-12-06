@@ -18,8 +18,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import lombok.SneakyThrows;
-
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
@@ -43,6 +41,8 @@ import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
+
+import lombok.SneakyThrows;
 
 public class HybridQueryTests extends OpenSearchQueryTestCase {
 

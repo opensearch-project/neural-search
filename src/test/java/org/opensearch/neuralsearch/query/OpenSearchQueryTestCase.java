@@ -73,7 +73,9 @@ public abstract class OpenSearchQueryTestCase extends OpenSearchTestCase {
             xContentRegistry(),
             similarityService,
             mapperRegistry,
-            () -> { throw new UnsupportedOperationException(); },
+            () -> {
+                throw new UnsupportedOperationException();
+            },
             () -> true,
             scriptService
         );

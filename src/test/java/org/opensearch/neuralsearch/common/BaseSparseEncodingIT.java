@@ -11,8 +11,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import lombok.SneakyThrows;
-
 import org.apache.http.HttpHeaders;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
@@ -26,6 +24,8 @@ import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 
 import com.google.common.collect.ImmutableList;
+
+import lombok.SneakyThrows;
 
 public abstract class BaseSparseEncodingIT extends BaseNeuralSearchIT {
 

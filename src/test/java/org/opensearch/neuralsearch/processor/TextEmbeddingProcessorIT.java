@@ -9,8 +9,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 
-import lombok.SneakyThrows;
-
 import org.apache.http.HttpHeaders;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
@@ -21,6 +19,8 @@ import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
 
 import com.google.common.collect.ImmutableList;
+
+import lombok.SneakyThrows;
 
 public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 

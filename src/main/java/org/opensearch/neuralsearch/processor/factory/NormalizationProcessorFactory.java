@@ -11,9 +11,6 @@ import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
 import java.util.Map;
 import java.util.Objects;
 
-import lombok.AllArgsConstructor;
-import lombok.extern.log4j.Log4j2;
-
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
@@ -24,6 +21,9 @@ import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFac
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
+
+import lombok.AllArgsConstructor;
+import lombok.extern.log4j.Log4j2;
 
 /**
  * Factory for query results normalization processor for search pipeline. Instantiates processor based on user provided input.

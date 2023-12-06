@@ -14,8 +14,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
-import lombok.extern.log4j.Log4j2;
-
 import org.opensearch.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.service.ClusterService;
@@ -60,6 +58,8 @@ import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.watcher.ResourceWatcherService;
+
+import lombok.extern.log4j.Log4j2;
 
 /**
  * Neural Search plugin class

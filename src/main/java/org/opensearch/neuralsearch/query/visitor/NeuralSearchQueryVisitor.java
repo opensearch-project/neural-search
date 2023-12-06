@@ -7,12 +7,12 @@ package org.opensearch.neuralsearch.query.visitor;
 
 import java.util.Map;
 
-import lombok.AllArgsConstructor;
-
 import org.apache.lucene.search.BooleanClause;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilderVisitor;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+
+import lombok.AllArgsConstructor;
 
 /**
  * Neural Search Query Visitor. It visits each and every component of query buikder tree.
