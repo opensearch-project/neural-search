@@ -10,8 +10,6 @@ import static org.opensearch.neuralsearch.TestUtils.objectToFloat;
 import java.util.List;
 import java.util.Map;
 
-import lombok.SneakyThrows;
-
 import org.junit.After;
 import org.junit.Before;
 import org.opensearch.client.ResponseException;
@@ -20,6 +18,8 @@ import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.neuralsearch.TestUtils;
 import org.opensearch.neuralsearch.common.BaseSparseEncodingIT;
+
+import lombok.SneakyThrows;
 
 public class NeuralSparseQueryIT extends BaseSparseEncodingIT {
     private static final String TEST_BASIC_INDEX_NAME = "test-sparse-basic-index";

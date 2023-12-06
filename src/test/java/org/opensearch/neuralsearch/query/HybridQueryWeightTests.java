@@ -12,8 +12,6 @@ import static org.opensearch.neuralsearch.query.HybridQueryBuilderTests.TEXT_FIE
 
 import java.util.List;
 
-import lombok.SneakyThrows;
-
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
@@ -35,6 +33,8 @@ import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
+
+import lombok.SneakyThrows;
 
 public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
 

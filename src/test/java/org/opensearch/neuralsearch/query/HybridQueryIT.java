@@ -20,8 +20,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.IntStream;
 
-import lombok.SneakyThrows;
-
 import org.apache.lucene.search.join.ScoreMode;
 import org.junit.After;
 import org.junit.Before;
@@ -35,6 +33,8 @@ import org.opensearch.knn.index.SpaceType;
 import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
 
 import com.google.common.primitives.Floats;
+
+import lombok.SneakyThrows;
 
 public class HybridQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_BASIC_INDEX_NAME = "test-neural-basic-index";

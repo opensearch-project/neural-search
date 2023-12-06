@@ -14,11 +14,11 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import lombok.extern.log4j.Log4j2;
-
 import org.apache.commons.lang3.Range;
 
 import com.google.common.math.DoubleMath;
+
+import lombok.extern.log4j.Log4j2;
 
 /**
  * Collection of utility methods for score combination technique classes

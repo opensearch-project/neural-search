@@ -12,9 +12,6 @@ import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import lombok.Getter;
-import lombok.extern.log4j.Log4j2;
-
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.HitQueue;
@@ -27,6 +24,9 @@ import org.apache.lucene.search.TopScoreDocCollector;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.util.PriorityQueue;
 import org.opensearch.neuralsearch.query.HybridQueryScorer;
+
+import lombok.Getter;
+import lombok.extern.log4j.Log4j2;
 
 /**
  * Collects the TopDocs after executing hybrid query. Uses HybridQueryTopDocs as DTO to handle each sub query results

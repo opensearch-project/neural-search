@@ -13,12 +13,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import lombok.extern.log4j.Log4j2;
-
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
+
+import lombok.extern.log4j.Log4j2;
 
 /**
  * Abstracts combination of scores in query search results.

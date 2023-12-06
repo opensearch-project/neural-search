@@ -16,8 +16,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
-import lombok.SneakyThrows;
-
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
@@ -30,6 +28,8 @@ import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.test.OpenSearchTestCase;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
+
+import lombok.SneakyThrows;
 
 public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
 

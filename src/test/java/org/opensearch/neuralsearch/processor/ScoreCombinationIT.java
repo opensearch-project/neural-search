@@ -16,8 +16,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 
-import lombok.SneakyThrows;
-
 import org.junit.After;
 import org.junit.Before;
 import org.opensearch.client.ResponseException;
@@ -28,6 +26,8 @@ import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 import com.google.common.primitives.Floats;
+
+import lombok.SneakyThrows;
 
 public class ScoreCombinationIT extends BaseNeuralSearchIT {
     private static final String TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME = "test-neural-multi-doc-one-shard-index";

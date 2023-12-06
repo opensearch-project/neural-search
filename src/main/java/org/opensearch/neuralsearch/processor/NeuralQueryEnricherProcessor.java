@@ -10,9 +10,6 @@ import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.TYPE;
 
 import java.util.Map;
 
-import lombok.Getter;
-import lombok.Setter;
-
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.common.Nullable;
 import org.opensearch.index.query.QueryBuilder;
@@ -21,6 +18,9 @@ import org.opensearch.neuralsearch.query.visitor.NeuralSearchQueryVisitor;
 import org.opensearch.search.pipeline.AbstractProcessor;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
+
+import lombok.Getter;
+import lombok.Setter;
 
 /**
  * Neural Search Query Request Processor, It modifies the search request with neural query clause

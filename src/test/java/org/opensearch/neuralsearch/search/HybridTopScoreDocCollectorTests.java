@@ -17,8 +17,6 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import lombok.SneakyThrows;
-
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.TextField;
@@ -41,6 +39,8 @@ import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.query.HybridQueryScorer;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
+
+import lombok.SneakyThrows;
 
 public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
 

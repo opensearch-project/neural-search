@@ -15,12 +15,12 @@ import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.
 
 import java.util.Map;
 
-import lombok.AllArgsConstructor;
-
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor;
+
+import lombok.AllArgsConstructor;
 
 /**
  * Factory for text_image embedding ingest processor for ingestion pipeline. Instantiates processor based on user provided input.

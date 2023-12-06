@@ -17,13 +17,13 @@ import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.
 import java.util.HashMap;
 import java.util.Map;
 
-import lombok.SneakyThrows;
-
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor;
 import org.opensearch.test.OpenSearchTestCase;
+
+import lombok.SneakyThrows;
 
 public class TextImageEmbeddingProcessorFactoryTests extends OpenSearchTestCase {
 
