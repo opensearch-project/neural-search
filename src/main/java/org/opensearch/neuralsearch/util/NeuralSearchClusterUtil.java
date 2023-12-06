@@ -5,12 +5,12 @@
 
 package org.opensearch.neuralsearch.util;
 
+import org.opensearch.Version;
+import org.opensearch.cluster.service.ClusterService;
+
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import lombok.extern.log4j.Log4j2;
-
-import org.opensearch.Version;
-import org.opensearch.cluster.service.ClusterService;
 
 /**
  * Class abstracts information related to underlying OpenSearch cluster

@@ -12,8 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import lombok.Getter;
-
 import org.apache.lucene.search.DisiPriorityQueue;
 import org.apache.lucene.search.DisiWrapper;
 import org.apache.lucene.search.DisjunctionDISIApproximation;
@@ -21,6 +19,8 @@ import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Weight;
+
+import lombok.Getter;
 
 /**
  * Class abstracts functionality of Scorer for hybrid query. When iterating over documents in increasing

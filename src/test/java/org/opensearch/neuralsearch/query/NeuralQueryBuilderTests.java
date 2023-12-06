@@ -29,8 +29,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
-import lombok.SneakyThrows;
-
 import org.opensearch.Version;
 import org.opensearch.client.Client;
 import org.opensearch.cluster.service.ClusterService;
@@ -58,6 +56,8 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.test.OpenSearchTestCase;
+
+import lombok.SneakyThrows;
 
 public class NeuralQueryBuilderTests extends OpenSearchTestCase {
 

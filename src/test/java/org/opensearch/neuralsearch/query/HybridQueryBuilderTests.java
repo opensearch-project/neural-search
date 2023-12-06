@@ -23,8 +23,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
-import lombok.SneakyThrows;
-
 import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
@@ -57,6 +55,8 @@ import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
+
+import lombok.SneakyThrows;
 
 public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     static final String VECTOR_FIELD_NAME = "vectorField";

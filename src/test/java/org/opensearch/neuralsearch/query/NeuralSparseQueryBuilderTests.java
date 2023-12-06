@@ -23,8 +23,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
-import lombok.SneakyThrows;
-
 import org.opensearch.client.Client;
 import org.opensearch.common.SetOnce;
 import org.opensearch.common.io.stream.BytesStreamOutput;
@@ -42,6 +40,8 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.test.OpenSearchTestCase;
+
+import lombok.SneakyThrows;
 
 public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
 

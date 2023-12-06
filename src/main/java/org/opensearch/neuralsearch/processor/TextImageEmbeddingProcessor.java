@@ -15,8 +15,6 @@ import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
-import lombok.extern.log4j.Log4j2;
-
 import org.apache.commons.lang3.StringUtils;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
@@ -29,6 +27,8 @@ import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
 import com.google.common.annotations.VisibleForTesting;
+
+import lombok.extern.log4j.Log4j2;
 
 /**
  * This processor is used for user input data text and image embedding processing, model_id can be used to indicate which model user use,

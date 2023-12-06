@@ -9,13 +9,13 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
-import lombok.ToString;
-
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import com.google.common.primitives.Floats;
+
+import lombok.ToString;
 
 /**
  * Abstracts normalization of scores based on min-max method

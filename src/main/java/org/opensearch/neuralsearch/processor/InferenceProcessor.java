@@ -11,8 +11,6 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import lombok.extern.log4j.Log4j2;
-
 import org.apache.commons.lang3.StringUtils;
 import org.opensearch.env.Environment;
 import org.opensearch.index.mapper.MapperService;
@@ -22,6 +20,8 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
+
+import lombok.extern.log4j.Log4j2;
 
 /**
  * The abstract class for text processing use cases. Users provide a field name map and a model id.

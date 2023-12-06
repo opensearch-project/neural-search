@@ -9,12 +9,12 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.function.BiFunction;
 
-import lombok.NoArgsConstructor;
-
 import org.apache.commons.lang.ArrayUtils;
 import org.opensearch.test.OpenSearchTestCase;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
+
+import lombok.NoArgsConstructor;
 
 @NoArgsConstructor
 public class BaseScoreCombinationTechniqueTests extends OpenSearchTestCase {
