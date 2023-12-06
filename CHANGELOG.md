@@ -13,7 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Infrastructure
 ### Documentation
 ### Maintenance
-Added support for jdk-21 ([#500](https://github.com/opensearch-project/neural-search/pull/500)))
+- Added support for jdk-21 ([#500](https://github.com/opensearch-project/neural-search/pull/500)))
 ### Refactoring
 
 ## [Unreleased 2.x](https://github.com/opensearch-project/neural-search/compare/2.11...2.x)
