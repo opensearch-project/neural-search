@@ -18,8 +18,8 @@ import org.opensearch.client.ResponseException;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.neuralsearch.BaseSparseEncodingIT;
 import org.opensearch.neuralsearch.TestUtils;
-import org.opensearch.neuralsearch.common.BaseSparseEncodingIT;
 
 public class NeuralSparseQueryIT extends BaseSparseEncodingIT {
     private static final String TEST_BASIC_INDEX_NAME = "test-sparse-basic-index";

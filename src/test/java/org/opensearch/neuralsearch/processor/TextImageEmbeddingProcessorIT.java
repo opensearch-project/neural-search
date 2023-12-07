@@ -18,7 +18,7 @@ import org.junit.After;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 import com.google.common.collect.ImmutableList;
 

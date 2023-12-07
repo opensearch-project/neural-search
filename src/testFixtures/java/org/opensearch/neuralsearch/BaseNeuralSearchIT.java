@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package org.opensearch.neuralsearch.common;
+package org.opensearch.neuralsearch;
 
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 
@@ -49,7 +49,6 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
-import org.opensearch.neuralsearch.OpenSearchSecureRestTestCase;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.test.ClusterServiceUtils;
 import org.opensearch.threadpool.TestThreadPool;

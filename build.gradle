@@ -11,6 +11,7 @@ import org.opensearch.gradle.test.RestIntegTestTask
 import java.util.concurrent.Callable
 
 apply plugin: 'java'
+apply plugin: 'java-test-fixtures'
 apply plugin: 'idea'
 apply plugin: 'opensearch.opensearchplugin'
 apply plugin: 'opensearch.pluginzip'
@@ -145,6 +146,7 @@ dependencies {
     compileOnly fileTree(dir: knnJarDirectory, include: '*.jar')
     api group: 'org.opensearch', name:'opensearch-ml-client', version: "${opensearch_build}"
     implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.10'
+    testFixturesImplementation "org.opensearch.test:framework:${opensearch_version}"
     // ml-common excluded reflection for runtime so we need to add it by ourselves.
     // https://github.com/opensearch-project/ml-commons/commit/464bfe34c66d7a729a00dd457f03587ea4e504d9
     // TODO: Remove following three lines of dependencies if ml-common include them in their jar
@@ -154,6 +156,10 @@ dependencies {
     runtimeOnly group: 'org.apache.commons', name: 'commons-text', version: '1.10.0'
     runtimeOnly group: 'com.google.code.gson', name: 'gson', version: '2.10.1'
     runtimeOnly group: 'org.json', name: 'json', version: '20231013'
+    testFixturesImplementation "org.opensearch:common-utils:${version}"
+    testFixturesImplementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.10'
+    testFixturesCompileOnly group: 'com.google.guava', name: 'guava', version:'32.0.1-jre'
+    testFixturesCompileOnly fileTree(dir: knnJarDirectory, include: '*.jar')
 }
 
 // In order to add the jar to the classpath, we need to unzip the
@@ -171,6 +177,9 @@ compileJava {
     options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
 }
 compileTestJava {
+    options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
+}
+compileTestFixturesJava {
     options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
 }
 

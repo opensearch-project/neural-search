@@ -18,7 +18,7 @@ import org.junit.After;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.neuralsearch.common.BaseSparseEncodingIT;
+import org.opensearch.neuralsearch.BaseSparseEncodingIT;
 
 import com.google.common.collect.ImmutableList;
 

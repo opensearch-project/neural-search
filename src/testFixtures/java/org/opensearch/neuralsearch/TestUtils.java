@@ -27,6 +27,7 @@ import org.apache.lucene.search.TotalHits;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.knn.index.SpaceType;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.fetch.FetchSearchResult;
@@ -34,8 +35,19 @@ import org.opensearch.search.query.QuerySearchResult;
 
 public class TestUtils {
 
-    private static final String RELATION_EQUAL_TO = "eq";
+    public static final String RELATION_EQUAL_TO = "eq";
     public static final float DELTA_FOR_SCORE_ASSERTION = 0.001f;
+    public static final String RESTART_UPGRADE_OLD_CLUSTER = "tests.is_old_cluster";
+    public static final String BWC_VERSION = "tests.plugin_bwc_version";
+    public static final String NEURAL_SEARCH_BWC_PREFIX = "neuralsearch-bwc-";
+    public static final String OLD_CLUSTER = "old_cluster";
+    public static final String MIXED_CLUSTER = "mixed_cluster";
+    public static final String UPGRADED_CLUSTER = "upgraded_cluster";
+    public static final String ROLLING_UPGRADE_FIRST_ROUND = "tests.rest.first_round";
+    public static final String BWCSUITE_CLUSTER = "tests.rest.bwcsuite_cluster";
+    public static final String NODES_BWC_CLUSTER = "3";
+    public static final int TEST_DIMENSION = 768;
+    public static final SpaceType TEST_SPACE_TYPE = SpaceType.L2;
 
     /**
      * Convert an xContentBuilder to a map

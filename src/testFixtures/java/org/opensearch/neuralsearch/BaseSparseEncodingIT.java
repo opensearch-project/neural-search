@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package org.opensearch.neuralsearch.common;
+package org.opensearch.neuralsearch;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

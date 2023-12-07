@@ -5,6 +5,8 @@
 
 package org.opensearch.neuralsearch.processor;
 
+import static org.opensearch.neuralsearch.TestUtils.TEST_DIMENSION;
+import static org.opensearch.neuralsearch.TestUtils.TEST_SPACE_TYPE;
 import static org.opensearch.neuralsearch.TestUtils.assertHybridSearchResults;
 import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
 
@@ -18,8 +20,7 @@ import lombok.SneakyThrows;
 import org.junit.After;
 import org.junit.Before;
 import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.knn.index.SpaceType;
-import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
@@ -34,8 +35,6 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
     private static final String TEST_DOC_TEXT4 = "Hello, I'm glad to you see you pal";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_1 = "test-knn-vector-1";
     private static final String TEST_TEXT_FIELD_NAME_1 = "test-text-field-1";
-    private static final int TEST_DIMENSION = 768;
-    private static final SpaceType TEST_SPACE_TYPE = SpaceType.L2;
     private static final String SEARCH_PIPELINE = "phase-results-pipeline";
     private final float[] testVector1 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector2 = createRandomVector(TEST_DIMENSION);
