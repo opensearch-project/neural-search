@@ -48,6 +48,7 @@ public class TestUtils {
     public static final String NODES_BWC_CLUSTER = "3";
     public static final int TEST_DIMENSION = 768;
     public static final SpaceType TEST_SPACE_TYPE = SpaceType.L2;
+    public static final String CLIENT_TIMEOUT_VALUE = "90s";
 
     /**
      * Convert an xContentBuilder to a map
