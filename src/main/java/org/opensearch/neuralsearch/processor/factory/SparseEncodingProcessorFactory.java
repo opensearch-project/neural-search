@@ -11,12 +11,12 @@ import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.*;
 
 import java.util.Map;
 
-import lombok.extern.log4j.Log4j2;
-
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
+
+import lombok.extern.log4j.Log4j2;
 
 /**
  * Factory for sparse encoding ingest processor for ingestion pipeline. Instantiates processor based on user provided input.

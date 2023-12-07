@@ -110,8 +110,8 @@ buildscript {
 
     dependencies {
         classpath "${opensearch_group}.gradle:build-tools:${opensearch_version}"
-        classpath "com.diffplug.spotless:spotless-plugin-gradle:5.6.1"
-        classpath "io.freefair.gradle:lombok-plugin:8.0.1"
+        classpath "com.diffplug.spotless:spotless-plugin-gradle:6.23.2"
+        classpath "io.freefair.gradle:lombok-plugin:8.4"
     }
 }
 
@@ -145,8 +145,8 @@ dependencies {
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-ml-plugin', version: "${opensearch_build}"
     compileOnly fileTree(dir: knnJarDirectory, include: '*.jar')
     api group: 'org.opensearch', name:'opensearch-ml-client', version: "${opensearch_build}"
-    implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.10'
     testFixturesImplementation "org.opensearch.test:framework:${opensearch_version}"
+    implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.14.0'
     // ml-common excluded reflection for runtime so we need to add it by ourselves.
     // https://github.com/opensearch-project/ml-commons/commit/464bfe34c66d7a729a00dd457f03587ea4e504d9
     // TODO: Remove following three lines of dependencies if ml-common include them in their jar
@@ -157,7 +157,7 @@ dependencies {
     runtimeOnly group: 'com.google.code.gson', name: 'gson', version: '2.10.1'
     runtimeOnly group: 'org.json', name: 'json', version: '20231013'
     testFixturesImplementation "org.opensearch:common-utils:${version}"
-    testFixturesImplementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.10'
+    testFixturesImplementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.14.0'
     testFixturesCompileOnly group: 'com.google.guava', name: 'guava', version:'32.0.1-jre'
     testFixturesCompileOnly fileTree(dir: knnJarDirectory, include: '*.jar')
 }
@@ -264,7 +264,7 @@ testClusters.integTest {
 
     // Increase heap size from default of 512mb to 1gb. When heap size is 512mb, our integ tests sporadically fail due
     // to ml-commons memory circuit breaker exception
-    jvmArgs("-Xms1g", "-Xmx1g")
+    jvmArgs("-Xms1g", "-Xmx4g")
 }
 
 // Remote Integration Tests

@@ -13,12 +13,6 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-import lombok.experimental.Accessors;
-import lombok.extern.log4j.Log4j2;
-
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.lucene.search.Query;
 import org.opensearch.common.lucene.search.Queries;
@@ -34,6 +28,12 @@ import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.QueryShardException;
 import org.opensearch.index.query.Rewriteable;
+
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.experimental.Accessors;
+import lombok.extern.log4j.Log4j2;
 
 /**
  * Class abstract creation of a Query type "hybrid". Hybrid query will allow execution of multiple sub-queries and

@@ -12,8 +12,6 @@ import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
 import java.util.Collections;
 import java.util.Map;
 
-import lombok.SneakyThrows;
-
 import org.junit.After;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
@@ -21,6 +19,8 @@ import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 import com.google.common.primitives.Floats;
+
+import lombok.SneakyThrows;
 
 public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
 
