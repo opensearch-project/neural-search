@@ -28,6 +28,7 @@ import lombok.Getter;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 
 /**
@@ -95,7 +96,12 @@ public abstract class RerankProcessor implements SearchResponseProcessor {
     }
 
     @Override
-    public void processResponseAsync(SearchRequest request, SearchResponse response, ActionListener<SearchResponse> responseListener) {
+    public void processResponseAsync(
+        SearchRequest request,
+        SearchResponse response,
+        PipelineProcessingContext ctx,
+        ActionListener<SearchResponse> responseListener
+    ) {
         try {
             generateRerankingContext(
                 request,

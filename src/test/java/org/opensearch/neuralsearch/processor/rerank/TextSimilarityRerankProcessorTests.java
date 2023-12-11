@@ -57,6 +57,7 @@ import org.opensearch.search.SearchExtBuilder;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.builder.SearchSourceBuilder;
+import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.pipeline.Processor.PipelineContext;
 import org.opensearch.test.OpenSearchTestCase;
 
@@ -73,6 +74,9 @@ public class TextSimilarityRerankProcessorTests extends OpenSearchTestCase {
 
     @Mock
     PipelineContext pipelineContext;
+
+    @Mock
+    PipelineProcessingContext ppctx;
 
     RerankProcessorFactory factory;
 
@@ -336,7 +340,7 @@ public class TextSimilarityRerankProcessorTests extends OpenSearchTestCase {
         setupSearchResults();
         @SuppressWarnings("unchecked")
         ActionListener<SearchResponse> listener = mock(ActionListener.class);
-        processor.processResponseAsync(request, response, listener);
+        processor.processResponseAsync(request, response, ppctx, listener);
         ArgumentCaptor<SearchResponse> argCaptor = ArgumentCaptor.forClass(SearchResponse.class);
         verify(listener, times(1)).onResponse(argCaptor.capture());
         SearchResponse rsp = argCaptor.getValue();
