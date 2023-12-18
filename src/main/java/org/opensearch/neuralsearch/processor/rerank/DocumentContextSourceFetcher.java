@@ -29,6 +29,7 @@ import lombok.AllArgsConstructor;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.core.xcontent.ObjectPath;
 import org.opensearch.search.SearchHit;
 
 /**
@@ -65,9 +66,11 @@ public class DocumentContextSourceFetcher implements ContextSourceFetcher {
 
     private String contextFromSearchHit(final SearchHit hit, final String field) {
         if (hit.getFields().containsKey(field)) {
-            return (String) hit.field(field).getValue();
+            Object fieldValue = hit.field(field).getValue();
+            return String.valueOf(fieldValue);
         } else if (hit.hasSource() && hit.getSourceAsMap().containsKey(field)) {
-            return (String) hit.getSourceAsMap().get(field);
+            Object sourceValue = ObjectPath.eval(field, hit.getSourceAsMap());
+            return String.valueOf(sourceValue);
         } else {
             return "";
         }
@@ -91,7 +94,7 @@ public class DocumentContextSourceFetcher implements ContextSourceFetcher {
         if (fields.size() == 0) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "%s must be nonempty", NAME));
         }
-        List<String> strfields = fields.stream().map(field -> (String) field).collect(Collectors.toList());
-        return new DocumentContextSourceFetcher(strfields);
+        List<String> fieldsAsStrings = fields.stream().map(field -> (String) field).collect(Collectors.toList());
+        return new DocumentContextSourceFetcher(fieldsAsStrings);
     }
 }

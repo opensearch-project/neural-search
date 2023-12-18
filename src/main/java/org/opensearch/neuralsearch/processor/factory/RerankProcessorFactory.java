@@ -36,7 +36,6 @@ import org.opensearch.neuralsearch.processor.rerank.TextSimilarityRerankProcesso
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 
 /**
@@ -79,8 +78,7 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
         }
     }
 
-    @VisibleForTesting
-    RerankType findRerankType(final Map<String, Object> config) throws IllegalArgumentException {
+    private RerankType findRerankType(final Map<String, Object> config) throws IllegalArgumentException {
         // Set of rerank type labels in the config
         Set<String> rerankTypes = Sets.intersection(config.keySet(), RerankType.labelMap().keySet());
         // A rerank type must be provided
