@@ -62,7 +62,7 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
         boolean includeQueryContextFetcher = ContextFetcherFactory.shouldIncludeQueryContextFetcher(type);
         List<ContextSourceFetcher> contextFetchers = ContextFetcherFactory.createFetchers(config, includeQueryContextFetcher);
         switch (type) {
-            case TEXT_SIMILARITY:
+            case ML_OPENSEARCH:
                 @SuppressWarnings("unchecked")
                 Map<String, String> rerankerConfig = (Map<String, String>) config.remove(type.getLabel());
                 String modelId = rerankerConfig.get(TextSimilarityRerankProcessor.MODEL_ID_FIELD);
@@ -106,7 +106,7 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
          */
         public static boolean shouldIncludeQueryContextFetcher(RerankType type) {
             switch (type) {
-                case TEXT_SIMILARITY:
+                case ML_OPENSEARCH:
                     return true;
                 default:
                     return false;

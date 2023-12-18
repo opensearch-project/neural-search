@@ -3,7 +3,7 @@
     "response_processors": [
         {
             "rerank": {
-                "text_similarity": {
+                "ml_opensearch": {
                     "model_id": "%s"
                 },
                 "context": {

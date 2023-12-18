@@ -88,7 +88,7 @@ public class TextSimilarityRerankProcessorTests extends OpenSearchTestCase {
         factory = new RerankProcessorFactory(mlCommonsClientAccessor);
         Map<String, Object> config = new HashMap<>(
             Map.of(
-                RerankType.TEXT_SIMILARITY.getLabel(),
+                RerankType.ML_OPENSEARCH.getLabel(),
                 new HashMap<>(Map.of(TextSimilarityRerankProcessor.MODEL_ID_FIELD, "model-id")),
                 RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
                 new HashMap<>(Map.of(DocumentContextSourceFetcher.NAME, new ArrayList<>(List.of("text_representation"))))

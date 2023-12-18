@@ -55,7 +55,7 @@ public class TextSimilarityRerankProcessor extends RescoringRerankProcessor {
         List<ContextSourceFetcher> contextSourceFetchers,
         MLCommonsClientAccessor mlCommonsClientAccessor
     ) {
-        super(RerankType.TEXT_SIMILARITY, description, tag, ignoreFailure, contextSourceFetchers);
+        super(RerankType.ML_OPENSEARCH, description, tag, ignoreFailure, contextSourceFetchers);
         this.modelId = modelId;
         this.mlCommonsClientAccessor = mlCommonsClientAccessor;
     }

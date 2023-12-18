@@ -28,7 +28,7 @@ import lombok.Getter;
  */
 public enum RerankType {
 
-    TEXT_SIMILARITY("text_similarity");
+    ML_OPENSEARCH("ml_opensearch");
 
     @Getter
     private final String label;
