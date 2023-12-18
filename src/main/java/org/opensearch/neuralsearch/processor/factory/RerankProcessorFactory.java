@@ -30,9 +30,9 @@ import org.opensearch.ingest.ConfigurationUtils;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.rerank.ContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.DocumentContextSourceFetcher;
+import org.opensearch.neuralsearch.processor.rerank.MLOpenSearchRerankProcessor;
 import org.opensearch.neuralsearch.processor.rerank.QueryContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.RerankType;
-import org.opensearch.neuralsearch.processor.rerank.TextSimilarityRerankProcessor;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 
@@ -70,9 +70,9 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
                     RERANK_PROCESSOR_TYPE,
                     tag,
                     rerankerConfig,
-                    TextSimilarityRerankProcessor.MODEL_ID_FIELD
+                    MLOpenSearchRerankProcessor.MODEL_ID_FIELD
                 );
-                return new TextSimilarityRerankProcessor(description, tag, ignoreFailure, modelId, contextFetchers, clientAccessor);
+                return new MLOpenSearchRerankProcessor(description, tag, ignoreFailure, modelId, contextFetchers, clientAccessor);
             default:
                 throw new IllegalArgumentException(String.format(Locale.ROOT, "Cannot build reranker type %s", type.getLabel()));
         }

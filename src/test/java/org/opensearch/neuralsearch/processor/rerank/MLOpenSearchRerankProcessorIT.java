@@ -39,9 +39,9 @@ import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
 import com.google.common.collect.ImmutableList;
 
 @Log4j2
-public class TextSimilarityRerankProcessorIT extends BaseNeuralSearchIT {
+public class MLOpenSearchRerankProcessorIT extends BaseNeuralSearchIT {
 
-    final static String PIPELINE_NAME = "rerank-ts-pipeline";
+    final static String PIPELINE_NAME = "rerank-mlos-pipeline";
     final static String INDEX_NAME = "rerank-test";
     final static String TEXT_REP_1 = "Jacques loves fish. Fish make Jacques happy";
     final static String TEXT_REP_2 = "Fish like to eat plankton";
@@ -63,7 +63,7 @@ public class TextSimilarityRerankProcessorIT extends BaseNeuralSearchIT {
     public void testCrossEncoderRerankProcessor() throws Exception {
         String modelId = uploadTextSimilarityModel();
         loadModel(modelId);
-        createSearchPipelineViaConfig(modelId, PIPELINE_NAME, "processor/TextSimilarityRerankPipelineConfiguration.json");
+        createSearchPipelineViaConfig(modelId, PIPELINE_NAME, "processor/RerankMLOpenSearchPipelineConfiguration.json");
         setupIndex();
         runQueries();
     }
