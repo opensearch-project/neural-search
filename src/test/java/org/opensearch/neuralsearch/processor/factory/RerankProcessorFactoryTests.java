@@ -27,6 +27,7 @@ import java.util.Map;
 
 import org.junit.Before;
 import org.mockito.Mock;
+import org.opensearch.OpenSearchParseException;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.rerank.DocumentContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
@@ -134,8 +135,8 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
     public void testRerankProcessorFactory_CrossEncoder_EmptySubConfig_ThenFail() {
         Map<String, Object> config = new HashMap<>(Map.of(RerankType.ML_OPENSEARCH.getLabel(), Map.of()));
         assertThrows(
-            TextSimilarityRerankProcessor.MODEL_ID_FIELD + " must be specified",
-            IllegalArgumentException.class,
+            String.format(Locale.ROOT, "[%s] required property is missing", RerankProcessorFactory.CONTEXT_CONFIG_FIELD),
+            OpenSearchParseException.class,
             () -> factory.create(Map.of(), TAG, DESC, false, config, pipelineContext)
         );
     }
@@ -145,8 +146,8 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
             Map.of(RerankType.ML_OPENSEARCH.getLabel(), new HashMap<>(Map.of(TextSimilarityRerankProcessor.MODEL_ID_FIELD, "model-id")))
         );
         assertThrows(
-            String.format(Locale.ROOT, "%s field must be provided", RerankProcessorFactory.CONTEXT_CONFIG_FIELD),
-            IllegalArgumentException.class,
+            String.format(Locale.ROOT, "[%s] required property is missing", RerankProcessorFactory.CONTEXT_CONFIG_FIELD),
+            OpenSearchParseException.class,
             () -> factory.create(Map.of(), TAG, DESC, false, config, pipelineContext)
         );
     }
@@ -161,8 +162,8 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
             )
         );
         assertThrows(
-            TextSimilarityRerankProcessor.MODEL_ID_FIELD + " must be specified",
-            IllegalArgumentException.class,
+            String.format(Locale.ROOT, "[%s] required property is missing", TextSimilarityRerankProcessor.MODEL_ID_FIELD),
+            OpenSearchParseException.class,
             () -> factory.create(Map.of(), TAG, DESC, false, config, pipelineContext)
         );
     }

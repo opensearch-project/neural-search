@@ -45,4 +45,5 @@ public interface ContextSourceFetcher {
      * @return Name of the fetcher
      */
     public String getName();
+
 }

@@ -20,7 +20,9 @@ package org.opensearch.neuralsearch.processor.rerank;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import lombok.AllArgsConstructor;
 
@@ -74,5 +76,22 @@ public class DocumentContextSourceFetcher implements ContextSourceFetcher {
     @Override
     public String getName() {
         return NAME;
+    }
+
+    /**
+     * Create a document context source fetcher from list of field names provided by configuration
+     * @param config configuration object grabbed from parsed API request. Should be a list of strings
+     * @return a new DocumentContextSourceFetcher or throws IllegalArgumentException if config is malformed
+     */
+    public static DocumentContextSourceFetcher create(Object config) {
+        if (!(config instanceof List)) {
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "%s must be a list of field names", NAME));
+        }
+        List<?> fields = (List<?>) config;
+        if (fields.size() == 0) {
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "%s must be nonempty", NAME));
+        }
+        List<String> strfields = fields.stream().map(field -> (String) field).collect(Collectors.toList());
+        return new DocumentContextSourceFetcher(strfields);
     }
 }

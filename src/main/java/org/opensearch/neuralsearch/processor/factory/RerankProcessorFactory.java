@@ -23,10 +23,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.StringJoiner;
-import java.util.stream.Collectors;
 
 import lombok.AllArgsConstructor;
 
+import org.opensearch.ingest.ConfigurationUtils;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.rerank.ContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.DocumentContextSourceFetcher;
@@ -63,22 +63,19 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
     ) {
         RerankType type = findRerankType(config);
         boolean includeQueryContextFetcher = ContextFetcherFactory.shouldIncludeQueryContextFetcher(type);
-        List<ContextSourceFetcher> contextFetchers = ContextFetcherFactory.createFetchers(config, includeQueryContextFetcher);
+        List<ContextSourceFetcher> contextFetchers = ContextFetcherFactory.createFetchers(config, includeQueryContextFetcher, tag);
         switch (type) {
             case ML_OPENSEARCH:
-                @SuppressWarnings("unchecked")
-                Map<String, String> rerankerConfig = (Map<String, String>) config.remove(type.getLabel());
-                String modelId = rerankerConfig.get(TextSimilarityRerankProcessor.MODEL_ID_FIELD);
-                if (modelId == null) {
-                    throw new IllegalArgumentException(
-                        String.format(Locale.ROOT, "%s must be specified", TextSimilarityRerankProcessor.MODEL_ID_FIELD)
-                    );
-                }
+                Map<String, Object> rerankerConfig = ConfigurationUtils.readMap(RERANK_PROCESSOR_TYPE, tag, config, type.getLabel());
+                String modelId = ConfigurationUtils.readStringProperty(
+                    RERANK_PROCESSOR_TYPE,
+                    tag,
+                    rerankerConfig,
+                    TextSimilarityRerankProcessor.MODEL_ID_FIELD
+                );
                 return new TextSimilarityRerankProcessor(description, tag, ignoreFailure, modelId, contextFetchers, clientAccessor);
             default:
-                throw new IllegalArgumentException(
-                    String.format(Locale.ROOT, "could not find constructor for reranker type %s", type.getLabel())
-                );
+                throw new IllegalArgumentException(String.format(Locale.ROOT, "Cannot build reranker type %s", type.getLabel()));
         }
     }
 
@@ -97,9 +94,7 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
         // Only one rerank type may be provided
         if (rerankTypes.size() > 1) {
             StringJoiner msgBuilder = new StringJoiner(", ", "Multiple rerank types found: [", "]. Only one is permitted.");
-            for (String rt : rerankTypes) {
-                msgBuilder.add(rt);
-            }
+            rerankTypes.forEach(rt -> msgBuilder.add(rt));
             throw new IllegalArgumentException(msgBuilder.toString());
         }
         return RerankType.from(rerankTypes.iterator().next());
@@ -131,26 +126,18 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
          * @param includeQueryContextFetcher should I include the queryContextFetcher?
          * @return list of contextFetchers for the processor to use
          */
-        public static List<ContextSourceFetcher> createFetchers(Map<String, Object> config, boolean includeQueryContextFetcher) {
+        public static List<ContextSourceFetcher> createFetchers(
+            Map<String, Object> config,
+            boolean includeQueryContextFetcher,
+            String tag
+        ) {
+            Map<String, Object> contextConfig = ConfigurationUtils.readMap(RERANK_PROCESSOR_TYPE, tag, config, CONTEXT_CONFIG_FIELD);
             List<ContextSourceFetcher> fetchers = new ArrayList<>();
-            @SuppressWarnings("unchecked")
-            Map<String, Object> contextConfig = (Map<String, Object>) config.remove(CONTEXT_CONFIG_FIELD);
-            if (contextConfig == null) {
-                throw new IllegalArgumentException(String.format(Locale.ROOT, "%s field must be provided", CONTEXT_CONFIG_FIELD));
-            }
             for (String key : contextConfig.keySet()) {
+                Object cfg = contextConfig.get(key);
                 switch (key) {
                     case DocumentContextSourceFetcher.NAME:
-                        Object cfg = contextConfig.get(key);
-                        if (!(cfg instanceof List<?>)) {
-                            throw new IllegalArgumentException(String.format(Locale.ROOT, "%s must be a list of strings", key));
-                        }
-                        List<?> fields = (List<?>) contextConfig.get(key);
-                        if (fields.size() == 0) {
-                            throw new IllegalArgumentException(String.format(Locale.ROOT, "%s must be nonempty", key));
-                        }
-                        List<String> strfields = fields.stream().map(field -> (String) field).collect(Collectors.toList());
-                        fetchers.add(new DocumentContextSourceFetcher(strfields));
+                        fetchers.add(DocumentContextSourceFetcher.create(cfg));
                         break;
                     default:
                         throw new IllegalArgumentException(String.format(Locale.ROOT, "unrecognized context field: %s", key));
