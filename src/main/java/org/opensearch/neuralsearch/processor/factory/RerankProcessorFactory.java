@@ -21,6 +21,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
 import lombok.AllArgsConstructor;
@@ -35,6 +37,7 @@ import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Sets;
 
 /**
  * Factory for rerank processors. Must:
@@ -81,16 +84,25 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
 
     @VisibleForTesting
     RerankType findRerankType(final Map<String, Object> config) throws IllegalArgumentException {
-        for (String key : config.keySet()) {
-            try {
-                RerankType attempt = RerankType.from(key);
-                return attempt;
-            } catch (IllegalArgumentException e) {
-                // Assume it's just a different field in the config, so don't do anything.
-                // If we get to the end and there were no valid RerankTypes, then we can panic.
+        // Set of rerank type labels in the config
+        Set<String> rerankTypes = Sets.intersection(config.keySet(), RerankType.labelMap().keySet());
+        // A rerank type must be provided
+        if (rerankTypes.size() == 0) {
+            StringJoiner msgBuilder = new StringJoiner(", ", "No rerank type found. Possible rerank types are: [", "]");
+            for (RerankType t : RerankType.values()) {
+                msgBuilder.add(t.getLabel());
             }
+            throw new IllegalArgumentException(msgBuilder.toString());
         }
-        throw new IllegalArgumentException("no rerank type found");
+        // Only one rerank type may be provided
+        if (rerankTypes.size() > 1) {
+            StringJoiner msgBuilder = new StringJoiner(", ", "Multiple rerank types found: [", "]. Only one is permitted.");
+            for (String rt : rerankTypes) {
+                msgBuilder.add(rt);
+            }
+            throw new IllegalArgumentException(msgBuilder.toString());
+        }
+        return RerankType.from(rerankTypes.iterator().next());
     }
 
     /**
