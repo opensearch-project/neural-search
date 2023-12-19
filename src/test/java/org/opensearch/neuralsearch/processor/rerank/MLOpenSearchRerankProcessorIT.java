@@ -22,9 +22,6 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-import lombok.SneakyThrows;
-import lombok.extern.log4j.Log4j2;
-
 import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.message.BasicHeader;
@@ -37,6 +34,9 @@ import org.opensearch.core.rest.RestStatus;
 import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
 
 import com.google.common.collect.ImmutableList;
+
+import lombok.SneakyThrows;
+import lombok.extern.log4j.Log4j2;
 
 @Log4j2
 public class MLOpenSearchRerankProcessorIT extends BaseNeuralSearchIT {

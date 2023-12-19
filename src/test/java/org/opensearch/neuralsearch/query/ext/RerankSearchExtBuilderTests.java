@@ -23,8 +23,6 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
-import lombok.extern.log4j.Log4j2;
-
 import org.junit.Before;
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.core.common.bytes.BytesReference;
@@ -34,6 +32,8 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.search.SearchExtBuilder;
 import org.opensearch.test.OpenSearchTestCase;
+
+import lombok.extern.log4j.Log4j2;
 
 @Log4j2
 public class RerankSearchExtBuilderTests extends OpenSearchTestCase {

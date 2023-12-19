@@ -22,14 +22,14 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 
 /**
  * Abstract base class for reranking processors
@@ -106,7 +106,9 @@ public abstract class RerankProcessor implements SearchResponseProcessor {
             generateRerankingContext(
                 request,
                 response,
-                ActionListener.wrap(context -> { rerank(response, context, responseListener); }, e -> { responseListener.onFailure(e); })
+                ActionListener.wrap(context -> { rerank(response, context, responseListener); }, e -> {
+                    responseListener.onFailure(e);
+                })
             );
         } catch (Exception e) {
             responseListener.onFailure(e);

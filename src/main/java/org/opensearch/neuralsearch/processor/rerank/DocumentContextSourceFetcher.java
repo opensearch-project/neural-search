@@ -24,13 +24,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import lombok.AllArgsConstructor;
-
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.xcontent.ObjectPath;
 import org.opensearch.search.SearchHit;
+
+import lombok.AllArgsConstructor;
 
 /**
  * Context Source Fetcher that gets context from the search results (documents)

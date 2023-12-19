@@ -24,8 +24,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.StringJoiner;
 
-import lombok.AllArgsConstructor;
-
 import org.opensearch.ingest.ConfigurationUtils;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.rerank.ContextSourceFetcher;
@@ -37,6 +35,8 @@ import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 
 import com.google.common.collect.Sets;
+
+import lombok.AllArgsConstructor;
 
 /**
  * Factory for rerank processors. Must:

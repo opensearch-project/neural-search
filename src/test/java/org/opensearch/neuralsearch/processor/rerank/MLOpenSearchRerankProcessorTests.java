@@ -33,8 +33,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-import lombok.extern.log4j.Log4j2;
-
 import org.junit.Before;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -60,6 +58,8 @@ import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.pipeline.Processor.PipelineContext;
 import org.opensearch.test.OpenSearchTestCase;
+
+import lombok.extern.log4j.Log4j2;
 
 @Log4j2
 public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
