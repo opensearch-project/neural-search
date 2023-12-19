@@ -13,6 +13,7 @@ String neural_search_bwc_version = System.getProperty("tests.bwc.version", defau
 boolean isSnapshot = neural_search_bwc_version.contains("-SNAPSHOT")
 String neural_search_bwc_version_no_qualifier = isSnapshot ? neural_search_bwc_version - "-SNAPSHOT" : neural_search_bwc_version
 String baseName = "neuralSearchBwcCluster-restart"
+String knn_bwc_version_no_qualifier = isSnapshot ? neural_search_bwc_version - "-SNAPSHOT" : neural_search_bwc_version
 
 // Creates a test cluster of previous version and loads k-NN plugin of bwcVersion
 testClusters {
@@ -20,23 +21,27 @@ testClusters {
         testDistribution = "ARCHIVE"
         versions = [neural_search_bwc_version, opensearch_version]
         numberOfNodes = 3
+        plugin(project.tasks.zipBwcMlCommonsPlugin.archiveFile)
+        plugin(project.tasks.zipBwcKnnPlugin.archiveFile)
         plugin(project.tasks.zipBwcPlugin.archiveFile)
         setting 'path.repo', "${buildDir}/cluster/shared/repo/${baseName}"
         setting 'http.content_type.required', 'true'
-//        environment "LD_LIBRARY_PATH", "${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/knnlib;${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/lib"
-//        if (Os.isFamily(Os.FAMILY_WINDOWS)) {
-//            // While running on Windows OS, setting the PATH environment variable to include the paths to dlls of JNI libraries and windows dependencies
-//            environment('PATH', System.getenv('PATH') + ";$rootDir/jni/release" + ";$rootDir/src/main/resources/windowsDependencies")
-//            systemProperty "java.library.path", "${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/knnlib;${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/lib"
-//        } else {
-//            systemProperty "java.library.path", "${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/knnlib:${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/lib"
-//        }
+        environment "LD_LIBRARY_PATH", "${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/knnlib;${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/lib"
+        if (Os.isFamily(Os.FAMILY_WINDOWS)) {
+            // While running on Windows OS, setting the PATH environment variable to include the paths to dlls of JNI libraries and windows dependencies
+            environment('PATH', System.getenv('PATH') + ";$rootDir/jni/release" + ";$rootDir/src/main/resources/windowsDependencies")
+            systemProperty "java.library.path", "${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/knnlib;${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/lib"
+        } else {
+            systemProperty "java.library.path", "${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/knnlib:${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/lib"
+        }
 
     }
 }
 
 // Task to run BWC tests against the old cluster
 task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
+    dependsOn "zipBwcMlCommonsPlugin"
+    dependsOn "zipBwcKnnPlugin"
     dependsOn "zipBwcPlugin"
     useCluster testClusters."${baseName}"
     systemProperty 'tests.rest.bwcsuite_cluster', 'old_cluster'
@@ -44,28 +49,6 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.skip_delete_model_index', 'true'
     systemProperty 'tests.plugin_bwc_version', neural_search_bwc_version
 
-    // Skip test if version is 1.0 or 1.1 as they are not supported in those versions
-    if (neural_search_bwc_version.startsWith("1.0") || neural_search_bwc_version.startsWith("1.1")) {
-        filter {
-//            excludeTestsMatching "org.opensearch.knn.bwc.ModelIT"
-//            excludeTestsMatching "org.opensearch.knn.bwc.IndexingIT.testKNNIndexCustomMethodFieldMapping"
-//            excludeTestsMatching "org.opensearch.knn.bwc.WarmupIT.testKNNWarmupCustomMethodFieldMapping"
-        }
-    }
-
-    // Skip test if version is 1.2 or 1.3 as they are not supported in those versions
-    if (neural_search_bwc_version.startsWith("1.2") || neural_search_bwc_version.startsWith("1.3")) {
-        filter {
-            // excludeTestsMatching "org.opensearch.knn.bwc.IndexingIT.testNullParametersOnUpgrade"
-        }
-    }
-
-    // Skip test if version is 1.0, 1.1, 1.2 or 1.3 as they are not supported in those versions
-    if (neural_search_bwc_version.startsWith("1.") || neural_search_bwc_version.startsWith("2.")) {
-        filter {
-            // excludeTestsMatching "org.opensearch.knn.bwc.IndexingIT.testEmptyParametersOnUpgrade"
-        }
-    }
     nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
     nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
     systemProperty 'tests.security.manager', 'false'
@@ -87,28 +70,6 @@ task testRestartUpgrade(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.is_old_cluster', 'false'
     systemProperty 'tests.plugin_bwc_version', neural_search_bwc_version
 
-    // Skip test if version is 1.0 or 1.1 as they are not supported in those versions
-    if (neural_search_bwc_version.startsWith("1.0") || neural_search_bwc_version.startsWith("1.1")) {
-        filter {
-//            excludeTestsMatching "org.opensearch.knn.bwc.ModelIT"
-//            excludeTestsMatching "org.opensearch.knn.bwc.IndexingIT.testKNNIndexCustomMethodFieldMapping"
-//            excludeTestsMatching "org.opensearch.knn.bwc.WarmupIT.testKNNWarmupCustomMethodFieldMapping"
-        }
-    }
-
-    // Skip test if version is 1.2 or 1.3 as they are not supported in those versions
-    if (neural_search_bwc_version.startsWith("1.2") || neural_search_bwc_version.startsWith("1.3")) {
-        filter {
-            //excludeTestsMatching "org.opensearch.knn.bwc.IndexingIT.testNullParametersOnUpgrade"
-        }
-    }
-
-    // Skip test if version is 1.0, 1.1, 1.2 or 1.3 as they are not supported in those versions
-    if (neural_search_bwc_version.startsWith("1.") || neural_search_bwc_version.startsWith("2.")) {
-        filter {
-            //excludeTestsMatching "org.opensearch.knn.bwc.IndexingIT.testEmptyParametersOnUpgrade"
-        }
-    }
     nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
     nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
     systemProperty 'tests.security.manager', 'false'

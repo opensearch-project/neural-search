@@ -22,10 +22,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.StringUtils;
-import org.apache.hc.core5.http.ContentType;
-import org.apache.hc.core5.http.Header;
-import org.apache.hc.core5.http.HttpEntity;
-import org.apache.hc.core5.http.HttpHeaders;
+import org.apache.hc.core5.http.*;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.http.message.BasicHeader;
@@ -138,7 +135,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         String modelGroupId = registerModelGroup();
         // model group id is dynamically generated, we need to update model update request body after group is registered
         requestBody = requestBody.replace("<MODEL_GROUP_ID>", modelGroupId);
+        return uploadModelId(requestBody);
+    }
 
+    protected String uploadModelId(String requestBody) throws Exception {
         Response uploadResponse = makeRequest(
             client(),
             "POST",
@@ -269,18 +269,17 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     protected void createPipelineProcessor(String modelId, String pipelineName, ProcessorType processorType) throws Exception {
+        String requestBody = Files.readString(Path.of(classLoader.getResource(PIPELINE_CONFIGS_BY_TYPE.get(processorType)).toURI()));
+        createPipelineProcessor(requestBody, pipelineName, modelId);
+    }
+
+    protected void createPipelineProcessor(String requestBody, String pipelineName, String modelId) throws Exception {
         Response pipelineCreateResponse = makeRequest(
             client(),
             "PUT",
             "/_ingest/pipeline/" + pipelineName,
             null,
-            toHttpEntity(
-                String.format(
-                    LOCALE,
-                    Files.readString(Path.of(classLoader.getResource(PIPELINE_CONFIGS_BY_TYPE.get(processorType)).toURI())),
-                    modelId
-                )
-            ),
+            toHttpEntity(String.format(LOCALE, requestBody, modelId)),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
         Map<String, Object> node = XContentHelper.convertToMap(
@@ -793,6 +792,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         String modelGroupRegisterRequestBody = Files.readString(
             Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
         ).replace("<MODEL_GROUP_NAME>", "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8));
+        return registerModelGroup(modelGroupRegisterRequestBody);
+    }
+
+    protected String registerModelGroup(String modelGroupRegisterRequestBody) throws IOException, ParseException {
         Response modelGroupResponse = makeRequest(
             client(),
             "POST",
@@ -809,6 +812,29 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         String modelGroupId = modelGroupResJson.get("model_group_id").toString();
         assertNotNull(modelGroupId);
         return modelGroupId;
+    }
+
+    // Method that waits till the health of nodes in the cluster goes green
+    protected void waitForClusterHealthGreen(String numOfNodes) throws IOException {
+        Request waitForGreen = new Request("GET", "/_cluster/health");
+        waitForGreen.addParameter("wait_for_nodes", numOfNodes);
+        waitForGreen.addParameter("wait_for_status", "green");
+        client().performRequest(waitForGreen);
+    }
+
+    /**
+     * Add a single Doc to an index
+     */
+    protected void addDocument(String index, String docId, String fieldName, String text) throws IOException {
+        Request request = new Request("PUT", "/" + index + "/_doc/" + docId + "?refresh=true");
+
+        XContentBuilder builder = XContentFactory.jsonBuilder().startObject().field(fieldName, text).endObject();
+        request.setJsonEntity(builder.toString());
+        client().performRequest(request);
+
+        request = new Request("POST", "/" + index + "/_refresh");
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
     }
 
     /**
