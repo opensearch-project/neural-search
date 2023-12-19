@@ -29,6 +29,7 @@ public class TextSearch extends AbstractRestartUpgradeRestTestCase{
                     Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
                     PIPELINE_NAME
             );
+            logger.info("=================================================================================Document Added");
             addDocument(testIndex, DOC_ID,TEST_FIELD,TEXT);
         }else {
             System.out.println("===========================================================================================Cluster Upgraded");
