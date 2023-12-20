@@ -49,6 +49,10 @@ public class TestUtils {
     public static final int TEST_DIMENSION = 768;
     public static final SpaceType TEST_SPACE_TYPE = SpaceType.L2;
     public static final String CLIENT_TIMEOUT_VALUE = "90s";
+    public static final String OPENDISTRO_SECURITY = ".opendistro_security";
+    public static final String SKIP_DELETE_MODEL_INDEX = "tests.skip_delete_model_index";
+    public static final String SECURITY_AUDITLOG_PREFIX = "security-auditlog";
+    public static final String OPENSEARCH_SYSTEM_INDEX_PREFIX = ".opensearch";
 
     /**
      * Convert an xContentBuilder to a map

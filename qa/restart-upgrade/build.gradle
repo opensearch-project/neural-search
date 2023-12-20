@@ -5,6 +5,7 @@
 
 import org.opensearch.gradle.testclusters.StandaloneRestIntegTestTask
 import org.apache.tools.ant.taskdefs.condition.Os
+import java.util.concurrent.Callable
 
 apply from : "$rootDir/qa/build.gradle"
 
@@ -14,6 +15,44 @@ boolean isSnapshot = neural_search_bwc_version.contains("-SNAPSHOT")
 String neural_search_bwc_version_no_qualifier = isSnapshot ? neural_search_bwc_version - "-SNAPSHOT" : neural_search_bwc_version
 String baseName = "neuralSearchBwcCluster-restart"
 String knn_bwc_version_no_qualifier = isSnapshot ? neural_search_bwc_version - "-SNAPSHOT" : neural_search_bwc_version
+
+List<Provider<RegularFile>> plugins = [provider(new Callable<RegularFile>(){
+    @Override
+    RegularFile call() throws Exception {
+        return new RegularFile() {
+            @Override
+            File getAsFile() {
+                return configurations.zipArchive.asFileTree.matching{include "**/opensearch-ml-plugin-${opensearch_build}.zip"}.getSingleFile()
+            }
+        }
+    }
+}), provider(new Callable<RegularFile>(){
+    @Override
+    RegularFile call() throws Exception {
+        return new RegularFile() {
+            @Override
+            File getAsFile() {
+                return configurations.zipArchive.asFileTree.matching{include "**/opensearch-knn-${opensearch_build}.zip"}.getSingleFile()
+            }
+        }
+    }
+}), rootProject.tasks.bundlePlugin.archiveFile]
+
+// task unzip {
+//     configurations.zipArchive.asFileTree.each {
+//         println(it.toPath())
+//     }
+// }
+
+// def tmp_dir = project.file('build/private/artifact_tmp').absoluteFile
+
+
+// task unzip(type: Copy) {
+//     configurations.zipArchive.asFileTree.each {
+//         from(zipTree(it))
+//     }
+//     into tmp_dir
+// }
 
 // Creates a test cluster of previous version and loads k-NN plugin of bwcVersion
 testClusters {
@@ -57,13 +96,12 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
 // All nodes are upgraded to latest version and run the tests
 task testRestartUpgrade(type: StandaloneRestIntegTestTask) {
     dependsOn "testAgainstOldCluster"
-    //dependsOn rootProject.tasks.buildJniLib
     dependsOn rootProject.tasks.assemble
     useCluster testClusters."${baseName}"
     doFirst {
         testClusters."${baseName}".environment("LD_LIBRARY_PATH", "$rootDir/jni/release")
         testClusters."${baseName}".systemProperty("java.library.path", "$rootDir/jni/release")
-        testClusters."${baseName}".upgradeAllNodesAndPluginsToNextVersion([rootProject.tasks.bundlePlugin.archiveFile])
+        testClusters."${baseName}".upgradeAllNodesAndPluginsToNextVersion(plugins)
     }
     systemProperty 'tests.rest.bwcsuite_cluster', 'upgraded_cluster'
     systemProperty 'tests.skip_delete_model_index', 'true'

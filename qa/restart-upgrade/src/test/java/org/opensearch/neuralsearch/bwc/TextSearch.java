@@ -8,6 +8,10 @@ package org.opensearch.neuralsearch.bwc;
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import org.opensearch.client.Request;
+import org.opensearch.client.Response;
+
 import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
 
 public class TextSearch extends AbstractRestartUpgradeRestTestCase{
@@ -29,10 +33,8 @@ public class TextSearch extends AbstractRestartUpgradeRestTestCase{
                     Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
                     PIPELINE_NAME
             );
-            logger.info("=================================================================================Document Added");
             addDocument(testIndex, DOC_ID,TEST_FIELD,TEXT);
         }else {
-            System.out.println("===========================================================================================Cluster Upgraded");
             validateTestIndex();
         }
     }

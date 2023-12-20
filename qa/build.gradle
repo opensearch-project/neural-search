@@ -81,29 +81,7 @@ task deletetempDirectories {
 }
 
 task pullMlCommonsBwcPlugin {
-    dependsOn "deletetempDirectories"
-
     doLast {
-        ext{
-            if (isSnapshot) {
-                srcUrl = "https://ci.opensearch.org/ci/dbc/distribution-build-opensearch/${neural_search_bwc_version_no_qualifier}/latest/${os_platform}/x64/${artifact_type}/dist/opensearch/opensearch-${neural_search_bwc_version_no_qualifier}-${os_platform}-x64.${file_ext}"
-            } else {
-                srcUrl = "https://artifacts.opensearch.org/releases/bundle/opensearch/${neural_search_bwc_version}/opensearch-${neural_search_bwc_version}-${os_platform}-x64.${file_ext}"
-            }
-        }
-        ant.get(
-                src: srcUrl,
-                dest: tmp_dir.absolutePath,
-                httpusecaches: false
-        )
-        copy {
-            if (Os.isFamily(Os.FAMILY_WINDOWS)) {
-                from zipTree(java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}-${os_platform}-x64.${file_ext}"))
-            } else {
-                from tarTree(java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}-${os_platform}-x64.${file_ext}"))
-            }
-            into tmp_dir.absolutePath
-        }
         copy {
             from(java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}", "plugins", "opensearch-ml"))
             into java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-ml")
@@ -144,29 +122,8 @@ task pullKnnBwcPlugin {
 
 // Task to pull neural search plugin from archive
 task pullBwcPlugin {
-    dependsOn "deletetempDirectories"
 
     doLast {
-        ext{
-            if (isSnapshot) {
-                srcUrl = "https://ci.opensearch.org/ci/dbc/distribution-build-opensearch/${neural_search_bwc_version_no_qualifier}/latest/${os_platform}/x64/${artifact_type}/dist/opensearch/opensearch-${neural_search_bwc_version_no_qualifier}-${os_platform}-x64.${file_ext}"
-            } else {
-                srcUrl = "https://artifacts.opensearch.org/releases/bundle/opensearch/${neural_search_bwc_version}/opensearch-${neural_search_bwc_version}-${os_platform}-x64.${file_ext}"
-            }
-        }
-        ant.get(
-                src: srcUrl,
-                dest: tmp_dir.absolutePath,
-                httpusecaches: false
-        )
-        copy {
-            if (Os.isFamily(Os.FAMILY_WINDOWS)) {
-                from zipTree(java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}-${os_platform}-x64.${file_ext}"))
-            } else {
-                from tarTree(java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}-${os_platform}-x64.${file_ext}"))
-            }
-            into tmp_dir.absolutePath
-        }
         copy {
             from(java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}", "plugins", "opensearch-neural-search"))
             into java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-neural-search")
