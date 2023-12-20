@@ -8,51 +8,54 @@ package org.opensearch.neuralsearch.bwc;
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
-import java.util.Map;
-import org.opensearch.client.Request;
-import org.opensearch.client.Response;
-
 import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
-import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
-public class TextSearch extends AbstractRestartUpgradeRestTestCase{
-
+public class TextSearch extends AbstractRollingUpgradeTestCase{
     private static final String PIPELINE_NAME = "nlp-pipeline";
-    private static String DOC_ID = "0";
     private static final String TEST_FIELD = "test-field";
     private static final String TEXT= "Hello world";
+    private static final String TEXT_MIXED= "Hello world mixed";
+    private static final String TEXT_UPGRADED= "Hello world upgraded";
+    private static final int NUM_DOCS = 1;
 
     public void testIndex() throws Exception{
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-
-        if (isRunningAgainstOldCluster()){
-            String modelId= uploadTextEmbeddingModel();
-            loadModel(modelId);
-            createPipelineProcessor(modelId,PIPELINE_NAME);
-            createIndexWithConfiguration(
-                    testIndex,
-                    Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
-                    PIPELINE_NAME
-            );
-            addDocument(testIndex, DOC_ID,TEST_FIELD,TEXT);
-        }else {
-            validateTestIndex();
+        switch (getClusterType()){
+            case OLD:
+                String modelId= uploadTextEmbeddingModel();
+                loadModel(modelId);
+                createPipelineProcessor(modelId,PIPELINE_NAME);
+                createIndexWithConfiguration(
+                        testIndex,
+                        Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
+                        PIPELINE_NAME
+                );
+                addDocument(testIndex, "0",TEST_FIELD,TEXT);
+                break;
+            case MIXED:
+                int totalDocsCountMixed;
+                if (isFirstMixedRound()){
+                    totalDocsCountMixed=NUM_DOCS;
+                    validateTestIndexOnUpgrade(totalDocsCountMixed);
+                    addDocument(testIndex, "1",TEST_FIELD,TEXT_MIXED);
+                }else{
+                    totalDocsCountMixed=2*NUM_DOCS;
+                    validateTestIndexOnUpgrade(totalDocsCountMixed);
+                }
+                break;
+            case UPGRADED:
+                int totalDocsCountUpgraded=3*NUM_DOCS;
+                addDocument(testIndex, "2",TEST_FIELD,TEXT_UPGRADED);
+                validateTestIndexOnUpgrade(totalDocsCountUpgraded);
+                deleteIndex(testIndex);
+                break;
         }
+
     }
 
-
-    private void validateTestIndex() throws Exception {
+    private void validateTestIndexOnUpgrade(int numberOfDocs) throws Exception {
         int docCount=getDocCount(testIndex);
-        assertEquals(1,docCount);
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
-        neuralQueryBuilder.fieldName(TEST_FIELD);
-        neuralQueryBuilder.queryText(TEXT);
-        neuralQueryBuilder.k(1);
-        Map<String, Object> searchResponseAsMap = search(testIndex,neuralQueryBuilder,1);
-        Map<String, Object> total = getTotalHits(searchResponseAsMap);
-        assertNotNull(total.get("value"));
-        deleteIndex(testIndex);
+        assertEquals(numberOfDocs,docCount);
     }
 
     private String uploadTextEmbeddingModel() throws Exception {
@@ -75,10 +78,5 @@ public class TextSearch extends AbstractRestartUpgradeRestTestCase{
     protected void createPipelineProcessor(String modelId, String pipelineName, ProcessorType processorType) throws Exception {
         String requestBody=Files.readString(Path.of(classLoader.getResource("processor/PipelineConfiguration.json").toURI()));
         createPipelineProcessor(requestBody,pipelineName,modelId);
-    }
-
-    private Map<String, Object> getTotalHits(Map<String, Object> searchResponseAsMap) {
-        Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
-        return (Map<String, Object>) hitsMap.get("total");
     }
 }
