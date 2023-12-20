@@ -57,6 +57,7 @@ jobs:
         name: Add MinGW to PATH on Windows
         run: |
           echo "C:/Users/runneradmin/scoop/apps/mingw/current/bin" >> $env:GITHUB_PATH
+          Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
           refreshenv
 
       - if: startsWith(matrix.os,'windows')
@@ -121,6 +122,7 @@ jobs:
         name: Add MinGW to PATH on Windows
         run: |
           echo "C:/Users/runneradmin/scoop/apps/mingw/current/bin" >> $env:GITHUB_PATH
+          Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
           refreshenv
 
       - if: startsWith(matrix.os,'windows')
