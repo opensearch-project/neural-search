@@ -6,6 +6,8 @@
 import org.opensearch.gradle.testclusters.StandaloneRestIntegTestTask
 import org.apache.tools.ant.taskdefs.condition.Os
 
+import java.util.concurrent.Callable
+
 apply from : "$rootDir/qa/build.gradle"
 
 String default_bwc_version = System.getProperty("bwc.version")
@@ -14,12 +16,36 @@ boolean isSnapshot = neural_search_bwc_version.contains("-SNAPSHOT")
 String knn_bwc_version_no_qualifier = isSnapshot ? neural_search_bwc_version - "-SNAPSHOT" : neural_search_bwc_version
 String baseName = "neuralSearchBwcCluster-rolling"
 
+List<Provider<RegularFile>> plugins = [provider(new Callable<RegularFile>(){
+    @Override
+    RegularFile call() throws Exception {
+        return new RegularFile() {
+            @Override
+            File getAsFile() {
+                return configurations.zipArchive.asFileTree.matching{include "**/opensearch-ml-plugin-${opensearch_build}.zip"}.getSingleFile()
+            }
+        }
+    }
+}), provider(new Callable<RegularFile>(){
+    @Override
+    RegularFile call() throws Exception {
+        return new RegularFile() {
+            @Override
+            File getAsFile() {
+                return configurations.zipArchive.asFileTree.matching{include "**/opensearch-knn-${opensearch_build}.zip"}.getSingleFile()
+            }
+        }
+    }
+}), rootProject.tasks.bundlePlugin.archiveFile]
+
 // Creates a test cluster of previous version and loads k-NN plugin of bwcVersion
 testClusters {
     "${baseName}" {
         testDistribution = "ARCHIVE"
         versions = [neural_search_bwc_version, opensearch_version]
         numberOfNodes = 3
+        plugin(project.tasks.zipBwcMlCommonsPlugin.archiveFile)
+        plugin(project.tasks.zipBwcKnnPlugin.archiveFile)
         plugin(project.tasks.zipBwcPlugin.archiveFile)
         setting 'path.repo', "${buildDir}/cluster/shared/repo/${baseName}"
         setting 'http.content_type.required', 'true'
@@ -37,6 +63,8 @@ testClusters {
 
 // Task to run BWC tests against the old cluster
 task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
+    dependsOn "zipBwcMlCommonsPlugin"
+    dependsOn "zipBwcKnnPlugin"
     dependsOn "zipBwcPlugin"
     useCluster testClusters."${baseName}"
     systemProperty 'tests.rest.bwcsuite_cluster', 'old_cluster'
@@ -47,18 +75,16 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.security.manager', 'false'
 }
 
-
 // Part of rolling upgrade. Upgrades one node of the old cluster to new OpenSearch version with upgraded plugin version
 // This results in a mixed cluster with 2 nodes on the old version and 1 upgraded node.
 task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
-    useCluster testClusters."${baseName}"
-    //dependsOn rootProject.tasks.buildJniLib
-    dependsOn rootProject.tasks.assemble
     dependsOn "testAgainstOldCluster"
+    useCluster testClusters."${baseName}"
+    dependsOn rootProject.tasks.assemble
     doFirst {
         testClusters."${baseName}".getNodes().getAt("${baseName}" + "-0").environment("LD_LIBRARY_PATH", "$rootDir/jni/release")
         testClusters."${baseName}".getNodes().getAt("${baseName}" + "-0").systemProperty("java.library.path", "$rootDir/jni/release")
-        testClusters."${baseName}".upgradeNodeAndPluginToNextVersion([rootProject.tasks.bundlePlugin.archiveFile])
+        testClusters."${baseName}".getNodes().getAt("${baseName}" + "-0").upgradeNodeAndPluginToNextVersion(plugins)
     }
     systemProperty 'tests.rest.bwcsuite_cluster', 'mixed_cluster'
     systemProperty 'tests.rest.first_round', 'true'
@@ -77,7 +103,7 @@ task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
     doFirst {
         testClusters."${baseName}".getNodes().getAt("${baseName}" + "-1").environment("LD_LIBRARY_PATH", "$rootDir/jni/release")
         testClusters."${baseName}".getNodes().getAt("${baseName}" + "-1").systemProperty("java.library.path", "$rootDir/jni/release")
-        testClusters."${baseName}".upgradeNodeAndPluginToNextVersion([rootProject.tasks.bundlePlugin.archiveFile])
+        testClusters."${baseName}".getNodes().getAt("${baseName}" + "-1").upgradeNodeAndPluginToNextVersion(plugins)
     }
     systemProperty 'tests.rest.bwcsuite_cluster', 'mixed_cluster'
     systemProperty 'tests.rest.first_round', 'false'
@@ -96,7 +122,7 @@ task testRollingUpgrade(type: StandaloneRestIntegTestTask) {
     doFirst {
         testClusters."${baseName}".getNodes().getAt("${baseName}" + "-2").environment("LD_LIBRARY_PATH", "$rootDir/jni/release")
         testClusters."${baseName}".getNodes().getAt("${baseName}" + "-2").systemProperty("java.library.path", "$rootDir/jni/release")
-        testClusters."${baseName}".upgradeNodeAndPluginToNextVersion([rootProject.tasks.bundlePlugin.archiveFile])
+        testClusters."${baseName}".getNodes().getAt("${baseName}" + "-2").upgradeNodeAndPluginToNextVersion(plugins)
     }
     mustRunAfter "testAgainstOneThirdUpgradedCluster"
     systemProperty 'tests.rest.bwcsuite_cluster', 'upgraded_cluster'
