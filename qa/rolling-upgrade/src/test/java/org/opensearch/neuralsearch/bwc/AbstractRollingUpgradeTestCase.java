@@ -52,7 +52,7 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
                 // increase the timeout here to 90 seconds to handle long waits for a green
                 // cluster health. the waits for green need to be longer than a minute to
                 // account for delayed shards
-                .put(OpenSearchRestTestCase.CLIENT_SOCKET_TIMEOUT, CLIENT_TIMEOUT_VALUE)
+                .put(OpenSearchRestTestCase.CLIENT_SOCKET_TIMEOUT, "120s")
                 .build();
     }
 

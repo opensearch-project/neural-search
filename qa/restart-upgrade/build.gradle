@@ -37,22 +37,6 @@ List<Provider<RegularFile>> plugins = [provider(new Callable<RegularFile>(){
     }
 }), rootProject.tasks.bundlePlugin.archiveFile]
 
-// task unzip {
-//     configurations.zipArchive.asFileTree.each {
-//         println(it.toPath())
-//     }
-// }
-
-// def tmp_dir = project.file('build/private/artifact_tmp').absoluteFile
-
-
-// task unzip(type: Copy) {
-//     configurations.zipArchive.asFileTree.each {
-//         from(zipTree(it))
-//     }
-//     into tmp_dir
-// }
-
 // Creates a test cluster of previous version and loads k-NN plugin of bwcVersion
 testClusters {
     "${baseName}" {
