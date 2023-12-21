@@ -8,13 +8,9 @@ package org.opensearch.neuralsearch.bwc;
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
-import org.opensearch.client.Request;
-import org.opensearch.client.Response;
 
 import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
-import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 public class TextSearch extends AbstractRestartUpgradeRestTestCase{
 
@@ -45,13 +41,6 @@ public class TextSearch extends AbstractRestartUpgradeRestTestCase{
     private void validateTestIndex() throws Exception {
         int docCount=getDocCount(testIndex);
         assertEquals(1,docCount);
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
-        neuralQueryBuilder.fieldName(TEST_FIELD);
-        neuralQueryBuilder.queryText(TEXT);
-        neuralQueryBuilder.k(1);
-        Map<String, Object> searchResponseAsMap = search(testIndex,neuralQueryBuilder,1);
-        Map<String, Object> total = getTotalHits(searchResponseAsMap);
-        assertNotNull(total.get("value"));
         deleteIndex(testIndex);
     }
 

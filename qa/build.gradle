@@ -81,6 +81,7 @@ task deletetempDirectories {
 }
 
 task pullMlCommonsBwcPlugin {
+    //dependsOn "deletetempDirectories"
     doLast {
         copy {
             from(java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}", "plugins", "opensearch-ml"))
@@ -122,7 +123,7 @@ task pullKnnBwcPlugin {
 
 // Task to pull neural search plugin from archive
 task pullBwcPlugin {
-
+    //dependsOn "deletetempDirectories"
     doLast {
         copy {
             from(java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}", "plugins", "opensearch-neural-search"))
