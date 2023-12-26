@@ -9,17 +9,24 @@ import com.carrotsearch.randomizedtesting.RandomizedTest;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.ArrayList;
+
 
 import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
 
-public class TextSearch extends AbstractRestartUpgradeRestTestCase{
+import static org.opensearch.neuralsearch.TestUtils.getModelId;
+import static org.opensearch.neuralsearch.TestUtils.TEXT_EMBEDDING_PROCESSOR;
+import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+
+
+public class SemanticSearch extends AbstractRestartUpgradeRestTestCase{
 
     private static final String PIPELINE_NAME = "nlp-pipeline";
     private static String DOC_ID = "0";
-    private static final String TEST_FIELD = "test-field";
+    private static final String TEST_FIELD = "passage_text";
     private static final String TEXT= "Hello world";
 
-    public void testIndex() throws Exception{
+    public void testSemanticSearch() throws Exception{
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
 
         if (isRunningAgainstOldCluster()){
@@ -33,16 +40,28 @@ public class TextSearch extends AbstractRestartUpgradeRestTestCase{
             );
             addDocument(testIndex, DOC_ID,TEST_FIELD,TEXT);
         }else {
-            validateTestIndex();
+            Map<String,Object> pipeline= getIngestionPipeline(PIPELINE_NAME);
+            assertNotNull(pipeline);
+            String modelId=getModelId(pipeline, TEXT_EMBEDDING_PROCESSOR);
+            validateTestIndex(modelId);
+            deleteIndex(testIndex);
         }
     }
 
 
-    private void validateTestIndex() throws Exception {
+    private void validateTestIndex(String modelId) throws Exception {
         int docCount=getDocCount(testIndex);
         assertEquals(1,docCount);
-        deleteIndex(testIndex);
+        loadModel(modelId);
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
+        neuralQueryBuilder.fieldName("passage_embedding");
+        neuralQueryBuilder.modelId(modelId);
+        neuralQueryBuilder.queryText(TEXT);
+        neuralQueryBuilder.k(1);
+        Map<String, Object> response = search(testIndex, neuralQueryBuilder, 1);
+        assertNotNull(response);
     }
+
 
     private String uploadTextEmbeddingModel() throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
@@ -70,4 +89,5 @@ public class TextSearch extends AbstractRestartUpgradeRestTestCase{
         Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
         return (Map<String, Object>) hitsMap.get("total");
     }
+    
 }

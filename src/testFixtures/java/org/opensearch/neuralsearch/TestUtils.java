@@ -53,6 +53,7 @@ public class TestUtils {
     public static final String SKIP_DELETE_MODEL_INDEX = "tests.skip_delete_model_index";
     public static final String SECURITY_AUDITLOG_PREFIX = "security-auditlog";
     public static final String OPENSEARCH_SYSTEM_INDEX_PREFIX = ".opensearch";
+    public static final String TEXT_EMBEDDING_PROCESSOR = "text_embedding";
 
     /**
      * Convert an xContentBuilder to a map
@@ -301,5 +302,13 @@ public class TestUtils {
     private static Optional<Float> getMaxScore(Map<String, Object> searchResponseAsMap) {
         Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
         return hitsMap.get("max_score") == null ? Optional.empty() : Optional.of(((Double) hitsMap.get("max_score")).floatValue());
+    }
+
+    public static String getModelId(Map<String, Object> pipeline, String processor) {
+        ArrayList<Map<String, Object>> processors = (ArrayList<Map<String, Object>>) pipeline.get("processors");
+
+        Map<String, Object> textEmbeddingProcessor = (Map<String, Object>) processors.get(0).get(processor);
+
+        return (String) textEmbeddingProcessor.get("model_id");
     }
 }

@@ -838,6 +838,19 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     /**
+    * Get ingest pipeline
+    */
+    @SneakyThrows
+    protected Map<String, Object> getIngestionPipeline(String pipelineName) {
+        Request request = new Request("GET", "/_ingest/pipeline/" + pipelineName);
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), responseBody).map();
+        return (Map<String, Object>) responseMap.get(pipelineName);
+    }
+
+    /**
      * Enumeration for types of pipeline processors, used to lookup resources like create
      * processor request as those are type specific
      */

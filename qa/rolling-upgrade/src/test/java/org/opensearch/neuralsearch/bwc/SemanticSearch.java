@@ -8,9 +8,14 @@ package org.opensearch.neuralsearch.bwc;
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
+import java.util.ArrayList;
 import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
+import static org.opensearch.neuralsearch.TestUtils.getModelId;
+import static org.opensearch.neuralsearch.TestUtils.TEXT_EMBEDDING_PROCESSOR;
+import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
-public class TextSearch extends AbstractRollingUpgradeTestCase{
+public class SemanticSearch extends AbstractRollingUpgradeTestCase{
     private static final String PIPELINE_NAME = "nlp-pipeline";
     private static final String TEST_FIELD = "test-field";
     private static final String TEXT= "Hello world";
@@ -18,7 +23,7 @@ public class TextSearch extends AbstractRollingUpgradeTestCase{
     private static final String TEXT_UPGRADED= "Hello world upgraded";
     private static final int NUM_DOCS = 1;
 
-    public void testIndex() throws Exception{
+    public void testSemanticSearch() throws Exception{
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         switch (getClusterType()){
             case OLD:
@@ -33,29 +38,40 @@ public class TextSearch extends AbstractRollingUpgradeTestCase{
                 addDocument(testIndex, "0",TEST_FIELD,TEXT);
                 break;
             case MIXED:
+                modelId=getModelId(PIPELINE_NAME);
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()){
                     totalDocsCountMixed=NUM_DOCS;
-                    validateTestIndexOnUpgrade(totalDocsCountMixed);
+                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, TEXT);
                     addDocument(testIndex, "1",TEST_FIELD,TEXT_MIXED);
+                    
                 }else{
                     totalDocsCountMixed=2*NUM_DOCS;
-                    validateTestIndexOnUpgrade(totalDocsCountMixed);
+                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, TEXT_MIXED);
                 }
                 break;
             case UPGRADED:
+                modelId=getModelId(PIPELINE_NAME);
                 int totalDocsCountUpgraded=3*NUM_DOCS;
                 addDocument(testIndex, "2",TEST_FIELD,TEXT_UPGRADED);
-                validateTestIndexOnUpgrade(totalDocsCountUpgraded);
+                validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, TEXT_UPGRADED);
                 deleteIndex(testIndex);
                 break;
         }
 
     }
 
-    private void validateTestIndexOnUpgrade(int numberOfDocs) throws Exception {
+    private void validateTestIndexOnUpgrade(int numberOfDocs, String modelId, String text) throws Exception {
         int docCount=getDocCount(testIndex);
         assertEquals(numberOfDocs,docCount);
+        loadModel(modelId);
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
+        neuralQueryBuilder.fieldName("passage_embedding");
+        neuralQueryBuilder.modelId(modelId);
+        neuralQueryBuilder.queryText(text);
+        neuralQueryBuilder.k(1);
+        Map<String, Object> response = search(testIndex, neuralQueryBuilder, 1);
+        assertNotNull(response);
     }
 
     private String uploadTextEmbeddingModel() throws Exception {
@@ -78,5 +94,11 @@ public class TextSearch extends AbstractRollingUpgradeTestCase{
     protected void createPipelineProcessor(String modelId, String pipelineName, ProcessorType processorType) throws Exception {
         String requestBody=Files.readString(Path.of(classLoader.getResource("processor/PipelineConfiguration.json").toURI()));
         createPipelineProcessor(requestBody,pipelineName,modelId);
+    }
+
+    private String getModelId(String pipelineName){
+        Map<String,Object> pipeline = getIngestionPipeline(PIPELINE_NAME);
+        assertNotNull(pipeline);
+        return getModelId(pipeline,TEXT_EMBEDDING_PROCESSOR);
     }
 }

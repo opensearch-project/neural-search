@@ -57,7 +57,6 @@ String default_bwc_version = System.getProperty("bwc.version")
 String neural_search_bwc_version = System.getProperty("tests.bwc.version", default_bwc_version)
 boolean isSnapshot = neural_search_bwc_version.contains("-SNAPSHOT")
 String neural_search_bwc_version_no_qualifier = isSnapshot ? neural_search_bwc_version - "-SNAPSHOT" : neural_search_bwc_version
-String knn_bwc_version_no_qualifier = isSnapshot ? neural_search_bwc_version - "-SNAPSHOT" : neural_search_bwc_version
 
 String os_platform = "linux"
 String artifact_type = "tar"
@@ -81,7 +80,6 @@ task deletetempDirectories {
 }
 
 task pullMlCommonsBwcPlugin {
-    //dependsOn "deletetempDirectories"
     doLast {
         copy {
             from(java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}", "plugins", "opensearch-ml"))
@@ -123,7 +121,6 @@ task pullKnnBwcPlugin {
 
 // Task to pull neural search plugin from archive
 task pullBwcPlugin {
-    //dependsOn "deletetempDirectories"
     doLast {
         copy {
             from(java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}", "plugins", "opensearch-neural-search"))
