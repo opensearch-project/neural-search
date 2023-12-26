@@ -47,6 +47,7 @@ testClusters {
         plugin(project.tasks.zipBwcMlCommonsPlugin.archiveFile)
         plugin(project.tasks.zipBwcKnnPlugin.archiveFile)
         plugin(project.tasks.zipBwcPlugin.archiveFile)
+        jvmArgs("-Xms1g", "-Xmx4g")
         setting 'path.repo', "${buildDir}/cluster/shared/repo/${baseName}"
         setting 'http.content_type.required', 'true'
         environment "LD_LIBRARY_PATH", "${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/knnlib;${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/lib"

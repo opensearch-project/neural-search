@@ -43,6 +43,7 @@ testClusters {
         testDistribution = "ARCHIVE"
         versions = [neural_search_bwc_version, opensearch_version]
         numberOfNodes = 3
+        jvmArgs("-Xms1g", "-Xmx4g")
         plugin(project.tasks.zipBwcMlCommonsPlugin.archiveFile)
         plugin(project.tasks.zipBwcKnnPlugin.archiveFile)
         plugin(project.tasks.zipBwcPlugin.archiveFile)
