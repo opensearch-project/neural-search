@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -26,6 +27,7 @@ import org.opensearch.neuralsearch.query.HybridQueryScorer;
 
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
 /**
  * Collects the TopDocs after executing hybrid query. Uses HybridQueryTopDocs as DTO to handle each sub query results
@@ -56,11 +58,38 @@ public class HybridTopScoreDocCollector implements Collector {
             @Override
             public void setScorer(Scorable scorer) throws IOException {
                 super.setScorer(scorer);
-                compoundQueryScorer = (HybridQueryScorer) scorer;
+                if (scorer instanceof HybridQueryScorer) {
+                    compoundQueryScorer = (HybridQueryScorer) scorer;
+                }
+                else {
+                    compoundQueryScorer = getHybridQueryScorer(scorer);
+                }
             }
 
-            @Override
+            private HybridQueryScorer getHybridQueryScorer(final Scorable scorer) throws IOException {
+                if (scorer == null) {
+                    return null;
+                }
+                if (scorer instanceof HybridQueryScorer) {
+                    return (HybridQueryScorer) scorer;
+                }
+                for (Scorable.ChildScorable childScorable : scorer.getChildren()) {
+                    HybridQueryScorer hybridQueryScorer = getHybridQueryScorer(childScorable.child);
+                    if (hybridQueryScorer != null) {
+                        return hybridQueryScorer;
+                    }
+                }
+                return null;
+            }
+
+
+
+        @Override
             public void collect(int doc) throws IOException {
+                if (compoundQueryScorer == null) {
+                    scorer.score();
+                    return;
+                }
                 float[] subScoresByQuery = compoundQueryScorer.hybridScores();
                 // iterate over results for each query
                 if (compoundScores == null) {

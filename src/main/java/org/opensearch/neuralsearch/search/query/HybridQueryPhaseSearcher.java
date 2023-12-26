@@ -15,10 +15,13 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 
+import com.google.common.base.Throwables;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.FieldExistsQuery;
+import org.apache.lucene.search.MultiCollector;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
@@ -210,10 +213,16 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
 
         final QuerySearchResult queryResult = searchContext.queryResult();
 
-        final HybridTopScoreDocCollector collector = new HybridTopScoreDocCollector(
+        Collector collector = new HybridTopScoreDocCollector(
             numDocs,
             new HitsThresholdChecker(Math.max(numDocs, searchContext.trackTotalHitsUpTo()))
         );
+
+        // cannot use streams here as assigment of global variable inside the lambda will not be possible
+        for (int idx = 1; idx < collectors.size(); idx++) {
+            QueryCollectorContext collectorContext = collectors.get(idx);
+            collector = collectorContext.create(collector);
+        }
 
         searcher.search(query, collector);
 
@@ -223,20 +232,35 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
 
         setTopDocsInQueryResult(queryResult, collector, searchContext);
 
+        collectors.stream().skip(1).forEach(ctx -> {
+            try {
+                ctx.postProcess(queryResult);
+            } catch (IOException e) {
+                Throwables.throwIfUnchecked(e);
+            }
+        });
+
         return shouldRescore;
     }
 
     private void setTopDocsInQueryResult(
         final QuerySearchResult queryResult,
-        final HybridTopScoreDocCollector collector,
+        final Collector collector,
         final SearchContext searchContext
     ) {
-        final List<TopDocs> topDocs = collector.topDocs();
-        final float maxScore = getMaxScore(topDocs);
-        final boolean isSingleShard = searchContext.numberOfShards() == 1;
-        final TopDocs newTopDocs = getNewTopDocs(getTotalHits(searchContext, topDocs, isSingleShard), topDocs);
-        final TopDocsAndMaxScore topDocsAndMaxScore = new TopDocsAndMaxScore(newTopDocs, maxScore);
-        queryResult.topDocs(topDocsAndMaxScore, getSortValueFormats(searchContext.sort()));
+        if (collector instanceof HybridTopScoreDocCollector) {
+            List<TopDocs> topDocs = ((HybridTopScoreDocCollector) collector).topDocs();
+            float maxScore = getMaxScore(topDocs);
+            boolean isSingleShard = searchContext.numberOfShards() == 1;
+            TopDocs newTopDocs = getNewTopDocs(getTotalHits(searchContext, topDocs, isSingleShard), topDocs);
+            TopDocsAndMaxScore topDocsAndMaxScore = new TopDocsAndMaxScore(newTopDocs, maxScore);
+            queryResult.topDocs(topDocsAndMaxScore, getSortValueFormats(searchContext.sort()));
+        } else if (collector instanceof MultiCollector) {
+            MultiCollector multiCollector = (MultiCollector) collector;
+            for (Collector subCollector : multiCollector.getCollectors()) {
+                setTopDocsInQueryResult(queryResult, subCollector, searchContext);
+            }
+        }
     }
 
     private TopDocs getNewTopDocs(final TotalHits totalHits, final List<TopDocs> topDocs) {
