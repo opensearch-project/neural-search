@@ -54,8 +54,10 @@ import com.google.common.collect.ImmutableList;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.SneakyThrows;
+import lombok.extern.log4j.Log4j2;
 
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
+@Log4j2
 public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     protected static final Locale LOCALE = Locale.ROOT;
@@ -848,6 +850,27 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         String responseBody = EntityUtils.toString(response.getEntity());
         Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), responseBody).map();
         return (Map<String, Object>) responseMap.get(pipelineName);
+    }
+
+    /**
+     * Get indices
+     */
+    @SneakyThrows
+    protected void getIndices() {
+        Request request = new Request("GET", "/_cat/indices");
+        Response response = client().performRequest(request);
+        String responseBody = EntityUtils.toString(response.getEntity());
+        log.info("Indices are ============================");
+        log.info(responseBody);
+    }
+
+    @SneakyThrows
+    protected void getShards() {
+        Request request = new Request("GET", "/_cat/shards");
+        Response response = client().performRequest(request);
+        String responseBody = EntityUtils.toString(response.getEntity());
+        log.info("Shards are ============================");
+        log.info(responseBody);
     }
 
     /**

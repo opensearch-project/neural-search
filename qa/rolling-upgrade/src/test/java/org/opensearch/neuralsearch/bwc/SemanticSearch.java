@@ -9,11 +9,13 @@ import com.carrotsearch.randomizedtesting.RandomizedTest;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.TestUtils;
 import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.TEXT_EMBEDDING_PROCESSOR;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
+@Log4j2
 public class SemanticSearch extends AbstractRollingUpgradeTestCase{
     private static final String PIPELINE_NAME = "nlp-pipeline";
     private static final String TEST_FIELD = "test-field";
@@ -23,6 +25,9 @@ public class SemanticSearch extends AbstractRollingUpgradeTestCase{
     private static final int NUM_DOCS = 1;
 
     public void testSemanticSearch() throws Exception{
+        log.info("Get Cluster Type=========================="+getClusterType());
+        getIndices();
+        getShards();
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         switch (getClusterType()){
             case OLD:
