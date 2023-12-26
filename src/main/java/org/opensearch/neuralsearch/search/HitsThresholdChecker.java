@@ -34,7 +34,7 @@ public class HitsThresholdChecker {
         return hitCount >= getTotalHitsThreshold();
     }
 
-    protected ScoreMode scoreMode() {
+    public ScoreMode scoreMode() {
         return ScoreMode.TOP_SCORES;
     }
 }
