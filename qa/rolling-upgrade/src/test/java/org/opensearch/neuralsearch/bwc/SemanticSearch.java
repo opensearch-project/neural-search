@@ -9,9 +9,8 @@ import com.carrotsearch.randomizedtesting.RandomizedTest;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
-import java.util.ArrayList;
+import org.opensearch.neuralsearch.TestUtils;
 import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
-import static org.opensearch.neuralsearch.TestUtils.getModelId;
 import static org.opensearch.neuralsearch.TestUtils.TEXT_EMBEDDING_PROCESSOR;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
@@ -97,8 +96,8 @@ public class SemanticSearch extends AbstractRollingUpgradeTestCase{
     }
 
     private String getModelId(String pipelineName){
-        Map<String,Object> pipeline = getIngestionPipeline(PIPELINE_NAME);
+        Map<String,Object> pipeline = getIngestionPipeline(pipelineName);
         assertNotNull(pipeline);
-        return getModelId(pipeline,TEXT_EMBEDDING_PROCESSOR);
+        return TestUtils.getModelId(pipeline,TEXT_EMBEDDING_PROCESSOR);
     }
 }
