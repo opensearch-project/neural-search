@@ -27,7 +27,13 @@ public class HitsTresholdCheckerTests extends OpenSearchQueryTestCase {
         expectThrows(IllegalArgumentException.class, () -> new HitsThresholdChecker(-1));
     }
 
-    public void testTresholdLimit_whenThresholdMaxValue_thenFail() {
-        expectThrows(IllegalArgumentException.class, () -> new HitsThresholdChecker(Integer.MAX_VALUE));
+    public void testTrackThreshold_whenTrackThresholdSet_thenSuccessful() {
+        HitsThresholdChecker hitsThresholdChecker = new HitsThresholdChecker(Integer.MAX_VALUE);
+        assertEquals(ScoreMode.TOP_SCORES, hitsThresholdChecker.scoreMode());
+        assertFalse(hitsThresholdChecker.isThresholdReached());
+        hitsThresholdChecker.incrementHitCount();
+        assertFalse(hitsThresholdChecker.isThresholdReached());
+        IntStream.rangeClosed(1, 5).forEach((checker) -> hitsThresholdChecker.incrementHitCount());
+        assertFalse(hitsThresholdChecker.isThresholdReached());
     }
 }
