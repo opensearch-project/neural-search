@@ -25,7 +25,7 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
 
     @Before
     protected void setIndex() {
-        // Creating index name by concatenating "knn-bwc-" prefix with test method name
+        // Creating index name by concatenating "neural-bwc-" prefix with test method name
         // for all the tests in this sub-project
         testIndex = NEURAL_SEARCH_BWC_PREFIX + getTestName().toLowerCase(Locale.ROOT);
     }

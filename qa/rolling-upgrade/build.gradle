@@ -13,7 +13,6 @@ apply from : "$rootDir/qa/build.gradle"
 String default_bwc_version = System.getProperty("bwc.version")
 String neural_search_bwc_version = System.getProperty("tests.bwc.version", default_bwc_version)
 boolean isSnapshot = neural_search_bwc_version.contains("-SNAPSHOT")
-String knn_bwc_version_no_qualifier = isSnapshot ? neural_search_bwc_version - "-SNAPSHOT" : neural_search_bwc_version
 String baseName = "neuralSearchBwcCluster-rolling"
 
 List<Provider<RegularFile>> plugins = [provider(new Callable<RegularFile>(){
@@ -50,22 +49,12 @@ testClusters {
         jvmArgs("-Xms1g", "-Xmx4g")
         setting 'path.repo', "${buildDir}/cluster/shared/repo/${baseName}"
         setting 'http.content_type.required', 'true'
-        environment "LD_LIBRARY_PATH", "${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/knnlib;${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/lib"
-        if (Os.isFamily(Os.FAMILY_WINDOWS)) {
-            // While running on Windows OS, setting the PATH environment variable to include the paths to dlls of JNI libraries and windows dependencies
-            environment('PATH', System.getenv('PATH') + ";$rootDir/jni/release" + ";$rootDir/src/main/resources/windowsDependencies")
-            systemProperty "java.library.path", "${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/knnlib;${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/lib"
-        } else {
-            systemProperty "java.library.path", "${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/knnlib:${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/lib"
-        }
     }
 }
 
 
 // Task to run BWC tests against the old cluster
 task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
-    dependsOn "zipBwcMlCommonsPlugin"
-    dependsOn "zipBwcKnnPlugin"
     dependsOn "zipBwcPlugin"
     useCluster testClusters."${baseName}"
     systemProperty 'tests.rest.bwcsuite_cluster', 'old_cluster'
@@ -102,8 +91,6 @@ task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
     dependsOn "testAgainstOneThirdUpgradedCluster"
     useCluster testClusters."${baseName}"
     doFirst {
-        testClusters."${baseName}".getNodes().getAt("${baseName}" + "-1").environment("LD_LIBRARY_PATH", "$rootDir/jni/release")
-        testClusters."${baseName}".getNodes().getAt("${baseName}" + "-1").systemProperty("java.library.path", "$rootDir/jni/release")
         testClusters."${baseName}".upgradeNodeAndPluginToNextVersion(plugins)
     }
     systemProperty 'tests.rest.bwcsuite_cluster', 'mixed_cluster'
@@ -121,8 +108,6 @@ task testRollingUpgrade(type: StandaloneRestIntegTestTask) {
     dependsOn "testAgainstTwoThirdsUpgradedCluster"
     useCluster testClusters."${baseName}"
     doFirst {
-        testClusters."${baseName}".getNodes().getAt("${baseName}" + "-2").environment("LD_LIBRARY_PATH", "$rootDir/jni/release")
-        testClusters."${baseName}".getNodes().getAt("${baseName}" + "-2").systemProperty("java.library.path", "$rootDir/jni/release")
         testClusters."${baseName}".upgradeNodeAndPluginToNextVersion(plugins)
     }
     mustRunAfter "testAgainstOneThirdUpgradedCluster"
