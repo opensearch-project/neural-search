@@ -13,6 +13,7 @@ apply from : "$rootDir/qa/build.gradle"
 String default_bwc_version = System.getProperty("bwc.version")
 String neural_search_bwc_version = System.getProperty("tests.bwc.version", default_bwc_version)
 boolean isSnapshot = neural_search_bwc_version.contains("-SNAPSHOT")
+String knn_bwc_version_no_qualifier = isSnapshot ? neural_search_bwc_version - "-SNAPSHOT" : neural_search_bwc_version
 String baseName = "neuralSearchBwcCluster-rolling"
 
 List<Provider<RegularFile>> plugins = [provider(new Callable<RegularFile>(){
@@ -49,6 +50,8 @@ testClusters {
         jvmArgs("-Xms1g", "-Xmx4g")
         setting 'path.repo', "${buildDir}/cluster/shared/repo/${baseName}"
         setting 'http.content_type.required', 'true'
+        environment "LD_LIBRARY_PATH", "${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/knnlib;${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/lib"
+        systemProperty "java.library.path", "${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/knnlib:${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/lib"
     }
 }
 

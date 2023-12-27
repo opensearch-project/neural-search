@@ -145,8 +145,8 @@ task zipBwcMlCommonsPlugin(type: Zip) {
 
 // Task to zip knn plugin from archive
 task zipBwcKnnPlugin(type: Zip) {
-    dependsOn "zipBwcMlCommonsPlugin"
     dependsOn "pullKnnBwcPlugin"
+    dependsOn "zipBwcMlCommonsPlugin"
     from(java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-knn"))
     destinationDirectory = tmp_dir
     archiveFileName = "opensearch-knn-${neural_search_bwc_version_no_qualifier}.zip"
