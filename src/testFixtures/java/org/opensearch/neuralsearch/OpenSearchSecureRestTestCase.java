@@ -7,7 +7,6 @@ package org.opensearch.neuralsearch;
 
 import static org.opensearch.client.RestClientBuilder.DEFAULT_MAX_CONN_PER_ROUTE;
 import static org.opensearch.client.RestClientBuilder.DEFAULT_MAX_CONN_TOTAL;
-import static org.opensearch.knn.common.KNNConstants.MODELS;
 import static org.opensearch.knn.common.KNNConstants.MODEL_INDEX_NAME;
 import static org.opensearch.neuralsearch.TestUtils.NEURAL_SEARCH_BWC_PREFIX;
 import static org.opensearch.neuralsearch.TestUtils.OPENDISTRO_SECURITY;
@@ -16,7 +15,6 @@ import static org.opensearch.neuralsearch.TestUtils.SECURITY_AUDITLOG_PREFIX;
 import static org.opensearch.neuralsearch.TestUtils.SKIP_DELETE_MODEL_INDEX;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -34,13 +32,11 @@ import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
 import org.apache.hc.core5.http.Header;
 import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.http.ParseException;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.message.BasicHeader;
 import org.apache.hc.core5.http.nio.ssl.TlsStrategy;
 import org.apache.hc.core5.ssl.SSLContextBuilder;
 import org.apache.hc.core5.util.Timeout;
 import org.junit.After;
-import org.opensearch.action.search.SearchResponse;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
 import org.opensearch.client.RestClient;
@@ -48,16 +44,10 @@ import org.opensearch.client.RestClientBuilder;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.DeprecationHandler;
 import org.opensearch.core.xcontent.MediaType;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.knn.plugin.KNNPlugin;
-import org.opensearch.search.SearchHit;
 import org.opensearch.test.rest.OpenSearchRestTestCase;
 
 /**
@@ -198,53 +188,11 @@ public abstract class OpenSearchSecureRestTestCase extends OpenSearchRestTestCas
                 .collect(Collectors.toList());
 
             for (final String indexName : externalIndices) {
-                if (isIndexCleanupRequired(indexName)) {
-                    wipeIndexContent(indexName);
-                    continue;
-                }
                 if (!skipDeleteIndex(indexName)) {
                     adminClient().performRequest(new Request("DELETE", "/" + indexName));
                 }
             }
         }
-    }
-
-    private boolean isIndexCleanupRequired(final String index) {
-        return MODEL_INDEX_NAME.equals(index) && !getSkipDeleteModelIndexFlag();
-    }
-
-    private void wipeIndexContent(String indexName) throws IOException, ParseException {
-        deleteAllDocs(indexName);
-    }
-
-    private List<String> getModelIds() throws IOException, ParseException {
-        final String restURIGetModels = String.join("/", KNNPlugin.KNN_BASE_URI, MODELS, "_search");
-        final Response response = adminClient().performRequest(new Request("GET", restURIGetModels));
-
-        assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
-
-        final String responseBody = EntityUtils.toString(response.getEntity());
-        assertNotNull(responseBody);
-
-        final XContentParser parser = createParser(MediaTypeRegistry.getDefaultMediaType().xContent(), responseBody);
-        final SearchResponse searchResponse = SearchResponse.fromXContent(parser);
-
-        return Arrays.stream(searchResponse.getHits().getHits()).map(SearchHit::getId).collect(Collectors.toList());
-    }
-
-    private void deleteAllDocs(final String indexName) throws IOException {
-        final String restURIDeleteByQuery = String.join("/", indexName, "_delete_by_query");
-        final Request request = new Request("POST", restURIDeleteByQuery);
-        final XContentBuilder matchAllDocsQuery = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject("query")
-            .startObject("match_all")
-            .endObject()
-            .endObject()
-            .endObject();
-
-        request.setJsonEntity(matchAllDocsQuery.toString());
-        adminClient().performRequest(request);
     }
 
     private boolean getSkipDeleteModelIndexFlag() {
