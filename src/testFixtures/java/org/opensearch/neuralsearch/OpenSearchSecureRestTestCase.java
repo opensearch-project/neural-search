@@ -50,7 +50,12 @@ import org.opensearch.common.unit.TimeValue;
 import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.rest.RestStatus;
-import org.opensearch.core.xcontent.*;
+import org.opensearch.core.xcontent.DeprecationHandler;
+import org.opensearch.core.xcontent.MediaType;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.knn.plugin.KNNPlugin;
 import org.opensearch.search.SearchHit;
 import org.opensearch.test.rest.OpenSearchRestTestCase;
@@ -209,7 +214,6 @@ public abstract class OpenSearchSecureRestTestCase extends OpenSearchRestTestCas
     }
 
     private void wipeIndexContent(String indexName) throws IOException, ParseException {
-        deleteModels(getModelIds());
         deleteAllDocs(indexName);
     }
 
@@ -226,18 +230,6 @@ public abstract class OpenSearchSecureRestTestCase extends OpenSearchRestTestCas
         final SearchResponse searchResponse = SearchResponse.fromXContent(parser);
 
         return Arrays.stream(searchResponse.getHits().getHits()).map(SearchHit::getId).collect(Collectors.toList());
-    }
-
-    private void deleteModels(final List<String> modelIds) throws IOException {
-        for (final String testModelID : modelIds) {
-            final String restURIGetModel = String.join("/", KNNPlugin.KNN_BASE_URI, MODELS, testModelID);
-            final Response getModelResponse = adminClient().performRequest(new Request("GET", restURIGetModel));
-            if (RestStatus.OK != RestStatus.fromCode(getModelResponse.getStatusLine().getStatusCode())) {
-                continue;
-            }
-            final String restURIDeleteModel = String.join("/", KNNPlugin.KNN_BASE_URI, MODELS, testModelID);
-            adminClient().performRequest(new Request("DELETE", restURIDeleteModel));
-        }
     }
 
     private void deleteAllDocs(final String indexName) throws IOException {
