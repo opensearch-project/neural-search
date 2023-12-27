@@ -23,9 +23,6 @@ public class SemanticSearch extends AbstractRollingUpgradeTestCase{
     private static final int NUM_DOCS = 1;
 
     public void testSemanticSearch() throws Exception{
-        logger.info("Get Cluster Type=========================="+getClusterType());
-        getIndices();
-        getShards();
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         switch (getClusterType()){
             case OLD:
