@@ -72,8 +72,6 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
     dependsOn rootProject.tasks.assemble
     dependsOn "testAgainstOldCluster"
     doFirst {
-        testClusters."${baseName}".getNodes().getAt("${baseName}" + "-0").environment("LD_LIBRARY_PATH", "$rootDir/jni/release")
-        testClusters."${baseName}".getNodes().getAt("${baseName}" + "-0").systemProperty("java.library.path", "$rootDir/jni/release")
         testClusters."${baseName}".upgradeNodeAndPluginToNextVersion(plugins)
     }
     systemProperty 'tests.rest.bwcsuite_cluster', 'mixed_cluster'
