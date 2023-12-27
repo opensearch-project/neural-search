@@ -854,27 +854,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return (Map<String, Object>) responseMap.get(pipelineName);
     }
 
-    // /**
-    // * Get indices
-    // */
-    // @SneakyThrows
-    // protected void getIndices() {
-    // Request request = new Request("GET", "/_cat/indices");
-    // Response response = client().performRequest(request);
-    // String responseBody = EntityUtils.toString(response.getEntity());
-    // logger.info("Indices are ============================");
-    // logger.info(responseBody);
-    // }
-    //
-    // @SneakyThrows
-    // protected void getShards() {
-    // Request request = new Request("GET", "/_cat/shards");
-    // Response response = client().performRequest(request);
-    // String responseBody = EntityUtils.toString(response.getEntity());
-    // logger.info("Shards are ============================");
-    // logger.info(responseBody);
-    // }
-
     /**
      * Enumeration for types of pipeline processors, used to lookup resources like create
      * processor request as those are type specific

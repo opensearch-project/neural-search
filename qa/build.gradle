@@ -20,13 +20,6 @@ test.enabled = false
 assemble.enabled = false
 dependenciesInfo.enabled = false
 
-repositories {
-    mavenLocal()
-    maven { url "https://aws.oss.sonatype.org/content/repositories/snapshots" }
-    mavenCentral()
-    maven { url "https://plugins.gradle.org/m2/" }
-}
-
 configurations {
     zipArchive
 }
