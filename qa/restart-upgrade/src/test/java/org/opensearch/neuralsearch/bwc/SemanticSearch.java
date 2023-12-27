@@ -26,6 +26,9 @@ public class SemanticSearch extends AbstractRestartUpgradeRestTestCase{
     private static final String TEST_FIELD = "passage_text";
     private static final String TEXT= "Hello world";
 
+    //Test restart-upgrade Semantic Search
+    //Create Text Embedding Processor, Ingestion Pipeline and add document
+    //Validate process , pipeline and document count in restart-upgrade scenario
     public void testSemanticSearch() throws Exception{
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
 
@@ -83,11 +86,6 @@ public class SemanticSearch extends AbstractRestartUpgradeRestTestCase{
     protected void createPipelineProcessor(String modelId, String pipelineName, ProcessorType processorType) throws Exception {
         String requestBody=Files.readString(Path.of(classLoader.getResource("processor/PipelineConfiguration.json").toURI()));
         createPipelineProcessor(requestBody,pipelineName,modelId);
-    }
-
-    private Map<String, Object> getTotalHits(Map<String, Object> searchResponseAsMap) {
-        Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
-        return (Map<String, Object>) hitsMap.get("total");
     }
     
 }

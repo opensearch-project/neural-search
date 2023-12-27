@@ -16,7 +16,12 @@ import static org.opensearch.neuralsearch.TestUtils.SECURITY_AUDITLOG_PREFIX;
 import static org.opensearch.neuralsearch.TestUtils.SKIP_DELETE_MODEL_INDEX;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.apache.hc.client5.http.auth.AuthScope;

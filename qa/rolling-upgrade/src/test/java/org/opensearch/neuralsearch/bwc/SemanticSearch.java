@@ -22,6 +22,9 @@ public class SemanticSearch extends AbstractRollingUpgradeTestCase{
     private static final String TEXT_UPGRADED= "Hello world upgraded";
     private static final int NUM_DOCS = 1;
 
+    //Test rolling-upgrade Semantic Search
+    //Create Text Embedding Processor, Ingestion Pipeline and add document
+    //Validate process , pipeline and document count in rolling-upgrade scenario
     public void testSemanticSearch() throws Exception{
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         switch (getClusterType()){
