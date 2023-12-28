@@ -5,6 +5,8 @@
 
 package org.opensearch.neuralsearch.query;
 
+import static java.util.Locale.ROOT;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -118,12 +120,21 @@ public final class HybridQueryScorer extends Scorer {
             }
             Query query = scorer.getWeight().getQuery();
             List<Integer> indexes = queryToIndex.get(query);
-            // we need to find the index of first sub-query that hasn't been updated yet
+            // we need to find the index of first sub-query that hasn't been set yet. Such score will have initial value of "0.0"
             int index = indexes.stream()
                 .mapToInt(idx -> idx)
-                .filter(index1 -> Float.compare(scores[index1], 0.0f) == 0)
+                .filter(idx -> Float.compare(scores[idx], 0.0f) == 0)
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException("cannot collect score for subquery"));
+                .orElseThrow(
+                    () -> new IllegalStateException(
+                        String.format(
+                            ROOT,
+                            "cannot set score for one of hybrid search subquery [%s] and document [%d]",
+                            query.toString(),
+                            scorer.docID()
+                        )
+                    )
+                );
             scores[index] = scorer.score();
         }
         return scores;

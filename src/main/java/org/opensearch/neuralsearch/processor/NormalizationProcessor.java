@@ -9,6 +9,7 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -155,7 +156,19 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
         SearchHits searchHits = fetchSearchResultOptional.get().hits();
         SearchHit[] searchHitArray = searchHits.getHits();
         // validate the both collections are of the same size
-        if (Objects.isNull(searchHitArray) || searchHitArray.length != docIds.size()) {
+        if (Objects.isNull(searchHitArray)) {
+            log.info("array of search hits in fetch phase results is null");
+            return true;
+        }
+        if (searchHitArray.length != docIds.size()) {
+            log.info(
+                String.format(
+                    Locale.ROOT,
+                    "number of documents in fetch results [%d] and query results [%d] is different",
+                    searchHitArray.length,
+                    docIds.size()
+                )
+            );
             return true;
         }
         return false;

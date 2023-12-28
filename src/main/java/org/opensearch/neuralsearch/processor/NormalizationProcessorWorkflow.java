@@ -139,7 +139,7 @@ public class NormalizationProcessorWorkflow {
         // 3. update original scores to normalized and combined values
         // 4. order scores based on normalized and combined values
         FetchSearchResult fetchSearchResult = fetchSearchResultOptional.get();
-        SearchHit[] searchHitArray = getSearchHits(docIds, fetchSearchResult);
+        SearchHit[] searchHitArray = getSearchHits(fetchSearchResult);
 
         // create map of docId to index of search hits. This solves (2), duplicates are from
         // delimiter and start/stop elements, they all have same valid doc_id. For this map
@@ -169,21 +169,9 @@ public class NormalizationProcessorWorkflow {
         fetchSearchResult.hits(updatedSearchHits);
     }
 
-    private SearchHit[] getSearchHits(final List<Integer> docIds, final FetchSearchResult fetchSearchResult) {
+    private SearchHit[] getSearchHits(final FetchSearchResult fetchSearchResult) {
         SearchHits searchHits = fetchSearchResult.hits();
-        SearchHit[] searchHitArray = searchHits.getHits();
-        // validate the both collections are of the same size
-        if (Objects.isNull(searchHitArray)) {
-            throw new IllegalStateException(
-                "Score normalization processor cannot produce final query result, for one shard case fetch does not have any results"
-            );
-        }
-        if (searchHitArray.length != docIds.size()) {
-            throw new IllegalStateException(
-                "Score normalization processor cannot produce final query result, for one shard case number of fetched documents does not match number of search hits"
-            );
-        }
-        return searchHitArray;
+        return searchHits.getHits();
     }
 
     private List<Integer> unprocessedDocIds(final List<QuerySearchResult> querySearchResults) {
