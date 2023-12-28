@@ -173,8 +173,15 @@ public class NormalizationProcessorWorkflow {
         SearchHits searchHits = fetchSearchResult.hits();
         SearchHit[] searchHitArray = searchHits.getHits();
         // validate the both collections are of the same size
-        if (Objects.isNull(searchHitArray) || searchHitArray.length != docIds.size()) {
-            throw new IllegalStateException("Score normalization processor cannot produce final query result");
+        if (Objects.isNull(searchHitArray)) {
+            throw new IllegalStateException(
+                "Score normalization processor cannot produce final query result, for one shard case fetch does not have any results"
+            );
+        }
+        if (searchHitArray.length != docIds.size()) {
+            throw new IllegalStateException(
+                "Score normalization processor cannot produce final query result, for one shard case number of fetched documents does not match number of search hits"
+            );
         }
         return searchHitArray;
     }

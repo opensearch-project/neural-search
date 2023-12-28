@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.processor;
 
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryStartStopElement;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -18,6 +19,8 @@ import org.opensearch.action.search.SearchPhaseName;
 import org.opensearch.action.search.SearchPhaseResults;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
+import org.opensearch.search.SearchHit;
+import org.opensearch.search.SearchHits;
 import org.opensearch.search.SearchPhaseResult;
 import org.opensearch.search.fetch.FetchSearchResult;
 import org.opensearch.search.internal.SearchContext;
@@ -98,7 +101,16 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
         }
 
         QueryPhaseResultConsumer queryPhaseResultConsumer = (QueryPhaseResultConsumer) searchPhaseResult;
-        return queryPhaseResultConsumer.getAtomicArray().asList().stream().filter(Objects::nonNull).noneMatch(this::isHybridQuery);
+        if (queryPhaseResultConsumer.getAtomicArray().asList().stream().filter(Objects::nonNull).noneMatch(this::isHybridQuery)) {
+            return true;
+        }
+        List<QuerySearchResult> querySearchResults = getQueryPhaseSearchResults(searchPhaseResult);
+        Optional<FetchSearchResult> fetchSearchResult = getFetchSearchResults(searchPhaseResult);
+        if (shouldSkipProcessorDueToIncompatibleQueryAndFetchResults(querySearchResults, fetchSearchResult)) {
+            log.debug("Query and fetch results do not match, normalization processor is skipped");
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -130,5 +142,30 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
     ) {
         Optional<Result> optionalFirstSearchPhaseResult = searchPhaseResults.getAtomicArray().asList().stream().findFirst();
         return optionalFirstSearchPhaseResult.map(SearchPhaseResult::fetchResult);
+    }
+
+    private boolean shouldSkipProcessorDueToIncompatibleQueryAndFetchResults(
+        final List<QuerySearchResult> querySearchResults,
+        final Optional<FetchSearchResult> fetchSearchResultOptional
+    ) {
+        if (fetchSearchResultOptional.isEmpty()) {
+            return false;
+        }
+        final List<Integer> docIds = unprocessedDocIds(querySearchResults);
+        SearchHits searchHits = fetchSearchResultOptional.get().hits();
+        SearchHit[] searchHitArray = searchHits.getHits();
+        // validate the both collections are of the same size
+        if (Objects.isNull(searchHitArray) || searchHitArray.length != docIds.size()) {
+            return true;
+        }
+        return false;
+    }
+
+    private List<Integer> unprocessedDocIds(final List<QuerySearchResult> querySearchResults) {
+        return querySearchResults.isEmpty()
+            ? List.of()
+            : Arrays.stream(querySearchResults.get(0).topDocs().topDocs.scoreDocs)
+                .map(scoreDoc -> scoreDoc.doc)
+                .collect(Collectors.toList());
     }
 }

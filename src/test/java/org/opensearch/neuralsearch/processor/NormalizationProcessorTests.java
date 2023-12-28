@@ -15,6 +15,7 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -45,9 +46,13 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.search.DocValueFormat;
+import org.opensearch.search.SearchHit;
+import org.opensearch.search.SearchHits;
 import org.opensearch.search.SearchShardTarget;
 import org.opensearch.search.aggregations.InternalAggregation;
 import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
+import org.opensearch.search.fetch.FetchSearchResult;
+import org.opensearch.search.fetch.QueryFetchSearchResult;
 import org.opensearch.search.query.QuerySearchResult;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.threadpool.TestThreadPool;
@@ -323,6 +328,176 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         when(searchPhaseContext.getNumShards()).thenReturn(numberOfShards);
         normalizationProcessor.process(queryPhaseResultConsumer, searchPhaseContext);
 
+        verify(normalizationProcessorWorkflow, never()).execute(any(), any(), any(), any());
+    }
+
+    public void testResultTypes_whenQueryAndFetchPresentAndSizeSame_thenCallNormalization() {
+        NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+        );
+        NormalizationProcessor normalizationProcessor = new NormalizationProcessor(
+            PROCESSOR_TAG,
+            DESCRIPTION,
+            new ScoreNormalizationFactory().createNormalization(NORMALIZATION_METHOD),
+            new ScoreCombinationFactory().createCombination(COMBINATION_METHOD),
+            normalizationProcessorWorkflow
+        );
+
+        SearchRequest searchRequest = new SearchRequest(INDEX_NAME);
+        searchRequest.setBatchedReduceSize(4);
+        AtomicReference<Exception> onPartialMergeFailure = new AtomicReference<>();
+        QueryPhaseResultConsumer queryPhaseResultConsumer = new QueryPhaseResultConsumer(
+            searchRequest,
+            executor,
+            new NoopCircuitBreaker(CircuitBreaker.REQUEST),
+            searchPhaseController,
+            SearchProgressListener.NOOP,
+            writableRegistry(),
+            10,
+            e -> onPartialMergeFailure.accumulateAndGet(e, (prev, curr) -> {
+                curr.addSuppressed(prev);
+                return curr;
+            })
+        );
+        CountDownLatch partialReduceLatch = new CountDownLatch(5);
+        int shardId = 0;
+        SearchShardTarget searchShardTarget = new SearchShardTarget(
+            "node",
+            new ShardId("index", "uuid", shardId),
+            null,
+            OriginalIndices.NONE
+        );
+        QuerySearchResult querySearchResult = new QuerySearchResult();
+        TopDocs topDocs = new TopDocs(
+            new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+
+            new ScoreDoc[] {
+                createStartStopElementForHybridSearchResults(4),
+                createDelimiterElementForHybridSearchResults(4),
+                new ScoreDoc(0, 0.5f),
+                new ScoreDoc(2, 0.3f),
+                new ScoreDoc(4, 0.25f),
+                new ScoreDoc(10, 0.2f),
+                createStartStopElementForHybridSearchResults(4) }
+
+        );
+        querySearchResult.topDocs(new TopDocsAndMaxScore(topDocs, 0.5f), new DocValueFormat[0]);
+        querySearchResult.setSearchShardTarget(searchShardTarget);
+        querySearchResult.setShardIndex(shardId);
+
+        FetchSearchResult fetchSearchResult = new FetchSearchResult();
+        fetchSearchResult.setShardIndex(shardId);
+        fetchSearchResult.setSearchShardTarget(searchShardTarget);
+        SearchHit[] searchHitArray = new SearchHit[] {
+            new SearchHit(4, "2", Map.of(), Map.of()),
+            new SearchHit(4, "2", Map.of(), Map.of()),
+            new SearchHit(0, "10", Map.of(), Map.of()),
+            new SearchHit(2, "1", Map.of(), Map.of()),
+            new SearchHit(4, "2", Map.of(), Map.of()),
+            new SearchHit(10, "3", Map.of(), Map.of()),
+            new SearchHit(4, "2", Map.of(), Map.of()) };
+        SearchHits searchHits = new SearchHits(searchHitArray, new TotalHits(7, TotalHits.Relation.EQUAL_TO), 10);
+        fetchSearchResult.hits(searchHits);
+
+        QueryFetchSearchResult queryFetchSearchResult = new QueryFetchSearchResult(querySearchResult, fetchSearchResult);
+        queryFetchSearchResult.setShardIndex(shardId);
+
+        queryPhaseResultConsumer.consumeResult(queryFetchSearchResult, partialReduceLatch::countDown);
+
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
+        normalizationProcessor.process(queryPhaseResultConsumer, searchPhaseContext);
+
+        List<QuerySearchResult> querySearchResults = queryPhaseResultConsumer.getAtomicArray()
+            .asList()
+            .stream()
+            .map(result -> result == null ? null : result.queryResult())
+            .collect(Collectors.toList());
+
+        TestUtils.assertQueryResultScores(querySearchResults);
+        verify(normalizationProcessorWorkflow).execute(any(), any(), any(), any());
+    }
+
+    public void testResultTypes_whenQueryAndFetchPresentButSizeDifferent_thenSkipNormalization() {
+        NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+        );
+        NormalizationProcessor normalizationProcessor = new NormalizationProcessor(
+            PROCESSOR_TAG,
+            DESCRIPTION,
+            new ScoreNormalizationFactory().createNormalization(NORMALIZATION_METHOD),
+            new ScoreCombinationFactory().createCombination(COMBINATION_METHOD),
+            normalizationProcessorWorkflow
+        );
+
+        SearchRequest searchRequest = new SearchRequest(INDEX_NAME);
+        searchRequest.setBatchedReduceSize(4);
+        AtomicReference<Exception> onPartialMergeFailure = new AtomicReference<>();
+        QueryPhaseResultConsumer queryPhaseResultConsumer = new QueryPhaseResultConsumer(
+            searchRequest,
+            executor,
+            new NoopCircuitBreaker(CircuitBreaker.REQUEST),
+            searchPhaseController,
+            SearchProgressListener.NOOP,
+            writableRegistry(),
+            10,
+            e -> onPartialMergeFailure.accumulateAndGet(e, (prev, curr) -> {
+                curr.addSuppressed(prev);
+                return curr;
+            })
+        );
+        CountDownLatch partialReduceLatch = new CountDownLatch(5);
+        int shardId = 0;
+        SearchShardTarget searchShardTarget = new SearchShardTarget(
+            "node",
+            new ShardId("index", "uuid", shardId),
+            null,
+            OriginalIndices.NONE
+        );
+        QuerySearchResult querySearchResult = new QuerySearchResult();
+        TopDocs topDocs = new TopDocs(
+            new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+
+            new ScoreDoc[] {
+                createStartStopElementForHybridSearchResults(4),
+                createDelimiterElementForHybridSearchResults(4),
+                new ScoreDoc(0, 0.5f),
+                new ScoreDoc(2, 0.3f),
+                new ScoreDoc(4, 0.25f),
+                new ScoreDoc(10, 0.2f),
+                createStartStopElementForHybridSearchResults(4) }
+
+        );
+        querySearchResult.topDocs(new TopDocsAndMaxScore(topDocs, 0.5f), new DocValueFormat[0]);
+        querySearchResult.setSearchShardTarget(searchShardTarget);
+        querySearchResult.setShardIndex(shardId);
+
+        FetchSearchResult fetchSearchResult = new FetchSearchResult();
+        fetchSearchResult.setShardIndex(shardId);
+        fetchSearchResult.setSearchShardTarget(searchShardTarget);
+        SearchHit[] searchHitArray = new SearchHit[] {
+            new SearchHit(0, "10", Map.of(), Map.of()),
+            new SearchHit(2, "1", Map.of(), Map.of()),
+            new SearchHit(4, "2", Map.of(), Map.of()),
+            new SearchHit(10, "3", Map.of(), Map.of()),
+            new SearchHit(0, "10", Map.of(), Map.of()), };
+        SearchHits searchHits = new SearchHits(searchHitArray, new TotalHits(5, TotalHits.Relation.EQUAL_TO), 10);
+        fetchSearchResult.hits(searchHits);
+
+        QueryFetchSearchResult queryFetchSearchResult = new QueryFetchSearchResult(querySearchResult, fetchSearchResult);
+        queryFetchSearchResult.setShardIndex(shardId);
+
+        queryPhaseResultConsumer.consumeResult(queryFetchSearchResult, partialReduceLatch::countDown);
+
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
+        normalizationProcessor.process(queryPhaseResultConsumer, searchPhaseContext);
+
+        List<QuerySearchResult> querySearchResults = queryPhaseResultConsumer.getAtomicArray()
+            .asList()
+            .stream()
+            .map(result -> result == null ? null : result.queryResult())
+            .collect(Collectors.toList());
+
+        assertNotNull(querySearchResults);
         verify(normalizationProcessorWorkflow, never()).execute(any(), any(), any(), any());
     }
 }
