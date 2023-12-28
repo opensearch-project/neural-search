@@ -1,0 +1,32 @@
+allprojects {
+    project.apply plugin: "com.diffplug.spotless"
+    spotless {
+        java {
+            // Normally this isn't necessary, but we have Java sources in
+            // non-standard places
+            target '**/*.java'
+
+            removeUnusedImports()
+            eclipse().configFile rootProject.file('formatter/formatterConfig.xml')
+            trimTrailingWhitespace()
+            endWithNewline();
+
+            custom 'Refuse wildcard imports', {
+                // Wildcard imports can't be resolved; fail the build
+                if (it =~ /\s+import .*\*;/) {
+                    throw new AssertionError("Do not use wildcard imports.  'spotlessApply' cannot resolve this issue.")
+                }
+            }
+        }
+        format 'misc', {
+            target '*.md', '*.gradle', '**/*.json', '**/*.yaml', '**/*.yml', '**/*.svg'
+
+            trimTrailingWhitespace()
+            endWithNewline()
+        }
+        format("license", {
+            licenseHeaderFile("${rootProject.file("formatter/license-header.txt")}", "package ");
+            target("src/*/java/**/*.java")
+        })
+    }
+}

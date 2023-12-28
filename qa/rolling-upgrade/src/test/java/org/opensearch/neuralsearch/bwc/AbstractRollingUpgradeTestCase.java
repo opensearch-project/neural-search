@@ -1,8 +1,11 @@
 /*
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
  */
-
 package org.opensearch.neuralsearch.bwc;
 
 import java.util.Locale;
@@ -11,7 +14,6 @@ import org.junit.Before;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.test.rest.OpenSearchRestTestCase;
-import static org.opensearch.neuralsearch.TestUtils.CLIENT_TIMEOUT_VALUE;
 import static org.opensearch.neuralsearch.TestUtils.OLD_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.MIXED_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.UPGRADED_CLUSTER;
@@ -48,12 +50,12 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
     @Override
     protected final Settings restClientSettings() {
         return Settings.builder()
-                .put(super.restClientSettings())
-                // increase the timeout here to 90 seconds to handle long waits for a green
-                // cluster health. the waits for green need to be longer than a minute to
-                // account for delayed shards
-                .put(OpenSearchRestTestCase.CLIENT_SOCKET_TIMEOUT, "120s")
-                .build();
+            .put(super.restClientSettings())
+            // increase the timeout here to 90 seconds to handle long waits for a green
+            // cluster health. the waits for green need to be longer than a minute to
+            // account for delayed shards
+            .put(OpenSearchRestTestCase.CLIENT_SOCKET_TIMEOUT, "120s")
+            .build();
     }
 
     protected enum ClusterType {

@@ -1,8 +1,11 @@
 /*
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
  */
-
 package org.opensearch.neuralsearch.bwc;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
@@ -14,48 +17,48 @@ import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.TEXT_EMBEDDING_PROCESSOR;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
-public class SemanticSearch extends AbstractRollingUpgradeTestCase{
+public class SemanticSearch extends AbstractRollingUpgradeTestCase {
     private static final String PIPELINE_NAME = "nlp-pipeline";
     private static final String TEST_FIELD = "test-field";
-    private static final String TEXT= "Hello world";
-    private static final String TEXT_MIXED= "Hello world mixed";
-    private static final String TEXT_UPGRADED= "Hello world upgraded";
+    private static final String TEXT = "Hello world";
+    private static final String TEXT_MIXED = "Hello world mixed";
+    private static final String TEXT_UPGRADED = "Hello world upgraded";
     private static final int NUM_DOCS = 1;
 
-    //Test rolling-upgrade Semantic Search
-    //Create Text Embedding Processor, Ingestion Pipeline and add document
-    //Validate process , pipeline and document count in rolling-upgrade scenario
-    public void testSemanticSearch() throws Exception{
+    // Test rolling-upgrade Semantic Search
+    // Create Text Embedding Processor, Ingestion Pipeline and add document
+    // Validate process , pipeline and document count in rolling-upgrade scenario
+    public void testSemanticSearch() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-        switch (getClusterType()){
+        switch (getClusterType()) {
             case OLD:
-                String modelId= uploadTextEmbeddingModel();
+                String modelId = uploadTextEmbeddingModel();
                 loadModel(modelId);
-                createPipelineProcessor(modelId,PIPELINE_NAME);
+                createPipelineProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
-                        testIndex,
-                        Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
-                        PIPELINE_NAME
+                    testIndex,
+                    Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
+                    PIPELINE_NAME
                 );
-                addDocument(testIndex, "0",TEST_FIELD,TEXT);
+                addDocument(testIndex, "0", TEST_FIELD, TEXT);
                 break;
             case MIXED:
-                modelId=getModelId(PIPELINE_NAME);
+                modelId = getModelId(PIPELINE_NAME);
                 int totalDocsCountMixed;
-                if (isFirstMixedRound()){
-                    totalDocsCountMixed=NUM_DOCS;
+                if (isFirstMixedRound()) {
+                    totalDocsCountMixed = NUM_DOCS;
                     validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, TEXT);
-                    addDocument(testIndex, "1",TEST_FIELD,TEXT_MIXED);
-                    
-                }else{
-                    totalDocsCountMixed=2*NUM_DOCS;
+                    addDocument(testIndex, "1", TEST_FIELD, TEXT_MIXED);
+
+                } else {
+                    totalDocsCountMixed = 2 * NUM_DOCS;
                     validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, TEXT_MIXED);
                 }
                 break;
             case UPGRADED:
-                modelId=getModelId(PIPELINE_NAME);
-                int totalDocsCountUpgraded=3*NUM_DOCS;
-                addDocument(testIndex, "2",TEST_FIELD,TEXT_UPGRADED);
+                modelId = getModelId(PIPELINE_NAME);
+                int totalDocsCountUpgraded = 3 * NUM_DOCS;
+                addDocument(testIndex, "2", TEST_FIELD, TEXT_UPGRADED);
                 validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, TEXT_UPGRADED);
                 deletePipeline(PIPELINE_NAME);
                 deleteModel(modelId);
@@ -66,8 +69,8 @@ public class SemanticSearch extends AbstractRollingUpgradeTestCase{
     }
 
     private void validateTestIndexOnUpgrade(int numberOfDocs, String modelId, String text) throws Exception {
-        int docCount=getDocCount(testIndex);
-        assertEquals(numberOfDocs,docCount);
+        int docCount = getDocCount(testIndex);
+        assertEquals(numberOfDocs, docCount);
         loadModel(modelId);
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
         neuralQueryBuilder.fieldName("passage_embedding");
@@ -85,10 +88,10 @@ public class SemanticSearch extends AbstractRollingUpgradeTestCase{
 
     private String registerModelGroupAndGetModelId(String requestBody) throws Exception {
         String modelGroupRegisterRequestBody = Files.readString(
-                Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
+            Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
         ).replace("<MODEL_GROUP_NAME>", "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8));
 
-        String modelGroupId=registerModelGroup(modelGroupRegisterRequestBody);
+        String modelGroupId = registerModelGroup(modelGroupRegisterRequestBody);
 
         requestBody = requestBody.replace("<MODEL_GROUP_ID>", modelGroupId);
 
@@ -96,13 +99,13 @@ public class SemanticSearch extends AbstractRollingUpgradeTestCase{
     }
 
     protected void createPipelineProcessor(String modelId, String pipelineName, ProcessorType processorType) throws Exception {
-        String requestBody=Files.readString(Path.of(classLoader.getResource("processor/PipelineConfiguration.json").toURI()));
-        createPipelineProcessor(requestBody,pipelineName,modelId);
+        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/PipelineConfiguration.json").toURI()));
+        createPipelineProcessor(requestBody, pipelineName, modelId);
     }
 
-    private String getModelId(String pipelineName){
-        Map<String,Object> pipeline = getIngestionPipeline(pipelineName);
+    private String getModelId(String pipelineName) {
+        Map<String, Object> pipeline = getIngestionPipeline(pipelineName);
         assertNotNull(pipeline);
-        return TestUtils.getModelId(pipeline,TEXT_EMBEDDING_PROCESSOR);
+        return TestUtils.getModelId(pipeline, TEXT_EMBEDDING_PROCESSOR);
     }
 }
