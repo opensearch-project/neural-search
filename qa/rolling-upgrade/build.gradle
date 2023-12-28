@@ -4,39 +4,12 @@
  */
 
 import org.opensearch.gradle.testclusters.StandaloneRestIntegTestTask
-import org.apache.tools.ant.taskdefs.condition.Os
-
-import java.util.concurrent.Callable
 
 apply from : "$rootDir/qa/build.gradle"
 
 String default_bwc_version = System.getProperty("bwc.version")
 String neural_search_bwc_version = System.getProperty("tests.bwc.version", default_bwc_version)
-boolean isSnapshot = neural_search_bwc_version.contains("-SNAPSHOT")
-String knn_bwc_version_no_qualifier = isSnapshot ? neural_search_bwc_version - "-SNAPSHOT" : neural_search_bwc_version
 String baseName = "neuralSearchBwcCluster-rolling"
-
-List<Provider<RegularFile>> plugins = [provider(new Callable<RegularFile>(){
-    @Override
-    RegularFile call() throws Exception {
-        return new RegularFile() {
-            @Override
-            File getAsFile() {
-                return configurations.zipArchive.asFileTree.matching{include "**/opensearch-ml-plugin-${opensearch_build}.zip"}.getSingleFile()
-            }
-        }
-    }
-}), provider(new Callable<RegularFile>(){
-    @Override
-    RegularFile call() throws Exception {
-        return new RegularFile() {
-            @Override
-            File getAsFile() {
-                return configurations.zipArchive.asFileTree.matching{include "**/opensearch-knn-${opensearch_build}.zip"}.getSingleFile()
-            }
-        }
-    }
-}), rootProject.tasks.bundlePlugin.archiveFile]
 
 // Creates a test cluster of previous version and loads k-NN plugin of bwcVersion
 testClusters {
@@ -50,8 +23,6 @@ testClusters {
         jvmArgs("-Xms1g", "-Xmx4g")
         setting 'path.repo', "${buildDir}/cluster/shared/repo/${baseName}"
         setting 'http.content_type.required', 'true'
-        environment "LD_LIBRARY_PATH", "${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/knnlib;${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/lib"
-        systemProperty "java.library.path", "${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/knnlib:${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/lib"
     }
 }
 
@@ -75,7 +46,7 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
     dependsOn rootProject.tasks.assemble
     dependsOn "testAgainstOldCluster"
     doFirst {
-        testClusters."${baseName}".upgradeNodeAndPluginToNextVersion(plugins)
+        testClusters."${baseName}".upgradeNodeAndPluginToNextVersion(project.ext.plugins)
     }
     systemProperty 'tests.rest.bwcsuite_cluster', 'mixed_cluster'
     systemProperty 'tests.rest.first_round', 'true'
@@ -92,7 +63,7 @@ task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
     dependsOn "testAgainstOneThirdUpgradedCluster"
     useCluster testClusters."${baseName}"
     doFirst {
-        testClusters."${baseName}".upgradeNodeAndPluginToNextVersion(plugins)
+        testClusters."${baseName}".upgradeNodeAndPluginToNextVersion(project.ext.plugins)
     }
     systemProperty 'tests.rest.bwcsuite_cluster', 'mixed_cluster'
     systemProperty 'tests.rest.first_round', 'false'
@@ -109,7 +80,7 @@ task testRollingUpgrade(type: StandaloneRestIntegTestTask) {
     dependsOn "testAgainstTwoThirdsUpgradedCluster"
     useCluster testClusters."${baseName}"
     doFirst {
-        testClusters."${baseName}".upgradeNodeAndPluginToNextVersion(plugins)
+        testClusters."${baseName}".upgradeNodeAndPluginToNextVersion(project.ext.plugins)
     }
     mustRunAfter "testAgainstOneThirdUpgradedCluster"
     systemProperty 'tests.rest.bwcsuite_cluster', 'upgraded_cluster'

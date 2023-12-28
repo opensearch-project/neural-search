@@ -13,7 +13,7 @@ import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.TEXT_EMBEDDING_PROCESSOR;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
-public class SemanticSearch extends AbstractRollingUpgradeTestCase {
+public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
     private static final String PIPELINE_NAME = "nlp-pipeline";
     private static final String TEST_FIELD = "test-field";
     private static final String TEXT = "Hello world";

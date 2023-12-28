@@ -4,38 +4,12 @@
  */
 
 import org.opensearch.gradle.testclusters.StandaloneRestIntegTestTask
-import org.apache.tools.ant.taskdefs.condition.Os
-import java.util.concurrent.Callable
 
 apply from : "$rootDir/qa/build.gradle"
 
 String default_bwc_version = System.getProperty("bwc.version")
 String neural_search_bwc_version = System.getProperty("tests.bwc.version", default_bwc_version)
-boolean isSnapshot = neural_search_bwc_version.contains("-SNAPSHOT")
 String baseName = "neuralSearchBwcCluster-restart"
-String knn_bwc_version_no_qualifier = isSnapshot ? neural_search_bwc_version - "-SNAPSHOT" : neural_search_bwc_version
-
-List<Provider<RegularFile>> plugins = [provider(new Callable<RegularFile>(){
-    @Override
-    RegularFile call() throws Exception {
-        return new RegularFile() {
-            @Override
-            File getAsFile() {
-                return configurations.zipArchive.asFileTree.matching{include "**/opensearch-ml-plugin-${opensearch_build}.zip"}.getSingleFile()
-            }
-        }
-    }
-}), provider(new Callable<RegularFile>(){
-    @Override
-    RegularFile call() throws Exception {
-        return new RegularFile() {
-            @Override
-            File getAsFile() {
-                return configurations.zipArchive.asFileTree.matching{include "**/opensearch-knn-${opensearch_build}.zip"}.getSingleFile()
-            }
-        }
-    }
-}), rootProject.tasks.bundlePlugin.archiveFile]
 
 // Creates a test cluster of previous version and loads k-NN plugin of bwcVersion
 testClusters {
@@ -49,8 +23,6 @@ testClusters {
         plugin(project.tasks.zipBwcPlugin.archiveFile)
         setting 'path.repo', "${buildDir}/cluster/shared/repo/${baseName}"
         setting 'http.content_type.required', 'true'
-        environment "LD_LIBRARY_PATH", "${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/knnlib;${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/lib"
-        systemProperty "java.library.path", "${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/knnlib:${buildDir}/testclusters/${baseName}-0/distro/${knn_bwc_version_no_qualifier}-ARCHIVE/plugins/opensearch-knn/lib"
     }
 }
 
@@ -74,7 +46,7 @@ task testRestartUpgrade(type: StandaloneRestIntegTestTask) {
     dependsOn rootProject.tasks.assemble
     useCluster testClusters."${baseName}"
     doFirst {
-        testClusters."${baseName}".upgradeAllNodesAndPluginsToNextVersion(plugins)
+        testClusters."${baseName}".upgradeAllNodesAndPluginsToNextVersion(project.ext.plugins)
     }
     systemProperty 'tests.rest.bwcsuite_cluster', 'upgraded_cluster'
     systemProperty 'tests.skip_delete_model_index', 'true'

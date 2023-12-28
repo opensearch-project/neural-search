@@ -15,7 +15,7 @@ import static org.opensearch.neuralsearch.TestUtils.getModelId;
 import static org.opensearch.neuralsearch.TestUtils.TEXT_EMBEDDING_PROCESSOR;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
-public class SemanticSearch extends AbstractRestartUpgradeRestTestCase {
+public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
 
     private static final String PIPELINE_NAME = "nlp-pipeline";
     private static String DOC_ID = "0";
