@@ -7,7 +7,7 @@
       "default_pipeline": "%s"
     },
     "number_of_shards": 6,
-    "number_of_replicas": 2
+    "number_of_replicas": 0
   },
   "mappings": {
     "properties": {
