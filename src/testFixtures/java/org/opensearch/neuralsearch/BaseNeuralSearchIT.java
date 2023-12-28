@@ -828,6 +828,11 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     /**
      * Add a single Doc to an index
+     *
+     * @param index name of the index
+     * @param docId
+     * @param fieldName name of the field
+     * @param text to be added
      */
     protected void addDocument(String index, String docId, String fieldName, String text) throws IOException {
         Request request = new Request("PUT", "/" + index + "/_doc/" + docId + "?refresh=true");
@@ -843,6 +848,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     /**
     * Get ingest pipeline
+    * @param pipelineName of the ingest pipeline
     */
     @SneakyThrows
     protected Map<String, Object> getIngestionPipeline(String pipelineName) {
@@ -852,6 +858,21 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         String responseBody = EntityUtils.toString(response.getEntity());
         Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), responseBody).map();
         return (Map<String, Object>) responseMap.get(pipelineName);
+    }
+
+    /**
+     * Delete pipeline
+     *
+     * @param pipelineName of the pipeline
+     */
+    @SneakyThrows
+    protected Map<String, Object> deletePipeline(String pipelineName) {
+        Request request = new Request("DELETE", "/_ingest/pipeline/" + pipelineName);
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), responseBody).map();
+        return responseMap;
     }
 
     /**

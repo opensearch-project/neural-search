@@ -57,6 +57,8 @@ public class SemanticSearch extends AbstractRollingUpgradeTestCase{
                 int totalDocsCountUpgraded=3*NUM_DOCS;
                 addDocument(testIndex, "2",TEST_FIELD,TEXT_UPGRADED);
                 validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, TEXT_UPGRADED);
+                deletePipeline(PIPELINE_NAME);
+                deleteModel(modelId);
                 deleteIndex(testIndex);
                 break;
         }
