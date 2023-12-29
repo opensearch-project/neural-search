@@ -36,13 +36,13 @@ jobs:
         name: Run NeuralSearch Restart-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on Windows
         run: |
           echo "Running restart-upgrade backwards compatibility tests ..."
-          ./gradlew :qa:restart-upgrade:testRestartUpgrade -D'tests.bwc.version=${{ matrix.bwc_version }}'
+          ./gradlew :qa:restart-upgrade:testAgainstNewCluster -D'tests.bwc.version=${{ matrix.bwc_version }}'
 
       - if: startsWith(matrix.os,'ubuntu')
         name: Run NeuralSearch Restart-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on Ubuntu
         run: |
           echo "Running restart-upgrade backwards compatibility tests ..."
-          ./gradlew :qa:restart-upgrade:testRestartUpgrade -Dtests.bwc.version=$BWC_VERSION_RESTART_UPGRADE
+          ./gradlew :qa:restart-upgrade:testAgainstNewCluster -Dtests.bwc.version=$BWC_VERSION_RESTART_UPGRADE
 
 
   Rolling-Upgrade-BWCTests-NeuralSearch:
