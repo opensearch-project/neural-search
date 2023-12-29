@@ -5,6 +5,7 @@
 
 package org.opensearch.neuralsearch.processor;
 
+import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -417,7 +418,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         verify(normalizationProcessorWorkflow).execute(any(), any(), any(), any());
     }
 
-    public void testResultTypes_whenQueryAndFetchPresentButSizeDifferent_thenSkipNormalization() {
+    public void testResultTypes_whenQueryAndFetchPresentButSizeDifferent_thenFail() {
         NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
             new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
         );
@@ -489,15 +490,13 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         queryPhaseResultConsumer.consumeResult(queryFetchSearchResult, partialReduceLatch::countDown);
 
         SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
-        normalizationProcessor.process(queryPhaseResultConsumer, searchPhaseContext);
-
-        List<QuerySearchResult> querySearchResults = queryPhaseResultConsumer.getAtomicArray()
-            .asList()
-            .stream()
-            .map(result -> result == null ? null : result.queryResult())
-            .collect(Collectors.toList());
-
-        assertNotNull(querySearchResults);
-        verify(normalizationProcessorWorkflow, never()).execute(any(), any(), any(), any());
+        IllegalStateException exception = expectThrows(
+            IllegalStateException.class,
+            () -> normalizationProcessor.process(queryPhaseResultConsumer, searchPhaseContext)
+        );
+        org.hamcrest.MatcherAssert.assertThat(
+            exception.getMessage(),
+            startsWith("score normalization processor cannot produce final query result")
+        );
     }
 }

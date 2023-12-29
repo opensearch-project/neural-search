@@ -237,7 +237,7 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
         TestUtils.assertFetchResultScores(fetchSearchResult, 4);
     }
 
-    public void testFetchResults_whenOneShardAndMultipleNodesAndMismatchResults_thenSuccess() {
+    public void testFetchResults_whenOneShardAndMultipleNodesAndMismatchResults_thenFail() {
         NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
             new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
         );
@@ -282,12 +282,14 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
         SearchHits searchHits = new SearchHits(searchHitArray, new TotalHits(7, TotalHits.Relation.EQUAL_TO), 10);
         fetchSearchResult.hits(searchHits);
 
-        normalizationProcessorWorkflow.execute(
-            querySearchResults,
-            Optional.of(fetchSearchResult),
-            ScoreNormalizationFactory.DEFAULT_METHOD,
-            ScoreCombinationFactory.DEFAULT_METHOD
+        expectThrows(
+            IllegalStateException.class,
+            () -> normalizationProcessorWorkflow.execute(
+                querySearchResults,
+                Optional.of(fetchSearchResult),
+                ScoreNormalizationFactory.DEFAULT_METHOD,
+                ScoreCombinationFactory.DEFAULT_METHOD
+            )
         );
-        TestUtils.assertQueryResultScores(querySearchResults);
     }
 }
