@@ -180,7 +180,12 @@ public class NormalizationProcessorWorkflow {
         }
         if (searchHitArray.length != docIds.size()) {
             throw new IllegalStateException(
-                "score normalization processor cannot produce final query result, the number of documents returned by fetch and query phases does not match"
+                String.format(
+                    Locale.ROOT,
+                    "score normalization processor cannot produce final query result, the number of documents after fetch phase [%d] is different from number of documents from query phase [%d]",
+                    searchHitArray.length,
+                    docIds.size()
+                )
             );
         }
         return searchHitArray;

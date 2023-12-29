@@ -10,9 +10,9 @@ import java.util.stream.IntStream;
 import org.apache.lucene.search.ScoreMode;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 
-public class HitsTresholdCheckerTests extends OpenSearchQueryTestCase {
+public class HitsThresholdCheckerTests extends OpenSearchQueryTestCase {
 
-    public void testTresholdReached_whenIncrementCount_thenTresholdReached() {
+    public void testThresholdReached_whenIncrementCount_thenThresholdReached() {
         HitsThresholdChecker hitsThresholdChecker = new HitsThresholdChecker(5);
         assertEquals(5, hitsThresholdChecker.getTotalHitsThreshold());
         assertEquals(ScoreMode.TOP_SCORES, hitsThresholdChecker.scoreMode());
@@ -23,7 +23,7 @@ public class HitsTresholdCheckerTests extends OpenSearchQueryTestCase {
         assertTrue(hitsThresholdChecker.isThresholdReached());
     }
 
-    public void testTresholdLimit_whenThresholdNegative_thenFail() {
+    public void testThresholdLimit_whenThresholdNegative_thenFail() {
         expectThrows(IllegalArgumentException.class, () -> new HitsThresholdChecker(-1));
     }
 
