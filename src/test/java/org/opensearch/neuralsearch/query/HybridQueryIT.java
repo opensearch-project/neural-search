@@ -175,7 +175,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     /**
-     * Tests complex query with multiple nested sub-queries, where soem sub-queries are same
+     * Tests complex query with multiple nested sub-queries, where some sub-queries are same
      * {
      *     "query": {
      *         "hybrid": {

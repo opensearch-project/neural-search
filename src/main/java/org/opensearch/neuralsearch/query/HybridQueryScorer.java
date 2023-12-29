@@ -5,13 +5,12 @@
 
 package org.opensearch.neuralsearch.query;
 
-import static java.util.Locale.ROOT;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -128,7 +127,7 @@ public final class HybridQueryScorer extends Scorer {
                 .orElseThrow(
                     () -> new IllegalStateException(
                         String.format(
-                            ROOT,
+                            Locale.ROOT,
                             "cannot set score for one of hybrid search subquery [%s] and document [%d]",
                             query.toString(),
                             scorer.docID()
