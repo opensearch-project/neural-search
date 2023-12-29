@@ -839,15 +839,13 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject().field(fieldName, text).endObject();
         request.setJsonEntity(builder.toString());
         client().performRequest(request);
-
-        request = new Request("POST", "/" + index + "/_refresh");
-        Response response = client().performRequest(request);
-        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
     }
 
     /**
-    * Get ingest pipeline
-    * @param pipelineName of the ingest pipeline
+     * Get ingest pipeline
+     * @param pipelineName of the ingest pipeline
+     *
+     * @return get pipeline response as a map object
     */
     @SneakyThrows
     protected Map<String, Object> getIngestionPipeline(String pipelineName) {
@@ -863,6 +861,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * Delete pipeline
      *
      * @param pipelineName of the pipeline
+     *
+     * @return delete pipeline response as a map object
      */
     @SneakyThrows
     protected Map<String, Object> deletePipeline(String pipelineName) {

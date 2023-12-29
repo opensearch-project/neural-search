@@ -18,9 +18,9 @@ import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
 
     private static final String PIPELINE_NAME = "nlp-pipeline";
-    private static String DOC_ID = "0";
     private static final String TEST_FIELD = "passage_text";
     private static final String TEXT = "Hello world";
+    private static final String TEXT_1 = "Hello world a";
 
     // Test restart-upgrade Semantic Search
     // Create Text Embedding Processor, Ingestion Pipeline and add document
@@ -33,32 +33,33 @@ public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
             loadModel(modelId);
             createPipelineProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
-                testIndex,
+                getIndexNameForTest(),
                 Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
                 PIPELINE_NAME
             );
-            addDocument(testIndex, DOC_ID, TEST_FIELD, TEXT);
+            addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT);
         } else {
             Map<String, Object> pipeline = getIngestionPipeline(PIPELINE_NAME);
             assertNotNull(pipeline);
             String modelId = getModelId(pipeline, TEXT_EMBEDDING_PROCESSOR);
+            addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1);
             validateTestIndex(modelId);
             deletePipeline(PIPELINE_NAME);
             deleteModel(modelId);
-            deleteIndex(testIndex);
+            deleteIndex(getIndexNameForTest());
         }
     }
 
     private void validateTestIndex(String modelId) throws Exception {
-        int docCount = getDocCount(testIndex);
-        assertEquals(1, docCount);
+        int docCount = getDocCount(getIndexNameForTest());
+        assertEquals(2, docCount);
         loadModel(modelId);
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
         neuralQueryBuilder.fieldName("passage_embedding");
         neuralQueryBuilder.modelId(modelId);
         neuralQueryBuilder.queryText(TEXT);
         neuralQueryBuilder.k(1);
-        Map<String, Object> response = search(testIndex, neuralQueryBuilder, 1);
+        Map<String, Object> response = search(getIndexNameForTest(), neuralQueryBuilder, 1);
         assertNotNull(response);
     }
 
@@ -70,13 +71,11 @@ public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
     private String registerModelGroupAndGetModelId(String requestBody) throws Exception {
         String modelGroupRegisterRequestBody = Files.readString(
             Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
-        ).replace("<MODEL_GROUP_NAME>", "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8));
-
-        String modelGroupId = registerModelGroup(modelGroupRegisterRequestBody);
-
-        requestBody = requestBody.replace("<MODEL_GROUP_ID>", modelGroupId);
-
-        return uploadModelId(requestBody);
+        );
+        String modelGroupId = registerModelGroup(
+            String.format(LOCALE, modelGroupRegisterRequestBody, "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8))
+        );
+        return uploadModelId(String.format(LOCALE, requestBody, modelGroupId));
     }
 
     protected void createPipelineProcessor(String modelId, String pipelineName, ProcessorType processorType) throws Exception {

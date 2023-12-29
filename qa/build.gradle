@@ -157,8 +157,8 @@ task pullBwcPlugin {
     }
 }
 
-// Task to zip ml-commons plugin from archive
-task zipBwcMlCommonsPlugin(type: Zip) {
+// Task to unzip ml-commons plugin from archive
+task unZipBwcMlCommonsPlugin(type: Zip) {
     dependsOn "pullMlCommonsBwcPlugin"
     from(Path.of(tmp_dir.absolutePath, "opensearch-ml"))
     destinationDirectory = tmp_dir
@@ -168,10 +168,10 @@ task zipBwcMlCommonsPlugin(type: Zip) {
     }
 }
 
-// Task to zip knn plugin from archive
-task zipBwcKnnPlugin(type: Zip) {
+// Task to unzip knn plugin from archive
+task unZipBwcKnnPlugin(type: Zip) {
     dependsOn "pullKnnBwcPlugin"
-    dependsOn "zipBwcMlCommonsPlugin"
+    dependsOn "unZipBwcMlCommonsPlugin"
     from(Path.of(tmp_dir.absolutePath, "opensearch-knn"))
     destinationDirectory = tmp_dir
     archiveFileName = "opensearch-knn-${neural_search_bwc_version_no_qualifier}.zip"
@@ -180,9 +180,9 @@ task zipBwcKnnPlugin(type: Zip) {
     }
 }
 
-// Task to zip neural search plugin from archive
-task zipBwcPlugin(type: Zip) {
-    dependsOn "zipBwcKnnPlugin"
+// Task to unzip neural search plugin from archive
+task unZipBwcPlugin(type: Zip) {
+    dependsOn "unZipBwcKnnPlugin"
     dependsOn "pullBwcPlugin"
     from(Path.of(tmp_dir.absolutePath, "opensearch-neural-search"))
     destinationDirectory = tmp_dir
@@ -194,6 +194,6 @@ task zipBwcPlugin(type: Zip) {
 
 
 task bwcTestSuite {
-    dependsOn ":qa:restart-upgrade:testRestartUpgrade"
+    dependsOn ":qa:restart-upgrade:testAgainstNewCluster"
     dependsOn ":qa:rolling-upgrade:testRollingUpgrade"
 }

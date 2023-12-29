@@ -19,13 +19,13 @@ import static org.opensearch.neuralsearch.TestUtils.BWCSUITE_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.NEURAL_SEARCH_BWC_PREFIX;
 
 public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT {
-    protected String testIndex;
+    // protected String testIndex;
 
     @Before
-    protected void setIndex() {
+    protected String getIndexNameForTest() {
         // Creating index name by concatenating "neural-bwc-" prefix with test method name
         // for all the tests in this sub-project
-        testIndex = NEURAL_SEARCH_BWC_PREFIX + getTestName().toLowerCase(Locale.ROOT);
+        return NEURAL_SEARCH_BWC_PREFIX + getTestName().toLowerCase(Locale.ROOT);
     }
 
     @Override

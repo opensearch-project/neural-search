@@ -18,9 +18,9 @@ testClusters {
         versions = [neural_search_bwc_version, opensearch_version]
         numberOfNodes = 3
         jvmArgs("-Xms1g", "-Xmx4g")
-        plugin(project.tasks.zipBwcMlCommonsPlugin.archiveFile)
-        plugin(project.tasks.zipBwcKnnPlugin.archiveFile)
-        plugin(project.tasks.zipBwcPlugin.archiveFile)
+        plugin(project.tasks.unZipBwcMlCommonsPlugin.archiveFile)
+        plugin(project.tasks.unZipBwcKnnPlugin.archiveFile)
+        plugin(project.tasks.unZipBwcPlugin.archiveFile)
         setting 'path.repo', "${buildDir}/cluster/shared/repo/${baseName}"
         setting 'http.content_type.required', 'true'
     }
@@ -28,7 +28,7 @@ testClusters {
 
 // Task to run BWC tests against the old cluster
 task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
-    dependsOn "zipBwcPlugin"
+    dependsOn "unZipBwcPlugin"
     useCluster testClusters."${baseName}"
     systemProperty 'tests.rest.bwcsuite_cluster', 'old_cluster'
     systemProperty 'tests.is_old_cluster', 'true'
@@ -41,7 +41,7 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
 }
 
 // All nodes are upgraded to latest version and run the tests
-task testRestartUpgrade(type: StandaloneRestIntegTestTask) {
+task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
     dependsOn "testAgainstOldCluster"
     dependsOn rootProject.tasks.assemble
     useCluster testClusters."${baseName}"

@@ -1,4 +1,4 @@
 {
-  "name": "<MODEL_GROUP_NAME>",
+  "name": "%s",
   "description": "This is a public model group"
 }
