@@ -393,6 +393,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         }
         request.setJsonEntity(builder.toString());
 
+        logger.info("============================================================" + request.toString());
         Response response = client().performRequest(request);
         assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
 
