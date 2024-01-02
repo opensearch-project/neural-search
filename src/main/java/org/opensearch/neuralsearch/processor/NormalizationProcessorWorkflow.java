@@ -173,8 +173,20 @@ public class NormalizationProcessorWorkflow {
         SearchHits searchHits = fetchSearchResult.hits();
         SearchHit[] searchHitArray = searchHits.getHits();
         // validate the both collections are of the same size
-        if (Objects.isNull(searchHitArray) || searchHitArray.length != docIds.size()) {
-            throw new IllegalStateException("Score normalization processor cannot produce final query result");
+        if (Objects.isNull(searchHitArray)) {
+            throw new IllegalStateException(
+                "score normalization processor cannot produce final query result, fetch query phase returns empty results"
+            );
+        }
+        if (searchHitArray.length != docIds.size()) {
+            throw new IllegalStateException(
+                String.format(
+                    Locale.ROOT,
+                    "score normalization processor cannot produce final query result, the number of documents after fetch phase [%d] is different from number of documents from query phase [%d]",
+                    searchHitArray.length,
+                    docIds.size()
+                )
+            );
         }
         return searchHitArray;
     }
