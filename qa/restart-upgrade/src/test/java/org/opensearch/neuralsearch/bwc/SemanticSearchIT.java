@@ -31,19 +31,19 @@ public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
         if (isRunningAgainstOldCluster()) {
             String modelId = uploadTextEmbeddingModel();
             loadModel(modelId);
-            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
+            createPipelineProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
                 Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
                 PIPELINE_NAME
             );
-            addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT);
+            addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, null, null);
         } else {
             Map<String, Object> pipeline = getIngestionPipeline(PIPELINE_NAME);
             assertNotNull(pipeline);
             String modelId = getModelId(pipeline, TEXT_EMBEDDING_PROCESSOR);
             loadModel(modelId);
-            addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1);
+            addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1,null,null);
             validateTestIndex(modelId);
             deletePipeline(PIPELINE_NAME);
             deleteModel(modelId);

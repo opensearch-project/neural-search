@@ -15,7 +15,7 @@ import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
     private static final String PIPELINE_NAME = "nlp-pipeline";
-    private static final String TEST_FIELD = "test-field";
+    private static final String TEST_FIELD = "passage_text";
     private static final String TEXT = "Hello world";
     private static final String TEXT_MIXED = "Hello world mixed";
     private static final String TEXT_UPGRADED = "Hello world upgraded";
@@ -30,13 +30,13 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
             case OLD:
                 String modelId = uploadTextEmbeddingModel();
                 loadModel(modelId);
-                createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
+                createPipelineProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
                     getIndexNameForTest(),
                     Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
                     PIPELINE_NAME
                 );
-                addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT);
+                addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, null, null);
                 break;
             case MIXED:
                 modelId = getModelId(PIPELINE_NAME);
@@ -44,7 +44,7 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
                     validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, TEXT);
-                    addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_MIXED);
+                    addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_MIXED, null,null);
 
                 } else {
                     totalDocsCountMixed = 2 * NUM_DOCS_PER_ROUND;
@@ -54,7 +54,7 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
             case UPGRADED:
                 modelId = getModelId(PIPELINE_NAME);
                 int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED);
+                addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED,null,null);
                 validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, TEXT_UPGRADED);
                 deletePipeline(PIPELINE_NAME);
                 deleteModel(modelId);

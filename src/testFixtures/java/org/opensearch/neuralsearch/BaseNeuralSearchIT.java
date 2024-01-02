@@ -266,10 +266,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertEquals(indexName, node.get("index").toString());
     }
 
-    protected void createPipelineProcessor(String modelId, String pipelineName) throws Exception {
-        createPipelineProcessor(modelId, pipelineName, ProcessorType.TEXT_EMBEDDING);
-    }
-
     protected void createPipelineProcessor(String modelId, String pipelineName, ProcessorType processorType) throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource(PIPELINE_CONFIGS_BY_TYPE.get(processorType)).toURI()));
         createPipelineProcessor(requestBody, pipelineName, modelId);
@@ -834,10 +830,15 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @param fieldName name of the field
      * @param text to be added
      */
-    protected void addDocument(String index, String docId, String fieldName, String text) throws IOException {
+    protected void addDocument(String index, String docId, String fieldName, String text, String imagefieldName,String imageText) throws IOException {
         Request request = new Request("PUT", "/" + index + "/_doc/" + docId + "?refresh=true");
 
-        XContentBuilder builder = XContentFactory.jsonBuilder().startObject().field(fieldName, text).endObject();
+        XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
+        builder.field(fieldName, text);
+        if (imagefieldName!=null && imageText!=null){
+            builder.field(imagefieldName,imageText);
+        }
+        builder.endObject();
         request.setJsonEntity(builder.toString());
         client().performRequest(request);
     }

@@ -26,6 +26,9 @@
       },
       "passage_text": {
         "type": "text"
+      },
+      "passage_image": {
+        "type": "binary"
       }
     }
   }
