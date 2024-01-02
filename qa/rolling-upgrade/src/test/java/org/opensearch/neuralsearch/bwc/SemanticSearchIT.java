@@ -30,7 +30,7 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
             case OLD:
                 String modelId = uploadTextEmbeddingModel();
                 loadModel(modelId);
-                createPipelineProcessor(modelId, PIPELINE_NAME);
+                createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
                 createIndexWithConfiguration(
                     getIndexNameForTest(),
                     Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
