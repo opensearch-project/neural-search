@@ -44,7 +44,7 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
                     validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, TEXT);
-                    addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_MIXED, null,null);
+                    addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_MIXED, null, null);
 
                 } else {
                     totalDocsCountMixed = 2 * NUM_DOCS_PER_ROUND;
@@ -54,7 +54,7 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
             case UPGRADED:
                 modelId = getModelId(PIPELINE_NAME);
                 int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED,null,null);
+                addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, null, null);
                 validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, TEXT_UPGRADED);
                 deletePipeline(PIPELINE_NAME);
                 deleteModel(modelId);

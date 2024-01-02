@@ -43,7 +43,7 @@ public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
             assertNotNull(pipeline);
             String modelId = getModelId(pipeline, TEXT_EMBEDDING_PROCESSOR);
             loadModel(modelId);
-            addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1,null,null);
+            addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1, null, null);
             validateTestIndex(modelId);
             deletePipeline(PIPELINE_NAME);
             deleteModel(modelId);

@@ -53,7 +53,7 @@ public class TestUtils {
     public static final String SECURITY_AUDITLOG_PREFIX = "security-auditlog";
     public static final String OPENSEARCH_SYSTEM_INDEX_PREFIX = ".opensearch";
     public static final String TEXT_EMBEDDING_PROCESSOR = "text_embedding";
-    public static final String TEXT_IMAGE_EMBEDDING_PROCESSOR ="text_image_embedding";
+    public static final String TEXT_IMAGE_EMBEDDING_PROCESSOR = "text_image_embedding";
 
     /**
      * Convert an xContentBuilder to a map

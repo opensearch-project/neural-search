@@ -830,13 +830,14 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @param fieldName name of the field
      * @param text to be added
      */
-    protected void addDocument(String index, String docId, String fieldName, String text, String imagefieldName,String imageText) throws IOException {
+    protected void addDocument(String index, String docId, String fieldName, String text, String imagefieldName, String imageText)
+        throws IOException {
         Request request = new Request("PUT", "/" + index + "/_doc/" + docId + "?refresh=true");
 
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
         builder.field(fieldName, text);
-        if (imagefieldName!=null && imageText!=null){
-            builder.field(imagefieldName,imageText);
+        if (imagefieldName != null && imageText != null) {
+            builder.field(imagefieldName, imageText);
         }
         builder.endObject();
         request.setJsonEntity(builder.toString());
