@@ -26,6 +26,9 @@ public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
 
     private static final int NUM_DOCS_PER_ROUND = 1;
 
+    // Test rolling-upgrade MultiModal Search
+    // Create Text Image Embedding Processor, Ingestion Pipeline and add document
+    // Validate process , pipeline and document count in rolling-upgrade scenario
     public void testMultiModalSearch_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         switch (getClusterType()) {
