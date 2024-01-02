@@ -25,7 +25,7 @@ public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
     // Test restart-upgrade Semantic Search
     // Create Text Embedding Processor, Ingestion Pipeline and add document
     // Validate process , pipeline and document count in restart-upgrade scenario
-    public void testSemanticSearch() throws Exception {
+    public void testSemanticSearch_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
 
         if (isRunningAgainstOldCluster()) {
