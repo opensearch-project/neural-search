@@ -4,15 +4,9 @@
  */
 package org.opensearch.neuralsearch;
 
+import org.apache.http.ParseException;
+import static org.apache.http.entity.ContentType.APPLICATION_JSON;
 import com.carrotsearch.randomizedtesting.RandomizedTest;
-import org.apache.hc.core5.http.ContentType;
-import org.apache.hc.core5.http.Header;
-import org.apache.hc.core5.http.HttpEntity;
-import org.apache.hc.core5.http.HttpHeaders;
-import org.apache.hc.core5.http.ParseException;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.hc.core5.http.io.entity.StringEntity;
-import org.apache.hc.core5.http.message.BasicHeader;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 
 import java.io.IOException;
@@ -30,6 +24,12 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.http.Header;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpHeaders;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.message.BasicHeader;
+import org.apache.http.util.EntityUtils;
 import org.junit.Before;
 import org.opensearch.client.Request;
 import org.opensearch.client.RequestOptions;
@@ -627,7 +627,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     protected static HttpEntity toHttpEntity(String jsonString) {
-        return new StringEntity(jsonString, ContentType.APPLICATION_JSON);
+        return new StringEntity(jsonString, APPLICATION_JSON);
     }
 
     @AllArgsConstructor
