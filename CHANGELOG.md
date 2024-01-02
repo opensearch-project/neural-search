@@ -20,8 +20,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Hybrid query and nested type fields ([#498](https://github.com/opensearch-project/neural-search/pull/498))
 - Fixing multiple issues reported in #497 ([#524](https://github.com/opensearch-project/neural-search/pull/524))
 ### Infrastructure
+- BWC tests for Neural Search ([#515](https://github.com/opensearch-project/neural-search/pull/515))
 ### Documentation
 ### Maintenance
 - Added support for jdk-21 ([#500](https://github.com/opensearch-project/neural-search/pull/500)))
 ### Refactoring
-Deprecate the `max_token_score` field in `neural_sparse` query clause ([#478](https://github.com/opensearch-project/neural-search/pull/478))
+- Deprecate the `max_token_score` field in `neural_sparse` query clause ([#478](https://github.com/opensearch-project/neural-search/pull/478))
+- Added spotless check in the build ([#515](https://github.com/opensearch-project/neural-search/pull/515))

@@ -2,10 +2,11 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch.query;
 
 import static org.opensearch.neuralsearch.TestUtils.DELTA_FOR_SCORE_ASSERTION;
+import static org.opensearch.neuralsearch.TestUtils.TEST_DIMENSION;
+import static org.opensearch.neuralsearch.TestUtils.TEST_SPACE_TYPE;
 import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
 import static org.opensearch.neuralsearch.TestUtils.objectToFloat;
 
@@ -18,8 +19,7 @@ import org.junit.Before;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
-import org.opensearch.knn.index.SpaceType;
-import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 import com.google.common.primitives.Floats;
 
@@ -37,9 +37,6 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_KNN_VECTOR_FIELD_NAME_2 = "test-knn-vector-2";
     private static final String TEST_TEXT_FIELD_NAME_1 = "test-text-field";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_NESTED = "nested.knn.field";
-
-    private static final int TEST_DIMENSION = 768;
-    private static final SpaceType TEST_SPACE_TYPE = SpaceType.L2;
     private final float[] testVector = createRandomVector(TEST_DIMENSION);
 
     @Before

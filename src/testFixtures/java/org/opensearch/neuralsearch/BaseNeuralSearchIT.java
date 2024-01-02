@@ -2,14 +2,20 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
+package org.opensearch.neuralsearch;
 
-package org.opensearch.neuralsearch.common;
-
-import static org.apache.http.entity.ContentType.APPLICATION_JSON;
+import com.carrotsearch.randomizedtesting.RandomizedTest;
+import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.http.Header;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.HttpHeaders;
+import org.apache.hc.core5.http.ParseException;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.http.io.entity.StringEntity;
+import org.apache.hc.core5.http.message.BasicHeader;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 
 import java.io.IOException;
-import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -20,17 +26,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.StringUtils;
-import org.apache.http.Header;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpHeaders;
-import org.apache.http.entity.StringEntity;
-import org.apache.http.message.BasicHeader;
-import org.apache.http.util.EntityUtils;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.http.io.entity.StringEntity;
+import org.apache.hc.core5.http.message.BasicHeader;
 import org.junit.Before;
 import org.opensearch.client.Request;
 import org.opensearch.client.RequestOptions;
@@ -47,7 +49,6 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
-import org.opensearch.neuralsearch.OpenSearchSecureRestTestCase;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.test.ClusterServiceUtils;
 import org.opensearch.threadpool.TestThreadPool;
@@ -136,10 +137,13 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
     }
 
-    protected String uploadModel(String requestBody) throws Exception {
-        String modelGroupId = registerModelGroup();
+    protected String registerModelGroupAndUploadModel(String requestBody) throws Exception {
+        String modelGroupId = getModelGroupId();
         // model group id is dynamically generated, we need to update model update request body after group is registered
-        requestBody = requestBody.replace("<MODEL_GROUP_ID>", modelGroupId);
+        return uploadModel(String.format(LOCALE, requestBody, modelGroupId));
+    }
+
+    protected String uploadModel(String requestBody) throws Exception {
         Response uploadResponse = makeRequest(
             client(),
             "POST",
@@ -168,7 +172,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return modelId;
     }
 
-    protected void loadModel(String modelId) throws IOException, InterruptedException {
+    protected void loadModel(String modelId) throws Exception {
         Response uploadResponse = makeRequest(
             client(),
             "POST",
@@ -202,7 +206,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     @SneakyThrows
     protected String prepareModel() {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        String modelId = uploadModel(requestBody);
+        String modelId = registerModelGroupAndUploadModel(requestBody);
         loadModel(modelId);
         return modelId;
     }
@@ -270,19 +274,18 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     protected void createPipelineProcessor(String modelId, String pipelineName, ProcessorType processorType) throws Exception {
+        String requestBody = Files.readString(Path.of(classLoader.getResource(PIPELINE_CONFIGS_BY_TYPE.get(processorType)).toURI()));
+        createPipelineProcessor(requestBody, pipelineName, modelId);
+    }
+
+    protected void createPipelineProcessor(String requestBody, String pipelineName, String modelId) throws Exception {
         Response pipelineCreateResponse = makeRequest(
             client(),
             "PUT",
             "/_ingest/pipeline/" + pipelineName,
             null,
-            toHttpEntity(
-                String.format(
-                    LOCALE,
-                    Files.readString(Path.of(classLoader.getResource(PIPELINE_CONFIGS_BY_TYPE.get(processorType)).toURI())),
-                    modelId
-                )
-            ),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+            toHttpEntity(String.format(LOCALE, requestBody, modelId)),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
         Map<String, Object> node = XContentHelper.convertToMap(
             XContentType.JSON.xContent(),
@@ -531,7 +534,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return spaceType.getVectorSimilarityFunction().compare(queryVector, indexVector);
     }
 
-    protected Map<String, Object> getTaskQueryResponse(String taskId) throws IOException {
+    protected Map<String, Object> getTaskQueryResponse(String taskId) throws Exception {
         Response taskQueryResponse = makeRequest(
             client(),
             "GET",
@@ -627,7 +630,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     protected static HttpEntity toHttpEntity(String jsonString) {
-        return new StringEntity(jsonString, APPLICATION_JSON);
+        return new StringEntity(jsonString, ContentType.APPLICATION_JSON);
     }
 
     @AllArgsConstructor
@@ -636,29 +639,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         private final String name;
         private final Integer dimension;
         private final SpaceType spaceType;
-    }
-
-    private String registerModelGroup() throws IOException, URISyntaxException {
-        String modelGroupRegisterRequestBody = Files.readString(
-            Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
-        );
-        modelGroupRegisterRequestBody = modelGroupRegisterRequestBody.replace("<MODEL_GROUP_NAME>", UUID.randomUUID().toString());
-        Response modelGroupResponse = makeRequest(
-            client(),
-            "POST",
-            "/_plugins/_ml/model_groups/_register",
-            null,
-            toHttpEntity(modelGroupRegisterRequestBody),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
-        );
-        Map<String, Object> modelGroupResJson = XContentHelper.convertToMap(
-            XContentType.JSON.xContent(),
-            EntityUtils.toString(modelGroupResponse.getEntity()),
-            false
-        );
-        String modelGroupId = modelGroupResJson.get("model_group_id").toString();
-        assertNotNull(modelGroupId);
-        return modelGroupId;
     }
 
     public boolean isUpdateClusterSettings() {
@@ -810,6 +790,92 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Set<String> modelIds = findDeployedModels();
         assertEquals(1, modelIds.size());
         return modelIds.iterator().next();
+    }
+
+    @SneakyThrows
+    private String getModelGroupId() {
+        String modelGroupRegisterRequestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
+        );
+        return registerModelGroup(
+            String.format(LOCALE, modelGroupRegisterRequestBody, "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8))
+        );
+    }
+
+    protected String registerModelGroup(String modelGroupRegisterRequestBody) throws IOException, ParseException {
+        Response modelGroupResponse = makeRequest(
+            client(),
+            "POST",
+            "/_plugins/_ml/model_groups/_register",
+            null,
+            toHttpEntity(modelGroupRegisterRequestBody),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+        );
+        Map<String, Object> modelGroupResJson = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(modelGroupResponse.getEntity()),
+            false
+        );
+        String modelGroupId = modelGroupResJson.get("model_group_id").toString();
+        assertNotNull(modelGroupId);
+        return modelGroupId;
+    }
+
+    // Method that waits till the health of nodes in the cluster goes green
+    protected void waitForClusterHealthGreen(String numOfNodes) throws IOException {
+        Request waitForGreen = new Request("GET", "/_cluster/health");
+        waitForGreen.addParameter("wait_for_nodes", numOfNodes);
+        waitForGreen.addParameter("wait_for_status", "green");
+        client().performRequest(waitForGreen);
+    }
+
+    /**
+     * Add a single Doc to an index
+     *
+     * @param index name of the index
+     * @param docId
+     * @param fieldName name of the field
+     * @param text to be added
+     */
+    protected void addDocument(String index, String docId, String fieldName, String text) throws IOException {
+        Request request = new Request("PUT", "/" + index + "/_doc/" + docId + "?refresh=true");
+
+        XContentBuilder builder = XContentFactory.jsonBuilder().startObject().field(fieldName, text).endObject();
+        request.setJsonEntity(builder.toString());
+        client().performRequest(request);
+    }
+
+    /**
+     * Get ingest pipeline
+     * @param pipelineName of the ingest pipeline
+     *
+     * @return get pipeline response as a map object
+    */
+    @SneakyThrows
+    protected Map<String, Object> getIngestionPipeline(String pipelineName) {
+        Request request = new Request("GET", "/_ingest/pipeline/" + pipelineName);
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), responseBody).map();
+        return (Map<String, Object>) responseMap.get(pipelineName);
+    }
+
+    /**
+     * Delete pipeline
+     *
+     * @param pipelineName of the pipeline
+     *
+     * @return delete pipeline response as a map object
+     */
+    @SneakyThrows
+    protected Map<String, Object> deletePipeline(String pipelineName) {
+        Request request = new Request("DELETE", "/_ingest/pipeline/" + pipelineName);
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), responseBody).map();
+        return responseMap;
     }
 
     /**

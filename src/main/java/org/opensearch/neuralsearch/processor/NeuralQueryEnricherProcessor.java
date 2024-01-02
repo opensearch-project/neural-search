@@ -2,11 +2,9 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch.processor;
 
-import static org.opensearch.ingest.ConfigurationUtils.*;
-import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.TYPE;
+import static org.opensearch.ingest.ConfigurationUtils.readOptionalStringProperty;
 
 import java.util.Map;
 
