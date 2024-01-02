@@ -2,7 +2,6 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch.bwc;
 
 import java.util.Locale;
@@ -17,13 +16,12 @@ import static org.opensearch.neuralsearch.TestUtils.NEURAL_SEARCH_BWC_PREFIX;
 import org.opensearch.test.rest.OpenSearchRestTestCase;
 
 public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearchIT {
-    protected static String testIndex;
 
     @Before
-    protected void setIndex() {
-        // Creating index name by concatenating "knn-bwc-" prefix with test method name
+    protected String getIndexNameForTest() {
+        // Creating index name by concatenating "neural-bwc-" prefix with test method name
         // for all the tests in this sub-project
-        testIndex = NEURAL_SEARCH_BWC_PREFIX + getTestName().toLowerCase(Locale.ROOT);
+        return NEURAL_SEARCH_BWC_PREFIX + getTestName().toLowerCase(Locale.ROOT);
     }
 
     @Override
@@ -44,12 +42,12 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
     @Override
     protected final Settings restClientSettings() {
         return Settings.builder()
-                .put(super.restClientSettings())
-                // increase the timeout here to 90 seconds to handle long waits for a green
-                // cluster health. the waits for green need to be longer than a minute to
-                // account for delayed shards
-                .put(OpenSearchRestTestCase.CLIENT_SOCKET_TIMEOUT, CLIENT_TIMEOUT_VALUE)
-                .build();
+            .put(super.restClientSettings())
+            // increase the timeout here to 90 seconds to handle long waits for a green
+            // cluster health. the waits for green need to be longer than a minute to
+            // account for delayed shards
+            .put(OpenSearchRestTestCase.CLIENT_SOCKET_TIMEOUT, CLIENT_TIMEOUT_VALUE)
+            .build();
     }
 
     protected static final boolean isRunningAgainstOldCluster() {

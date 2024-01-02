@@ -2,13 +2,14 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -37,7 +38,7 @@ public final class HybridQueryScorer extends Scorer {
 
     private final float[] subScores;
 
-    private final Map<Query, Integer> queryToIndex;
+    private final Map<Query, List<Integer>> queryToIndex;
 
     public HybridQueryScorer(Weight weight, List<Scorer> subScorers) throws IOException {
         super(weight);
@@ -111,24 +112,43 @@ public final class HybridQueryScorer extends Scorer {
         DisiWrapper topList = subScorersPQ.topList();
         for (DisiWrapper disiWrapper = topList; disiWrapper != null; disiWrapper = disiWrapper.next) {
             // check if this doc has match in the subQuery. If not, add score as 0.0 and continue
-            if (disiWrapper.scorer.docID() == DocIdSetIterator.NO_MORE_DOCS) {
+            Scorer scorer = disiWrapper.scorer;
+            if (scorer.docID() == DocIdSetIterator.NO_MORE_DOCS) {
                 continue;
             }
-            float subScore = disiWrapper.scorer.score();
-            scores[queryToIndex.get(disiWrapper.scorer.getWeight().getQuery())] = subScore;
+            Query query = scorer.getWeight().getQuery();
+            List<Integer> indexes = queryToIndex.get(query);
+            // we need to find the index of first sub-query that hasn't been set yet. Such score will have initial value of "0.0"
+            int index = indexes.stream()
+                .mapToInt(idx -> idx)
+                .filter(idx -> Float.compare(scores[idx], 0.0f) == 0)
+                .findFirst()
+                .orElseThrow(
+                    () -> new IllegalStateException(
+                        String.format(
+                            Locale.ROOT,
+                            "cannot set score for one of hybrid search subquery [%s] and document [%d]",
+                            query.toString(),
+                            scorer.docID()
+                        )
+                    )
+                );
+            scores[index] = scorer.score();
         }
         return scores;
     }
 
-    private Map<Query, Integer> mapQueryToIndex() {
-        Map<Query, Integer> queryToIndex = new HashMap<>();
+    private Map<Query, List<Integer>> mapQueryToIndex() {
+        Map<Query, List<Integer>> queryToIndex = new HashMap<>();
         int idx = 0;
         for (Scorer scorer : subScorers) {
             if (scorer == null) {
                 idx++;
                 continue;
             }
-            queryToIndex.put(scorer.getWeight().getQuery(), idx);
+            Query query = scorer.getWeight().getQuery();
+            queryToIndex.putIfAbsent(query, new ArrayList<>());
+            queryToIndex.get(query).add(idx);
             idx++;
         }
         return queryToIndex;
@@ -137,7 +157,9 @@ public final class HybridQueryScorer extends Scorer {
     private DisiPriorityQueue initializeSubScorersPQ() {
         Objects.requireNonNull(queryToIndex, "should not be null");
         Objects.requireNonNull(subScorers, "should not be null");
-        DisiPriorityQueue subScorersPQ = new DisiPriorityQueue(queryToIndex.size());
+        // we need to count this way in order to include all identical sub-queries
+        int numOfSubQueries = queryToIndex.values().stream().map(List::size).reduce(0, Integer::sum);
+        DisiPriorityQueue subScorersPQ = new DisiPriorityQueue(numOfSubQueries);
         for (Scorer scorer : subScorers) {
             if (scorer == null) {
                 continue;

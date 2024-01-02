@@ -2,7 +2,6 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch.search;
 
 import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
@@ -344,6 +343,57 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
             .map(scoreDoc -> scoreDoc.doc)
             .collect(Collectors.toList());
         assertTrue(Arrays.stream(docIdsQueryMatchAll).allMatch(resultDocIdsQueryMatchAll::contains));
+
+        w.close();
+        reader.close();
+        directory.close();
+    }
+
+    @SneakyThrows
+    public void testTrackTotalHits_whenTotalHitsSetIntegerMaxValue_thenSuccessful() {
+        final Directory directory = newDirectory();
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
+        ft.setOmitNorms(random().nextBoolean());
+        ft.freeze();
+
+        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_1, FIELD_1_VALUE, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_2, FIELD_2_VALUE, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_3, FIELD_3_VALUE, ft));
+        w.commit();
+
+        DirectoryReader reader = DirectoryReader.open(w);
+
+        LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
+
+        HybridTopScoreDocCollector hybridTopScoreDocCollector = new HybridTopScoreDocCollector(
+            NUM_DOCS,
+            new HitsThresholdChecker(Integer.MAX_VALUE)
+        );
+        LeafCollector leafCollector = hybridTopScoreDocCollector.getLeafCollector(leafReaderContext);
+        assertNotNull(leafCollector);
+
+        Weight weight = mock(Weight.class);
+        int[] docIds = new int[] { DOC_ID_1, DOC_ID_2, DOC_ID_3 };
+        Arrays.sort(docIds);
+        final List<Float> scores = Stream.generate(() -> random().nextFloat()).limit(NUM_DOCS).collect(Collectors.toList());
+        HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(
+            weight,
+            Arrays.asList(scorer(docIds, scores, fakeWeight(new MatchAllDocsQuery())))
+        );
+
+        leafCollector.setScorer(hybridQueryScorer);
+        List<float[]> hybridScores = new ArrayList<>();
+        DocIdSetIterator iterator = hybridQueryScorer.iterator();
+        int nextDoc = iterator.nextDoc();
+        while (nextDoc != NO_MORE_DOCS) {
+            hybridScores.add(hybridQueryScorer.hybridScores());
+            nextDoc = iterator.nextDoc();
+        }
+        // assert
+        assertEquals(3, hybridScores.size());
+        assertFalse(hybridScores.stream().anyMatch(score -> score[0] <= 0.0));
 
         w.close();
         reader.close();

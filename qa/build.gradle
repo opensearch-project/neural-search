@@ -4,9 +4,10 @@
  */
 
 import org.apache.tools.ant.taskdefs.condition.Os
-import org.w3c.dom.Text
 
 import java.nio.file.Files
+import java.util.concurrent.Callable
+import java.nio.file.Path
 
 apply plugin: 'opensearch.testclusters'
 apply plugin: 'opensearch.build'
@@ -31,7 +32,6 @@ dependencies {
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-knn', version: "${opensearch_build}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-ml-plugin', version: "${opensearch_build}"
     compileOnly fileTree(dir: knnJarDirectory, include: '*.jar')
-    //api group: 'commons-lang', name: 'commons-lang', version: '2.6'
     api "org.apache.logging.log4j:log4j-api:${versions.log4j}"
     api "org.apache.logging.log4j:log4j-core:${versions.log4j}"
     api "junit:junit:${versions.junit}"
@@ -61,7 +61,31 @@ if (Os.isFamily(Os.FAMILY_WINDOWS)) {
     file_ext = "zip"
 }
 
-task deletetempDirectories {
+ext{
+    plugins = [provider(new Callable<RegularFile>(){
+        @Override
+        RegularFile call() throws Exception {
+            return new RegularFile() {
+                @Override
+                File getAsFile() {
+                    return configurations.zipArchive.asFileTree.matching{include "**/opensearch-ml-plugin-${opensearch_build}.zip"}.getSingleFile()
+                }
+            }
+        }
+    }), provider(new Callable<RegularFile>(){
+        @Override
+        RegularFile call() throws Exception {
+            return new RegularFile() {
+                @Override
+                File getAsFile() {
+                    return configurations.zipArchive.asFileTree.matching{include "**/opensearch-knn-${opensearch_build}.zip"}.getSingleFile()
+                }
+            }
+        }
+    }), rootProject.tasks.bundlePlugin.archiveFile]
+}
+
+task deleteTempDirectories {
     doFirst {
         File[] tempFiles = tmp_dir.listFiles()
         for (File child : tempFiles) {
@@ -72,19 +96,11 @@ task deletetempDirectories {
     }
 }
 
-task pullMlCommonsBwcPlugin {
-    doLast {
-        copy {
-            from(java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}", "plugins", "opensearch-ml"))
-            into java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-ml")
-        }
-    }
-}
+// Task to pull opensearch artifact from archive
+task pullOpensearchArtifact {
+   dependsOn "deleteTempDirectories"
 
-task pullKnnBwcPlugin {
-    dependsOn "deletetempDirectories"
-
-    doLast {
+   doLast{
         ext{
             if (isSnapshot) {
                 srcUrl = "https://ci.opensearch.org/ci/dbc/distribution-build-opensearch/${neural_search_bwc_version_no_qualifier}/latest/${os_platform}/x64/${artifact_type}/dist/opensearch/opensearch-${neural_search_bwc_version_no_qualifier}-${os_platform}-x64.${file_ext}"
@@ -99,15 +115,33 @@ task pullKnnBwcPlugin {
         )
         copy {
             if (Os.isFamily(Os.FAMILY_WINDOWS)) {
-                from zipTree(java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}-${os_platform}-x64.${file_ext}"))
+                from zipTree(Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}-${os_platform}-x64.${file_ext}"))
             } else {
-                from tarTree(java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}-${os_platform}-x64.${file_ext}"))
+                from tarTree(Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}-${os_platform}-x64.${file_ext}"))
             }
             into tmp_dir.absolutePath
         }
+   }
+}
+
+// Task to pull ml plugin from archive
+task pullMlCommonsBwcPlugin {
+    doLast {
         copy {
-            from(java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}", "plugins", "opensearch-knn"))
-            into java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-knn")
+            from(Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}", "plugins", "opensearch-ml"))
+            into Path.of(tmp_dir.absolutePath, "opensearch-ml")
+        }
+    }
+}
+
+// Task to pull KNN plugin from archive
+task pullKnnBwcPlugin {
+    dependsOn "pullOpensearchArtifact"
+
+    doLast {
+        copy {
+            from(Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}", "plugins", "opensearch-knn"))
+            into Path.of(tmp_dir.absolutePath, "opensearch-knn")
         }
     }
 }
@@ -116,48 +150,50 @@ task pullKnnBwcPlugin {
 task pullBwcPlugin {
     doLast {
         copy {
-            from(java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}", "plugins", "opensearch-neural-search"))
-            into java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-neural-search")
+            from(Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}", "plugins", "opensearch-neural-search"))
+            into Path.of(tmp_dir.absolutePath, "opensearch-neural-search")
         }
-        delete java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}"), java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}-${os_platform}-x64.${file_ext}")
+        delete Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}"), java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}-${os_platform}-x64.${file_ext}")
     }
 }
 
-task zipBwcMlCommonsPlugin(type: Zip) {
+// Task to unzip ml-commons plugin from archive
+task unZipBwcMlCommonsPlugin(type: Zip) {
     dependsOn "pullMlCommonsBwcPlugin"
-    from(java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-ml"))
+    from(Path.of(tmp_dir.absolutePath, "opensearch-ml"))
     destinationDirectory = tmp_dir
     archiveFileName = "opensearch-ml-${neural_search_bwc_version_no_qualifier}.zip"
     doLast {
-        delete java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-ml")
+        delete Path.of(tmp_dir.absolutePath, "opensearch-ml")
     }
 }
 
-task zipBwcKnnPlugin(type: Zip) {
-    dependsOn "zipBwcMlCommonsPlugin"
+// Task to unzip knn plugin from archive
+task unZipBwcKnnPlugin(type: Zip) {
     dependsOn "pullKnnBwcPlugin"
-    from(java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-knn"))
+    dependsOn "unZipBwcMlCommonsPlugin"
+    from(Path.of(tmp_dir.absolutePath, "opensearch-knn"))
     destinationDirectory = tmp_dir
     archiveFileName = "opensearch-knn-${neural_search_bwc_version_no_qualifier}.zip"
     doLast {
-        delete java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-knn")
+        delete Path.of(tmp_dir.absolutePath, "opensearch-knn")
     }
 }
 
-// Task to zip plugin from archive
-task zipBwcPlugin(type: Zip) {
-    dependsOn "zipBwcKnnPlugin"
+// Task to unzip neural search plugin from archive
+task unZipBwcPlugin(type: Zip) {
+    dependsOn "unZipBwcKnnPlugin"
     dependsOn "pullBwcPlugin"
-    from(java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-neural-search"))
+    from(Path.of(tmp_dir.absolutePath, "opensearch-neural-search"))
     destinationDirectory = tmp_dir
     archiveFileName = "opensearch-neural-search-${neural_search_bwc_version_no_qualifier}.zip"
     doLast {
-        delete java.nio.file.Path.of(tmp_dir.absolutePath, "opensearch-neural-search")
+        delete Path.of(tmp_dir.absolutePath, "opensearch-neural-search")
     }
 }
 
 
 task bwcTestSuite {
-    dependsOn ":qa:restart-upgrade:testRestartUpgrade"
+    dependsOn ":qa:restart-upgrade:testAgainstNewCluster"
     dependsOn ":qa:rolling-upgrade:testRollingUpgrade"
 }

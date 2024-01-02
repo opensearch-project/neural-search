@@ -2,7 +2,6 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch.query;
 
 import static org.opensearch.neuralsearch.TestUtils.DELTA_FOR_SCORE_ASSERTION;

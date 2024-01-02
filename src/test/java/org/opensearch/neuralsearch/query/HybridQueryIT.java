@@ -2,7 +2,6 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch.query;
 
 import static org.hamcrest.Matchers.allOf;
@@ -168,6 +167,75 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         Map<String, Object> total = getTotalHits(searchResponseAsMap1);
         assertNotNull(total.get("value"));
         assertEquals(3, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+    }
+
+    /**
+     * Tests complex query with multiple nested sub-queries, where some sub-queries are same
+     * {
+     *     "query": {
+     *         "hybrid": {
+     *              "queries": [
+     *                  {
+     *                      "term": {
+     *                         "text": "word1"
+     *                       }
+     *                  },
+     *                  {
+     *                      "term": {
+     *                         "text": "word2"
+     *                       }
+     *                  },
+     *                  {
+     *                      "term": {
+     *                          "text": "word3"
+     *                      }
+     *                  }
+     *              ]
+     *          }
+     *      }
+     * }
+     */
+    @SneakyThrows
+    public void testComplexQuery_whenMultipleIdenticalSubQueries_thenSuccessful() {
+        initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
+
+        TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
+        TermQueryBuilder termQueryBuilder3 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+
+        HybridQueryBuilder hybridQueryBuilderThreeTerms = new HybridQueryBuilder();
+        hybridQueryBuilderThreeTerms.add(termQueryBuilder1);
+        hybridQueryBuilderThreeTerms.add(termQueryBuilder2);
+        hybridQueryBuilderThreeTerms.add(termQueryBuilder3);
+
+        Map<String, Object> searchResponseAsMap1 = search(
+            TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
+            hybridQueryBuilderThreeTerms,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
+
+        assertEquals(2, getHitCount(searchResponseAsMap1));
+
+        List<Map<String, Object>> hits1NestedList = getNestedHits(searchResponseAsMap1);
+        List<String> ids = new ArrayList<>();
+        List<Double> scores = new ArrayList<>();
+        for (Map<String, Object> oneHit : hits1NestedList) {
+            ids.add((String) oneHit.get("_id"));
+            scores.add((Double) oneHit.get("_score"));
+        }
+
+        // verify that scores are in desc order
+        assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
+        // verify that all ids are unique
+        assertEquals(Set.copyOf(ids).size(), ids.size());
+
+        Map<String, Object> total = getTotalHits(searchResponseAsMap1);
+        assertNotNull(total.get("value"));
+        assertEquals(2, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }

@@ -2,7 +2,6 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch.search;
 
 import java.util.Locale;
@@ -23,9 +22,6 @@ public class HitsThresholdChecker {
     public HitsThresholdChecker(int totalHitsThreshold) {
         if (totalHitsThreshold < 0) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "totalHitsThreshold must be >= 0, got %d", totalHitsThreshold));
-        }
-        if (totalHitsThreshold == Integer.MAX_VALUE) {
-            throw new IllegalArgumentException(String.format(Locale.ROOT, "totalHitsThreshold must be less than max integer value"));
         }
         this.totalHitsThreshold = totalHitsThreshold;
     }

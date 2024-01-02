@@ -2,7 +2,6 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch;
 
 import java.nio.file.Files;
@@ -35,7 +34,7 @@ public abstract class BaseSparseEncodingIT extends BaseNeuralSearchIT {
         String requestBody = Files.readString(
             Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
         );
-        String modelId = uploadModel(requestBody);
+        String modelId = registerModelGroupAndUploadModel(requestBody);
         loadModel(modelId);
         return modelId;
     }
