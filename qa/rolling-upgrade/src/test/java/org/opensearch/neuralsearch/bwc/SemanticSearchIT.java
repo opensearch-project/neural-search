@@ -92,7 +92,7 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
         return uploadModel(String.format(LOCALE, requestBody, modelGroupId));
     }
 
-    protected void createPipelineProcessor(String modelId, String pipelineName, ProcessorType processorType) throws Exception {
+    protected void createPipelineProcessor(String modelId, String pipelineName) throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/PipelineConfiguration.json").toURI()));
         createPipelineProcessor(requestBody, pipelineName, modelId);
     }
