@@ -16,7 +16,6 @@ import static org.opensearch.neuralsearch.TestUtils.NEURAL_SEARCH_BWC_PREFIX;
 import org.opensearch.test.rest.OpenSearchRestTestCase;
 
 public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearchIT {
-    // protected static String testIndex;
 
     @Before
     protected String getIndexNameForTest() {

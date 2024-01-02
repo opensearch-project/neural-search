@@ -49,7 +49,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     private String uploadTextEmbeddingModel() throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        return uploadModel(requestBody);
+        return registerModelGroupAndUploadModel(requestBody);
     }
 
     private void createTextEmbeddingIndex() throws Exception {

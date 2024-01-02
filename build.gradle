@@ -135,7 +135,7 @@ allprojects {
         project.dependencyLicenses.enabled = false
         project.thirdPartyAudit.enabled = false
         project.loggerUsageCheck.enabled = false
-        project.forbiddenApis.ignoreFailures = true
+        project.forbiddenApis.ignoreFailures = false
         project.forbiddenPatterns {
             setEnabled(false)
         }
@@ -143,7 +143,6 @@ allprojects {
         project.validateNebulaPom.enabled = false
         project.licenseFile = rootProject.file('LICENSE.txt')
         project.noticeFile = rootProject.file('NOTICE.txt')
-        project.forbiddenApis.ignoreFailures = true
     }
 }
 

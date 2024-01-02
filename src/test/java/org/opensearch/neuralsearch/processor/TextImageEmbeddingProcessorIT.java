@@ -57,7 +57,7 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     private String uploadModel() throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        return uploadModel(requestBody);
+        return registerModelGroupAndUploadModel(requestBody);
     }
 
     private void createTextImageEmbeddingIndex() throws Exception {

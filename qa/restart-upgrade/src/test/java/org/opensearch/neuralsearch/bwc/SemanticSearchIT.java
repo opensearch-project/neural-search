@@ -76,7 +76,7 @@ public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
         String modelGroupId = registerModelGroup(
             String.format(LOCALE, modelGroupRegisterRequestBody, "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8))
         );
-        return uploadModelId(String.format(LOCALE, requestBody, modelGroupId));
+        return uploadModel(String.format(LOCALE, requestBody, modelGroupId));
     }
 
     protected void createPipelineProcessor(String modelId, String pipelineName, ProcessorType processorType) throws Exception {

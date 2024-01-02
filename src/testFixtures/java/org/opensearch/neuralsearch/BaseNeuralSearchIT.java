@@ -134,14 +134,13 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
     }
 
-    protected String uploadModel(String requestBody) throws Exception {
-        String modelGroupId = registerModelGroup();
+    protected String registerModelGroupAndUploadModel(String requestBody) throws Exception {
+        String modelGroupId = getModelGroupId();
         // model group id is dynamically generated, we need to update model update request body after group is registered
-        requestBody = requestBody.replace("<MODEL_GROUP_ID>", modelGroupId);
-        return uploadModelId(requestBody);
+        return uploadModel(String.format(LOCALE, requestBody, modelGroupId));
     }
 
-    protected String uploadModelId(String requestBody) throws Exception {
+    protected String uploadModel(String requestBody) throws Exception {
         Response uploadResponse = makeRequest(
             client(),
             "POST",
@@ -204,7 +203,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     @SneakyThrows
     protected String prepareModel() {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        String modelId = uploadModel(requestBody);
+        String modelId = registerModelGroupAndUploadModel(requestBody);
         loadModel(modelId);
         return modelId;
     }
@@ -791,11 +790,13 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     @SneakyThrows
-    private String registerModelGroup() {
+    private String getModelGroupId() {
         String modelGroupRegisterRequestBody = Files.readString(
             Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
-        ).replace("<MODEL_GROUP_NAME>", "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8));
-        return registerModelGroup(modelGroupRegisterRequestBody);
+        );
+        return registerModelGroup(
+            String.format(LOCALE, modelGroupRegisterRequestBody, "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8))
+        );
     }
 
     protected String registerModelGroup(String modelGroupRegisterRequestBody) throws IOException, ParseException {

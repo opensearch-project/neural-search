@@ -32,18 +32,10 @@ jobs:
         with:
           java-version: ${{ matrix.java }}
 
-      - if: startsWith(matrix.os,'windows')
-        name: Run NeuralSearch Restart-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on Windows
+      - name: Run NeuralSearch Restart-Upgrade BWC Tests from BWCVersion-$BWC_VERSION_RESTART_UPGRADE to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
         run: |
           echo "Running restart-upgrade backwards compatibility tests ..."
-          ./gradlew :qa:restart-upgrade:testAgainstNewCluster -D'tests.bwc.version=${{ matrix.bwc_version }}'
-
-      - if: startsWith(matrix.os,'ubuntu')
-        name: Run NeuralSearch Restart-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on Ubuntu
-        run: |
-          echo "Running restart-upgrade backwards compatibility tests ..."
-          ./gradlew :qa:restart-upgrade:testAgainstNewCluster -Dtests.bwc.version=$BWC_VERSION_RESTART_UPGRADE
-
+          ./gradlew :qa:restart-upgrade:testAgainstNewCluster -D'tests.bwc.version=$BWC_VERSION_RESTART_UPGRADE'
 
   Rolling-Upgrade-BWCTests-NeuralSearch:
     strategy:
@@ -67,14 +59,7 @@ jobs:
         with:
           java-version: ${{ matrix.java }}
 
-      - if: startsWith(matrix.os,'windows')
-        name: Run NeuralSearch Rolling-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on Windows
+      - name: Run NeuralSearch Rolling-Upgrade BWC Tests from BWCVersion-$BWC_VERSION_ROLLING_UPGRADE to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
         run: |
           echo "Running rolling-upgrade backwards compatibility tests ..."
-          ./gradlew :qa:rolling-upgrade:testRollingUpgrade -D'tests.bwc.version=${{ matrix.bwc_version }}'
-
-      - if: startsWith(matrix.os,'ubuntu')
-        name: Run NeuralSearch Rolling-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on Ubuntu
-        run: |
-          echo "Running rolling-upgrade backwards compatibility tests ..."
-          ./gradlew :qa:rolling-upgrade:testRollingUpgrade -Dtests.bwc.version=$BWC_VERSION_ROLLING_UPGRADE
+          ./gradlew :qa:rolling-upgrade:testRollingUpgrade -D'tests.bwc.version=$BWC_VERSION_ROLLING_UPGRADE'
