@@ -32,10 +32,10 @@ jobs:
         with:
           java-version: ${{ matrix.java }}
 
-      - name: Run NeuralSearch Restart-Upgrade BWC Tests from BWCVersion-$BWC_VERSION_RESTART_UPGRADE to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
+      - name: Run NeuralSearch Restart-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
         run: |
           echo "Running restart-upgrade backwards compatibility tests ..."
-          ./gradlew :qa:restart-upgrade:testAgainstNewCluster -D'tests.bwc.version=$BWC_VERSION_RESTART_UPGRADE'
+          ./gradlew :qa:restart-upgrade:testAgainstNewCluster -D'tests.bwc.version=${{ matrix.bwc_version }}'
 
   Rolling-Upgrade-BWCTests-NeuralSearch:
     strategy:
@@ -59,7 +59,7 @@ jobs:
         with:
           java-version: ${{ matrix.java }}
 
-      - name: Run NeuralSearch Rolling-Upgrade BWC Tests from BWCVersion-$BWC_VERSION_ROLLING_UPGRADE to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
+      - name: Run NeuralSearch Rolling-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
         run: |
           echo "Running rolling-upgrade backwards compatibility tests ..."
-          ./gradlew :qa:rolling-upgrade:testRollingUpgrade -D'tests.bwc.version=$BWC_VERSION_ROLLING_UPGRADE'
+          ./gradlew :qa:rolling-upgrade:testRollingUpgrade -D'tests.bwc.version=${{ matrix.bwc_version }}'
