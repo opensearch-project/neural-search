@@ -9,3 +9,7 @@
  */
 
 rootProject.name = 'neural-search'
+
+include ":qa"
+include ":qa:rolling-upgrade"
+include ":qa:restart-upgrade"

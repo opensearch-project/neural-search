@@ -1,0 +1,59 @@
+/*
+ *  Copyright OpenSearch Contributors
+ *  SPDX-License-Identifier: Apache-2.0
+ */
+
+import org.opensearch.gradle.testclusters.StandaloneRestIntegTestTask
+
+apply from : "$rootDir/qa/build.gradle"
+
+String default_bwc_version = System.getProperty("bwc.version")
+String neural_search_bwc_version = System.getProperty("tests.bwc.version", default_bwc_version)
+String baseName = "neuralSearchBwcCluster-restart"
+
+// Creates a test cluster of previous version and loads k-NN plugin of bwcVersion
+testClusters {
+    "${baseName}" {
+        testDistribution = "ARCHIVE"
+        versions = [neural_search_bwc_version, opensearch_version]
+        numberOfNodes = 3
+        jvmArgs("-Xms1g", "-Xmx4g")
+        plugin(project.tasks.unZipBwcMlCommonsPlugin.archiveFile)
+        plugin(project.tasks.unZipBwcKnnPlugin.archiveFile)
+        plugin(project.tasks.unZipBwcPlugin.archiveFile)
+        setting 'path.repo', "${buildDir}/cluster/shared/repo/${baseName}"
+        setting 'http.content_type.required', 'true'
+    }
+}
+
+// Task to run BWC tests against the old cluster
+task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
+    dependsOn "unZipBwcPlugin"
+    useCluster testClusters."${baseName}"
+    systemProperty 'tests.rest.bwcsuite_cluster', 'old_cluster'
+    systemProperty 'tests.is_old_cluster', 'true'
+    systemProperty 'tests.skip_delete_model_index', 'true'
+    systemProperty 'tests.plugin_bwc_version', neural_search_bwc_version
+
+    nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
+    nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
+    systemProperty 'tests.security.manager', 'false'
+}
+
+// All nodes are upgraded to latest version and run the tests
+task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
+    dependsOn "testAgainstOldCluster"
+    dependsOn rootProject.tasks.assemble
+    useCluster testClusters."${baseName}"
+    doFirst {
+        testClusters."${baseName}".upgradeAllNodesAndPluginsToNextVersion(project.ext.plugins)
+    }
+    systemProperty 'tests.rest.bwcsuite_cluster', 'upgraded_cluster'
+    systemProperty 'tests.skip_delete_model_index', 'true'
+    systemProperty 'tests.is_old_cluster', 'false'
+    systemProperty 'tests.plugin_bwc_version', neural_search_bwc_version
+
+    nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
+    nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
+    systemProperty 'tests.security.manager', 'false'
+}
