@@ -35,7 +35,7 @@ git clone https://github.com/[your username]/neural-search.git
 
 #### JDK 11
 
-OpenSearch builds using Java 11 at a minimum. This means you must have a JDK 11 installed with the environment variable 
+OpenSearch builds using Java 11 at a minimum. This means you must have a JDK 11 installed with the environment variable
 `JAVA_HOME` referencing the path to Java home for your JDK 11 installation, e.g. `JAVA_HOME=/usr/lib/jvm/jdk-11`.
 
 One easy way to get Java 11 on *nix is to use [sdkman](https://sdkman.io/).
@@ -85,10 +85,10 @@ Please follow these formatting guidelines:
 
 ## Build
 
-OpenSearch neural-search uses a [Gradle](https://docs.gradle.org/6.6.1/userguide/userguide.html) wrapper for its build. 
+OpenSearch neural-search uses a [Gradle](https://docs.gradle.org/6.6.1/userguide/userguide.html) wrapper for its build.
 Run `gradlew` on Unix systems.
 
-Build OpenSearch neural-search using `gradlew build` 
+Build OpenSearch neural-search using `gradlew build`
 
 ```
 ./gradlew build
@@ -242,8 +242,8 @@ See [CONTRIBUTING](CONTRIBUTING.md).
 
 ## Backports
 
-The Github workflow in [`backport.yml`](.github/workflows/backport.yml) creates backport PRs automatically when the 
-original PR with an appropriate label `backport <backport-branch-name>` is merged to main with the backport workflow 
-run successfully on the PR. For example, if a PR on main needs to be backported to `2.x` branch, add a label 
-`backport 2.x` to the PR and make sure the backport workflow runs on the PR along with other checks. Once this PR is 
+The Github workflow in [`backport.yml`](.github/workflows/backport.yml) creates backport PRs automatically when the
+original PR with an appropriate label `backport <backport-branch-name>` is merged to main with the backport workflow
+run successfully on the PR. For example, if a PR on main needs to be backported to `2.x` branch, add a label
+`backport 2.x` to the PR and make sure the backport workflow runs on the PR along with other checks. Once this PR is
 merged to main, the workflow will create a backport PR to the `2.x` branch.
