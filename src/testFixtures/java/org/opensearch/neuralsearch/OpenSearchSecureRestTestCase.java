@@ -9,6 +9,7 @@ import org.apache.http.HttpHost;
 import org.apache.http.ParseException;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.CredentialsProvider;
 import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.message.BasicHeader;
@@ -109,9 +110,8 @@ public abstract class OpenSearchSecureRestTestCase extends OpenSearchRestTestCas
                 .orElseThrow(() -> new RuntimeException("user name is missing"));
             final String password = Optional.ofNullable(System.getProperty(SYS_PROPERTY_KEY_PASSWORD))
                 .orElseThrow(() -> new RuntimeException("password is missing"));
-            final BasicCredentialsProvider credentialsProvider = new BasicCredentialsProvider();
-            final AuthScope anyScope = new AuthScope(null, -1);
-            credentialsProvider.setCredentials(anyScope, new UsernamePasswordCredentials(userName, password));
+            final CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
+            credentialsProvider.setCredentials(AuthScope.ANY, new UsernamePasswordCredentials(userName, password));
             try {
                 return httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider)
                     // disable the certificate since our testing cluster just uses the default security configuration
