@@ -2,18 +2,11 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
 
 import org.apache.http.Header;
 import org.apache.http.HttpHost;
+import org.apache.http.ParseException;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.CredentialsProvider;
@@ -21,6 +14,20 @@ import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.ssl.SSLContextBuilder;
+import static org.opensearch.knn.common.KNNConstants.MODEL_INDEX_NAME;
+import static org.opensearch.neuralsearch.TestUtils.NEURAL_SEARCH_BWC_PREFIX;
+import static org.opensearch.neuralsearch.TestUtils.OPENDISTRO_SECURITY;
+import static org.opensearch.neuralsearch.TestUtils.OPENSEARCH_SYSTEM_INDEX_PREFIX;
+import static org.opensearch.neuralsearch.TestUtils.SECURITY_AUDITLOG_PREFIX;
+import static org.opensearch.neuralsearch.TestUtils.SKIP_DELETE_MODEL_INDEX;
+
+import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.After;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
@@ -50,6 +57,12 @@ public abstract class OpenSearchSecureRestTestCase extends OpenSearchRestTestCas
     private static final String DEFAULT_SOCKET_TIMEOUT = "60s";
     private static final String INTERNAL_INDICES_PREFIX = ".";
     private static String protocol;
+
+    private final Set<String> IMMUTABLE_INDEX_PREFIXES = Set.of(
+        NEURAL_SEARCH_BWC_PREFIX,
+        SECURITY_AUDITLOG_PREFIX,
+        OPENSEARCH_SYSTEM_INDEX_PREFIX
+    );
 
     @Override
     protected String getProtocol() {
@@ -129,7 +142,7 @@ public abstract class OpenSearchSecureRestTestCase extends OpenSearchRestTestCas
     }
 
     @After
-    public void deleteExternalIndices() throws IOException {
+    public void deleteExternalIndices() throws IOException, ParseException {
         final Response response = client().performRequest(new Request("GET", "/_cat/indices?format=json" + "&expand_wildcards=all"));
         try (
             final XContentParser parser = JsonXContent.jsonXContent.createParser(
@@ -153,8 +166,29 @@ public abstract class OpenSearchSecureRestTestCase extends OpenSearchRestTestCas
                 .collect(Collectors.toList());
 
             for (final String indexName : externalIndices) {
-                adminClient().performRequest(new Request("DELETE", "/" + indexName));
+                if (!skipDeleteIndex(indexName)) {
+                    adminClient().performRequest(new Request("DELETE", "/" + indexName));
+                }
             }
         }
+    }
+
+    private boolean getSkipDeleteModelIndexFlag() {
+        return Boolean.parseBoolean(System.getProperty(SKIP_DELETE_MODEL_INDEX, "false"));
+    }
+
+    private boolean skipDeleteModelIndex(String indexName) {
+        return (MODEL_INDEX_NAME.equals(indexName) && getSkipDeleteModelIndexFlag());
+    }
+
+    private boolean skipDeleteIndex(String indexName) {
+        if (indexName != null
+            && !OPENDISTRO_SECURITY.equals(indexName)
+            && IMMUTABLE_INDEX_PREFIXES.stream().noneMatch(indexName::startsWith)
+            && !skipDeleteModelIndex(indexName)) {
+            return false;
+        }
+
+        return true;
     }
 }

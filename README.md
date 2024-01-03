@@ -7,7 +7,7 @@
 ![PRs welcome!](https://img.shields.io/badge/PRs-welcome!-success)
 
 ## OpenSearch Neural Search
-**OpenSearch Neural Search** is an OpenSearch plugin that adds dense neural retrieval into the OpenSearch ecosystem. 
+**OpenSearch Neural Search** is an OpenSearch plugin that adds dense neural retrieval into the OpenSearch ecosystem.
 The plugin provides the capability for indexing documents and doing neural search on the indexed documents.
 
 ## Project Resources

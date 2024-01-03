@@ -2,7 +2,6 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch.query;
 
 import static org.opensearch.neuralsearch.TestUtils.objectToFloat;
@@ -16,8 +15,8 @@ import org.opensearch.client.ResponseException;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.neuralsearch.BaseSparseEncodingIT;
 import org.opensearch.neuralsearch.TestUtils;
-import org.opensearch.neuralsearch.common.BaseSparseEncodingIT;
 
 import lombok.SneakyThrows;
 

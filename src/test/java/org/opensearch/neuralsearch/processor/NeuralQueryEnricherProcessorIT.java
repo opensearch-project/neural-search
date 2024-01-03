@@ -2,9 +2,10 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch.processor;
 
+import static org.opensearch.neuralsearch.TestUtils.TEST_DIMENSION;
+import static org.opensearch.neuralsearch.TestUtils.TEST_SPACE_TYPE;
 import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
 
 import java.util.Collections;
@@ -13,8 +14,7 @@ import java.util.Map;
 import org.junit.After;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.knn.index.SpaceType;
-import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 import com.google.common.primitives.Floats;
@@ -27,8 +27,6 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
     private static final String search_pipeline = "search-pipeline";
     private static final String ingest_pipeline = "nlp-pipeline";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_1 = "test-knn-vector-1";
-    private static final int TEST_DIMENSION = 768;
-    private static final SpaceType TEST_SPACE_TYPE = SpaceType.L2;
     private final float[] testVector = createRandomVector(TEST_DIMENSION);
 
     @Before
