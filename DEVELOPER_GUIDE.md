@@ -190,16 +190,19 @@ Additionally, it is possible to attach one debugger to the cluster JVM and anoth
 
 The purpose of Backwards Compatibility Testing and different types of BWC tests are explained [here](https://github.com/opensearch-project/opensearch-plugins/blob/main/TESTING.md#backwards-compatibility-testing)
 
-Use these commands to run BWC tests for k-NN:
+Use these commands to run BWC tests for neural search:
 1. Rolling upgrade tests: `./gradlew :qa:rolling-upgrade:testRollingUpgrade`
 2. Full restart upgrade tests: `./gradlew :qa:restart-upgrade:testAgainstNewCluster`
 3. `./gradlew :qa:bwcTestSuite` is used to run all the above bwc tests together.
 
+bwc.version stands for the older version of OpenSearch against which one needs to check the compatibility with the current version.
+The details regarding all bwc versions of OpenSearch can be found [here](https://github.com/opensearch-project/OpenSearch/blob/main/libs/core/src/main/java/org/opensearch/Version.java).
 Use this command to run BWC tests for a given Backwards Compatibility Version:
 ```
 ./gradlew :qa:bwcTestSuite -Dbwc.version=2.9.0
 ```
 Here, we are testing BWC Tests with BWC version of plugin as 2.9.0.
+The tests will not run on MAC OS due to issues coming from the OS.
 
 ### Adding new tests
 
