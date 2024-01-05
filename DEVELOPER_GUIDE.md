@@ -188,7 +188,8 @@ Additionally, it is possible to attach one debugger to the cluster JVM and anoth
 
 ## Backwards Compatibility Testing
 
-The purpose of Backwards Compatibility Testing and different types of BWC tests are explained [here](https://github.com/opensearch-project/opensearch-plugins/blob/main/TESTING.md#backwards-compatibility-testing)
+The purpose of Backwards Compatibility Testing and different types of BWC tests are explained [here](https://github.com/opensearch-project/opensearch-plugins/blob/main/TESTING.md#backwards-compatibility-testing). The BWC tests (i.e. Restart-Upgrade, Mixed-Cluster and Rolling-Upgrade scenarios) should be added with any new feature being added to Neural Search.
+The current design has mixed-cluster tests combined with rolling-upgrade tests in the same test class for [example](https://github.com/opensearch-project/neural-search/blob/main/qa/rolling-upgrade/src/test/java/org/opensearch/neuralsearch/bwc/SemanticSearchIT.java).
 
 Use these commands to run BWC tests for neural search:
 1. Rolling upgrade tests: `./gradlew :qa:rolling-upgrade:testRollingUpgrade`
