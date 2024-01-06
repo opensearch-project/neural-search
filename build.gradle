@@ -194,6 +194,7 @@ project.tasks.delombok.dependsOn(extractKnnJar)
 
 compileJava {
     dependsOn extractKnnJar
+    dependsOn spotlessApply
     options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
 }
 compileTestJava {
