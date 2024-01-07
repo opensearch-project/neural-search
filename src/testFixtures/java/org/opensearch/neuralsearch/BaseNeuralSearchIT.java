@@ -54,6 +54,13 @@ import com.carrotsearch.randomizedtesting.RandomizedTest;
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import com.google.common.collect.ImmutableList;
 
+import static org.opensearch.neuralsearch.TestUtils.MAX_TASK_RESULT_QUERY_TIME_IN_SECOND;
+import static org.opensearch.neuralsearch.TestUtils.DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND;
+import static org.opensearch.neuralsearch.TestUtils.DEFAULT_USER_AGENT;
+import static org.opensearch.neuralsearch.TestUtils.DEFAULT_NORMALIZATION_METHOD;
+import static org.opensearch.neuralsearch.TestUtils.DEFAULT_COMBINATION_METHOD;
+import static org.opensearch.neuralsearch.TestUtils.PARAM_NAME_WEIGHTS;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.SneakyThrows;
@@ -62,14 +69,6 @@ import lombok.SneakyThrows;
 public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     protected static final Locale LOCALE = Locale.ROOT;
-
-    private static final int MAX_TASK_RESULT_QUERY_TIME_IN_SECOND = 60 * 5;
-
-    private static final int DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND = 1000;
-    protected static final String DEFAULT_USER_AGENT = "Kibana";
-    protected static final String DEFAULT_NORMALIZATION_METHOD = "min_max";
-    protected static final String DEFAULT_COMBINATION_METHOD = "arithmetic_mean";
-    protected static final String PARAM_NAME_WEIGHTS = "weights";
 
     protected static final Map<ProcessorType, String> PIPELINE_CONFIGS_BY_TYPE = Map.of(
         ProcessorType.TEXT_EMBEDDING,
@@ -664,8 +663,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     @SneakyThrows
-    protected void createSearchPipelineWithResultsPostProcessor(final String pipelineId) {
-        createSearchPipeline(pipelineId, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of());
+    protected void createSearchPipelineWithResultsPostProcessor(final String pipelineId, Map<String, Object> combinationParams) {
+        createSearchPipeline(pipelineId, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, combinationParams);
     }
 
     @SneakyThrows
@@ -673,7 +672,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final String pipelineId,
         final String normalizationMethod,
         String combinationMethod,
-        final Map<String, String> combinationParams
+        final Map<String, Object> combinationParams
     ) {
         StringBuilder stringBuilderForContentBody = new StringBuilder();
         stringBuilderForContentBody.append("{\"description\": \"Post processor pipeline\",")
@@ -687,7 +686,16 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         if (Objects.nonNull(combinationParams) && !combinationParams.isEmpty()) {
             stringBuilderForContentBody.append(", \"parameters\": {");
             if (combinationParams.containsKey(PARAM_NAME_WEIGHTS)) {
-                stringBuilderForContentBody.append("\"weights\": ").append(combinationParams.get(PARAM_NAME_WEIGHTS));
+                List<Double> weights = (List<Double>) combinationParams.get(PARAM_NAME_WEIGHTS);
+                if (weights.size() > 1) {
+                    stringBuilderForContentBody.append("\"weights\": [");
+                    for (int i = 0; i < weights.size() - 1; i++) {
+                        stringBuilderForContentBody.append(weights.get(i) + ",");
+                    }
+                    stringBuilderForContentBody.append(weights.get(weights.size() - 1) + "]");
+                } else {
+                    stringBuilderForContentBody.append("\"weights\": ").append(combinationParams.get(PARAM_NAME_WEIGHTS));
+                }
             }
             stringBuilderForContentBody.append(" }");
         }
@@ -829,6 +837,9 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @param docId
      * @param fieldName name of the field
      * @param text to be added
+     * @param imagefieldName name of the image field
+     * @param imageText name of the image text
+     *
      */
     protected void addDocument(String index, String docId, String fieldName, String text, String imagefieldName, String imageText)
         throws IOException {

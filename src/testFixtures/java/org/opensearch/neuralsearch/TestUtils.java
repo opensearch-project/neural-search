@@ -54,6 +54,12 @@ public class TestUtils {
     public static final String OPENSEARCH_SYSTEM_INDEX_PREFIX = ".opensearch";
     public static final String TEXT_EMBEDDING_PROCESSOR = "text_embedding";
     public static final String TEXT_IMAGE_EMBEDDING_PROCESSOR = "text_image_embedding";
+    public static final int MAX_TASK_RESULT_QUERY_TIME_IN_SECOND = 60 * 5;
+    public static final int DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND = 1000;
+    public static final String DEFAULT_USER_AGENT = "Kibana";
+    public static final String DEFAULT_NORMALIZATION_METHOD = "min_max";
+    public static final String DEFAULT_COMBINATION_METHOD = "arithmetic_mean";
+    public static final String PARAM_NAME_WEIGHTS = "weights";
 
     /**
      * Convert an xContentBuilder to a map

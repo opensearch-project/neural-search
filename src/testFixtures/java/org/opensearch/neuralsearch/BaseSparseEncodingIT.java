@@ -23,7 +23,7 @@ import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 
 import com.google.common.collect.ImmutableList;
-
+import static org.opensearch.neuralsearch.TestUtils.DEFAULT_USER_AGENT;
 import lombok.SneakyThrows;
 
 public abstract class BaseSparseEncodingIT extends BaseNeuralSearchIT {
