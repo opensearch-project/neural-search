@@ -44,7 +44,7 @@ public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
             String modelId = getModelId(pipeline, TEXT_IMAGE_EMBEDDING_PROCESSOR);
             loadModel(modelId);
             addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_1);
-            // validateTestIndex(modelId);
+            validateTestIndex(modelId);
             deletePipeline(PIPELINE_NAME);
             deleteModel(modelId);
             deleteIndex(getIndexNameForTest());
