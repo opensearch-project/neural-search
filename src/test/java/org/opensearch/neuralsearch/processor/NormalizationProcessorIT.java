@@ -89,7 +89,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testResultProcessor_whenOneShardAndQueryMatches_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
-        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE, Map.of());
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
         String modelId = getDeployedModelId();
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
@@ -163,7 +163,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testResultProcessor_whenMultipleShardsAndQueryMatches_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
-        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE, Map.of());
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
         String modelId = getDeployedModelId();
         int totalExpectedDocQty = 6;
 
@@ -223,7 +223,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testResultProcessor_whenMultipleShardsAndNoMatches_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
-        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE, Map.of());
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
 
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
         hybridQueryBuilder.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT6));
@@ -242,7 +242,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testResultProcessor_whenMultipleShardsAndPartialMatches_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
-        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE, Map.of());
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
 
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
         hybridQueryBuilder.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));

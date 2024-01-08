@@ -7,13 +7,15 @@ package org.opensearch.neuralsearch.bwc;
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
+import java.util.Arrays;
 import java.util.Map;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.neuralsearch.TestUtils;
 import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.PARAM_NAME_WEIGHTS;
 import static org.opensearch.neuralsearch.TestUtils.TEXT_EMBEDDING_PROCESSOR;
+import static org.opensearch.neuralsearch.TestUtils.DEFAULT_NORMALIZATION_METHOD;
+import static org.opensearch.neuralsearch.TestUtils.DEFAULT_COMBINATION_METHOD;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
@@ -44,7 +46,12 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
                     PIPELINE_NAME
                 );
                 addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, null, null);
-                createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE_NAME, Map.of(PARAM_NAME_WEIGHTS, List.of(0.3, 0.7)));
+                createSearchPipeline(
+                    SEARCH_PIPELINE_NAME,
+                    DEFAULT_NORMALIZATION_METHOD,
+                    DEFAULT_COMBINATION_METHOD,
+                    Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.7f }))
+                );
                 break;
             case MIXED:
                 modelId = getModelId(PIPELINE_NAME);

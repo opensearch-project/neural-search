@@ -663,8 +663,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     @SneakyThrows
-    protected void createSearchPipelineWithResultsPostProcessor(final String pipelineId, Map<String, Object> combinationParams) {
-        createSearchPipeline(pipelineId, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, combinationParams);
+    protected void createSearchPipelineWithResultsPostProcessor(final String pipelineId) {
+        createSearchPipeline(pipelineId, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of());
     }
 
     @SneakyThrows
@@ -672,7 +672,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final String pipelineId,
         final String normalizationMethod,
         String combinationMethod,
-        final Map<String, Object> combinationParams
+        final Map<String, String> combinationParams
     ) {
         StringBuilder stringBuilderForContentBody = new StringBuilder();
         stringBuilderForContentBody.append("{\"description\": \"Post processor pipeline\",")
@@ -686,16 +686,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         if (Objects.nonNull(combinationParams) && !combinationParams.isEmpty()) {
             stringBuilderForContentBody.append(", \"parameters\": {");
             if (combinationParams.containsKey(PARAM_NAME_WEIGHTS)) {
-                List<Double> weights = (List<Double>) combinationParams.get(PARAM_NAME_WEIGHTS);
-                if (weights.size() > 1) {
-                    stringBuilderForContentBody.append("\"weights\": [");
-                    for (int i = 0; i < weights.size() - 1; i++) {
-                        stringBuilderForContentBody.append(weights.get(i) + ",");
-                    }
-                    stringBuilderForContentBody.append(weights.get(weights.size() - 1) + "]");
-                } else {
-                    stringBuilderForContentBody.append("\"weights\": ").append(combinationParams.get(PARAM_NAME_WEIGHTS));
-                }
+                stringBuilderForContentBody.append("\"weights\": ").append(combinationParams.get(PARAM_NAME_WEIGHTS));
             }
             stringBuilderForContentBody.append(" }");
         }
