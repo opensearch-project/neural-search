@@ -94,9 +94,9 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
             1,
             Map.of("search_pipeline", SEARCH_PIPELINE_NAME)
         );
+        assertNotNull(searchResponseAsMap);
         int hits = getHitCount(searchResponseAsMap);
         assertEquals(1, hits);
-        assertNotNull(searchResponseAsMap);
     }
 
     public HybridQueryBuilder getQueryBuilder(String modelId) {
