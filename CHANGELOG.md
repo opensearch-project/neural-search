@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixing multiple issues reported in #497 ([#524](https://github.com/opensearch-project/neural-search/pull/524))
 ### Infrastructure
 - BWC tests for Neural Search ([#515](https://github.com/opensearch-project/neural-search/pull/515))
+- Github action to run integ tests in secure opensearch cluster ([#535](https://github.com/opensearch-project/neural-search/pull/535))
 ### Documentation
 ### Maintenance
 ### Refactoring
