@@ -60,6 +60,7 @@ public class TestUtils {
     public static final String DEFAULT_NORMALIZATION_METHOD = "min_max";
     public static final String DEFAULT_COMBINATION_METHOD = "arithmetic_mean";
     public static final String PARAM_NAME_WEIGHTS = "weights";
+    public static final String SPARSE_ENCODING_PROCESSOR = "sparse_encoding";
 
     /**
      * Convert an xContentBuilder to a map
