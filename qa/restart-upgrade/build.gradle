@@ -38,6 +38,7 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
     if (neural_search_bwc_version.startsWith("2.9") || neural_search_bwc_version.startsWith("2.10")){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
         }
     }
 
@@ -62,6 +63,7 @@ task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
     if (neural_search_bwc_version.startsWith("2.9") || neural_search_bwc_version.startsWith("2.10")){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
         }
     }
 
