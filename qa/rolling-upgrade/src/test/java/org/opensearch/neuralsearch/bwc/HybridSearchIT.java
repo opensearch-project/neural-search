@@ -19,7 +19,7 @@ import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
 
-    private static final String PIPELINE_NAME = "nlp-pipeline";
+    private static final String PIPELINE_NAME = "nlp-hybrid-pipeline";
     private static final String SEARCH_PIPELINE_NAME = "nlp-search-pipeline";
     private static final String TEST_FIELD = "passage_text";
     private static final String TEXT = "Hello world";
@@ -28,6 +28,9 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
     private static final String query = "Hi world";
     private static final int NUM_DOCS_PER_ROUND = 1;
 
+    // Test rolling-upgrade Hybrid Search
+    // Create Text Embedding Processor, Ingestion Pipeline, add document and search pipeline with noramlization processor
+    // Validate process , pipeline and document count in rolling-upgrade scenario
     public void testHybridSearch_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         switch (getClusterType()) {
@@ -49,7 +52,7 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
                     validateTestIndexOnUpgrade(totalDocsCountMixed, modelId);
-                    addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT_MIXED, null, null);
+                    addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_MIXED, null, null);
                 } else {
                     totalDocsCountMixed = 2 * NUM_DOCS_PER_ROUND;
                     validateTestIndexOnUpgrade(totalDocsCountMixed, modelId);

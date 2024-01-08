@@ -18,13 +18,16 @@ import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
-    private static final String PIPELINE_NAME = "nlp-pipeline";
+    private static final String PIPELINE_NAME = "nlp-hybrid-pipeline";
     private static final String SEARCH_PIPELINE_NAME = "nlp-search-pipeline";
     private static final String TEST_FIELD = "passage_text";
     private static final String TEXT = "Hello world";
     private static final String TEXT_1 = "Hi planet";
     private static final String query = "Hi world";
 
+    // Test restart-upgrade Hybrid Search
+    // Create Text Embedding Processor, Ingestion Pipeline, add document and search pipeline with noramlization processor
+    // Validate process , pipeline and document count in restart-upgrade scenario
     public void testHybridSearch_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         if (isRunningAgainstOldCluster()) {
