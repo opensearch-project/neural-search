@@ -22,10 +22,10 @@ public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
     private static final String TEST_IMAGE_TEXT = "/9j/4AAQSkZJRgABAQAASABIAAD";
     private static final String TEST_IMAGE_TEXT_1 = "/9j/4AAQSkZJRgbdwoeicfhoid";
 
-    // Test restart-upgrade MultiModal Search
+    // Test restart-upgrade test image embedding processor
     // Create Text Image Embedding Processor, Ingestion Pipeline and add document
     // Validate process , pipeline and document count in restart-upgrade scenario
-    public void testMultiModalSearch_E2EFlow() throws Exception {
+    public void testTextImageEmbeddingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
 
         if (isRunningAgainstOldCluster()) {
@@ -54,7 +54,6 @@ public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
     private void validateTestIndex(String modelId) throws Exception {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(2, docCount);
-        loadModel(modelId);
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder("passage_embedding", TEXT, TEST_IMAGE_TEXT, modelId, 1, null, null);
         Map<String, Object> response = search(getIndexNameForTest(), neuralQueryBuilder, 1);
         assertNotNull(response);
@@ -77,7 +76,7 @@ public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
 
     protected void createPipelineProcessor(String modelId, String pipelineName) throws Exception {
         String requestBody = Files.readString(
-            Path.of(classLoader.getResource("processor/PipelineForTextImagingProcessorConfiguration.json").toURI())
+            Path.of(classLoader.getResource("processor/PipelineForTextImageProcessorConfiguration.json").toURI())
         );
         createPipelineProcessor(requestBody, pipelineName, modelId);
     }

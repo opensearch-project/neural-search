@@ -26,10 +26,10 @@ public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
 
     private static final int NUM_DOCS_PER_ROUND = 1;
 
-    // Test rolling-upgrade MultiModal Search
+    // Test rolling-upgrade test image embedding processor
     // Create Text Image Embedding Processor, Ingestion Pipeline and add document
     // Validate process , pipeline and document count in rolling-upgrade scenario
-    public void testMultiModalSearch_E2EFlow() throws Exception {
+    public void testTextImageEmbeddingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         switch (getClusterType()) {
             case OLD:
@@ -94,7 +94,7 @@ public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
 
     protected void createPipelineProcessor(String modelId, String pipelineName) throws Exception {
         String requestBody = Files.readString(
-            Path.of(classLoader.getResource("processor/PipelineForTextImagingProcessorConfiguration.json").toURI())
+            Path.of(classLoader.getResource("processor/PipelineForTextImageProcessorConfiguration.json").toURI())
         );
         createPipelineProcessor(requestBody, pipelineName, modelId);
     }

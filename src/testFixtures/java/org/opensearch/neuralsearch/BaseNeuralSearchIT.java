@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.ArrayList;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -494,6 +495,24 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Map<String, Object> hits1map = (Map<String, Object>) searchResponseAsMap.get("hits");
         List<Object> hits1List = (List<Object>) hits1map.get("hits");
         return hits1List.size();
+    }
+
+    /**
+     * Parse the total number of hits and retrive score from the search
+     *
+     * @param searchResponseAsMap Complete search response as a map
+     * @return number of scores list from the search
+     */
+    @SuppressWarnings("unchecked")
+    protected List<Double> getNormalizationScoreList(Map<String, Object> searchResponseAsMap) {
+        Map<String, Object> hits1map = (Map<String, Object>) searchResponseAsMap.get("hits");
+        List<Object> hitsList = (List<Object>) hits1map.get("hits");
+        List<Double> scores = new ArrayList<>();
+        for (Object hit : hitsList) {
+            Map<String, Object> searchHit = (Map<String, Object>) hit;
+            scores.add((Double) searchHit.get("_score"));
+        }
+        return scores;
     }
 
     /**

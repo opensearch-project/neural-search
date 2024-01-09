@@ -20,9 +20,12 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
     private static final String TEXT_MIXED = "Hi planet";
     private static final String TEXT_UPGRADED = "Hi earth";
     private static final int NUM_DOCS_PER_ROUND = 1;
-    private static final String query = "Hi world";
+    private static final String QUERY = "Hi world";
 
-    public void testNeuralSparseSearch_E2EFlow() throws Exception {
+    // Test rolling-upgrade test sparse embedding processor
+    // Create Sparse Encoding Processor, Ingestion Pipeline and add document
+    // Validate process , pipeline and document count in restart-upgrade scenario
+    public void testSparseEncodingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         switch (getClusterType()) {
             case OLD:
@@ -67,7 +70,7 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
         loadModel(modelId);
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
         neuralSparseQueryBuilder.fieldName("passage_embedding");
-        neuralSparseQueryBuilder.queryText(query);
+        neuralSparseQueryBuilder.queryText(QUERY);
         neuralSparseQueryBuilder.modelId(modelId);
         Map<String, Object> response = search(getIndexNameForTest(), neuralSparseQueryBuilder, 1);
         assertNotNull(response);

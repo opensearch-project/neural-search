@@ -27,13 +27,13 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
     private static final String TEXT = "Hello world";
     private static final String TEXT_MIXED = "Hi planet";
     private static final String TEXT_UPGRADED = "Hi earth";
-    private static final String query = "Hi world";
+    private static final String QUERY = "Hi world";
     private static final int NUM_DOCS_PER_ROUND = 1;
 
     // Test rolling-upgrade Hybrid Search
-    // Create Text Embedding Processor, Ingestion Pipeline, add document and search pipeline with noramlization processor
+    // Create Text Embedding Processor, Ingestion Pipeline, add document and search pipeline with normalization processor
     // Validate process , pipeline and document count in rolling-upgrade scenario
-    public void testHybridSearch_E2EFlow() throws Exception {
+    public void testNormalizationProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         switch (getClusterType()) {
             case OLD:
@@ -118,10 +118,10 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
         neuralQueryBuilder.fieldName("passage_embedding");
         neuralQueryBuilder.modelId(modelId);
-        neuralQueryBuilder.queryText(query);
+        neuralQueryBuilder.queryText(QUERY);
         neuralQueryBuilder.k(5);
 
-        MatchQueryBuilder matchQueryBuilder = new MatchQueryBuilder("text", query);
+        MatchQueryBuilder matchQueryBuilder = new MatchQueryBuilder("text", QUERY);
 
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
         hybridQueryBuilder.add(matchQueryBuilder);

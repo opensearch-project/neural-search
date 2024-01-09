@@ -54,7 +54,6 @@ public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
     private void validateTestIndex(String modelId) throws Exception {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(2, docCount);
-        loadModel(modelId);
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
         neuralQueryBuilder.fieldName("passage_embedding");
         neuralQueryBuilder.modelId(modelId);

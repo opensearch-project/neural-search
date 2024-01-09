@@ -16,11 +16,14 @@ import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
     private static final String PIPELINE_NAME = "nlp-ingest-pipeline-sparse";
     private static final String TEST_FIELD = "passage_text";
-    private static final String TEXT = "Hello world";
-    private static final String TEXT_1 = "Hi planet";
-    private static final String query = "Hi world";
+    private static final String TEXT_1 = "Hello world";
+    private static final String TEXT_2 = "Hi planet";
+    private static final String QUERY = "Hi world";
 
-    public void testNeuralSparseSearch_E2EFlow() throws Exception {
+    // Test restart-upgrade test sparse embedding processor
+    // Create Sparse Encoding Processor, Ingestion Pipeline and add document
+    // Validate process , pipeline and document count in restart-upgrade scenario
+    public void testSparseEncodingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         if (isRunningAgainstOldCluster()) {
             String modelId = uploadTextEmbeddingModel();
@@ -31,13 +34,13 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
                 Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),
                 PIPELINE_NAME
             );
-            addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, null, null);
+            addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT_1, null, null);
         } else {
             Map<String, Object> pipeline = getIngestionPipeline(PIPELINE_NAME);
             assertNotNull(pipeline);
             String modelId = TestUtils.getModelId(pipeline, SPARSE_ENCODING_PROCESSOR);
             loadModel(modelId);
-            addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1, null, null);
+            addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_2, null, null);
             validateTestIndex(modelId);
             deletePipeline(PIPELINE_NAME);
             deleteModel(modelId);
@@ -49,10 +52,9 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
     private void validateTestIndex(String modelId) throws Exception {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(2, docCount);
-        loadModel(modelId);
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
         neuralSparseQueryBuilder.fieldName("passage_embedding");
-        neuralSparseQueryBuilder.queryText(query);
+        neuralSparseQueryBuilder.queryText(QUERY);
         neuralSparseQueryBuilder.modelId(modelId);
         Map<String, Object> response = search(getIndexNameForTest(), neuralSparseQueryBuilder, 1);
         assertNotNull(response);
