@@ -89,7 +89,7 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
      * Factory class for context fetchers. Constructs a list of context fetchers
      * specified in the pipeline config (and maybe the query context fetcher)
      */
-    protected static class ContextFetcherFactory {
+    private static class ContextFetcherFactory {
 
         /**
          * Map rerank types to whether they should include the query context source fetcher

@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.processor.rerank;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -56,14 +57,7 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
                 scoringContext.put(QUERY_TEXT_FIELD, (String) ctxMap.get(QUERY_TEXT_FIELD));
             } else if (ctxMap.containsKey(QUERY_TEXT_PATH_FIELD)) {
                 String path = (String) ctxMap.get(QUERY_TEXT_PATH_FIELD);
-                // Convert query to a map with io/xcontent shenanigans
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                XContentBuilder builder = XContentType.CBOR.contentBuilder(baos);
-                searchRequest.source().toXContent(builder, ToXContent.EMPTY_PARAMS);
-                builder.close();
-                ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
-                XContentParser parser = XContentType.CBOR.xContent().createParser(NamedXContentRegistry.EMPTY, null, bais);
-                Map<String, Object> map = parser.map();
+                Map<String, Object> map = requestToMap(searchRequest);
                 // Get the text at the path
                 Object queryText = ObjectPath.eval(path, map);
                 if (!(queryText instanceof String)) {
@@ -86,5 +80,23 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
     @Override
     public String getName() {
         return NAME;
+    }
+
+    /**
+     * Convert a search request to a general map by streaming out as XContent and then back in,
+     * with the intention of representing the query as a user would see it
+     * @param request Search request to turn into xcontent
+     * @return Map representing the XContent-ified search request
+     * @throws IOException
+     */
+    private static Map<String, Object> requestToMap(SearchRequest request) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        XContentBuilder builder = XContentType.CBOR.contentBuilder(baos);
+        request.source().toXContent(builder, ToXContent.EMPTY_PARAMS);
+        builder.close();
+        ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+        XContentParser parser = XContentType.CBOR.xContent().createParser(NamedXContentRegistry.EMPTY, null, bais);
+        Map<String, Object> map = parser.map();
+        return map;
     }
 }

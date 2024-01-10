@@ -29,13 +29,13 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
     final String TAG = "default-tag";
     final String DESC = "processor description";
 
-    RerankProcessorFactory factory;
+    private RerankProcessorFactory factory;
 
     @Mock
-    MLCommonsClientAccessor clientAccessor;
+    private MLCommonsClientAccessor clientAccessor;
 
     @Mock
-    PipelineContext pipelineContext;
+    private PipelineContext pipelineContext;
 
     @Before
     public void setup() {

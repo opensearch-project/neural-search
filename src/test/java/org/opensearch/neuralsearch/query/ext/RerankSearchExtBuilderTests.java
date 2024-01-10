@@ -7,16 +7,23 @@ package org.opensearch.neuralsearch.query.ext;
 import static org.mockito.Mockito.mock;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.junit.Before;
 import org.opensearch.common.io.stream.BytesStreamOutput;
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.core.ParseField;
 import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.common.io.stream.BytesStreamInput;
 import org.opensearch.core.common.io.stream.OutputStreamStreamOutput;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.core.xcontent.ToXContentObject;
+import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.search.SearchExtBuilder;
 import org.opensearch.test.OpenSearchTestCase;
 
@@ -29,7 +36,20 @@ public class RerankSearchExtBuilderTests extends OpenSearchTestCase {
 
     @Before
     public void setup() {
-        params = Map.of("query_text", "question about the meaning of life, the universe, and everything");
+        params = Map.of("query_context", Map.of("query_text", "question about the meaning of life, the universe, and everything"));
+    }
+
+    @Override
+    protected NamedXContentRegistry xContentRegistry() {
+        return new NamedXContentRegistry(
+            List.of(
+                new NamedXContentRegistry.Entry(
+                    SearchExtBuilder.class,
+                    new ParseField(RerankSearchExtBuilder.PARAM_FIELD_NAME),
+                    parser -> RerankSearchExtBuilder.parse(parser)
+                )
+            )
+        );
     }
 
     public void testStreaming() throws IOException {
@@ -43,19 +63,23 @@ public class RerankSearchExtBuilderTests extends OpenSearchTestCase {
         assert (b1.equals(b2));
     }
 
-    // public void testToXContent() throws IOException {
-    // RerankSearchExtBuilder b1 = new RerankSearchExtBuilder(new HashMap<>(params));
-    // XContentBuilder builder = XContentType.JSON.contentBuilder();
-    // builder.startObject();
-    // b1.toXContent(builder, ToXContentObject.EMPTY_PARAMS);
-    // builder.endObject();
-    // String extString = builder.toString();
-    // log.info(extString);
-    // XContentParser parser = this.createParser(XContentType.JSON.xContent(), extString);
-    // RerankSearchExtBuilder b2 = RerankSearchExtBuilder.parse(parser);
-    // assert (b2.getParams().equals(params));
-    // assert (b1.equals(b2));
-    // }
+    public void testToXContent() throws IOException {
+        RerankSearchExtBuilder b1 = new RerankSearchExtBuilder(new HashMap<>(params));
+        XContentBuilder builder = XContentType.JSON.contentBuilder();
+        builder.startObject();
+        b1.toXContent(builder, ToXContentObject.EMPTY_PARAMS);
+        builder.endObject();
+        String extString = builder.toString();
+        log.info(extString);
+        XContentParser parser = this.createParser(XContentType.JSON.xContent(), extString);
+        SearchExtBuilder b2 = parser.namedObject(SearchExtBuilder.class, RerankSearchExtBuilder.PARAM_FIELD_NAME, parser);
+        assert (b2 instanceof RerankSearchExtBuilder);
+        RerankSearchExtBuilder b3 = (RerankSearchExtBuilder) b2;
+        log.info(b1.getParams().toString());
+        log.info(b3.getParams().toString());
+        assert (b3.getParams().equals(params));
+        assert (b1.equals(b3));
+    }
 
     public void testPullFromListOfExtBuilders() {
         RerankSearchExtBuilder builder = new RerankSearchExtBuilder(params);

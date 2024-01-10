@@ -4,7 +4,7 @@
     "function_name": "TEXT_SIMILARITY",
     "description": "test model",
     "model_format": "TORCH_SCRIPT",
-    "model_group_id": "<MODEL_GROUP_ID>",
+    "model_group_id": "%s",
     "model_content_hash_value": "90e39a926101d1a4e542aade0794319404689b12acfd5d7e65c03d91c668b5cf",
     "model_config": {
         "model_type": "bert",

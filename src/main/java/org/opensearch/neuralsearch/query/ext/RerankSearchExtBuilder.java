@@ -18,9 +18,34 @@ import org.opensearch.search.SearchExtBuilder;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
-import lombok.extern.log4j.Log4j2;
 
-@Log4j2
+/**
+ * Holds ext data from the query for reranking processors. Since
+ * there can be multiple kinds of rerank processors with different
+ * contexts, all we can assume is that there's keys and objects.
+ * e.g. ext might look like
+ * {
+ *   "query": {blah},
+ *   "ext": {
+ *     "rerank": {
+ *       "query_context": {
+ *         "query_text": "some question to rerank about"
+ *       }
+ *     }
+ *   }
+ * }
+ * or
+ * {
+ *   "query": {blah},
+ *   "ext": {
+ *     "rerank": {
+ *       "query_context": {
+ *         "query_path": "query.neural.embedding.query_text"
+ *       }
+ *     }
+ *   }
+ * }
+ */
 @AllArgsConstructor
 public class RerankSearchExtBuilder extends SearchExtBuilder {
 
@@ -44,7 +69,10 @@ public class RerankSearchExtBuilder extends SearchExtBuilder {
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        return builder.field(PARAM_FIELD_NAME, this.params);
+        for (String key : this.params.keySet()) {
+            builder.field(key, this.params.get(key));
+        }
+        return builder;
     }
 
     @Override

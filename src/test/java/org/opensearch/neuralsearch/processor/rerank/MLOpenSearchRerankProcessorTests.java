@@ -46,28 +46,25 @@ import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.pipeline.Processor.PipelineContext;
 import org.opensearch.test.OpenSearchTestCase;
 
-import lombok.extern.log4j.Log4j2;
-
-@Log4j2
 public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
 
     @Mock
-    SearchRequest request;
+    private SearchRequest request;
 
-    SearchResponse response;
-
-    @Mock
-    MLCommonsClientAccessor mlCommonsClientAccessor;
+    private SearchResponse response;
 
     @Mock
-    PipelineContext pipelineContext;
+    private MLCommonsClientAccessor mlCommonsClientAccessor;
 
     @Mock
-    PipelineProcessingContext ppctx;
+    private PipelineContext pipelineContext;
 
-    RerankProcessorFactory factory;
+    @Mock
+    private PipelineProcessingContext ppctx;
 
-    MLOpenSearchRerankProcessor processor;
+    private RerankProcessorFactory factory;
+
+    private MLOpenSearchRerankProcessor processor;
 
     @Before
     public void setup() {

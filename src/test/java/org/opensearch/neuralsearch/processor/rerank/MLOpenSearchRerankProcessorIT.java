@@ -28,11 +28,12 @@ import lombok.extern.log4j.Log4j2;
 @Log4j2
 public class MLOpenSearchRerankProcessorIT extends BaseNeuralSearchIT {
 
-    final static String PIPELINE_NAME = "rerank-mlos-pipeline";
-    final static String INDEX_NAME = "rerank-test";
-    final static String TEXT_REP_1 = "Jacques loves fish. Fish make Jacques happy";
-    final static String TEXT_REP_2 = "Fish like to eat plankton";
-    final static String INDEX_CONFIG = "{\"mappings\": {\"properties\": {\"text_representation\": {\"type\": \"text\"}}}}";
+    private final static String PIPELINE_NAME = "rerank-mlos-pipeline";
+    private final static String INDEX_NAME = "rerank-test";
+    private final static String TEXT_REP_1 = "Jacques loves fish. Fish make Jacques happy";
+    private final static String TEXT_REP_2 = "Fish like to eat plankton";
+    private final static String INDEX_CONFIG = "{\"mappings\": {\"properties\": {\"text_representation\": {\"type\": \"text\"}}}}";
+    private String modelId;
 
     @After
     @SneakyThrows
@@ -42,13 +43,14 @@ public class MLOpenSearchRerankProcessorIT extends BaseNeuralSearchIT {
          * this happens in case we leave model from previous test case. We use new model for every test, and old model
          * can be undeployed and deleted to free resources after each test case execution.
          */
+        deleteModel(modelId);
         deleteSearchPipeline(PIPELINE_NAME);
-        findDeployedModels().forEach(this::deleteModel);
         deleteIndex(INDEX_NAME);
     }
 
-    public void testCrossEncoderRerankProcessor() throws Exception {
-        String modelId = uploadTextSimilarityModel();
+    @SneakyThrows
+    public void testCrossEncoderRerankProcessor() {
+        modelId = uploadTextSimilarityModel();
         loadModel(modelId);
         createSearchPipelineViaConfig(modelId, PIPELINE_NAME, "processor/RerankMLOpenSearchPipelineConfiguration.json");
         setupIndex();
@@ -59,7 +61,7 @@ public class MLOpenSearchRerankProcessorIT extends BaseNeuralSearchIT {
         String requestBody = Files.readString(
             Path.of(classLoader.getResource("processor/UploadTextSimilarityModelRequestBody.json").toURI())
         );
-        return uploadModel(requestBody);
+        return registerModelGroupAndUploadModel(requestBody);
     }
 
     private void setupIndex() throws Exception {

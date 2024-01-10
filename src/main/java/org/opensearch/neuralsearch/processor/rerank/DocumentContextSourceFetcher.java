@@ -18,10 +18,12 @@ import org.opensearch.core.xcontent.ObjectPath;
 import org.opensearch.search.SearchHit;
 
 import lombok.AllArgsConstructor;
+import lombok.extern.log4j.Log4j2;
 
 /**
  * Context Source Fetcher that gets context from the search results (documents)
  */
+@Log4j2
 @AllArgsConstructor
 public class DocumentContextSourceFetcher implements ContextSourceFetcher {
 
@@ -59,6 +61,14 @@ public class DocumentContextSourceFetcher implements ContextSourceFetcher {
             Object sourceValue = ObjectPath.eval(field, hit.getSourceAsMap());
             return String.valueOf(sourceValue);
         } else {
+            log.warn(
+                String.format(
+                    Locale.ROOT,
+                    "Could not find field %s in document %s for reranking! Using the empty string instead.",
+                    field,
+                    hit.getId()
+                )
+            );
             return "";
         }
     }

@@ -59,8 +59,9 @@ public abstract class RescoringRerankProcessor extends RerankProcessor {
                 // Assign new scores
                 SearchHit[] hits = searchResponse.getHits().getHits();
                 if (hits.length != scores.size()) {
-                    throw new Exception("scores and hits are not the same length");
+                    throw new RuntimeException("scores and hits are not the same length");
                 }
+                // NOTE: Assumes that the new scores came back in the same order
                 for (int i = 0; i < hits.length; i++) {
                     hits[i].score(scores.get(i));
                 }
