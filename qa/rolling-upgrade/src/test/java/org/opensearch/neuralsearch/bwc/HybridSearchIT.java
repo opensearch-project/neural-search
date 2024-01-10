@@ -8,6 +8,7 @@ import com.carrotsearch.randomizedtesting.RandomizedTest;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.neuralsearch.TestUtils;
@@ -30,10 +31,10 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
     private static final String QUERY = "Hi world";
     private static final int NUM_DOCS_PER_ROUND = 1;
 
-    // Test rolling-upgrade Hybrid Search
-    // Create Text Embedding Processor, Ingestion Pipeline, add document and search pipeline with normalization processor
+    // Test rolling-upgrade normalization processor when index with multiple shards
+    // Create Text Embedding Processor, Ingestion Pipeline, add document and search pipeline with noramlization processor
     // Validate process , pipeline and document count in rolling-upgrade scenario
-    public void testNormalizationProcessor_E2EFlow() throws Exception {
+    public void testNormalizationProcessor_whenIndexWithMultipleShards_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         switch (getClusterType()) {
             case OLD:
@@ -92,6 +93,12 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
             Map.of("search_pipeline", SEARCH_PIPELINE_NAME)
         );
         assertNotNull(searchResponseAsMap);
+        int hits = getHitCount(searchResponseAsMap);
+        assertEquals(1, hits);
+        List<Double> scoresList = getNormalizationScoreList(searchResponseAsMap);
+        for (Double score : scoresList) {
+            assertTrue(0 < score && score < 1);
+        }
     }
 
     private String uploadTextEmbeddingModel() throws Exception {

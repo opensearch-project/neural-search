@@ -40,20 +40,19 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
     public void testNormalizationProcessor_whenIndexWithMultipleShards_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         if (isRunningAgainstOldCluster()) {
-            String index = getIndexNameForTest();
             String modelId = uploadTextEmbeddingModel();
             loadModel(modelId);
             createPipelineProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
-                index,
+                getIndexNameForTest(),
                 Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
                 PIPELINE_NAME
             );
-            addDocument(index, "0", TEST_FIELD, TEXT_1, null, null);
-            addDocument(index, "1", TEST_FIELD, TEXT_2, null, null);
-            addDocument(index, "2", TEST_FIELD, TEXT_3, null, null);
-            addDocument(index, "3", TEST_FIELD, TEXT_4, null, null);
-            addDocument(index, "4", TEST_FIELD, TEXT_5, null, null);
+            addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT_1, null, null);
+            addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_2, null, null);
+            addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_3, null, null);
+            addDocument(getIndexNameForTest(), "3", TEST_FIELD, TEXT_4, null, null);
+            addDocument(getIndexNameForTest(), "4", TEST_FIELD, TEXT_5, null, null);
             createSearchPipeline(
                 SEARCH_PIPELINE_NAME,
                 DEFAULT_NORMALIZATION_METHOD,
@@ -61,17 +60,16 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
                 Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.7f }))
             );
         } else {
-            String index = getIndexNameForTest();
             Map<String, Object> pipeline = getIngestionPipeline(PIPELINE_NAME);
             assertNotNull(pipeline);
             String modelId = getModelId(pipeline, TEXT_EMBEDDING_PROCESSOR);
             loadModel(modelId);
-            addDocument(index, "5", TEST_FIELD, TEXT_6, null, null);
-            validateTestIndex(modelId, index, SEARCH_PIPELINE_NAME);
+            addDocument(getIndexNameForTest(), "5", TEST_FIELD, TEXT_6, null, null);
+            validateTestIndex(modelId, getIndexNameForTest(), SEARCH_PIPELINE_NAME);
             deleteSearchPipeline(SEARCH_PIPELINE_NAME);
             deletePipeline(PIPELINE_NAME);
             deleteModel(modelId);
-            deleteIndex(index);
+            deleteIndex(getIndexNameForTest());
         }
     }
 
@@ -81,20 +79,19 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
     public void testNormalizationProcessor_whenIndexWithSingleShard_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         if (isRunningAgainstOldCluster()) {
-            String index = getIndexNameForTest() + "1";
             String modelId = uploadTextEmbeddingModel();
             loadModel(modelId);
             createPipelineProcessor(modelId, PIPELINE1_NAME);
             createIndexWithConfiguration(
-                index,
+                getIndexNameForTest(),
                 Files.readString(Path.of(classLoader.getResource("processor/Index1Mappings.json").toURI())),
                 PIPELINE1_NAME
             );
-            addDocument(index, "0", TEST_FIELD, TEXT_1, null, null);
-            addDocument(index, "1", TEST_FIELD, TEXT_2, null, null);
-            addDocument(index, "2", TEST_FIELD, TEXT_3, null, null);
-            addDocument(index, "3", TEST_FIELD, TEXT_4, null, null);
-            addDocument(index, "4", TEST_FIELD, TEXT_5, null, null);
+            addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT_1, null, null);
+            addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_2, null, null);
+            addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_3, null, null);
+            addDocument(getIndexNameForTest(), "3", TEST_FIELD, TEXT_4, null, null);
+            addDocument(getIndexNameForTest(), "4", TEST_FIELD, TEXT_5, null, null);
             createSearchPipeline(
                 SEARCH_PIPELINE1_NAME,
                 DEFAULT_NORMALIZATION_METHOD,
@@ -102,17 +99,16 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
                 Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.7f }))
             );
         } else {
-            String index = getIndexNameForTest() + "1";
             Map<String, Object> pipeline = getIngestionPipeline(PIPELINE1_NAME);
             assertNotNull(pipeline);
             String modelId = getModelId(pipeline, TEXT_EMBEDDING_PROCESSOR);
             loadModel(modelId);
-            addDocument(index, "5", TEST_FIELD, TEXT_6, null, null);
-            validateTestIndex(modelId, index, SEARCH_PIPELINE1_NAME);
+            addDocument(getIndexNameForTest(), "5", TEST_FIELD, TEXT_6, null, null);
+            validateTestIndex(modelId, getIndexNameForTest(), SEARCH_PIPELINE1_NAME);
             deleteSearchPipeline(SEARCH_PIPELINE1_NAME);
             deletePipeline(PIPELINE1_NAME);
             deleteModel(modelId);
-            deleteIndex(index);
+            deleteIndex(getIndexNameForTest());
         }
     }
 

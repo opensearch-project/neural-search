@@ -39,6 +39,7 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
         }
     }
 
@@ -64,6 +65,7 @@ task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
         }
     }
 

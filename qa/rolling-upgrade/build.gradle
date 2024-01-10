@@ -39,6 +39,7 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
         }
     }
 
@@ -65,6 +66,7 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
         }
     }
 
@@ -90,6 +92,7 @@ task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
         }
     }
 
@@ -115,6 +118,7 @@ task testRollingUpgrade(type: StandaloneRestIntegTestTask) {
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
         }
     }
 

@@ -8,14 +8,14 @@ import java.util.Locale;
 import java.util.Optional;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.BaseSparseEncodingIT;
 import static org.opensearch.neuralsearch.TestUtils.CLIENT_TIMEOUT_VALUE;
 import static org.opensearch.neuralsearch.TestUtils.RESTART_UPGRADE_OLD_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.BWC_VERSION;
 import static org.opensearch.neuralsearch.TestUtils.NEURAL_SEARCH_BWC_PREFIX;
 import org.opensearch.test.rest.OpenSearchRestTestCase;
 
-public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearchIT {
+public abstract class AbstractRestartUpgradeRestTestCase extends BaseSparseEncodingIT {
 
     @Before
     protected String getIndexNameForTest() {
