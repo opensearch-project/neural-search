@@ -13,6 +13,9 @@ import org.opensearch.action.search.SearchResponse;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
+import org.opensearch.neuralsearch.processor.rerank.context.ContextSourceFetcher;
+import org.opensearch.neuralsearch.processor.rerank.context.DocumentContextSourceFetcher;
+import org.opensearch.neuralsearch.processor.rerank.context.QueryContextSourceFetcher;
 
 /**
  * Rescoring Rerank Processor that uses a TextSimilarity model in ml-commons to rescore

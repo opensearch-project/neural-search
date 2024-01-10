@@ -13,6 +13,7 @@ import java.util.Map;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.SearchResponseSections;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.neuralsearch.processor.rerank.context.ContextSourceFetcher;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.profile.SearchProfileShardResults;

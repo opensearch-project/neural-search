@@ -36,6 +36,8 @@ import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
+import org.opensearch.neuralsearch.processor.rerank.context.DocumentContextSourceFetcher;
+import org.opensearch.neuralsearch.processor.rerank.context.QueryContextSourceFetcher;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.search.SearchExtBuilder;

@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.neuralsearch.processor.rerank.context.ContextSourceFetcher;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 

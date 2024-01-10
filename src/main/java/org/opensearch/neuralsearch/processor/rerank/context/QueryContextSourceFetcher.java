@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.processor.rerank;
+package org.opensearch.neuralsearch.processor.rerank.context;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;

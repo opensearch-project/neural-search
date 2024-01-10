@@ -13,11 +13,11 @@ import java.util.StringJoiner;
 
 import org.opensearch.ingest.ConfigurationUtils;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
-import org.opensearch.neuralsearch.processor.rerank.ContextSourceFetcher;
-import org.opensearch.neuralsearch.processor.rerank.DocumentContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.MLOpenSearchRerankProcessor;
-import org.opensearch.neuralsearch.processor.rerank.QueryContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.RerankType;
+import org.opensearch.neuralsearch.processor.rerank.context.ContextSourceFetcher;
+import org.opensearch.neuralsearch.processor.rerank.context.DocumentContextSourceFetcher;
+import org.opensearch.neuralsearch.processor.rerank.context.QueryContextSourceFetcher;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 
