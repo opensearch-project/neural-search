@@ -7,7 +7,7 @@
   "mappings": {
     "properties": {
       "passage_embedding": {
-        "type": "knn_vector"
+        "type": "rank_features"
       },
       "passage_text": {
         "type": "text"

@@ -40,7 +40,7 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         switch (getClusterType()) {
             case OLD:
-                String modelId = uploadTextEmbeddingModel();
+                String modelId = uploadSparseEncodingModel();
                 loadModel(modelId);
                 createPipelineProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
@@ -109,13 +109,15 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
         Map<String, Object> response = search(getIndexNameForTest(), boolQueryBuilder, 1);
         Map<String, Object> firstInnerHit = getFirstInnerHit(response);
 
-        assertEquals("1", firstInnerHit.get("_id"));
+        assertEquals("0", firstInnerHit.get("_id"));
         float minExpectedScore = computeExpectedScore(modelId, testRankFeaturesDoc1, TEXT);
         assertTrue(minExpectedScore < objectToFloat(firstInnerHit.get("_score")));
     }
 
-    private String uploadTextEmbeddingModel() throws Exception {
-        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
+    private String uploadSparseEncodingModel() throws Exception {
+        String requestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
+        );
         return registerModelGroupAndGetModelId(requestBody);
     }
 
