@@ -30,7 +30,7 @@ public class DocumentContextSourceFetcher implements ContextSourceFetcher {
     public static final String NAME = "document_fields";
     public static final String DOCUMENT_CONTEXT_LIST_FIELD = "document_context_list";
 
-    List<String> contextFields;
+    private final List<String> contextFields;
 
     /**
      * Fetch the information needed in order to rerank.
@@ -41,7 +41,7 @@ public class DocumentContextSourceFetcher implements ContextSourceFetcher {
      * @param listener be async
      */
     @Override
-    public void fetchContext(SearchRequest searchRequest, SearchResponse searchResponse, ActionListener<Map<String, Object>> listener) {
+    public void fetchContext(final SearchRequest searchRequest, final SearchResponse searchResponse, final ActionListener<Map<String, Object>> listener) {
         List<String> contexts = new ArrayList<>();
         for (SearchHit hit : searchResponse.getHits()) {
             StringBuilder ctx = new StringBuilder();

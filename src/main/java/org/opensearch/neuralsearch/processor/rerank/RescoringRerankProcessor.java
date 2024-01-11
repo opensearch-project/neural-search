@@ -32,11 +32,11 @@ public abstract class RescoringRerankProcessor extends RerankProcessor {
      * @param contextSourceFetchers
      */
     public RescoringRerankProcessor(
-        RerankType type,
-        String description,
-        String tag,
-        boolean ignoreFailure,
-        List<ContextSourceFetcher> contextSourceFetchers
+        final RerankType type,
+        final String description,
+        final String tag,
+        final boolean ignoreFailure,
+        final List<ContextSourceFetcher> contextSourceFetchers
     ) {
         super(type, description, tag, ignoreFailure, contextSourceFetchers);
     }
@@ -48,13 +48,13 @@ public abstract class RescoringRerankProcessor extends RerankProcessor {
      * @param listener be async. recieves the list of new scores
      */
     public abstract void rescoreSearchResponse(
-        SearchResponse response,
-        Map<String, Object> rerankingContext,
-        ActionListener<List<Float>> listener
+        final SearchResponse response,
+        final Map<String, Object> rerankingContext,
+        final ActionListener<List<Float>> listener
     );
 
     @Override
-    public void rerank(SearchResponse searchResponse, Map<String, Object> rerankingContext, ActionListener<SearchResponse> listener) {
+    public void rerank(final SearchResponse searchResponse, final Map<String, Object> rerankingContext, final ActionListener<SearchResponse> listener) {
         try {
             rescoreSearchResponse(searchResponse, rerankingContext, ActionListener.wrap(scores -> {
                 // Assign new scores

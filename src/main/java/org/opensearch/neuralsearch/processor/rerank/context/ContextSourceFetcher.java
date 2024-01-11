@@ -24,7 +24,7 @@ public interface ContextSourceFetcher {
      * @param searchResponse the search results, in case they're relevant
      * @param listener be async
      */
-    public void fetchContext(SearchRequest searchRequest, SearchResponse searchResponse, ActionListener<Map<String, Object>> listener);
+    public void fetchContext(final SearchRequest searchRequest, final SearchResponse searchResponse, final ActionListener<Map<String, Object>> listener);
 
     /**
      * Get the name of the contextSourceFetcher. This will be used as the field

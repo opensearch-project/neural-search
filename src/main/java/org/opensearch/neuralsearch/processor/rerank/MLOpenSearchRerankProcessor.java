@@ -38,12 +38,12 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
      * @param mlCommonsClientAccessor
      */
     public MLOpenSearchRerankProcessor(
-        String description,
-        String tag,
-        boolean ignoreFailure,
-        String modelId,
-        List<ContextSourceFetcher> contextSourceFetchers,
-        MLCommonsClientAccessor mlCommonsClientAccessor
+        final String description,
+        final String tag,
+        final boolean ignoreFailure,
+        final String modelId,
+        final List<ContextSourceFetcher> contextSourceFetchers,
+        final MLCommonsClientAccessor mlCommonsClientAccessor
     ) {
         super(RerankType.ML_OPENSEARCH, description, tag, ignoreFailure, contextSourceFetchers);
         this.modelId = modelId;
@@ -51,7 +51,7 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
     }
 
     @Override
-    public void rescoreSearchResponse(SearchResponse response, Map<String, Object> rerankingContext, ActionListener<List<Float>> listener) {
+    public void rescoreSearchResponse(final SearchResponse response, final Map<String, Object> rerankingContext, final ActionListener<List<Float>> listener) {
         Object ctxObj = rerankingContext.get(DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD);
         if (!(ctxObj instanceof List<?>)) {
             listener.onFailure(

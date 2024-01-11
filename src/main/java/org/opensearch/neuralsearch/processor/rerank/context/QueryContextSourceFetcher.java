@@ -34,11 +34,12 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
     public static final String QUERY_TEXT_PATH_FIELD = "query_text_path";
 
     @Override
-    public void fetchContext(SearchRequest searchRequest, SearchResponse searchResponse, ActionListener<Map<String, Object>> listener) {
+    public void fetchContext(final SearchRequest searchRequest, final SearchResponse searchResponse, final ActionListener<Map<String, Object>> listener) {
         try {
+            // Get RerankSearchExt query-specific context map
             List<SearchExtBuilder> exts = searchRequest.source().ext();
             Map<String, Object> params = RerankSearchExtBuilder.fromExtBuilderList(exts).getParams();
-            Map<String, Object> scoringContext = new HashMap<>();
+            Map<String, Object> rerankContext = new HashMap<>();
             if (!params.containsKey(NAME)) {
                 throw new IllegalArgumentException(String.format(Locale.ROOT, "must specify %s", NAME));
             }
@@ -46,16 +47,19 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
             if (!(ctxObj instanceof Map<?, ?>)) {
                 throw new IllegalArgumentException(String.format(Locale.ROOT, "%s must be a map", NAME));
             }
+            // Put query context into reranking context
             @SuppressWarnings("unchecked")
             Map<String, Object> ctxMap = (Map<String, Object>) ctxObj;
             if (ctxMap.containsKey(QUERY_TEXT_FIELD)) {
+                // Case "query_text": "<text to put in rerank context>"
                 if (ctxMap.containsKey(QUERY_TEXT_PATH_FIELD)) {
                     throw new IllegalArgumentException(
                         String.format(Locale.ROOT, "Cannot specify both \"%s\" and \"%s\"", QUERY_TEXT_FIELD, QUERY_TEXT_PATH_FIELD)
                     );
                 }
-                scoringContext.put(QUERY_TEXT_FIELD, (String) ctxMap.get(QUERY_TEXT_FIELD));
+                rerankContext.put(QUERY_TEXT_FIELD, (String) ctxMap.get(QUERY_TEXT_FIELD));
             } else if (ctxMap.containsKey(QUERY_TEXT_PATH_FIELD)) {
+                // Case "query_text_path": ser/de the query into a map and then find the text at the path specified
                 String path = (String) ctxMap.get(QUERY_TEXT_PATH_FIELD);
                 Map<String, Object> map = requestToMap(searchRequest);
                 // Get the text at the path
@@ -65,13 +69,13 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
                         String.format(Locale.ROOT, "%s must point to a string field", QUERY_TEXT_PATH_FIELD)
                     );
                 }
-                scoringContext.put(QUERY_TEXT_FIELD, (String) queryText);
+                rerankContext.put(QUERY_TEXT_FIELD, (String) queryText);
             } else {
                 throw new IllegalArgumentException(
                     String.format(Locale.ROOT, "Must specify either \"%s\" or \"%s\"", QUERY_TEXT_FIELD, QUERY_TEXT_PATH_FIELD)
                 );
             }
-            listener.onResponse(scoringContext);
+            listener.onResponse(rerankContext);
         } catch (Exception e) {
             listener.onFailure(e);
         }
@@ -89,7 +93,7 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
      * @return Map representing the XContent-ified search request
      * @throws IOException
      */
-    private static Map<String, Object> requestToMap(SearchRequest request) throws IOException {
+    private static Map<String, Object> requestToMap(final SearchRequest request) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         XContentBuilder builder = XContentType.CBOR.contentBuilder(baos);
         request.source().toXContent(builder, ToXContent.EMPTY_PARAMS);

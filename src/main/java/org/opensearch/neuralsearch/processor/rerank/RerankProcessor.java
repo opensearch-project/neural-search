@@ -44,9 +44,9 @@ public abstract class RerankProcessor implements SearchResponseProcessor {
      * @param listener be async
      */
     public void generateRerankingContext(
-        SearchRequest searchRequest,
-        SearchResponse searchResponse,
-        ActionListener<Map<String, Object>> listener
+        final SearchRequest searchRequest,
+        final SearchResponse searchResponse,
+        final ActionListener<Map<String, Object>> listener
     ) {
         Map<String, Object> overallContext = new ConcurrentHashMap<>();
         AtomicInteger successfulContexts = new AtomicInteger(contextSourceFetchers.size());
@@ -73,22 +73,22 @@ public abstract class RerankProcessor implements SearchResponseProcessor {
      * @param listener be async
      */
     public abstract void rerank(
-        SearchResponse searchResponse,
-        Map<String, Object> rerankingContext,
-        ActionListener<SearchResponse> listener
+        final SearchResponse searchResponse,
+        final Map<String, Object> rerankingContext,
+        final ActionListener<SearchResponse> listener
     );
 
     @Override
-    public SearchResponse processResponse(SearchRequest request, SearchResponse response) throws Exception {
+    public SearchResponse processResponse(final SearchRequest request, final SearchResponse response) throws Exception {
         throw new UnsupportedOperationException("Use asyncProcessResponse unless you can guarantee to not deadlock yourself");
     }
 
     @Override
     public void processResponseAsync(
-        SearchRequest request,
-        SearchResponse response,
-        PipelineProcessingContext ctx,
-        ActionListener<SearchResponse> responseListener
+        final SearchRequest request,
+        final SearchResponse response,
+        final PipelineProcessingContext ctx,
+        final ActionListener<SearchResponse> responseListener
     ) {
         try {
             generateRerankingContext(

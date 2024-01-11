@@ -39,16 +39,12 @@ public enum RerankType {
      * @param label label of a RerankType
      * @return RerankType represented by the label
      */
-    public static RerankType from(String label) {
+    public static RerankType from(final String label) {
         RerankType ans = LABEL_MAP.get(label);
         if (ans == null) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "Wrong rerank type name: %s", label));
-       if (ans == null) {
-            throw new IllegalArgumentException(String.format(Locale.ROOT, "Wrong rerank type name: %s", label));
         }
         return ans;
-            return ans;
-        }
     }
 
     public static Map<String, RerankType> labelMap() {
