@@ -34,7 +34,11 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
     public static final String QUERY_TEXT_PATH_FIELD = "query_text_path";
 
     @Override
-    public void fetchContext(final SearchRequest searchRequest, final SearchResponse searchResponse, final ActionListener<Map<String, Object>> listener) {
+    public void fetchContext(
+        final SearchRequest searchRequest,
+        final SearchResponse searchResponse,
+        final ActionListener<Map<String, Object>> listener
+    ) {
         try {
             // Get RerankSearchExt query-specific context map
             List<SearchExtBuilder> exts = searchRequest.source().ext();

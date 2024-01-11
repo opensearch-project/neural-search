@@ -24,13 +24,17 @@ public interface ContextSourceFetcher {
      * @param searchResponse the search results, in case they're relevant
      * @param listener be async
      */
-    public void fetchContext(final SearchRequest searchRequest, final SearchResponse searchResponse, final ActionListener<Map<String, Object>> listener);
+    void fetchContext(
+        final SearchRequest searchRequest,
+        final SearchResponse searchResponse,
+        final ActionListener<Map<String, Object>> listener
+    );
 
     /**
      * Get the name of the contextSourceFetcher. This will be used as the field
      * name in the context config for the pipeline
      * @return Name of the fetcher
      */
-    public String getName();
+    String getName();
 
 }

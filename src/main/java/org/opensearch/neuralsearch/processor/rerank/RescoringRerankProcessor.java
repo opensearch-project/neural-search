@@ -6,7 +6,6 @@ package org.opensearch.neuralsearch.processor.rerank;
 
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -54,11 +53,22 @@ public abstract class RescoringRerankProcessor extends RerankProcessor {
     );
 
     @Override
-    public void rerank(final SearchResponse searchResponse, final Map<String, Object> rerankingContext, final ActionListener<SearchResponse> listener) {
+    public void rerank(
+        final SearchResponse searchResponse,
+        final Map<String, Object> rerankingContext,
+        final ActionListener<SearchResponse> listener
+    ) {
         try {
+            if (searchResponse.getHits().getTotalHits().value == 0) {
+                listener.onResponse(searchResponse);
+                return;
+            }
             rescoreSearchResponse(searchResponse, rerankingContext, ActionListener.wrap(scores -> {
                 // Assign new scores
                 SearchHit[] hits = searchResponse.getHits().getHits();
+                if (scores == null) {
+                    throw new IllegalStateException("scores cannot be null");
+                }
                 if (hits.length != scores.size()) {
                     throw new IllegalStateException("scores and hits are not the same length");
                 }
@@ -66,14 +76,8 @@ public abstract class RescoringRerankProcessor extends RerankProcessor {
                 for (int i = 0; i < hits.length; i++) {
                     hits[i].score(scores.get(i));
                 }
-                // Re-sort by the new scores
-                Collections.sort(Arrays.asList(hits), new Comparator<SearchHit>() {
-                    @Override
-                    public int compare(SearchHit hit1, SearchHit hit2) {
-                        // backwards to sort DESC
-                        return Float.compare(hit2.getScore(), hit1.getScore());
-                    }
-                });
+                // Re-sort by the new scores. Backwards comparison for desc ordering
+                Collections.sort(Arrays.asList(hits), (hit1, hit2) -> Float.compare(hit2.getScore(), hit1.getScore()));
                 // Reconstruct the search response, replacing the max score
                 SearchHits newHits = new SearchHits(
                     hits,

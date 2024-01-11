@@ -44,7 +44,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
         factory = new RerankProcessorFactory(clientAccessor);
     }
 
-    public void testRerankProcessorFactory_EmptyConfig_ThenFail() {
+    public void testRerankProcessorFactory_whenEmptyConfig_thenFail() {
         Map<String, Object> config = new HashMap<>(Map.of());
         assertThrows(
             "no rerank type found",
@@ -53,7 +53,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
         );
     }
 
-    public void testRerankProcessorFactory_NonExistentType_ThenFail() {
+    public void testRerankProcessorFactory_whenNonExistentType_thenFail() {
         Map<String, Object> config = new HashMap<>(
             Map.of("jpeo rvgh we iorgn", Map.of(MLOpenSearchRerankProcessor.MODEL_ID_FIELD, "model-id"))
         );
@@ -64,7 +64,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
         );
     }
 
-    public void testRerankProcessorFactory_CrossEncoder_HappyPath() {
+    public void testCrossEncoder_whenCorrectParams_thenSuccessful() {
         Map<String, Object> config = new HashMap<>(
             Map.of(
                 RerankType.ML_OPENSEARCH.getLabel(),
@@ -79,7 +79,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
         assert (processor.getType().equals(RerankProcessor.TYPE));
     }
 
-    public void testRerankProcessorFactory_CrossEncoder_MessyConfig_ThenHappy() {
+    public void testCrossEncoder_whenMessyConfig_thenSuccessful() {
         Map<String, Object> config = new HashMap<>(
             Map.of(
                 "poafn aorr;anv",
@@ -96,7 +96,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
         assert (processor.getType().equals(RerankProcessor.TYPE));
     }
 
-    public void testRerankProcessorFactory_CrossEncoder_MessyContext_ThenFail() {
+    public void testCrossEncoder_whenMessyContext_thenFail() {
         Map<String, Object> config = new HashMap<>(
             Map.of(
                 RerankType.ML_OPENSEARCH.getLabel(),
@@ -119,7 +119,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
         );
     }
 
-    public void testRerankProcessorFactory_CrossEncoder_EmptySubConfig_ThenFail() {
+    public void testCrossEncoder_whenEmptySubConfig_thenFail() {
         Map<String, Object> config = new HashMap<>(Map.of(RerankType.ML_OPENSEARCH.getLabel(), Map.of()));
         assertThrows(
             String.format(Locale.ROOT, "[%s] required property is missing", RerankProcessorFactory.CONTEXT_CONFIG_FIELD),
@@ -128,7 +128,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
         );
     }
 
-    public void testRerankProcessorFactory_CrossEncoder_NoContextField_ThenFail() {
+    public void testCrossEncoder_whenNoContextField_thenFail() {
         Map<String, Object> config = new HashMap<>(
             Map.of(RerankType.ML_OPENSEARCH.getLabel(), new HashMap<>(Map.of(MLOpenSearchRerankProcessor.MODEL_ID_FIELD, "model-id")))
         );
@@ -139,7 +139,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
         );
     }
 
-    public void testRerankProcessorFactory_CrossEncoder_NoModelId_ThenFail() {
+    public void testCrossEncoder_whenNoModelId_thenFail() {
         Map<String, Object> config = new HashMap<>(
             Map.of(
                 RerankType.ML_OPENSEARCH.getLabel(),
@@ -155,7 +155,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
         );
     }
 
-    public void testRerankProcessorFactory_CrossEncoder_BadContextDocField_ThenFail() {
+    public void testCrossEncoder_whenBadContextDocField_thenFail() {
         Map<String, Object> config = new HashMap<>(
             Map.of(
                 RerankType.ML_OPENSEARCH.getLabel(),
@@ -171,7 +171,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
         );
     }
 
-    public void testRerankProcessorFactory_CrossEncoder_EmptyContextDocField_ThenFail() {
+    public void testCrossEncoder_whenEmptyContextDocField_thenFail() {
         Map<String, Object> config = new HashMap<>(
             Map.of(
                 RerankType.ML_OPENSEARCH.getLabel(),

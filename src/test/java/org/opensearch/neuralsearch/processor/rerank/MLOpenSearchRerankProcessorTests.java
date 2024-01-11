@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import org.apache.lucene.search.TotalHits;
 import org.junit.Before;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -128,8 +129,9 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
         nullHit.score(0f);
 
         SearchHit[] hitArray = new SearchHit[] { fieldHit, sourceHit, nullHit };
+        TotalHits totalHits = new TotalHits(3, TotalHits.Relation.EQUAL_TO);
 
-        SearchHits searchHits = new SearchHits(hitArray, null, 1.0f);
+        SearchHits searchHits = new SearchHits(hitArray, totalHits, 1.0f);
         SearchResponseSections internal = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
         response = new SearchResponse(internal, null, 1, 1, 0, 1, new ShardSearchFailure[0], new Clusters(1, 1, 0), null);
     }

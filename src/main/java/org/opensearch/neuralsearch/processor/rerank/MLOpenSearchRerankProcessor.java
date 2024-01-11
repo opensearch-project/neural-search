@@ -51,7 +51,11 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
     }
 
     @Override
-    public void rescoreSearchResponse(final SearchResponse response, final Map<String, Object> rerankingContext, final ActionListener<List<Float>> listener) {
+    public void rescoreSearchResponse(
+        final SearchResponse response,
+        final Map<String, Object> rerankingContext,
+        final ActionListener<List<Float>> listener
+    ) {
         Object ctxObj = rerankingContext.get(DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD);
         if (!(ctxObj instanceof List<?>)) {
             listener.onFailure(

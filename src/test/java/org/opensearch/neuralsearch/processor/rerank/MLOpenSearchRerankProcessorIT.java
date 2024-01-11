@@ -13,6 +13,7 @@ import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.message.BasicHeader;
 import org.junit.After;
+import org.junit.Before;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
@@ -48,10 +49,15 @@ public class MLOpenSearchRerankProcessorIT extends BaseNeuralSearchIT {
         deleteIndex(INDEX_NAME);
     }
 
+    @Before
     @SneakyThrows
-    public void testCrossEncoderRerankProcessor() {
+    public void setup() {
         modelId = uploadTextSimilarityModel();
         loadModel(modelId);
+    }
+
+    @SneakyThrows
+    public void testCrossEncoderRerankProcessor() {
         createSearchPipelineViaConfig(modelId, PIPELINE_NAME, "processor/RerankMLOpenSearchPipelineConfiguration.json");
         setupIndex();
         runQueries();

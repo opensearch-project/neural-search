@@ -41,7 +41,11 @@ public class DocumentContextSourceFetcher implements ContextSourceFetcher {
      * @param listener be async
      */
     @Override
-    public void fetchContext(final SearchRequest searchRequest, final SearchResponse searchResponse, final ActionListener<Map<String, Object>> listener) {
+    public void fetchContext(
+        final SearchRequest searchRequest,
+        final SearchResponse searchResponse,
+        final ActionListener<Map<String, Object>> listener
+    ) {
         List<String> contexts = new ArrayList<>();
         for (SearchHit hit : searchResponse.getHits()) {
             StringBuilder ctx = new StringBuilder();
