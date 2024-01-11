@@ -136,7 +136,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
         response = new SearchResponse(internal, null, 1, 1, 0, 1, new ShardSearchFailure[0], new Clusters(1, 1, 0), null);
     }
 
-    public void testScoringContext_QueryText_ThenSucceed() throws IOException {
+    public void testRerankContext_whenQueryText_thenSucceed() throws IOException {
         setupParams(Map.of(QueryContextSourceFetcher.QUERY_TEXT_FIELD, "query text"));
         setupSearchResults();
         @SuppressWarnings("unchecked")
@@ -149,7 +149,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
         assert (argCaptor.getValue().get(QueryContextSourceFetcher.QUERY_TEXT_FIELD).equals("query text"));
     }
 
-    public void testScoringContext_QueryTextPath_ThenSucceed() throws IOException {
+    public void testRerankContext_whenQueryTextPath_thenSucceed() throws IOException {
         setupParams(Map.of(QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD, "query.neural.embedding.query_text"));
         setupSearchResults();
         @SuppressWarnings("unchecked")
@@ -162,7 +162,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
         assert (argCaptor.getValue().get(QueryContextSourceFetcher.QUERY_TEXT_FIELD).equals("Question about dolphins"));
     }
 
-    public void testScoringContext_QueryTextAndPath_ThenFail() throws IOException {
+    public void testRerankContext_whenQueryTextAndPath_thenFail() throws IOException {
         setupParams(
             Map.of(
                 QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD,
@@ -189,7 +189,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
             ));
     }
 
-    public void testScoringContext_NoQueryInfo_ThenFail() throws IOException {
+    public void testRerankContext_whenNoQueryInfo_thenFail() throws IOException {
         setupParams(Map.of());
         setupSearchResults();
         @SuppressWarnings("unchecked")
@@ -209,7 +209,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
             ));
     }
 
-    public void testScoringContext_QueryTextPath_BadPointer_ThenFail() throws IOException {
+    public void testRerankContext_whenQueryTextPathIsBadPointer_thenFail() throws IOException {
         setupParams(Map.of(QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD, "query.neural.embedding"));
         setupSearchResults();
         @SuppressWarnings("unchecked")
@@ -244,7 +244,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
         assert (argCaptor.getValue().get(2) == 3f);
     }
 
-    public void testRescoreSearchResponse_NoContextList_ThenFail() throws IOException {
+    public void testRescoreSearchResponse_whenNoContextList_thenFail() throws IOException {
         setupSimilarityRescoring();
         setupSearchResults();
         @SuppressWarnings("unchecked")
@@ -289,7 +289,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
         assert (rsp.getHits().getAt(2).getScore() == 1f);
     }
 
-    public void testRerank_ScoresAndHitsHaveDiffLengths() throws IOException {
+    public void testRerank_whenScoresAndHitsHaveDiffLengths_thenFail() throws IOException {
         doAnswer(invocation -> {
             ActionListener<List<Float>> listener = invocation.getArgument(3);
             List<Float> scores = List.of(1f, 2f);
