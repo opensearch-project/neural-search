@@ -97,7 +97,7 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
          * @return does this RerankType depend on the QueryContextSourceFetcher?
          */
         public static boolean shouldIncludeQueryContextFetcher(RerankType type) {
-            switch (type) {
+            return ML_OPENSEARCH == type;
                 case ML_OPENSEARCH:
                     return true;
                 default:

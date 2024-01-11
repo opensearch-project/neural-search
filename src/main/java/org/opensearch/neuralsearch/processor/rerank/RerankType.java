@@ -43,7 +43,10 @@ public enum RerankType {
         RerankType ans = LABEL_MAP.get(label);
         if (ans == null) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "Wrong rerank type name: %s", label));
-        } else {
+       if (ans == null) {
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "Wrong rerank type name: %s", label));
+        }
+        return ans;
             return ans;
         }
     }

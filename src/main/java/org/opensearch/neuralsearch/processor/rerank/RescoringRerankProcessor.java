@@ -24,7 +24,7 @@ import org.opensearch.search.profile.SearchProfileShardResults;
 public abstract class RescoringRerankProcessor extends RerankProcessor {
 
     /**
-     * Constructor. pass through to RerankProcessor ctor.
+     * Constructor. pass through to RerankProcessor constructor.
      * @param type
      * @param description
      * @param tag
@@ -60,7 +60,7 @@ public abstract class RescoringRerankProcessor extends RerankProcessor {
                 // Assign new scores
                 SearchHit[] hits = searchResponse.getHits().getHits();
                 if (hits.length != scores.size()) {
-                    throw new RuntimeException("scores and hits are not the same length");
+                    throw new IllegalStateException("scores and hits are not the same length");
                 }
                 // NOTE: Assumes that the new scores came back in the same order
                 for (int i = 0; i < hits.length; i++) {
