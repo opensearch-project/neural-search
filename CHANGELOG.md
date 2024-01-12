@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed exception for case when Hybrid query being wrapped into bool query ([#490](https://github.com/opensearch-project/neural-search/pull/490))
 - Hybrid query and nested type fields ([#498](https://github.com/opensearch-project/neural-search/pull/498))
 - Fixing multiple issues reported in #497 ([#524](https://github.com/opensearch-project/neural-search/pull/524))
+- Fix Flaky test reported in #433 ([#533](https://github.com/opensearch-project/neural-search/pull/533))
 ### Infrastructure
 - BWC tests for Neural Search ([#515](https://github.com/opensearch-project/neural-search/pull/515))
 ### Documentation
