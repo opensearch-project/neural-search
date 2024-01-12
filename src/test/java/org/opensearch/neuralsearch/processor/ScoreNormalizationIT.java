@@ -37,7 +37,7 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
     private static final String TEST_DOC_TEXT4 = "Hello, I'm glad to you see you pal";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_1 = "test-knn-vector-1";
     private static final String TEST_TEXT_FIELD_NAME_1 = "test-text-field-1";
-    private static final String SEARCH_PIPELINE = "phase-results-normalization-pipeline";
+    private static final String SEARCH_PIPELINE = "phase-results-pipeline";
     private final float[] testVector1 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector2 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector3 = createRandomVector(TEST_DIMENSION);
