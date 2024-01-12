@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch;
 
+import org.opensearch.ml.common.model.MLModelState;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 
 import java.io.IOException;
@@ -61,6 +62,8 @@ import static org.opensearch.neuralsearch.TestUtils.DEFAULT_USER_AGENT;
 import static org.opensearch.neuralsearch.TestUtils.DEFAULT_NORMALIZATION_METHOD;
 import static org.opensearch.neuralsearch.TestUtils.DEFAULT_COMBINATION_METHOD;
 import static org.opensearch.neuralsearch.TestUtils.PARAM_NAME_WEIGHTS;
+import static org.opensearch.neuralsearch.TestUtils.MAX_RETRY;
+import static org.opensearch.neuralsearch.TestUtils.MAX_TIME_OUT_INTERVAL;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -664,8 +667,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
 
-        // after model undeploy returns, the max interval to update model status is 3s in ml-commons CronJob.
-        Thread.sleep(3000);
+        // wait for model undeploy to complete.
+        // Sometimes the undeploy action results in a DEPLOY_FAILED state. But this does not block the model from being deleted.
+        // So set both UNDEPLOYED and DEPLOY_FAILED as exit state.
+        pollForModelState(modelId, Set.of(MLModelState.UNDEPLOYED, MLModelState.DEPLOY_FAILED));
 
         makeRequest(
             client(),
@@ -675,6 +680,46 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             toHttpEntity(""),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
+    }
+
+    protected void pollForModelState(String modelId, Set<MLModelState> exitModelStates) throws InterruptedException {
+        MLModelState currentState = null;
+        for (int i = 0; i < MAX_RETRY; i++) {
+            Thread.sleep(MAX_TIME_OUT_INTERVAL);
+            currentState = getModelState(modelId);
+            if (exitModelStates.contains(currentState)) {
+                return;
+            }
+        }
+        fail(
+            String.format(
+                LOCALE,
+                "Model state does not reached exit states %s after %d attempts with interval of %d ms, latest model state: %s.",
+                StringUtils.join(exitModelStates, ","),
+                MAX_RETRY,
+                MAX_TIME_OUT_INTERVAL,
+                currentState
+            )
+        );
+    }
+
+    @SneakyThrows
+    protected MLModelState getModelState(String modelId) {
+        Response getModelResponse = makeRequest(
+            client(),
+            "GET",
+            String.format(LOCALE, "/_plugins/_ml/models/%s", modelId),
+            null,
+            toHttpEntity(""),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+        Map<String, Object> getModelResponseJson = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(getModelResponse.getEntity()),
+            false
+        );
+        String modelState = (String) getModelResponseJson.get("model_state");
+        return MLModelState.valueOf(modelState);
     }
 
     public boolean isUpdateClusterSettings() {
