@@ -134,7 +134,7 @@ curl localhost:9200
 
 Additionally, it is also possible to run a cluster with security enabled:
 ```shell script
-./gradlew run -Dsecurity.enabled=true -Dhttps=true -Duser=admin -Dpassword=admin
+./gradlew run -Dsecurity.enabled=true
 ```
 
 By default, if `-Dsecurity.enabled=true` is passed the following defaults will be used: `https=true`, `user=admin` and
