@@ -12,79 +12,6 @@ import org.opensearch.gradle.testclusters.OpenSearchCluster
 import java.nio.file.Paths
 import java.util.concurrent.Callable
 
-apply plugin: 'java'
-apply plugin: 'java-test-fixtures'
-apply plugin: 'idea'
-apply plugin: 'opensearch.opensearchplugin'
-apply plugin: 'opensearch.pluginzip'
-apply plugin: 'jacoco'
-apply plugin: "com.diffplug.spotless"
-apply plugin: 'io.freefair.lombok'
-apply from: 'gradle/formatting.gradle'
-
-def pluginName = 'opensearch-neural-search'
-def pluginDescription = 'A plugin that adds dense neural retrieval into the OpenSearch ecosytem'
-def projectPath = 'org.opensearch'
-def pathToPlugin = 'neuralsearch.plugin'
-def pluginClassName = 'NeuralSearch'
-
-tasks.register("preparePluginPathDirs") {
-    mustRunAfter clean
-    doLast {
-        def newPath = pathToPlugin.replace(".", "/")
-        mkdir "src/main/java/org/opensearch/$newPath"
-        mkdir "src/test/java/org/opensearch/$newPath"
-    }
-}
-
-publishing {
-    repositories {
-        maven {
-            name = "Snapshots"
-            url = "https://aws.oss.sonatype.org/content/repositories/snapshots"
-            credentials {
-                username "$System.env.SONATYPE_USERNAME"
-                password "$System.env.SONATYPE_PASSWORD"
-            }
-        }
-    }
-    publications {
-        pluginZip(MavenPublication) { publication ->
-            pom {
-                name = pluginName
-                description = pluginDescription
-                groupId = "org.opensearch.plugin"
-                licenses {
-                    license {
-                        name = "The Apache License, Version 2.0"
-                        url = "http://www.apache.org/licenses/LICENSE-2.0.txt"
-                    }
-                }
-                developers {
-                    developer {
-                        name = "OpenSearch"
-                        url = "https://github.com/opensearch-project/neural-search"
-                    }
-                }
-            }
-        }
-    }
-}
-opensearchplugin {
-    name pluginName
-    description pluginDescription
-    classname "${projectPath}.${pathToPlugin}.${pluginClassName}"
-    licenseFile rootProject.file('LICENSE')
-    noticeFile rootProject.file('NOTICE')
-    extendedPlugins = ['opensearch-knn']
-}
-
-dependencyLicenses.enabled = false
-thirdPartyAudit.enabled = false
-loggerUsageCheck.enabled = false
-// No need to validate pom, as we do not upload to maven/sonatype
-validateNebulaPom.enabled = false
-
 buildscript {
     ext {
         opensearch_version = System.getProperty("opensearch.version", "3.0.0-SNAPSHOT")
@@ -118,6 +45,19 @@ buildscript {
     }
 }
 
+plugins{
+    id "de.undercouch.download" version "5.3.0"
+}
+apply plugin: 'java'
+apply plugin: 'java-test-fixtures'
+apply plugin: 'idea'
+apply plugin: 'opensearch.opensearchplugin'
+apply plugin: 'opensearch.pluginzip'
+apply plugin: 'jacoco'
+apply plugin: "com.diffplug.spotless"
+apply plugin: 'io.freefair.lombok'
+apply from: 'gradle/formatting.gradle'
+
 def opensearch_tmp_dir = rootProject.file('build/private/opensearch_tmp').absoluteFile
 opensearch_tmp_dir.mkdirs()
 
@@ -127,17 +67,19 @@ ext {
 
     configureSecurityPlugin = { OpenSearchCluster cluster ->
         configurations.zipArchive.asFileTree.each {
-            cluster.plugin(provider(new Callable<RegularFile>() {
-                @Override
-                RegularFile call() throws Exception {
-                    return new RegularFile() {
-                        @Override
-                        File getAsFile() {
-                            return it
+            if(it.name.contains("opensearch-security")){
+                cluster.plugin(provider(new Callable<RegularFile>() {
+                    @Override
+                    RegularFile call() throws Exception {
+                        return new RegularFile() {
+                            @Override
+                            File getAsFile() {
+                                return it
+                            }
                         }
                     }
-                }
-            }))
+                }))
+            }
         }
 
         cluster.getNodes().forEach { node ->
@@ -216,16 +158,72 @@ allprojects {
     }
 }
 
-repositories {
-    mavenLocal()
-    maven { url "https://aws.oss.sonatype.org/content/repositories/snapshots" }
-    mavenCentral()
-    maven { url "https://plugins.gradle.org/m2/" }
-}
-
 configurations {
     zipArchive
 }
+
+tasks.register("preparePluginPathDirs") {
+    mustRunAfter clean
+    doLast {
+        def newPath = pathToPlugin.replace(".", "/")
+        mkdir "src/main/java/org/opensearch/$newPath"
+        mkdir "src/test/java/org/opensearch/$newPath"
+    }
+}
+
+def pluginName = 'opensearch-neural-search'
+def pluginDescription = 'A plugin that adds dense neural retrieval into the OpenSearch ecosytem'
+def projectPath = 'org.opensearch'
+def pathToPlugin = 'neuralsearch.plugin'
+def pluginClassName = 'NeuralSearch'
+
+publishing {
+    repositories {
+        maven {
+            name = "Snapshots"
+            url = "https://aws.oss.sonatype.org/content/repositories/snapshots"
+            credentials {
+                username "$System.env.SONATYPE_USERNAME"
+                password "$System.env.SONATYPE_PASSWORD"
+            }
+        }
+    }
+    publications {
+        pluginZip(MavenPublication) { publication ->
+            pom {
+                name = pluginName
+                description = pluginDescription
+                groupId = "org.opensearch.plugin"
+                licenses {
+                    license {
+                        name = "The Apache License, Version 2.0"
+                        url = "http://www.apache.org/licenses/LICENSE-2.0.txt"
+                    }
+                }
+                developers {
+                    developer {
+                        name = "OpenSearch"
+                        url = "https://github.com/opensearch-project/neural-search"
+                    }
+                }
+            }
+        }
+    }
+}
+opensearchplugin {
+    name pluginName
+    description pluginDescription
+    classname "${projectPath}.${pathToPlugin}.${pluginClassName}"
+    licenseFile rootProject.file('LICENSE')
+    noticeFile rootProject.file('NOTICE')
+    extendedPlugins = ['opensearch-knn']
+}
+
+dependencyLicenses.enabled = false
+thirdPartyAudit.enabled = false
+loggerUsageCheck.enabled = false
+// No need to validate pom, as we do not upload to maven/sonatype
+validateNebulaPom.enabled = false
 
 def knnJarDirectory = "$buildDir/dependencies/opensearch-knn"
 
@@ -295,7 +293,7 @@ integTest {
     systemProperty 'java.io.tmpdir', opensearch_tmp_dir.absolutePath
     // allows integration test classes to access test resource from project root path
     systemProperty('project.root', project.rootDir.absolutePath)
-
+    systemProperty 'security.enabled', System.getProperty('security.enabled')
     var is_https = System.getProperty("https")
     var user = System.getProperty("user")
     var password = System.getProperty("password")
@@ -333,23 +331,25 @@ testClusters.integTest {
     testDistribution = "ARCHIVE"
 
     // Optionally install security
-    if (System.getProperty("security.enabled") != null) {
+    if (System.getProperty("security.enabled") != null && System.getProperty("security.enabled") == "true") {
         configureSecurityPlugin(testClusters.integTest)
     }
 
-    // Install K-NN/ml-commons plugins on the integTest cluster nodes
+    // Install K-NN/ml-commons plugins on the integTest cluster nodes except security
     configurations.zipArchive.asFileTree.each {
-        plugin(provider(new Callable<RegularFile>(){
-            @Override
-            RegularFile call() throws Exception {
-                return new RegularFile() {
-                    @Override
-                    File getAsFile() {
-                        return it
+        if(!it.name.contains("opensearch-security")) {
+            plugin(provider(new Callable<RegularFile>(){
+                @Override
+                RegularFile call() throws Exception {
+                    return new RegularFile() {
+                        @Override
+                        File getAsFile() {
+                            return it
+                        }
                     }
                 }
-            }
-        }))
+            }))
+        }
     }
 
     // This installs our neural-search plugin into the testClusters
@@ -393,7 +393,6 @@ task integTestRemote(type: RestIntegTestTask) {
     }
 }
 
-
 run {
     useCluster testClusters.integTest
 }
@@ -409,7 +408,6 @@ jacocoTestReport {
 check.dependsOn spotlessCheck
 check.dependsOn jacocoTestCoverageVerification
 jacocoTestCoverageVerification.dependsOn jacocoTestReport
-
 
 // updateVersion: Task to auto update version to the next development iteration
 task updateVersion {
