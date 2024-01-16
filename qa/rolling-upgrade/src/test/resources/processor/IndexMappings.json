@@ -2,7 +2,6 @@
   "settings": {
     "index": {
       "knn": true,
-      "knn.algo_param.ef_search": 100,
       "refresh_interval": "30s",
       "default_pipeline": "%s"
     },

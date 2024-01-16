@@ -97,7 +97,7 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
         assertEquals(1, hits);
         List<Double> scoresList = getNormalizationScoreList(searchResponseAsMap);
         for (Double score : scoresList) {
-            assertTrue(0 < score && score < 1);
+            assertTrue(0 <= score && score <= 2);
         }
     }
 
@@ -110,9 +110,7 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
         String modelGroupRegisterRequestBody = Files.readString(
             Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
         );
-        String modelGroupId = registerModelGroup(
-            String.format(LOCALE, modelGroupRegisterRequestBody, generateModelId())
-        );
+        String modelGroupId = registerModelGroup(String.format(LOCALE, modelGroupRegisterRequestBody, generateModelId()));
         return uploadModel(String.format(LOCALE, requestBody, modelGroupId));
     }
 

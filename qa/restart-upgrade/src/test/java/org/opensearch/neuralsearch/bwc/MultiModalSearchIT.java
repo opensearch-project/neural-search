@@ -68,9 +68,7 @@ public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
         String modelGroupRegisterRequestBody = Files.readString(
             Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
         );
-        String modelGroupId = registerModelGroup(
-            String.format(LOCALE, modelGroupRegisterRequestBody, generateModelId())
-        );
+        String modelGroupId = registerModelGroup(String.format(LOCALE, modelGroupRegisterRequestBody, generateModelId()));
         return uploadModel(String.format(LOCALE, requestBody, modelGroupId));
     }
 

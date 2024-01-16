@@ -322,7 +322,7 @@ public class TestUtils {
         return (String) textEmbeddingProcessor.get("model_id");
     }
 
-    public static String generateModelId(){
+    public static String generateModelId() {
         return "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8);
     }
 
