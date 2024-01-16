@@ -4,13 +4,13 @@
  */
 package org.opensearch.neuralsearch.bwc;
 
-import com.carrotsearch.randomizedtesting.RandomizedTest;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.TEXT_IMAGE_EMBEDDING_PROCESSOR;
 import static org.opensearch.neuralsearch.TestUtils.getModelId;
+import static org.opensearch.neuralsearch.TestUtils.generateModelId;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
@@ -34,7 +34,7 @@ public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
             createPipelineProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
-                Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
+                Files.readString(Path.of(classLoader.getResource("processor/IndexMappingMultipleShard.json").toURI())),
                 PIPELINE_NAME
             );
             addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT);
@@ -69,7 +69,7 @@ public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
             Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
         );
         String modelGroupId = registerModelGroup(
-            String.format(LOCALE, modelGroupRegisterRequestBody, "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8))
+            String.format(LOCALE, modelGroupRegisterRequestBody, generateModelId())
         );
         return uploadModel(String.format(LOCALE, requestBody, modelGroupId));
     }

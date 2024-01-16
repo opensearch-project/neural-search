@@ -4,13 +4,13 @@
  */
 package org.opensearch.neuralsearch.bwc;
 
-import com.carrotsearch.randomizedtesting.RandomizedTest;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import org.opensearch.neuralsearch.TestUtils;
 import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.TEXT_IMAGE_EMBEDDING_PROCESSOR;
+import static org.opensearch.neuralsearch.TestUtils.generateModelId;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
@@ -87,7 +87,7 @@ public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
             Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
         );
         String modelGroupId = registerModelGroup(
-            String.format(LOCALE, modelGroupRegisterRequestBody, "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8))
+            String.format(LOCALE, modelGroupRegisterRequestBody, generateModelId())
         );
         return uploadModel(String.format(LOCALE, requestBody, modelGroupId));
     }

@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch.bwc;
 
-import com.carrotsearch.randomizedtesting.RandomizedTest;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -12,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import org.opensearch.index.query.MatchQueryBuilder;
 import static org.opensearch.neuralsearch.TestUtils.getModelId;
+import static org.opensearch.neuralsearch.TestUtils.generateModelId;
 import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.PARAM_NAME_WEIGHTS;
 import static org.opensearch.neuralsearch.TestUtils.TEXT_EMBEDDING_PROCESSOR;
@@ -45,7 +45,7 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
             createPipelineProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
-                Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
+                Files.readString(Path.of(classLoader.getResource("processor/IndexMappingMultipleShard.json").toURI())),
                 PIPELINE_NAME
             );
             addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT_1, null, null);
@@ -84,7 +84,7 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
             createPipelineProcessor(modelId, PIPELINE1_NAME);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
-                Files.readString(Path.of(classLoader.getResource("processor/Index1Mappings.json").toURI())),
+                Files.readString(Path.of(classLoader.getResource("processor/IndexMappingSingleShard.json").toURI())),
                 PIPELINE1_NAME
             );
             addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT_1, null, null);
@@ -122,7 +122,7 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
             Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
         );
         String modelGroupId = registerModelGroup(
-            String.format(LOCALE, modelGroupRegisterRequestBody, "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8))
+            String.format(LOCALE, modelGroupRegisterRequestBody, generateModelId())
         );
         return uploadModel(String.format(LOCALE, requestBody, modelGroupId));
     }

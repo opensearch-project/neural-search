@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch;
 
+import com.carrotsearch.randomizedtesting.RandomizedTest;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -320,4 +321,9 @@ public class TestUtils {
 
         return (String) textEmbeddingProcessor.get("model_id");
     }
+
+    public static String generateModelId(){
+        return "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8);
+    }
+
 }
