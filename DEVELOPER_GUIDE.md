@@ -177,7 +177,7 @@ In order to run the integration tests with a 3 node cluster, run this command:
 ./gradlew :integTest -PnumNodes=3
 ```
 
-Additionally, to run integration tests with security enabled, run
+Additionally, to run integration tests on multi nodes with security enabled, run
 ```
 ./gradlew :integTest -Dsecurity.enabled=true -PnumNodes=3
 ```
