@@ -1,0 +1,13 @@
+{
+  "description": "text embedding pipeline for hybrid",
+  "processors": [
+    {
+      "text_embedding": {
+        "model_id": "%s",
+        "field_map": {
+          "passage_text": "passage_embedding"
+        }
+      }
+    }
+  ]
+}

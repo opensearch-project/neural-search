@@ -11,12 +11,14 @@ import org.opensearch.gradle.test.RestIntegTestTask
 import java.util.concurrent.Callable
 
 apply plugin: 'java'
+apply plugin: 'java-test-fixtures'
 apply plugin: 'idea'
 apply plugin: 'opensearch.opensearchplugin'
 apply plugin: 'opensearch.pluginzip'
 apply plugin: 'jacoco'
 apply plugin: "com.diffplug.spotless"
 apply plugin: 'io.freefair.lombok'
+apply from: 'gradle/formatting.gradle'
 
 def pluginName = 'opensearch-neural-search'
 def pluginDescription = 'A plugin that adds dense neural retrieval into the OpenSearch ecosytem'
@@ -123,6 +125,25 @@ allprojects {
     version = "${opensearch_build}"
     targetCompatibility = JavaVersion.VERSION_11
     sourceCompatibility = JavaVersion.VERSION_11
+
+    apply from: rootProject.file('repositories.gradle').absoluteFile
+    plugins.withId('java') {
+        sourceCompatibility = targetCompatibility = "11"
+    }
+
+    afterEvaluate {
+        project.dependencyLicenses.enabled = false
+        project.thirdPartyAudit.enabled = false
+        project.loggerUsageCheck.enabled = false
+        project.forbiddenApis.ignoreFailures = false
+        project.forbiddenPatterns {
+            setEnabled(false)
+        }
+        project.testingConventions.enabled = false
+        project.validateNebulaPom.enabled = false
+        project.licenseFile = rootProject.file('LICENSE.txt')
+        project.noticeFile = rootProject.file('NOTICE.txt')
+    }
 }
 
 repositories {
@@ -144,6 +165,7 @@ dependencies {
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-ml-plugin', version: "${opensearch_build}"
     compileOnly fileTree(dir: knnJarDirectory, include: '*.jar')
     api group: 'org.opensearch', name:'opensearch-ml-client', version: "${opensearch_build}"
+    testFixturesImplementation "org.opensearch.test:framework:${opensearch_version}"
     implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.14.0'
     // ml-common excluded reflection for runtime so we need to add it by ourselves.
     // https://github.com/opensearch-project/ml-commons/commit/464bfe34c66d7a729a00dd457f03587ea4e504d9
@@ -154,6 +176,10 @@ dependencies {
     runtimeOnly group: 'org.apache.commons', name: 'commons-text', version: '1.10.0'
     runtimeOnly group: 'com.google.code.gson', name: 'gson', version: '2.10.1'
     runtimeOnly group: 'org.json', name: 'json', version: '20231013'
+    testFixturesImplementation "org.opensearch:common-utils:${version}"
+    testFixturesImplementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.14.0'
+    testFixturesCompileOnly group: 'com.google.guava', name: 'guava', version:'32.0.1-jre'
+    testFixturesCompileOnly fileTree(dir: knnJarDirectory, include: '*.jar')
 }
 
 // In order to add the jar to the classpath, we need to unzip the
@@ -168,9 +194,13 @@ project.tasks.delombok.dependsOn(extractKnnJar)
 
 compileJava {
     dependsOn extractKnnJar
+    dependsOn spotlessApply
     options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
 }
 compileTestJava {
+    options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
+}
+compileTestFixturesJava {
     options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
 }
 
@@ -284,16 +314,6 @@ run {
     useCluster testClusters.integTest
 }
 
-spotless {
-    java {
-        removeUnusedImports()
-        importOrder 'java', 'javax', 'org', 'com'
-        eclipse().configFile rootProject.file('formatterConfig.xml')
-        trimTrailingWhitespace()
-        endWithNewline()
-    }
-}
-
 jacocoTestReport {
     dependsOn integTest, test
     reports {
@@ -302,6 +322,7 @@ jacocoTestReport {
     }
 }
 
+check.dependsOn spotlessCheck
 check.dependsOn jacocoTestCoverageVerification
 jacocoTestCoverageVerification.dependsOn jacocoTestReport
 

@@ -2,7 +2,6 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch.processor;
 
 import java.nio.file.Files;
@@ -16,7 +15,7 @@ import org.junit.After;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.neuralsearch.common.BaseSparseEncodingIT;
+import org.opensearch.neuralsearch.BaseSparseEncodingIT;
 
 import com.google.common.collect.ImmutableList;
 

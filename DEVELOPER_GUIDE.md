@@ -11,6 +11,8 @@
     - [Run Single-node Cluster Locally](#run-single-node-cluster-locally)
     - [Run Multi-node Cluster Locally](#run-multi-node-cluster-locally)
   - [Debugging](#debugging)
+  - [Backwards Compatibility Testing](#backwards-compatibility-testing)
+    - [Adding new tests](#adding-new-tests)
   - [Supported configurations](#supported-configurations)
   - [Submitting Changes](#submitting-changes)
 
@@ -33,7 +35,7 @@ git clone https://github.com/[your username]/neural-search.git
 
 #### JDK 11
 
-OpenSearch builds using Java 11 at a minimum. This means you must have a JDK 11 installed with the environment variable 
+OpenSearch builds using Java 11 at a minimum. This means you must have a JDK 11 installed with the environment variable
 `JAVA_HOME` referencing the path to Java home for your JDK 11 installation, e.g. `JAVA_HOME=/usr/lib/jvm/jdk-11`.
 
 One easy way to get Java 11 on *nix is to use [sdkman](https://sdkman.io/).
@@ -83,10 +85,10 @@ Please follow these formatting guidelines:
 
 ## Build
 
-OpenSearch neural-search uses a [Gradle](https://docs.gradle.org/6.6.1/userguide/userguide.html) wrapper for its build. 
+OpenSearch neural-search uses a [Gradle](https://docs.gradle.org/6.6.1/userguide/userguide.html) wrapper for its build.
 Run `gradlew` on Unix systems.
 
-Build OpenSearch neural-search using `gradlew build` 
+Build OpenSearch neural-search using `gradlew build`
 
 ```
 ./gradlew build
@@ -184,6 +186,29 @@ Additionally, it is possible to attach one debugger to the cluster JVM and anoth
 ./gradlew :integTest -Dtest.debug=1 -Dcluster.debug=1
 ```
 
+## Backwards Compatibility Testing
+
+The purpose of Backwards Compatibility Testing and different types of BWC tests are explained [here](https://github.com/opensearch-project/opensearch-plugins/blob/main/TESTING.md#backwards-compatibility-testing). The BWC tests (i.e. Restart-Upgrade, Mixed-Cluster and Rolling-Upgrade scenarios) should be added with any new feature being added to Neural Search.
+The current design has mixed-cluster tests combined with rolling-upgrade tests in the same test class for [example](https://github.com/opensearch-project/neural-search/blob/main/qa/rolling-upgrade/src/test/java/org/opensearch/neuralsearch/bwc/SemanticSearchIT.java).
+
+Use these commands to run BWC tests for neural search:
+1. Rolling upgrade tests: `./gradlew :qa:rolling-upgrade:testRollingUpgrade`
+2. Full restart upgrade tests: `./gradlew :qa:restart-upgrade:testAgainstNewCluster`
+3. `./gradlew :qa:bwcTestSuite` is used to run all the above bwc tests together.
+
+bwc.version stands for the older version of OpenSearch against which one needs to check the compatibility with the current version.
+The details regarding all bwc versions of OpenSearch can be found [here](https://github.com/opensearch-project/OpenSearch/blob/main/libs/core/src/main/java/org/opensearch/Version.java).
+Use this command to run BWC tests for a given Backwards Compatibility Version:
+```
+./gradlew :qa:bwcTestSuite -Dbwc.version=2.9.0
+```
+Here, we are testing BWC Tests with BWC version of plugin as 2.9.0.
+The tests will not run on MAC OS due to issues coming from the OS.
+
+### Adding new tests
+
+Before adding any new tests to Backward Compatibility Tests, we should be aware that the tests in BWC are not independent. While creating an index, a test cannot use the same index name if it is already used in other tests.
+
 ### Supported configurations
 
 By default, neural-search plugin supports `lucene` k-NN engine for local runs. Below is the sample request for creating of new index using this engine:
@@ -221,8 +246,8 @@ See [CONTRIBUTING](CONTRIBUTING.md).
 
 ## Backports
 
-The Github workflow in [`backport.yml`](.github/workflows/backport.yml) creates backport PRs automatically when the 
-original PR with an appropriate label `backport <backport-branch-name>` is merged to main with the backport workflow 
-run successfully on the PR. For example, if a PR on main needs to be backported to `2.x` branch, add a label 
-`backport 2.x` to the PR and make sure the backport workflow runs on the PR along with other checks. Once this PR is 
+The Github workflow in [`backport.yml`](.github/workflows/backport.yml) creates backport PRs automatically when the
+original PR with an appropriate label `backport <backport-branch-name>` is merged to main with the backport workflow
+run successfully on the PR. For example, if a PR on main needs to be backported to `2.x` branch, add a label
+`backport 2.x` to the PR and make sure the backport workflow runs on the PR along with other checks. Once this PR is
 merged to main, the workflow will create a backport PR to the `2.x` branch.

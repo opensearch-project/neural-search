@@ -2,7 +2,6 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch.processor;
 
 import java.nio.file.Files;
@@ -16,7 +15,7 @@ import org.junit.After;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.neuralsearch.common.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 import com.google.common.collect.ImmutableList;
 
@@ -58,7 +57,7 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     private String uploadModel() throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        return uploadModel(requestBody);
+        return registerModelGroupAndUploadModel(requestBody);
     }
 
     private void createTextImageEmbeddingIndex() throws Exception {
