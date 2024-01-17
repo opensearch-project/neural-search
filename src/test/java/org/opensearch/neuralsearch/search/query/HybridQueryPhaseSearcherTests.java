@@ -63,7 +63,6 @@ import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.search.SearchShardTarget;
 import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.SearchContext;
-import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 
@@ -860,21 +859,21 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         SearchContext searchContext = mock(SearchContext.class);
 
         ContextIndexSearcher contextIndexSearcher = new ContextIndexSearcher(
-                reader,
-                IndexSearcher.getDefaultSimilarity(),
-                IndexSearcher.getDefaultQueryCache(),
-                IndexSearcher.getDefaultQueryCachingPolicy(),
-                true,
-                null,
-                searchContext
+            reader,
+            IndexSearcher.getDefaultSimilarity(),
+            IndexSearcher.getDefaultQueryCache(),
+            IndexSearcher.getDefaultQueryCachingPolicy(),
+            true,
+            null,
+            searchContext
         );
 
         ShardId shardId = new ShardId(dummyIndex, 1);
         SearchShardTarget shardTarget = new SearchShardTarget(
-                randomAlphaOfLength(10),
-                shardId,
-                randomAlphaOfLength(10),
-                OriginalIndices.NONE
+            randomAlphaOfLength(10),
+            shardId,
+            randomAlphaOfLength(10),
+            OriginalIndices.NONE
         );
         when(searchContext.shardTarget()).thenReturn(shardTarget);
         when(searchContext.searcher()).thenReturn(contextIndexSearcher);

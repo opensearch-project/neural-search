@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -27,13 +26,12 @@ import org.opensearch.neuralsearch.query.HybridQueryScorer;
 
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
-import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
 /**
  * Collects the TopDocs after executing hybrid query. Uses HybridQueryTopDocs as DTO to handle each sub query results
  */
 @Log4j2
-public class HybridTopScoreDocCollector implements Collector {
+public class HybridTopScoreDocCollector<T extends ScoreDoc> implements Collector {
     private static final TopDocs EMPTY_TOPDOCS = new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]);
     private int docBase;
     private final HitsThresholdChecker hitsThresholdChecker;
@@ -58,10 +56,10 @@ public class HybridTopScoreDocCollector implements Collector {
             @Override
             public void setScorer(Scorable scorer) throws IOException {
                 super.setScorer(scorer);
+                // compoundQueryScorer = (HybridQueryScorer) scorer;
                 if (scorer instanceof HybridQueryScorer) {
                     compoundQueryScorer = (HybridQueryScorer) scorer;
-                }
-                else {
+                } else {
                     compoundQueryScorer = getHybridQueryScorer(scorer);
                 }
             }
@@ -82,14 +80,12 @@ public class HybridTopScoreDocCollector implements Collector {
                 return null;
             }
 
-
-
-        @Override
+            @Override
             public void collect(int doc) throws IOException {
-                if (compoundQueryScorer == null) {
+                /*if (compoundQueryScorer == null) {
                     scorer.score();
                     return;
-                }
+                }*/
                 float[] subScoresByQuery = compoundQueryScorer.hybridScores();
                 // iterate over results for each query
                 if (compoundScores == null) {

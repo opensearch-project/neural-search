@@ -13,13 +13,15 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
-import com.google.common.base.Throwables;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Collector;
+import org.apache.lucene.search.CollectorManager;
 import org.apache.lucene.search.FieldExistsQuery;
 import org.apache.lucene.search.MultiCollector;
 import org.apache.lucene.search.Query;
@@ -33,15 +35,18 @@ import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.mapper.SeqNoFieldMapper;
 import org.opensearch.index.search.NestedHelper;
 import org.opensearch.neuralsearch.query.HybridQuery;
-import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 import org.opensearch.neuralsearch.search.HybridTopScoreDocCollector;
 import org.opensearch.search.DocValueFormat;
+import org.opensearch.search.aggregations.AggregationProcessor;
+import org.opensearch.search.aggregations.GlobalAggCollectorManager;
 import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.QueryCollectorContext;
+import org.opensearch.search.query.QueryCollectorManagerContext;
 import org.opensearch.search.query.QueryPhase;
 import org.opensearch.search.query.QueryPhaseSearcherWrapper;
 import org.opensearch.search.query.QuerySearchResult;
+import org.opensearch.search.query.ReduceableSearchResult;
 import org.opensearch.search.query.TopDocsCollectorContext;
 import org.opensearch.search.rescore.RescoreContext;
 import org.opensearch.search.sort.SortAndFormats;
@@ -56,6 +61,9 @@ import lombok.extern.log4j.Log4j2;
  */
 @Log4j2
 public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
+
+    private final AggregationProcessor aggregationProcessor = new HybridAggregationProcessor();
+    // private final AggregationProcessor aggregationProcessor = new DefaultAggregationProcessor();
 
     public HybridQueryPhaseSearcher() {
         super();
@@ -194,6 +202,11 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
     ) throws IOException {
         log.debug("searching with custom doc collector, shard {}", searchContext.shardTarget().getShardId());
 
+        HybridCollectorManager collectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> collectorManagers = searchContext
+            .queryCollectorManagers();
+        collectorManagers.put(HybridCollectorManager.class, collectorManager);
+
         final TopDocsCollectorContext topDocsFactory = createTopDocsCollectorContext(searchContext, hasFilterCollector);
         collectors.addFirst(topDocsFactory);
         if (searchContext.size() == 0) {
@@ -213,34 +226,57 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
 
         final QuerySearchResult queryResult = searchContext.queryResult();
 
-        Collector collector = new HybridTopScoreDocCollector(
-            numDocs,
-            new HitsThresholdChecker(Math.max(numDocs, searchContext.trackTotalHitsUpTo()))
-        );
+        // Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers =
+        // searchContext.queryCollectorManagers();
+        // CollectorManager collectorManager =;
+        // List<CollectorManager<?, ReduceableSearchResult>> managers =
+        // List.of(QueryCollectorManagerContext.createQueryCollectorManager(collectorsOurs),
+        // QueryCollectorManagerContext.createQueryCollectorManager(collectors));
+        // final CollectorManager<?, ReduceableSearchResult> multiCollectorManager =
+        // QueryCollectorManagerContext.createMultiCollectorManager(managers);
 
         // cannot use streams here as assigment of global variable inside the lambda will not be possible
-        for (int idx = 1; idx < collectors.size(); idx++) {
+        /*for (int idx = 1; idx < collectors.size(); idx++) {
             QueryCollectorContext collectorContext = collectors.get(idx);
             collector = collectorContext.create(collector);
-        }
+        }*/
+        /*Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers = searchContext.queryCollectorManagers();
+        queryCollectorManagers.values().stream().forEach(e -> {
+            try {
+                e.newCollector();
+            } catch (IOException ex) {
+                throw new RuntimeException(ex);
+            }
+        });*/
 
-        searcher.search(query, collector);
+        final List<CollectorManager<?, ReduceableSearchResult>> managersExceptGlobalAgg = collectorManagers.entrySet()
+            .stream()
+            .filter(entry -> !(entry.getKey().equals(GlobalAggCollectorManager.class)))
+            .map(Map.Entry::getValue)
+            .collect(Collectors.toList());
+        final ReduceableSearchResult result = searcher.search(
+            query,
+            QueryCollectorManagerContext.createMultiCollectorManager(managersExceptGlobalAgg)
+        );
+        // searcher.search(query, QueryCollectorManagerContext.createQueryCollectorManager(collectors));
 
         if (searchContext.terminateAfter() != SearchContext.DEFAULT_TERMINATE_AFTER && queryResult.terminatedEarly() == null) {
             queryResult.terminatedEarly(false);
         }
+        result.reduce(queryResult);
 
-        setTopDocsInQueryResult(queryResult, collector, searchContext);
+        updateQueryResult(queryResult, searchContext);
 
-        collectors.stream().skip(1).forEach(ctx -> {
-            try {
-                ctx.postProcess(queryResult);
-            } catch (IOException e) {
-                Throwables.throwIfUnchecked(e);
-            }
-        });
+        // setTopDocsInQueryResult(queryResult, collector, searchContext);
 
         return shouldRescore;
+    }
+
+    private void updateQueryResult(final QuerySearchResult queryResult, final SearchContext searchContext) {
+        boolean isSingleShard = searchContext.numberOfShards() == 1;
+        if (isSingleShard) {
+            searchContext.size(queryResult.queryResult().topDocs().topDocs.scoreDocs.length);
+        }
     }
 
     private void setTopDocsInQueryResult(
@@ -249,7 +285,7 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
         final SearchContext searchContext
     ) {
         if (collector instanceof HybridTopScoreDocCollector) {
-            List<TopDocs> topDocs = ((HybridTopScoreDocCollector) collector).topDocs();
+            List<TopDocs> topDocs = ((HybridTopScoreDocCollector<?>) collector).topDocs();
             float maxScore = getMaxScore(topDocs);
             boolean isSingleShard = searchContext.numberOfShards() == 1;
             TopDocs newTopDocs = getNewTopDocs(getTotalHits(searchContext, topDocs, isSingleShard), topDocs);
@@ -351,5 +387,10 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
     private int getMaxDepthLimit(final SearchContext searchContext) {
         Settings indexSettings = searchContext.getQueryShardContext().getIndexSettings().getSettings();
         return MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(indexSettings).intValue();
+    }
+
+    @Override
+    public AggregationProcessor aggregationProcessor(SearchContext searchContext) {
+        return aggregationProcessor;
     }
 }

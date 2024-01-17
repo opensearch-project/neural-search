@@ -285,6 +285,8 @@ testClusters.integTest {
     // Increase heap size from default of 512mb to 1gb. When heap size is 512mb, our integ tests sporadically fail due
     // to ml-commons memory circuit breaker exception
     jvmArgs("-Xms1g", "-Xmx4g")
+
+    systemProperty('opensearch.experimental.feature.concurrent_segment_search.enabled', 'true')
 }
 
 // Remote Integration Tests
