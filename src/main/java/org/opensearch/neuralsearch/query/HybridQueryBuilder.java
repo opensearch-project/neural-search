@@ -300,7 +300,6 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
 
     /**
      * visit method to parse the HybridQueryBuilder by a visitor
-     * @return
      */
     @Override
     public void visit(QueryBuilderVisitor visitor) {

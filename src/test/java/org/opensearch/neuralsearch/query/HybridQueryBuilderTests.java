@@ -20,6 +20,7 @@ import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TEXT_FI
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 import java.util.function.Supplier;
 
 import org.apache.lucene.search.MatchNoDocsQuery;
@@ -52,6 +53,7 @@ import org.opensearch.knn.index.query.KNNQuery;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
+import static org.opensearch.neuralsearch.TestUtils.createTestVisitor;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 
@@ -706,6 +708,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
         HybridQueryBuilder hybridQueryBuilder = HybridQueryBuilder.fromXContent(contentParser);
         assertNotNull(hybridQueryBuilder);
+    }
+
+    public void testVisit() {
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(new NeuralQueryBuilder()).add(new NeuralSparseQueryBuilder());
+        List<QueryBuilder> visitedQueries = new ArrayList<>();
+        hybridQueryBuilder.visit(createTestVisitor(visitedQueries));
+        assertEquals(3, visitedQueries.size());
     }
 
     private Map<String, Object> getInnerMap(Object innerObject, String queryName, String fieldName) {
