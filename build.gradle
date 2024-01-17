@@ -7,9 +7,47 @@
  */
 
 import org.opensearch.gradle.test.RestIntegTestTask
+import org.opensearch.gradle.testclusters.OpenSearchCluster
 
+import java.nio.file.Paths
 import java.util.concurrent.Callable
 
+buildscript {
+    ext {
+        opensearch_version = System.getProperty("opensearch.version", "2.12.0-SNAPSHOT")
+        buildVersionQualifier = System.getProperty("build.version_qualifier", "")
+        isSnapshot = "true" == System.getProperty("build.snapshot", "true")
+        version_tokens = opensearch_version.tokenize('-')
+        opensearch_build = version_tokens[0] + '.0'
+        plugin_no_snapshot = opensearch_build
+        if (buildVersionQualifier) {
+            opensearch_build += "-${buildVersionQualifier}"
+            plugin_no_snapshot += "-${buildVersionQualifier}"
+        }
+        if (isSnapshot) {
+            opensearch_build += "-SNAPSHOT"
+        }
+        opensearch_group = "org.opensearch"
+        opensearch_no_snapshot = opensearch_build.replace("-SNAPSHOT","")
+    }
+
+    repositories {
+        mavenLocal()
+        maven { url "https://aws.oss.sonatype.org/content/repositories/snapshots" }
+        mavenCentral()
+        maven { url "https://plugins.gradle.org/m2/" }
+    }
+
+    dependencies {
+        classpath "${opensearch_group}.gradle:build-tools:${opensearch_version}"
+        classpath "com.diffplug.spotless:spotless-plugin-gradle:6.23.2"
+        classpath "io.freefair.gradle:lombok-plugin:8.4"
+    }
+}
+
+plugins{
+    id "de.undercouch.download" version "5.3.0"
+}
 apply plugin: 'java'
 apply plugin: 'java-test-fixtures'
 apply plugin: 'idea'
@@ -20,11 +58,109 @@ apply plugin: "com.diffplug.spotless"
 apply plugin: 'io.freefair.lombok'
 apply from: 'gradle/formatting.gradle'
 
-def pluginName = 'opensearch-neural-search'
-def pluginDescription = 'A plugin that adds dense neural retrieval into the OpenSearch ecosytem'
-def projectPath = 'org.opensearch'
-def pathToPlugin = 'neuralsearch.plugin'
-def pluginClassName = 'NeuralSearch'
+def opensearch_tmp_dir = rootProject.file('build/private/opensearch_tmp').absoluteFile
+opensearch_tmp_dir.mkdirs()
+
+ext {
+    isSnapshot = "true" == System.getProperty("build.snapshot", "true")
+    projectSubstitutions = [:]
+
+    configureSecurityPlugin = { OpenSearchCluster cluster ->
+        configurations.zipArchive.asFileTree.each {
+            if(it.name.contains("opensearch-security")){
+                cluster.plugin(provider(new Callable<RegularFile>() {
+                    @Override
+                    RegularFile call() throws Exception {
+                        return new RegularFile() {
+                            @Override
+                            File getAsFile() {
+                                return it
+                            }
+                        }
+                    }
+                }))
+            }
+        }
+
+        cluster.getNodes().forEach { node ->
+            var creds = node.getCredentials()
+            if (creds.isEmpty()) {
+                creds.add(Map.of('username', 'admin', 'password', 'admin'))
+            } else {
+                creds.get(0).putAll(Map.of('username', 'admin', 'password', 'admin'))
+            }
+        }
+
+        // Config below including files are copied from security demo configuration
+        ['esnode.pem', 'esnode-key.pem', 'root-ca.pem'].forEach { file ->
+            File local = Paths.get(opensearch_tmp_dir.absolutePath, file).toFile()
+            download.run {
+                src "https://raw.githubusercontent.com/opensearch-project/security/main/bwc-test/src/test/resources/security/" + file
+                dest local
+                overwrite false
+            }
+            cluster.extraConfigFile(file, local)
+        }
+
+        // This configuration is copied from the security plugins demo install:
+        // https://github.com/opensearch-project/security/blob/2.11.1.0/tools/install_demo_configuration.sh#L365-L388
+        cluster.setting("plugins.security.ssl.transport.pemcert_filepath", "esnode.pem")
+        cluster.setting("plugins.security.ssl.transport.pemkey_filepath", "esnode-key.pem")
+        cluster.setting("plugins.security.ssl.transport.pemtrustedcas_filepath", "root-ca.pem")
+        cluster.setting("plugins.security.ssl.transport.enforce_hostname_verification", "false")
+        cluster.setting("plugins.security.ssl.http.enabled", "true")
+        cluster.setting("plugins.security.ssl.http.pemcert_filepath", "esnode.pem")
+        cluster.setting("plugins.security.ssl.http.pemkey_filepath", "esnode-key.pem")
+        cluster.setting("plugins.security.ssl.http.pemtrustedcas_filepath", "root-ca.pem")
+        cluster.setting("plugins.security.allow_unsafe_democertificates", "true")
+        cluster.setting("plugins.security.allow_default_init_securityindex", "true")
+        cluster.setting("plugins.security.unsupported.inject_user.enabled", "true")
+
+        cluster.setting("plugins.security.authcz.admin_dn", "\n- CN=kirk,OU=client,O=client,L=test, C=de")
+        cluster.setting('plugins.security.restapi.roles_enabled', '["all_access", "security_rest_api_access"]')
+        cluster.setting('plugins.security.system_indices.enabled', "true")
+        cluster.setting('plugins.security.system_indices.indices', '[' +
+                '".plugins-ml-config", ' +
+                '".plugins-ml-connector", ' +
+                '".plugins-ml-model-group", ' +
+                '".plugins-ml-model", ".plugins-ml-task", ' +
+                '".plugins-ml-conversation-meta", ' +
+                '".plugins-ml-conversation-interactions", ' +
+                ']'
+        )
+        cluster.setSecure(true)
+    }
+}
+
+allprojects {
+    group = opensearch_group
+    version = "${opensearch_build}"
+    targetCompatibility = JavaVersion.VERSION_11
+    sourceCompatibility = JavaVersion.VERSION_11
+
+    apply from: rootProject.file('repositories.gradle').absoluteFile
+    plugins.withId('java') {
+        sourceCompatibility = targetCompatibility = "11"
+    }
+
+    afterEvaluate {
+        project.dependencyLicenses.enabled = false
+        project.thirdPartyAudit.enabled = false
+        project.loggerUsageCheck.enabled = false
+        project.forbiddenApis.ignoreFailures = false
+        project.forbiddenPatterns {
+            setEnabled(false)
+        }
+        project.testingConventions.enabled = false
+        project.validateNebulaPom.enabled = false
+        project.licenseFile = rootProject.file('LICENSE.txt')
+        project.noticeFile = rootProject.file('NOTICE.txt')
+    }
+}
+
+configurations {
+    zipArchive
+}
 
 tasks.register("preparePluginPathDirs") {
     mustRunAfter clean
@@ -34,6 +170,12 @@ tasks.register("preparePluginPathDirs") {
         mkdir "src/test/java/org/opensearch/$newPath"
     }
 }
+
+def pluginName = 'opensearch-neural-search'
+def pluginDescription = 'A plugin that adds dense neural retrieval into the OpenSearch ecosytem'
+def projectPath = 'org.opensearch'
+def pathToPlugin = 'neuralsearch.plugin'
+def pluginClassName = 'NeuralSearch'
 
 publishing {
     repositories {
@@ -83,86 +225,13 @@ loggerUsageCheck.enabled = false
 // No need to validate pom, as we do not upload to maven/sonatype
 validateNebulaPom.enabled = false
 
-buildscript {
-    ext {
-        opensearch_version = System.getProperty("opensearch.version", "2.12.0-SNAPSHOT")
-        buildVersionQualifier = System.getProperty("build.version_qualifier", "")
-        isSnapshot = "true" == System.getProperty("build.snapshot", "true")
-        version_tokens = opensearch_version.tokenize('-')
-        opensearch_build = version_tokens[0] + '.0'
-        plugin_no_snapshot = opensearch_build
-        if (buildVersionQualifier) {
-            opensearch_build += "-${buildVersionQualifier}"
-            plugin_no_snapshot += "-${buildVersionQualifier}"
-        }
-        if (isSnapshot) {
-            opensearch_build += "-SNAPSHOT"
-        }
-        opensearch_group = "org.opensearch"
-        opensearch_no_snapshot = opensearch_build.replace("-SNAPSHOT","")
-    }
-
-    repositories {
-        mavenLocal()
-        maven { url "https://aws.oss.sonatype.org/content/repositories/snapshots" }
-        mavenCentral()
-        maven { url "https://plugins.gradle.org/m2/" }
-    }
-
-    dependencies {
-        classpath "${opensearch_group}.gradle:build-tools:${opensearch_version}"
-        classpath "com.diffplug.spotless:spotless-plugin-gradle:6.23.2"
-        classpath "io.freefair.gradle:lombok-plugin:8.4"
-    }
-}
-
-ext {
-    isSnapshot = "true" == System.getProperty("build.snapshot", "true")
-}
-
-allprojects {
-    group = opensearch_group
-    version = "${opensearch_build}"
-    targetCompatibility = JavaVersion.VERSION_11
-    sourceCompatibility = JavaVersion.VERSION_11
-
-    apply from: rootProject.file('repositories.gradle').absoluteFile
-    plugins.withId('java') {
-        sourceCompatibility = targetCompatibility = "11"
-    }
-
-    afterEvaluate {
-        project.dependencyLicenses.enabled = false
-        project.thirdPartyAudit.enabled = false
-        project.loggerUsageCheck.enabled = false
-        project.forbiddenApis.ignoreFailures = false
-        project.forbiddenPatterns {
-            setEnabled(false)
-        }
-        project.testingConventions.enabled = false
-        project.validateNebulaPom.enabled = false
-        project.licenseFile = rootProject.file('LICENSE.txt')
-        project.noticeFile = rootProject.file('NOTICE.txt')
-    }
-}
-
-repositories {
-    mavenLocal()
-    maven { url "https://aws.oss.sonatype.org/content/repositories/snapshots" }
-    mavenCentral()
-    maven { url "https://plugins.gradle.org/m2/" }
-}
-
-configurations {
-    zipArchive
-}
-
 def knnJarDirectory = "$buildDir/dependencies/opensearch-knn"
 
 dependencies {
     api "org.opensearch:opensearch:${opensearch_version}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-knn', version: "${opensearch_build}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-ml-plugin', version: "${opensearch_build}"
+    zipArchive group: 'org.opensearch.plugin', name:'opensearch-security', version: "${opensearch_build}"
     compileOnly fileTree(dir: knnJarDirectory, include: '*.jar')
     api group: 'org.opensearch', name:'opensearch-ml-client', version: "${opensearch_build}"
     testFixturesImplementation "org.opensearch.test:framework:${opensearch_version}"
@@ -204,8 +273,6 @@ compileTestFixturesJava {
     options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
 }
 
-def opensearch_tmp_dir = rootProject.file('build/private/opensearch_tmp').absoluteFile
-opensearch_tmp_dir.mkdirs()
 def _numNodes = findProperty('numNodes') as Integer ?: 1
 
 test {
@@ -226,10 +293,19 @@ integTest {
     systemProperty 'java.io.tmpdir', opensearch_tmp_dir.absolutePath
     // allows integration test classes to access test resource from project root path
     systemProperty('project.root', project.rootDir.absolutePath)
-
-    systemProperty "https", System.getProperty("https")
-    systemProperty "user", System.getProperty("user")
-    systemProperty "password", System.getProperty("password")
+    systemProperty 'security.enabled', System.getProperty('security.enabled')
+    var is_https = System.getProperty("https")
+    var user = System.getProperty("user")
+    var password = System.getProperty("password")
+    if (System.getProperty("security.enabled") != null) {
+        // If security is enabled, set is_https/user/password defaults
+        is_https = is_https == null ? "true" : is_https
+        user = user == null ? "admin" : user
+        password = password == null ? "admin" : password
+    }
+    systemProperty("https", is_https)
+    systemProperty("user", user)
+    systemProperty("password", password)
 
     doFirst {
         // Tell the test JVM if the cluster JVM is running under a debugger so that tests can
@@ -253,19 +329,27 @@ integTest {
 
 testClusters.integTest {
     testDistribution = "ARCHIVE"
-    // Install K-NN/ml-commons plugins on the integTest cluster nodes
+
+    // Optionally install security
+    if (System.getProperty("security.enabled") != null && System.getProperty("security.enabled") == "true") {
+        configureSecurityPlugin(testClusters.integTest)
+    }
+
+    // Install K-NN/ml-commons plugins on the integTest cluster nodes except security
     configurations.zipArchive.asFileTree.each {
-        plugin(provider(new Callable<RegularFile>(){
-            @Override
-            RegularFile call() throws Exception {
-                return new RegularFile() {
-                    @Override
-                    File getAsFile() {
-                        return it
+        if(!it.name.contains("opensearch-security")) {
+            plugin(provider(new Callable<RegularFile>(){
+                @Override
+                RegularFile call() throws Exception {
+                    return new RegularFile() {
+                        @Override
+                        File getAsFile() {
+                            return it
+                        }
                     }
                 }
-            }
-        }))
+            }))
+        }
     }
 
     // This installs our neural-search plugin into the testClusters
@@ -309,7 +393,6 @@ task integTestRemote(type: RestIntegTestTask) {
     }
 }
 
-
 run {
     useCluster testClusters.integTest
 }
@@ -325,7 +408,6 @@ jacocoTestReport {
 check.dependsOn spotlessCheck
 check.dependsOn jacocoTestCoverageVerification
 jacocoTestCoverageVerification.dependsOn jacocoTestReport
-
 
 // updateVersion: Task to auto update version to the next development iteration
 task updateVersion {

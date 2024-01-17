@@ -24,7 +24,7 @@ jobs:
       BWC_VERSION_RESTART_UPGRADE: ${{ matrix.bwc_version }}
 
     steps:
-      - name: Checkout NeuralSearch
+      - name: Checkout neural-search
         uses: actions/checkout@v1
 
       - name: Setup Java ${{ matrix.java }}
@@ -51,7 +51,7 @@ jobs:
       BWC_VERSION_ROLLING_UPGRADE: ${{ matrix.bwc_version }}
 
     steps:
-      - name: Checkout NeuralSearch
+      - name: Checkout neural-search
         uses: actions/checkout@v1
 
       - name: Setup Java ${{ matrix.java }}
