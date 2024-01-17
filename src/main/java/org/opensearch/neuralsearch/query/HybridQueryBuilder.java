@@ -304,6 +304,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     @Override
     public void visit(QueryBuilderVisitor visitor) {
         visitor.accept(this);
+        // getChildVisitor of NeuralSearchQueryVisitor return this.
+        // therefore any argument can be passed. Here we have used Occcur.MUST as an argument.
         QueryBuilderVisitor subVisitor = visitor.getChildVisitor(Occur.MUST);
         for (QueryBuilder subQueryBuilder : queries) {
             subQueryBuilder.visit(subVisitor);
