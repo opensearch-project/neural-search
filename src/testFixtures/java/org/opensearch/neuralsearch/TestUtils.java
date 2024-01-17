@@ -8,8 +8,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryBuilderVisitor;
 import static org.opensearch.test.OpenSearchTestCase.randomFloat;
 
 import java.util.ArrayList;
@@ -311,9 +309,5 @@ public class TestUtils {
         Map<String, Object> textEmbeddingProcessor = (Map<String, Object>) processors.get(0).get(processor);
 
         return (String) textEmbeddingProcessor.get("model_id");
-    }
-
-    public static QueryBuilderVisitor createTestVisitor(List<QueryBuilder> visitedQueries) {
-        return QueryBuilderVisitor.NO_OP_VISITOR;
     }
 }

@@ -9,6 +9,12 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS;
+import org.opensearch.index.query.MatchAllQueryBuilder;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.index.query.QueryShardContext;
+import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.index.query.QueryBuilderVisitor;
 import static org.opensearch.index.query.AbstractQueryBuilder.BOOST_FIELD;
 import static org.opensearch.index.query.AbstractQueryBuilder.DEFAULT_BOOST;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.FILTER_FIELD;
@@ -42,18 +48,12 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.mapper.TextFieldMapper;
-import org.opensearch.index.query.MatchAllQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.knn.index.VectorDataType;
 import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
 import org.opensearch.knn.index.query.KNNQuery;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
-import static org.opensearch.neuralsearch.TestUtils.createTestVisitor;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 
@@ -713,7 +713,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     public void testVisit() {
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(new NeuralQueryBuilder()).add(new NeuralSparseQueryBuilder());
         List<QueryBuilder> visitedQueries = new ArrayList<>();
-        hybridQueryBuilder.visit(createTestVisitor(visitedQueries));
+        hybridQueryBuilder.visit(QueryBuilderVisitor.NO_OP_VISITOR);
         assertEquals(3, visitedQueries.size());
     }
 
