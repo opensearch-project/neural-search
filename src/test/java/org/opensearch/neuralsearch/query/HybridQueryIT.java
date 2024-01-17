@@ -36,8 +36,6 @@ import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import com.google.common.primitives.Floats;
 
 import lombok.SneakyThrows;
-import org.opensearch.search.aggregations.AggregationBuilder;
-import org.opensearch.search.aggregations.AggregationBuilders;
 
 public class HybridQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_BASIC_INDEX_NAME = "test-neural-basic-index";
@@ -46,8 +44,6 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD = "test-neural-multi-doc-single-shard-index";
     private static final String TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD =
         "test-neural-multi-doc-nested-type--single-shard-index";
-    private static final String TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT =
-            "test-neural-multi-doc-text-and-int-index";
     private static final String TEST_QUERY_TEXT = "greetings";
     private static final String TEST_QUERY_TEXT2 = "salute";
     private static final String TEST_QUERY_TEXT3 = "hello";
@@ -64,9 +60,6 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     private static final String NESTED_FIELD_2 = "lastname";
     private static final String NESTED_FIELD_1_VALUE = "john";
     private static final String NESTED_FIELD_2_VALUE = "black";
-    private static final String INTEGER_FIELD_1 = "doc_index";
-    private static final int INTEGER_FIELD_1_VALUE = 1234;
-    private static final int INTEGER_FIELD_2_VALUE = 2345;
     private final float[] testVector1 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector2 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector3 = createRandomVector(TEST_DIMENSION);
@@ -385,78 +378,6 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
 
-    /**
-     * Tests complex query with multiple nested sub-queries:
-     * {
-     *     "query": {
-     *         "hybrid": {
-     *              "queries": [
-     *                  {
-     *                      "term": {
-     *                          "text": "word1"
-     *                       }
-     *                  },
-     *                  {
-     *                      "term": {
-     *                          "text": "word3"
-     *                      }
-     *                  }
-     *              ]
-     *          }
-     *      },
-     *     "aggs": {
-     *         "max_index": {
-     *             "max": {
-     *                 "field": "doc_index"
-     *             }
-     *         }
-     *     }
-     * }
-     */
-    @SneakyThrows
-    public void testAggregations_whenMetricAggregationsInQuery_thenSuccessful() {
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT);
-
-        TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
-        TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT5);
-
-        HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
-        hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder1);
-        hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder2);
-
-        AggregationBuilder aggsBuilder = AggregationBuilders.max("max_aggs").field(INTEGER_FIELD_1);
-        //AggregationBuilder aggsBuilder = null;
-        Map<String, Object> searchResponseAsMap1 = search(
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT,
-                hybridQueryBuilderNeuralThenTerm,
-                null,
-                10,
-                Map.of("search_pipeline", SEARCH_PIPELINE),
-                aggsBuilder
-        );
-
-        assertEquals(1, getHitCount(searchResponseAsMap1));
-
-        List<Map<String, Object>> hits1NestedList = getNestedHits(searchResponseAsMap1);
-        List<String> ids = new ArrayList<>();
-        List<Double> scores = new ArrayList<>();
-        for (Map<String, Object> oneHit : hits1NestedList) {
-            ids.add((String) oneHit.get("_id"));
-            scores.add((Double) oneHit.get("_score"));
-        }
-
-        // verify that scores are in desc order
-        assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
-        // verify that all ids are unique
-        assertEquals(Set.copyOf(ids).size(), ids.size());
-
-        Map<String, Object> total = getTotalHits(searchResponseAsMap1);
-        assertNotNull(total.get("value"));
-        assertEquals(1, total.get("value"));
-        assertNotNull(total.get("relation"));
-        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-    }
-
     @SneakyThrows
     private void initializeIndexIfNotExist(String indexName) throws IOException {
         if (TEST_BASIC_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_INDEX_NAME)) {
@@ -546,46 +467,6 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 List.of(),
                 List.of(TEST_NESTED_TYPE_FIELD_NAME_1),
                 List.of(Map.of(NESTED_FIELD_1, NESTED_FIELD_1_VALUE, NESTED_FIELD_2, NESTED_FIELD_2_VALUE))
-            );
-        }
-
-        if (TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT.equals(indexName)
-                && !indexExists(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT)) {
-            createIndexWithConfiguration(
-                    indexName,
-                    buildIndexConfiguration(
-                            List.of(),
-                            List.of(),
-                            List.of(INTEGER_FIELD_1),
-                            1
-                    ),
-                    ""
-            );
-
-            addKnnDoc(
-                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT,
-                    "1",
-                    List.of(),
-                    List.of(),
-                    Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
-                    Collections.singletonList(TEST_DOC_TEXT1),
-                    List.of(),
-                    List.of(),
-                    List.of(INTEGER_FIELD_1),
-                    List.of(INTEGER_FIELD_1_VALUE)
-            );
-
-            addKnnDoc(
-                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT,
-                    "2",
-                    List.of(),
-                    List.of(),
-                    Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
-                    Collections.singletonList(TEST_DOC_TEXT3),
-                    List.of(),
-                    List.of(),
-                    List.of(INTEGER_FIELD_1),
-                    List.of(INTEGER_FIELD_2_VALUE)
             );
         }
     }
