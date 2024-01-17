@@ -13,6 +13,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang.builder.EqualsBuilder;
+import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.Query;
 import org.opensearch.common.lucene.search.Queries;
 import org.opensearch.core.ParseField;
@@ -27,6 +28,7 @@ import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.QueryShardException;
 import org.opensearch.index.query.Rewriteable;
+import org.opensearch.index.query.QueryBuilderVisitor;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -294,5 +296,18 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             }
         }).filter(Objects::nonNull).collect(Collectors.toList());
         return queries;
+    }
+
+    /**
+     * visit method to parse the HybridQueryBuilder by a visitor
+     * @return
+     */
+    @Override
+    public void visit(QueryBuilderVisitor visitor) {
+        visitor.accept(this);
+        QueryBuilderVisitor subVisitor = visitor.getChildVisitor(Occur.MUST);
+        for (QueryBuilder subQueryBuilder : queries) {
+            subQueryBuilder.visit(subVisitor);
+        }
     }
 }
