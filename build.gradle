@@ -338,8 +338,7 @@ testClusters.integTest {
 
     // Install K-NN/ml-commons plugins on the integTest cluster nodes except security
     configurations.zipArchive.asFileTree.each {
-        if(!it.name.contains("opensearch-security")) {
-            plugin(provider(new Callable<RegularFile>(){
+        plugin(provider(new Callable<RegularFile>(){
                 @Override
                 RegularFile call() throws Exception {
                     return new RegularFile() {
@@ -349,8 +348,7 @@ testClusters.integTest {
                         }
                     }
                 }
-            }))
-        }
+        }))
     }
 
     // This installs our neural-search plugin into the testClusters
