@@ -61,7 +61,7 @@ public abstract class OpenSearchSecureRestTestCase extends OpenSearchRestTestCas
     private static final String SYS_PROPERTY_KEY_CLUSTER_ENDPOINT = "tests.rest.cluster";
     private static final String SYS_PROPERTY_KEY_USER = "user";
     private static final String SYS_PROPERTY_KEY_PASSWORD = "password";
-    private static final String DEFAULT_SOCKET_TIMEOUT = "120s";
+    private static final String DEFAULT_SOCKET_TIMEOUT = "60s";
     private static final String INTERNAL_INDICES_PREFIX = ".";
     private static String protocol;
 
