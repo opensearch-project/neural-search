@@ -63,7 +63,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     protected static final Locale LOCALE = Locale.ROOT;
 
-    private static final int MAX_TASK_RESULT_QUERY_TIME_IN_SECOND = 90 * 5;
+    private static final int MAX_TASK_RESULT_QUERY_TIME_IN_SECOND = 60 * 5;
 
     private static final int DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND = 1000;
     protected static final String DEFAULT_USER_AGENT = "Kibana";
