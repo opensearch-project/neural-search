@@ -15,6 +15,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 import com.google.common.primitives.Floats;
@@ -57,6 +58,25 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
         neuralQueryBuilder.queryText("Hello World");
         neuralQueryBuilder.k(1);
         Map<String, Object> response = search(index, neuralQueryBuilder, 2);
+
+        assertFalse(response.isEmpty());
+
+    }
+
+    @SneakyThrows
+    public void testNeuralQueryEnricherProcessor_whenHybridQueryBuilderAndNoModelIdPassed_thenSuccess() {
+        initializeIndexIfNotExist();
+        String modelId = getDeployedModelId();
+        createSearchRequestProcessor(modelId, search_pipeline);
+        createPipelineProcessor(modelId, ingest_pipeline);
+        updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
+        neuralQueryBuilder.fieldName(TEST_KNN_VECTOR_FIELD_NAME_1);
+        neuralQueryBuilder.queryText("Hello World");
+        neuralQueryBuilder.k(1);
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        hybridQueryBuilder.add(neuralQueryBuilder);
+        Map<String, Object> response = search(index, hybridQueryBuilder, 2);
 
         assertFalse(response.isEmpty());
 
