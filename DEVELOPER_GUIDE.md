@@ -137,12 +137,11 @@ Additionally, it is also possible to run a cluster with security enabled:
 ./gradlew run -Dsecurity.enabled=true
 ```
 
-By default, if `-Dsecurity.enabled=true` is passed the following defaults will be used: `https=true`, `user=admin` and
-`password=admin`.
+By default, if `-Dsecurity.enabled=true` is passed the following defaults will be used: `https=true`, `user=admin`. There is no default password and it is set as `password=<admin-password`.
 
-Then, to access the cluster, we can run
+Then, to access the cluster, we can run the below command. <admin-password> parameter is the password set by admin.
 ```bash
-curl https://localhost:9200 --insecure -u admin:admin
+curl https://localhost:9200 --insecure -u admin:<admin-password>
 
 {
   "name" : "integTest-0",
@@ -191,7 +190,7 @@ Integration tests can be run with remote cluster. For that run the following com
 In case remote cluster is secured it's possible to pass username and password with the following command:
 
 ```
-./gradlew :integTestRemote -Dtests.rest.cluster=localhost:9200 -Dtests.cluster=localhost:9200 -Dtests.clustername="integTest-0" -Dhttps=true -Duser=admin -Dpassword=admin
+./gradlew :integTestRemote -Dtests.rest.cluster=localhost:9200 -Dtests.cluster=localhost:9200 -Dtests.clustername="integTest-0" -Dhttps=true -Duser=admin -Dpassword=<admin-password>
 ```
 
 ### Debugging
