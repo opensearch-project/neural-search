@@ -86,9 +86,9 @@ ext {
         cluster.getNodes().forEach { node ->
             var creds = node.getCredentials()
             if (creds.isEmpty()) {
-                creds.add(Map.of('username', 'admin', 'password', System.getProperty("password")))
+                creds.add(Map.of('username', 'admin', 'password', System.getProperty("OPENSEARCH_INITIAL_ADMIN_PASSWORD")))
             } else {
-                creds.get(0).putAll(Map.of('username', 'admin', 'password', System.getProperty("password")))
+                creds.get(0).putAll(Map.of('username', 'admin', 'password', System.getProperty("OPENSEARCH_INITIAL_ADMIN_PASSWORD")))
             }
         }
 
