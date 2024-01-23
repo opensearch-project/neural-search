@@ -29,7 +29,6 @@ buildscript {
         }
         opensearch_group = "org.opensearch"
         opensearch_no_snapshot = opensearch_build.replace("-SNAPSHOT","")
-        System.setProperty("OPENSEARCH_INITIAL_ADMIN_PASSWORD", "myStrongPassword123!")
     }
 
     repositories {
@@ -63,6 +62,7 @@ def opensearch_tmp_dir = rootProject.file('build/private/opensearch_tmp').absolu
 opensearch_tmp_dir.mkdirs()
 
 ext {
+    System.setProperty("OPENSEARCH_INITIAL_ADMIN_PASSWORD", "myStrongPassword123!")
     isSnapshot = "true" == System.getProperty("build.snapshot", "true")
     projectSubstitutions = [:]
 
@@ -86,9 +86,9 @@ ext {
         cluster.getNodes().forEach { node ->
             var creds = node.getCredentials()
             if (creds.isEmpty()) {
-                creds.add(Map.of('username', 'admin', 'password', System.getProperty("OPENSEARCH_INITIAL_ADMIN_PASSWORD")))
+                creds.add(Map.of('username', 'admin', 'password', System.getProperty("password")))
             } else {
-                creds.get(0).putAll(Map.of('username', 'admin', 'password', System.getProperty("OPENSEARCH_INITIAL_ADMIN_PASSWORD")))
+                creds.get(0).putAll(Map.of('username', 'admin', 'password', System.getProperty("password")))
             }
         }
 

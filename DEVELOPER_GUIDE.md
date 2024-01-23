@@ -137,7 +137,7 @@ Additionally, it is also possible to run a cluster with security enabled:
 ./gradlew run -Dsecurity.enabled=true
 ```
 
-By default, if `-Dsecurity.enabled=true` is passed the following defaults will be used: `https=true`, `user=admin`. There is no default password and it is set as `password=<admin-password`.
+By default, if `-Dsecurity.enabled=true` is passed the following defaults will be used: `https=true`, `user=admin`. There is no default password and it is to be set as `password=<admin-password>`.
 
 Then, to access the cluster, we can run the below command. <admin-password> parameter is the password set by admin.
 ```bash
