@@ -20,6 +20,7 @@ import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TEXT_FI
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 import java.util.function.Supplier;
 
 import org.apache.lucene.search.MatchNoDocsQuery;
@@ -706,6 +707,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
         HybridQueryBuilder hybridQueryBuilder = HybridQueryBuilder.fromXContent(contentParser);
         assertNotNull(hybridQueryBuilder);
+    }
+
+    public void testVisit() {
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(new NeuralQueryBuilder()).add(new NeuralSparseQueryBuilder());
+        List<QueryBuilder> visitedQueries = new ArrayList<>();
+        hybridQueryBuilder.visit(createTestVisitor(visitedQueries));
+        assertEquals(3, visitedQueries.size());
     }
 
     private Map<String, Object> getInnerMap(Object innerObject, String queryName, String fieldName) {
