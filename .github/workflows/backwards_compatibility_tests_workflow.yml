@@ -36,6 +36,7 @@ jobs:
       - name: Run NeuralSearch Restart-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
         run: |
           echo "Running restart-upgrade backwards compatibility tests ..."
+#          Disabling BWC tests due to ongoing build failure. https://github.com/opensearch-project/neural-search/issues/536
 #          ./gradlew :qa:restart-upgrade:testAgainstNewCluster -D'tests.bwc.version=${{ matrix.bwc_version }}'
 
   Rolling-Upgrade-BWCTests-NeuralSearch:
@@ -63,4 +64,5 @@ jobs:
       - name: Run NeuralSearch Rolling-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
         run: |
           echo "Running rolling-upgrade backwards compatibility tests ..."
+#          Disabling BWC tests due to ongoing build failure. https://github.com/opensearch-project/neural-search/issues/536
 #         ./gradlew :qa:rolling-upgrade:testRollingUpgrade -D'tests.bwc.version=${{ matrix.bwc_version }}'
