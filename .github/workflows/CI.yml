@@ -21,7 +21,8 @@ jobs:
     needs: Get-CI-Image-Tag
     strategy:
       matrix:
-        java: [11, 17, 21]
+        # Restricting java 21 to 21.0.1 due to ongoing bug in JDK 21.0.2 https://bugs.openjdk.org/browse/JDK-8323659. Once the fix https://github.com/opensearch-project/OpenSearch/pull/11968 get merged this change will be reverted.
+        java: [11, 17, 21.0.1]
         os: [ubuntu-latest]
 
     name: Gradle Check Linux
@@ -32,6 +33,7 @@ jobs:
       image: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-version-linux }}
       # need to switch to root so that github actions can install runner binary on container without permission issues.
       options: --user root
+
 
     steps:
       - name: Checkout neural-search
@@ -55,7 +57,8 @@ jobs:
   Check-neural-search-windows:
     strategy:
       matrix:
-        java: [11, 17, 21]
+        # Restricting java 21 to 21.0.1 due to ongoing bug in JDK 21.0.2 https://bugs.openjdk.org/browse/JDK-8323659. Once the fix https://github.com/opensearch-project/OpenSearch/pull/11968 get merged this change will be reverted.
+        java: [11, 17, 21.0.1]
         os: [windows-latest]
 
     name: Gradle Check Windows
@@ -83,7 +86,8 @@ jobs:
     needs: Get-CI-Image-Tag
     strategy:
       matrix:
-        java: [11, 17, 21]
+        # Restricting java 21 to 21.0.1 due to ongoing bug in JDK 21.0.2 https://bugs.openjdk.org/browse/JDK-8323659. Once the fix https://github.com/opensearch-project/OpenSearch/pull/11968 get merged this change will be reverted.
+        java: [11, 17, 21.0.1]
         os: [ubuntu-latest]
 
     name: Pre-commit Linux
@@ -117,7 +121,8 @@ jobs:
   Precommit-neural-search-windows:
     strategy:
       matrix:
-        java: [11, 17, 21]
+        # Restricting java 21 to 21.0.1 due to ongoing bug in JDK 21.0.2 https://bugs.openjdk.org/browse/JDK-8323659. Once the fix https://github.com/opensearch-project/OpenSearch/pull/11968 get merged this change will be reverted.
+        java: [11, 17, 21.0.1]
         os: [windows-latest]
 
     name: Pre-commit Windows
