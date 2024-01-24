@@ -197,8 +197,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             isComplete = checkComplete(taskQueryResult);
             Thread.sleep(DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND);
         }
-
-        pollForModelState(modelId, Set.of(MLModelState.DEPLOYED));
     }
 
     /**
@@ -893,7 +891,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         List<Map<String, Object>> innerHitsMap = (List<Map<String, Object>>) hits.get("hits");
         return innerHitsMap.stream()
             .map(hit -> (Map<String, Object>) hit.get("_source"))
-            .filter(hitsMap -> !Objects.isNull(hitsMap) && hitsMap.containsKey("model_id"))
+            .filter(hitsMap -> Objects.nonNull(hitsMap) && hitsMap.containsKey("model_id"))
             .map(hitsMap -> (String) hitsMap.get("model_id"))
             .collect(Collectors.toSet());
     }
