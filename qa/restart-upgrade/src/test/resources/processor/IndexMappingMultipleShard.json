@@ -27,7 +27,7 @@
         "type": "text"
       },
       "passage_image": {
-        "type": "binary"
+        "type": "text"
       }
     }
   }
