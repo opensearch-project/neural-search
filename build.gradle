@@ -66,7 +66,7 @@ ext {
     projectSubstitutions = [:]
 
     configureSecurityPlugin = { OpenSearchCluster cluster ->
-        configurations.zipArchive.asFileTree.each {
+        configurations.secureIntegTestPluginArchive.asFileTree.each {
             if(it.name.contains("opensearch-security")){
                 cluster.plugin(provider(new Callable<RegularFile>() {
                     @Override
@@ -160,6 +160,7 @@ allprojects {
 
 configurations {
     zipArchive
+    secureIntegTestPluginArchive
 }
 
 tasks.register("preparePluginPathDirs") {
@@ -231,7 +232,7 @@ dependencies {
     api "org.opensearch:opensearch:${opensearch_version}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-knn', version: "${opensearch_build}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-ml-plugin', version: "${opensearch_build}"
-    zipArchive group: 'org.opensearch.plugin', name:'opensearch-security', version: "${opensearch_build}"
+    secureIntegTestPluginArchive group: 'org.opensearch.plugin', name:'opensearch-security', version: "${opensearch_build}"
     compileOnly fileTree(dir: knnJarDirectory, include: '*.jar')
     api group: 'org.opensearch', name:'opensearch-ml-client', version: "${opensearch_build}"
     testFixturesImplementation "org.opensearch.test:framework:${opensearch_version}"
@@ -337,8 +338,7 @@ testClusters.integTest {
 
     // Install K-NN/ml-commons plugins on the integTest cluster nodes except security
     configurations.zipArchive.asFileTree.each {
-        if(!it.name.contains("opensearch-security")) {
-            plugin(provider(new Callable<RegularFile>(){
+        plugin(provider(new Callable<RegularFile>(){
                 @Override
                 RegularFile call() throws Exception {
                     return new RegularFile() {
@@ -348,8 +348,7 @@ testClusters.integTest {
                         }
                     }
                 }
-            }))
-        }
+        }))
     }
 
     // This installs our neural-search plugin into the testClusters
