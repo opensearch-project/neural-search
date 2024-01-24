@@ -62,7 +62,12 @@ def opensearch_tmp_dir = rootProject.file('build/private/opensearch_tmp').absolu
 opensearch_tmp_dir.mkdirs()
 
 ext {
-    System.setProperty("OPENSEARCH_INITIAL_ADMIN_PASSWORD", "myStrongPassword123!")
+    var versionsWithoutDefaultAdminPassword = System.getProperty("versionsWithoutDefaultAdminPassword").split(',').toList()
+    if(versionsWithoutDefaultAdminPassword.contains(version_tokens[0])){
+        System.setProperty("OPENSEARCH_INITIAL_ADMIN_PASSWORD", "myStrongPassword123!")
+    }else{
+        System.setProperty("OPENSEARCH_INITIAL_ADMIN_PASSWORD", "admin")
+    }
     isSnapshot = "true" == System.getProperty("build.snapshot", "true")
     projectSubstitutions = [:]
 
