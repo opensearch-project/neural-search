@@ -40,7 +40,7 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
     public void setUp() throws Exception {
         super.setUp();
         updateClusterSettings();
-        prepareModel();
+        prepareSparseEncodingModel();
     }
 
     @After
