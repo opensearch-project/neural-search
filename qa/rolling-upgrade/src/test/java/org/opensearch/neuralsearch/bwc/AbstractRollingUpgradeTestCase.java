@@ -8,7 +8,7 @@ import java.util.Locale;
 import java.util.Optional;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.neuralsearch.BaseSparseEncodingIT;
+import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.test.rest.OpenSearchRestTestCase;
 import static org.opensearch.neuralsearch.TestUtils.OLD_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.MIXED_CLUSTER;
@@ -18,7 +18,7 @@ import static org.opensearch.neuralsearch.TestUtils.ROLLING_UPGRADE_FIRST_ROUND;
 import static org.opensearch.neuralsearch.TestUtils.BWCSUITE_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.NEURAL_SEARCH_BWC_PREFIX;
 
-public abstract class AbstractRollingUpgradeTestCase extends BaseSparseEncodingIT {
+public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT {
 
     @Before
     protected String getIndexNameForTest() {
