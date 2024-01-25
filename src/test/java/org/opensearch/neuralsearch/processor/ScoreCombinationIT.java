@@ -30,8 +30,8 @@ import com.google.common.primitives.Floats;
 import lombok.SneakyThrows;
 
 public class ScoreCombinationIT extends BaseNeuralSearchIT {
-    private static final String TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME = "test-neural-multi-doc-one-shard-index";
-    private static final String TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME = "test-neural-multi-doc-three-shards-index";
+    private static final String TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME = "test-score-neural-multi-doc-one-shard-index";
+    private static final String TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME = "test-score-neural-multi-doc-three-shards-index";
     private static final String TEST_QUERY_TEXT3 = "hello";
     private static final String TEST_QUERY_TEXT4 = "place";
     private static final String TEST_QUERY_TEXT7 = "notexistingwordtwo";
@@ -51,11 +51,12 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
     private static final String L2_NORMALIZATION_METHOD = "l2";
     private static final String HARMONIC_MEAN_COMBINATION_METHOD = "harmonic_mean";
     private static final String GEOMETRIC_MEAN_COMBINATION_METHOD = "geometric_mean";
+    private static String modelId;
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        prepareModel();
+        modelId=prepareModel();
     }
 
     @After
@@ -63,7 +64,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
     public void tearDown() {
         super.tearDown();
         deleteSearchPipeline(SEARCH_PIPELINE);
-        findDeployedModels().forEach(this::deleteModel);
+        deleteModel(modelId);
     }
 
     /**
@@ -179,6 +180,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
                 containsString("in hybrid query")
             )
         );
+        deleteIndex(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
     }
 
     /**
@@ -245,6 +247,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertHybridSearchResults(searchResponseAsMapL2Norm, 5, new float[] { 0.5f, 1.0f });
+        deleteIndex(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
     }
 
     /**
@@ -311,6 +314,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertHybridSearchResults(searchResponseAsMapL2Norm, 5, new float[] { 0.5f, 1.0f });
+        deleteIndex(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
     }
 
     private void initializeIndexIfNotExist(String indexName) throws IOException {

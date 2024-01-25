@@ -35,19 +35,20 @@ public class NeuralSparseQueryIT extends BaseSparseEncodingIT {
 
     private static final Float DELTA = 1e-5f;
     private final Map<String, Float> testRankFeaturesDoc = TestUtils.createRandomTokenWeightMap(TEST_TOKENS);
-
+    private static String modelId;
     @Before
     public void setUp() throws Exception {
         super.setUp();
         updateClusterSettings();
-        prepareModel();
+        modelId=prepareModel();
+        assertNotNull(modelId);
     }
 
     @After
     @SneakyThrows
     public void tearDown() {
         super.tearDown();
-        findDeployedModels().forEach(this::deleteModel);
+        deleteModel(modelId);
     }
 
     /**

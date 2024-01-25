@@ -53,11 +53,11 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     private final float[] testVector2 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector3 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector4 = createRandomVector(TEST_DIMENSION);
-
+    private static String modelId;
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        prepareModel();
+        modelId=prepareModel();
     }
 
     @After
@@ -65,7 +65,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     public void tearDown() {
         super.tearDown();
         deleteSearchPipeline(SEARCH_PIPELINE);
-        findDeployedModels().forEach(this::deleteModel);
+        deleteModel(modelId);
     }
 
     /**
@@ -115,6 +115,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertQueryResults(searchResponseAsMap, 5, false);
+        deleteIndex(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
     }
 
     /**
@@ -158,6 +159,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertQueryResults(searchResponseAsMap, 5, false);
+        deleteIndex(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
     }
 
     @SneakyThrows
@@ -218,6 +220,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
 
         // verify that all ids are unique
         assertEquals(Set.copyOf(ids).size(), ids.size());
+        deleteIndex(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
     }
 
     @SneakyThrows
@@ -237,6 +240,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertQueryResults(searchResponseAsMap, 0, true);
+        deleteIndex(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
     }
 
     @SneakyThrows
@@ -257,6 +261,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertQueryResults(searchResponseAsMap, 4, true, Range.between(0.33f, 1.0f));
+        deleteIndex(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
     }
 
     private void initializeIndexIfNotExist(String indexName) throws IOException {

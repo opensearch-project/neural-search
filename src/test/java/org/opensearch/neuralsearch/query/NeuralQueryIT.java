@@ -38,12 +38,14 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_TEXT_FIELD_NAME_1 = "test-text-field";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_NESTED = "nested.knn.field";
     private final float[] testVector = createRandomVector(TEST_DIMENSION);
+    private static String modelId;
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
         updateClusterSettings();
-        prepareModel();
+        modelId=prepareModel();
+        assertNotNull(modelId);
     }
 
     @After
@@ -54,7 +56,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
          * this happens in case we leave model from previous test case. We use new model for every test, and old model
          * can be undeployed and deleted to free resources after each test case execution.
          */
-        findDeployedModels().forEach(this::deleteModel);
+        deleteModel(modelId);
     }
 
     /**
