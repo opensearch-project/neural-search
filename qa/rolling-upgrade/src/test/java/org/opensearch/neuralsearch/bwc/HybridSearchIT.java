@@ -103,7 +103,7 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
         }
     }
 
-    public HybridQueryBuilder getQueryBuilder(final String modelId) {
+    private HybridQueryBuilder getQueryBuilder(final String modelId) {
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
         neuralQueryBuilder.fieldName("passage_embedding");
         neuralQueryBuilder.modelId(modelId);

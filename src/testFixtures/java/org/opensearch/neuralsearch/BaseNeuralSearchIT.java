@@ -119,7 +119,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     @SneakyThrows
-    protected void updateClusterSettings(String settingKey, Object value) {
+    protected void updateClusterSettings(final String settingKey, final Object value) {
         XContentBuilder builder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject("persistent")
@@ -138,13 +138,13 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
     }
 
-    protected String registerModelGroupAndUploadModel(String requestBody) throws Exception {
+    protected String registerModelGroupAndUploadModel(final String requestBody) throws Exception {
         String modelGroupId = getModelGroupId();
         // model group id is dynamically generated, we need to update model update request body after group is registered
         return uploadModel(String.format(LOCALE, requestBody, modelGroupId));
     }
 
-    protected String uploadModel(String requestBody) throws Exception {
+    protected String uploadModel(final String requestBody) throws Exception {
         Response uploadResponse = makeRequest(
             client(),
             "POST",
@@ -173,7 +173,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return modelId;
     }
 
-    protected void loadModel(String modelId) throws Exception {
+    protected void loadModel(final String modelId) throws Exception {
         Response uploadResponse = makeRequest(
             client(),
             "POST",
@@ -236,7 +236,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      */
     @SuppressWarnings("unchecked")
     @SneakyThrows
-    protected float[] runInference(String modelId, String queryText) {
+    protected float[] runInference(final String modelId, final String queryText) {
         Response inferenceResponse = makeRequest(
             client(),
             "POST",
@@ -264,7 +264,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return vectorAsListToArray(data);
     }
 
-    protected void createIndexWithConfiguration(String indexName, String indexConfiguration, String pipelineName) throws Exception {
+    protected void createIndexWithConfiguration(final String indexName, String indexConfiguration, final String pipelineName)
+        throws Exception {
         if (StringUtils.isNotBlank(pipelineName)) {
             indexConfiguration = String.format(LOCALE, indexConfiguration, pipelineName);
         }
@@ -285,12 +286,13 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertEquals(indexName, node.get("index").toString());
     }
 
-    protected void createPipelineProcessor(String modelId, String pipelineName, ProcessorType processorType) throws Exception {
+    protected void createPipelineProcessor(final String modelId, final String pipelineName, final ProcessorType processorType)
+        throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource(PIPELINE_CONFIGS_BY_TYPE.get(processorType)).toURI()));
         createPipelineProcessor(requestBody, pipelineName, modelId);
     }
 
-    protected void createPipelineProcessor(String requestBody, String pipelineName, String modelId) throws Exception {
+    protected void createPipelineProcessor(final String requestBody, final String pipelineName, final String modelId) throws Exception {
         Response pipelineCreateResponse = makeRequest(
             client(),
             "PUT",
@@ -307,7 +309,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertEquals("true", node.get("acknowledged").toString());
     }
 
-    protected void createSearchRequestProcessor(String modelId, String pipelineName) throws Exception {
+    protected void createSearchRequestProcessor(final String modelId, final String pipelineName) throws Exception {
         Response pipelineCreateResponse = makeRequest(
             client(),
             "PUT",
@@ -337,7 +339,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @return number of documents indexed to that index
      */
     @SneakyThrows
-    protected int getDocCount(String indexName) {
+    protected int getDocCount(final String indexName) {
         Request request = new Request("GET", "/" + indexName + "/_count");
         Response response = client().performRequest(request);
         assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
@@ -354,7 +356,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @param resultSize number of results to return in the search
      * @return Search results represented as a map
      */
-    protected Map<String, Object> search(String index, QueryBuilder queryBuilder, int resultSize) {
+    protected Map<String, Object> search(final String index, final QueryBuilder queryBuilder, final int resultSize) {
         return search(index, queryBuilder, null, resultSize);
     }
 
@@ -368,7 +370,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @return Search results represented as a map
      */
     @SneakyThrows
-    protected Map<String, Object> search(String index, QueryBuilder queryBuilder, QueryBuilder rescorer, int resultSize) {
+    protected Map<String, Object> search(
+        final String index,
+        final QueryBuilder queryBuilder,
+        final QueryBuilder rescorer,
+        final int resultSize
+    ) {
         return search(index, queryBuilder, rescorer, resultSize, Map.of());
     }
 
@@ -384,11 +391,11 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      */
     @SneakyThrows
     protected Map<String, Object> search(
-        String index,
-        QueryBuilder queryBuilder,
-        QueryBuilder rescorer,
-        int resultSize,
-        Map<String, String> requestParams
+        final String index,
+        final QueryBuilder queryBuilder,
+        final QueryBuilder rescorer,
+        final int resultSize,
+        final Map<String, String> requestParams
     ) {
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject().field("query");
         queryBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
@@ -424,18 +431,18 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @param vectorFieldNames List of vectir fields to be added
      * @param vectors List of vectors corresponding to those fields
      */
-    protected void addKnnDoc(String index, String docId, List<String> vectorFieldNames, List<Object[]> vectors) {
+    protected void addKnnDoc(final String index, final String docId, final List<String> vectorFieldNames, final List<Object[]> vectors) {
         addKnnDoc(index, docId, vectorFieldNames, vectors, Collections.emptyList(), Collections.emptyList());
     }
 
     @SneakyThrows
     protected void addKnnDoc(
-        String index,
-        String docId,
-        List<String> vectorFieldNames,
-        List<Object[]> vectors,
-        List<String> textFieldNames,
-        List<String> texts
+        final String index,
+        final String docId,
+        final List<String> vectorFieldNames,
+        final List<Object[]> vectors,
+        final List<String> textFieldNames,
+        final List<String> texts
     ) {
         addKnnDoc(index, docId, vectorFieldNames, vectors, textFieldNames, texts, Collections.emptyList(), Collections.emptyList());
     }
@@ -454,14 +461,14 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      */
     @SneakyThrows
     protected void addKnnDoc(
-        String index,
-        String docId,
-        List<String> vectorFieldNames,
-        List<Object[]> vectors,
-        List<String> textFieldNames,
-        List<String> texts,
-        List<String> nestedFieldNames,
-        List<Map<String, String>> nestedFields
+        final String index,
+        final String docId,
+        final List<String> vectorFieldNames,
+        final List<Object[]> vectors,
+        final List<String> textFieldNames,
+        final List<String> texts,
+        final List<String> nestedFieldNames,
+        final List<Map<String, String>> nestedFields
     ) {
         Request request = new Request("POST", "/" + index + "/_doc/" + docId + "?refresh=true");
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
@@ -490,18 +497,23 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     @SneakyThrows
-    protected void addSparseEncodingDoc(String index, String docId, List<String> fieldNames, List<Map<String, Float>> docs) {
+    protected void addSparseEncodingDoc(
+        final String index,
+        final String docId,
+        final List<String> fieldNames,
+        final List<Map<String, Float>> docs
+    ) {
         addSparseEncodingDoc(index, docId, fieldNames, docs, Collections.emptyList(), Collections.emptyList());
     }
 
     @SneakyThrows
     protected void addSparseEncodingDoc(
-        String index,
-        String docId,
-        List<String> fieldNames,
-        List<Map<String, Float>> docs,
-        List<String> textFieldNames,
-        List<String> texts
+        final String index,
+        final String docId,
+        final List<String> fieldNames,
+        final List<Map<String, Float>> docs,
+        final List<String> textFieldNames,
+        final List<String> texts
     ) {
         Request request = new Request("POST", "/" + index + "/_doc/" + docId + "?refresh=true");
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
@@ -526,7 +538,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @return Map of first internal hit from the search
      */
     @SuppressWarnings("unchecked")
-    protected Map<String, Object> getFirstInnerHit(Map<String, Object> searchResponseAsMap) {
+    protected Map<String, Object> getFirstInnerHit(final Map<String, Object> searchResponseAsMap) {
         Map<String, Object> hits1map = (Map<String, Object>) searchResponseAsMap.get("hits");
         List<Object> hits2List = (List<Object>) hits1map.get("hits");
         assertTrue(hits2List.size() > 0);
@@ -540,7 +552,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @return number of hits from the search
      */
     @SuppressWarnings("unchecked")
-    protected int getHitCount(Map<String, Object> searchResponseAsMap) {
+    protected int getHitCount(final Map<String, Object> searchResponseAsMap) {
         Map<String, Object> hits1map = (Map<String, Object>) searchResponseAsMap.get("hits");
         List<Object> hits1List = (List<Object>) hits1map.get("hits");
         return hits1List.size();
@@ -553,7 +565,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @return number of scores list from the search
      */
     @SuppressWarnings("unchecked")
-    protected List<Double> getNormalizationScoreList(Map<String, Object> searchResponseAsMap) {
+    protected List<Double> getNormalizationScoreList(final Map<String, Object> searchResponseAsMap) {
         Map<String, Object> hits1map = (Map<String, Object>) searchResponseAsMap.get("hits");
         List<Object> hitsList = (List<Object>) hits1map.get("hits");
         List<Double> scores = new ArrayList<>();
@@ -571,17 +583,17 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @param knnFieldConfigs list of configs specifying field
      */
     @SneakyThrows
-    protected void prepareKnnIndex(String indexName, List<KNNFieldConfig> knnFieldConfigs) {
+    protected void prepareKnnIndex(final String indexName, final List<KNNFieldConfig> knnFieldConfigs) {
         prepareKnnIndex(indexName, knnFieldConfigs, 3);
     }
 
     @SneakyThrows
-    protected void prepareKnnIndex(String indexName, List<KNNFieldConfig> knnFieldConfigs, int numOfShards) {
+    protected void prepareKnnIndex(final String indexName, final List<KNNFieldConfig> knnFieldConfigs, final int numOfShards) {
         createIndexWithConfiguration(indexName, buildIndexConfiguration(knnFieldConfigs, numOfShards), "");
     }
 
     @SneakyThrows
-    protected void prepareSparseEncodingIndex(String indexName, List<String> sparseEncodingFieldNames) {
+    protected void prepareSparseEncodingIndex(final String indexName, final List<String> sparseEncodingFieldNames) {
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder().startObject().startObject("mappings").startObject("properties");
 
         for (String fieldName : sparseEncodingFieldNames) {
@@ -602,12 +614,17 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @param queryText Text to produce query vector from
      * @return Expected OpenSearch score for this indexVector
      */
-    protected float computeExpectedScore(String modelId, float[] indexVector, SpaceType spaceType, String queryText) {
+    protected float computeExpectedScore(
+        final String modelId,
+        final float[] indexVector,
+        final SpaceType spaceType,
+        final String queryText
+    ) {
         float[] queryVector = runInference(modelId, queryText);
         return spaceType.getVectorSimilarityFunction().compare(queryVector, indexVector);
     }
 
-    protected Map<String, Object> getTaskQueryResponse(String taskId) throws Exception {
+    protected Map<String, Object> getTaskQueryResponse(final String taskId) throws Exception {
         Response taskQueryResponse = makeRequest(
             client(),
             "GET",
@@ -619,7 +636,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return XContentHelper.convertToMap(XContentType.JSON.xContent(), EntityUtils.toString(taskQueryResponse.getEntity()), false);
     }
 
-    protected boolean checkComplete(Map<String, Object> node) {
+    protected boolean checkComplete(final Map<String, Object> node) {
         Predicate<Map<String, Object>> predicate = x -> node.get("error") != null || "COMPLETED".equals(String.valueOf(node.get("state")));
         return predicate.test(node);
     }
@@ -917,7 +934,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         );
     }
 
-    protected String registerModelGroup(String modelGroupRegisterRequestBody) throws IOException, ParseException {
+    protected String registerModelGroup(final String modelGroupRegisterRequestBody) throws IOException, ParseException {
         Response modelGroupResponse = makeRequest(
             client(),
             "POST",
@@ -937,7 +954,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     // Method that waits till the health of nodes in the cluster goes green
-    protected void waitForClusterHealthGreen(String numOfNodes) throws IOException {
+    protected void waitForClusterHealthGreen(final String numOfNodes) throws IOException {
         Request waitForGreen = new Request("GET", "/_cluster/health");
         waitForGreen.addParameter("wait_for_nodes", numOfNodes);
         waitForGreen.addParameter("wait_for_status", "green");
@@ -955,8 +972,14 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @param imageText name of the image text
      *
      */
-    protected void addDocument(String index, String docId, String fieldName, String text, String imagefieldName, String imageText)
-        throws IOException {
+    protected void addDocument(
+        final String index,
+        final String docId,
+        final String fieldName,
+        final String text,
+        final String imagefieldName,
+        final String imageText
+    ) throws IOException {
         Request request = new Request("PUT", "/" + index + "/_doc/" + docId + "?refresh=true");
 
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
@@ -976,7 +999,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @return get pipeline response as a map object
     */
     @SneakyThrows
-    protected Map<String, Object> getIngestionPipeline(String pipelineName) {
+    protected Map<String, Object> getIngestionPipeline(final String pipelineName) {
         Request request = new Request("GET", "/_ingest/pipeline/" + pipelineName);
         Response response = client().performRequest(request);
         assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
@@ -993,7 +1016,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @return delete pipeline response as a map object
      */
     @SneakyThrows
-    protected Map<String, Object> deletePipeline(String pipelineName) {
+    protected Map<String, Object> deletePipeline(final String pipelineName) {
         Request request = new Request("DELETE", "/_ingest/pipeline/" + pipelineName);
         Response response = client().performRequest(request);
         assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
@@ -1002,12 +1025,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return responseMap;
     }
 
-    protected float computeExpectedScore(String modelId, Map<String, Float> tokenWeightMap, String queryText) {
+    protected float computeExpectedScore(final String modelId, final Map<String, Float> tokenWeightMap, final String queryText) {
         Map<String, Float> queryTokens = runSparseModelInference(modelId, queryText);
         return computeExpectedScore(tokenWeightMap, queryTokens);
     }
 
-    protected float computeExpectedScore(Map<String, Float> tokenWeightMap, Map<String, Float> queryTokens) {
+    protected float computeExpectedScore(final Map<String, Float> tokenWeightMap, final Map<String, Float> queryTokens) {
         Float score = 0f;
         for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
             if (tokenWeightMap.containsKey(entry.getKey())) {
@@ -1018,7 +1041,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     @SneakyThrows
-    protected Map<String, Float> runSparseModelInference(String modelId, String queryText) {
+    protected Map<String, Float> runSparseModelInference(final String modelId, final String queryText) {
         Response inferenceResponse = makeRequest(
             client(),
             "POST",
@@ -1049,7 +1072,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     // rank_features use lucene FeatureField, which will compress the Float number to 16 bit
     // this function simulate the encoding and decoding progress in lucene FeatureField
-    protected Float getFeatureFieldCompressedNumber(Float originNumber) {
+    protected Float getFeatureFieldCompressedNumber(final Float originNumber) {
         int freqBits = Float.floatToIntBits(originNumber);
         freqBits = freqBits >> 15;
         freqBits = ((int) ((float) freqBits)) << 15;
@@ -1057,7 +1080,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     // Wipe of all the resources after execution of the tests.
-    protected void wipeOfTestResources(String indexName, String ingestPipeline, String modelId, String searchPipeline) throws IOException {
+    protected void wipeOfTestResources(
+        final String indexName,
+        final String ingestPipeline,
+        final String modelId,
+        final String searchPipeline
+    ) throws IOException {
         if (ingestPipeline != null) {
             deletePipeline(ingestPipeline);
         }

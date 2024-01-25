@@ -38,56 +38,39 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
     // Create Text Embedding Processor, Ingestion Pipeline, add document and search pipeline with normalization processor
     // Validate process , pipeline and document count in restart-upgrade scenario
     public void testNormalizationProcessor_whenIndexWithMultipleShards_E2EFlow() throws Exception {
-        waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-        if (isRunningAgainstOldCluster()) {
-            String modelId = uploadTextEmbeddingModel();
-            loadModel(modelId);
-            createPipelineProcessor(modelId, PIPELINE_NAME);
-            createIndexWithConfiguration(
-                getIndexNameForTest(),
-                Files.readString(Path.of(classLoader.getResource("processor/IndexMappingMultipleShard.json").toURI())),
-                PIPELINE_NAME
-            );
-            addDocuments(getIndexNameForTest(), true);
-            createSearchPipeline(SEARCH_PIPELINE_NAME);
-        } else {
-            String modelId = null;
-            try {
-                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                loadModel(modelId);
-                addDocuments(getIndexNameForTest(), false);
-                validateTestIndex(modelId, getIndexNameForTest(), SEARCH_PIPELINE_NAME);
-            } finally {
-                wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, SEARCH_PIPELINE_NAME);
-            }
-        }
+        validateNormalizationProcessor("processor/IndexMappingMultipleShard.json", PIPELINE_NAME, SEARCH_PIPELINE_NAME);
     }
 
     // Test restart-upgrade normalization processor when index with single shard
     // Create Text Embedding Processor, Ingestion Pipeline, add document and search pipeline with normalization processor
     // Validate process , pipeline and document count in restart-upgrade scenario
     public void testNormalizationProcessor_whenIndexWithSingleShard_E2EFlow() throws Exception {
+        validateNormalizationProcessor("processor/IndexMappingSingleShard.json", PIPELINE1_NAME, SEARCH_PIPELINE1_NAME);
+    }
+
+    private void validateNormalizationProcessor(final String fileName, final String pipelineName, final String searchPipelineName)
+        throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         if (isRunningAgainstOldCluster()) {
             String modelId = uploadTextEmbeddingModel();
             loadModel(modelId);
-            createPipelineProcessor(modelId, PIPELINE1_NAME);
+            createPipelineProcessor(modelId, pipelineName);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
-                Files.readString(Path.of(classLoader.getResource("processor/IndexMappingSingleShard.json").toURI())),
-                PIPELINE1_NAME
+                Files.readString(Path.of(classLoader.getResource(fileName).toURI())),
+                pipelineName
             );
             addDocuments(getIndexNameForTest(), true);
-            createSearchPipeline(SEARCH_PIPELINE1_NAME);
+            createSearchPipeline(searchPipelineName);
         } else {
             String modelId = null;
             try {
-                modelId = getModelId(getIngestionPipeline(PIPELINE1_NAME), TEXT_EMBEDDING_PROCESSOR);
+                modelId = getModelId(getIngestionPipeline(pipelineName), TEXT_EMBEDDING_PROCESSOR);
                 loadModel(modelId);
                 addDocuments(getIndexNameForTest(), false);
-                validateTestIndex(modelId, getIndexNameForTest(), SEARCH_PIPELINE1_NAME);
+                validateTestIndex(modelId, getIndexNameForTest(), searchPipelineName);
             } finally {
-                wipeOfTestResources(getIndexNameForTest(), PIPELINE1_NAME, modelId, SEARCH_PIPELINE1_NAME);
+                wipeOfTestResources(getIndexNameForTest(), pipelineName, modelId, searchPipelineName);
             }
         }
     }
@@ -127,7 +110,7 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         }
     }
 
-    public HybridQueryBuilder getQueryBuilder(final String modelId) {
+    private HybridQueryBuilder getQueryBuilder(final String modelId) {
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
         neuralQueryBuilder.fieldName("passage_embedding");
         neuralQueryBuilder.modelId(modelId);
