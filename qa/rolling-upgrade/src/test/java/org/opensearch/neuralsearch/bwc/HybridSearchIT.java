@@ -10,13 +10,12 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import org.opensearch.index.query.MatchQueryBuilder;
-import org.opensearch.neuralsearch.TestUtils;
 import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.PARAM_NAME_WEIGHTS;
 import static org.opensearch.neuralsearch.TestUtils.TEXT_EMBEDDING_PROCESSOR;
 import static org.opensearch.neuralsearch.TestUtils.DEFAULT_NORMALIZATION_METHOD;
 import static org.opensearch.neuralsearch.TestUtils.DEFAULT_COMBINATION_METHOD;
-import static org.opensearch.neuralsearch.TestUtils.generateModelId;
+import static org.opensearch.neuralsearch.TestUtils.getModelId;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
@@ -30,6 +29,7 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
     private static final String TEXT_UPGRADED = "Hi earth";
     private static final String QUERY = "Hi world";
     private static final int NUM_DOCS_PER_ROUND = 1;
+    private static String modelId = "";
 
     // Test rolling-upgrade normalization processor when index with multiple shards
     // Create Text Embedding Processor, Ingestion Pipeline, add document and search pipeline with noramlization processor
@@ -38,7 +38,7 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         switch (getClusterType()) {
             case OLD:
-                String modelId = uploadTextEmbeddingModel();
+                modelId = uploadTextEmbeddingModel();
                 loadModel(modelId);
                 createPipelineProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
@@ -55,7 +55,7 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
                 );
                 break;
             case MIXED:
-                modelId = getModelId(PIPELINE_NAME);
+                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
@@ -67,20 +67,22 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
                 }
                 break;
             case UPGRADED:
-                modelId = getModelId(PIPELINE_NAME);
-                int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                loadModel(modelId);
-                addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, null, null);
-                validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId);
-                deleteSearchPipeline(SEARCH_PIPELINE_NAME);
-                deletePipeline(PIPELINE_NAME);
-                deleteModel(modelId);
-                deleteIndex(getIndexNameForTest());
+                try {
+                    modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                    int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
+                    loadModel(modelId);
+                    addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, null, null);
+                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId);
+                } finally {
+                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, SEARCH_PIPELINE_NAME);
+                }
                 break;
+            default:
+                throw new IllegalStateException("Unexpected value: " + getClusterType());
         }
     }
 
-    private void validateTestIndexOnUpgrade(int numberOfDocs, String modelId) throws Exception {
+    private void validateTestIndexOnUpgrade(final int numberOfDocs, final String modelId) throws Exception {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
         loadModel(modelId);
@@ -101,25 +103,7 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
         }
     }
 
-    private String uploadTextEmbeddingModel() throws Exception {
-        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        return registerModelGroupAndGetModelId(requestBody);
-    }
-
-    private String registerModelGroupAndGetModelId(String requestBody) throws Exception {
-        String modelGroupRegisterRequestBody = Files.readString(
-            Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
-        );
-        String modelGroupId = registerModelGroup(String.format(LOCALE, modelGroupRegisterRequestBody, generateModelId()));
-        return uploadModel(String.format(LOCALE, requestBody, modelGroupId));
-    }
-
-    private void createPipelineProcessor(String modelId, String pipelineName) throws Exception {
-        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/PipelineConfiguration.json").toURI()));
-        createPipelineProcessor(requestBody, pipelineName, modelId);
-    }
-
-    public HybridQueryBuilder getQueryBuilder(String modelId) {
+    public HybridQueryBuilder getQueryBuilder(final String modelId) {
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
         neuralQueryBuilder.fieldName("passage_embedding");
         neuralQueryBuilder.modelId(modelId);
@@ -133,11 +117,5 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
         hybridQueryBuilder.add(neuralQueryBuilder);
 
         return hybridQueryBuilder;
-    }
-
-    private String getModelId(String pipelineName) {
-        Map<String, Object> pipeline = getIngestionPipeline(pipelineName);
-        assertNotNull(pipeline);
-        return TestUtils.getModelId(pipeline, TEXT_EMBEDDING_PROCESSOR);
     }
 }

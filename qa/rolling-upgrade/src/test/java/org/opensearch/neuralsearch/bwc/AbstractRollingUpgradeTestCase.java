@@ -4,19 +4,22 @@
  */
 package org.opensearch.neuralsearch.bwc;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Optional;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
-import org.opensearch.test.rest.OpenSearchRestTestCase;
+import static org.opensearch.neuralsearch.TestUtils.NEURAL_SEARCH_BWC_PREFIX;
 import static org.opensearch.neuralsearch.TestUtils.OLD_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.MIXED_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.UPGRADED_CLUSTER;
-import static org.opensearch.neuralsearch.TestUtils.BWC_VERSION;
 import static org.opensearch.neuralsearch.TestUtils.ROLLING_UPGRADE_FIRST_ROUND;
 import static org.opensearch.neuralsearch.TestUtils.BWCSUITE_CLUSTER;
-import static org.opensearch.neuralsearch.TestUtils.NEURAL_SEARCH_BWC_PREFIX;
+import static org.opensearch.neuralsearch.TestUtils.BWC_VERSION;
+import static org.opensearch.neuralsearch.TestUtils.generateModelId;
+import org.opensearch.test.rest.OpenSearchRestTestCase;
 
 public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT {
 
@@ -84,4 +87,47 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
         return Optional.ofNullable(System.getProperty(BWC_VERSION, null));
     }
 
+    protected String uploadTextEmbeddingModel() throws Exception {
+        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
+        return registerModelGroupAndGetModelId(requestBody);
+    }
+
+    protected String registerModelGroupAndGetModelId(String requestBody) throws Exception {
+        String modelGroupRegisterRequestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
+        );
+        String modelGroupId = registerModelGroup(String.format(LOCALE, modelGroupRegisterRequestBody, generateModelId()));
+        return uploadModel(String.format(LOCALE, requestBody, modelGroupId));
+    }
+
+    protected void createPipelineProcessor(String modelId, String pipelineName) throws Exception {
+        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/PipelineConfiguration.json").toURI()));
+        createPipelineProcessor(requestBody, pipelineName, modelId);
+    }
+
+    protected String uploadTextImageEmbeddingModel() throws Exception {
+        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
+        return registerModelGroupAndGetModelId(requestBody);
+    }
+
+    protected void createPipelineForTextImageProcessor(String modelId, String pipelineName) throws Exception {
+        String requestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/PipelineForTextImageProcessorConfiguration.json").toURI())
+        );
+        createPipelineProcessor(requestBody, pipelineName, modelId);
+    }
+
+    protected String uploadSparseEncodingModel() throws Exception {
+        String requestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
+        );
+        return registerModelGroupAndGetModelId(requestBody);
+    }
+
+    protected void createPipelineForSparseEncodingProcessor(String modelId, String pipelineName) throws Exception {
+        String requestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/PipelineForSparseEncodingProcessorConfiguration.json").toURI())
+        );
+        createPipelineProcessor(requestBody, pipelineName, modelId);
+    }
 }

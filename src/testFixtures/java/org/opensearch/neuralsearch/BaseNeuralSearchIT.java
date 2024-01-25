@@ -1056,6 +1056,22 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return Float.intBitsToFloat(freqBits);
     }
 
+    // Wipe of all the resources after execution of the tests.
+    protected void wipeOfTestResources(String indexName, String ingestPipeline, String modelId, String searchPipeline) throws IOException {
+        if (ingestPipeline != null) {
+            deletePipeline(ingestPipeline);
+        }
+        if (searchPipeline != null) {
+            deleteSearchPipeline(searchPipeline);
+        }
+        if (modelId != null) {
+            deleteModel(modelId);
+        }
+        if (indexName != null) {
+            deleteIndex(indexName);
+        }
+    }
+
     /**
      * Enumeration for types of pipeline processors, used to lookup resources like create
      * processor request as those are type specific

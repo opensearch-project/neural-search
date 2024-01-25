@@ -315,11 +315,12 @@ public class TestUtils {
     }
 
     public static String getModelId(Map<String, Object> pipeline, String processor) {
+        assertNotNull(pipeline);
         ArrayList<Map<String, Object>> processors = (ArrayList<Map<String, Object>>) pipeline.get("processors");
-
         Map<String, Object> textEmbeddingProcessor = (Map<String, Object>) processors.get(0).get(processor);
-
-        return (String) textEmbeddingProcessor.get("model_id");
+        String modelId = (String) textEmbeddingProcessor.get("model_id");
+        assertNotNull(modelId);
+        return modelId;
     }
 
     public static String generateModelId() {

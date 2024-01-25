@@ -14,7 +14,6 @@ import org.opensearch.neuralsearch.TestUtils;
 import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.SPARSE_ENCODING_PROCESSOR;
 import static org.opensearch.neuralsearch.TestUtils.objectToFloat;
-import static org.opensearch.neuralsearch.TestUtils.generateModelId;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 
 public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
@@ -36,7 +35,7 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
         if (isRunningAgainstOldCluster()) {
             String modelId = uploadSparseEncodingModel();
             loadModel(modelId);
-            createPipelineProcessor(modelId, PIPELINE_NAME);
+            createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
                 Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),
@@ -52,27 +51,27 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
                 List.of(TEXT_1)
             );
         } else {
-            Map<String, Object> pipeline = getIngestionPipeline(PIPELINE_NAME);
-            assertNotNull(pipeline);
-            String modelId = TestUtils.getModelId(pipeline, SPARSE_ENCODING_PROCESSOR);
-            loadModel(modelId);
-            addSparseEncodingDoc(
-                getIndexNameForTest(),
-                "1",
-                List.of(TEST_SPARSE_ENCODING_FIELD),
-                List.of(testRankFeaturesDoc2),
-                List.of(TEST_TEXT_FIELD),
-                List.of(TEXT_2)
-            );
-            validateTestIndex(modelId);
-            deletePipeline(PIPELINE_NAME);
-            deleteModel(modelId);
-            deleteIndex(getIndexNameForTest());
+            String modelId = null;
+            try {
+                modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                loadModel(modelId);
+                addSparseEncodingDoc(
+                    getIndexNameForTest(),
+                    "1",
+                    List.of(TEST_SPARSE_ENCODING_FIELD),
+                    List.of(testRankFeaturesDoc2),
+                    List.of(TEST_TEXT_FIELD),
+                    List.of(TEXT_2)
+                );
+                validateTestIndex(modelId);
+            } finally {
+                wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
+            }
         }
 
     }
 
-    private void validateTestIndex(String modelId) throws Exception {
+    private void validateTestIndex(final String modelId) throws Exception {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(2, docCount);
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
@@ -87,27 +86,5 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
         assertEquals("0", firstInnerHit.get("_id"));
         float minExpectedScore = computeExpectedScore(modelId, testRankFeaturesDoc1, TEXT_1);
         assertTrue(minExpectedScore < objectToFloat(firstInnerHit.get("_score")));
-    }
-
-    private String uploadSparseEncodingModel() throws Exception {
-        String requestBody = Files.readString(
-            Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
-        );
-        return registerModelGroupAndGetModelId(requestBody);
-    }
-
-    private String registerModelGroupAndGetModelId(String requestBody) throws Exception {
-        String modelGroupRegisterRequestBody = Files.readString(
-            Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
-        );
-        String modelGroupId = registerModelGroup(String.format(LOCALE, modelGroupRegisterRequestBody, generateModelId()));
-        return uploadModel(String.format(LOCALE, requestBody, modelGroupId));
-    }
-
-    private void createPipelineProcessor(String modelId, String pipelineName) throws Exception {
-        String requestBody = Files.readString(
-            Path.of(classLoader.getResource("processor/PipelineForSparseEncodingProcessorConfiguration.json").toURI())
-        );
-        createPipelineProcessor(requestBody, pipelineName, modelId);
     }
 }

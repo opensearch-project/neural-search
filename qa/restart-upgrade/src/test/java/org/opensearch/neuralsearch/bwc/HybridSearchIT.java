@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.bwc;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -11,7 +12,6 @@ import java.util.List;
 import java.util.Map;
 import org.opensearch.index.query.MatchQueryBuilder;
 import static org.opensearch.neuralsearch.TestUtils.getModelId;
-import static org.opensearch.neuralsearch.TestUtils.generateModelId;
 import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.PARAM_NAME_WEIGHTS;
 import static org.opensearch.neuralsearch.TestUtils.TEXT_EMBEDDING_PROCESSOR;
@@ -48,28 +48,18 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
                 Files.readString(Path.of(classLoader.getResource("processor/IndexMappingMultipleShard.json").toURI())),
                 PIPELINE_NAME
             );
-            addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT_1, null, null);
-            addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_2, null, null);
-            addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_3, null, null);
-            addDocument(getIndexNameForTest(), "3", TEST_FIELD, TEXT_4, null, null);
-            addDocument(getIndexNameForTest(), "4", TEST_FIELD, TEXT_5, null, null);
-            createSearchPipeline(
-                SEARCH_PIPELINE_NAME,
-                DEFAULT_NORMALIZATION_METHOD,
-                DEFAULT_COMBINATION_METHOD,
-                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.7f }))
-            );
+            addDocuments(getIndexNameForTest(), true);
+            createSearchPipeline(SEARCH_PIPELINE_NAME);
         } else {
-            Map<String, Object> pipeline = getIngestionPipeline(PIPELINE_NAME);
-            assertNotNull(pipeline);
-            String modelId = getModelId(pipeline, TEXT_EMBEDDING_PROCESSOR);
-            loadModel(modelId);
-            addDocument(getIndexNameForTest(), "5", TEST_FIELD, TEXT_6, null, null);
-            validateTestIndex(modelId, getIndexNameForTest(), SEARCH_PIPELINE_NAME);
-            deleteSearchPipeline(SEARCH_PIPELINE_NAME);
-            deletePipeline(PIPELINE_NAME);
-            deleteModel(modelId);
-            deleteIndex(getIndexNameForTest());
+            String modelId = null;
+            try {
+                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                loadModel(modelId);
+                addDocuments(getIndexNameForTest(), false);
+                validateTestIndex(modelId, getIndexNameForTest(), SEARCH_PIPELINE_NAME);
+            } finally {
+                wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, SEARCH_PIPELINE_NAME);
+            }
         }
     }
 
@@ -87,50 +77,43 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
                 Files.readString(Path.of(classLoader.getResource("processor/IndexMappingSingleShard.json").toURI())),
                 PIPELINE1_NAME
             );
-            addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT_1, null, null);
-            addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_2, null, null);
-            addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_3, null, null);
-            addDocument(getIndexNameForTest(), "3", TEST_FIELD, TEXT_4, null, null);
-            addDocument(getIndexNameForTest(), "4", TEST_FIELD, TEXT_5, null, null);
-            createSearchPipeline(
-                SEARCH_PIPELINE1_NAME,
-                DEFAULT_NORMALIZATION_METHOD,
-                DEFAULT_COMBINATION_METHOD,
-                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.7f }))
-            );
+            addDocuments(getIndexNameForTest(), true);
+            createSearchPipeline(SEARCH_PIPELINE1_NAME);
         } else {
-            Map<String, Object> pipeline = getIngestionPipeline(PIPELINE1_NAME);
-            assertNotNull(pipeline);
-            String modelId = getModelId(pipeline, TEXT_EMBEDDING_PROCESSOR);
-            loadModel(modelId);
-            addDocument(getIndexNameForTest(), "5", TEST_FIELD, TEXT_6, null, null);
-            validateTestIndex(modelId, getIndexNameForTest(), SEARCH_PIPELINE1_NAME);
-            deleteSearchPipeline(SEARCH_PIPELINE1_NAME);
-            deletePipeline(PIPELINE1_NAME);
-            deleteModel(modelId);
-            deleteIndex(getIndexNameForTest());
+            String modelId = null;
+            try {
+                modelId = getModelId(getIngestionPipeline(PIPELINE1_NAME), TEXT_EMBEDDING_PROCESSOR);
+                loadModel(modelId);
+                addDocuments(getIndexNameForTest(), false);
+                validateTestIndex(modelId, getIndexNameForTest(), SEARCH_PIPELINE1_NAME);
+            } finally {
+                wipeOfTestResources(getIndexNameForTest(), PIPELINE1_NAME, modelId, SEARCH_PIPELINE1_NAME);
+            }
         }
     }
 
-    private String uploadTextEmbeddingModel() throws Exception {
-        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        return registerModelGroupAndGetModelId(requestBody);
+    private void addDocuments(final String indexName, boolean isRunningAgainstOldCluster) throws IOException {
+        if (isRunningAgainstOldCluster) {
+            addDocument(indexName, "0", TEST_FIELD, TEXT_1, null, null);
+            addDocument(indexName, "1", TEST_FIELD, TEXT_2, null, null);
+            addDocument(indexName, "2", TEST_FIELD, TEXT_3, null, null);
+            addDocument(indexName, "3", TEST_FIELD, TEXT_4, null, null);
+            addDocument(indexName, "4", TEST_FIELD, TEXT_5, null, null);
+        } else {
+            addDocument(indexName, "5", TEST_FIELD, TEXT_6, null, null);
+        }
     }
 
-    private String registerModelGroupAndGetModelId(String requestBody) throws Exception {
-        String modelGroupRegisterRequestBody = Files.readString(
-            Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
+    private void createSearchPipeline(final String pipelineName) {
+        createSearchPipeline(
+            pipelineName,
+            DEFAULT_NORMALIZATION_METHOD,
+            DEFAULT_COMBINATION_METHOD,
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.7f }))
         );
-        String modelGroupId = registerModelGroup(String.format(LOCALE, modelGroupRegisterRequestBody, generateModelId()));
-        return uploadModel(String.format(LOCALE, requestBody, modelGroupId));
     }
 
-    private void createPipelineProcessor(String modelId, String pipelineName) throws Exception {
-        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/PipelineConfiguration.json").toURI()));
-        createPipelineProcessor(requestBody, pipelineName, modelId);
-    }
-
-    private void validateTestIndex(String modelId, String index, String searchPipeline) throws Exception {
+    private void validateTestIndex(final String modelId, final String index, final String searchPipeline) throws Exception {
         int docCount = getDocCount(index);
         assertEquals(6, docCount);
         HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId);
@@ -144,7 +127,7 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         }
     }
 
-    public HybridQueryBuilder getQueryBuilder(String modelId) {
+    public HybridQueryBuilder getQueryBuilder(final String modelId) {
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
         neuralQueryBuilder.fieldName("passage_embedding");
         neuralQueryBuilder.modelId(modelId);
