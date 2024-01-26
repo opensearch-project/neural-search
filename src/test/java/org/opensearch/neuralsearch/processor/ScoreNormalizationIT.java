@@ -26,7 +26,7 @@ import com.google.common.primitives.Floats;
 import lombok.SneakyThrows;
 
 public class ScoreNormalizationIT extends BaseNeuralSearchIT {
-    private static final String TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME = "test-neural-multi-doc-one-shard-index";
+    private static final String TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME = "test-score-normalization-neural-multi-doc-one-shard-index";
     private static final String TEST_QUERY_TEXT3 = "hello";
     private static final String TEST_DOC_TEXT1 = "Hello world";
     private static final String TEST_DOC_TEXT2 = "Hi to this place";
@@ -43,12 +43,14 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
     private static final String L2_NORMALIZATION_METHOD = "l2";
     private static final String HARMONIC_MEAN_COMBINATION_METHOD = "harmonic_mean";
     private static final String GEOMETRIC_MEAN_COMBINATION_METHOD = "geometric_mean";
+    private static String modelId;
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
         updateClusterSettings();
-        prepareModel();
+        modelId = prepareModel();
+        assertNotNull(modelId);
     }
 
     @After
@@ -56,7 +58,7 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
     public void tearDown() {
         super.tearDown();
         deleteSearchPipeline(SEARCH_PIPELINE);
-        findDeployedModels().forEach(this::deleteModel);
+        deleteModel(modelId);
     }
 
     @Override
@@ -157,6 +159,7 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertHybridSearchResults(searchResponseAsMapGeometricMean, 5, new float[] { 0.5f, 1.0f });
+        deleteIndex(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
     }
 
     /**
@@ -252,6 +255,7 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertHybridSearchResults(searchResponseAsMapGeometricMean, 5, new float[] { 0.6f, 1.0f });
+        deleteIndex(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
     }
 
     private void initializeIndexIfNotExist(String indexName) throws IOException {

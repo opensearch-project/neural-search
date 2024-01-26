@@ -44,7 +44,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     public void setUp() throws Exception {
         super.setUp();
         updateClusterSettings();
-        modelId=prepareModel();
+        modelId = prepareModel();
         assertNotNull(modelId);
     }
 
@@ -92,6 +92,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
+        deleteIndex(TEST_BASIC_INDEX_NAME);
     }
 
     /**
@@ -131,6 +132,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = 2 * computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
+        deleteIndex(TEST_BASIC_INDEX_NAME);
     }
 
     /**
@@ -174,6 +176,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
+        deleteIndex(TEST_BASIC_INDEX_NAME);
     }
 
     /**
@@ -234,6 +237,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = 2 * computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
+        deleteIndex(TEST_MULTI_VECTOR_FIELD_INDEX_NAME);
     }
 
     /**
@@ -285,6 +289,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float minExpectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertTrue(minExpectedScore < objectToFloat(firstInnerHit.get("_score")));
+        deleteIndex(TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME);
     }
 
     /**
@@ -326,6 +331,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
+        deleteIndex(TEST_NESTED_INDEX_NAME);
     }
 
     /**
@@ -368,6 +374,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals("3", firstInnerHit.get("_id"));
         float expectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
+        deleteIndex(TEST_MULTI_DOC_INDEX_NAME);
     }
 
     /**
@@ -404,6 +411,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
+        deleteIndex(TEST_BASIC_INDEX_NAME);
     }
 
     @SneakyThrows

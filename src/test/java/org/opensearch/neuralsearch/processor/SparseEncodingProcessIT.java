@@ -12,6 +12,7 @@ import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.message.BasicHeader;
 import org.junit.After;
+import org.junit.Before;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
@@ -26,6 +27,13 @@ public class SparseEncodingProcessIT extends BaseSparseEncodingIT {
     private static final String INDEX_NAME = "sparse_encoding_index";
 
     private static final String PIPELINE_NAME = "pipeline-sparse-encoding";
+    private static String modelId;
+
+    @Before
+    public void setUp() {
+        modelId = prepareModel();
+        assertNotNull(modelId);
+    }
 
     @After
     @SneakyThrows
@@ -35,11 +43,11 @@ public class SparseEncodingProcessIT extends BaseSparseEncodingIT {
          * this happens in case we leave model from previous test case. We use new model for every test, and old model
          * can be undeployed and deleted to free resources after each test case execution.
          */
-        findDeployedModels().forEach(this::deleteModel);
+        deleteModel(modelId);
+        deleteIndex(INDEX_NAME);
     }
 
     public void testSparseEncodingProcessor() throws Exception {
-        String modelId = prepareModel();
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING);
         createSparseEncodingIndex();
         ingestDocument();

@@ -70,7 +70,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     public void setUp() throws Exception {
         super.setUp();
         updateClusterSettings();
-        modelId=prepareModel();
+        modelId = prepareModel();
         assertNotNull(modelId);
         createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
     }
@@ -171,6 +171,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         assertEquals(3, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+        deleteIndex(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
     }
 
     /**
@@ -240,6 +241,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         assertEquals(2, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+        deleteIndex(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
     }
 
     @SneakyThrows
@@ -269,6 +271,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         assertEquals(0, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+        deleteIndex(TEST_MULTI_DOC_INDEX_NAME);
     }
 
     @SneakyThrows
@@ -316,6 +319,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 containsString("illegal_argument_exception")
             )
         );
+        deleteIndex(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
     }
 
     @SneakyThrows
@@ -345,6 +349,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         assertEquals(1, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+        deleteIndex(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
     }
 
     @SneakyThrows
@@ -378,6 +383,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         assertEquals(1, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+        deleteIndex(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
     }
 
     @SneakyThrows

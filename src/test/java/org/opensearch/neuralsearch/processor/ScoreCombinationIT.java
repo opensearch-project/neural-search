@@ -30,8 +30,8 @@ import com.google.common.primitives.Floats;
 import lombok.SneakyThrows;
 
 public class ScoreCombinationIT extends BaseNeuralSearchIT {
-    private static final String TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME = "test-score-neural-multi-doc-one-shard-index";
-    private static final String TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME = "test-score-neural-multi-doc-three-shards-index";
+    private static final String TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME = "test-score-combination-neural-multi-doc-one-shard-index";
+    private static final String TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME = "test-score-combination-neural-multi-doc-three-shards-index";
     private static final String TEST_QUERY_TEXT3 = "hello";
     private static final String TEST_QUERY_TEXT4 = "place";
     private static final String TEST_QUERY_TEXT7 = "notexistingwordtwo";
@@ -56,7 +56,8 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        modelId=prepareModel();
+        modelId = prepareModel();
+        assertNotNull(modelId);
     }
 
     @After

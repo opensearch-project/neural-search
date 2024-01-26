@@ -12,6 +12,7 @@ import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.message.BasicHeader;
 import org.junit.After;
+import org.junit.Before;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
@@ -29,16 +30,23 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     private static final String INDEX_NAME = "text_image_embedding_index";
     private static final String PIPELINE_NAME = "ingest-pipeline";
+    private static String modelId;
+
+    @Before
+    public void setUp() throws Exception {
+        modelId = uploadModel();
+        assertNotNull(modelId);
+    }
 
     @After
     @SneakyThrows
     public void tearDown() {
         super.tearDown();
-        findDeployedModels().forEach(this::deleteModel);
+        deleteModel(modelId);
+        deleteIndex(INDEX_NAME);
     }
 
     public void testEmbeddingProcessor_whenIngestingDocumentWithSourceMatchingTextMapping_thenSuccessful() throws Exception {
-        String modelId = uploadModel();
         loadModel(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
         createTextImageEmbeddingIndex();
@@ -47,7 +55,6 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
     }
 
     public void testEmbeddingProcessor_whenIngestingDocumentWithSourceWithoutMatchingInMapping_thenSuccessful() throws Exception {
-        String modelId = uploadModel();
         loadModel(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
         createTextImageEmbeddingIndex();

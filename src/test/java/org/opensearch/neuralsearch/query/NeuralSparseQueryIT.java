@@ -36,11 +36,12 @@ public class NeuralSparseQueryIT extends BaseSparseEncodingIT {
     private static final Float DELTA = 1e-5f;
     private final Map<String, Float> testRankFeaturesDoc = TestUtils.createRandomTokenWeightMap(TEST_TOKENS);
     private static String modelId;
+
     @Before
     public void setUp() throws Exception {
         super.setUp();
         updateClusterSettings();
-        modelId=prepareModel();
+        modelId = prepareModel();
         assertNotNull(modelId);
     }
 
@@ -77,6 +78,7 @@ public class NeuralSparseQueryIT extends BaseSparseEncodingIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
+        deleteIndex(TEST_BASIC_INDEX_NAME);
     }
 
     /**
@@ -107,6 +109,7 @@ public class NeuralSparseQueryIT extends BaseSparseEncodingIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = 2 * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
+        deleteIndex(TEST_BASIC_INDEX_NAME);
     }
 
     /**
@@ -143,6 +146,7 @@ public class NeuralSparseQueryIT extends BaseSparseEncodingIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
+        deleteIndex(TEST_BASIC_INDEX_NAME);
     }
 
     /**
@@ -189,6 +193,7 @@ public class NeuralSparseQueryIT extends BaseSparseEncodingIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = 2 * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
+        deleteIndex(TEST_MULTI_NEURAL_SPARSE_FIELD_INDEX_NAME);
     }
 
     /**
@@ -232,6 +237,7 @@ public class NeuralSparseQueryIT extends BaseSparseEncodingIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float minExpectedScore = computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
         assertTrue(minExpectedScore < objectToFloat(firstInnerHit.get("_score")));
+        deleteIndex(TEST_TEXT_AND_NEURAL_SPARSE_FIELD_INDEX_NAME);
     }
 
     @SneakyThrows

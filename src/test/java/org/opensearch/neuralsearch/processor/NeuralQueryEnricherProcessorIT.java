@@ -30,11 +30,12 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
     private static final String TEST_KNN_VECTOR_FIELD_NAME_1 = "test-knn-vector-1";
     private final float[] testVector = createRandomVector(TEST_DIMENSION);
     private static String modelId;
+
     @Before
     public void setUp() throws Exception {
         super.setUp();
         updateClusterSettings();
-        modelId=prepareModel();
+        modelId = prepareModel();
         assertNotNull(modelId);
     }
 
