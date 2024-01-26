@@ -36,13 +36,13 @@ jobs:
       - name: Run NeuralSearch Restart-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
         run: |
           echo "Running restart-upgrade backwards compatibility tests ..."
-#          Disabling BWC tests due to ongoing build failure. https://github.com/opensearch-project/neural-search/issues/536
-#          ./gradlew :qa:restart-upgrade:testAgainstNewCluster -D'tests.bwc.version=${{ matrix.bwc_version }}'
+          ./gradlew :qa:restart-upgrade:testAgainstNewCluster -D'tests.bwc.version=${{ matrix.bwc_version }}'
 
   Rolling-Upgrade-BWCTests-NeuralSearch:
     strategy:
       matrix:
-        java: [ 11, 17, 21 ]
+        # Restricting java 21 to 21.0.1 due to ongoing bug in JDK 21.0.2 https://bugs.openjdk.org/browse/JDK-8323659. Once the fix https://github.com/opensearch-project/OpenSearch/pull/11968 get merged this change will be reverted.
+        java: [ 11, 17, 21.0.1 ]
         os: [ubuntu-latest,windows-latest]
         bwc_version: [ "2.11.0" ]
         opensearch_version: [ "2.12.0-SNAPSHOT" ]
@@ -64,5 +64,4 @@ jobs:
       - name: Run NeuralSearch Rolling-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
         run: |
           echo "Running rolling-upgrade backwards compatibility tests ..."
-#          Disabling BWC tests due to ongoing build failure. https://github.com/opensearch-project/neural-search/issues/536
-#         ./gradlew :qa:rolling-upgrade:testRollingUpgrade -D'tests.bwc.version=${{ matrix.bwc_version }}'
+          ./gradlew :qa:rolling-upgrade:testRollingUpgrade -D'tests.bwc.version=${{ matrix.bwc_version }}'

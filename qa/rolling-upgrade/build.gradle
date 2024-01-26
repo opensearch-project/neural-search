@@ -34,6 +34,16 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.rest.bwcsuite_cluster', 'old_cluster'
     systemProperty 'tests.plugin_bwc_version', neural_search_bwc_version
     systemProperty 'tests.skip_delete_model_index', 'true'
+
+    //Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT tests from neural search version 2.9 and 2.10 because these features were released in 2.11 version.
+    if (neural_search_bwc_version.startsWith("2.9") || neural_search_bwc_version.startsWith("2.10")){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
+        }
+    }
+
     nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
     nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
     systemProperty 'tests.security.manager', 'false'
@@ -52,6 +62,16 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.rest.first_round', 'true'
     systemProperty 'tests.skip_delete_model_index', 'true'
     systemProperty 'tests.plugin_bwc_version', neural_search_bwc_version
+
+    //Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT tests from neural search version 2.9 and 2.10 because these features were released in 2.11 version.
+    if (neural_search_bwc_version.startsWith("2.9") || neural_search_bwc_version.startsWith("2.10")){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
+        }
+    }
+
     nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
     nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
     systemProperty 'tests.security.manager', 'false'
@@ -69,6 +89,16 @@ task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.rest.first_round', 'false'
     systemProperty 'tests.skip_delete_model_index', 'true'
     systemProperty 'tests.plugin_bwc_version', neural_search_bwc_version
+
+    //Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT tests from neural search version 2.9 and 2.10 because these features were released in 2.11 version.
+    if (neural_search_bwc_version.startsWith("2.9") || neural_search_bwc_version.startsWith("2.10")){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
+        }
+    }
+
     nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
     nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
     systemProperty 'tests.security.manager', 'false'
@@ -86,6 +116,16 @@ task testRollingUpgrade(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.rest.bwcsuite_cluster', 'upgraded_cluster'
     systemProperty 'tests.skip_delete_model_index', 'true'
     systemProperty 'tests.plugin_bwc_version', neural_search_bwc_version
+
+    //Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT tests from neural search version 2.9 and 2.10 because these features were released in 2.11 version.
+    if (neural_search_bwc_version.startsWith("2.9") || neural_search_bwc_version.startsWith("2.10")){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
+        }
+    }
+
     nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
     nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
     systemProperty 'tests.security.manager', 'false'

@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Infrastructure
 - BWC tests for Neural Search ([#515](https://github.com/opensearch-project/neural-search/pull/515))
 - Github action to run integ tests in secure opensearch cluster ([#535](https://github.com/opensearch-project/neural-search/pull/535))
+- BWC tests for Multimodal search, Hybrid Search and Neural Sparse Search ([#533](https://github.com/opensearch-project/neural-search/pull/533))
 ### Documentation
 ### Maintenance
 - Added support for jdk-21 ([#500](https://github.com/opensearch-project/neural-search/pull/500)))
