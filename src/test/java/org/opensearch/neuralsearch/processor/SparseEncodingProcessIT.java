@@ -16,13 +16,13 @@ import org.junit.Before;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.neuralsearch.BaseSparseEncodingIT;
+import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 import com.google.common.collect.ImmutableList;
 
 import lombok.SneakyThrows;
 
-public class SparseEncodingProcessIT extends BaseSparseEncodingIT {
+public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
 
     private static final String INDEX_NAME = "sparse_encoding_index";
 
@@ -31,7 +31,7 @@ public class SparseEncodingProcessIT extends BaseSparseEncodingIT {
 
     @Before
     public void setUp() {
-        modelId = prepareModel();
+        modelId = prepareSparseEncodingModel();
         assertNotNull(modelId);
     }
 

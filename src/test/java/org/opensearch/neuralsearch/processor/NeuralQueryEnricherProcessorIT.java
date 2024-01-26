@@ -53,7 +53,7 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
         initializeIndexIfNotExist();
         String modelId = getDeployedModelId();
         createSearchRequestProcessor(modelId, search_pipeline);
-        createPipelineProcessor(modelId, ingest_pipeline);
+        createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
         updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
         neuralQueryBuilder.fieldName(TEST_KNN_VECTOR_FIELD_NAME_1);
@@ -70,7 +70,7 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
         initializeIndexIfNotExist();
         String modelId = getDeployedModelId();
         createSearchRequestProcessor(modelId, search_pipeline);
-        createPipelineProcessor(modelId, ingest_pipeline);
+        createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
         updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
         neuralQueryBuilder.fieldName(TEST_KNN_VECTOR_FIELD_NAME_1);

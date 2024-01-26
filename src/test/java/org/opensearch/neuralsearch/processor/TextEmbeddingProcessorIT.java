@@ -49,7 +49,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     public void testTextEmbeddingProcessor() throws Exception {
         loadModel(modelId);
-        createPipelineProcessor(modelId, PIPELINE_NAME);
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
         createTextEmbeddingIndex();
         ingestDocument();
         assertEquals(1, getDocCount(INDEX_NAME));

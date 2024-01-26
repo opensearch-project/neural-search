@@ -4,15 +4,18 @@
  */
 package org.opensearch.neuralsearch.bwc;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Optional;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+import static org.opensearch.neuralsearch.TestUtils.NEURAL_SEARCH_BWC_PREFIX;
 import static org.opensearch.neuralsearch.TestUtils.CLIENT_TIMEOUT_VALUE;
 import static org.opensearch.neuralsearch.TestUtils.RESTART_UPGRADE_OLD_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.BWC_VERSION;
-import static org.opensearch.neuralsearch.TestUtils.NEURAL_SEARCH_BWC_PREFIX;
+import static org.opensearch.neuralsearch.TestUtils.generateModelId;
 import org.opensearch.test.rest.OpenSearchRestTestCase;
 
 public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearchIT {
@@ -56,5 +59,44 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
 
     protected final Optional<String> getBWCVersion() {
         return Optional.ofNullable(System.getProperty(BWC_VERSION, null));
+    }
+
+    protected String uploadTextEmbeddingModel() throws Exception {
+        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
+        return registerModelGroupAndGetModelId(requestBody);
+    }
+
+    protected String registerModelGroupAndGetModelId(final String requestBody) throws Exception {
+        String modelGroupRegisterRequestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
+        );
+        String modelGroupId = registerModelGroup(String.format(LOCALE, modelGroupRegisterRequestBody, generateModelId()));
+        return uploadModel(String.format(LOCALE, requestBody, modelGroupId));
+    }
+
+    protected void createPipelineProcessor(final String modelId, final String pipelineName) throws Exception {
+        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/PipelineConfiguration.json").toURI()));
+        createPipelineProcessor(requestBody, pipelineName, modelId);
+    }
+
+    protected String uploadSparseEncodingModel() throws Exception {
+        String requestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
+        );
+        return registerModelGroupAndGetModelId(requestBody);
+    }
+
+    protected void createPipelineForTextImageProcessor(final String modelId, final String pipelineName) throws Exception {
+        String requestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/PipelineForTextImageProcessorConfiguration.json").toURI())
+        );
+        createPipelineProcessor(requestBody, pipelineName, modelId);
+    }
+
+    protected void createPipelineForSparseEncodingProcessor(final String modelId, final String pipelineName) throws Exception {
+        String requestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/PipelineForSparseEncodingProcessorConfiguration.json").toURI())
+        );
+        createPipelineProcessor(requestBody, pipelineName, modelId);
     }
 }
