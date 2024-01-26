@@ -8,39 +8,41 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
+import static org.opensearch.neuralsearch.TestUtils.TEXT_IMAGE_EMBEDDING_PROCESSOR;
 import static org.opensearch.neuralsearch.TestUtils.getModelId;
-import static org.opensearch.neuralsearch.TestUtils.TEXT_EMBEDDING_PROCESSOR;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
-public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
-
-    private static final String PIPELINE_NAME = "nlp-pipeline";
+public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
+    private static final String PIPELINE_NAME = "nlp-ingest-pipeline";
     private static final String TEST_FIELD = "passage_text";
+    private static final String TEST_IMAGE_FIELD = "passage_image";
     private static final String TEXT = "Hello world";
     private static final String TEXT_1 = "Hello world a";
+    private static final String TEST_IMAGE_TEXT = "/9j/4AAQSkZJRgABAQAASABIAAD";
+    private static final String TEST_IMAGE_TEXT_1 = "/9j/4AAQSkZJRgbdwoeicfhoid";
 
-    // Test restart-upgrade Semantic Search
-    // Create Text Embedding Processor, Ingestion Pipeline and add document
+    // Test restart-upgrade test image embedding processor
+    // Create Text Image Embedding Processor, Ingestion Pipeline and add document
     // Validate process , pipeline and document count in restart-upgrade scenario
-    public void testTextEmbeddingProcessor_E2EFlow() throws Exception {
+    public void testTextImageEmbeddingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
 
         if (isRunningAgainstOldCluster()) {
             String modelId = uploadTextEmbeddingModel();
             loadModel(modelId);
-            createPipelineProcessor(modelId, PIPELINE_NAME);
+            createPipelineForTextImageProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
                 Files.readString(Path.of(classLoader.getResource("processor/IndexMappingMultipleShard.json").toURI())),
                 PIPELINE_NAME
             );
-            addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, null, null);
+            addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT);
         } else {
             String modelId = null;
             try {
-                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
                 loadModel(modelId);
-                addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1, null, null);
+                addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_1);
                 validateTestIndex(modelId);
             } finally {
                 wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
@@ -51,12 +53,9 @@ public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
     private void validateTestIndex(final String modelId) throws Exception {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(2, docCount);
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
-        neuralQueryBuilder.fieldName("passage_embedding");
-        neuralQueryBuilder.modelId(modelId);
-        neuralQueryBuilder.queryText(TEXT);
-        neuralQueryBuilder.k(1);
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder("passage_embedding", TEXT, TEST_IMAGE_TEXT, modelId, 1, null, null);
         Map<String, Object> response = search(getIndexNameForTest(), neuralQueryBuilder, 1);
         assertNotNull(response);
     }
+
 }

@@ -2,12 +2,11 @@
   "settings": {
     "index": {
       "knn": true,
-      "knn.algo_param.ef_search": 100,
       "refresh_interval": "30s",
       "default_pipeline": "%s"
     },
-    "number_of_shards": 3,
-    "number_of_replicas": 1
+    "number_of_shards": 1,
+    "number_of_replicas": 0
   },
   "mappings": {
     "properties": {
@@ -25,6 +24,9 @@
         }
       },
       "passage_text": {
+        "type": "text"
+      },
+      "passage_image": {
         "type": "text"
       }
     }
