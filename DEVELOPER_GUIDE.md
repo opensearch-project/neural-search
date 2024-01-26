@@ -139,7 +139,7 @@ Additionally, it is also possible to run a cluster with security enabled:
 
 By default, if `-Dsecurity.enabled=true` is passed the following defaults will be used: `https=true`, `user=admin`. There is no default password and it is to be set as `password=<admin-password>`.
 
-Then, to access the cluster, we can run the below command. <admin-password> parameter is the password set by admin.
+Then, to connect to the cluster, use the following command. Remember to replace `<admin-password>` with the password you chose when setting up the admin user.
 ```bash
 curl https://localhost:9200 --insecure -u admin:<admin-password>
 
