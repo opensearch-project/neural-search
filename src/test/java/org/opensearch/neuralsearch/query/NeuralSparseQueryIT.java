@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.query;
 
+import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import static org.opensearch.neuralsearch.TestUtils.objectToFloat;
 
 import java.util.List;
@@ -15,12 +16,11 @@ import org.opensearch.client.ResponseException;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
-import org.opensearch.neuralsearch.BaseSparseEncodingIT;
 import org.opensearch.neuralsearch.TestUtils;
 
 import lombok.SneakyThrows;
 
-public class NeuralSparseQueryIT extends BaseSparseEncodingIT {
+public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_BASIC_INDEX_NAME = "test-sparse-basic-index";
     private static final String TEST_MULTI_NEURAL_SPARSE_FIELD_INDEX_NAME = "test-sparse-multi-field-index";
     private static final String TEST_TEXT_AND_NEURAL_SPARSE_FIELD_INDEX_NAME = "test-sparse-text-and-field-index";
@@ -40,7 +40,7 @@ public class NeuralSparseQueryIT extends BaseSparseEncodingIT {
     public void setUp() throws Exception {
         super.setUp();
         updateClusterSettings();
-        prepareModel();
+        prepareSparseEncodingModel();
     }
 
     @After

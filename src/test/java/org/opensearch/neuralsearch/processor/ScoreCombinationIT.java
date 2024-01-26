@@ -25,6 +25,9 @@ import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
+import static org.opensearch.neuralsearch.TestUtils.DEFAULT_NORMALIZATION_METHOD;
+import static org.opensearch.neuralsearch.TestUtils.DEFAULT_COMBINATION_METHOD;
+import static org.opensearch.neuralsearch.TestUtils.PARAM_NAME_WEIGHTS;
 import com.google.common.primitives.Floats;
 
 import lombok.SneakyThrows;

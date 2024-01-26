@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch;
 
+import com.carrotsearch.randomizedtesting.RandomizedTest;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -53,6 +54,16 @@ public class TestUtils {
     public static final String SECURITY_AUDITLOG_PREFIX = "security-auditlog";
     public static final String OPENSEARCH_SYSTEM_INDEX_PREFIX = ".opensearch";
     public static final String TEXT_EMBEDDING_PROCESSOR = "text_embedding";
+    public static final String TEXT_IMAGE_EMBEDDING_PROCESSOR = "text_image_embedding";
+    public static final int MAX_TASK_RESULT_QUERY_TIME_IN_SECOND = 60 * 5;
+    public static final int DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND = 1000;
+    public static final String DEFAULT_USER_AGENT = "Kibana";
+    public static final String DEFAULT_NORMALIZATION_METHOD = "min_max";
+    public static final String DEFAULT_COMBINATION_METHOD = "arithmetic_mean";
+    public static final String PARAM_NAME_WEIGHTS = "weights";
+    public static final String SPARSE_ENCODING_PROCESSOR = "sparse_encoding";
+    public static final int MAX_TIME_OUT_INTERVAL = 3000;
+    public static final int MAX_RETRY = 5;
 
     /**
      * Convert an xContentBuilder to a map
@@ -304,10 +315,16 @@ public class TestUtils {
     }
 
     public static String getModelId(Map<String, Object> pipeline, String processor) {
+        assertNotNull(pipeline);
         ArrayList<Map<String, Object>> processors = (ArrayList<Map<String, Object>>) pipeline.get("processors");
-
         Map<String, Object> textEmbeddingProcessor = (Map<String, Object>) processors.get(0).get(processor);
-
-        return (String) textEmbeddingProcessor.get("model_id");
+        String modelId = (String) textEmbeddingProcessor.get("model_id");
+        assertNotNull(modelId);
+        return modelId;
     }
+
+    public static String generateModelId() {
+        return "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8);
+    }
+
 }
