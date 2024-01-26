@@ -15,13 +15,13 @@ import org.junit.After;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.neuralsearch.BaseSparseEncodingIT;
+import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 import com.google.common.collect.ImmutableList;
 
 import lombok.SneakyThrows;
 
-public class SparseEncodingProcessIT extends BaseSparseEncodingIT {
+public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
 
     private static final String INDEX_NAME = "sparse_encoding_index";
 
@@ -39,7 +39,7 @@ public class SparseEncodingProcessIT extends BaseSparseEncodingIT {
     }
 
     public void testSparseEncodingProcessor() throws Exception {
-        String modelId = prepareModel();
+        String modelId = prepareSparseEncodingModel();
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING);
         createSparseEncodingIndex();
         ingestDocument();
