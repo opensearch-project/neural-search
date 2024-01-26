@@ -38,7 +38,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_TEXT_FIELD_NAME_1 = "test-text-field";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_NESTED = "nested.knn.field";
     private final float[] testVector = createRandomVector(TEST_DIMENSION);
-    private static String modelId;
+    private String modelId;
 
     @Before
     public void setUp() throws Exception {

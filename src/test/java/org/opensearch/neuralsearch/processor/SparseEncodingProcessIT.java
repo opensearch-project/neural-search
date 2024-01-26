@@ -27,7 +27,7 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
     private static final String INDEX_NAME = "sparse_encoding_index";
 
     private static final String PIPELINE_NAME = "pipeline-sparse-encoding";
-    private static String modelId;
+    private String modelId;
 
     @Before
     public void setUp() throws Exception {

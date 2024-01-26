@@ -54,7 +54,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
     private static final String L2_NORMALIZATION_METHOD = "l2";
     private static final String HARMONIC_MEAN_COMBINATION_METHOD = "harmonic_mean";
     private static final String GEOMETRIC_MEAN_COMBINATION_METHOD = "geometric_mean";
-    private static String modelId;
+    private String modelId;
 
     @Before
     public void setUp() throws Exception {

@@ -53,7 +53,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     private final float[] testVector2 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector3 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector4 = createRandomVector(TEST_DIMENSION);
-    private static String modelId;
+    private String modelId;
 
     @Before
     public void setUp() throws Exception {

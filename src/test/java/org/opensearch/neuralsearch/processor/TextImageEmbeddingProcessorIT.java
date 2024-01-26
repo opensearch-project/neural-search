@@ -30,7 +30,7 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     private static final String INDEX_NAME = "text_image_embedding_index";
     private static final String PIPELINE_NAME = "ingest-pipeline";
-    private static String modelId;
+    private String modelId;
 
     @Before
     public void setUp() throws Exception {

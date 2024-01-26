@@ -29,7 +29,7 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
     private static final String ingest_pipeline = "nlp-pipeline";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_1 = "test-knn-vector-1";
     private final float[] testVector = createRandomVector(TEST_DIMENSION);
-    private static String modelId;
+    private String modelId;
 
     @Before
     public void setUp() throws Exception {

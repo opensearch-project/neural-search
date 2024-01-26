@@ -35,7 +35,7 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
 
     private static final Float DELTA = 1e-5f;
     private final Map<String, Float> testRankFeaturesDoc = TestUtils.createRandomTokenWeightMap(TEST_TOKENS);
-    private static String modelId;
+    private String modelId;
 
     @Before
     public void setUp() throws Exception {

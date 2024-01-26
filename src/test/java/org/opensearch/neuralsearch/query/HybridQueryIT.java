@@ -64,7 +64,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     private final float[] testVector2 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector3 = createRandomVector(TEST_DIMENSION);
     private static final String SEARCH_PIPELINE = "phase-results-hybrid-pipeline";
-    private static String modelId;
+    private String modelId;
 
     @Before
     public void setUp() throws Exception {
