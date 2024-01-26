@@ -339,15 +339,15 @@ testClusters.integTest {
     // Install K-NN/ml-commons plugins on the integTest cluster nodes except security
     configurations.zipArchive.asFileTree.each {
         plugin(provider(new Callable<RegularFile>(){
-            @Override
-            RegularFile call() throws Exception {
-                return new RegularFile() {
-                    @Override
-                    File getAsFile() {
-                        return it
+                @Override
+                RegularFile call() throws Exception {
+                    return new RegularFile() {
+                        @Override
+                        File getAsFile() {
+                            return it
+                        }
                     }
                 }
-            }
         }))
     }
 
