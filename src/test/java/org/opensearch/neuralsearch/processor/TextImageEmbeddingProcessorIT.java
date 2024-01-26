@@ -34,6 +34,7 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     @Before
     public void setUp() throws Exception {
+        super.setUp();
         modelId = uploadModel();
         assertNotNull(modelId);
     }
