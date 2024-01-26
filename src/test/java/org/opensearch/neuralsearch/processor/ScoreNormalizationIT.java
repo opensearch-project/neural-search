@@ -95,7 +95,6 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             DEFAULT_COMBINATION_METHOD,
             Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
         );
-        String modelId = getDeployedModelId();
 
         HybridQueryBuilder hybridQueryBuilderArithmeticMean = new HybridQueryBuilder();
         hybridQueryBuilderArithmeticMean.add(
@@ -191,7 +190,6 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             DEFAULT_COMBINATION_METHOD,
             Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
         );
-        String modelId = getDeployedModelId();
 
         HybridQueryBuilder hybridQueryBuilderArithmeticMean = new HybridQueryBuilder();
         hybridQueryBuilderArithmeticMean.add(

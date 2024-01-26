@@ -50,7 +50,6 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testNeuralQueryEnricherProcessor_whenNoModelIdPassed_thenSuccess() {
         initializeIndexIfNotExist();
-        String modelId = getDeployedModelId();
         createSearchRequestProcessor(modelId, search_pipeline);
         createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
         updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
@@ -67,7 +66,6 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testNeuralQueryEnricherProcessor_whenHybridQueryBuilderAndNoModelIdPassed_thenSuccess() {
         initializeIndexIfNotExist();
-        String modelId = getDeployedModelId();
         createSearchRequestProcessor(modelId, search_pipeline);
         createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
         updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));

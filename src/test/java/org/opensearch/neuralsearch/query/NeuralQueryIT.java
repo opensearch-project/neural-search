@@ -75,7 +75,6 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testBasicQuery() {
         initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-        String modelId = getDeployedModelId();
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_1,
             TEST_QUERY_TEXT,
@@ -112,7 +111,6 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testBoostQuery() {
         initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-        String modelId = getDeployedModelId();
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_1,
             TEST_QUERY_TEXT,
@@ -157,7 +155,6 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testRescoreQuery() {
         initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-        String modelId = getDeployedModelId();
         MatchAllQueryBuilder matchAllQueryBuilder = new MatchAllQueryBuilder();
         NeuralQueryBuilder rescoreNeuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_1,
@@ -206,7 +203,6 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testBooleanQuery_withMultipleNeuralQueries() {
         initializeIndexIfNotExist(TEST_MULTI_VECTOR_FIELD_INDEX_NAME);
-        String modelId = getDeployedModelId();
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
 
         NeuralQueryBuilder neuralQueryBuilder1 = new NeuralQueryBuilder(
@@ -265,7 +261,6 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testBooleanQuery_withNeuralAndBM25Queries() {
         initializeIndexIfNotExist(TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME);
-        String modelId = getDeployedModelId();
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
@@ -312,7 +307,6 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testNestedQuery() {
         initializeIndexIfNotExist(TEST_NESTED_INDEX_NAME);
-        String modelId = getDeployedModelId();
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_NESTED,
@@ -357,7 +351,6 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testFilterQuery() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
-        String modelId = getDeployedModelId();
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_1,
             TEST_QUERY_TEXT,
@@ -394,7 +387,6 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testMultimodalQuery() {
         initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-        String modelId = getDeployedModelId();
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_1,
             TEST_QUERY_TEXT,

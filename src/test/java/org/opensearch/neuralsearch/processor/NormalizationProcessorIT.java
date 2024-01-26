@@ -91,7 +91,6 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     public void testResultProcessor_whenOneShardAndQueryMatches_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
         createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-        String modelId = getDeployedModelId();
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_1,
@@ -135,7 +134,6 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     public void testResultProcessor_whenDefaultProcessorConfigAndQueryMatches_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
         createSearchPipelineWithDefaultResultsPostProcessor(SEARCH_PIPELINE);
-        String modelId = getDeployedModelId();
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_1,
@@ -167,7 +165,6 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     public void testResultProcessor_whenMultipleShardsAndQueryMatches_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
         createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-        String modelId = getDeployedModelId();
         int totalExpectedDocQty = 6;
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(

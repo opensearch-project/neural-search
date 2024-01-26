@@ -67,7 +67,6 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testBasicQueryUsingQueryText() {
         initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-        String modelId = getDeployedModelId();
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
             .queryText(TEST_QUERY_TEXT)
             .modelId(modelId);
@@ -97,7 +96,6 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testBoostQuery() {
         initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-        String modelId = getDeployedModelId();
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
             .queryText(TEST_QUERY_TEXT)
             .modelId(modelId)
@@ -134,7 +132,6 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testRescoreQuery() {
         initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-        String modelId = getDeployedModelId();
         MatchAllQueryBuilder matchAllQueryBuilder = new MatchAllQueryBuilder();
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
             .queryText(TEST_QUERY_TEXT)
@@ -174,7 +171,6 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testBooleanQuery_withMultipleSparseEncodingQueries() {
         initializeIndexIfNotExist(TEST_MULTI_NEURAL_SPARSE_FIELD_INDEX_NAME);
-        String modelId = getDeployedModelId();
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
 
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder1 = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
@@ -221,7 +217,6 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testBooleanQuery_withSparseEncodingAndBM25Queries() {
         initializeIndexIfNotExist(TEST_TEXT_AND_NEURAL_SPARSE_FIELD_INDEX_NAME);
-        String modelId = getDeployedModelId();
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
 
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
@@ -242,7 +237,6 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testBasicQueryUsingQueryText_whenQueryWrongFieldType_thenFail() {
         initializeIndexIfNotExist(TEST_TEXT_AND_NEURAL_SPARSE_FIELD_INDEX_NAME);
-        String modelId = getDeployedModelId();
 
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_TEXT_FIELD_NAME_1)
             .queryText(TEST_QUERY_TEXT)

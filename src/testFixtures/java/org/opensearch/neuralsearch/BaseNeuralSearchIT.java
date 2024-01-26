@@ -11,7 +11,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -870,58 +869,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             toHttpEntity(""),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
-    }
-
-    /**
-     * Find all modesl that are currently deployed in the cluster
-     * @return set of model ids
-     */
-    @SneakyThrows
-    protected Set<String> findDeployedModels() {
-
-        StringBuilder stringBuilderForContentBody = new StringBuilder();
-        stringBuilderForContentBody.append("{")
-            .append("\"query\": { \"match_all\": {} },")
-            .append("  \"_source\": {")
-            .append("    \"includes\": [\"model_id\"],")
-            .append("    \"excludes\": [\"content\", \"model_content\"]")
-            .append("}}");
-
-        Response response = makeRequest(
-            client(),
-            "POST",
-            "/_plugins/_ml/models/_search",
-            null,
-            toHttpEntity(stringBuilderForContentBody.toString()),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
-        );
-
-        String responseBody = EntityUtils.toString(response.getEntity());
-
-        Map<String, Object> models = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
-        Set<String> modelIds = new HashSet<>();
-        if (Objects.isNull(models) || models.isEmpty()) {
-            return modelIds;
-        }
-
-        Map<String, Object> hits = (Map<String, Object>) models.get("hits");
-        List<Map<String, Object>> innerHitsMap = (List<Map<String, Object>>) hits.get("hits");
-        return innerHitsMap.stream()
-            .map(hit -> (Map<String, Object>) hit.get("_source"))
-            .filter(hitsMap -> Objects.nonNull(hitsMap) && hitsMap.containsKey("model_id"))
-            .map(hitsMap -> (String) hitsMap.get("model_id"))
-            .collect(Collectors.toSet());
-    }
-
-    /**
-     * Get the id for model currently deployed in the cluster. If there are no models deployed or it's more than 1 model
-     * fail on assertion
-     * @return id of deployed model
-     */
-    protected String getDeployedModelId() {
-        Set<String> modelIds = findDeployedModels();
-        assertEquals(1, modelIds.size());
-        return modelIds.iterator().next();
     }
 
     @SneakyThrows

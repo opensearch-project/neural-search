@@ -213,7 +213,6 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             HARMONIC_MEAN_COMBINATION_METHOD,
             Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
         );
-        String modelId = getDeployedModelId();
 
         HybridQueryBuilder hybridQueryBuilderDefaultNorm = new HybridQueryBuilder();
         hybridQueryBuilderDefaultNorm.add(new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null));
@@ -280,7 +279,6 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             GEOMETRIC_MEAN_COMBINATION_METHOD,
             Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
         );
-        String modelId = getDeployedModelId();
 
         HybridQueryBuilder hybridQueryBuilderDefaultNorm = new HybridQueryBuilder();
         hybridQueryBuilderDefaultNorm.add(new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null));
