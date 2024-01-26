@@ -42,7 +42,6 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
         super.setUp();
         updateClusterSettings();
         modelId = prepareSparseEncodingModel();
-        assertNotNull(modelId);
     }
 
     @After

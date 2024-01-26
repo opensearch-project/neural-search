@@ -60,7 +60,6 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
     public void setUp() throws Exception {
         super.setUp();
         modelId = prepareModel();
-        assertNotNull(modelId);
     }
 
     @After

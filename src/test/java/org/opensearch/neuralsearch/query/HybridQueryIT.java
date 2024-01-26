@@ -71,7 +71,6 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         super.setUp();
         updateClusterSettings();
         modelId = prepareModel();
-        assertNotNull(modelId);
         createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
     }
 

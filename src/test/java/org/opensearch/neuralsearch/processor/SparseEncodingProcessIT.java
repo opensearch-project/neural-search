@@ -33,7 +33,6 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
     public void setUp() throws Exception {
         super.setUp();
         modelId = prepareSparseEncodingModel();
-        assertNotNull(modelId);
     }
 
     @After

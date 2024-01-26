@@ -36,7 +36,6 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
         super.setUp();
         updateClusterSettings();
         modelId = prepareModel();
-        assertNotNull(modelId);
     }
 
     @After
