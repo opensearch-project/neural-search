@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.plugin;
 
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SEARCH_HYBRID_SEARCH_DISABLED;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER_MAX_DOC_FIELDS;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -145,7 +146,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED);
+        return List.of(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED, RERANKER_MAX_DOC_FIELDS);
     }
 
     @Override
@@ -159,7 +160,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     public Map<String, org.opensearch.search.pipeline.Processor.Factory<SearchResponseProcessor>> getResponseProcessors(
         Parameters parameters
     ) {
-        return Map.of(RerankProcessor.TYPE, new RerankProcessorFactory(clientAccessor));
+        return Map.of(RerankProcessor.TYPE, new RerankProcessorFactory(clientAccessor, parameters.env));
     }
 
     @Override

@@ -21,17 +21,24 @@ import org.opensearch.core.xcontent.ObjectPath;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.env.Environment;
+import org.opensearch.index.mapper.MapperService;
 import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.search.SearchExtBuilder;
+
+import lombok.AllArgsConstructor;
 
 /**
  * Context Source Fetcher that gets context from the rerank query ext.
  */
+@AllArgsConstructor
 public class QueryContextSourceFetcher implements ContextSourceFetcher {
 
     public static final String NAME = "query_context";
     public static final String QUERY_TEXT_FIELD = "query_text";
     public static final String QUERY_TEXT_PATH_FIELD = "query_text_path";
+
+    private final Environment environment;
 
     @Override
     public void fetchContext(
@@ -65,6 +72,16 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
             } else if (ctxMap.containsKey(QUERY_TEXT_PATH_FIELD)) {
                 // Case "query_text_path": ser/de the query into a map and then find the text at the path specified
                 String path = (String) ctxMap.get(QUERY_TEXT_PATH_FIELD);
+                if (!validatePath(path)) {
+                    throw new IllegalArgumentException(
+                        String.format(
+                            Locale.ROOT,
+                            "%s exceeded the maximum path length of %d",
+                            QUERY_TEXT_PATH_FIELD,
+                            MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())
+                        )
+                    );
+                }
                 Map<String, Object> map = requestToMap(searchRequest);
                 // Get the text at the path
                 Object queryText = ObjectPath.eval(path, map);
@@ -106,5 +123,12 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
         XContentParser parser = XContentType.CBOR.xContent().createParser(NamedXContentRegistry.EMPTY, null, bais);
         Map<String, Object> map = parser.map();
         return map;
+    }
+
+    private boolean validatePath(final String path) {
+        if (path == null || path.isEmpty()) {
+            return true;
+        }
+        return path.split("\\.").length <= MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings());
     }
 }
