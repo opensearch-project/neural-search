@@ -8,7 +8,6 @@
 
 import org.opensearch.gradle.test.RestIntegTestTask
 import org.opensearch.gradle.testclusters.OpenSearchCluster
-import org.opensearch.gradle.Version
 
 import java.nio.file.Paths
 import java.util.concurrent.Callable
@@ -63,15 +62,6 @@ def opensearch_tmp_dir = rootProject.file('build/private/opensearch_tmp').absolu
 opensearch_tmp_dir.mkdirs()
 
 ext {
-    var versionsWithoutDefaultAdminPassword = System.getProperty("versionsWithoutDefaultAdminPassword").toString()
-    Version currentVersion= Version.fromString(version_tokens[0])
-    Version versionWithoutDefaultAdminPassword=Version.fromString(versionsWithoutDefaultAdminPassword)
-    if(currentVersion.onOrAfter(versionWithoutDefaultAdminPassword)){
-        System.setProperty("OPENSEARCH_INITIAL_ADMIN_PASSWORD", "myStrongPassword123!")
-    }else{
-        System.setProperty("OPENSEARCH_INITIAL_ADMIN_PASSWORD", "admin")
-    }
-
     isSnapshot = "true" == System.getProperty("build.snapshot", "true")
     projectSubstitutions = [:]
 
@@ -95,9 +85,9 @@ ext {
         cluster.getNodes().forEach { node ->
             var creds = node.getCredentials()
             if (creds.isEmpty()) {
-                creds.add(Map.of('username', 'admin', 'password', System.getProperty("OPENSEARCH_INITIAL_ADMIN_PASSWORD")))
+                creds.add(Map.of('username', 'admin', 'password', 'admin'))
             } else {
-                creds.get(0).putAll(Map.of('username', 'admin', 'password', System.getProperty("OPENSEARCH_INITIAL_ADMIN_PASSWORD")))
+                creds.get(0).putAll(Map.of('username', 'admin', 'password', 'admin'))
             }
         }
 
@@ -312,7 +302,7 @@ integTest {
         // If security is enabled, set is_https/user/password defaults
         is_https = is_https == null ? "true" : is_https
         user = user == null ? "admin" : user
-        password = password == null ? System.getProperty("OPENSEARCH_INITIAL_ADMIN_PASSWORD") : password
+        password = password == null ? "admin" : password
     }
     systemProperty("https", is_https)
     systemProperty("user", user)
@@ -349,15 +339,15 @@ testClusters.integTest {
     // Install K-NN/ml-commons plugins on the integTest cluster nodes except security
     configurations.zipArchive.asFileTree.each {
         plugin(provider(new Callable<RegularFile>(){
-                @Override
-                RegularFile call() throws Exception {
-                    return new RegularFile() {
-                        @Override
-                        File getAsFile() {
-                            return it
-                        }
+            @Override
+            RegularFile call() throws Exception {
+                return new RegularFile() {
+                    @Override
+                    File getAsFile() {
+                        return it
                     }
                 }
+            }
         }))
     }
 
