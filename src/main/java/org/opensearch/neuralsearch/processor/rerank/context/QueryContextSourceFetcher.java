@@ -146,6 +146,5 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
                 )
             );
         }
-        return;
     }
 }
