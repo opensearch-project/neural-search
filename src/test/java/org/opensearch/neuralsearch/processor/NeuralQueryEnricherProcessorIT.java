@@ -11,7 +11,6 @@ import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
 import java.util.Collections;
 import java.util.Map;
 
-import org.junit.After;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
@@ -29,27 +28,17 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
     private static final String ingest_pipeline = "nlp-pipeline";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_1 = "test-knn-vector-1";
     private final float[] testVector = createRandomVector(TEST_DIMENSION);
-    private String modelId;
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
         updateClusterSettings();
-        modelId = prepareModel();
-    }
-
-    @After
-    @SneakyThrows
-    public void tearDown() {
-        super.tearDown();
-        deleteSearchPipeline(search_pipeline);
-        deleteModel(modelId);
-        deleteIndex(index);
     }
 
     @SneakyThrows
     public void testNeuralQueryEnricherProcessor_whenNoModelIdPassed_thenSuccess() {
-        initializeIndexIfNotExist();
+        initializeIndexIfNotExist(index);
+        String modelId = prepareModel();
         createSearchRequestProcessor(modelId, search_pipeline);
         createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
         updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
@@ -60,12 +49,13 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
         Map<String, Object> response = search(index, neuralQueryBuilder, 2);
 
         assertFalse(response.isEmpty());
-
+        wipeOfTestResources(index, ingest_pipeline, modelId, search_pipeline);
     }
 
     @SneakyThrows
     public void testNeuralQueryEnricherProcessor_whenHybridQueryBuilderAndNoModelIdPassed_thenSuccess() {
-        initializeIndexIfNotExist();
+        initializeIndexIfNotExist(index);
+        String modelId = prepareModel();
         createSearchRequestProcessor(modelId, search_pipeline);
         createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
         updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
@@ -78,23 +68,24 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
         Map<String, Object> response = search(index, hybridQueryBuilder, 2);
 
         assertFalse(response.isEmpty());
+        wipeOfTestResources(index, ingest_pipeline, modelId, search_pipeline);
 
     }
 
     @SneakyThrows
-    private void initializeIndexIfNotExist() {
-        if (index.equals(NeuralQueryEnricherProcessorIT.index) && !indexExists(index)) {
+    private void initializeIndexIfNotExist(String indexName) {
+        if (indexName.equals(NeuralQueryEnricherProcessorIT.index) && !indexExists(indexName)) {
             prepareKnnIndex(
-                index,
+                indexName,
                 Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE))
             );
             addKnnDoc(
-                index,
+                indexName,
                 "1",
                 Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
                 Collections.singletonList(Floats.asList(testVector).toArray())
             );
-            assertEquals(1, getDocCount(index));
+            assertEquals(1, getDocCount(indexName));
         }
     }
 }

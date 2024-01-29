@@ -23,7 +23,6 @@ import java.util.Set;
 import java.util.stream.IntStream;
 
 import org.apache.lucene.search.join.ScoreMode;
-import org.junit.After;
 import org.junit.Before;
 import org.opensearch.client.ResponseException;
 import org.opensearch.index.query.BoolQueryBuilder;
@@ -64,26 +63,11 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     private final float[] testVector2 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector3 = createRandomVector(TEST_DIMENSION);
     private static final String SEARCH_PIPELINE = "phase-results-hybrid-pipeline";
-    private String modelId;
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
         updateClusterSettings();
-        modelId = prepareModel();
-        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-    }
-
-    @After
-    @SneakyThrows
-    public void tearDown() {
-        super.tearDown();
-        deleteSearchPipeline(SEARCH_PIPELINE);
-        /* this is required to minimize chance of model not being deployed due to open memory CB,
-         * this happens in case we leave model from previous test case. We use new model for every test, and old model
-         * can be undeployed and deleted to free resources after each test case execution.
-         */
-        deleteModel(modelId);
     }
 
     @Override
@@ -131,7 +115,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testComplexQuery_whenMultipleSubqueries_thenSuccessful() {
         initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
-
+        String modelId = prepareModel();
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
         TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
         TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
         TermQueryBuilder termQueryBuilder3 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT5);
@@ -170,7 +155,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         assertEquals(3, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-        deleteIndex(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
+        wipeOfTestResources(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, null, modelId, SEARCH_PIPELINE);
     }
 
     /**
@@ -202,7 +187,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testComplexQuery_whenMultipleIdenticalSubQueries_thenSuccessful() {
         initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
-
+        String modelId = prepareModel();
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
         TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
         TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
         TermQueryBuilder termQueryBuilder3 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
@@ -240,13 +226,14 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         assertEquals(2, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-        deleteIndex(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
+        wipeOfTestResources(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, null, modelId, SEARCH_PIPELINE);
     }
 
     @SneakyThrows
     public void testNoMatchResults_whenOnlyTermSubQueryWithoutMatch_thenEmptyResult() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
-
+        String modelId = prepareModel();
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
         TermQueryBuilder termQuery2Builder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT2);
         HybridQueryBuilder hybridQueryBuilderOnlyTerm = new HybridQueryBuilder();
@@ -270,13 +257,14 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         assertEquals(0, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-        deleteIndex(TEST_MULTI_DOC_INDEX_NAME);
+        wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME, null, modelId, SEARCH_PIPELINE);
     }
 
     @SneakyThrows
     public void testNestedQuery_whenHybridQueryIsWrappedIntoOtherQuery_thenFail() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
-
+        String modelId = prepareModel();
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
         MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
         MatchQueryBuilder matchQuery2Builder = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
         HybridQueryBuilder hybridQueryBuilderOnlyTerm = new HybridQueryBuilder();
@@ -318,13 +306,14 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 containsString("illegal_argument_exception")
             )
         );
-        deleteIndex(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+        wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, null, modelId, SEARCH_PIPELINE);
     }
 
     @SneakyThrows
     public void testIndexWithNestedFields_whenHybridQuery_thenSuccess() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
-
+        String modelId = prepareModel();
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
         TermQueryBuilder termQuery2Builder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT2);
         HybridQueryBuilder hybridQueryBuilderOnlyTerm = new HybridQueryBuilder();
@@ -348,13 +337,14 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         assertEquals(1, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-        deleteIndex(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
+        wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD, null, modelId, SEARCH_PIPELINE);
     }
 
     @SneakyThrows
     public void testIndexWithNestedFields_whenHybridQueryIncludesNested_thenSuccess() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
-
+        String modelId = prepareModel();
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
         NestedQueryBuilder nestedQueryBuilder = QueryBuilders.nestedQuery(
             TEST_NESTED_TYPE_FIELD_NAME_1,
@@ -382,7 +372,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         assertEquals(1, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-        deleteIndex(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
+        wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD, null, modelId, SEARCH_PIPELINE);
     }
 
     @SneakyThrows

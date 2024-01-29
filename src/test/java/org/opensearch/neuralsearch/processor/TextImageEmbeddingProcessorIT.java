@@ -11,7 +11,6 @@ import java.util.Map;
 import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.message.BasicHeader;
-import org.junit.After;
 import org.junit.Before;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
@@ -19,8 +18,6 @@ import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 import com.google.common.collect.ImmutableList;
-
-import lombok.SneakyThrows;
 
 /**
  * Testing text_and_image_embedding ingest processor. We can only test text in integ tests, none of pre-built models
@@ -30,36 +27,31 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     private static final String INDEX_NAME = "text_image_embedding_index";
     private static final String PIPELINE_NAME = "ingest-pipeline";
-    private String modelId;
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        modelId = uploadModel();
-    }
-
-    @After
-    @SneakyThrows
-    public void tearDown() {
-        super.tearDown();
-        deleteModel(modelId);
-        deleteIndex(INDEX_NAME);
+        updateClusterSettings();
     }
 
     public void testEmbeddingProcessor_whenIngestingDocumentWithSourceMatchingTextMapping_thenSuccessful() throws Exception {
+        String modelId = uploadModel();
         loadModel(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
         createTextImageEmbeddingIndex();
         ingestDocumentWithTextMappedToEmbeddingField();
         assertEquals(1, getDocCount(INDEX_NAME));
+        wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
     }
 
     public void testEmbeddingProcessor_whenIngestingDocumentWithSourceWithoutMatchingInMapping_thenSuccessful() throws Exception {
+        String modelId = uploadModel();
         loadModel(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
         createTextImageEmbeddingIndex();
         ingestDocumentWithoutMappedFields();
         assertEquals(1, getDocCount(INDEX_NAME));
+        wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
     }
 
     private String uploadModel() throws Exception {

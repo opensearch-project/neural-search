@@ -17,7 +17,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 
-import org.junit.After;
 import org.junit.Before;
 import org.opensearch.client.ResponseException;
 import org.opensearch.index.query.QueryBuilders;
@@ -54,20 +53,11 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
     private static final String L2_NORMALIZATION_METHOD = "l2";
     private static final String HARMONIC_MEAN_COMBINATION_METHOD = "harmonic_mean";
     private static final String GEOMETRIC_MEAN_COMBINATION_METHOD = "geometric_mean";
-    private String modelId;
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        modelId = prepareModel();
-    }
-
-    @After
-    @SneakyThrows
-    public void tearDown() {
-        super.tearDown();
-        deleteSearchPipeline(SEARCH_PIPELINE);
-        deleteModel(modelId);
+        updateClusterSettings();
     }
 
     /**
@@ -183,7 +173,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
                 containsString("in hybrid query")
             )
         );
-        deleteIndex(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
+        wipeOfTestResources(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, null, null, SEARCH_PIPELINE);
     }
 
     /**
@@ -207,6 +197,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testHarmonicMeanCombination_whenOneShardAndQueryMatches_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+        String modelId = prepareModel();
         createSearchPipeline(
             SEARCH_PIPELINE,
             DEFAULT_NORMALIZATION_METHOD,
@@ -249,7 +240,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertHybridSearchResults(searchResponseAsMapL2Norm, 5, new float[] { 0.5f, 1.0f });
-        deleteIndex(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+        wipeOfTestResources(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, null, modelId, SEARCH_PIPELINE);
     }
 
     /**
@@ -273,6 +264,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testGeometricMeanCombination_whenOneShardAndQueryMatches_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+        String modelId = prepareModel();
         createSearchPipeline(
             SEARCH_PIPELINE,
             DEFAULT_NORMALIZATION_METHOD,
@@ -315,7 +307,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertHybridSearchResults(searchResponseAsMapL2Norm, 5, new float[] { 0.5f, 1.0f });
-        deleteIndex(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+        wipeOfTestResources(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, null, modelId, SEARCH_PIPELINE);
     }
 
     private void initializeIndexIfNotExist(String indexName) throws IOException {

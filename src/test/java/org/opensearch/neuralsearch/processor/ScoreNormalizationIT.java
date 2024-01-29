@@ -14,7 +14,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 
-import org.junit.After;
 import org.junit.Before;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
@@ -46,21 +45,11 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
     private static final String L2_NORMALIZATION_METHOD = "l2";
     private static final String HARMONIC_MEAN_COMBINATION_METHOD = "harmonic_mean";
     private static final String GEOMETRIC_MEAN_COMBINATION_METHOD = "geometric_mean";
-    private String modelId;
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
         updateClusterSettings();
-        modelId = prepareModel();
-    }
-
-    @After
-    @SneakyThrows
-    public void tearDown() {
-        super.tearDown();
-        deleteSearchPipeline(SEARCH_PIPELINE);
-        deleteModel(modelId);
     }
 
     @Override
@@ -89,6 +78,7 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testL2Norm_whenOneShardAndQueryMatches_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+        String modelId = prepareModel();
         createSearchPipeline(
             SEARCH_PIPELINE,
             L2_NORMALIZATION_METHOD,
@@ -160,7 +150,7 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertHybridSearchResults(searchResponseAsMapGeometricMean, 5, new float[] { 0.5f, 1.0f });
-        deleteIndex(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+        wipeOfTestResources(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, null, modelId, SEARCH_PIPELINE);
     }
 
     /**
@@ -184,6 +174,7 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testMinMaxNorm_whenOneShardAndQueryMatches_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+        String modelId = prepareModel();
         createSearchPipeline(
             SEARCH_PIPELINE,
             DEFAULT_NORMALIZATION_METHOD,

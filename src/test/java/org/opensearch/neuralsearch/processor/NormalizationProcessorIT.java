@@ -19,7 +19,6 @@ import java.util.Set;
 import java.util.stream.IntStream;
 
 import org.apache.commons.lang3.Range;
-import org.junit.After;
 import org.junit.Before;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.TermQueryBuilder;
@@ -53,20 +52,11 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     private final float[] testVector2 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector3 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector4 = createRandomVector(TEST_DIMENSION);
-    private String modelId;
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        modelId = prepareModel();
-    }
-
-    @After
-    @SneakyThrows
-    public void tearDown() {
-        super.tearDown();
-        deleteSearchPipeline(SEARCH_PIPELINE);
-        deleteModel(modelId);
+        updateClusterSettings();
     }
 
     /**
@@ -90,6 +80,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testResultProcessor_whenOneShardAndQueryMatches_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+        String modelId = prepareModel();
         createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
@@ -115,7 +106,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertQueryResults(searchResponseAsMap, 5, false);
-        deleteIndex(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+        wipeOfTestResources(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, null, modelId, SEARCH_PIPELINE);
     }
 
     /**
@@ -133,6 +124,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testResultProcessor_whenDefaultProcessorConfigAndQueryMatches_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+        String modelId = prepareModel();
         createSearchPipelineWithDefaultResultsPostProcessor(SEARCH_PIPELINE);
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
@@ -158,12 +150,13 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertQueryResults(searchResponseAsMap, 5, false);
-        deleteIndex(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+        wipeOfTestResources(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, null, modelId, SEARCH_PIPELINE);
     }
 
     @SneakyThrows
     public void testResultProcessor_whenMultipleShardsAndQueryMatches_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
+        String modelId = prepareModel();
         createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
         int totalExpectedDocQty = 6;
 
@@ -218,7 +211,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
 
         // verify that all ids are unique
         assertEquals(Set.copyOf(ids).size(), ids.size());
-        deleteIndex(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
+        wipeOfTestResources(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, null, modelId, SEARCH_PIPELINE);
     }
 
     @SneakyThrows
@@ -238,7 +231,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertQueryResults(searchResponseAsMap, 0, true);
-        deleteIndex(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
+        wipeOfTestResources(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, null, null, SEARCH_PIPELINE);
     }
 
     @SneakyThrows
@@ -259,7 +252,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertQueryResults(searchResponseAsMap, 4, true, Range.between(0.33f, 1.0f));
-        deleteIndex(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
+        wipeOfTestResources(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, null, null, SEARCH_PIPELINE);
     }
 
     private void initializeIndexIfNotExist(String indexName) throws IOException {

@@ -14,7 +14,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import org.junit.After;
 import org.junit.Before;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
@@ -38,24 +37,11 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_TEXT_FIELD_NAME_1 = "test-text-field";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_NESTED = "nested.knn.field";
     private final float[] testVector = createRandomVector(TEST_DIMENSION);
-    private String modelId;
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
         updateClusterSettings();
-        modelId = prepareModel();
-    }
-
-    @After
-    @SneakyThrows
-    public void tearDown() {
-        super.tearDown();
-        /* this is required to minimize chance of model not being deployed due to open memory CB,
-         * this happens in case we leave model from previous test case. We use new model for every test, and old model
-         * can be undeployed and deleted to free resources after each test case execution.
-         */
-        deleteModel(modelId);
     }
 
     /**
@@ -75,6 +61,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testBasicQuery() {
         initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
+        String modelId = prepareModel();
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_1,
             TEST_QUERY_TEXT,
@@ -90,7 +77,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
-        deleteIndex(TEST_BASIC_INDEX_NAME);
+        wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
     }
 
     /**
@@ -111,6 +98,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testBoostQuery() {
         initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
+        String modelId = prepareModel();
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_1,
             TEST_QUERY_TEXT,
@@ -129,7 +117,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = 2 * computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
-        deleteIndex(TEST_BASIC_INDEX_NAME);
+        wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
     }
 
     /**
@@ -155,6 +143,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testRescoreQuery() {
         initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
+        String modelId = prepareModel();
         MatchAllQueryBuilder matchAllQueryBuilder = new MatchAllQueryBuilder();
         NeuralQueryBuilder rescoreNeuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_1,
@@ -172,7 +161,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
-        deleteIndex(TEST_BASIC_INDEX_NAME);
+        wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
     }
 
     /**
@@ -203,6 +192,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testBooleanQuery_withMultipleNeuralQueries() {
         initializeIndexIfNotExist(TEST_MULTI_VECTOR_FIELD_INDEX_NAME);
+        String modelId = prepareModel();
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
 
         NeuralQueryBuilder neuralQueryBuilder1 = new NeuralQueryBuilder(
@@ -232,7 +222,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = 2 * computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
-        deleteIndex(TEST_MULTI_VECTOR_FIELD_INDEX_NAME);
+        wipeOfTestResources(TEST_MULTI_VECTOR_FIELD_INDEX_NAME, null, modelId, null);
     }
 
     /**
@@ -261,6 +251,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testBooleanQuery_withNeuralAndBM25Queries() {
         initializeIndexIfNotExist(TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME);
+        String modelId = prepareModel();
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
@@ -283,7 +274,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float minExpectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertTrue(minExpectedScore < objectToFloat(firstInnerHit.get("_score")));
-        deleteIndex(TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME);
+        wipeOfTestResources(TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME, null, modelId, null);
     }
 
     /**
@@ -307,7 +298,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testNestedQuery() {
         initializeIndexIfNotExist(TEST_NESTED_INDEX_NAME);
-
+        String modelId = prepareModel();
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_NESTED,
             TEST_QUERY_TEXT,
@@ -324,7 +315,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
-        deleteIndex(TEST_NESTED_INDEX_NAME);
+        wipeOfTestResources(TEST_NESTED_INDEX_NAME, null, modelId, null);
     }
 
     /**
@@ -351,6 +342,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testFilterQuery() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
+        String modelId = prepareModel();
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_1,
             TEST_QUERY_TEXT,
@@ -366,7 +358,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals("3", firstInnerHit.get("_id"));
         float expectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
-        deleteIndex(TEST_MULTI_DOC_INDEX_NAME);
+        wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME, null, modelId, null);
     }
 
     /**
@@ -387,6 +379,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testMultimodalQuery() {
         initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
+        String modelId = prepareModel();
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
             TEST_KNN_VECTOR_FIELD_NAME_1,
             TEST_QUERY_TEXT,
@@ -402,7 +395,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
-        deleteIndex(TEST_BASIC_INDEX_NAME);
+        wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
     }
 
     @SneakyThrows
