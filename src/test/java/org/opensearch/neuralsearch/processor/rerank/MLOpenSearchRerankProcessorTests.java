@@ -245,9 +245,8 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
             .equals(
                 String.format(
                     Locale.ROOT,
-                    "%s exceeded the maximum path length of %d nested fields or %d characters",
+                    "%s exceeded the maximum path length of %d characters",
                     QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD,
-                    MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings()),
                     QueryContextSourceFetcher.MAX_QUERY_PATH_STRLEN
                 )
             ));
@@ -267,10 +266,9 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
             .equals(
                 String.format(
                     Locale.ROOT,
-                    "%s exceeded the maximum path length of %d nested fields or %d characters",
+                    "%s exceeded the maximum path length of %d nested fields",
                     QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD,
-                    MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings()),
-                    QueryContextSourceFetcher.MAX_QUERY_PATH_STRLEN
+                    MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())
                 )
             ));
     }

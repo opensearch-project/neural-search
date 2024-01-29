@@ -27,10 +27,12 @@ import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.search.SearchExtBuilder;
 
 import lombok.AllArgsConstructor;
+import lombok.extern.log4j.Log4j2;
 
 /**
  * Context Source Fetcher that gets context from the rerank query ext.
  */
+@Log4j2
 @AllArgsConstructor
 public class QueryContextSourceFetcher implements ContextSourceFetcher {
 
@@ -74,17 +76,7 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
             } else if (ctxMap.containsKey(QUERY_TEXT_PATH_FIELD)) {
                 // Case "query_text_path": ser/de the query into a map and then find the text at the path specified
                 String path = (String) ctxMap.get(QUERY_TEXT_PATH_FIELD);
-                if (!validatePath(path)) {
-                    throw new IllegalArgumentException(
-                        String.format(
-                            Locale.ROOT,
-                            "%s exceeded the maximum path length of %d nested fields or %d characters",
-                            QUERY_TEXT_PATH_FIELD,
-                            MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings()),
-                            MAX_QUERY_PATH_STRLEN
-                        )
-                    );
-                }
+                validatePath(path);
                 Map<String, Object> map = requestToMap(searchRequest);
                 // Get the text at the path
                 Object queryText = ObjectPath.eval(path, map);
@@ -128,13 +120,32 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
         return map;
     }
 
-    private boolean validatePath(final String path) {
+    private void validatePath(final String path) throws IllegalArgumentException {
         if (path == null || path.isEmpty()) {
-            return true;
+            return;
         }
         if (path.length() > MAX_QUERY_PATH_STRLEN) {
-            return false;
+            log.error(String.format(Locale.ROOT, "invalid %s due to too many characters: %s", QUERY_TEXT_PATH_FIELD, path));
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "%s exceeded the maximum path length of %d characters",
+                    QUERY_TEXT_PATH_FIELD,
+                    MAX_QUERY_PATH_STRLEN
+                )
+            );
         }
-        return path.split("\\.").length <= MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings());
+        if (path.split("\\.").length > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())) {
+            log.error(String.format(Locale.ROOT, "invalid %s due to too many nested fields: %s", QUERY_TEXT_PATH_FIELD, path));
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "%s exceeded the maximum path length of %d nested fields",
+                    QUERY_TEXT_PATH_FIELD,
+                    MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())
+                )
+            );
+        }
+        return;
     }
 }
