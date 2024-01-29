@@ -20,8 +20,7 @@ jobs:
   integ-test-with-security-linux:
     strategy:
       matrix:
-        # Restricting java 21 to 21.0.1 due to ongoing bug in JDK 21.0.2 https://bugs.openjdk.org/browse/JDK-8323659. Once the fix https://github.com/opensearch-project/OpenSearch/pull/11968 get merged this change will be reverted.
-        java: [11, 17, 21.0.1]
+        java: [11, 17, 21]
 
     name: Run Integration Tests on Linux
     runs-on: ubuntu-latest
