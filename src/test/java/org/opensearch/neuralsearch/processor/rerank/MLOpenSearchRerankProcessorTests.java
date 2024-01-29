@@ -230,7 +230,30 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
             .equals(QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD + " must point to a string field"));
     }
 
-    public void testRerankContext_whenQueryTextPathIsExceeedinglyLong_thenFail() throws IOException {
+    public void testRerankContext_whenQueryTextPathIsExceeedinglyManyCharacters_thenFail() throws IOException {
+        // "eighteencharacters" * 60 = 1080 character string > max len of 1024
+        setupParams(Map.of(QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD, "eighteencharacters".repeat(60)));
+        setupSearchResults();
+        @SuppressWarnings("unchecked")
+        ActionListener<Map<String, Object>> listener = mock(ActionListener.class);
+        processor.generateRerankingContext(request, response, listener);
+        ArgumentCaptor<Exception> argCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener, times(1)).onFailure(argCaptor.capture());
+        assert (argCaptor.getValue() instanceof IllegalArgumentException);
+        assert (argCaptor.getValue()
+            .getMessage()
+            .equals(
+                String.format(
+                    Locale.ROOT,
+                    "%s exceeded the maximum path length of %d nested fields or %d characters",
+                    QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD,
+                    MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings()),
+                    QueryContextSourceFetcher.MAX_QUERY_PATH_STRLEN
+                )
+            ));
+    }
+
+    public void textRerankContext_whenQueryTextPathIsExceeedinglyDeeplyNested_ThenFail() throws IOException {
         setupParams(Map.of(QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD, "a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p.q.r.s.t.w.x.y.z"));
         setupSearchResults();
         @SuppressWarnings("unchecked")
@@ -244,9 +267,10 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
             .equals(
                 String.format(
                     Locale.ROOT,
-                    "%s exceeded the maximum path length of %d",
+                    "%s exceeded the maximum path length of %d nested fields or %d characters",
                     QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD,
-                    MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())
+                    MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings()),
+                    QueryContextSourceFetcher.MAX_QUERY_PATH_STRLEN
                 )
             ));
     }

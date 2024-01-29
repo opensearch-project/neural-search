@@ -38,6 +38,8 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
     public static final String QUERY_TEXT_FIELD = "query_text";
     public static final String QUERY_TEXT_PATH_FIELD = "query_text_path";
 
+    public static final Integer MAX_QUERY_PATH_STRLEN = 1024;
+
     private final Environment environment;
 
     @Override
@@ -76,9 +78,10 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
                     throw new IllegalArgumentException(
                         String.format(
                             Locale.ROOT,
-                            "%s exceeded the maximum path length of %d",
+                            "%s exceeded the maximum path length of %d nested fields or %d characters",
                             QUERY_TEXT_PATH_FIELD,
-                            MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())
+                            MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings()),
+                            MAX_QUERY_PATH_STRLEN
                         )
                     );
                 }
@@ -128,6 +131,9 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
     private boolean validatePath(final String path) {
         if (path == null || path.isEmpty()) {
             return true;
+        }
+        if (path.length() > MAX_QUERY_PATH_STRLEN) {
+            return false;
         }
         return path.split("\\.").length <= MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings());
     }
