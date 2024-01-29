@@ -38,7 +38,7 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
     public static final String QUERY_TEXT_FIELD = "query_text";
     public static final String QUERY_TEXT_PATH_FIELD = "query_text_path";
 
-    public static final Integer MAX_QUERY_PATH_STRLEN = 1024;
+    public static final Integer MAX_QUERY_PATH_STRLEN = 1000;
 
     private final Environment environment;
 
