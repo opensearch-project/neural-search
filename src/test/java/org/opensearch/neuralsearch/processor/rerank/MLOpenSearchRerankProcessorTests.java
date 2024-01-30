@@ -52,6 +52,8 @@ import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.pipeline.Processor.PipelineContext;
 import org.opensearch.test.OpenSearchTestCase;
 
+import lombok.SneakyThrows;
+
 public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
 
     @Mock
