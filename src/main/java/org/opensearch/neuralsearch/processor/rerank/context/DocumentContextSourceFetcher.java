@@ -32,7 +32,6 @@ public class DocumentContextSourceFetcher implements ContextSourceFetcher {
 
     public static final String NAME = "document_fields";
     public static final String DOCUMENT_CONTEXT_LIST_FIELD = "document_context_list";
-    public static final int MAX_DOCUMENT_FIELDS = 50;
 
     private final List<String> contextFields;
     private final Environment environment;

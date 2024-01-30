@@ -197,7 +197,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
         );
     }
 
-    public void testCrossEncoder_whenTooManyDocFields_ThenFail() {
+    public void testCrossEncoder_whenTooManyDocFields_thenFail() {
         Map<String, Object> config = new HashMap<>(
             Map.of(
                 RerankType.ML_OPENSEARCH.getLabel(),

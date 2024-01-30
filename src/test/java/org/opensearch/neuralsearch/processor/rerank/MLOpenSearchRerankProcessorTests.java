@@ -230,7 +230,8 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
             .equals(QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD + " must point to a string field"));
     }
 
-    public void testRerankContext_whenQueryTextPathIsExceeedinglyManyCharacters_thenFail() throws IOException {
+    @SneakyThrows
+    public void testRerankContext_whenQueryTextPathIsExceeedinglyManyCharacters_thenFail() {
         // "eighteencharacters" * 60 = 1080 character string > max len of 1024
         setupParams(Map.of(QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD, "eighteencharacters".repeat(60)));
         setupSearchResults();
@@ -252,7 +253,8 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
             ));
     }
 
-    public void textRerankContext_whenQueryTextPathIsExceeedinglyDeeplyNested_ThenFail() throws IOException {
+    @SneakyThrows
+    public void textRerankContext_whenQueryTextPathIsExceeedinglyDeeplyNested_thenFail() {
         setupParams(Map.of(QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD, "a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p.q.r.s.t.w.x.y.z"));
         setupSearchResults();
         @SuppressWarnings("unchecked")
