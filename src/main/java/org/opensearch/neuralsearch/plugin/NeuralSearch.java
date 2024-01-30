@@ -160,6 +160,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     public Map<String, org.opensearch.search.pipeline.Processor.Factory<SearchResponseProcessor>> getResponseProcessors(
         Parameters parameters
     ) {
+        parameters.searchPipelineService.getClusterService().getClusterSettings()
         return Map.of(RerankProcessor.TYPE, new RerankProcessorFactory(clientAccessor, parameters.env));
     }
 

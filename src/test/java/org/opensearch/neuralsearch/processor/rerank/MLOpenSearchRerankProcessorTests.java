@@ -28,6 +28,7 @@ import org.mockito.MockitoAnnotations;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.SearchResponse.Clusters;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.action.search.SearchResponseSections;
 import org.opensearch.action.search.ShardSearchFailure;
 import org.opensearch.common.document.DocumentField;
@@ -36,7 +37,6 @@ import org.opensearch.common.xcontent.json.JsonXContent;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.env.Environment;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
@@ -69,7 +69,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
     private PipelineProcessingContext ppctx;
 
     @Mock
-    private Environment environment;
+    private ClusterService clusterService;
 
     private RerankProcessorFactory factory;
 
@@ -78,8 +78,8 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
     @Before
     public void setup() {
         MockitoAnnotations.openMocks(this);
-        doReturn(Settings.EMPTY).when(environment).settings();
-        factory = new RerankProcessorFactory(mlCommonsClientAccessor, environment);
+        doReturn(Settings.EMPTY).when(clusterService).getSettings();
+        factory = new RerankProcessorFactory(mlCommonsClientAccessor, clusterService);
         Map<String, Object> config = new HashMap<>(
             Map.of(
                 RerankType.ML_OPENSEARCH.getLabel(),
@@ -270,7 +270,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
                     Locale.ROOT,
                     "%s exceeded the maximum path length of %d nested fields",
                     QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD,
-                    MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())
+                    MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(clusterService.getSettings())
                 )
             ));
     }

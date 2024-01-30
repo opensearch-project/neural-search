@@ -14,6 +14,7 @@ import java.util.Map;
 
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
@@ -21,7 +22,6 @@ import org.opensearch.core.xcontent.ObjectPath;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.env.Environment;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.search.SearchExtBuilder;
@@ -42,7 +42,7 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
 
     public static final Integer MAX_QUERY_PATH_STRLEN = 1000;
 
-    private final Environment environment;
+    private final ClusterService clusterService;
 
     @Override
     public void fetchContext(
@@ -135,14 +135,14 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
                 )
             );
         }
-        if (path.split("\\.").length > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())) {
+        if (path.split("\\.").length > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(clusterService.getSettings())) {
             log.error(String.format(Locale.ROOT, "invalid %s due to too many nested fields: %s", QUERY_TEXT_PATH_FIELD, path));
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
                     "%s exceeded the maximum path length of %d nested fields",
                     QUERY_TEXT_PATH_FIELD,
-                    MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())
+                    MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(clusterService.getSettings())
                 )
             );
         }
