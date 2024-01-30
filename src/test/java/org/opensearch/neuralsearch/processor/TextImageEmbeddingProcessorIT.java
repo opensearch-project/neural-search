@@ -11,15 +11,13 @@ import java.util.Map;
 import org.apache.http.HttpHeaders;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
-import org.junit.After;
+import org.junit.Before;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 import com.google.common.collect.ImmutableList;
-
-import lombok.SneakyThrows;
 
 /**
  * Testing text_and_image_embedding ingest processor. We can only test text in integ tests, none of pre-built models
@@ -30,29 +28,38 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
     private static final String INDEX_NAME = "text_image_embedding_index";
     private static final String PIPELINE_NAME = "ingest-pipeline";
 
-    @After
-    @SneakyThrows
-    public void tearDown() {
-        super.tearDown();
-        findDeployedModels().forEach(this::deleteModel);
+    @Before
+    public void setUp() throws Exception {
+        super.setUp();
+        updateClusterSettings();
     }
 
     public void testEmbeddingProcessor_whenIngestingDocumentWithSourceMatchingTextMapping_thenSuccessful() throws Exception {
-        String modelId = uploadModel();
-        loadModel(modelId);
-        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
-        createTextImageEmbeddingIndex();
-        ingestDocumentWithTextMappedToEmbeddingField();
-        assertEquals(1, getDocCount(INDEX_NAME));
+        String modelId = null;
+        try {
+            modelId = uploadModel();
+            loadModel(modelId);
+            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
+            createTextImageEmbeddingIndex();
+            ingestDocumentWithTextMappedToEmbeddingField();
+            assertEquals(1, getDocCount(INDEX_NAME));
+        } finally {
+            wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
+        }
     }
 
     public void testEmbeddingProcessor_whenIngestingDocumentWithSourceWithoutMatchingInMapping_thenSuccessful() throws Exception {
-        String modelId = uploadModel();
-        loadModel(modelId);
-        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
-        createTextImageEmbeddingIndex();
-        ingestDocumentWithoutMappedFields();
-        assertEquals(1, getDocCount(INDEX_NAME));
+        String modelId = null;
+        try {
+            modelId = uploadModel();
+            loadModel(modelId);
+            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
+            createTextImageEmbeddingIndex();
+            ingestDocumentWithoutMappedFields();
+            assertEquals(1, getDocCount(INDEX_NAME));
+        } finally {
+            wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
+        }
     }
 
     private String uploadModel() throws Exception {

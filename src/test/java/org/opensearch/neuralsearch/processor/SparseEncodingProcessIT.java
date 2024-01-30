@@ -11,7 +11,7 @@ import java.util.Map;
 import org.apache.http.HttpHeaders;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
-import org.junit.After;
+import org.junit.Before;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
@@ -19,31 +19,29 @@ import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 import com.google.common.collect.ImmutableList;
 
-import lombok.SneakyThrows;
-
 public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
 
     private static final String INDEX_NAME = "sparse_encoding_index";
 
     private static final String PIPELINE_NAME = "pipeline-sparse-encoding";
 
-    @After
-    @SneakyThrows
-    public void tearDown() {
-        super.tearDown();
-        /* this is required to minimize chance of model not being deployed due to open memory CB,
-         * this happens in case we leave model from previous test case. We use new model for every test, and old model
-         * can be undeployed and deleted to free resources after each test case execution.
-         */
-        findDeployedModels().forEach(this::deleteModel);
+    @Before
+    public void setUp() throws Exception {
+        super.setUp();
+        updateClusterSettings();
     }
 
     public void testSparseEncodingProcessor() throws Exception {
-        String modelId = prepareSparseEncodingModel();
-        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING);
-        createSparseEncodingIndex();
-        ingestDocument();
-        assertEquals(1, getDocCount(INDEX_NAME));
+        String modelId = null;
+        try {
+            modelId = prepareSparseEncodingModel();
+            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING);
+            createSparseEncodingIndex();
+            ingestDocument();
+            assertEquals(1, getDocCount(INDEX_NAME));
+        } finally {
+            wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
+        }
     }
 
     private void createSparseEncodingIndex() throws Exception {
