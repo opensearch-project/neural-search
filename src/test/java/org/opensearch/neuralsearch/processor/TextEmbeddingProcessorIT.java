@@ -11,7 +11,7 @@ import java.util.Map;
 import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.message.BasicHeader;
-import org.junit.After;
+import org.junit.Before;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
@@ -19,32 +19,30 @@ import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 import com.google.common.collect.ImmutableList;
 
-import lombok.SneakyThrows;
-
 public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     private static final String INDEX_NAME = "text_embedding_index";
 
     private static final String PIPELINE_NAME = "pipeline-hybrid";
 
-    @After
-    @SneakyThrows
-    public void tearDown() {
-        super.tearDown();
-        /* this is required to minimize chance of model not being deployed due to open memory CB,
-         * this happens in case we leave model from previous test case. We use new model for every test, and old model
-         * can be undeployed and deleted to free resources after each test case execution.
-         */
-        findDeployedModels().forEach(this::deleteModel);
+    @Before
+    public void setUp() throws Exception {
+        super.setUp();
+        updateClusterSettings();
     }
 
     public void testTextEmbeddingProcessor() throws Exception {
-        String modelId = uploadTextEmbeddingModel();
-        loadModel(modelId);
-        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
-        createTextEmbeddingIndex();
-        ingestDocument();
-        assertEquals(1, getDocCount(INDEX_NAME));
+        String modelId = null;
+        try {
+            modelId = uploadTextEmbeddingModel();
+            loadModel(modelId);
+            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
+            createTextEmbeddingIndex();
+            ingestDocument();
+            assertEquals(1, getDocCount(INDEX_NAME));
+        } finally {
+            wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
+        }
     }
 
     private String uploadTextEmbeddingModel() throws Exception {
