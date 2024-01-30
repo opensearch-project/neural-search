@@ -85,95 +85,112 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testArithmeticWeightedMean_whenWeightsPassed_thenSuccessful() {
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
-        // check case when number of weights and sub-queries are same
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            DEFAULT_NORMALIZATION_METHOD,
-            DEFAULT_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.4f, 0.3f, 0.3f }))
-        );
+        String modelId = null;
+        try {
+            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
+            modelId = prepareModel();
+            // check case when number of weights and sub-queries are same
+            createSearchPipeline(
+                SEARCH_PIPELINE,
+                DEFAULT_NORMALIZATION_METHOD,
+                DEFAULT_COMBINATION_METHOD,
+                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.4f, 0.3f, 0.3f }))
+            );
 
-        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-        hybridQueryBuilder.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
-        hybridQueryBuilder.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4));
-        hybridQueryBuilder.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT7));
+            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+            hybridQueryBuilder.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
+            hybridQueryBuilder.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4));
+            hybridQueryBuilder.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT7));
 
-        Map<String, Object> searchResponseWithWeights1AsMap = search(
-            TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-            hybridQueryBuilder,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
+            Map<String, Object> searchResponseWithWeights1AsMap = search(
+                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+                hybridQueryBuilder,
+                null,
+                5,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            );
 
-        assertWeightedScores(searchResponseWithWeights1AsMap, 0.4, 0.3, 0.001);
+            assertWeightedScores(searchResponseWithWeights1AsMap, 0.4, 0.3, 0.001);
 
-        // delete existing pipeline and create a new one with another set of weights
-        deleteSearchPipeline(SEARCH_PIPELINE);
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            DEFAULT_NORMALIZATION_METHOD,
-            DEFAULT_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.233f, 0.666f, 0.1f }))
-        );
+            // delete existing pipeline and create a new one with another set of weights
+            deleteSearchPipeline(SEARCH_PIPELINE);
+            createSearchPipeline(
+                SEARCH_PIPELINE,
+                DEFAULT_NORMALIZATION_METHOD,
+                DEFAULT_COMBINATION_METHOD,
+                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.233f, 0.666f, 0.1f }))
+            );
 
-        Map<String, Object> searchResponseWithWeights2AsMap = search(
-            TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-            hybridQueryBuilder,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
+            Map<String, Object> searchResponseWithWeights2AsMap = search(
+                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+                hybridQueryBuilder,
+                null,
+                5,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            );
 
-        assertWeightedScores(searchResponseWithWeights2AsMap, 0.6666, 0.2332, 0.001);
+            assertWeightedScores(searchResponseWithWeights2AsMap, 0.6666, 0.2332, 0.001);
 
-        // check case when number of weights is less than number of sub-queries
-        // delete existing pipeline and create a new one with another set of weights
-        deleteSearchPipeline(SEARCH_PIPELINE);
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            DEFAULT_NORMALIZATION_METHOD,
-            DEFAULT_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 1.0f }))
-        );
+            // check case when number of weights is less than number of sub-queries
+            // delete existing pipeline and create a new one with another set of weights
+            deleteSearchPipeline(SEARCH_PIPELINE);
+            createSearchPipeline(
+                SEARCH_PIPELINE,
+                DEFAULT_NORMALIZATION_METHOD,
+                DEFAULT_COMBINATION_METHOD,
+                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 1.0f }))
+            );
 
-        ResponseException exception1 = expectThrows(
-            ResponseException.class,
-            () -> search(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, hybridQueryBuilder, null, 5, Map.of("search_pipeline", SEARCH_PIPELINE))
-        );
-        org.hamcrest.MatcherAssert.assertThat(
-            exception1.getMessage(),
-            allOf(
-                containsString("number of weights"),
-                containsString("must match number of sub-queries"),
-                containsString("in hybrid query")
-            )
-        );
+            ResponseException exception1 = expectThrows(
+                ResponseException.class,
+                () -> search(
+                    TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+                    hybridQueryBuilder,
+                    null,
+                    5,
+                    Map.of("search_pipeline", SEARCH_PIPELINE)
+                )
+            );
+            org.hamcrest.MatcherAssert.assertThat(
+                exception1.getMessage(),
+                allOf(
+                    containsString("number of weights"),
+                    containsString("must match number of sub-queries"),
+                    containsString("in hybrid query")
+                )
+            );
 
-        // check case when number of weights is more than number of sub-queries
-        // delete existing pipeline and create a new one with another set of weights
-        deleteSearchPipeline(SEARCH_PIPELINE);
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            DEFAULT_NORMALIZATION_METHOD,
-            DEFAULT_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.25f, 0.25f, 0.2f }))
-        );
+            // check case when number of weights is more than number of sub-queries
+            // delete existing pipeline and create a new one with another set of weights
+            deleteSearchPipeline(SEARCH_PIPELINE);
+            createSearchPipeline(
+                SEARCH_PIPELINE,
+                DEFAULT_NORMALIZATION_METHOD,
+                DEFAULT_COMBINATION_METHOD,
+                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.25f, 0.25f, 0.2f }))
+            );
 
-        ResponseException exception2 = expectThrows(
-            ResponseException.class,
-            () -> search(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, hybridQueryBuilder, null, 5, Map.of("search_pipeline", SEARCH_PIPELINE))
-        );
-        org.hamcrest.MatcherAssert.assertThat(
-            exception2.getMessage(),
-            allOf(
-                containsString("number of weights"),
-                containsString("must match number of sub-queries"),
-                containsString("in hybrid query")
-            )
-        );
-        wipeOfTestResources(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, null, null, SEARCH_PIPELINE);
+            ResponseException exception2 = expectThrows(
+                ResponseException.class,
+                () -> search(
+                    TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+                    hybridQueryBuilder,
+                    null,
+                    5,
+                    Map.of("search_pipeline", SEARCH_PIPELINE)
+                )
+            );
+            org.hamcrest.MatcherAssert.assertThat(
+                exception2.getMessage(),
+                allOf(
+                    containsString("number of weights"),
+                    containsString("must match number of sub-queries"),
+                    containsString("in hybrid query")
+                )
+            );
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, null, modelId, SEARCH_PIPELINE);
+        }
     }
 
     /**
@@ -196,51 +213,57 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testHarmonicMeanCombination_whenOneShardAndQueryMatches_thenSuccessful() {
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
-        String modelId = prepareModel();
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            DEFAULT_NORMALIZATION_METHOD,
-            HARMONIC_MEAN_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
-        );
+        String modelId = null;
+        try {
+            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+            modelId = prepareModel();
+            createSearchPipeline(
+                SEARCH_PIPELINE,
+                DEFAULT_NORMALIZATION_METHOD,
+                HARMONIC_MEAN_COMBINATION_METHOD,
+                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
+            );
 
-        HybridQueryBuilder hybridQueryBuilderDefaultNorm = new HybridQueryBuilder();
-        hybridQueryBuilderDefaultNorm.add(new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null));
-        hybridQueryBuilderDefaultNorm.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
+            HybridQueryBuilder hybridQueryBuilderDefaultNorm = new HybridQueryBuilder();
+            hybridQueryBuilderDefaultNorm.add(
+                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null)
+            );
+            hybridQueryBuilderDefaultNorm.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
-        Map<String, Object> searchResponseAsMapDefaultNorm = search(
-            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-            hybridQueryBuilderDefaultNorm,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
+            Map<String, Object> searchResponseAsMapDefaultNorm = search(
+                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+                hybridQueryBuilderDefaultNorm,
+                null,
+                5,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            );
 
-        assertHybridSearchResults(searchResponseAsMapDefaultNorm, 5, new float[] { 0.5f, 1.0f });
+            assertHybridSearchResults(searchResponseAsMapDefaultNorm, 5, new float[] { 0.5f, 1.0f });
 
-        deleteSearchPipeline(SEARCH_PIPELINE);
+            deleteSearchPipeline(SEARCH_PIPELINE);
 
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            L2_NORMALIZATION_METHOD,
-            HARMONIC_MEAN_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
-        );
+            createSearchPipeline(
+                SEARCH_PIPELINE,
+                L2_NORMALIZATION_METHOD,
+                HARMONIC_MEAN_COMBINATION_METHOD,
+                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
+            );
 
-        HybridQueryBuilder hybridQueryBuilderL2Norm = new HybridQueryBuilder();
-        hybridQueryBuilderL2Norm.add(new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null));
-        hybridQueryBuilderL2Norm.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
+            HybridQueryBuilder hybridQueryBuilderL2Norm = new HybridQueryBuilder();
+            hybridQueryBuilderL2Norm.add(new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null));
+            hybridQueryBuilderL2Norm.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
-        Map<String, Object> searchResponseAsMapL2Norm = search(
-            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-            hybridQueryBuilderL2Norm,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
-        assertHybridSearchResults(searchResponseAsMapL2Norm, 5, new float[] { 0.5f, 1.0f });
-        wipeOfTestResources(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, null, modelId, SEARCH_PIPELINE);
+            Map<String, Object> searchResponseAsMapL2Norm = search(
+                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+                hybridQueryBuilderL2Norm,
+                null,
+                5,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            );
+            assertHybridSearchResults(searchResponseAsMapL2Norm, 5, new float[] { 0.5f, 1.0f });
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, null, modelId, SEARCH_PIPELINE);
+        }
     }
 
     /**
@@ -263,51 +286,57 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testGeometricMeanCombination_whenOneShardAndQueryMatches_thenSuccessful() {
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
-        String modelId = prepareModel();
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            DEFAULT_NORMALIZATION_METHOD,
-            GEOMETRIC_MEAN_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
-        );
+        String modelId = null;
+        try {
+            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+            modelId = prepareModel();
+            createSearchPipeline(
+                SEARCH_PIPELINE,
+                DEFAULT_NORMALIZATION_METHOD,
+                GEOMETRIC_MEAN_COMBINATION_METHOD,
+                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
+            );
 
-        HybridQueryBuilder hybridQueryBuilderDefaultNorm = new HybridQueryBuilder();
-        hybridQueryBuilderDefaultNorm.add(new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null));
-        hybridQueryBuilderDefaultNorm.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
+            HybridQueryBuilder hybridQueryBuilderDefaultNorm = new HybridQueryBuilder();
+            hybridQueryBuilderDefaultNorm.add(
+                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null)
+            );
+            hybridQueryBuilderDefaultNorm.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
-        Map<String, Object> searchResponseAsMapDefaultNorm = search(
-            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-            hybridQueryBuilderDefaultNorm,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
+            Map<String, Object> searchResponseAsMapDefaultNorm = search(
+                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+                hybridQueryBuilderDefaultNorm,
+                null,
+                5,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            );
 
-        assertHybridSearchResults(searchResponseAsMapDefaultNorm, 5, new float[] { 0.5f, 1.0f });
+            assertHybridSearchResults(searchResponseAsMapDefaultNorm, 5, new float[] { 0.5f, 1.0f });
 
-        deleteSearchPipeline(SEARCH_PIPELINE);
+            deleteSearchPipeline(SEARCH_PIPELINE);
 
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            L2_NORMALIZATION_METHOD,
-            GEOMETRIC_MEAN_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
-        );
+            createSearchPipeline(
+                SEARCH_PIPELINE,
+                L2_NORMALIZATION_METHOD,
+                GEOMETRIC_MEAN_COMBINATION_METHOD,
+                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
+            );
 
-        HybridQueryBuilder hybridQueryBuilderL2Norm = new HybridQueryBuilder();
-        hybridQueryBuilderL2Norm.add(new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null));
-        hybridQueryBuilderL2Norm.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
+            HybridQueryBuilder hybridQueryBuilderL2Norm = new HybridQueryBuilder();
+            hybridQueryBuilderL2Norm.add(new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null));
+            hybridQueryBuilderL2Norm.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
-        Map<String, Object> searchResponseAsMapL2Norm = search(
-            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-            hybridQueryBuilderL2Norm,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
-        assertHybridSearchResults(searchResponseAsMapL2Norm, 5, new float[] { 0.5f, 1.0f });
-        wipeOfTestResources(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, null, modelId, SEARCH_PIPELINE);
+            Map<String, Object> searchResponseAsMapL2Norm = search(
+                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+                hybridQueryBuilderL2Norm,
+                null,
+                5,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            );
+            assertHybridSearchResults(searchResponseAsMapL2Norm, 5, new float[] { 0.5f, 1.0f });
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, null, modelId, SEARCH_PIPELINE);
+        }
     }
 
     private void initializeIndexIfNotExist(String indexName) throws IOException {

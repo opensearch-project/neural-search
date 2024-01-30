@@ -77,80 +77,84 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testL2Norm_whenOneShardAndQueryMatches_thenSuccessful() {
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
-        String modelId = prepareModel();
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            L2_NORMALIZATION_METHOD,
-            DEFAULT_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
-        );
+        String modelId = null;
+        try {
+            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+            modelId = prepareModel();
+            createSearchPipeline(
+                SEARCH_PIPELINE,
+                L2_NORMALIZATION_METHOD,
+                DEFAULT_COMBINATION_METHOD,
+                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
+            );
 
-        HybridQueryBuilder hybridQueryBuilderArithmeticMean = new HybridQueryBuilder();
-        hybridQueryBuilderArithmeticMean.add(
-            new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null)
-        );
-        hybridQueryBuilderArithmeticMean.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
+            HybridQueryBuilder hybridQueryBuilderArithmeticMean = new HybridQueryBuilder();
+            hybridQueryBuilderArithmeticMean.add(
+                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null)
+            );
+            hybridQueryBuilderArithmeticMean.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
-        Map<String, Object> searchResponseAsMapArithmeticMean = search(
-            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-            hybridQueryBuilderArithmeticMean,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
-        assertHybridSearchResults(searchResponseAsMapArithmeticMean, 5, new float[] { 0.6f, 1.0f });
+            Map<String, Object> searchResponseAsMapArithmeticMean = search(
+                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+                hybridQueryBuilderArithmeticMean,
+                null,
+                5,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            );
+            assertHybridSearchResults(searchResponseAsMapArithmeticMean, 5, new float[] { 0.6f, 1.0f });
 
-        deleteSearchPipeline(SEARCH_PIPELINE);
+            deleteSearchPipeline(SEARCH_PIPELINE);
 
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            L2_NORMALIZATION_METHOD,
-            HARMONIC_MEAN_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
-        );
+            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+            createSearchPipeline(
+                SEARCH_PIPELINE,
+                L2_NORMALIZATION_METHOD,
+                HARMONIC_MEAN_COMBINATION_METHOD,
+                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
+            );
 
-        HybridQueryBuilder hybridQueryBuilderHarmonicMean = new HybridQueryBuilder();
-        hybridQueryBuilderHarmonicMean.add(
-            new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null)
-        );
-        hybridQueryBuilderHarmonicMean.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
+            HybridQueryBuilder hybridQueryBuilderHarmonicMean = new HybridQueryBuilder();
+            hybridQueryBuilderHarmonicMean.add(
+                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null)
+            );
+            hybridQueryBuilderHarmonicMean.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
-        Map<String, Object> searchResponseAsMapHarmonicMean = search(
-            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-            hybridQueryBuilderHarmonicMean,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
-        assertHybridSearchResults(searchResponseAsMapHarmonicMean, 5, new float[] { 0.5f, 1.0f });
+            Map<String, Object> searchResponseAsMapHarmonicMean = search(
+                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+                hybridQueryBuilderHarmonicMean,
+                null,
+                5,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            );
+            assertHybridSearchResults(searchResponseAsMapHarmonicMean, 5, new float[] { 0.5f, 1.0f });
 
-        deleteSearchPipeline(SEARCH_PIPELINE);
+            deleteSearchPipeline(SEARCH_PIPELINE);
 
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            L2_NORMALIZATION_METHOD,
-            GEOMETRIC_MEAN_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
-        );
+            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+            createSearchPipeline(
+                SEARCH_PIPELINE,
+                L2_NORMALIZATION_METHOD,
+                GEOMETRIC_MEAN_COMBINATION_METHOD,
+                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
+            );
 
-        HybridQueryBuilder hybridQueryBuilderGeometricMean = new HybridQueryBuilder();
-        hybridQueryBuilderGeometricMean.add(
-            new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null)
-        );
-        hybridQueryBuilderGeometricMean.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
+            HybridQueryBuilder hybridQueryBuilderGeometricMean = new HybridQueryBuilder();
+            hybridQueryBuilderGeometricMean.add(
+                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null)
+            );
+            hybridQueryBuilderGeometricMean.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
-        Map<String, Object> searchResponseAsMapGeometricMean = search(
-            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-            hybridQueryBuilderGeometricMean,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
-        assertHybridSearchResults(searchResponseAsMapGeometricMean, 5, new float[] { 0.5f, 1.0f });
-        wipeOfTestResources(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, null, modelId, SEARCH_PIPELINE);
+            Map<String, Object> searchResponseAsMapGeometricMean = search(
+                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+                hybridQueryBuilderGeometricMean,
+                null,
+                5,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            );
+            assertHybridSearchResults(searchResponseAsMapGeometricMean, 5, new float[] { 0.5f, 1.0f });
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, null, modelId, SEARCH_PIPELINE);
+        }
     }
 
     /**
@@ -173,80 +177,84 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testMinMaxNorm_whenOneShardAndQueryMatches_thenSuccessful() {
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
-        String modelId = prepareModel();
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            DEFAULT_NORMALIZATION_METHOD,
-            DEFAULT_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
-        );
+        String modelId = null;
+        try {
+            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+            modelId = prepareModel();
+            createSearchPipeline(
+                SEARCH_PIPELINE,
+                DEFAULT_NORMALIZATION_METHOD,
+                DEFAULT_COMBINATION_METHOD,
+                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
+            );
 
-        HybridQueryBuilder hybridQueryBuilderArithmeticMean = new HybridQueryBuilder();
-        hybridQueryBuilderArithmeticMean.add(
-            new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null)
-        );
-        hybridQueryBuilderArithmeticMean.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
+            HybridQueryBuilder hybridQueryBuilderArithmeticMean = new HybridQueryBuilder();
+            hybridQueryBuilderArithmeticMean.add(
+                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null)
+            );
+            hybridQueryBuilderArithmeticMean.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
-        Map<String, Object> searchResponseAsMapArithmeticMean = search(
-            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-            hybridQueryBuilderArithmeticMean,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
-        assertHybridSearchResults(searchResponseAsMapArithmeticMean, 5, new float[] { 0.5f, 1.0f });
+            Map<String, Object> searchResponseAsMapArithmeticMean = search(
+                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+                hybridQueryBuilderArithmeticMean,
+                null,
+                5,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            );
+            assertHybridSearchResults(searchResponseAsMapArithmeticMean, 5, new float[] { 0.5f, 1.0f });
 
-        deleteSearchPipeline(SEARCH_PIPELINE);
+            deleteSearchPipeline(SEARCH_PIPELINE);
 
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            DEFAULT_NORMALIZATION_METHOD,
-            HARMONIC_MEAN_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
-        );
+            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+            createSearchPipeline(
+                SEARCH_PIPELINE,
+                DEFAULT_NORMALIZATION_METHOD,
+                HARMONIC_MEAN_COMBINATION_METHOD,
+                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
+            );
 
-        HybridQueryBuilder hybridQueryBuilderHarmonicMean = new HybridQueryBuilder();
-        hybridQueryBuilderHarmonicMean.add(
-            new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null)
-        );
-        hybridQueryBuilderHarmonicMean.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
+            HybridQueryBuilder hybridQueryBuilderHarmonicMean = new HybridQueryBuilder();
+            hybridQueryBuilderHarmonicMean.add(
+                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null)
+            );
+            hybridQueryBuilderHarmonicMean.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
-        Map<String, Object> searchResponseAsMapHarmonicMean = search(
-            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-            hybridQueryBuilderHarmonicMean,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
-        assertHybridSearchResults(searchResponseAsMapHarmonicMean, 5, new float[] { 0.6f, 1.0f });
+            Map<String, Object> searchResponseAsMapHarmonicMean = search(
+                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+                hybridQueryBuilderHarmonicMean,
+                null,
+                5,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            );
+            assertHybridSearchResults(searchResponseAsMapHarmonicMean, 5, new float[] { 0.6f, 1.0f });
 
-        deleteSearchPipeline(SEARCH_PIPELINE);
+            deleteSearchPipeline(SEARCH_PIPELINE);
 
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
-        createSearchPipeline(
-            SEARCH_PIPELINE,
-            DEFAULT_NORMALIZATION_METHOD,
-            GEOMETRIC_MEAN_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
-        );
+            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+            createSearchPipeline(
+                SEARCH_PIPELINE,
+                DEFAULT_NORMALIZATION_METHOD,
+                GEOMETRIC_MEAN_COMBINATION_METHOD,
+                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
+            );
 
-        HybridQueryBuilder hybridQueryBuilderGeometricMean = new HybridQueryBuilder();
-        hybridQueryBuilderGeometricMean.add(
-            new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null)
-        );
-        hybridQueryBuilderGeometricMean.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
+            HybridQueryBuilder hybridQueryBuilderGeometricMean = new HybridQueryBuilder();
+            hybridQueryBuilderGeometricMean.add(
+                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null)
+            );
+            hybridQueryBuilderGeometricMean.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
-        Map<String, Object> searchResponseAsMapGeometricMean = search(
-            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-            hybridQueryBuilderGeometricMean,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
-        assertHybridSearchResults(searchResponseAsMapGeometricMean, 5, new float[] { 0.6f, 1.0f });
-        deleteIndex(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+            Map<String, Object> searchResponseAsMapGeometricMean = search(
+                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+                hybridQueryBuilderGeometricMean,
+                null,
+                5,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            );
+            assertHybridSearchResults(searchResponseAsMapGeometricMean, 5, new float[] { 0.6f, 1.0f });
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, null, modelId, SEARCH_PIPELINE);
+        }
     }
 
     private void initializeIndexIfNotExist(String indexName) throws IOException {

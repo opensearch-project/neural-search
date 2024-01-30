@@ -32,13 +32,17 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
     }
 
     public void testTextEmbeddingProcessor() throws Exception {
-        String modelId = uploadTextEmbeddingModel();
-        loadModel(modelId);
-        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
-        createTextEmbeddingIndex();
-        ingestDocument();
-        assertEquals(1, getDocCount(INDEX_NAME));
-        wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
+        String modelId = null;
+        try {
+            modelId = uploadTextEmbeddingModel();
+            loadModel(modelId);
+            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
+            createTextEmbeddingIndex();
+            ingestDocument();
+            assertEquals(1, getDocCount(INDEX_NAME));
+        } finally {
+            wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
+        }
     }
 
     private String uploadTextEmbeddingModel() throws Exception {

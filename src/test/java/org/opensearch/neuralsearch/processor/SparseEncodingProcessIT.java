@@ -32,12 +32,16 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
     }
 
     public void testSparseEncodingProcessor() throws Exception {
-        String modelId = prepareSparseEncodingModel();
-        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING);
-        createSparseEncodingIndex();
-        ingestDocument();
-        assertEquals(1, getDocCount(INDEX_NAME));
-        wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
+        String modelId = null;
+        try {
+            modelId = prepareSparseEncodingModel();
+            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING);
+            createSparseEncodingIndex();
+            ingestDocument();
+            assertEquals(1, getDocCount(INDEX_NAME));
+        } finally {
+            wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
+        }
     }
 
     private void createSparseEncodingIndex() throws Exception {
