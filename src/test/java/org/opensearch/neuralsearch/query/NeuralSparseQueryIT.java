@@ -90,19 +90,25 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testBasicQueryWithMaxTokenScore() {
-        float maxTokenScore = 0.00001f;
-        initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-        String modelId = getDeployedModelId();
-        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
-            .queryText(TEST_QUERY_TEXT)
-            .modelId(modelId)
-            .maxTokenScore(maxTokenScore);
-        Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, sparseEncodingQueryBuilder, 1);
-        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+        String modelId = null;
+        try {
+            float maxTokenScore = 0.00001f;
+            initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
+            modelId = prepareSparseEncodingModel();
+            NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
+                .queryText(TEST_QUERY_TEXT)
+                .modelId(modelId)
+                .maxTokenScore(maxTokenScore);
+            Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, sparseEncodingQueryBuilder, 1);
+            Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
 
-        assertEquals("1", firstInnerHit.get("_id"));
-        float expectedScore = computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
-        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
+            assertEquals("1", firstInnerHit.get("_id"));
+            float expectedScore = computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
+            assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
+        } finally {
+            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
+        }
+
     }
 
     /**
