@@ -14,6 +14,7 @@ import java.util.Map;
 
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
@@ -21,17 +22,27 @@ import org.opensearch.core.xcontent.ObjectPath;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.mapper.MapperService;
 import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.search.SearchExtBuilder;
+
+import lombok.AllArgsConstructor;
+import lombok.extern.log4j.Log4j2;
 
 /**
  * Context Source Fetcher that gets context from the rerank query ext.
  */
+@Log4j2
+@AllArgsConstructor
 public class QueryContextSourceFetcher implements ContextSourceFetcher {
 
     public static final String NAME = "query_context";
     public static final String QUERY_TEXT_FIELD = "query_text";
     public static final String QUERY_TEXT_PATH_FIELD = "query_text_path";
+
+    public static final Integer MAX_QUERY_PATH_STRLEN = 1000;
+
+    private final ClusterService clusterService;
 
     @Override
     public void fetchContext(
@@ -65,6 +76,7 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
             } else if (ctxMap.containsKey(QUERY_TEXT_PATH_FIELD)) {
                 // Case "query_text_path": ser/de the query into a map and then find the text at the path specified
                 String path = (String) ctxMap.get(QUERY_TEXT_PATH_FIELD);
+                validatePath(path);
                 Map<String, Object> map = requestToMap(searchRequest);
                 // Get the text at the path
                 Object queryText = ObjectPath.eval(path, map);
@@ -106,5 +118,33 @@ public class QueryContextSourceFetcher implements ContextSourceFetcher {
         XContentParser parser = XContentType.CBOR.xContent().createParser(NamedXContentRegistry.EMPTY, null, bais);
         Map<String, Object> map = parser.map();
         return map;
+    }
+
+    private void validatePath(final String path) throws IllegalArgumentException {
+        if (path == null || path.isEmpty()) {
+            return;
+        }
+        if (path.length() > MAX_QUERY_PATH_STRLEN) {
+            log.error(String.format(Locale.ROOT, "invalid %s due to too many characters: %s", QUERY_TEXT_PATH_FIELD, path));
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "%s exceeded the maximum path length of %d characters",
+                    QUERY_TEXT_PATH_FIELD,
+                    MAX_QUERY_PATH_STRLEN
+                )
+            );
+        }
+        if (path.split("\\.").length > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(clusterService.getSettings())) {
+            log.error(String.format(Locale.ROOT, "invalid %s due to too many nested fields: %s", QUERY_TEXT_PATH_FIELD, path));
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "%s exceeded the maximum path length of %d nested fields",
+                    QUERY_TEXT_PATH_FIELD,
+                    MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(clusterService.getSettings())
+                )
+            );
+        }
     }
 }

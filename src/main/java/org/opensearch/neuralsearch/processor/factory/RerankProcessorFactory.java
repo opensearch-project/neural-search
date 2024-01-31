@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.StringJoiner;
 
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.ingest.ConfigurationUtils;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.rerank.MLOpenSearchRerankProcessor;
@@ -37,6 +38,7 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
     public static final String CONTEXT_CONFIG_FIELD = "context";
 
     private final MLCommonsClientAccessor clientAccessor;
+    private final ClusterService clusterService;
 
     @Override
     public SearchResponseProcessor create(
@@ -49,7 +51,12 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
     ) {
         RerankType type = findRerankType(config);
         boolean includeQueryContextFetcher = ContextFetcherFactory.shouldIncludeQueryContextFetcher(type);
-        List<ContextSourceFetcher> contextFetchers = ContextFetcherFactory.createFetchers(config, includeQueryContextFetcher, tag);
+        List<ContextSourceFetcher> contextFetchers = ContextFetcherFactory.createFetchers(
+            config,
+            includeQueryContextFetcher,
+            tag,
+            clusterService
+        );
         switch (type) {
             case ML_OPENSEARCH:
                 Map<String, Object> rerankerConfig = ConfigurationUtils.readMap(RERANK_PROCESSOR_TYPE, tag, config, type.getLabel());
@@ -109,7 +116,8 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
         public static List<ContextSourceFetcher> createFetchers(
             Map<String, Object> config,
             boolean includeQueryContextFetcher,
-            String tag
+            String tag,
+            final ClusterService clusterService
         ) {
             Map<String, Object> contextConfig = ConfigurationUtils.readMap(RERANK_PROCESSOR_TYPE, tag, config, CONTEXT_CONFIG_FIELD);
             List<ContextSourceFetcher> fetchers = new ArrayList<>();
@@ -117,14 +125,14 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
                 Object cfg = contextConfig.get(key);
                 switch (key) {
                     case DocumentContextSourceFetcher.NAME:
-                        fetchers.add(DocumentContextSourceFetcher.create(cfg));
+                        fetchers.add(DocumentContextSourceFetcher.create(cfg, clusterService));
                         break;
                     default:
                         throw new IllegalArgumentException(String.format(Locale.ROOT, "unrecognized context field: %s", key));
                 }
             }
             if (includeQueryContextFetcher) {
-                fetchers.add(new QueryContextSourceFetcher());
+                fetchers.add(new QueryContextSourceFetcher(clusterService));
             }
             return fetchers;
         }

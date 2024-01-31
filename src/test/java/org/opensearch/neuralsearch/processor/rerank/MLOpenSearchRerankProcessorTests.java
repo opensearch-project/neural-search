@@ -28,13 +28,16 @@ import org.mockito.MockitoAnnotations;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.SearchResponse.Clusters;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.action.search.SearchResponseSections;
 import org.opensearch.action.search.ShardSearchFailure;
 import org.opensearch.common.document.DocumentField;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.json.JsonXContent;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.index.mapper.MapperService;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
 import org.opensearch.neuralsearch.processor.rerank.context.DocumentContextSourceFetcher;
@@ -48,6 +51,8 @@ import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.pipeline.Processor.PipelineContext;
 import org.opensearch.test.OpenSearchTestCase;
+
+import lombok.SneakyThrows;
 
 public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
 
@@ -65,6 +70,9 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
     @Mock
     private PipelineProcessingContext ppctx;
 
+    @Mock
+    private ClusterService clusterService;
+
     private RerankProcessorFactory factory;
 
     private MLOpenSearchRerankProcessor processor;
@@ -72,7 +80,8 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
     @Before
     public void setup() {
         MockitoAnnotations.openMocks(this);
-        factory = new RerankProcessorFactory(mlCommonsClientAccessor);
+        doReturn(Settings.EMPTY).when(clusterService).getSettings();
+        factory = new RerankProcessorFactory(mlCommonsClientAccessor, clusterService);
         Map<String, Object> config = new HashMap<>(
             Map.of(
                 RerankType.ML_OPENSEARCH.getLabel(),
@@ -221,6 +230,51 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
         assert (argCaptor.getValue()
             .getMessage()
             .equals(QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD + " must point to a string field"));
+    }
+
+    @SneakyThrows
+    public void testRerankContext_whenQueryTextPathIsExceeedinglyManyCharacters_thenFail() {
+        // "eighteencharacters" * 60 = 1080 character string > max len of 1024
+        setupParams(Map.of(QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD, "eighteencharacters".repeat(60)));
+        setupSearchResults();
+        @SuppressWarnings("unchecked")
+        ActionListener<Map<String, Object>> listener = mock(ActionListener.class);
+        processor.generateRerankingContext(request, response, listener);
+        ArgumentCaptor<Exception> argCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener, times(1)).onFailure(argCaptor.capture());
+        assert (argCaptor.getValue() instanceof IllegalArgumentException);
+        assert (argCaptor.getValue()
+            .getMessage()
+            .equals(
+                String.format(
+                    Locale.ROOT,
+                    "%s exceeded the maximum path length of %d characters",
+                    QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD,
+                    QueryContextSourceFetcher.MAX_QUERY_PATH_STRLEN
+                )
+            ));
+    }
+
+    @SneakyThrows
+    public void textRerankContext_whenQueryTextPathIsExceeedinglyDeeplyNested_thenFail() {
+        setupParams(Map.of(QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD, "a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p.q.r.s.t.w.x.y.z"));
+        setupSearchResults();
+        @SuppressWarnings("unchecked")
+        ActionListener<Map<String, Object>> listener = mock(ActionListener.class);
+        processor.generateRerankingContext(request, response, listener);
+        ArgumentCaptor<Exception> argCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener, times(1)).onFailure(argCaptor.capture());
+        assert (argCaptor.getValue() instanceof IllegalArgumentException);
+        assert (argCaptor.getValue()
+            .getMessage()
+            .equals(
+                String.format(
+                    Locale.ROOT,
+                    "%s exceeded the maximum path length of %d nested fields",
+                    QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD,
+                    MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(clusterService.getSettings())
+                )
+            ));
     }
 
     public void testRescoreSearchResponse_HappyPath() throws IOException {

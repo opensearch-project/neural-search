@@ -4,9 +4,12 @@
  */
 package org.opensearch.neuralsearch.processor.factory;
 
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER_MAX_DOC_FIELDS;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -15,6 +18,8 @@ import java.util.Map;
 import org.junit.Before;
 import org.mockito.Mock;
 import org.opensearch.OpenSearchParseException;
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.rerank.MLOpenSearchRerankProcessor;
 import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
@@ -37,11 +42,16 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
     @Mock
     private PipelineContext pipelineContext;
 
+    @Mock
+    private ClusterService clusterService;
+
     @Before
     public void setup() {
+        clusterService = mock(ClusterService.class);
         pipelineContext = mock(PipelineContext.class);
         clientAccessor = mock(MLCommonsClientAccessor.class);
-        factory = new RerankProcessorFactory(clientAccessor);
+        factory = new RerankProcessorFactory(clientAccessor, clusterService);
+        doReturn(Settings.EMPTY).when(clusterService).getSettings();
     }
 
     public void testRerankProcessorFactory_whenEmptyConfig_thenFail() {
@@ -182,6 +192,28 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
         );
         assertThrows(
             String.format(Locale.ROOT, "%s must be nonempty", DocumentContextSourceFetcher.NAME),
+            IllegalArgumentException.class,
+            () -> factory.create(Map.of(), TAG, DESC, false, config, pipelineContext)
+        );
+    }
+
+    public void testCrossEncoder_whenTooManyDocFields_thenFail() {
+        Map<String, Object> config = new HashMap<>(
+            Map.of(
+                RerankType.ML_OPENSEARCH.getLabel(),
+                new HashMap<>(Map.of(MLOpenSearchRerankProcessor.MODEL_ID_FIELD, "model-id")),
+                RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
+                new HashMap<>(Map.of(DocumentContextSourceFetcher.NAME, Collections.nCopies(75, "field")))
+            )
+        );
+        assertThrows(
+            String.format(
+                Locale.ROOT,
+                "%s must not contain more than %d fields. Configure by setting %s",
+                DocumentContextSourceFetcher.NAME,
+                RERANKER_MAX_DOC_FIELDS.get(clusterService.getSettings()),
+                RERANKER_MAX_DOC_FIELDS.getKey()
+            ),
             IllegalArgumentException.class,
             () -> factory.create(Map.of(), TAG, DESC, false, config, pipelineContext)
         );

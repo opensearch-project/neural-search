@@ -26,6 +26,8 @@ import com.google.common.collect.ImmutableList;
 import lombok.SneakyThrows;
 import lombok.extern.log4j.Log4j2;
 
+import static org.opensearch.neuralsearch.TestUtils.DEFAULT_USER_AGENT;
+
 @Log4j2
 public class MLOpenSearchRerankProcessorIT extends BaseNeuralSearchIT {
 

@@ -13,9 +13,12 @@ import java.util.stream.Collectors;
 
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.xcontent.ObjectPath;
 import org.opensearch.search.SearchHit;
+
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER_MAX_DOC_FIELDS;
 
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -87,13 +90,24 @@ public class DocumentContextSourceFetcher implements ContextSourceFetcher {
      * @param config configuration object grabbed from parsed API request. Should be a list of strings
      * @return a new DocumentContextSourceFetcher or throws IllegalArgumentException if config is malformed
      */
-    public static DocumentContextSourceFetcher create(Object config) {
+    public static DocumentContextSourceFetcher create(Object config, ClusterService clusterService) {
         if (!(config instanceof List)) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "%s must be a list of field names", NAME));
         }
         List<?> fields = (List<?>) config;
         if (fields.size() == 0) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "%s must be nonempty", NAME));
+        }
+        if (fields.size() > RERANKER_MAX_DOC_FIELDS.get(clusterService.getSettings())) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "%s must not contain more than %d fields. Configure by setting %s",
+                    NAME,
+                    RERANKER_MAX_DOC_FIELDS.get(clusterService.getSettings()),
+                    RERANKER_MAX_DOC_FIELDS.getKey()
+                )
+            );
         }
         List<String> fieldsAsStrings = fields.stream().map(field -> (String) field).collect(Collectors.toList());
         return new DocumentContextSourceFetcher(fieldsAsStrings);
