@@ -58,10 +58,26 @@ apply plugin: "com.diffplug.spotless"
 apply plugin: 'io.freefair.lombok'
 apply from: 'gradle/formatting.gradle'
 
-def opensearch_tmp_dir = rootProject.file('build/private/opensearch_tmp').absoluteFile
+ext.opensearch_tmp_dir = rootProject.file('build/private/opensearch_tmp').absoluteFile
 opensearch_tmp_dir.mkdirs()
 
 ext {
+    default_bwc_version = System.getProperty("bwc.version")
+    default_bwc_bundle_version= System.getProperty("bwc.bundle.version")
+    bwcBundleTest = (project.findProperty('customDistributionDownloadType') != null && project.properties['customDistributionDownloadType'] == "bundle")
+    neural_search_bwc_version = bwcBundleTest ? System.getProperty("tests.bwc.bundle.version",rootProject.ext.default_bwc_bundle_version): System.getProperty("tests.bwc.version", rootProject.ext.default_bwc_version)
+    currentBundleVersion = opensearch_version.replace("-SNAPSHOT","")
+
+    // Config below including files are copied from security demo configuration
+    ['esnode.pem', 'esnode-key.pem', 'root-ca.pem','kirk.pem','kirk-key.pem'].forEach { file ->
+            File local = Paths.get(opensearch_tmp_dir.absolutePath, file).toFile()
+            download.run {
+                src "https://raw.githubusercontent.com/opensearch-project/security/main/bwc-test/src/test/resources/security/" + file
+                dest local
+                overwrite false
+            }
+    }
+
     isSnapshot = "true" == System.getProperty("build.snapshot", "true")
     projectSubstitutions = [:]
 
@@ -91,17 +107,10 @@ ext {
             }
         }
 
-        // Config below including files are copied from security demo configuration
-        ['esnode.pem', 'esnode-key.pem', 'root-ca.pem'].forEach { file ->
-            File local = Paths.get(opensearch_tmp_dir.absolutePath, file).toFile()
-            download.run {
-                src "https://raw.githubusercontent.com/opensearch-project/security/main/bwc-test/src/test/resources/security/" + file
-                dest local
-                overwrite false
-            }
-            cluster.extraConfigFile(file, local)
-        }
-
+        // // Config below including files are copied from security demo configuration
+        cluster.extraConfigFile("esnode.pem", file("$opensearch_tmp_dir/esnode.pem"))
+        cluster.extraConfigFile("esnode-key.pem", file("$opensearch_tmp_dir/esnode-key.pem"))
+        cluster.extraConfigFile("root-ca.pem", file("$opensearch_tmp_dir/root-ca.pem"))
         // This configuration is copied from the security plugins demo install:
         // https://github.com/opensearch-project/security/blob/2.11.1.0/tools/install_demo_configuration.sh#L365-L388
         cluster.setting("plugins.security.ssl.transport.pemcert_filepath", "esnode.pem")

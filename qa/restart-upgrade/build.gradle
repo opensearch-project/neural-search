@@ -7,11 +7,7 @@ import org.opensearch.gradle.testclusters.StandaloneRestIntegTestTask
 
 apply from : "$rootDir/qa/build.gradle"
 
-String default_bwc_version = System.getProperty("bwc.version")
-Boolean bwcBundleTest = (project.findProperty('customDistributionDownloadType') != null &&
-        project.properties['customDistributionDownloadType'] == "bundle")
-String neural_search_bwc_version = bwcBundleTest ? System.getProperty("bwc.bundle.version"): System.getProperty("tests.bwc.version", default_bwc_version)
-String currentBundleVersion = opensearch_version.replace("-SNAPSHOT","")
+def ext=rootProject.ext
 String baseName = "neuralSearchBwcCluster-restart"
 
 // Creates a test cluster of previous version and loads k-NN plugin of bwcVersion
@@ -20,14 +16,15 @@ testClusters {
         testDistribution = "ARCHIVE"
         numberOfNodes = 3
         jvmArgs("-Xms1g", "-Xmx4g")
-        if(bwcBundleTest){
-            versions = [neural_search_bwc_version, currentBundleVersion]
+        if(ext.bwcBundleTest){
+            versions = [ext.neural_search_bwc_version, ext.currentBundleVersion]
+            def path=ext.opensearch_tmp_dir
             nodes.each { node ->
-                node.extraConfigFile("kirk.pem", file("$rootDir/src/test/resources/security/kirk.pem"))
-                node.extraConfigFile("kirk-key.pem", file("$rootDir/src/test/resources/security/kirk-key.pem"))
-                node.extraConfigFile("esnode.pem", file("$rootDir/src/test/resources/security/esnode.pem"))
-                node.extraConfigFile("esnode-key.pem", file("$rootDir/src/test/resources/security/esnode-key.pem"))
-                node.extraConfigFile("root-ca.pem", file("$rootDir/src/test/resources/security/root-ca.pem"))
+                node.extraConfigFile("kirk.pem", file("$path/kirk.pem"))
+                node.extraConfigFile("kirk-key.pem", file("$path/kirk-key.pem"))
+                node.extraConfigFile("esnode.pem", file("$path/esnode.pem"))
+                node.extraConfigFile("esnode-key.pem", file("$path/esnode-key.pem"))
+                node.extraConfigFile("root-ca.pem", file("$path/root-ca.pem"))
                 node.setting("plugins.security.disabled", "true")
                 node.setting("plugins.security.ssl.transport.pemcert_filepath", "esnode.pem")
                 node.setting("plugins.security.ssl.transport.pemkey_filepath", "esnode-key.pem")
@@ -47,7 +44,7 @@ testClusters {
                 node.setting("plugins.security.system_indices.enabled", "true")
             }
         }else{
-            versions = [neural_search_bwc_version, opensearch_version]
+            versions = [ext.neural_search_bwc_version, opensearch_version]
             plugin(project.tasks.unZipBwcMlCommonsPlugin.archiveFile)
             plugin(project.tasks.unZipBwcKnnPlugin.archiveFile)
             plugin(project.tasks.unZipBwcPlugin.archiveFile)
@@ -59,17 +56,17 @@ testClusters {
 
 // Task to run BWC tests against the old cluster
 task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
-    if(!bwcBundleTest){
+    if(!ext.bwcBundleTest){
        dependsOn "unZipBwcPlugin"
     }
     useCluster testClusters."${baseName}"
     systemProperty 'tests.rest.bwcsuite_cluster', 'old_cluster'
     systemProperty 'tests.is_old_cluster', 'true'
     systemProperty 'tests.skip_delete_model_index', 'true'
-    systemProperty 'tests.plugin_bwc_version', neural_search_bwc_version
+    systemProperty 'tests.plugin_bwc_version', ext.neural_search_bwc_version
 
     //Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT tests from neural search version 2.9 and 2.10 because these features were released in 2.11 version.
-    if (neural_search_bwc_version.startsWith("2.9") || neural_search_bwc_version.startsWith("2.10")){
+    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10")){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
@@ -87,7 +84,7 @@ task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
     dependsOn "testAgainstOldCluster"
     dependsOn rootProject.tasks.assemble
     useCluster testClusters."${baseName}"
-    if(bwcBundleTest){
+    if(ext.bwcBundleTest){
         doFirst {
             testClusters."${baseName}".goToNextVersion()
         }
@@ -99,10 +96,10 @@ task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.rest.bwcsuite_cluster', 'upgraded_cluster'
     systemProperty 'tests.skip_delete_model_index', 'true'
     systemProperty 'tests.is_old_cluster', 'false'
-    systemProperty 'tests.plugin_bwc_version', neural_search_bwc_version
+    systemProperty 'tests.plugin_bwc_version', ext.neural_search_bwc_version
 
     //Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT tests from neural search version 2.9 and 2.10 because these features were released in 2.11 version.
-    if (neural_search_bwc_version.startsWith("2.9") || neural_search_bwc_version.startsWith("2.10")){
+    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10")){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
