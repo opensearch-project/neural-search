@@ -37,12 +37,12 @@ import com.google.common.primitives.Floats;
 import lombok.SneakyThrows;
 
 public class HybridQueryIT extends BaseNeuralSearchIT {
-    private static final String TEST_BASIC_INDEX_NAME = "test-neural-basic-index";
-    private static final String TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME = "test-neural-vector-doc-field-index";
-    private static final String TEST_MULTI_DOC_INDEX_NAME = "test-neural-multi-doc-index";
-    private static final String TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD = "test-neural-multi-doc-single-shard-index";
+    private static final String TEST_BASIC_INDEX_NAME = "test-hybrid-basic-index";
+    private static final String TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME = "test-hybrid-vector-doc-field-index";
+    private static final String TEST_MULTI_DOC_INDEX_NAME = "test-hybrid-multi-doc-index";
+    private static final String TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD = "test-hybrid-multi-doc-single-shard-index";
     private static final String TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD =
-        "test-neural-multi-doc-nested-type--single-shard-index";
+        "test-hybrid-multi-doc-nested-type-single-shard-index";
     private static final String TEST_QUERY_TEXT = "greetings";
     private static final String TEST_QUERY_TEXT2 = "salute";
     private static final String TEST_QUERY_TEXT3 = "hello";
