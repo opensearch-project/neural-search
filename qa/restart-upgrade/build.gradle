@@ -7,20 +7,48 @@ import org.opensearch.gradle.testclusters.StandaloneRestIntegTestTask
 
 apply from : "$rootDir/qa/build.gradle"
 
-String default_bwc_version = System.getProperty("bwc.version")
-String neural_search_bwc_version = System.getProperty("tests.bwc.version", default_bwc_version)
+def ext=rootProject.ext
 String baseName = "neuralSearchBwcCluster-restart"
 
 // Creates a test cluster of previous version and loads k-NN plugin of bwcVersion
 testClusters {
     "${baseName}" {
         testDistribution = "ARCHIVE"
-        versions = [neural_search_bwc_version, opensearch_version]
         numberOfNodes = 3
         jvmArgs("-Xms1g", "-Xmx4g")
-        plugin(project.tasks.unZipBwcMlCommonsPlugin.archiveFile)
-        plugin(project.tasks.unZipBwcKnnPlugin.archiveFile)
-        plugin(project.tasks.unZipBwcPlugin.archiveFile)
+        if(ext.bwcBundleTest){
+            versions = [ext.neural_search_bwc_version, ext.currentBundleVersion]
+            def path=ext.opensearch_tmp_dir
+            nodes.each { node ->
+                node.extraConfigFile("kirk.pem", file("$path/kirk.pem"))
+                node.extraConfigFile("kirk-key.pem", file("$path/kirk-key.pem"))
+                node.extraConfigFile("esnode.pem", file("$path/esnode.pem"))
+                node.extraConfigFile("esnode-key.pem", file("$path/esnode-key.pem"))
+                node.extraConfigFile("root-ca.pem", file("$path/root-ca.pem"))
+                node.setting("plugins.security.disabled", "true")
+                node.setting("plugins.security.ssl.transport.pemcert_filepath", "esnode.pem")
+                node.setting("plugins.security.ssl.transport.pemkey_filepath", "esnode-key.pem")
+                node.setting("plugins.security.ssl.transport.pemtrustedcas_filepath", "root-ca.pem")
+                node.setting("plugins.security.ssl.transport.enforce_hostname_verification", "false")
+                node.setting("plugins.security.ssl.http.enabled", "true")
+                node.setting("plugins.security.ssl.http.pemcert_filepath", "esnode.pem")
+                node.setting("plugins.security.ssl.http.pemkey_filepath", "esnode-key.pem")
+                node.setting("plugins.security.ssl.http.pemtrustedcas_filepath", "root-ca.pem")
+                node.setting("plugins.security.allow_unsafe_democertificates", "true")
+                node.setting("plugins.security.allow_default_init_securityindex", "true")
+                node.setting("plugins.security.authcz.admin_dn", "CN=kirk,OU=client,O=client,L=test,C=de")
+                node.setting("plugins.security.audit.type", "internal_elasticsearch")
+                node.setting("plugins.security.enable_snapshot_restore_privilege", "true")
+                node.setting("plugins.security.check_snapshot_restore_write_privileges", "true")
+                node.setting("plugins.security.restapi.roles_enabled", "[\"all_access\", \"security_rest_api_access\"]")
+                node.setting("plugins.security.system_indices.enabled", "true")
+            }
+        }else{
+            versions = [ext.neural_search_bwc_version, opensearch_version]
+            plugin(project.tasks.unZipBwcMlCommonsPlugin.archiveFile)
+            plugin(project.tasks.unZipBwcKnnPlugin.archiveFile)
+            plugin(project.tasks.unZipBwcPlugin.archiveFile)
+        }
         setting 'path.repo', "${buildDir}/cluster/shared/repo/${baseName}"
         setting 'http.content_type.required', 'true'
     }
@@ -28,15 +56,17 @@ testClusters {
 
 // Task to run BWC tests against the old cluster
 task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
-    dependsOn "unZipBwcPlugin"
+    if(!ext.bwcBundleTest){
+        dependsOn "unZipBwcPlugin"
+    }
     useCluster testClusters."${baseName}"
     systemProperty 'tests.rest.bwcsuite_cluster', 'old_cluster'
     systemProperty 'tests.is_old_cluster', 'true'
     systemProperty 'tests.skip_delete_model_index', 'true'
-    systemProperty 'tests.plugin_bwc_version', neural_search_bwc_version
+    systemProperty 'tests.plugin_bwc_version', ext.neural_search_bwc_version
 
     //Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT tests from neural search version 2.9 and 2.10 because these features were released in 2.11 version.
-    if (neural_search_bwc_version.startsWith("2.9") || neural_search_bwc_version.startsWith("2.10")){
+    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10")){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
@@ -54,16 +84,22 @@ task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
     dependsOn "testAgainstOldCluster"
     dependsOn rootProject.tasks.assemble
     useCluster testClusters."${baseName}"
-    doFirst {
-        testClusters."${baseName}".upgradeAllNodesAndPluginsToNextVersion(project.ext.plugins)
+    if(ext.bwcBundleTest){
+        doFirst {
+            testClusters."${baseName}".goToNextVersion()
+        }
+    }else{
+        doFirst {
+            testClusters."${baseName}".upgradeAllNodesAndPluginsToNextVersion(project.ext.plugins)
+        }
     }
     systemProperty 'tests.rest.bwcsuite_cluster', 'upgraded_cluster'
     systemProperty 'tests.skip_delete_model_index', 'true'
     systemProperty 'tests.is_old_cluster', 'false'
-    systemProperty 'tests.plugin_bwc_version', neural_search_bwc_version
+    systemProperty 'tests.plugin_bwc_version', ext.neural_search_bwc_version
 
     //Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT tests from neural search version 2.9 and 2.10 because these features were released in 2.11 version.
-    if (neural_search_bwc_version.startsWith("2.9") || neural_search_bwc_version.startsWith("2.10")){
+    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10")){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
