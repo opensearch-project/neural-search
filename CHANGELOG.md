@@ -31,5 +31,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Distribution bundle bwc tests ([#579])(https://github.com/opensearch-project/neural-search/pull/579)
 ### Documentation
 ### Maintenance
+- Update spotless and eclipse dependencies ([#589](https://github.com/opensearch-project/neural-search/pull/589))
 ### Refactoring
 - Added spotless check in the build ([#515](https://github.com/opensearch-project/neural-search/pull/515))
