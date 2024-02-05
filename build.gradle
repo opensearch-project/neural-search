@@ -40,8 +40,15 @@ buildscript {
 
     dependencies {
         classpath "${opensearch_group}.gradle:build-tools:${opensearch_version}"
-        classpath "com.diffplug.spotless:spotless-plugin-gradle:6.23.2"
+        classpath "com.diffplug.spotless:spotless-plugin-gradle:6.25.0"
         classpath "io.freefair.gradle:lombok-plugin:8.4"
+
+        configurations.all {
+            resolutionStrategy {
+                force("org.eclipse.platform:org.eclipse.core.runtime:4.29.0") // CVE for < 4.29
+                force("org.eclipse.platform:org.eclipse.core.resources:4.20.0") // CVE for < 4.20
+            }
+        }
     }
 }
 
