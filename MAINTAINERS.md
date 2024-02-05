@@ -25,4 +25,4 @@ This document contains a list of maintainers in this repo. See [opensearch-proje
 
 | Maintainer              | GitHub ID                                   | Affiliation |
 |-------------------------|---------------------------------------------|-------------|
-| Junshen Wu              | [wujunshen](https://github.com/wujunshen)                 | Independent |
+| Junshen Wu              | [wujunshen](https://github.com/wujunshen)   | Independent |
