@@ -1,0 +1,15 @@
+{
+    "description": "Pipeline for reranking with a cross encoder",
+    "response_processors": [
+        {
+            "rerank": {
+                "ml_opensearch": {
+                    "model_id": "%s"
+                },
+                "context": {
+                    "document_fields": ["text_representation"]
+                }
+            }
+        }
+    ]
+}

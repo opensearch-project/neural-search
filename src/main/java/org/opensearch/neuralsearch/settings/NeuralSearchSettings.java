@@ -25,4 +25,13 @@ public final class NeuralSearchSettings {
         false,
         Setting.Property.NodeScope
     );
+
+    /**
+     * Limits the number of document fields that can be passed to the reranker.
+     */
+    public static final Setting<Integer> RERANKER_MAX_DOC_FIELDS = Setting.intSetting(
+        "plugins.neural_search.reranker_max_document_fields",
+        50,
+        Setting.Property.NodeScope
+    );
 }
