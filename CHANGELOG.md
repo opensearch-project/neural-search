@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Documentation
 ### Maintenance
 - Added support for jdk-21 ([#500](https://github.com/opensearch-project/neural-search/pull/500)))
+- Update spotless and eclipse dependencies ([#589](https://github.com/opensearch-project/neural-search/pull/589))
 ### Refactoring
 - Deprecate the `max_token_score` field in `neural_sparse` query clause ([#478](https://github.com/opensearch-project/neural-search/pull/478))
 - Added spotless check in the build ([#515](https://github.com/opensearch-project/neural-search/pull/515))
