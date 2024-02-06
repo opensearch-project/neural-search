@@ -325,6 +325,71 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         Mockito.verify(singleSentenceResultListener).onFailure(nodeNodeConnectedException);
     }
 
+    public void testInferenceSimilarity_whenValidInput_thenSuccess() {
+        final List<Float> vector = new ArrayList<>(List.of(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createManyModelTensorOutputs(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSimilarity(
+            TestCommonConstants.MODEL_ID,
+            "is it sunny",
+            List.of("it is sunny today", "roses are red"),
+            singleSentenceResultListener
+        );
+
+        Mockito.verify(client)
+            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        Mockito.verify(singleSentenceResultListener).onResponse(vector);
+        Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
+    }
+
+    public void testInferencesSimilarity_whenExceptionFromMLClient_ThenFail() {
+        final RuntimeException exception = new RuntimeException();
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onFailure(exception);
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSimilarity(
+            TestCommonConstants.MODEL_ID,
+            "is it sunny",
+            List.of("it is sunny today", "roses are red"),
+            singleSentenceResultListener
+        );
+
+        Mockito.verify(client)
+            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        Mockito.verify(singleSentenceResultListener).onFailure(exception);
+        Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
+    }
+
+    public void testInferenceSimilarity_whenNodeNotConnectedException_ThenTryThreeTimes() {
+        final NodeNotConnectedException nodeNodeConnectedException = new NodeNotConnectedException(
+            mock(DiscoveryNode.class),
+            "Node not connected"
+        );
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onFailure(nodeNodeConnectedException);
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSimilarity(
+            TestCommonConstants.MODEL_ID,
+            "is it sunny",
+            List.of("it is sunny today", "roses are red"),
+            singleSentenceResultListener
+        );
+
+        Mockito.verify(client, times(4))
+            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        Mockito.verify(singleSentenceResultListener).onFailure(nodeNodeConnectedException);
+    }
+
     private ModelTensorOutput createModelTensorOutput(final Float[] output) {
         final List<ModelTensors> tensorsList = new ArrayList<>();
         final List<ModelTensor> mlModelTensorList = new ArrayList<>();
@@ -351,5 +416,22 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
         tensorsList.add(modelTensors);
         return new ModelTensorOutput(tensorsList);
+    }
+
+    private ModelTensorOutput createManyModelTensorOutputs(final Float[] output) {
+        final List<ModelTensors> tensorsList = new ArrayList<>();
+        for (Float score : output) {
+            List<ModelTensor> tensorList = new ArrayList<>();
+            String name = "logits";
+            Number[] data = new Number[] { score };
+            long[] shape = new long[] { 1 };
+            MLResultDataType dataType = MLResultDataType.FLOAT32;
+            MLResultDataType mlResultDataType = MLResultDataType.valueOf(dataType.name());
+            ModelTensor tensor = ModelTensor.builder().name(name).data(data).shape(shape).dataType(mlResultDataType).build();
+            tensorList.add(tensor);
+            tensorsList.add(new ModelTensors(tensorList));
+        }
+        ModelTensorOutput modelTensorOutput = new ModelTensorOutput(tensorsList);
+        return modelTensorOutput;
     }
 }
