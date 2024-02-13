@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Enhancements
 ### Bug Fixes
 ### Infrastructure
+- Update bwc workflow to include 2.13.0-SNAPSHOT ([]())
 ### Documentation
 ### Maintenance
 ### Refactoring
