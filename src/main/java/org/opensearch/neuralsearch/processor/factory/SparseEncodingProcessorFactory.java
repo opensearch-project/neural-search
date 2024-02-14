@@ -40,8 +40,8 @@ public class SparseEncodingProcessorFactory implements Processor.Factory {
         Map<String, Object> config
     ) throws Exception {
         String modelId = readStringProperty(TYPE, processorTag, config, MODEL_ID_FIELD);
-        Map<String, Object> filedMap = readMap(TYPE, processorTag, config, FIELD_MAP_FIELD);
+        Map<String, Object> fieldMap = readMap(TYPE, processorTag, config, FIELD_MAP_FIELD);
 
-        return new SparseEncodingProcessor(processorTag, description, modelId, filedMap, clientAccessor, environment);
+        return new SparseEncodingProcessor(processorTag, description, modelId, fieldMap, clientAccessor, environment);
     }
 }
