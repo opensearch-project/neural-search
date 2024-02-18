@@ -31,6 +31,7 @@ import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
+import org.opensearch.neuralsearch.processor.DocumentChunkingProcessor;
 import org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
@@ -114,14 +115,16 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
             SparseEncodingProcessor.TYPE,
             new SparseEncodingProcessorFactory(clientAccessor, parameters.env),
             TextImageEmbeddingProcessor.TYPE,
-            new TextImageEmbeddingProcessorFactory(clientAccessor, parameters.env, parameters.ingestService.getClusterService())
+            new TextImageEmbeddingProcessorFactory(clientAccessor, parameters.env, parameters.ingestService.getClusterService()),
+            DocumentChunkingProcessor.TYPE,
+            new DocumentChunkingProcessor.Factory()
         );
     }
 
     @Override
     public Optional<QueryPhaseSearcher> getQueryPhaseSearcher() {
         // we're using "is_disabled" flag as there are no proper implementation of FeatureFlags.isDisabled(). Both
-        // cases when flag is not set or it is "false" are interpretted in the same way. In such case core is reading
+        // cases when flag is not set, or it is "false" are interpreted in the same way. In such case core is reading
         // the actual value from settings.
         if (FeatureFlags.isEnabled(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED.getKey())) {
             log.info(
