@@ -143,7 +143,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                 for (Object contentElement : contentList) {
                     if (!(contentElement instanceof String)) {
                         throw new IllegalArgumentException(
-                            "element in input field list ["
+                            "some element in input field list ["
                                 + inputField
                                 + "] of type ["
                                 + contentElement.getClass().getName()
