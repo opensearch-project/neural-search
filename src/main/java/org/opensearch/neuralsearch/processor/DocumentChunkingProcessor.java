@@ -8,13 +8,22 @@ import java.util.Map;
 import java.util.Set;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.core.index.Index;
+import org.opensearch.index.IndexService;
+import org.opensearch.index.IndexSettings;
 import org.opensearch.index.analysis.AnalysisRegistry;
+import org.opensearch.indices.IndicesService;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.Processor;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
+import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.neuralsearch.processor.chunker.IFieldChunker;
+import org.opensearch.index.mapper.IndexFieldMapper;
 
 import static org.opensearch.ingest.ConfigurationUtils.readMap;
 import static org.opensearch.neuralsearch.processor.InferenceProcessor.FIELD_MAP_FIELD;
@@ -28,12 +37,29 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
 
     private final Set<String> supportedChunkers = ChunkerFactory.getChunkers();
 
+    private final Settings settings;
+
+    private final ClusterService clusterService;
+
+    private final IndicesService indicesService;
+
     private final AnalysisRegistry analysisRegistry;
 
-    public DocumentChunkingProcessor(String tag, String description, Map<String, Object> fieldMap, AnalysisRegistry analysisRegistry) {
+    public DocumentChunkingProcessor(
+        String tag,
+        String description,
+        Map<String, Object> fieldMap,
+        Settings settings,
+        ClusterService clusterService,
+        IndicesService indicesService,
+        AnalysisRegistry analysisRegistry
+    ) {
         super(tag, description);
         validateDocumentChunkingFieldMap(fieldMap);
         this.fieldMap = fieldMap;
+        this.settings = settings;
+        this.clusterService = clusterService;
+        this.indicesService = indicesService;
         this.analysisRegistry = analysisRegistry;
     }
 
@@ -139,6 +165,8 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                 );
             }
 
+
+
             Map<?, ?> parameters = (Map<?, ?>) fieldMapEntry.getValue();
             String outputField = (String) parameters.get(OUTPUT_FIELD);
             List<String> chunkedPassages = new ArrayList<>();
@@ -150,6 +178,17 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                 if (supportedChunkers.contains(parameterKey)) {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> chunkerParameters = (Map<String, Object>) parameterEntry.getValue();
+                    if (Objects.equals(parameterKey, ChunkerFactory.FIXED_LENGTH_ALGORITHM)) {
+                        // add maxTokenCount setting from index metadata to chunker parameters
+                        Map<String, Object> sourceAndMetadataMap = document.getSourceAndMetadata();
+                        String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
+                        Index index = clusterService.state().metadata().index(indexName).getIndex();
+                        IndexService indexService = indicesService.indexServiceSafe(index);
+                        final int maxTokenCount = indexService == null
+                                ? IndexSettings.MAX_TOKEN_COUNT_SETTING.get(settings)
+                                : indexService.getIndexSettings().getMaxTokenCount();
+                        chunkerParameters.put(FixedTokenLengthChunker.MAX_TOKEN_COUNT, maxTokenCount);
+                    }
                     IFieldChunker chunker = ChunkerFactory.create(parameterKey, analysisRegistry);
                     if (content instanceof String) {
                         chunkedPassages = chunker.chunk((String) content, chunkerParameters);
@@ -167,9 +206,18 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
 
     public static class Factory implements Processor.Factory {
 
+        private final Settings settings;
+
+        private final ClusterService clusterService;
+
+        private final IndicesService indicesService;
+        
         private final AnalysisRegistry analysisRegistry;
 
-        public Factory(AnalysisRegistry analysisRegistry) {
+        public Factory(Settings settings, ClusterService clusterService, IndicesService indicesService, AnalysisRegistry analysisRegistry) {
+            this.settings = settings;
+            this.clusterService = clusterService;
+            this.indicesService = indicesService;
             this.analysisRegistry = analysisRegistry;
         }
 
@@ -181,7 +229,15 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
             Map<String, Object> config
         ) throws Exception {
             Map<String, Object> fieldMap = readMap(TYPE, processorTag, config, FIELD_MAP_FIELD);
-            return new DocumentChunkingProcessor(processorTag, description, fieldMap, analysisRegistry);
+            return new DocumentChunkingProcessor(
+                processorTag,
+                description,
+                fieldMap,
+                settings,
+                clusterService,
+                indicesService,
+                analysisRegistry
+            );
         }
 
     }

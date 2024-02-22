@@ -19,10 +19,12 @@ import static org.opensearch.action.admin.indices.analyze.TransportAnalyzeAction
 @Log4j2
 public class FixedTokenLengthChunker implements IFieldChunker {
 
-    private static final String TOKEN_LIMIT = "token_limit";
-    private static final String OVERLAP_RATE = "overlap_rate";
+    public static final String TOKEN_LIMIT = "token_limit";
+    public static final String OVERLAP_RATE = "overlap_rate";
 
-    private static final String TOKENIZER = "tokenizer";
+    public static final String MAX_TOKEN_COUNT = "max_token_count";
+
+    public static final String TOKENIZER = "tokenizer";
 
     private final AnalysisRegistry analysisRegistry;
 
@@ -30,12 +32,12 @@ public class FixedTokenLengthChunker implements IFieldChunker {
         this.analysisRegistry = analysisRegistry;
     }
 
-    private List<String> tokenize(String content, String tokenizer) {
+    private List<String> tokenize(String content, String tokenizer, int maxTokenCount) {
         AnalyzeAction.Request analyzeRequest = new AnalyzeAction.Request();
         analyzeRequest.text(content);
         analyzeRequest.tokenizer(tokenizer);
         try {
-            AnalyzeAction.Response analyzeResponse = analyze(analyzeRequest, analysisRegistry, null, 10000);
+            AnalyzeAction.Response analyzeResponse = analyze(analyzeRequest, analysisRegistry, null, maxTokenCount);
             List<AnalyzeAction.AnalyzeToken> analyzeTokenList = analyzeResponse.getTokens();
             List<String> tokenList = new ArrayList<>();
             for (AnalyzeAction.AnalyzeToken analyzeToken : analyzeTokenList) {
@@ -53,6 +55,7 @@ public class FixedTokenLengthChunker implements IFieldChunker {
         // parameters has been validated
         int tokenLimit = 500;
         double overlapRate = 0.2;
+        int maxTokenCount = 10000;
         String tokenizer = "standard";
 
         if (parameters.containsKey(TOKEN_LIMIT)) {
@@ -61,11 +64,14 @@ public class FixedTokenLengthChunker implements IFieldChunker {
         if (parameters.containsKey(OVERLAP_RATE)) {
             overlapRate = ((Number) parameters.get(OVERLAP_RATE)).doubleValue();
         }
+        if (parameters.containsKey(MAX_TOKEN_COUNT)) {
+            maxTokenCount = ((Number) parameters.get(MAX_TOKEN_COUNT)).intValue();
+        }
         if (parameters.containsKey(TOKENIZER)) {
             tokenizer = (String) parameters.get(TOKENIZER);
         }
 
-        List<String> tokens = tokenize(content, tokenizer);
+        List<String> tokens = tokenize(content, tokenizer, maxTokenCount);
         List<String> passages = new ArrayList<>();
 
         String passage;
