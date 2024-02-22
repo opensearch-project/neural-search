@@ -10,9 +10,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.core.index.Index;
 import org.opensearch.index.IndexService;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.analysis.AnalysisRegistry;
@@ -165,8 +165,6 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                 );
             }
 
-
-
             Map<?, ?> parameters = (Map<?, ?>) fieldMapEntry.getValue();
             String outputField = (String) parameters.get(OUTPUT_FIELD);
             List<String> chunkedPassages = new ArrayList<>();
@@ -179,14 +177,16 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> chunkerParameters = (Map<String, Object>) parameterEntry.getValue();
                     if (Objects.equals(parameterKey, ChunkerFactory.FIXED_LENGTH_ALGORITHM)) {
-                        // add maxTokenCount setting from index metadata to chunker parameters
+                        // add maxTokenCount to chunker parameters
                         Map<String, Object> sourceAndMetadataMap = document.getSourceAndMetadata();
+                        int maxTokenCount = IndexSettings.MAX_TOKEN_COUNT_SETTING.get(settings);
                         String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
-                        Index index = clusterService.state().metadata().index(indexName).getIndex();
-                        IndexService indexService = indicesService.indexServiceSafe(index);
-                        final int maxTokenCount = indexService == null
-                                ? IndexSettings.MAX_TOKEN_COUNT_SETTING.get(settings)
-                                : indexService.getIndexSettings().getMaxTokenCount();
+                        IndexMetadata indexMetadata = clusterService.state().metadata().index(indexName);
+                        if (indexMetadata != null) {
+                            // if the index exists, read maxTokenCount from the index setting
+                            IndexService indexService = indicesService.indexServiceSafe(indexMetadata.getIndex());
+                            maxTokenCount = indexService.getIndexSettings().getMaxTokenCount();
+                        }
                         chunkerParameters.put(FixedTokenLengthChunker.MAX_TOKEN_COUNT, maxTokenCount);
                     }
                     IFieldChunker chunker = ChunkerFactory.create(parameterKey, analysisRegistry);
@@ -211,7 +211,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
         private final ClusterService clusterService;
 
         private final IndicesService indicesService;
-        
+
         private final AnalysisRegistry analysisRegistry;
 
         public Factory(Settings settings, ClusterService clusterService, IndicesService indicesService, AnalysisRegistry analysisRegistry) {
