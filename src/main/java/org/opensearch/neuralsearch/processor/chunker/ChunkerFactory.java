@@ -4,7 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor.chunker;
 
-import org.opensearch.client.node.NodeClient;
+import org.opensearch.index.analysis.AnalysisRegistry;
 
 import java.util.Set;
 
@@ -13,10 +13,10 @@ public class ChunkerFactory {
     public static final String FIXED_LENGTH_ALGORITHM = "fix_length";
     public static final String DELIMITER_ALGORITHM = "delimiter";
 
-    public static IFieldChunker create(String type, NodeClient nodeClient) {
+    public static IFieldChunker create(String type, AnalysisRegistry analysisRegistry) {
         switch (type) {
             case FIXED_LENGTH_ALGORITHM:
-                return new FixedTokenLengthChunker(nodeClient);
+                return new FixedTokenLengthChunker(analysisRegistry);
             case DELIMITER_ALGORITHM:
                 return new DelimiterChunker();
             default:
