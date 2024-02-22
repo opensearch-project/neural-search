@@ -91,7 +91,6 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         final Supplier<RepositoriesService> repositoriesServiceSupplier
     ) {
         NeuralSearchClusterUtil.instance().initialize(clusterService);
-        DocumentChunkingProcessor.initialize(client);
         NeuralQueryBuilder.initialize(clientAccessor);
         NeuralSparseQueryBuilder.initialize(clientAccessor);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
@@ -118,7 +117,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
             TextImageEmbeddingProcessor.TYPE,
             new TextImageEmbeddingProcessorFactory(clientAccessor, parameters.env, parameters.ingestService.getClusterService()),
             DocumentChunkingProcessor.TYPE,
-            new DocumentChunkingProcessor.Factory()
+            new DocumentChunkingProcessor.Factory(parameters.analysisRegistry)
         );
     }
 
