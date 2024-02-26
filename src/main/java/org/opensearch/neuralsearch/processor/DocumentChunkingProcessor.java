@@ -83,7 +83,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
 
             if (!(parameters instanceof Map)) {
                 throw new IllegalArgumentException(
-                    "parameters for input field [" + inputField + "] cannot be cast to [" + String.class.getName() + "]"
+                    "parameters for input field [" + inputField + "] cannot be cast to [" + Map.class.getName() + "]"
                 );
             }
 
@@ -119,11 +119,8 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
             }
 
             // should only define one algorithm
-            if (chunkingAlgorithmCount == 0) {
-                throw new IllegalArgumentException("chunking algorithm not defined for input field [" + inputField + "]");
-            }
-            if (chunkingAlgorithmCount > 1) {
-                throw new IllegalArgumentException("multiple chunking algorithms defined for input field [" + inputField + "]");
+            if (chunkingAlgorithmCount != 1) {
+                throw new IllegalArgumentException("input field [" + inputField + "] should has and only has 1 chunking algorithm");
             }
         }
     }
@@ -165,14 +162,15 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                 );
             }
 
-            Map<?, ?> parameters = (Map<?, ?>) fieldMapEntry.getValue();
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parameters = (Map<String, Object>) fieldMapEntry.getValue();
             String outputField = (String) parameters.get(OUTPUT_FIELD);
             List<String> chunkedPassages = new ArrayList<>();
 
             // we have validated that there is one chunking algorithm
             // and that chunkerParameters is of type Map<String, Object>
-            for (Map.Entry<?, ?> parameterEntry : parameters.entrySet()) {
-                String parameterKey = (String) parameterEntry.getKey();
+            for (Map.Entry<String, Object> parameterEntry : parameters.entrySet()) {
+                String parameterKey = parameterEntry.getKey();
                 if (supportedChunkers.contains(parameterKey)) {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> chunkerParameters = (Map<String, Object>) parameterEntry.getValue();
