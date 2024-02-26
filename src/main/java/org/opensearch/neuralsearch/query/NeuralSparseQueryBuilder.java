@@ -55,7 +55,7 @@ import lombok.extern.log4j.Log4j2;
 @Accessors(chain = true, fluent = true)
 @NoArgsConstructor
 @AllArgsConstructor
-public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQueryBuilder> {
+public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQueryBuilder> implements ModelInferenceQueryBuilder {
     public static final String NAME = "neural_sparse";
     @VisibleForTesting
     static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");

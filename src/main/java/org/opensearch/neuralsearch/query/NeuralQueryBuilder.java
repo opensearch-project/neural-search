@@ -58,7 +58,7 @@ import lombok.extern.log4j.Log4j2;
 @Accessors(chain = true, fluent = true)
 @NoArgsConstructor
 @AllArgsConstructor
-public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder> {
+public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder> implements ModelInferenceQueryBuilder {
 
     public static final String NAME = "neural";
 
