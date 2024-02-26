@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.ArrayList;
@@ -125,6 +126,72 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
         }
     }
 
+    private void validateContent(Object content, String inputField) {
+        // content can be a map, a list of strings or a list
+        if (content instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> contentMap = (Map<String, Object>) content;
+            for (Map.Entry<String, Object> contentEntry : contentMap.entrySet()) {
+                String contentKey = contentEntry.getKey();
+                Object contentValue = contentEntry.getValue();
+                // the map value can also be a map, list or string
+                validateContent(contentValue, inputField + "." + contentKey);
+            }
+        }
+        if (content instanceof List) {
+            List<?> contentList = (List<?>) content;
+            for (Object contentElement : contentList) {
+                if (!(contentElement instanceof String)) {
+                    throw new IllegalArgumentException(
+                            "some element in input field list ["
+                                    + inputField
+                                    + "] of type ["
+                                    + contentElement.getClass().getName()
+                                    + "] cannot be cast to ["
+                                    + String.class.getName()
+                                    + "]"
+                    );
+                }
+            }
+        }
+        if (!(content instanceof String)) {
+            throw new IllegalArgumentException(
+                    "input field ["
+                            + inputField
+                            + "] of type ["
+                            + content.getClass().getName()
+                            + "] cannot be cast to ["
+                            + String.class.getName()
+                            + "]"
+            );
+        }
+    }
+
+    private Object chunk(IFieldChunker chunker, Object content, Map<String, Object> chunkerParameters) {
+        // assume that content is either a map, list or string
+        if (content instanceof Map) {
+            Map<String, Object> chunkedPassageMap = new HashMap<>();
+            Map<String, Object> contentMap = (Map<String, Object>) content;
+            for (Map.Entry<String, Object> contentEntry : contentMap.entrySet()) {
+                String contentKey = contentEntry.getKey();
+                Object contentValue = contentEntry.getValue();
+                // contentValue can also be a map, list or string
+                chunkedPassageMap.put(contentKey, chunk(chunker, contentValue, chunkerParameters));
+            }
+            return chunkedPassageMap;
+        } else if (content instanceof List) {
+            List<String> chunkedPassageList = new ArrayList<>();
+            List<?> contentList = (List<?>) content;
+            for (Object contentElement : contentList) {
+                chunkedPassageList.addAll(chunker.chunk((String) contentElement, chunkerParameters));
+            }
+            return chunkedPassageList;
+        } else {
+            return chunker.chunk((String) content, chunkerParameters);
+        }
+    }
+
+
     @Override
     public IngestDocument execute(IngestDocument document) {
         for (Map.Entry<String, Object> fieldMapEntry : fieldMap.entrySet()) {
@@ -135,52 +202,11 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                 throw new IllegalArgumentException("input field in document [" + inputField + "] is null, cannot process it.");
             }
 
-            if (content instanceof List<?>) {
-                List<?> contentList = (List<?>) content;
-                for (Object contentElement : contentList) {
-                    if (!(contentElement instanceof String)) {
-                        throw new IllegalArgumentException(
-                            "some element in input field list ["
-                                + inputField
-                                + "] of type ["
-                                + contentElement.getClass().getName()
-                                + "] cannot be cast to ["
-                                + String.class.getName()
-                                + "]"
-                        );
-                    }
-                }
-            } else if (content instanceof Map<?, ?>) {
-                Map<?, ?> contentMap = (Map<?, ?>) content;
-                for (Object contentElement : contentMap.values()) {
-                    if (!(contentElement instanceof String)) {
-                        throw new IllegalArgumentException(
-                            "some element in input field map ["
-                                + inputField
-                                + "] of type ["
-                                + contentElement.getClass().getName()
-                                + "] cannot be cast to ["
-                                + String.class.getName()
-                                + "]"
-                        );
-                    }
-                }
-            } else if (!(content instanceof String)) {
-                throw new IllegalArgumentException(
-                    "input field ["
-                        + inputField
-                        + "] of type ["
-                        + content.getClass().getName()
-                        + "] cannot be cast to ["
-                        + String.class.getName()
-                        + "]"
-                );
-            }
+            validateContent(content, inputField);
 
             @SuppressWarnings("unchecked")
             Map<String, Object> parameters = (Map<String, Object>) fieldMapEntry.getValue();
             String outputField = (String) parameters.get(OUTPUT_FIELD);
-            List<String> chunkedPassages = new ArrayList<>();
 
             // we have validated that there is one chunking algorithm
             // and that chunkerParameters is of type Map<String, Object>
@@ -203,21 +229,9 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                         chunkerParameters.put(FixedTokenLengthChunker.MAX_TOKEN_COUNT, maxTokenCount);
                     }
                     IFieldChunker chunker = ChunkerFactory.create(parameterKey, analysisRegistry);
-                    if (content instanceof String) {
-                        chunkedPassages = chunker.chunk((String) content, chunkerParameters);
-                    } else if (content instanceof List<?>) {
-                        for (Object contentElement : (List<?>) content) {
-                            chunkedPassages.addAll(chunker.chunk((String) contentElement, chunkerParameters));
-                        }
-                    } else {
-                        // content is map type
-                        for (Object contentElement : ((Map<?, ?>) content).values()) {
-                            chunkedPassages.addAll(chunker.chunk((String) contentElement, chunkerParameters));
-                        }
-                    }
+                    document.setFieldValue(outputField, chunk(chunker, content, parameters));
                 }
             }
-            document.setFieldValue(outputField, chunkedPassages);
         }
         return document;
     }
