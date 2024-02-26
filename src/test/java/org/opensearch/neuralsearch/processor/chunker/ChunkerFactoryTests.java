@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor.chunker;
 
+import org.mockito.Mock;
 import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.test.OpenSearchTestCase;
 
@@ -11,6 +12,7 @@ import java.util.Set;
 
 public class ChunkerFactoryTests extends OpenSearchTestCase {
 
+    @Mock
     private AnalysisRegistry registry;
 
     public void testGetAllChunkers() {
@@ -31,6 +33,13 @@ public class ChunkerFactoryTests extends OpenSearchTestCase {
     }
 
     public void testCreate_Invalid() {
-        assertThrows(IllegalArgumentException.class, () -> ChunkerFactory.create("Invalid Chunker Type", registry));
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> ChunkerFactory.create("Invalid Chunker Type", registry)
+        );
+        assertEquals(
+            "chunker type [Invalid Chunker Type] is not supported. Supported chunkers types are [fix_length, delimiter]",
+            illegalArgumentException.getMessage()
+        );
     }
 }
