@@ -129,6 +129,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
     private void validateContent(Object content, String inputField) {
         // content can be a map, a list of strings or a list
         if (content instanceof Map) {
+            System.out.println("map type");
             @SuppressWarnings("unchecked")
             Map<String, Object> contentMap = (Map<String, Object>) content;
             for (Map.Entry<String, Object> contentEntry : contentMap.entrySet()) {
@@ -137,32 +138,31 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                 // the map value can also be a map, list or string
                 validateContent(contentValue, inputField + "." + contentKey);
             }
-        }
-        if (content instanceof List) {
+        } else if (content instanceof List) {
             List<?> contentList = (List<?>) content;
             for (Object contentElement : contentList) {
                 if (!(contentElement instanceof String)) {
                     throw new IllegalArgumentException(
-                            "some element in input field list ["
-                                    + inputField
-                                    + "] of type ["
-                                    + contentElement.getClass().getName()
-                                    + "] cannot be cast to ["
-                                    + String.class.getName()
-                                    + "]"
+                        "some element in input field list ["
+                            + inputField
+                            + "] of type ["
+                            + contentElement.getClass().getName()
+                            + "] cannot be cast to ["
+                            + String.class.getName()
+                            + "]"
                     );
                 }
             }
         }
         if (!(content instanceof String)) {
             throw new IllegalArgumentException(
-                    "input field ["
-                            + inputField
-                            + "] of type ["
-                            + content.getClass().getName()
-                            + "] cannot be cast to ["
-                            + String.class.getName()
-                            + "]"
+                "input field ["
+                    + inputField
+                    + "] of type ["
+                    + content.getClass().getName()
+                    + "] cannot be cast to ["
+                    + String.class.getName()
+                    + "]"
             );
         }
     }
@@ -190,7 +190,6 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
             return chunker.chunk((String) content, chunkerParameters);
         }
     }
-
 
     @Override
     public IngestDocument execute(IngestDocument document) {
