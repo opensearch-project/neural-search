@@ -46,6 +46,15 @@ public class NeuralQueryEnricherProcessorTests extends OpenSearchTestCase {
         assertEquals(processSearchRequest, searchRequest);
     }
 
+    public void testProcessRequest_whenVisitingEmptyQueryBody_thenSuccess() throws Exception {
+        NeuralQueryEnricherProcessor.Factory factory = new NeuralQueryEnricherProcessor.Factory();
+        SearchRequest searchRequest = new SearchRequest();
+        searchRequest.source(new SearchSourceBuilder());
+        NeuralQueryEnricherProcessor processor = createTestProcessor(factory);
+        SearchRequest processSearchRequest = processor.processRequest(searchRequest);
+        assert (processSearchRequest == searchRequest);
+    }
+
     public void testType() throws Exception {
         NeuralQueryEnricherProcessor.Factory factory = new NeuralQueryEnricherProcessor.Factory();
         NeuralQueryEnricherProcessor processor = createTestProcessor(factory);
