@@ -153,8 +153,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                     );
                 }
             }
-        }
-        if (!(content instanceof String)) {
+        } else if (!(content instanceof String)) {
             throw new IllegalArgumentException(
                 "input field ["
                     + inputField
