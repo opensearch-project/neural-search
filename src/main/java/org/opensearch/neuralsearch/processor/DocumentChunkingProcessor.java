@@ -168,7 +168,6 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
 
     private Object chunk(IFieldChunker chunker, Object content, Map<String, Object> chunkerParameters) {
         // assume that content is either a map, list or string
-        System.out.println("chunkerParameters: " + chunkerParameters);
         if (content instanceof Map) {
             Map<String, Object> chunkedPassageMap = new HashMap<>();
             Map<String, Object> contentMap = (Map<String, Object>) content;
