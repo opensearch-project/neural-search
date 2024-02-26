@@ -32,7 +32,8 @@ public class ChunkerFactory {
         }
     }
 
-    public static Set<String> getChunkers() {
+    public static Set<String> getAllChunkers() {
         return Set.of(FIXED_LENGTH_ALGORITHM, DELIMITER_ALGORITHM);
     }
+
 }

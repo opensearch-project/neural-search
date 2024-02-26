@@ -35,7 +35,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
 
     private final Map<String, Object> fieldMap;
 
-    private final Set<String> supportedChunkers = ChunkerFactory.getChunkers();
+    private final Set<String> supportedChunkers = ChunkerFactory.getAllChunkers();
 
     private final Settings settings;
 
