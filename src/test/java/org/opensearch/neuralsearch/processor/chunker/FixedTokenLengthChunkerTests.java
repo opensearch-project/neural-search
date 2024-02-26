@@ -139,4 +139,19 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         expectedPassages.add("and 24 tokens by standard tokenizer in OpenSearch");
         assertEquals(expectedPassages, passages);
     }
+
+    public void testChunk_withOverlapRate_half() {
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put(TOKEN_LIMIT, 10);
+        parameters.put(OVERLAP_RATE, 0.5);
+        String content =
+            "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
+        List<String> passages = FixedTokenLengthChunker.chunk(content, parameters);
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked The document");
+        expectedPassages.add("to be chunked The document contains a single paragraph two");
+        expectedPassages.add("contains a single paragraph two sentences and 24 tokens by");
+        expectedPassages.add("sentences and 24 tokens by standard tokenizer in OpenSearch");
+        assertEquals(expectedPassages, passages);
+    }
 }
