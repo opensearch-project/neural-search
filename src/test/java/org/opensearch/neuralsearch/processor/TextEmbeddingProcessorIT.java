@@ -72,7 +72,15 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
             + "  \"favorites\": {\n"
             + "    \"game\": \"overwatch\",\n"
             + "    \"movie\": null\n"
-            + "  }\n"
+            + "  },\n"
+            + "  \"nested_passages\": [\n"
+            + "    {\n"
+            + "      \"text\": \"hello\"\n"
+            + "    },\n"
+            + "    {\n"
+            + "      \"text\": \"world\"\n"
+            + "    }\n"
+            + "  ]\n"
             + "}\n";
         Response response = makeRequest(
             client(),
