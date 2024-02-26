@@ -150,6 +150,21 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                         );
                     }
                 }
+            } else if (content instanceof Map<?, ?>) {
+                Map<?, ?> contentMap = (Map<?, ?>) content;
+                for (Object contentElement : contentMap.values()) {
+                    if (!(contentElement instanceof String)) {
+                        throw new IllegalArgumentException(
+                            "some element in input field map ["
+                                + inputField
+                                + "] of type ["
+                                + contentElement.getClass().getName()
+                                + "] cannot be cast to ["
+                                + String.class.getName()
+                                + "]"
+                        );
+                    }
+                }
             } else if (!(content instanceof String)) {
                 throw new IllegalArgumentException(
                     "input field ["
@@ -190,8 +205,13 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                     IFieldChunker chunker = ChunkerFactory.create(parameterKey, analysisRegistry);
                     if (content instanceof String) {
                         chunkedPassages = chunker.chunk((String) content, chunkerParameters);
-                    } else {
+                    } else if (content instanceof List<?>) {
                         for (Object contentElement : (List<?>) content) {
+                            chunkedPassages.addAll(chunker.chunk((String) contentElement, chunkerParameters));
+                        }
+                    } else {
+                        // content is map type
+                        for (Object contentElement : ((Map<?, ?>) content).values()) {
                             chunkedPassages.addAll(chunker.chunk((String) contentElement, chunkerParameters));
                         }
                     }
