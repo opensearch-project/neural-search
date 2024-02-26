@@ -26,6 +26,12 @@ public class FixedTokenLengthChunker implements IFieldChunker {
 
     public static final String TOKENIZER = "tokenizer";
 
+    // default values for each parameter
+    private static final int DEFAULT_TOKEN_LIMIT = 500;
+    private static final double DEFAULT_OVERLAP_RATE = 0.2;
+    private static final int DEFAULT_MAX_TOKEN_COUNT = 10000;
+    private static final String DEFAULT_TOKENIZER = "standard";
+
     private final AnalysisRegistry analysisRegistry;
 
     public FixedTokenLengthChunker(AnalysisRegistry analysisRegistry) {
@@ -52,11 +58,11 @@ public class FixedTokenLengthChunker implements IFieldChunker {
 
     @Override
     public List<String> chunk(String content, Map<String, Object> parameters) {
-        // parameters has been validated
-        int tokenLimit = 500;
-        double overlapRate = 0.2;
-        int maxTokenCount = 10000;
-        String tokenizer = "standard";
+        // assume that parameters has been validated
+        int tokenLimit = DEFAULT_TOKEN_LIMIT;
+        double overlapRate = DEFAULT_OVERLAP_RATE;
+        int maxTokenCount = DEFAULT_MAX_TOKEN_COUNT;
+        String tokenizer = DEFAULT_TOKENIZER;
 
         if (parameters.containsKey(TOKEN_LIMIT)) {
             tokenLimit = ((Number) parameters.get(TOKEN_LIMIT)).intValue();
