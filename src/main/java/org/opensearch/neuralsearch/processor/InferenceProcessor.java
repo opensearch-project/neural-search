@@ -212,14 +212,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
                 String sourceKey = embeddingFieldsEntry.getKey();
                 Class<?> sourceValueClass = sourceValue.getClass();
                 if (List.class.isAssignableFrom(sourceValueClass) || Map.class.isAssignableFrom(sourceValueClass)) {
-                    if (Map.class.isAssignableFrom(embeddingFieldsEntry.getValue().getClass())) {
-                        Map<String, Object> innerFieldsEntry = (Map<String, Object>) embeddingFieldsEntry.getValue();
-                        for (Map.Entry<String, Object> innerKey : innerFieldsEntry.entrySet()) {
-                            validateNestedTypeValue(innerKey.getKey(), sourceValue, () -> 2);
-                        }
-                    } else {
-                        validateNestedTypeValue(sourceKey, sourceValue, () -> 1);
-                    }
+                    validateNestedTypeValue(sourceKey, sourceValue, () -> 1);
                 } else if (!String.class.isAssignableFrom(sourceValueClass)) {
                     throw new IllegalArgumentException("field [" + sourceKey + "] is neither string nor nested type, cannot process it");
                 } else if (StringUtils.isBlank(sourceValue.toString())) {
