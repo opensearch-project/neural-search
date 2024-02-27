@@ -5,11 +5,14 @@
 package org.opensearch.neuralsearch.plugin;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.opensearch.common.settings.Settings;
+import org.opensearch.env.Environment;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.ingest.IngestService;
 import org.opensearch.ingest.Processor;
@@ -57,8 +60,11 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
     public void testProcessors() {
         NeuralSearch plugin = new NeuralSearch();
+        Settings settings = Settings.builder().build();
+        Environment environment = mock(Environment.class);
+        when(environment.settings()).thenReturn(settings);
         Processor.Parameters processorParams = new Processor.Parameters(
-            null,
+            environment,
             null,
             null,
             null,
