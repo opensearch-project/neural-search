@@ -81,13 +81,6 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         factory = new DocumentChunkingProcessor.Factory(settings, clusterService, indicesService, getAnalysisRegistry());
     }
 
-    @SneakyThrows
-    public void testGetType() {
-        DocumentChunkingProcessor processor = createFixedTokenLengthInstance();
-        String type = processor.getType();
-        assertEquals(DocumentChunkingProcessor.TYPE, type);
-    }
-
     private Map<String, Object> createFixedTokenLengthParameters() {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(FixedTokenLengthChunker.TOKEN_LIMIT_FIELD, 10);
@@ -124,6 +117,115 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldParameters);
         Map<String, Processor.Factory> registry = new HashMap<>();
         return factory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+    }
+
+    public void testCreate_whenFieldMapEmpty_failure() {
+        Map<String, Object> config = new HashMap<>();
+        Map<String, Object> emptyFieldMap = new HashMap<>();
+        config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, emptyFieldMap);
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> factory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
+        );
+        assertEquals("Unable to create the processor as field_map is null or empty", illegalArgumentException.getMessage());
+    }
+
+    public void testCreate_whenFieldMapWithEmptyParameter_failure() {
+        Map<String, Object> config = new HashMap<>();
+        Map<String, Object> fieldMap = new HashMap<>();
+        fieldMap.put("key", null);
+        config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> factory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
+        );
+        assertEquals("parameters for input field [key] is null, cannot process it.", illegalArgumentException.getMessage());
+    }
+
+    public void testCreate_whenFieldMapWithIllegalParameterType_failure() {
+        Map<String, Object> config = new HashMap<>();
+        Map<String, Object> fieldMap = new HashMap<>();
+        fieldMap.put("key", "value");
+        config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> factory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
+        );
+        assertEquals("parameters for input field [key] cannot be cast to [java.util.Map]", illegalArgumentException.getMessage());
+    }
+
+    public void testCreate_whenFieldMapWithEmptyOutputField_failure() {
+        Map<String, Object> config = new HashMap<>();
+        Map<String, Object> fieldMap = new HashMap<>();
+        fieldMap.put(INPUT_FIELD, ImmutableMap.of());
+        config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> factory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
+        );
+        assertEquals(
+            "parameters for input field [" + INPUT_FIELD + "] misses [" + DocumentChunkingProcessor.OUTPUT_FIELD + "], cannot process it.",
+            illegalArgumentException.getMessage()
+        );
+    }
+
+    public void testCreate_whenFieldMapWithIllegalOutputField_failure() {
+        Map<String, Object> config = new HashMap<>();
+        Map<String, Object> fieldMap = new HashMap<>();
+        fieldMap.put(INPUT_FIELD, ImmutableMap.of(DocumentChunkingProcessor.OUTPUT_FIELD, 1));
+        config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> factory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
+        );
+        assertEquals(
+            "parameters for output field [output_field] cannot be cast to [java.lang.String]",
+            illegalArgumentException.getMessage()
+        );
+    }
+
+    public void testCreate_whenFieldMapWithIllegalKey_failure() {
+        Map<String, Object> config = new HashMap<>();
+        Map<Object, Object> fieldMap = new HashMap<>();
+        fieldMap.put(INPUT_FIELD, ImmutableMap.of(DocumentChunkingProcessor.OUTPUT_FIELD, OUTPUT_FIELD, 1, 1));
+        config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> factory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
+        );
+        assertEquals(
+            "found parameter entry with non-string key",
+            illegalArgumentException.getMessage()
+        );
+    }
+
+    public void testCreate_whenFieldMapWithNoAlgorithm_failure() {
+        Map<String, Object> config = new HashMap<>();
+        Map<String, Object> fieldMap = new HashMap<>();
+        fieldMap.put(INPUT_FIELD, ImmutableMap.of(DocumentChunkingProcessor.OUTPUT_FIELD, INPUT_FIELD));
+        config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> factory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
+        );
+        assertEquals(
+            "input field [" + INPUT_FIELD + "] should has and only has 1 chunking algorithm",
+            illegalArgumentException.getMessage()
+        );
+    }
+
+    @SneakyThrows
+    public void testGetType() {
+        DocumentChunkingProcessor processor = createFixedTokenLengthInstance();
+        String type = processor.getType();
+        assertEquals(DocumentChunkingProcessor.TYPE, type);
     }
 
     private String createSourceDataString() {

@@ -93,7 +93,9 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
 
             // output field must be string
             if (!(parameterMap.containsKey(OUTPUT_FIELD))) {
-                throw new IllegalArgumentException("parameters for output field [" + OUTPUT_FIELD + "] is null, cannot process it.");
+                throw new IllegalArgumentException(
+                    "parameters for input field [" + inputField + "] misses [" + OUTPUT_FIELD + "], cannot process it."
+                );
             }
 
             Object outputField = parameterMap.get(OUTPUT_FIELD);
