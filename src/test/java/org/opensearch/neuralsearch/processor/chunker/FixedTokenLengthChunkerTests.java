@@ -36,7 +36,6 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
     public void setup() {
         Settings settings = Settings.builder().put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString()).build();
         Environment environment = TestEnvironment.newEnvironment(settings);
-
         AnalysisPlugin plugin = new AnalysisPlugin() {
 
             @Override

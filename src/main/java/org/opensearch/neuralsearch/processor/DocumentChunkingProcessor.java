@@ -27,12 +27,13 @@ import org.opensearch.neuralsearch.processor.chunker.IFieldChunker;
 import org.opensearch.index.mapper.IndexFieldMapper;
 
 import static org.opensearch.ingest.ConfigurationUtils.readMap;
-import static org.opensearch.neuralsearch.processor.InferenceProcessor.FIELD_MAP_FIELD;
 
 public final class DocumentChunkingProcessor extends AbstractProcessor {
 
     public static final String TYPE = "chunking";
     public static final String OUTPUT_FIELD = "output_field";
+
+    public static final String FIELD_MAP_FIELD = "field_map";
 
     private final Map<String, Object> fieldMap;
 
@@ -129,7 +130,6 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
     private void validateContent(Object content, String inputField) {
         // content can be a map, a list of strings or a list
         if (content instanceof Map) {
-            System.out.println("map type");
             @SuppressWarnings("unchecked")
             Map<String, Object> contentMap = (Map<String, Object>) content;
             for (Map.Entry<String, Object> contentEntry : contentMap.entrySet()) {
@@ -214,7 +214,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> chunkerParameters = (Map<String, Object>) parameterEntry.getValue();
                     if (Objects.equals(parameterKey, ChunkerFactory.FIXED_LENGTH_ALGORITHM)) {
-                        // add maxTokenCount to chunker parameters
+                        // for fixed token length algorithm, add maxTokenCount to chunker parameters
                         Map<String, Object> sourceAndMetadataMap = document.getSourceAndMetadata();
                         int maxTokenCount = IndexSettings.MAX_TOKEN_COUNT_SETTING.get(settings);
                         String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
