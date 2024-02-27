@@ -40,8 +40,7 @@ public class DelimiterChunkerTests {
         String content = "a\nb\nc\nd";
         Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, "\n");
         List<String> chunkResult = chunker.chunk(content, inputParameters);
-        assertEquals(4, chunkResult.size());
-        assertEquals(7, cntLength(chunkResult));
+        assertEquals(List.of("a\n", "b\n", "c\n", "d"), chunkResult);
     }
 
     @Test
@@ -50,8 +49,7 @@ public class DelimiterChunkerTests {
         String content = "a\nb\nc\nd\n";
         Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, "\n");
         List<String> chunkResult = chunker.chunk(content, inputParameters);
-        assertEquals(4, chunkResult.size());
-        assertEquals(8, cntLength(chunkResult));
+        assertEquals(List.of("a\n", "b\n", "c\n", "d\n"), chunkResult);
     }
 
     @Test
@@ -60,8 +58,7 @@ public class DelimiterChunkerTests {
         String content = "\n";
         Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, "\n");
         List<String> chunkResult = chunker.chunk(content, inputParameters);
-        assertEquals(1, chunkResult.size());
-        assertEquals(1, cntLength(chunkResult));
+        assertEquals(List.of("\n"), chunkResult);
     }
 
     @Test
@@ -70,15 +67,25 @@ public class DelimiterChunkerTests {
         String content = "\n\n\n";
         Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, "\n");
         List<String> chunkResult = chunker.chunk(content, inputParameters);
-        assertEquals(3, chunkResult.size());
-        assertEquals(3, cntLength(chunkResult));
+        assertEquals(List.of("\n", "\n", "\n"), chunkResult);
     }
 
-    private int cntLength(List<String> outputs) {
-        int totalLength = 0;
-        for (String output : outputs) {
-            totalLength += output.length();
-        }
-        return totalLength;
+    @Test
+    public void testChunkerWithDifferentDelimiters() {
+        DelimiterChunker chunker = new DelimiterChunker();
+        String content = "a.b.cc.d.";
+        Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, ".");
+        List<String> chunkResult = chunker.chunk(content, inputParameters);
+        assertEquals(List.of("a.", "b.", "cc.", "d."), chunkResult);
     }
+
+    @Test
+    public void testChunkerWithStringDelimter() {
+        DelimiterChunker chunker = new DelimiterChunker();
+        String content = "\n\na\n\n\n";
+        Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, "\n\n");
+        List<String> chunkResult = chunker.chunk(content, inputParameters);
+        assertEquals(List.of("\n\n", "a\n\n", "\n"), chunkResult);
+    }
+
 }
