@@ -23,9 +23,9 @@ import java.util.Map;
 
 import static java.util.Collections.singletonList;
 import static java.util.Collections.singletonMap;
-import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.TOKEN_LIMIT;
-import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.OVERLAP_RATE;
-import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.TOKENIZER;
+import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.TOKEN_LIMIT_FIELD;
+import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.OVERLAP_RATE_FIELD;
+import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.TOKENIZER_FIELD;
 
 public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
 
@@ -61,7 +61,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
 
     public void testValidateParameters_whenIllegalTokenLimitType_thenFail() {
         Map<String, Object> parameters = new HashMap<>();
-        parameters.put(TOKEN_LIMIT, "invalid token limit");
+        parameters.put(TOKEN_LIMIT_FIELD, "invalid token limit");
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
             () -> FixedTokenLengthChunker.validateParameters(parameters)
@@ -71,7 +71,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
 
     public void testValidateParameters_whenIllegalTokenLimitValue_thenFail() {
         Map<String, Object> parameters = new HashMap<>();
-        parameters.put(TOKEN_LIMIT, -1);
+        parameters.put(TOKEN_LIMIT_FIELD, -1);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
             () -> FixedTokenLengthChunker.validateParameters(parameters)
@@ -81,7 +81,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
 
     public void testValidateParameters_whenIllegalOverlapRateType_thenFail() {
         Map<String, Object> parameters = new HashMap<>();
-        parameters.put(OVERLAP_RATE, "invalid overlap rate");
+        parameters.put(OVERLAP_RATE_FIELD, "invalid overlap rate");
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
             () -> FixedTokenLengthChunker.validateParameters(parameters)
@@ -91,7 +91,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
 
     public void testValidateParameters_whenIllegalOverlapRateValue_thenFail() {
         Map<String, Object> parameters = new HashMap<>();
-        parameters.put(OVERLAP_RATE, 1.0);
+        parameters.put(OVERLAP_RATE_FIELD, 1.0);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
             () -> FixedTokenLengthChunker.validateParameters(parameters)
@@ -104,7 +104,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
 
     public void testValidateParameters_whenIllegalTokenizerType_thenFail() {
         Map<String, Object> parameters = new HashMap<>();
-        parameters.put(TOKENIZER, 111);
+        parameters.put(TOKENIZER_FIELD, 111);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
             () -> FixedTokenLengthChunker.validateParameters(parameters)
@@ -114,7 +114,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
 
     public void testChunk_withTokenLimit_10() {
         Map<String, Object> parameters = new HashMap<>();
-        parameters.put(TOKEN_LIMIT, 10);
+        parameters.put(TOKEN_LIMIT_FIELD, 10);
         String content =
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
         List<String> passages = FixedTokenLengthChunker.chunk(content, parameters);
@@ -127,7 +127,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
 
     public void testChunk_withTokenLimit_20() {
         Map<String, Object> parameters = new HashMap<>();
-        parameters.put(TOKEN_LIMIT, 20);
+        parameters.put(TOKEN_LIMIT_FIELD, 20);
         String content =
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
         List<String> passages = FixedTokenLengthChunker.chunk(content, parameters);
@@ -141,8 +141,8 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
 
     public void testChunk_withOverlapRate_half() {
         Map<String, Object> parameters = new HashMap<>();
-        parameters.put(TOKEN_LIMIT, 10);
-        parameters.put(OVERLAP_RATE, 0.5);
+        parameters.put(TOKEN_LIMIT_FIELD, 10);
+        parameters.put(OVERLAP_RATE_FIELD, 0.5);
         String content =
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
         List<String> passages = FixedTokenLengthChunker.chunk(content, parameters);

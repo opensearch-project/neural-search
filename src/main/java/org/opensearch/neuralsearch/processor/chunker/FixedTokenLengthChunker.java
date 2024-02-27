@@ -19,12 +19,12 @@ import static org.opensearch.action.admin.indices.analyze.TransportAnalyzeAction
 @Log4j2
 public class FixedTokenLengthChunker implements IFieldChunker {
 
-    public static final String TOKEN_LIMIT = "token_limit";
-    public static final String OVERLAP_RATE = "overlap_rate";
+    public static final String TOKEN_LIMIT_FIELD = "token_limit";
+    public static final String OVERLAP_RATE_FIELD = "overlap_rate";
 
-    public static final String MAX_TOKEN_COUNT = "max_token_count";
+    public static final String MAX_TOKEN_COUNT_FIELD = "max_token_count";
 
-    public static final String TOKENIZER = "tokenizer";
+    public static final String TOKENIZER_FIELD = "tokenizer";
 
     // default values for each parameter
     private static final int DEFAULT_TOKEN_LIMIT = 500;
@@ -64,17 +64,17 @@ public class FixedTokenLengthChunker implements IFieldChunker {
         int maxTokenCount = DEFAULT_MAX_TOKEN_COUNT;
         String tokenizer = DEFAULT_TOKENIZER;
 
-        if (parameters.containsKey(TOKEN_LIMIT)) {
-            tokenLimit = ((Number) parameters.get(TOKEN_LIMIT)).intValue();
+        if (parameters.containsKey(TOKEN_LIMIT_FIELD)) {
+            tokenLimit = ((Number) parameters.get(TOKEN_LIMIT_FIELD)).intValue();
         }
-        if (parameters.containsKey(OVERLAP_RATE)) {
-            overlapRate = ((Number) parameters.get(OVERLAP_RATE)).doubleValue();
+        if (parameters.containsKey(OVERLAP_RATE_FIELD)) {
+            overlapRate = ((Number) parameters.get(OVERLAP_RATE_FIELD)).doubleValue();
         }
-        if (parameters.containsKey(MAX_TOKEN_COUNT)) {
-            maxTokenCount = ((Number) parameters.get(MAX_TOKEN_COUNT)).intValue();
+        if (parameters.containsKey(MAX_TOKEN_COUNT_FIELD)) {
+            maxTokenCount = ((Number) parameters.get(MAX_TOKEN_COUNT_FIELD)).intValue();
         }
-        if (parameters.containsKey(TOKENIZER)) {
-            tokenizer = (String) parameters.get(TOKENIZER);
+        if (parameters.containsKey(TOKENIZER_FIELD)) {
+            tokenizer = (String) parameters.get(TOKENIZER_FIELD);
         }
 
         List<String> tokens = tokenize(content, tokenizer, maxTokenCount);
@@ -103,34 +103,34 @@ public class FixedTokenLengthChunker implements IFieldChunker {
 
     @Override
     public void validateParameters(Map<String, Object> parameters) {
-        if (parameters.containsKey(TOKEN_LIMIT)) {
-            if (!(parameters.get(TOKEN_LIMIT) instanceof Number)) {
+        if (parameters.containsKey(TOKEN_LIMIT_FIELD)) {
+            if (!(parameters.get(TOKEN_LIMIT_FIELD) instanceof Number)) {
                 throw new IllegalArgumentException(
-                    "fixed length parameter [" + TOKEN_LIMIT + "] cannot be cast to [" + Number.class.getName() + "]"
+                    "fixed length parameter [" + TOKEN_LIMIT_FIELD + "] cannot be cast to [" + Number.class.getName() + "]"
                 );
             }
-            if (((Number) parameters.get(TOKEN_LIMIT)).intValue() <= 0) {
-                throw new IllegalArgumentException("fixed length parameter [" + TOKEN_LIMIT + "] must be positive");
+            if (((Number) parameters.get(TOKEN_LIMIT_FIELD)).intValue() <= 0) {
+                throw new IllegalArgumentException("fixed length parameter [" + TOKEN_LIMIT_FIELD + "] must be positive");
             }
         }
 
-        if (parameters.containsKey(OVERLAP_RATE)) {
-            if (!(parameters.get(OVERLAP_RATE) instanceof Number)) {
+        if (parameters.containsKey(OVERLAP_RATE_FIELD)) {
+            if (!(parameters.get(OVERLAP_RATE_FIELD) instanceof Number)) {
                 throw new IllegalArgumentException(
-                    "fixed length parameter [" + OVERLAP_RATE + "] cannot be cast to [" + Number.class.getName() + "]"
+                    "fixed length parameter [" + OVERLAP_RATE_FIELD + "] cannot be cast to [" + Number.class.getName() + "]"
                 );
             }
-            if (((Number) parameters.get(OVERLAP_RATE)).doubleValue() < 0.0
-                || ((Number) parameters.get(OVERLAP_RATE)).doubleValue() >= 1.0) {
+            if (((Number) parameters.get(OVERLAP_RATE_FIELD)).doubleValue() < 0.0
+                || ((Number) parameters.get(OVERLAP_RATE_FIELD)).doubleValue() >= 1.0) {
                 throw new IllegalArgumentException(
-                    "fixed length parameter [" + OVERLAP_RATE + "] must be between 0 and 1, 1 is not included."
+                    "fixed length parameter [" + OVERLAP_RATE_FIELD + "] must be between 0 and 1, 1 is not included."
                 );
             }
         }
 
-        if (parameters.containsKey(TOKENIZER) && !(parameters.get(TOKENIZER) instanceof String)) {
+        if (parameters.containsKey(TOKENIZER_FIELD) && !(parameters.get(TOKENIZER_FIELD) instanceof String)) {
             throw new IllegalArgumentException(
-                "fixed length parameter [" + TOKENIZER + "] cannot be cast to [" + String.class.getName() + "]"
+                "fixed length parameter [" + TOKENIZER_FIELD + "] cannot be cast to [" + String.class.getName() + "]"
             );
         }
     }

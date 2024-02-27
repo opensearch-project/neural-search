@@ -224,7 +224,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                             IndexService indexService = indicesService.indexServiceSafe(indexMetadata.getIndex());
                             maxTokenCount = indexService.getIndexSettings().getMaxTokenCount();
                         }
-                        chunkerParameters.put(FixedTokenLengthChunker.MAX_TOKEN_COUNT, maxTokenCount);
+                        chunkerParameters.put(FixedTokenLengthChunker.MAX_TOKEN_COUNT_FIELD, maxTokenCount);
                     }
                     IFieldChunker chunker = ChunkerFactory.create(parameterKey, analysisRegistry);
                     document.setFieldValue(outputField, chunk(chunker, content, chunkerParameters));
