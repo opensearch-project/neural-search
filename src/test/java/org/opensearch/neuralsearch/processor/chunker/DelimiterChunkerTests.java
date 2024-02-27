@@ -22,7 +22,7 @@ public class DelimiterChunkerTests {
         String content = "a\nb\nc\nd";
         Map<String, Object> inputParameters = Map.of("", "");
         Exception exception = assertThrows(IllegalArgumentException.class, () -> chunker.validateParameters(inputParameters));
-        Assert.assertEquals("You must contain field:" + DELIMITER_FIELD + " in your parameter", exception.getMessage());
+        Assert.assertEquals("You must contain field:" + DELIMITER_FIELD + " in your parameter.", exception.getMessage());
     }
 
     @Test
@@ -31,7 +31,16 @@ public class DelimiterChunkerTests {
         String content = "a\nb\nc\nd";
         Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, List.of(""));
         Exception exception = assertThrows(IllegalArgumentException.class, () -> chunker.validateParameters(inputParameters));
-        Assert.assertEquals("delimiter parameters: " + List.of("") + " must be string", exception.getMessage());
+        Assert.assertEquals("delimiter parameters: " + List.of("") + " must be string.", exception.getMessage());
+    }
+
+    @Test
+    public void testChunkerWithDelimiterFieldNoString() {
+        DelimiterChunker chunker = new DelimiterChunker();
+        String content = "a\nb\nc\nd";
+        Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, "");
+        Exception exception = assertThrows(IllegalArgumentException.class, () -> chunker.validateParameters(inputParameters));
+        Assert.assertEquals("delimiter parameters should not be empty.", exception.getMessage());
     }
 
     @Test

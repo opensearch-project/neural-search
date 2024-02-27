@@ -19,10 +19,12 @@ public class DelimiterChunker implements IFieldChunker {
         if (parameters.containsKey(DELIMITER_FIELD)) {
             Object delimiter = parameters.get(DELIMITER_FIELD);
             if (!(delimiter instanceof String)) {
-                throw new IllegalArgumentException("delimiter parameters: " + delimiter + " must be string");
+                throw new IllegalArgumentException("delimiter parameters: " + delimiter + " must be string.");
+            } else if (((String) delimiter).length() == 0) {
+                throw new IllegalArgumentException("delimiter parameters should not be empty.");
             }
         } else {
-            throw new IllegalArgumentException("You must contain field:" + DELIMITER_FIELD + " in your parameter");
+            throw new IllegalArgumentException("You must contain field:" + DELIMITER_FIELD + " in your parameter.");
         }
     }
 
