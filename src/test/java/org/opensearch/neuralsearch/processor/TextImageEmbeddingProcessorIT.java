@@ -62,6 +62,26 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
         }
     }
 
+    public void testEmbeddingProcessor_whenReindexingDocument_thenSuccessful() throws Exception {
+        // create a simple index and indexing data into this index.
+        String fromIndexName = "test-reindex-from";
+        createIndexWithConfiguration(fromIndexName, "{ \"settings\": { \"number_of_shards\": 1, \"number_of_replicas\": 0 } }", null);
+        String result = ingestDocument(fromIndexName, "{ \"text\": \"hello world\" }");
+        assertEquals("created", result);
+        String modelId = null;
+        try {
+            modelId = uploadModel();
+            loadModel(modelId);
+            String toIndexName = "test-reindex-to";
+            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
+            createIndexWithPipeline(toIndexName, "IndexMappings.json", PIPELINE_NAME);
+            reindex(fromIndexName, toIndexName);
+            assertEquals(1, getDocCount(toIndexName));
+        } finally {
+            wipeOfTestResources(fromIndexName, PIPELINE_NAME, modelId, null);
+        }
+    }
+
     private String uploadModel() throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
         return registerModelGroupAndUploadModel(requestBody);
