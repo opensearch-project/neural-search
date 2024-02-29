@@ -67,7 +67,10 @@ public class NeuralQueryEnricherProcessor extends AbstractProcessor implements S
     @Override
     public SearchRequest processRequest(SearchRequest searchRequest) {
         QueryBuilder queryBuilder = searchRequest.source().query();
-        queryBuilder.visit(new NeuralSearchQueryVisitor(modelId, neuralFieldDefaultIdMap));
+        /* Use null check for the case where users are using empty query body. i.e. GET /index_name/_search */
+        if (queryBuilder != null) {
+            queryBuilder.visit(new NeuralSearchQueryVisitor(modelId, neuralFieldDefaultIdMap));
+        }
         return searchRequest;
     }
 
