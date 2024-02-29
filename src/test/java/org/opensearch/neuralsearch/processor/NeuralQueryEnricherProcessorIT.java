@@ -11,7 +11,7 @@ import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
 import java.util.Collections;
 import java.util.Map;
 
-import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.http.util.EntityUtils;
 import org.junit.Before;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
