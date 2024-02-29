@@ -4,11 +4,11 @@
     {
       "chunking": {
         "field_map": {
-          "body_chunk1": {
+          "body": {
             "delimiter": {
-              "delimiter": "\n"
+              "delimiter": "."
             },
-            "output_field": "body_chunk2"
+            "output_field": "body_chunk"
           }
         }
       }

@@ -199,10 +199,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
             IllegalArgumentException.class,
             () -> factory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
         );
-        assertEquals(
-            "found parameter entry with non-string key",
-            illegalArgumentException.getMessage()
-        );
+        assertEquals("found parameter entry with non-string key", illegalArgumentException.getMessage());
     }
 
     public void testCreate_whenFieldMapWithNoAlgorithm_failure() {

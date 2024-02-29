@@ -1,0 +1,17 @@
+{
+  "description": "An example fixed token length chunker pipeline",
+  "processors" : [
+    {
+      "chunking": {
+        "field_map": {
+          "body": {
+            "fix_length": {
+              "token_limit": 10
+            },
+            "output_field": "body_chunk"
+          }
+        }
+      }
+    }
+  ]
+}
