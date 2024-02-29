@@ -17,7 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Enhancements
 ### Bug Fixes
 Fix typo for sparse encoding processor factory([#600](https://github.com/opensearch-project/neural-search/pull/600))
-Add non-null check for queryBuilder in NeuralQueryEnricherProcessor ([#618](https://github.com/opensearch-project/neural-search/pull/618))
+Add non-null check for queryBuilder in NeuralQueryEnricherProcessor ([#619](https://github.com/opensearch-project/neural-search/pull/619))
 ### Infrastructure
 ### Documentation
 ### Maintenance
