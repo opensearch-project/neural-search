@@ -28,6 +28,8 @@ public class DocumentChunkingProcessorIT extends BaseNeuralSearchIT {
 
     private static final String OUTPUT_FIELD = "body_chunk";
 
+    private static final String INTERMEDIATE_FIELD = "body_chunk_intermediate";
+
     private static final String FIXED_TOKEN_LENGTH_PIPELINE_NAME = "pipeline-document-chunking-fixed-token-length";
 
     private static final String DELIMITER_PIPELINE_NAME = "pipeline-document-chunking-delimiter";
@@ -63,7 +65,7 @@ public class DocumentChunkingProcessorIT extends BaseNeuralSearchIT {
             expectedPassages.add("This is an example document to be chunked The document");
             expectedPassages.add("The document contains a single paragraph two sentences and 24");
             expectedPassages.add("and 24 tokens by standard tokenizer in OpenSearch");
-            validateIndexIngestResults(INDEX_NAME, expectedPassages);
+            validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
         } finally {
             wipeOfTestResources(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_NAME, null, null);
         }
@@ -94,7 +96,7 @@ public class DocumentChunkingProcessorIT extends BaseNeuralSearchIT {
             expectedPassages.add(
                 " The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch."
             );
-            validateIndexIngestResults(INDEX_NAME, expectedPassages);
+            validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
         } finally {
             wipeOfTestResources(INDEX_NAME, DELIMITER_PIPELINE_NAME, null, null);
         }
@@ -111,13 +113,21 @@ public class DocumentChunkingProcessorIT extends BaseNeuralSearchIT {
             expectedPassages.add("This is an example document to be chunked");
             expectedPassages.add("The document contains a single paragraph two sentences and 24");
             expectedPassages.add("and 24 tokens by standard tokenizer in OpenSearch");
-            validateIndexIngestResults(INDEX_NAME, expectedPassages);
+            validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
+
+            expectedPassages.clear();
+            expectedPassages.add("This is an example document to be chunked.");
+            expectedPassages.add(
+                " The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch."
+            );
+            validateIndexIngestResults(INDEX_NAME, INTERMEDIATE_FIELD, expectedPassages);
+
         } finally {
             wipeOfTestResources(INDEX_NAME, CASCADE_PIPELINE_NAME, null, null);
         }
     }
 
-    private void validateIndexIngestResults(String indexName, Object expected) {
+    private void validateIndexIngestResults(String indexName, String fieldName, Object expected) {
         assertEquals(1, getDocCount(indexName));
         MatchAllQueryBuilder query = new MatchAllQueryBuilder();
         Map<String, Object> searchResults = search(indexName, query, 10);
@@ -128,8 +138,8 @@ public class DocumentChunkingProcessorIT extends BaseNeuralSearchIT {
         assert (documentSource instanceof Map);
         @SuppressWarnings("unchecked")
         Map<String, Object> documentSourceMap = (Map<String, Object>) documentSource;
-        assert (documentSourceMap).containsKey(OUTPUT_FIELD);
-        Object ingestOutputs = documentSourceMap.get(OUTPUT_FIELD);
+        assert (documentSourceMap).containsKey(fieldName);
+        Object ingestOutputs = documentSourceMap.get(fieldName);
         assertEquals(expected, ingestOutputs);
     }
 
