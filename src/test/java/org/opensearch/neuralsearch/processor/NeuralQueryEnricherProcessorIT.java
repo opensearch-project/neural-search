@@ -23,11 +23,11 @@ import org.opensearch.core.rest.RestStatus;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 
 import com.google.common.primitives.Floats;
 
 import lombok.SneakyThrows;
-import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 
 public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
 
