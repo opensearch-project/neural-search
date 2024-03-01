@@ -22,7 +22,7 @@ public class DelimiterChunker implements IFieldChunker {
             Object delimiter = parameters.get(DELIMITER_FIELD);
             if (!(delimiter instanceof String)) {
                 throw new IllegalArgumentException("delimiter parameters: " + delimiter + " must be string.");
-            } else if (((String) delimiter).length() == 0) {
+            } else if (((String) delimiter).isEmpty()) {
                 throw new IllegalArgumentException("delimiter parameters should not be empty.");
             }
         } else {
@@ -50,7 +50,6 @@ public class DelimiterChunker implements IFieldChunker {
             addChunkResult(chunkResult, maxChunkingNumber, content.substring(start, end + delimiter.length()));
             start = end + delimiter.length();
             end = content.indexOf(delimiter, start);
-
         }
 
         if (start < content.length()) {
