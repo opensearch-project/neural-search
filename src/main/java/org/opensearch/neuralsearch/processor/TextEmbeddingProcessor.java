@@ -31,9 +31,10 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
         String modelId,
         Map<String, Object> fieldMap,
         MLCommonsClientAccessor clientAccessor,
-        Environment environment
+        Environment environment,
+        ProcessorInputValidator processorInputValidator
     ) {
-        super(tag, description, TYPE, LIST_TYPE_NESTED_MAP_KEY, modelId, fieldMap, clientAccessor, environment);
+        super(tag, description, TYPE, LIST_TYPE_NESTED_MAP_KEY, modelId, fieldMap, clientAccessor, environment, processorInputValidator);
     }
 
     @Override
@@ -44,7 +45,7 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
         BiConsumer<IngestDocument, Exception> handler
     ) {
         mlCommonsClientAccessor.inferenceSentences(this.modelId, inferenceList, ActionListener.wrap(vectors -> {
-            setVectorFieldsToDocument(ingestDocument, ProcessMap, vectors);
+            setTargetFieldsToDocument(ingestDocument, ProcessMap, vectors);
             handler.accept(ingestDocument, null);
         }, e -> { handler.accept(null, e); }));
     }

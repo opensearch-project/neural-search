@@ -32,9 +32,10 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         String modelId,
         Map<String, Object> fieldMap,
         MLCommonsClientAccessor clientAccessor,
-        Environment environment
+        Environment environment,
+        ProcessorInputValidator processorInputValidator
     ) {
-        super(tag, description, TYPE, LIST_TYPE_NESTED_MAP_KEY, modelId, fieldMap, clientAccessor, environment);
+        super(tag, description, TYPE, LIST_TYPE_NESTED_MAP_KEY, modelId, fieldMap, clientAccessor, environment, processorInputValidator);
     }
 
     @Override
@@ -45,7 +46,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         BiConsumer<IngestDocument, Exception> handler
     ) {
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(this.modelId, inferenceList, ActionListener.wrap(resultMaps -> {
-            setVectorFieldsToDocument(ingestDocument, ProcessMap, TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps));
+            setTargetFieldsToDocument(ingestDocument, ProcessMap, TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps));
             handler.accept(ingestDocument, null);
         }, e -> { handler.accept(null, e); }));
     }
