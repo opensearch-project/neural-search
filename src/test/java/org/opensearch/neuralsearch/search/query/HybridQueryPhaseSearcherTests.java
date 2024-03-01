@@ -159,7 +159,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         releaseResources(directory, w, reader);
 
-        verify(hybridQueryPhaseSearcher, atLeastOnce()).searchWithCollector(any(), any(), any(), any(), anyBoolean(), anyBoolean());
+        verify(hybridQueryPhaseSearcher, atLeastOnce()).searchWith(any(), any(), any(), any(), anyBoolean(), anyBoolean());
     }
 
     @SneakyThrows
@@ -226,7 +226,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         releaseResources(directory, w, reader);
 
-        verify(hybridQueryPhaseSearcher, never()).searchWithCollector(any(), any(), any(), any(), anyBoolean(), anyBoolean());
+        verify(hybridQueryPhaseSearcher, never()).searchWith(any(), any(), any(), any(), anyBoolean(), anyBoolean());
     }
 
     @SneakyThrows
