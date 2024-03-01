@@ -22,7 +22,7 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
         String content = "a\nb\nc\nd";
         Map<String, Object> inputParameters = Map.of("", "");
         Exception exception = assertThrows(IllegalArgumentException.class, () -> chunker.validateParameters(inputParameters));
-        Assert.assertEquals("You must contain field:" + DELIMITER_FIELD + " in your parameter.", exception.getMessage());
+        Assert.assertEquals("You must contain field: " + DELIMITER_FIELD + " in your parameter.", exception.getMessage());
     }
 
     public void testChunkerWithWrongLimitFieldList() {

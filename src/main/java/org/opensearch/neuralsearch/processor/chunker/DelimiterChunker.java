@@ -26,7 +26,7 @@ public class DelimiterChunker implements IFieldChunker {
                 throw new IllegalArgumentException("delimiter parameters should not be empty.");
             }
         } else {
-            throw new IllegalArgumentException("You must contain field:" + DELIMITER_FIELD + " in your parameter.");
+            throw new IllegalArgumentException("You must contain field: " + DELIMITER_FIELD + " in your parameter.");
         }
         if (parameters.containsKey(MAX_CHUNK_LIMIT_FIELD)) {
             Object maxChunkLimit = parameters.get(MAX_CHUNK_LIMIT_FIELD);
