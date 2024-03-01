@@ -10,6 +10,9 @@
           "favorites": {
             "game": "game_knn",
             "movie": "movie_knn"
+          },
+          "nested_passages": {
+            "text": "embedding"
           }
         }
       }
