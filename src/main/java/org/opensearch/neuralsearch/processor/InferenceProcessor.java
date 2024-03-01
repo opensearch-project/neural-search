@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import org.apache.commons.lang3.StringUtils;
@@ -173,13 +174,28 @@ public abstract class InferenceProcessor extends AbstractProcessor {
         if (processorKey == null || sourceAndMetadataMap == null) return;
         if (processorKey instanceof Map) {
             Map<String, Object> next = new LinkedHashMap<>();
-            for (Map.Entry<String, Object> nestedFieldMapEntry : ((Map<String, Object>) processorKey).entrySet()) {
-                buildMapWithProcessorKeyAndOriginalValueForMapType(
-                    nestedFieldMapEntry.getKey(),
-                    nestedFieldMapEntry.getValue(),
-                    (Map<String, Object>) sourceAndMetadataMap.get(parentKey),
-                    next
-                );
+            if (sourceAndMetadataMap.get(parentKey) instanceof Map) {
+                for (Map.Entry<String, Object> nestedFieldMapEntry : ((Map<String, Object>) processorKey).entrySet()) {
+                    buildMapWithProcessorKeyAndOriginalValueForMapType(
+                        nestedFieldMapEntry.getKey(),
+                        nestedFieldMapEntry.getValue(),
+                        (Map<String, Object>) sourceAndMetadataMap.get(parentKey),
+                        next
+                    );
+                }
+            } else if (sourceAndMetadataMap.get(parentKey) instanceof List) {
+                for (Map.Entry<String, Object> nestedFieldMapEntry : ((Map<String, Object>) processorKey).entrySet()) {
+                    List<Map<String, Object>> list = (List<Map<String, Object>>) sourceAndMetadataMap.get(parentKey);
+                    List<Object> listOfStrings = list.stream().map(x -> x.get(nestedFieldMapEntry.getKey())).collect(Collectors.toList());
+                    Map<String, Object> map = new LinkedHashMap<>();
+                    map.put(nestedFieldMapEntry.getKey(), listOfStrings);
+                    buildMapWithProcessorKeyAndOriginalValueForMapType(
+                        nestedFieldMapEntry.getKey(),
+                        nestedFieldMapEntry.getValue(),
+                        map,
+                        next
+                    );
+                }
             }
             treeRes.put(parentKey, next);
         } else {
@@ -212,7 +228,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
         if (maxDepth > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())) {
             throw new IllegalArgumentException("map type field [" + sourceKey + "] reached max depth limit, cannot process it");
         } else if ((List.class.isAssignableFrom(sourceValue.getClass()))) {
-            validateListTypeValue(sourceKey, sourceValue);
+            validateListTypeValue(sourceKey, sourceValue, maxDepthSupplier);
         } else if (Map.class.isAssignableFrom(sourceValue.getClass())) {
             ((Map) sourceValue).values()
                 .stream()
@@ -226,9 +242,11 @@ public abstract class InferenceProcessor extends AbstractProcessor {
     }
 
     @SuppressWarnings({ "rawtypes" })
-    private void validateListTypeValue(String sourceKey, Object sourceValue) {
+    private void validateListTypeValue(String sourceKey, Object sourceValue, Supplier<Integer> maxDepthSupplier) {
         for (Object value : (List) sourceValue) {
-            if (value == null) {
+            if (value instanceof Map) {
+                validateNestedTypeValue(sourceKey, value, () -> maxDepthSupplier.get() + 1);
+            } else if (value == null) {
                 throw new IllegalArgumentException("list type field [" + sourceKey + "] has null, cannot process it");
             } else if (!(value instanceof String)) {
                 throw new IllegalArgumentException("list type field [" + sourceKey + "] has non string value, cannot process it");
@@ -275,13 +293,20 @@ public abstract class InferenceProcessor extends AbstractProcessor {
         if (processorKey == null || sourceAndMetadataMap == null || sourceValue == null) return;
         if (sourceValue instanceof Map) {
             for (Map.Entry<String, Object> inputNestedMapEntry : ((Map<String, Object>) sourceValue).entrySet()) {
-                putNLPResultToSourceMapForMapType(
-                    inputNestedMapEntry.getKey(),
-                    inputNestedMapEntry.getValue(),
-                    results,
-                    indexWrapper,
-                    (Map<String, Object>) sourceAndMetadataMap.get(processorKey)
-                );
+                if (sourceAndMetadataMap.get(processorKey) instanceof List) {
+                    // build nlp output for list of nested objects
+                    for (Map<String, Object> nestedElement : (List<Map<String, Object>>) sourceAndMetadataMap.get(processorKey)) {
+                        nestedElement.put(inputNestedMapEntry.getKey(), results.get(indexWrapper.index++));
+                    }
+                } else {
+                    putNLPResultToSourceMapForMapType(
+                        inputNestedMapEntry.getKey(),
+                        inputNestedMapEntry.getValue(),
+                        results,
+                        indexWrapper,
+                        (Map<String, Object>) sourceAndMetadataMap.get(processorKey)
+                    );
+                }
             }
         } else if (sourceValue instanceof String) {
             sourceAndMetadataMap.put(processorKey, results.get(indexWrapper.index++));
