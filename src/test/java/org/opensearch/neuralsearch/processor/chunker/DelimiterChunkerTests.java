@@ -13,6 +13,7 @@ import java.util.Map;
 import static junit.framework.TestCase.assertEquals;
 import static org.junit.Assert.assertThrows;
 import static org.opensearch.neuralsearch.processor.chunker.DelimiterChunker.DELIMITER_FIELD;
+import static org.opensearch.neuralsearch.processor.chunker.DelimiterChunker.MAX_CHUNK_LIMIT_FIELD;
 
 public class DelimiterChunkerTests extends OpenSearchTestCase {
 
@@ -22,6 +23,22 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
         Map<String, Object> inputParameters = Map.of("", "");
         Exception exception = assertThrows(IllegalArgumentException.class, () -> chunker.validateParameters(inputParameters));
         Assert.assertEquals("You must contain field:" + DELIMITER_FIELD + " in your parameter.", exception.getMessage());
+    }
+
+    public void testChunkerWithWrongLimitFieldList() {
+        DelimiterChunker chunker = new DelimiterChunker();
+        String content = "a\nb\nc\nd";
+        Map<String, Object> inputParameters = Map.of(MAX_CHUNK_LIMIT_FIELD, List.of("-1"), DELIMITER_FIELD, "\n");
+        Exception exception = assertThrows(IllegalArgumentException.class, () -> chunker.validateParameters(inputParameters));
+        Assert.assertEquals("Parameter max_chunk_limit:" + List.of("-1") + " cannot be converted to integer.", exception.getMessage());
+    }
+
+    public void testChunkerWithWrongLimitField() {
+        DelimiterChunker chunker = new DelimiterChunker();
+        String content = "a\nb\nc\nd";
+        Map<String, Object> inputParameters = Map.of(MAX_CHUNK_LIMIT_FIELD, "1000\n", DELIMITER_FIELD, "\n");
+        Exception exception = assertThrows(IllegalArgumentException.class, () -> chunker.validateParameters(inputParameters));
+        Assert.assertEquals("Parameter max_chunk_limit:1000\n cannot be converted to integer.", exception.getMessage());
     }
 
     public void testChunkerWithDelimiterFieldNotString() {
@@ -38,6 +55,14 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
         Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, "");
         Exception exception = assertThrows(IllegalArgumentException.class, () -> chunker.validateParameters(inputParameters));
         Assert.assertEquals("delimiter parameters should not be empty.", exception.getMessage());
+    }
+
+    public void testChunkerWithLimitNumber() {
+        DelimiterChunker chunker = new DelimiterChunker();
+        String content = "a\nb\nc\nd";
+        Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, "\n", MAX_CHUNK_LIMIT_FIELD, "1");
+        Exception exception = assertThrows(IllegalArgumentException.class, () -> chunker.chunk(content, inputParameters));
+        Assert.assertEquals("Exceed max chunk number: 1", exception.getMessage());
     }
 
     public void testChunker() {
