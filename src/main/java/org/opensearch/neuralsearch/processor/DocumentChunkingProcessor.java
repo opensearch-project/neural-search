@@ -10,17 +10,18 @@ import java.util.Set;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.env.Environment;
 import org.opensearch.index.IndexService;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.Processor;
-import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.neuralsearch.processor.chunker.IFieldChunker;
@@ -28,14 +29,16 @@ import org.opensearch.index.mapper.IndexFieldMapper;
 
 import static org.opensearch.ingest.ConfigurationUtils.readMap;
 
-public final class DocumentChunkingProcessor extends AbstractProcessor {
+public final class DocumentChunkingProcessor extends InferenceProcessor {
 
     public static final String TYPE = "chunking";
     public static final String OUTPUT_FIELD = "output_field";
 
     public static final String FIELD_MAP_FIELD = "field_map";
 
-    private final Map<String, Object> fieldMap;
+    public static final String LIST_TYPE_NESTED_MAP_KEY = "chunking";
+
+    private final Map<String, Object> originalFieldMap;
 
     private final Set<String> supportedChunkers = ChunkerFactory.getAllChunkers();
 
@@ -54,11 +57,11 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
         Settings settings,
         ClusterService clusterService,
         IndicesService indicesService,
-        AnalysisRegistry analysisRegistry
+        AnalysisRegistry analysisRegistry,
+        Environment environment
     ) {
-        super(tag, description);
-        validateDocumentChunkingFieldMap(fieldMap);
-        this.fieldMap = fieldMap;
+        super(tag, description, TYPE, LIST_TYPE_NESTED_MAP_KEY, "", tranferFieldMap(fieldMap), null, environment);
+        this.originalFieldMap = fieldMap;
         this.settings = settings;
         this.clusterService = clusterService;
         this.indicesService = indicesService;
@@ -67,105 +70,6 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
 
     public String getType() {
         return TYPE;
-    }
-
-    @SuppressWarnings("unchecked")
-    private void validateDocumentChunkingFieldMap(Map<String, Object> fieldMap) {
-        if (fieldMap == null || fieldMap.isEmpty()) {
-            throw new IllegalArgumentException("Unable to create the processor as field_map is null or empty");
-        }
-
-        for (Map.Entry<String, Object> fieldMapEntry : fieldMap.entrySet()) {
-            String inputField = fieldMapEntry.getKey();
-            Object parameters = fieldMapEntry.getValue();
-
-            if (parameters == null) {
-                throw new IllegalArgumentException("parameters for input field [" + inputField + "] is null, cannot process it.");
-            }
-
-            if (!(parameters instanceof Map)) {
-                throw new IllegalArgumentException(
-                    "parameters for input field [" + inputField + "] cannot be cast to [" + Map.class.getName() + "]"
-                );
-            }
-
-            Map<String, Object> parameterMap = (Map<String, Object>) parameters;
-
-            // output field must be string
-            if (!(parameterMap.containsKey(OUTPUT_FIELD))) {
-                throw new IllegalArgumentException(
-                    "parameters for input field [" + inputField + "] misses [" + OUTPUT_FIELD + "], cannot process it."
-                );
-            }
-
-            Object outputField = parameterMap.get(OUTPUT_FIELD);
-
-            if (!(outputField instanceof String)) {
-                throw new IllegalArgumentException(
-                    "parameters for output field [" + OUTPUT_FIELD + "] cannot be cast to [" + String.class.getName() + "]"
-                );
-            }
-
-            // check non string parameters
-            int chunkingAlgorithmCount = 0;
-            Map<String, Object> chunkerParameters;
-            for (Map.Entry<?, ?> parameterEntry : parameterMap.entrySet()) {
-                if (!(parameterEntry.getKey() instanceof String)) {
-                    throw new IllegalArgumentException("found parameter entry with non-string key");
-                }
-                String parameterKey = (String) parameterEntry.getKey();
-                if (supportedChunkers.contains(parameterKey)) {
-                    chunkingAlgorithmCount += 1;
-                    chunkerParameters = (Map<String, Object>) parameterEntry.getValue();
-                    IFieldChunker chunker = ChunkerFactory.create(parameterKey, analysisRegistry);
-                    chunker.validateParameters(chunkerParameters);
-                }
-            }
-
-            // should only define one algorithm
-            if (chunkingAlgorithmCount != 1) {
-                throw new IllegalArgumentException("input field [" + inputField + "] should has and only has 1 chunking algorithm");
-            }
-        }
-    }
-
-    private void validateContent(Object content, String inputField) {
-        // content can be a map, a list of strings or a list
-        if (content instanceof Map) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> contentMap = (Map<String, Object>) content;
-            for (Map.Entry<String, Object> contentEntry : contentMap.entrySet()) {
-                String contentKey = contentEntry.getKey();
-                Object contentValue = contentEntry.getValue();
-                // the map value can also be a map, list or string
-                validateContent(contentValue, inputField + "." + contentKey);
-            }
-        } else if (content instanceof List) {
-            List<?> contentList = (List<?>) content;
-            for (Object contentElement : contentList) {
-                if (!(contentElement instanceof String)) {
-                    throw new IllegalArgumentException(
-                        "some element in input field list ["
-                            + inputField
-                            + "] of type ["
-                            + contentElement.getClass().getName()
-                            + "] cannot be cast to ["
-                            + String.class.getName()
-                            + "]"
-                    );
-                }
-            }
-        } else if (!(content instanceof String)) {
-            throw new IllegalArgumentException(
-                "input field ["
-                    + inputField
-                    + "] of type ["
-                    + content.getClass().getName()
-                    + "] cannot be cast to ["
-                    + String.class.getName()
-                    + "]"
-            );
-        }
     }
 
     private Object chunk(IFieldChunker chunker, Object content, Map<String, Object> chunkerParameters) {
@@ -192,17 +96,32 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
         }
     }
 
+    private static Map<String, Object> tranferFieldMap(Map<String, Object> orignalMap) {
+        // The original map should be
+        Map<String, Object> transferFieldMap = new HashMap<>();
+        Map<String, Object> tmpParameters = (Map<String, Object>) orignalMap.entrySet().iterator().next().getValue();
+        String inputField = orignalMap.entrySet().iterator().next().getKey();
+        Object outputField = tmpParameters.get(OUTPUT_FIELD);
+        transferFieldMap.put(inputField, outputField);
+        return transferFieldMap;
+    }
+
     @Override
-    public IngestDocument execute(IngestDocument document) {
-        for (Map.Entry<String, Object> fieldMapEntry : fieldMap.entrySet()) {
+    public void doExecute(
+        IngestDocument ingestDocument,
+        Map<String, Object> ProcessMap,
+        List<String> inferenceList,
+        BiConsumer<IngestDocument, Exception> handler
+    ) {
+        List<Object> results = new ArrayList<>();
+        for (Map.Entry<String, Object> fieldMapEntry : originalFieldMap.entrySet()) {
             String inputField = fieldMapEntry.getKey();
-            Object content = document.getFieldValue(inputField, Object.class);
+            Object content = ingestDocument.getFieldValue(inputField, Object.class);
 
             if (content == null) {
                 throw new IllegalArgumentException("input field in document [" + inputField + "] is null, cannot process it.");
             }
 
-            validateContent(content, inputField);
 
             @SuppressWarnings("unchecked")
             Map<String, Object> parameters = (Map<String, Object>) fieldMapEntry.getValue();
@@ -217,7 +136,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                     Map<String, Object> chunkerParameters = (Map<String, Object>) parameterEntry.getValue();
                     if (Objects.equals(parameterKey, ChunkerFactory.FIXED_LENGTH_ALGORITHM)) {
                         // for fixed token length algorithm, add maxTokenCount to chunker parameters
-                        Map<String, Object> sourceAndMetadataMap = document.getSourceAndMetadata();
+                        Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
                         int maxTokenCount = IndexSettings.MAX_TOKEN_COUNT_SETTING.get(settings);
                         String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
                         IndexMetadata indexMetadata = clusterService.state().metadata().index(indexName);
@@ -229,11 +148,17 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                         chunkerParameters.put(FixedTokenLengthChunker.MAX_TOKEN_COUNT_FIELD, maxTokenCount);
                     }
                     IFieldChunker chunker = ChunkerFactory.create(parameterKey, analysisRegistry);
-                    document.setFieldValue(outputField, chunk(chunker, content, chunkerParameters));
+                    results.add(chunk(chunker, content, chunkerParameters));
                 }
             }
         }
-        return document;
+        try {
+            setTargetFieldsToDocument(ingestDocument, ProcessMap, results);
+            handler.accept(ingestDocument, null);
+        } catch (Exception exception) {
+            handler.accept(null, exception);
+        }
+
     }
 
     public static class Factory implements Processor.Factory {
@@ -244,13 +169,22 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
 
         private final IndicesService indicesService;
 
+        private final Environment environment;
+
         private final AnalysisRegistry analysisRegistry;
 
-        public Factory(Settings settings, ClusterService clusterService, IndicesService indicesService, AnalysisRegistry analysisRegistry) {
+        public Factory(
+            Settings settings,
+            ClusterService clusterService,
+            IndicesService indicesService,
+            AnalysisRegistry analysisRegistry,
+            Environment environment
+        ) {
             this.settings = settings;
             this.clusterService = clusterService;
             this.indicesService = indicesService;
             this.analysisRegistry = analysisRegistry;
+            this.environment = environment;
         }
 
         @Override
@@ -268,7 +202,8 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                 settings,
                 clusterService,
                 indicesService,
-                analysisRegistry
+                analysisRegistry,
+                environment
             );
         }
 
