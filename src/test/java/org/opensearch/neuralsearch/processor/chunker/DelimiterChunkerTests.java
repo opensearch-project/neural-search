@@ -30,7 +30,7 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
         String content = "a\nb\nc\nd";
         Map<String, Object> inputParameters = Map.of(MAX_CHUNK_LIMIT_FIELD, List.of("-1"), DELIMITER_FIELD, "\n");
         Exception exception = assertThrows(IllegalArgumentException.class, () -> chunker.validateParameters(inputParameters));
-        Assert.assertEquals("Parameter max_chunk_limit:" + List.of("-1") + " cannot be converted to integer.", exception.getMessage());
+        Assert.assertEquals("Parameter max_chunk_limit:" + List.of("-1") + " should be integer.", exception.getMessage());
     }
 
     public void testChunkerWithWrongLimitField() {
@@ -38,7 +38,15 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
         String content = "a\nb\nc\nd";
         Map<String, Object> inputParameters = Map.of(MAX_CHUNK_LIMIT_FIELD, "1000\n", DELIMITER_FIELD, "\n");
         Exception exception = assertThrows(IllegalArgumentException.class, () -> chunker.validateParameters(inputParameters));
-        Assert.assertEquals("Parameter max_chunk_limit:1000\n cannot be converted to integer.", exception.getMessage());
+        Assert.assertEquals("Parameter max_chunk_limit:1000\n should be integer.", exception.getMessage());
+    }
+
+    public void testChunkerWithNegativeLimit() {
+        DelimiterChunker chunker = new DelimiterChunker();
+        String content = "a\nb\nc\nd";
+        Map<String, Object> inputParameters = Map.of(MAX_CHUNK_LIMIT_FIELD, -1, DELIMITER_FIELD, "\n");
+        Exception exception = assertThrows(IllegalArgumentException.class, () -> chunker.validateParameters(inputParameters));
+        Assert.assertEquals("Parameter max_chunk_limit:-1 is not greater than 0.", exception.getMessage());
     }
 
     public void testChunkerWithDelimiterFieldNotString() {

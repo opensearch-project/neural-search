@@ -31,9 +31,9 @@ public class DelimiterChunker implements IFieldChunker {
         if (parameters.containsKey(MAX_CHUNK_LIMIT_FIELD)) {
             Object maxChunkLimit = parameters.get(MAX_CHUNK_LIMIT_FIELD);
             if (!(maxChunkLimit instanceof Integer)) {
-                throw new IllegalArgumentException(
-                    "Parameter max_chunk_limit:" + maxChunkLimit.toString() + " cannot be converted to integer."
-                );
+                throw new IllegalArgumentException("Parameter max_chunk_limit:" + maxChunkLimit.toString() + " should be integer.");
+            } else if ((int) maxChunkLimit <= 0) {
+                throw new IllegalArgumentException("Parameter max_chunk_limit:" + maxChunkLimit + " is not greater than 0.");
             }
         }
     }
@@ -41,7 +41,7 @@ public class DelimiterChunker implements IFieldChunker {
     @Override
     public List<String> chunk(String content, Map<String, Object> parameters) {
         String delimiter = (String) parameters.get(DELIMITER_FIELD);
-        int maxChunkingNumber = (int) parameters.getOrDefault(MAX_CHUNK_LIMIT_FIELD, 0);
+        int maxChunkingNumber = (int) parameters.getOrDefault(MAX_CHUNK_LIMIT_FIELD, -1);
         List<String> chunkResult = new ArrayList<>();
         int start = 0;
         int end = content.indexOf(delimiter);
