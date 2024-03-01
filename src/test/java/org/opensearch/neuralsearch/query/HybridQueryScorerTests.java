@@ -219,12 +219,7 @@ public class HybridQueryScorerTests extends OpenSearchQueryTestCase {
         when(scorer.iterator()).thenReturn(iterator(docs));
         when(scorer.getMaxScore(anyInt())).thenThrow(new IOException("Test exception"));
 
-        HybridQueryScorer hybridQueryScorerWithAllNonNullSubScorers = new HybridQueryScorer(weight, Arrays.asList(scorer));
-
-        RuntimeException runtimeException = expectThrows(
-            RuntimeException.class,
-            () -> hybridQueryScorerWithAllNonNullSubScorers.getMaxScore(Integer.MAX_VALUE)
-        );
+        IOException runtimeException = expectThrows(IOException.class, () -> new HybridQueryScorer(weight, Arrays.asList(scorer)));
         assertTrue(runtimeException.getMessage().contains("Test exception"));
     }
 

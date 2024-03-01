@@ -5,10 +5,12 @@
 package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import lombok.RequiredArgsConstructor;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.IndexSearcher;
@@ -16,6 +18,7 @@ import org.apache.lucene.search.Matches;
 import org.apache.lucene.search.MatchesUtils;
 import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Scorer;
+import org.apache.lucene.search.ScorerSupplier;
 import org.apache.lucene.search.Weight;
 
 /**
@@ -23,18 +26,18 @@ import org.apache.lucene.search.Weight;
  */
 public final class HybridQueryWeight extends Weight {
 
-    private final HybridQuery queries;
     // The Weights for our subqueries, in 1-1 correspondence
     private final List<Weight> weights;
 
     private final ScoreMode scoreMode;
+
+    static final int BOOLEAN_REWRITE_TERM_COUNT_THRESHOLD = 16;
 
     /**
      * Construct the Weight for this Query searched by searcher. Recursively construct subquery weights.
      */
     public HybridQueryWeight(HybridQuery hybridQuery, IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
         super(hybridQuery);
-        this.queries = hybridQuery;
         weights = hybridQuery.getSubQueries().stream().map(q -> {
             try {
                 return searcher.createWeight(q, scoreMode, boost);
@@ -65,6 +68,20 @@ public final class HybridQueryWeight extends Weight {
         return MatchesUtils.fromSubMatches(mis);
     }
 
+    @Override
+    public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
+        List<ScorerSupplier> scorerSuppliers = new ArrayList<>();
+        for (Weight w : weights) {
+            ScorerSupplier ss = w.scorerSupplier(context);
+            scorerSuppliers.add(ss);
+        }
+
+        if (scorerSuppliers.isEmpty()) {
+            return null;
+        }
+        return new HybridScorerSupplier(scorerSuppliers, this, scoreMode);
+    }
+
     /**
      * Create the scorer used to score our associated Query
      *
@@ -75,19 +92,12 @@ public final class HybridQueryWeight extends Weight {
      */
     @Override
     public Scorer scorer(LeafReaderContext context) throws IOException {
-        List<Scorer> scorers = weights.stream().map(w -> {
-            try {
-                return w.scorer(context);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }).collect(Collectors.toList());
-        // if there are no matches in any of the scorers (sub-queries) we need to return
-        // scorer as null to avoid problems with disi result iterators
-        if (scorers.stream().allMatch(Objects::isNull)) {
+        ScorerSupplier supplier = scorerSupplier(context);
+        if (supplier == null) {
             return null;
         }
-        return new HybridQueryScorer(this, scorers);
+        supplier.setTopLevelScoringClause();
+        return supplier.get(Long.MAX_VALUE);
     }
 
     /**
@@ -98,6 +108,11 @@ public final class HybridQueryWeight extends Weight {
      */
     @Override
     public boolean isCacheable(LeafReaderContext ctx) {
+        if (weights.size() > BOOLEAN_REWRITE_TERM_COUNT_THRESHOLD) {
+            // Disallow caching large queries to not encourage users
+            // to build large queries
+            return false;
+        }
         return weights.stream().allMatch(w -> w.isCacheable(ctx));
     }
 
@@ -113,4 +128,50 @@ public final class HybridQueryWeight extends Weight {
     public Explanation explain(LeafReaderContext context, int doc) throws IOException {
         throw new UnsupportedOperationException("Explain is not supported");
     }
+
+    @RequiredArgsConstructor
+    static class HybridScorerSupplier extends ScorerSupplier {
+        private long cost = -1;
+        private final List<ScorerSupplier> scorerSuppliers;
+        private final Weight weight;
+        private final ScoreMode scoreMode;
+
+        @Override
+        public Scorer get(long leadCost) throws IOException {
+            List<Scorer> tScorers = new ArrayList<>();
+            for (ScorerSupplier ss : scorerSuppliers) {
+                if (Objects.nonNull(ss)) {
+                    tScorers.add(ss.get(leadCost));
+                } else {
+                    tScorers.add(null);
+                }
+            }
+            return new HybridQueryScorer(weight, tScorers, scoreMode);
+        }
+
+        @Override
+        public long cost() {
+            if (cost == -1) {
+                long cost = 0;
+                for (ScorerSupplier ss : scorerSuppliers) {
+                    if (Objects.nonNull(ss)) {
+                        cost += ss.cost();
+                    }
+                }
+                this.cost = cost;
+            }
+            return cost;
+        }
+
+        @Override
+        public void setTopLevelScoringClause() throws IOException {
+            for (ScorerSupplier ss : scorerSuppliers) {
+                // sub scorers need to be able to skip too as calls to setMinCompetitiveScore get
+                // propagated
+                if (Objects.nonNull(ss)) {
+                    ss.setTopLevelScoringClause();
+                }
+            }
+        }
+    };
 }
