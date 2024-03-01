@@ -107,8 +107,8 @@ public class FixedTokenLengthChunker implements IFieldChunker {
     }
 
     private void addPassageToList(List<String> passages, String passage, int maxChunkLimit) {
-        if (maxChunkLimit != DEFAULT_MAX_CHUNK_LIMIT && passages.size() + 1 >= maxChunkLimit) {
-            throw new IllegalArgumentException("Exceed max chunk number: " + maxChunkLimit);
+        if (maxChunkLimit != DEFAULT_MAX_CHUNK_LIMIT && passages.size() >= maxChunkLimit) {
+            throw new IllegalStateException("Exceed max chunk number: " + maxChunkLimit);
         }
         passages.add(passage);
     }
@@ -116,9 +116,13 @@ public class FixedTokenLengthChunker implements IFieldChunker {
     private void validatePositiveIntegerParameter(Map<String, Object> parameters, String fieldName) {
         // this method validate that parameter is a positive integer
         // this method accepts positive float or double number
+        if (!parameters.containsKey(fieldName)) {
+            // all parameters are optional
+            return;
+        }
         if (!(parameters.get(fieldName) instanceof Number)) {
             throw new IllegalArgumentException(
-                    "fixed length parameter [" + fieldName + "] cannot be cast to [" + Number.class.getName() + "]"
+                "fixed length parameter [" + fieldName + "] cannot be cast to [" + Number.class.getName() + "]"
             );
         }
         if (((Number) parameters.get(fieldName)).intValue() <= 0) {

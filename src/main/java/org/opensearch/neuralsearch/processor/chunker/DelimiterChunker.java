@@ -61,7 +61,7 @@ public class DelimiterChunker implements IFieldChunker {
 
     private void addChunkResult(List<String> chunkResult, int maxChunkingNumber, String candidate) {
         if (chunkResult.size() >= maxChunkingNumber && maxChunkingNumber > 0) {
-            throw new IllegalArgumentException("Exceed max chunk number: " + maxChunkingNumber);
+            throw new IllegalStateException("Exceed max chunk number: " + maxChunkingNumber);
         }
         chunkResult.add(candidate);
     }
