@@ -11,8 +11,14 @@ import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
 import java.util.Collections;
 import java.util.Map;
 
+import org.apache.http.util.EntityUtils;
 import org.junit.Before;
+import org.opensearch.client.Request;
+import org.opensearch.client.Response;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.common.xcontent.XContentHelper;
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.core.rest.RestStatus;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
@@ -50,6 +56,27 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
             neuralQueryBuilder.k(1);
             Map<String, Object> response = search(index, neuralQueryBuilder, 2);
             assertFalse(response.isEmpty());
+        } finally {
+            wipeOfTestResources(index, ingest_pipeline, modelId, search_pipeline);
+        }
+    }
+
+    @SneakyThrows
+    public void testNeuralQueryEnricherProcessor_whenGetEmptyQueryBody_thenSuccess() {
+        String modelId = null;
+        try {
+            initializeIndexIfNotExist(index);
+            modelId = prepareModel();
+            createSearchRequestProcessor(modelId, search_pipeline);
+            createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
+            updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
+            Request request = new Request("POST", "/" + index + "/_search");
+            Response response = client().performRequest(request);
+            assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+            String responseBody = EntityUtils.toString(response.getEntity());
+            Map<String, Object> responseInMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
+            assertFalse(responseInMap.isEmpty());
+            assertEquals(3, ((Map) responseInMap.get("hits")).size());
         } finally {
             wipeOfTestResources(index, ingest_pipeline, modelId, search_pipeline);
         }
