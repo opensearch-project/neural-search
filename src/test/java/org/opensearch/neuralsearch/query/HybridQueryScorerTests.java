@@ -21,6 +21,7 @@ import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Scorer;
+import org.apache.lucene.search.TwoPhaseIterator;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.tests.util.TestUtil;
 
@@ -221,6 +222,99 @@ public class HybridQueryScorerTests extends OpenSearchQueryTestCase {
 
         IOException runtimeException = expectThrows(IOException.class, () -> new HybridQueryScorer(weight, Arrays.asList(scorer)));
         assertTrue(runtimeException.getMessage().contains("Test exception"));
+    }
+
+    @SneakyThrows
+    public void testApproximationIterator_whenSubScorerSupportsApproximation_thenSuccessful() {
+        final int maxDoc = TestUtil.nextInt(random(), 10, 1_000);
+        final int numDocs = TestUtil.nextInt(random(), 1, maxDoc / 2);
+        final Set<Integer> uniqueDocs = new HashSet<>();
+        while (uniqueDocs.size() < numDocs) {
+            uniqueDocs.add(random().nextInt(maxDoc));
+        }
+        final int[] docs = new int[numDocs];
+        int i = 0;
+        for (int doc : uniqueDocs) {
+            docs[i++] = doc;
+        }
+        Arrays.sort(docs);
+        final float[] scores1 = new float[numDocs];
+        for (i = 0; i < numDocs; ++i) {
+            scores1[i] = random().nextFloat();
+        }
+        final float[] scores2 = new float[numDocs];
+        for (i = 0; i < numDocs; ++i) {
+            scores2[i] = random().nextFloat();
+        }
+
+        Weight weight = mock(Weight.class);
+
+        HybridQueryScorer queryScorer = new HybridQueryScorer(
+            weight,
+            Arrays.asList(
+                scorerWithTwoPhaseIterator(docs, scores1, fakeWeight(new MatchAllDocsQuery()), maxDoc),
+                scorerWithTwoPhaseIterator(docs, scores2, fakeWeight(new MatchNoDocsQuery()), maxDoc)
+            )
+        );
+
+        int doc = -1;
+        int idx = 0;
+        while (doc != DocIdSetIterator.NO_MORE_DOCS) {
+            doc = queryScorer.iterator().nextDoc();
+            if (idx == docs.length) {
+                assertEquals(DocIdSetIterator.NO_MORE_DOCS, doc);
+            } else {
+                assertEquals(docs[idx], doc);
+                assertEquals(scores1[idx] + scores2[idx], queryScorer.score(), 0.001f);
+            }
+            idx++;
+        }
+    }
+
+    protected static Scorer scorerWithTwoPhaseIterator(final int[] docs, final float[] scores, Weight weight, int maxDoc) {
+        final DocIdSetIterator iterator = DocIdSetIterator.all(maxDoc);
+        return new Scorer(weight) {
+
+            int lastScoredDoc = -1;
+
+            public DocIdSetIterator iterator() {
+                return TwoPhaseIterator.asDocIdSetIterator(twoPhaseIterator());
+            }
+
+            @Override
+            public int docID() {
+                return iterator.docID();
+            }
+
+            @Override
+            public float score() {
+                assertNotEquals("score() called twice on doc " + docID(), lastScoredDoc, docID());
+                lastScoredDoc = docID();
+                final int idx = Arrays.binarySearch(docs, docID());
+                return scores[idx];
+            }
+
+            @Override
+            public float getMaxScore(int upTo) {
+                return Float.MAX_VALUE;
+            }
+
+            @Override
+            public TwoPhaseIterator twoPhaseIterator() {
+                return new TwoPhaseIterator(iterator) {
+
+                    @Override
+                    public boolean matches() {
+                        return Arrays.binarySearch(docs, iterator.docID()) >= 0;
+                    }
+
+                    @Override
+                    public float matchCost() {
+                        return 10;
+                    }
+                };
+            }
+        };
     }
 
     private Pair<int[], float[]> generateDocuments(int maxDocId) {

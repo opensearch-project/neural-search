@@ -13,7 +13,16 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.Objects;
 
-public class HybridScorePropagator {
+/**
+ * This class functions as a utility for propagating block boundaries within disjunctions.
+ * In disjunctions, where a match occurs if any subclause matches, a common approach might involve returning
+ * the minimum block boundary across all clauses. However, this method can introduce performance challenges,
+ * particularly when dealing with high minimum competitive scores and clauses with low scores that no longer
+ * significantly contribute to the iteration process. Therefore, this class computes block boundaries solely for clauses
+ * with a maximum score equal to or exceeding the minimum competitive score, or for the clause with the maximum
+ * score if such a clause is absent.
+ */
+public class HybridScoreBlockBoundaryPropagator {
 
     private static final Comparator<Scorer> MAX_SCORE_COMPARATOR = Comparator.comparing((Scorer s) -> {
         try {
@@ -27,7 +36,7 @@ public class HybridScorePropagator {
     private final float[] maxScores;
     private int leadIndex = 0;
 
-    HybridScorePropagator(Collection<Scorer> scorers) throws IOException {
+    HybridScoreBlockBoundaryPropagator(final Collection<Scorer> scorers) throws IOException {
         this.scorers = scorers.stream().filter(Objects::nonNull).toArray(Scorer[]::new);
         for (Scorer scorer : this.scorers) {
             scorer.advanceShallow(0);
@@ -73,7 +82,6 @@ public class HybridScorePropagator {
                 break;
             }
         }
-
         return upTo;
     }
 

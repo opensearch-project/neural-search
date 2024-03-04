@@ -53,10 +53,11 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
 
     private static final String TEXT_FIELD_NAME = "field";
-    private static final String TERM_QUERY_TEXT = "keyword";
-
+    private static final String TEST_DOC_TEXT1 = "Hello world";
+    private static final String TEST_DOC_TEXT2 = "Hi to this place";
+    private static final String TEST_DOC_TEXT3 = "We would like to welcome everyone";
+    private static final String QUERY1 = "hello";
     private static final float DELTA_FOR_ASSERTION = 0.001f;
-    private static final float MAX_SCORE = 0.611f;
 
     @SneakyThrows
     public void testNewCollector_whenNotConcurrentSearch_thenSuccessful() {
@@ -64,7 +65,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
-        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT);
+        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
         HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)));
 
         when(searchContext.query()).thenReturn(hybridQuery);
@@ -95,7 +96,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
-        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT);
+        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
         HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)));
 
         when(searchContext.query()).thenReturn(hybridQuery);
@@ -128,12 +129,12 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
 
         HybridQuery hybridQueryWithTerm = new HybridQuery(
-            List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext))
+            List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1).toQuery(mockQueryShardContext))
         );
         when(searchContext.query()).thenReturn(hybridQueryWithTerm);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
         IndexReader indexReader = mock(IndexReader.class);
-        when(indexReader.numDocs()).thenReturn(1);
+        when(indexReader.numDocs()).thenReturn(3);
         when(indexSearcher.getIndexReader()).thenReturn(indexReader);
         when(searchContext.searcher()).thenReturn(indexSearcher);
         when(searchContext.size()).thenReturn(1);
@@ -150,8 +151,14 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
         ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
-        int docId = RandomizedTest.randomInt();
-        w.addDocument(getDocument(TEXT_FIELD_NAME, docId, TERM_QUERY_TEXT, ft));
+
+        int docId1 = RandomizedTest.randomInt();
+        int docId2 = RandomizedTest.randomInt();
+        int docId3 = RandomizedTest.randomInt();
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId1, TEST_DOC_TEXT1, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId2, TEST_DOC_TEXT2, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId3, TEST_DOC_TEXT3, ft));
+        w.flush();
         w.commit();
 
         IndexReader reader = DirectoryReader.open(w);

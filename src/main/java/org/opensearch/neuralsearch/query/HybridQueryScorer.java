@@ -27,8 +27,6 @@ import org.apache.lucene.search.Weight;
 import lombok.Getter;
 import org.apache.lucene.util.PriorityQueue;
 
-import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
-
 /**
  * Class abstracts functionality of Scorer for hybrid query. When iterating over documents in increasing
  * order of doc id, this class fills up array of scores per sub-query for each doc id. Order in array of scores
@@ -47,7 +45,7 @@ public final class HybridQueryScorer extends Scorer {
     private final Map<Query, List<Integer>> queryToIndex;
 
     private final DocIdSetIterator approximation;
-    HybridScorePropagator disjunctionBlockPropagator;
+    HybridScoreBlockBoundaryPropagator disjunctionBlockPropagator;
     private final TwoPhase twoPhase;
 
     public HybridQueryScorer(Weight weight, List<Scorer> subScorers) throws IOException {
@@ -56,23 +54,19 @@ public final class HybridQueryScorer extends Scorer {
 
     public HybridQueryScorer(Weight weight, List<Scorer> subScorers, ScoreMode scoreMode) throws IOException {
         super(weight);
-        // max
         this.subScorers = Collections.unmodifiableList(subScorers);
-        // custom
         subScores = new float[subScorers.size()];
         this.queryToIndex = mapQueryToIndex();
-        // base
         this.subScorersPQ = initializeSubScorersPQ();
-        // base
         boolean needsScores = scoreMode != ScoreMode.COMPLETE_NO_SCORES;
-        this.approximation = new HybridDisjunctionDISIApproximation(this.subScorersPQ);
-        // max
+
+        this.approximation = new HybridSubqueriesDISIApproximation(this.subScorersPQ);
         if (scoreMode == ScoreMode.TOP_SCORES) {
-            this.disjunctionBlockPropagator = new HybridScorePropagator(subScorers);
+            this.disjunctionBlockPropagator = new HybridScoreBlockBoundaryPropagator(subScorers);
         } else {
             this.disjunctionBlockPropagator = null;
         }
-        // base
+
         boolean hasApproximation = false;
         float sumMatchCost = 0;
         long sumApproxCost = 0;
@@ -116,7 +110,7 @@ public final class HybridQueryScorer extends Scorer {
         float totalScore = 0.0f;
         for (DisiWrapper disiWrapper = topList; disiWrapper != null; disiWrapper = disiWrapper.next) {
             // check if this doc has match in the subQuery. If not, add score as 0.0 and continue
-            if (disiWrapper.scorer.docID() == NO_MORE_DOCS) {
+            if (disiWrapper.scorer.docID() == DocIdSetIterator.NO_MORE_DOCS) {
                 continue;
             }
             totalScore += disiWrapper.scorer.score();
@@ -187,7 +181,7 @@ public final class HybridQueryScorer extends Scorer {
     @Override
     public int docID() {
         if (subScorersPQ.size() == 0) {
-            return NO_MORE_DOCS;
+            return DocIdSetIterator.NO_MORE_DOCS;
         }
         return subScorersPQ.top().doc;
     }
@@ -269,6 +263,10 @@ public final class HybridQueryScorer extends Scorer {
         return children;
     }
 
+    /**
+     *  Object returned by Scorer.twoPhaseIterator() to provide an approximation of a DocIdSetIterator.
+     *  After calling nextDoc() or advance(int) on the iterator returned by approximation(), you need to check matches() to confirm if the retrieved document ID is a match.
+     */
     static class TwoPhase extends TwoPhaseIterator {
         private final float matchCost;
         // list of verified matches on the current doc
@@ -292,11 +290,10 @@ public final class HybridQueryScorer extends Scorer {
         }
 
         DisiWrapper getSubMatches() throws IOException {
-            // iteration order does not matter
-            for (DisiWrapper w : unverifiedMatches) {
-                if (w.twoPhaseView.matches()) {
-                    w.next = verifiedMatches;
-                    verifiedMatches = w;
+            for (DisiWrapper wrapper : unverifiedMatches) {
+                if (wrapper.twoPhaseView.matches()) {
+                    wrapper.next = verifiedMatches;
+                    verifiedMatches = wrapper;
                 }
             }
             unverifiedMatches.clear();
@@ -308,39 +305,38 @@ public final class HybridQueryScorer extends Scorer {
             verifiedMatches = null;
             unverifiedMatches.clear();
 
-            for (DisiWrapper w = subScorers.topList(); w != null;) {
-                DisiWrapper next = w.next;
+            for (DisiWrapper wrapper = subScorers.topList(); wrapper != null;) {
+                DisiWrapper next = wrapper.next;
 
-                if (w.twoPhaseView == null) {
+                if (Objects.isNull(wrapper.twoPhaseView)) {
                     // implicitly verified, move it to verifiedMatches
-                    w.next = verifiedMatches;
-                    verifiedMatches = w;
+                    wrapper.next = verifiedMatches;
+                    verifiedMatches = wrapper;
 
                     if (!needsScores) {
                         // we can stop here
                         return true;
                     }
                 } else {
-                    unverifiedMatches.add(w);
+                    unverifiedMatches.add(wrapper);
                 }
-                w = next;
+                wrapper = next;
             }
 
-            if (verifiedMatches != null) {
+            if (Objects.nonNull(verifiedMatches)) {
                 return true;
             }
 
             // verify subs that have an two-phase iterator
             // least-costly ones first
             while (unverifiedMatches.size() > 0) {
-                DisiWrapper w = unverifiedMatches.pop();
-                if (w.twoPhaseView.matches()) {
-                    w.next = null;
-                    verifiedMatches = w;
+                DisiWrapper wrapper = unverifiedMatches.pop();
+                if (wrapper.twoPhaseView.matches()) {
+                    wrapper.next = null;
+                    verifiedMatches = wrapper;
                     return true;
                 }
             }
-
             return false;
         }
 
@@ -350,18 +346,22 @@ public final class HybridQueryScorer extends Scorer {
         }
     }
 
-    static class HybridDisjunctionDISIApproximation extends DocIdSetIterator {
-        final DocIdSetIterator delegate;
+    /**
+     * A DocIdSetIterator which is a disjunction of the approximations of the provided iterators and supports
+     * sub iterators that return empty results
+     */
+    static class HybridSubqueriesDISIApproximation extends DocIdSetIterator {
+        final DocIdSetIterator docIdSetIterator;
         final DisiPriorityQueue subIterators;
 
-        public HybridDisjunctionDISIApproximation(DisiPriorityQueue subIterators) {
-            delegate = new DisjunctionDISIApproximation(subIterators);
+        public HybridSubqueriesDISIApproximation(final DisiPriorityQueue subIterators) {
+            docIdSetIterator = new DisjunctionDISIApproximation(subIterators);
             this.subIterators = subIterators;
         }
 
         @Override
         public long cost() {
-            return delegate.cost();
+            return docIdSetIterator.cost();
         }
 
         @Override
@@ -369,7 +369,7 @@ public final class HybridQueryScorer extends Scorer {
             if (subIterators.size() == 0) {
                 return NO_MORE_DOCS;
             }
-            return delegate.docID();
+            return docIdSetIterator.docID();
         }
 
         @Override
@@ -377,15 +377,15 @@ public final class HybridQueryScorer extends Scorer {
             if (subIterators.size() == 0) {
                 return NO_MORE_DOCS;
             }
-            return delegate.nextDoc();
+            return docIdSetIterator.nextDoc();
         }
 
         @Override
-        public int advance(int target) throws IOException {
+        public int advance(final int target) throws IOException {
             if (subIterators.size() == 0) {
                 return NO_MORE_DOCS;
             }
-            return delegate.advance(target);
+            return docIdSetIterator.advance(target);
         }
     }
 }

@@ -34,6 +34,10 @@ import java.util.stream.Collectors;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createDelimiterElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
 
+/**
+ * Collector manager based on HybridTopScoreDocCollector that allows users to parallelize counting the number of hits.
+ * In most cases it will be wrapped in MultiCollectorManager.
+ */
 @RequiredArgsConstructor
 public abstract class HybridCollectorManager implements CollectorManager<Collector, ReduceableSearchResult> {
 
@@ -43,6 +47,12 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     private final int trackTotalHitsUpTo;
     private final SortAndFormats sortAndFormats;
 
+    /**
+     * Create new instance of HybridCollectorManager depending on the concurrent search beeing enabled or disabled.
+     * @param searchContext
+     * @return
+     * @throws IOException
+     */
     public static CollectorManager createHybridCollectorManager(final SearchContext searchContext) throws IOException {
         final IndexReader reader = searchContext.searcher().getIndexReader();
         final int totalNumDocs = Math.max(0, reader.numDocs());
@@ -184,6 +194,10 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         return sortAndFormats == null ? null : sortAndFormats.formats;
     }
 
+    /**
+     * Implementation of the HybridCollector that reuses instance of collector on each even call. This allows caller to
+     * use saved state of collector
+     */
     static class HybridCollectorNonConcurrentManager extends HybridCollectorManager {
         Collector maxScoreCollector;
 
@@ -210,6 +224,10 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         }
     }
 
+    /**
+     * Implementation of the HybridCollector that doesn't save collector's state and return new instance of every
+     * call of newCollector
+     */
     static class HybridCollectorConcurrentSearchManager extends HybridCollectorManager {
 
         public HybridCollectorConcurrentSearchManager(
