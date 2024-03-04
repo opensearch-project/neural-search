@@ -64,7 +64,6 @@ public abstract class InferenceProcessor extends AbstractProcessor {
     ) {
         super(tag, description);
         this.type = type;
-        if (StringUtils.isBlank(modelId)) throw new IllegalArgumentException("model_id is null or empty, cannot process it");
         validateEmbeddingConfiguration(fieldMap);
 
         this.listTypeNestedMapKey = listTypeNestedMapKey;
@@ -111,7 +110,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
             processorInputValidator.validateFieldsValue(fieldMap, environment, ingestDocument, false);
             Map<String, Object> processMap = buildMapWithProcessorKeyAndOriginalValue(ingestDocument);
             List<String> inferenceList = createInferenceList(processMap);
-            if (inferenceList.size() == 0) {
+            if (inferenceList.isEmpty()) {
                 handler.accept(ingestDocument, null);
             } else {
                 doExecute(ingestDocument, processMap, inferenceList, handler);
