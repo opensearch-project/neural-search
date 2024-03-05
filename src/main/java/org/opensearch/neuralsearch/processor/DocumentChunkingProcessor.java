@@ -9,6 +9,7 @@ import java.util.Set;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.IntStream;
 import java.util.function.BiConsumer;
 
 import org.opensearch.cluster.metadata.IndexMetadata;
@@ -38,8 +39,6 @@ public final class DocumentChunkingProcessor extends InferenceProcessor {
 
     public static final String ALGORITHM_FIELD = "algorithm";
 
-    public static final String LIST_TYPE_NESTED_MAP_KEY = "chunking";
-
     private final Set<String> supportedChunkers = ChunkerFactory.getAllChunkers();
 
     private final Settings settings;
@@ -66,7 +65,7 @@ public final class DocumentChunkingProcessor extends InferenceProcessor {
         Environment environment,
         ProcessorInputValidator processorInputValidator
     ) {
-        super(tag, description, TYPE, LIST_TYPE_NESTED_MAP_KEY, null, fieldMap, null, environment, processorInputValidator);
+        super(tag, description, TYPE, null, null, fieldMap, null, environment, processorInputValidator);
         validateAndParseAlgorithmMap(algorithmMap);
         this.settings = settings;
         this.clusterService = clusterService;
@@ -117,6 +116,24 @@ public final class DocumentChunkingProcessor extends InferenceProcessor {
     }
 
     @Override
+    protected List<?> buildResultForListType(List<Object> sourceValue, List<?> results, IndexWrapper indexWrapper) {
+        Object peek = sourceValue.get(0);
+        if (peek instanceof String) {
+            List<Object> keyToResult = new ArrayList<>();
+            IntStream.range(0, sourceValue.size()).forEachOrdered(x -> keyToResult.add(results.get(indexWrapper.index++)));
+            return keyToResult;
+        } else {
+            List<List<Object>> keyToResult = new ArrayList<>();
+            for (Object nestedList : sourceValue) {
+                List<Object> nestedResult = new ArrayList<>();
+                IntStream.range(0, ((List) nestedList).size()).forEachOrdered(x -> nestedResult.add(results.get(indexWrapper.index++)));
+                keyToResult.add(nestedResult);
+            }
+            return keyToResult;
+        }
+    }
+
+    @Override
     public void doExecute(
         IngestDocument ingestDocument,
         Map<String, Object> ProcessMap,
@@ -124,7 +141,7 @@ public final class DocumentChunkingProcessor extends InferenceProcessor {
         BiConsumer<IngestDocument, Exception> handler
     ) {
         try {
-            processorInputValidator.validateFieldsValue(fieldMap, environment, ingestDocument, false);
+            processorInputValidator.validateFieldsValue(fieldMap, environment, ingestDocument, true);
             if (Objects.equals(chunkerType, FIXED_LENGTH_ALGORITHM)) {
                 // add maxTokenCount setting from index metadata to chunker parameters
                 Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();

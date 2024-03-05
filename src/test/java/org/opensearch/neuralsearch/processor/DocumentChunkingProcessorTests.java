@@ -173,9 +173,13 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
 
     public void testCreate_whenFieldMapWithIllegalKey_failure() {
         Map<String, Object> config = new HashMap<>();
-        Map<Object, Object> fieldMap = new HashMap<>();
-        fieldMap.put(INPUT_FIELD, ImmutableMap.of(DocumentChunkingProcessor.OUTPUT_FIELD, OUTPUT_FIELD, 1, 1));
+        Map<String, Object> fieldMap = new HashMap<>();
+        fieldMap.put(null, 1);
+        fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
+        Map<String, Object> algorithmMap = new HashMap<>();
+        algorithmMap.put(ChunkerFactory.FIXED_LENGTH_ALGORITHM, createFixedTokenLengthParameters());
         config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
+        config.put(DocumentChunkingProcessor.ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
@@ -187,8 +191,10 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
     public void testCreate_whenFieldMapWithNoAlgorithm_failure() {
         Map<String, Object> config = new HashMap<>();
         Map<String, Object> fieldMap = new HashMap<>();
-        fieldMap.put(INPUT_FIELD, ImmutableMap.of(DocumentChunkingProcessor.OUTPUT_FIELD, INPUT_FIELD));
+        Map<String, Object> algorithmMap = new HashMap<>();
+        fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
         config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
+        config.put(DocumentChunkingProcessor.ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,

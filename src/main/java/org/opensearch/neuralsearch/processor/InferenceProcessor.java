@@ -303,7 +303,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
      * index: the index pointer of the text embedding result.
      */
     static class IndexWrapper {
-        private int index;
+        protected int index;
 
         protected IndexWrapper(int index) {
             this.index = index;

@@ -69,7 +69,7 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
         DelimiterChunker chunker = new DelimiterChunker();
         String content = "a\nb\nc\nd";
         Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, "\n", MAX_CHUNK_LIMIT_FIELD, 1);
-        Exception exception = assertThrows(IllegalArgumentException.class, () -> chunker.chunk(content, inputParameters));
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> chunker.chunk(content, inputParameters));
         Assert.assertEquals("Exceed max chunk number: 1", exception.getMessage());
     }
 
