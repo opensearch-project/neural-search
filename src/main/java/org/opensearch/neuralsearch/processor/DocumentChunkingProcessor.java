@@ -167,12 +167,6 @@ public final class DocumentChunkingProcessor extends InferenceProcessor {
         }
     }
 
-    private static List<String> stringToList(String string) {
-        List<String> list = new ArrayList<>();
-        list.add(string);
-        return list;
-    }
-
     public static class Factory implements Processor.Factory {
 
         private final Settings settings;
