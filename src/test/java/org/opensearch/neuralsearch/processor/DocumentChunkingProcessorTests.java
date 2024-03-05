@@ -110,12 +110,12 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
     @SneakyThrows
     private DocumentChunkingProcessor createFixedTokenLengthInstance() {
         Map<String, Object> config = new HashMap<>();
-        Map<String, Object> fieldParameters = new HashMap<>();
-        Map<String, Object> chunkerParameters = new HashMap<>();
-        chunkerParameters.put(ChunkerFactory.FIXED_LENGTH_ALGORITHM, createFixedTokenLengthParameters());
-        chunkerParameters.put(DocumentChunkingProcessor.OUTPUT_FIELD, OUTPUT_FIELD);
-        fieldParameters.put(INPUT_FIELD, chunkerParameters);
-        config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldParameters);
+        Map<String, Object> fieldMap = new HashMap<>();
+        Map<String, Object> algorithmMap = new HashMap<>();
+        algorithmMap.put(ChunkerFactory.FIXED_LENGTH_ALGORITHM, createFixedTokenLengthParameters());
+        fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
+        config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
+        config.put(DocumentChunkingProcessor.ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
         return factory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
     }
@@ -123,12 +123,12 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
     @SneakyThrows
     private DocumentChunkingProcessor createDelimiterInstance() {
         Map<String, Object> config = new HashMap<>();
-        Map<String, Object> fieldParameters = new HashMap<>();
-        Map<String, Object> chunkerParameters = new HashMap<>();
-        chunkerParameters.put(ChunkerFactory.DELIMITER_ALGORITHM, createDelimiterParameters());
-        chunkerParameters.put(DocumentChunkingProcessor.OUTPUT_FIELD, OUTPUT_FIELD);
-        fieldParameters.put(INPUT_FIELD, chunkerParameters);
-        config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldParameters);
+        Map<String, Object> fieldMap = new HashMap<>();
+        Map<String, Object> algorithmMap = new HashMap<>();
+        algorithmMap.put(ChunkerFactory.DELIMITER_ALGORITHM, createDelimiterParameters());
+        fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
+        config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
+        config.put(DocumentChunkingProcessor.ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
         return factory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
     }
@@ -169,38 +169,6 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
             () -> factory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
         );
         assertEquals("parameters for input field [key] cannot be cast to [java.util.Map]", illegalArgumentException.getMessage());
-    }
-
-    public void testCreate_whenFieldMapWithEmptyOutputField_failure() {
-        Map<String, Object> config = new HashMap<>();
-        Map<String, Object> fieldMap = new HashMap<>();
-        fieldMap.put(INPUT_FIELD, ImmutableMap.of());
-        config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
-        Map<String, Processor.Factory> registry = new HashMap<>();
-        IllegalArgumentException illegalArgumentException = assertThrows(
-            IllegalArgumentException.class,
-            () -> factory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
-        );
-        assertEquals(
-            "parameters for input field [" + INPUT_FIELD + "] misses [" + DocumentChunkingProcessor.OUTPUT_FIELD + "], cannot process it.",
-            illegalArgumentException.getMessage()
-        );
-    }
-
-    public void testCreate_whenFieldMapWithIllegalOutputField_failure() {
-        Map<String, Object> config = new HashMap<>();
-        Map<String, Object> fieldMap = new HashMap<>();
-        fieldMap.put(INPUT_FIELD, ImmutableMap.of(DocumentChunkingProcessor.OUTPUT_FIELD, 1));
-        config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
-        Map<String, Processor.Factory> registry = new HashMap<>();
-        IllegalArgumentException illegalArgumentException = assertThrows(
-            IllegalArgumentException.class,
-            () -> factory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
-        );
-        assertEquals(
-            "parameters for output field [output_field] cannot be cast to [java.lang.String]",
-            illegalArgumentException.getMessage()
-        );
     }
 
     public void testCreate_whenFieldMapWithIllegalKey_failure() {

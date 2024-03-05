@@ -121,7 +121,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
     }
 
     @SuppressWarnings({ "unchecked" })
-    private List<String> createInferenceList(Map<String, Object> knnKeyMap) {
+    protected List<String> createInferenceList(Map<String, Object> knnKeyMap) {
         List<String> texts = new ArrayList<>();
         knnKeyMap.entrySet().stream().filter(knnMapEntry -> knnMapEntry.getValue() != null).forEach(knnMapEntry -> {
             Object sourceValue = knnMapEntry.getValue();
