@@ -83,6 +83,27 @@
       },
       "passage_text": {
         "type": "text"
+      },
+      "nested_passages": {
+        "type": "nested",
+        "properties": {
+          "text": {
+            "type": "text"
+          },
+          "embedding": {
+            "type": "knn_vector",
+            "dimension": 768,
+            "method": {
+              "name": "hnsw",
+              "space_type": "l2",
+              "engine": "lucene",
+              "parameters": {
+                "ef_construction": 128,
+                "m": 24
+              }
+            }
+          }
+        }
       }
     }
   }
