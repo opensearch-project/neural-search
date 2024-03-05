@@ -43,13 +43,13 @@ public abstract class InferenceProcessor extends AbstractProcessor {
 
     protected final String modelId;
 
-    private final Map<String, Object> fieldMap;
+    protected final Map<String, Object> fieldMap;
 
     protected final MLCommonsClientAccessor mlCommonsClientAccessor;
 
-    private final Environment environment;
+    protected final Environment environment;
 
-    private final ProcessorInputValidator processorInputValidator;
+    protected final ProcessorInputValidator processorInputValidator;
 
     public InferenceProcessor(
         String tag,

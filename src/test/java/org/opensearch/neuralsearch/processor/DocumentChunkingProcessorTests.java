@@ -8,6 +8,7 @@ import com.google.common.collect.ImmutableMap;
 import lombok.SneakyThrows;
 import org.apache.lucene.tests.analysis.MockTokenizer;
 import org.junit.Before;
+import org.mockito.Mock;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.service.ClusterService;
@@ -48,6 +49,12 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
     private static final String OUTPUT_FIELD = "body_chunk";
     private static final String INDEX_NAME = "_index";
 
+    @Mock
+    private ProcessorInputValidator processorInputValidator;
+
+    @Mock
+    private Environment environment;
+
     @SneakyThrows
     private AnalysisRegistry getAnalysisRegistry() {
         Settings settings = Settings.builder().put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString()).build();
@@ -78,7 +85,14 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         when(metadata.index(anyString())).thenReturn(null);
         when(clusterState.metadata()).thenReturn(metadata);
         when(clusterService.state()).thenReturn(clusterState);
-        factory = new DocumentChunkingProcessor.Factory(settings, clusterService, indicesService, getAnalysisRegistry());
+        factory = new DocumentChunkingProcessor.Factory(
+            settings,
+            clusterService,
+            indicesService,
+            getAnalysisRegistry(),
+            environment,
+            processorInputValidator
+        );
     }
 
     private Map<String, Object> createFixedTokenLengthParameters() {

@@ -124,8 +124,8 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
                 parameters.ingestService.getClusterService(),
                 parameters.indicesService,
                 parameters.analysisRegistry,
-                processorInputValidator,
-                parameters.env
+                parameters.env,
+                processorInputValidator
             )
         );
     }
