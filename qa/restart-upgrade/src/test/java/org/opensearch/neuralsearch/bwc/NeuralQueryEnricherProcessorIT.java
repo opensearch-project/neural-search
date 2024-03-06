@@ -53,8 +53,6 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
                 // do nothing here. need to add test codes after finishing backport
                 ;
             } else {
-                // deploy model
-                loadModel(modelId);
                 // before we support default model id in neural_sparse query
                 NeuralSparseQueryBuilder sparseEncodingQueryBuilderWithoutModelId = new NeuralSparseQueryBuilder().fieldName(
                     TEST_SPARSE_ENCODING_FIELD
@@ -62,7 +60,6 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
 
                 expectThrows(ResponseException.class, () -> search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1));
             }
-
         } else {
             String modelId = null;
             try {
