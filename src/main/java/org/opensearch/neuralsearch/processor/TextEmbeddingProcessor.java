@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
 
-import org.apache.commons.lang3.StringUtils;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.IngestDocument;
@@ -32,11 +31,9 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
         String modelId,
         Map<String, Object> fieldMap,
         MLCommonsClientAccessor clientAccessor,
-        Environment environment,
-        ProcessorInputValidator processorInputValidator
+        Environment environment
     ) {
-        super(tag, description, TYPE, LIST_TYPE_NESTED_MAP_KEY, modelId, fieldMap, clientAccessor, environment, processorInputValidator);
-        if (StringUtils.isBlank(modelId)) throw new IllegalArgumentException("model_id is null or empty, cannot process it");
+        super(tag, description, TYPE, LIST_TYPE_NESTED_MAP_KEY, modelId, fieldMap, clientAccessor, environment);
     }
 
     @Override

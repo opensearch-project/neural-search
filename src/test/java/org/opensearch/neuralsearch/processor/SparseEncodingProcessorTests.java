@@ -51,9 +51,6 @@ public class SparseEncodingProcessorTests extends OpenSearchTestCase {
     @Mock
     private Environment env;
 
-    @Mock
-    private ProcessorInputValidator processorInputValidator;
-
     @InjectMocks
     private SparseEncodingProcessorFactory SparseEncodingProcessorFactory;
     private static final String PROCESSOR_TAG = "mockTag";
@@ -100,11 +97,7 @@ public class SparseEncodingProcessorTests extends OpenSearchTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         Map<String, Processor.Factory> registry = new HashMap<>();
         MLCommonsClientAccessor accessor = mock(MLCommonsClientAccessor.class);
-        SparseEncodingProcessorFactory sparseEncodingProcessorFactory = new SparseEncodingProcessorFactory(
-            accessor,
-            env,
-            processorInputValidator
-        );
+        SparseEncodingProcessorFactory sparseEncodingProcessorFactory = new SparseEncodingProcessorFactory(accessor, env);
 
         Map<String, Object> config = new HashMap<>();
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");

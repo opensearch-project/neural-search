@@ -49,8 +49,6 @@ public abstract class InferenceProcessor extends AbstractProcessor {
 
     protected final Environment environment;
 
-    protected final ProcessorInputValidator processorInputValidator;
-
     public InferenceProcessor(
         String tag,
         String description,
@@ -59,19 +57,17 @@ public abstract class InferenceProcessor extends AbstractProcessor {
         String modelId,
         Map<String, Object> fieldMap,
         MLCommonsClientAccessor clientAccessor,
-        Environment environment,
-        ProcessorInputValidator processorInputValidator
+        Environment environment
     ) {
         super(tag, description);
         this.type = type;
         validateEmbeddingConfiguration(fieldMap);
-
+        if (StringUtils.isBlank(modelId)) throw new IllegalArgumentException("model_id is null or empty, cannot process it");
         this.listTypeNestedMapKey = listTypeNestedMapKey;
         this.modelId = modelId;
         this.fieldMap = fieldMap;
         this.mlCommonsClientAccessor = clientAccessor;
         this.environment = environment;
-        this.processorInputValidator = processorInputValidator;
     }
 
     private void validateEmbeddingConfiguration(Map<String, Object> fieldMap) {

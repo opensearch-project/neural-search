@@ -50,9 +50,6 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
     private static final String INDEX_NAME = "_index";
 
     @Mock
-    private ProcessorInputValidator processorInputValidator;
-
-    @Mock
     private Environment environment;
 
     @SneakyThrows
@@ -85,14 +82,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         when(metadata.index(anyString())).thenReturn(null);
         when(clusterState.metadata()).thenReturn(metadata);
         when(clusterService.state()).thenReturn(clusterState);
-        factory = new DocumentChunkingProcessor.Factory(
-            settings,
-            clusterService,
-            indicesService,
-            getAnalysisRegistry(),
-            environment,
-            processorInputValidator
-        );
+        factory = new DocumentChunkingProcessor.Factory(settings, clusterService, indicesService, getAnalysisRegistry());
     }
 
     private Map<String, Object> createFixedTokenLengthParameters() {

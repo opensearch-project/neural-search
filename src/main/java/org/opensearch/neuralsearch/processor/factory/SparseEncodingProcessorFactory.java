@@ -15,7 +15,6 @@ import java.util.Map;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
-import org.opensearch.neuralsearch.processor.ProcessorInputValidator;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 
 import lombok.extern.log4j.Log4j2;
@@ -27,16 +26,10 @@ import lombok.extern.log4j.Log4j2;
 public class SparseEncodingProcessorFactory implements Processor.Factory {
     private final MLCommonsClientAccessor clientAccessor;
     private final Environment environment;
-    private ProcessorInputValidator processorInputValidator;
 
-    public SparseEncodingProcessorFactory(
-        MLCommonsClientAccessor clientAccessor,
-        Environment environment,
-        ProcessorInputValidator processorInputValidator
-    ) {
+    public SparseEncodingProcessorFactory(MLCommonsClientAccessor clientAccessor, Environment environment) {
         this.clientAccessor = clientAccessor;
         this.environment = environment;
-        this.processorInputValidator = processorInputValidator;
     }
 
     @Override
@@ -49,14 +42,6 @@ public class SparseEncodingProcessorFactory implements Processor.Factory {
         String modelId = readStringProperty(TYPE, processorTag, config, MODEL_ID_FIELD);
         Map<String, Object> fieldMap = readMap(TYPE, processorTag, config, FIELD_MAP_FIELD);
 
-        return new SparseEncodingProcessor(
-            processorTag,
-            description,
-            modelId,
-            fieldMap,
-            clientAccessor,
-            environment,
-            processorInputValidator
-        );
+        return new SparseEncodingProcessor(processorTag, description, modelId, fieldMap, clientAccessor, environment);
     }
 }

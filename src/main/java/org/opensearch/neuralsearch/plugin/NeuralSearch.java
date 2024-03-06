@@ -29,7 +29,6 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
-import org.opensearch.neuralsearch.processor.ProcessorInputValidator;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.DocumentChunkingProcessor;
@@ -110,12 +109,11 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     @Override
     public Map<String, Processor.Factory> getProcessors(Processor.Parameters parameters) {
         clientAccessor = new MLCommonsClientAccessor(new MachineLearningNodeClient(parameters.client));
-        ProcessorInputValidator processorInputValidator = new ProcessorInputValidator();
         return Map.of(
             TextEmbeddingProcessor.TYPE,
-            new TextEmbeddingProcessorFactory(clientAccessor, parameters.env, processorInputValidator),
+            new TextEmbeddingProcessorFactory(clientAccessor, parameters.env),
             SparseEncodingProcessor.TYPE,
-            new SparseEncodingProcessorFactory(clientAccessor, parameters.env, processorInputValidator),
+            new SparseEncodingProcessorFactory(clientAccessor, parameters.env),
             TextImageEmbeddingProcessor.TYPE,
             new TextImageEmbeddingProcessorFactory(clientAccessor, parameters.env, parameters.ingestService.getClusterService()),
             DocumentChunkingProcessor.TYPE,
@@ -123,9 +121,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
                 parameters.env.settings(),
                 parameters.ingestService.getClusterService(),
                 parameters.indicesService,
-                parameters.analysisRegistry,
-                parameters.env,
-                processorInputValidator
+                parameters.analysisRegistry
             )
         );
     }
