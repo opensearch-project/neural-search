@@ -72,7 +72,7 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.*"
         }
     }
 
@@ -107,7 +107,7 @@ task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.*"
         }
     }
 

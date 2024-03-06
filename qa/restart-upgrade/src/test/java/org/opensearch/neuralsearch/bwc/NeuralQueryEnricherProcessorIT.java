@@ -39,8 +39,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
         logger.info("bwc version: " + bwcVersion.toString());
 
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadSparseEncodingModel();
-            loadModel(modelId);
+            String modelId = prepareSparseEncodingModel();
             createPipelineForSparseEncodingProcessor(modelId, SPARSE_INGEST_PIPELINE_NAME);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
@@ -51,8 +50,8 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
             addSparseEncodingDoc(
                 getIndexNameForTest(),
                 "0",
-                List.of(TEST_SPARSE_ENCODING_FIELD),
-                List.of(testRankFeaturesDoc1),
+                List.of(),
+                List.of(),
                 List.of(TEST_TEXT_FIELD),
                 List.of(TEXT_1)
             );
