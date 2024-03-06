@@ -357,7 +357,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> knnMap = processor.buildMapWithProcessorKeyAndOriginalValue(ingestDocument);
 
         List<List<Float>> modelTensorList = createMockVectorResult();
-        processor.setTargetFieldsToDocument(ingestDocument, knnMap, modelTensorList);
+        processor.setVectorFieldsToDocument(ingestDocument, knnMap, modelTensorList);
         assertEquals(12, ingestDocument.getSourceAndMetadata().size());
     }
 
@@ -378,7 +378,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         assertEquals(knnKeyList.get(lastIndex), configValueList.get(lastIndex).toString());
 
         List<List<Float>> modelTensorList = createMockVectorResult();
-        Map<String, Object> result = processor.buildResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
+        Map<String, Object> result = processor.buildNLPResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
         assertTrue(result.containsKey("oriKey1_knn"));
         assertTrue(result.containsKey("oriKey2_knn"));
         assertTrue(result.containsKey("oriKey3_knn"));
@@ -395,7 +395,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
         Map<String, Object> knnMap = processor.buildMapWithProcessorKeyAndOriginalValue(ingestDocument);
         List<List<Float>> modelTensorList = createMockVectorResult();
-        processor.buildResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
+        processor.buildNLPResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
         Map<String, Object> favoritesMap = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("favorites");
         assertNotNull(favoritesMap);
         Map<String, Object> favoriteGames = (Map<String, Object>) favoritesMap.get("favorite.games");
@@ -411,7 +411,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         TextEmbeddingProcessor textEmbeddingProcessor = createInstanceWithNestedMapConfiguration(config);
         Map<String, Object> knnMap = textEmbeddingProcessor.buildMapWithProcessorKeyAndOriginalValue(ingestDocument);
         List<List<Float>> modelTensorList = createMockVectorResult();
-        textEmbeddingProcessor.buildResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
+        textEmbeddingProcessor.buildNLPResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
         List<Map<String, Object>> nestedObj = (List<Map<String, Object>>) ingestDocument.getSourceAndMetadata().get("nestedField");
         assertTrue(nestedObj.get(0).containsKey("vectorField"));
         assertTrue(nestedObj.get(1).containsKey("vectorField"));
@@ -425,7 +425,7 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         TextEmbeddingProcessor textEmbeddingProcessor = createInstanceWithNestedMapConfiguration(config);
         Map<String, Object> knnMap = textEmbeddingProcessor.buildMapWithProcessorKeyAndOriginalValue(ingestDocument);
         List<List<Float>> modelTensorList = createMockVectorResult();
-        textEmbeddingProcessor.buildResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
+        textEmbeddingProcessor.buildNLPResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
         Map<String, Object> nestedLevel1 = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("nestedField");
         List<Map<String, Object>> nestedObj = (List<Map<String, Object>>) nestedLevel1.get("nestedField");
         assertTrue(nestedObj.get(0).containsKey("vectorField"));
@@ -440,10 +440,10 @@ public class TextEmbeddingProcessorTests extends OpenSearchTestCase {
         TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
         Map<String, Object> knnMap = processor.buildMapWithProcessorKeyAndOriginalValue(ingestDocument);
         List<List<Float>> modelTensorList = createMockVectorResult();
-        processor.setTargetFieldsToDocument(ingestDocument, knnMap, modelTensorList);
+        processor.setVectorFieldsToDocument(ingestDocument, knnMap, modelTensorList);
 
         List<List<Float>> modelTensorList1 = createMockVectorResult();
-        processor.setTargetFieldsToDocument(ingestDocument, knnMap, modelTensorList1);
+        processor.setVectorFieldsToDocument(ingestDocument, knnMap, modelTensorList1);
         assertEquals(12, ingestDocument.getSourceAndMetadata().size());
         assertEquals(2, ((List<?>) ingestDocument.getSourceAndMetadata().get("oriKey6_knn")).size());
     }
