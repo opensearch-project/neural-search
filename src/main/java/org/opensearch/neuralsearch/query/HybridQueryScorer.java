@@ -264,8 +264,11 @@ public final class HybridQueryScorer extends Scorer {
     }
 
     /**
-     *  Object returned by Scorer.twoPhaseIterator() to provide an approximation of a DocIdSetIterator.
-     *  After calling nextDoc() or advance(int) on the iterator returned by approximation(), you need to check matches() to confirm if the retrieved document ID is a match.
+     *  Object returned by {@link Scorer#twoPhaseIterator()} to provide an approximation of a {@link DocIdSetIterator}.
+     *  After calling {@link DocIdSetIterator#nextDoc()} or {@link DocIdSetIterator#advance(int)} on the iterator
+     *  returned by approximation(), you need to check {@link TwoPhaseIterator#matches()} to confirm if the retrieved
+     *  document ID is a match. Implementation inspired by identical class for
+     *  <a href="https://github.com/apache/lucene/blob/branch_9_10/lucene/core/src/java/org/apache/lucene/search/DisjunctionScorer.java">DisjunctionScorer</a>
      */
     static class TwoPhase extends TwoPhaseIterator {
         private final float matchCost;
