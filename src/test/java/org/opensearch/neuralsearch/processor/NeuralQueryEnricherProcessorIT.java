@@ -72,7 +72,7 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
             initializeIndexIfNotExist(sparseIndex);
             modelId = prepareSparseEncodingModel();
             createSearchRequestProcessor(modelId, search_pipeline);
-            createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
+            createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.SPARSE_ENCODING);
             updateIndexSettings(sparseIndex, Settings.builder().put("index.search.default_pipeline", search_pipeline));
             NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
             neuralSparseQueryBuilder.fieldName(TEST_RANK_FEATURES_FIELD_NAME_1);
