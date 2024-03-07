@@ -47,8 +47,14 @@ public class HybridAggregationProcessor implements AggregationProcessor {
     public void postProcess(SearchContext context) {
         if (isHybridQuery(context.query(), context)) {
             // for case when concurrent search is not enabled (default as of 2.12 release) reduce for collector
-            // managers is not called, and we have to call it manually. This is required as we format final
+            // managers is not called
+            // (https://github.com/opensearch-project/OpenSearch/blob/2.12/server/src/main/java/org/opensearch/search/query/QueryPhase.java#L333-L373)
+            // and we have to call it manually. This is required as we format final
             // result of hybrid query in {@link HybridTopScoreCollector#reduce}
+            // when concurrent search is enabled then reduce method is called as part of the search {@see
+            // ConcurrentQueryPhaseSearcher#searchWithCollectorManager}
+            // corresponding call in Lucene
+            // https://github.com/apache/lucene/blob/branch_9_10/lucene/core/src/java/org/apache/lucene/search/IndexSearcher.java#L700
             if (!context.shouldUseConcurrentSearch()) {
                 reduceCollectorResults(context);
             }

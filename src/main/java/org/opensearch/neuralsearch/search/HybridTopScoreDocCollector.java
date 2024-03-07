@@ -56,9 +56,15 @@ public class HybridTopScoreDocCollector implements Collector {
             @Override
             public void setScorer(Scorable scorer) throws IOException {
                 if (scorer instanceof HybridQueryScorer) {
+                    log.debug("passed scorer is of type HybridQueryScorer, saving it for collecting documents and scores");
                     compoundQueryScorer = (HybridQueryScorer) scorer;
                 } else {
                     compoundQueryScorer = getHybridQueryScorer(scorer);
+                    if (Objects.isNull(compoundQueryScorer)) {
+                        log.error(
+                            String.format(Locale.ROOT, "cannot find scorer of type HybridQueryScorer in a hierarchy of scorer %s", scorer)
+                        );
+                    }
                 }
             }
 
@@ -71,7 +77,14 @@ public class HybridTopScoreDocCollector implements Collector {
                 }
                 for (Scorable.ChildScorable childScorable : scorer.getChildren()) {
                     HybridQueryScorer hybridQueryScorer = getHybridQueryScorer(childScorable.child);
-                    if (hybridQueryScorer != null) {
+                    if (Objects.nonNull(hybridQueryScorer)) {
+                        log.debug(
+                            String.format(
+                                Locale.ROOT,
+                                "found hybrid query scorer, it's child of scorer %s",
+                                childScorable.child.getClass().getSimpleName()
+                            )
+                        );
                         return hybridQueryScorer;
                     }
                 }
