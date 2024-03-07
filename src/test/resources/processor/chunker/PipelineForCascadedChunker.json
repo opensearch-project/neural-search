@@ -4,11 +4,11 @@
     {
       "chunking": {
         "field_map": {
-          "body": {
-            "delimiter": {
-              "delimiter": "."
-            },
-            "output_field": "body_chunk_intermediate"
+          "body": "body_chunk_intermediate"
+        },
+        "algorithm": {
+          "delimiter": {
+            "delimiter": "."
           }
         }
       }
@@ -16,11 +16,11 @@
     {
       "chunking": {
         "field_map": {
-          "body_chunk_intermediate": {
-            "fix_length": {
-              "token_limit": 10
-            },
-            "output_field": "body_chunk"
+          "body_chunk_intermediate": "body_chunk"
+        },
+        "algorithm": {
+          "fix_length": {
+            "token_limit": 10
           }
         }
       }

@@ -4,11 +4,11 @@
     {
       "chunking": {
         "field_map": {
-          "body": {
-            "fix_length": {
-              "token_limit": 10
-            },
-            "output_field": "body_chunk"
+          "body": "body_chunk"
+        },
+        "algorithm": {
+          "fix_length": {
+            "token_limit": 10
           }
         }
       }
