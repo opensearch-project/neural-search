@@ -2,7 +2,6 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch.bwc;
 
 import org.opensearch.Version;
@@ -39,13 +38,11 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
         }
 
         String modelId = null;
-        NeuralSparseQueryBuilder sparseEncodingQueryBuilderWithoutModelId = new NeuralSparseQueryBuilder().fieldName(
-                TEST_ENCODING_FIELD
-        ).queryText(TEXT_1);
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilderWithoutModelId = new NeuralSparseQueryBuilder().fieldName(TEST_ENCODING_FIELD)
+            .queryText(TEXT_1);
         // will set the model_id after we obtain the id
-        NeuralSparseQueryBuilder sparseEncodingQueryBuilderWithModelId = new NeuralSparseQueryBuilder().fieldName(
-                TEST_ENCODING_FIELD
-        ).queryText(TEXT_1);
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilderWithModelId = new NeuralSparseQueryBuilder().fieldName(TEST_ENCODING_FIELD)
+            .queryText(TEXT_1);
 
         switch (getClusterType()) {
             case OLD:
@@ -54,16 +51,16 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                 sparseEncodingQueryBuilderWithModelId.modelId(modelId);
                 createPipelineForSparseEncodingProcessor(modelId, SPARSE_INGEST_PIPELINE_NAME);
                 createIndexWithConfiguration(
-                        getIndexNameForTest(),
-                        Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),
-                        SPARSE_INGEST_PIPELINE_NAME
+                    getIndexNameForTest(),
+                    Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),
+                    SPARSE_INGEST_PIPELINE_NAME
                 );
 
                 addSparseEncodingDoc(getIndexNameForTest(), "0", List.of(), List.of(), List.of(TEST_TEXT_FIELD), List.of(TEXT_1));
                 createSearchRequestProcessor(modelId, SPARSE_SEARCH_PIPELINE_NAME);
                 updateIndexSettings(
-                        getIndexNameForTest(),
-                        Settings.builder().put("index.search.default_pipeline", SPARSE_SEARCH_PIPELINE_NAME)
+                    getIndexNameForTest(),
+                    Settings.builder().put("index.search.default_pipeline", SPARSE_SEARCH_PIPELINE_NAME)
                 );
 
                 if (bwcVersion.onOrAfter(Version.V_2_13_0)) {
@@ -94,8 +91,8 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                     loadModel(modelId);
                     sparseEncodingQueryBuilderWithModelId.modelId(modelId);
                     assertEquals(
-                            search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
-                            search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
+                        search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
+                        search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
                     );
                 } finally {
                     wipeOfTestResources(getIndexNameForTest(), SPARSE_INGEST_PIPELINE_NAME, modelId, SPARSE_SEARCH_PIPELINE_NAME);
@@ -121,9 +118,9 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                 neuralQueryBuilderWithModelId.modelId(modelId);
                 createPipelineProcessor(modelId, DENSE_INGEST_PIPELINE_NAME);
                 createIndexWithConfiguration(
-                        getIndexNameForTest(),
-                        Files.readString(Path.of(classLoader.getResource("processor/IndexMappingMultipleShard.json").toURI())),
-                        DENSE_INGEST_PIPELINE_NAME
+                    getIndexNameForTest(),
+                    Files.readString(Path.of(classLoader.getResource("processor/IndexMappingMultipleShard.json").toURI())),
+                    DENSE_INGEST_PIPELINE_NAME
                 );
 
                 addDocument(getIndexNameForTest(), "0", TEST_TEXT_FIELD, TEXT_1, null, null);
@@ -133,10 +130,13 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                     expectThrows(ResponseException.class, () -> search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1));
                 } else {
                     createSearchRequestProcessor(modelId, DENSE_SEARCH_PIPELINE_NAME);
-                    updateIndexSettings(getIndexNameForTest(), Settings.builder().put("index.search.default_pipeline", DENSE_SEARCH_PIPELINE_NAME));
+                    updateIndexSettings(
+                        getIndexNameForTest(),
+                        Settings.builder().put("index.search.default_pipeline", DENSE_SEARCH_PIPELINE_NAME)
+                    );
                     assertEquals(
-                            search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
-                            search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
+                        search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
+                        search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
                     );
                 }
                 break;
@@ -150,10 +150,13 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                     expectThrows(ResponseException.class, () -> search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1));
                 } else {
                     createSearchRequestProcessor(modelId, DENSE_SEARCH_PIPELINE_NAME);
-                    updateIndexSettings(getIndexNameForTest(), Settings.builder().put("index.search.default_pipeline", DENSE_SEARCH_PIPELINE_NAME));
+                    updateIndexSettings(
+                        getIndexNameForTest(),
+                        Settings.builder().put("index.search.default_pipeline", DENSE_SEARCH_PIPELINE_NAME)
+                    );
                     assertEquals(
-                            search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
-                            search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
+                        search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
+                        search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
                     );
                 }
                 break;
@@ -166,12 +169,15 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                     // create the neural_query_enricher processor if we don't create them before
                     if (!bwcVersion.onOrAfter(Version.V_2_11_0)) {
                         createSearchRequestProcessor(modelId, DENSE_SEARCH_PIPELINE_NAME);
-                        updateIndexSettings(getIndexNameForTest(), Settings.builder().put("index.search.default_pipeline", DENSE_SEARCH_PIPELINE_NAME));
+                        updateIndexSettings(
+                            getIndexNameForTest(),
+                            Settings.builder().put("index.search.default_pipeline", DENSE_SEARCH_PIPELINE_NAME)
+                        );
                     }
 
                     assertEquals(
-                            search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
-                            search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
+                        search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
+                        search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
                     );
                 } finally {
                     wipeOfTestResources(getIndexNameForTest(), DENSE_INGEST_PIPELINE_NAME, modelId, DENSE_SEARCH_PIPELINE_NAME);

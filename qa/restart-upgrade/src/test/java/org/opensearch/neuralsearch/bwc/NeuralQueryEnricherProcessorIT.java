@@ -40,13 +40,11 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
         }
 
         String modelId = null;
-        NeuralSparseQueryBuilder sparseEncodingQueryBuilderWithoutModelId = new NeuralSparseQueryBuilder().fieldName(
-                TEST_ENCODING_FIELD
-        ).queryText(TEXT_1);
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilderWithoutModelId = new NeuralSparseQueryBuilder().fieldName(TEST_ENCODING_FIELD)
+            .queryText(TEXT_1);
         // will set the model_id after we obtain the id
-        NeuralSparseQueryBuilder sparseEncodingQueryBuilderWithModelId = new NeuralSparseQueryBuilder().fieldName(
-                TEST_ENCODING_FIELD
-        ).queryText(TEXT_1);
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilderWithModelId = new NeuralSparseQueryBuilder().fieldName(TEST_ENCODING_FIELD)
+            .queryText(TEXT_1);
 
         if (isRunningAgainstOldCluster()) {
             modelId = uploadSparseEncodingModel();
@@ -66,8 +64,6 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
                 getIndexNameForTest(),
                 Settings.builder().put("index.search.default_pipeline", SPARSE_SEARCH_PIPELINE_NAME)
             );
-
-
 
             if (bwcVersion.onOrAfter(Version.V_2_13_0)) {
                 // after we support default model id in neural_sparse query
@@ -118,10 +114,13 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
                 expectThrows(ResponseException.class, () -> search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1));
             } else {
                 createSearchRequestProcessor(modelId, DENSE_SEARCH_PIPELINE_NAME);
-                updateIndexSettings(getIndexNameForTest(), Settings.builder().put("index.search.default_pipeline", DENSE_SEARCH_PIPELINE_NAME));
+                updateIndexSettings(
+                    getIndexNameForTest(),
+                    Settings.builder().put("index.search.default_pipeline", DENSE_SEARCH_PIPELINE_NAME)
+                );
                 assertEquals(
-                        search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
-                        search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
+                    search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
+                    search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
                 );
             }
         } else {
@@ -133,7 +132,10 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
                 // create the neural_query_enricher processor if we don't create them before
                 if (!bwcVersion.onOrAfter(Version.V_2_11_0)) {
                     createSearchRequestProcessor(modelId, DENSE_SEARCH_PIPELINE_NAME);
-                    updateIndexSettings(getIndexNameForTest(), Settings.builder().put("index.search.default_pipeline", DENSE_SEARCH_PIPELINE_NAME));
+                    updateIndexSettings(
+                        getIndexNameForTest(),
+                        Settings.builder().put("index.search.default_pipeline", DENSE_SEARCH_PIPELINE_NAME)
+                    );
                 }
 
                 assertEquals(
