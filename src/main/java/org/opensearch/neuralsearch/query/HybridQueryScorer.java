@@ -45,14 +45,14 @@ public final class HybridQueryScorer extends Scorer {
     private final Map<Query, List<Integer>> queryToIndex;
 
     private final DocIdSetIterator approximation;
-    HybridScoreBlockBoundaryPropagator disjunctionBlockPropagator;
+    private final HybridScoreBlockBoundaryPropagator disjunctionBlockPropagator;
     private final TwoPhase twoPhase;
 
-    public HybridQueryScorer(Weight weight, List<Scorer> subScorers) throws IOException {
+    public HybridQueryScorer(final Weight weight, final List<Scorer> subScorers) throws IOException {
         this(weight, subScorers, ScoreMode.TOP_SCORES);
     }
 
-    public HybridQueryScorer(Weight weight, List<Scorer> subScorers, ScoreMode scoreMode) throws IOException {
+    HybridQueryScorer(final Weight weight, final List<Scorer> subScorers, final ScoreMode scoreMode) throws IOException {
         super(weight);
         this.subScorers = Collections.unmodifiableList(subScorers);
         subScores = new float[subScorers.size()];

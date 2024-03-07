@@ -5,17 +5,12 @@
 package org.opensearch.neuralsearch.search.query;
 
 import java.io.IOException;
-import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 
 import com.google.common.annotations.VisibleForTesting;
-import lombok.AllArgsConstructor;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.Collector;
-import org.apache.lucene.search.CollectorManager;
 import org.apache.lucene.search.FieldExistsQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.common.settings.Settings;
@@ -28,10 +23,7 @@ import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.QueryCollectorContext;
 import org.opensearch.search.query.QueryPhase;
-import org.opensearch.search.query.QueryPhaseExecutionException;
 import org.opensearch.search.query.QueryPhaseSearcherWrapper;
-import org.opensearch.search.query.QuerySearchResult;
-import org.opensearch.search.query.ReduceableSearchResult;
 
 import lombok.extern.log4j.Log4j2;
 
@@ -180,59 +172,5 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
     public AggregationProcessor aggregationProcessor(SearchContext searchContext) {
         AggregationProcessor coreAggProcessor = super.aggregationProcessor(searchContext);
         return new HybridAggregationProcessor(coreAggProcessor);
-    }
-
-    @AllArgsConstructor
-    public static class HybridAggregationProcessor implements AggregationProcessor {
-
-        private final AggregationProcessor delegateAggsProcessor;
-
-        @Override
-        public void preProcess(SearchContext context) {
-            delegateAggsProcessor.preProcess(context);
-
-            if (isHybridQuery(context.query(), context)) {
-                // adding collector manager for hybrid query
-                CollectorManager collectorManager;
-                try {
-                    collectorManager = HybridCollectorManager.createHybridCollectorManager(context);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-                Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> collectorManagersByManagerClass = context
-                    .queryCollectorManagers();
-                collectorManagersByManagerClass.put(HybridCollectorManager.class, collectorManager);
-            }
-        }
-
-        @Override
-        public void postProcess(SearchContext context) {
-            if (isHybridQuery(context.query(), context)) {
-                if (!context.shouldUseConcurrentSearch()) {
-                    reduceCollectorResults(context);
-                }
-                updateQueryResult(context.queryResult(), context);
-            }
-
-            delegateAggsProcessor.postProcess(context);
-        }
-
-        private void reduceCollectorResults(SearchContext context) {
-            CollectorManager<?, ReduceableSearchResult> collectorManager = context.queryCollectorManagers()
-                .get(HybridCollectorManager.class);
-            try {
-                final Collection collectors = List.of(collectorManager.newCollector());
-                collectorManager.reduce(collectors).reduce(context.queryResult());
-            } catch (IOException e) {
-                throw new QueryPhaseExecutionException(context.shardTarget(), "failed to execute hybrid query aggregation processor", e);
-            }
-        }
-
-        private void updateQueryResult(final QuerySearchResult queryResult, final SearchContext searchContext) {
-            boolean isSingleShard = searchContext.numberOfShards() == 1;
-            if (isSingleShard) {
-                searchContext.size(queryResult.queryResult().topDocs().topDocs.scoreDocs.length);
-            }
-        }
     }
 }

@@ -85,10 +85,22 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         return hybridcollector;
     }
 
+    /**
+     * Reduce the results from hybrid scores collector into a format specific for hybrid search query:
+     * - start
+     * - sub-query-delimiter
+     * - scores
+     * - stop
+     * Ignore other collectors if they are present in the context
+     * @param collectors collection of collectors after they has been executed and collected documents and scores
+     * @return search results that can be reduced be the caller
+     */
     @Override
     public ReduceableSearchResult reduce(Collection<Collector> collectors) {
         final List<HybridTopScoreDocCollector> hybridTopScoreDocCollectors = new ArrayList<>();
-
+        // check if collector for hybrid query scores is part of this search context. It can be wrapped into MultiCollectorWrapper
+        // in case multiple collector managers are registered. We use hybrid scores collector to format scores into
+        // format specific for hybrid search query: start, sub-query-delimiter, scores, stop
         for (final Collector collector : collectors) {
             if (collector instanceof MultiCollectorWrapper) {
                 for (final Collector sub : (((MultiCollectorWrapper) collector).getCollectors())) {

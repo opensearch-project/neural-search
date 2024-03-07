@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -79,6 +80,9 @@ public class HybridTopScoreDocCollector implements Collector {
 
             @Override
             public void collect(int doc) throws IOException {
+                if (Objects.isNull(compoundQueryScorer)) {
+                    throw new IllegalArgumentException("scorers are null for all sub-queries in hybrid query");
+                }
                 float[] subScoresByQuery = compoundQueryScorer.hybridScores();
                 // iterate over results for each query
                 if (compoundScores == null) {

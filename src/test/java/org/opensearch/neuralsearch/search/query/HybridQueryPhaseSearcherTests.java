@@ -807,7 +807,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         SearchContext searchContext = mock(SearchContext.class);
         AggregationProcessor aggregationProcessor = hybridQueryPhaseSearcher.aggregationProcessor(searchContext);
         assertNotNull(aggregationProcessor);
-        assertTrue(aggregationProcessor instanceof HybridQueryPhaseSearcher.HybridAggregationProcessor);
+        assertTrue(aggregationProcessor instanceof HybridAggregationProcessor);
     }
 
     @SneakyThrows

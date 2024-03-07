@@ -49,8 +49,7 @@ public class HybridAggregationProcessorTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testAggregationProcessorDelegate_whenPreAndPostAreCalled_thenSuccessful() {
         AggregationProcessor mockAggsProcessorDelegate = mock(AggregationProcessor.class);
-        HybridQueryPhaseSearcher.HybridAggregationProcessor hybridAggregationProcessor =
-            new HybridQueryPhaseSearcher.HybridAggregationProcessor(mockAggsProcessorDelegate);
+        HybridAggregationProcessor hybridAggregationProcessor = new HybridAggregationProcessor(mockAggsProcessorDelegate);
 
         SearchContext searchContext = mock(SearchContext.class);
         hybridAggregationProcessor.preProcess(searchContext);
@@ -63,8 +62,7 @@ public class HybridAggregationProcessorTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testCollectorManager_whenHybridQueryAndNotConcurrentSearch_thenSuccessful() {
         AggregationProcessor mockAggsProcessorDelegate = mock(AggregationProcessor.class);
-        HybridQueryPhaseSearcher.HybridAggregationProcessor hybridAggregationProcessor =
-            new HybridQueryPhaseSearcher.HybridAggregationProcessor(mockAggsProcessorDelegate);
+        HybridAggregationProcessor hybridAggregationProcessor = new HybridAggregationProcessor(mockAggsProcessorDelegate);
 
         SearchContext searchContext = mock(SearchContext.class);
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
@@ -124,8 +122,7 @@ public class HybridAggregationProcessorTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testCollectorManager_whenHybridQueryAndConcurrentSearch_thenSuccessful() {
         AggregationProcessor mockAggsProcessorDelegate = mock(AggregationProcessor.class);
-        HybridQueryPhaseSearcher.HybridAggregationProcessor hybridAggregationProcessor =
-            new HybridQueryPhaseSearcher.HybridAggregationProcessor(mockAggsProcessorDelegate);
+        HybridAggregationProcessor hybridAggregationProcessor = new HybridAggregationProcessor(mockAggsProcessorDelegate);
 
         SearchContext searchContext = mock(SearchContext.class);
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
@@ -185,8 +182,7 @@ public class HybridAggregationProcessorTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testCollectorManager_whenNotHybridQueryAndNotConcurrentSearch_thenSuccessful() {
         AggregationProcessor mockAggsProcessorDelegate = mock(AggregationProcessor.class);
-        HybridQueryPhaseSearcher.HybridAggregationProcessor hybridAggregationProcessor =
-            new HybridQueryPhaseSearcher.HybridAggregationProcessor(mockAggsProcessorDelegate);
+        HybridAggregationProcessor hybridAggregationProcessor = new HybridAggregationProcessor(mockAggsProcessorDelegate);
 
         SearchContext searchContext = mock(SearchContext.class);
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);

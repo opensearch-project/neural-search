@@ -53,7 +53,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
 
     private String fieldName;
 
-    private static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
+    static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
 
     public HybridQueryBuilder(StreamInput in) throws IOException {
         super(in);

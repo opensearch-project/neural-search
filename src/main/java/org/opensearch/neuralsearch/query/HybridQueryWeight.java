@@ -21,6 +21,8 @@ import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.ScorerSupplier;
 import org.apache.lucene.search.Weight;
 
+import static org.opensearch.neuralsearch.query.HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES;
+
 /**
  * Calculates query weights and build query scorers for hybrid query.
  */
@@ -30,8 +32,6 @@ public final class HybridQueryWeight extends Weight {
     private final List<Weight> weights;
 
     private final ScoreMode scoreMode;
-
-    static final int BOOLEAN_REWRITE_TERM_COUNT_THRESHOLD = 16;
 
     /**
      * Construct the Weight for this Query searched by searcher. Recursively construct subquery weights.
@@ -108,9 +108,8 @@ public final class HybridQueryWeight extends Weight {
      */
     @Override
     public boolean isCacheable(LeafReaderContext ctx) {
-        if (weights.size() > BOOLEAN_REWRITE_TERM_COUNT_THRESHOLD) {
-            // Disallow caching large queries to not encourage users
-            // to build large queries
+        if (weights.size() > MAX_NUMBER_OF_SUB_QUERIES) {
+            // this situation should never happen, but in case it do such query will not be cached
             return false;
         }
         return weights.stream().allMatch(w -> w.isCacheable(ctx));
