@@ -43,9 +43,11 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
 
     public static String MAX_CHUNK_LIMIT_FIELD = "max_chunk_limit";
 
-    private static final int DEFAULT_MAX_CHUNK_LIMIT = 100;
+    private static final int DEFAULT_MAX_CHUNK_LIMIT = -1;
 
-    private int current_max_chunk_limit = DEFAULT_MAX_CHUNK_LIMIT;
+    private int current_chunk_count = 0;
+
+    private int max_chunk_limit = DEFAULT_MAX_CHUNK_LIMIT;
     private final Set<String> supportedChunkers = ChunkerFactory.getAllChunkers();
 
     private String chunkerType;
@@ -118,7 +120,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
             this.chunkerParameters = (Map<String, Object>) algorithmValue;
             chunker.validateParameters(chunkerParameters);
             if (((Map<String, Object>) algorithmValue).containsKey(MAX_CHUNK_LIMIT_FIELD)) {
-                this.current_max_chunk_limit = ((Number) ((Map<String, Object>) algorithmValue).get(MAX_CHUNK_LIMIT_FIELD)).intValue();
+                this.max_chunk_limit = ((Number) ((Map<String, Object>) algorithmValue).get(MAX_CHUNK_LIMIT_FIELD)).intValue();
             }
         }
     }
@@ -138,14 +140,16 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
     }
 
     private List<String> chunkString(String content) {
-        // assume that content is either a map, list or string
-        if (current_max_chunk_limit < 0) {
-            throw new IllegalStateException("Exceed [" + MAX_CHUNK_LIMIT_FIELD + "] in [" + chunkerType+ "] algorithm");
-        }
         FieldChunker chunker = ChunkerFactory.create(chunkerType, analysisRegistry);
         List<String> result = chunker.chunk(content, chunkerParameters);
-        current_max_chunk_limit -= result.size();
-        chunkerParameters.put(MAX_CHUNK_LIMIT_FIELD, current_max_chunk_limit);
+        current_chunk_count += result.size();
+        if (max_chunk_limit != DEFAULT_MAX_CHUNK_LIMIT && current_chunk_count > max_chunk_limit) {
+            throw new IllegalArgumentException(
+                "Unable to create the processor as the number of chunks [" + current_chunk_count + "] exceeds the maximum chunk limit ["
+                    + MAX_CHUNK_LIMIT_FIELD
+                    + "]"
+            );
+        }
         return chunker.chunk(content, chunkerParameters);
     }
 
@@ -174,7 +178,6 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
     public IngestDocument execute(IngestDocument ingestDocument) {
         validateEmbeddingFieldsValue(ingestDocument);
 
-        chunkerParameters.put(MAX_CHUNK_LIMIT_FIELD, current_max_chunk_limit);
         if (Objects.equals(chunkerType, FIXED_LENGTH_ALGORITHM)) {
             // add maxTokenCount setting from index metadata to chunker parameters
             Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
