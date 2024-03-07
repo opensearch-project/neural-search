@@ -7,7 +7,7 @@ package org.opensearch.neuralsearch.processor.chunker;
 import java.util.Map;
 import java.util.List;
 
-public interface IFieldChunker {
+public interface FieldChunker {
     void validateParameters(Map<String, Object> parameters);
 
     List<String> chunk(String content, Map<String, Object> parameters);

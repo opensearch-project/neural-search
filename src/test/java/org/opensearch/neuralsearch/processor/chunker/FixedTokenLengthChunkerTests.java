@@ -30,7 +30,7 @@ import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChun
 
 public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
 
-    private FixedTokenLengthChunker FixedTokenLengthChunker;
+    private org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker FixedTokenLengthChunker;
 
     @Before
     @SneakyThrows

@@ -11,13 +11,11 @@ import java.util.Map;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
-
 import org.opensearch.index.analysis.AnalysisRegistry;
-
 import static org.opensearch.action.admin.indices.analyze.TransportAnalyzeAction.analyze;
 
 @Log4j2
-public class FixedTokenLengthChunker implements IFieldChunker {
+public class FixedTokenLengthChunker implements FieldChunker {
 
     public static final String TOKEN_LIMIT_FIELD = "token_limit";
     public static final String OVERLAP_RATE_FIELD = "overlap_rate";
@@ -29,7 +27,7 @@ public class FixedTokenLengthChunker implements IFieldChunker {
     private static final int DEFAULT_TOKEN_LIMIT = 500;
     private static final double DEFAULT_OVERLAP_RATE = 0.2;
     private static final int DEFAULT_MAX_TOKEN_COUNT = 10000;
-    private static final int DEFAULT_MAX_CHUNK_LIMIT = -1;
+    private static final int DEFAULT_MAX_CHUNK_LIMIT = 100;
     private static final String DEFAULT_TOKENIZER = "standard";
 
     private final AnalysisRegistry analysisRegistry;
@@ -50,15 +48,14 @@ public class FixedTokenLengthChunker implements IFieldChunker {
                 tokenList.add(analyzeToken.getTerm());
             }
             return tokenList;
-
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("Fixed token length algorithm meet with exception: " + e);
         }
     };
 
     @Override
     public List<String> chunk(String content, Map<String, Object> parameters) {
-        // assume that parameters has been validated
+        // prior to chunking, parameters have been validated
         int tokenLimit = DEFAULT_TOKEN_LIMIT;
         double overlapRate = DEFAULT_OVERLAP_RATE;
         int maxTokenCount = DEFAULT_MAX_TOKEN_COUNT;
@@ -107,15 +104,14 @@ public class FixedTokenLengthChunker implements IFieldChunker {
     }
 
     private void addPassageToList(List<String> passages, String passage, int maxChunkLimit) {
-        if (maxChunkLimit != DEFAULT_MAX_CHUNK_LIMIT && passages.size() >= maxChunkLimit) {
-            throw new IllegalStateException("Exceed max chunk number: " + maxChunkLimit);
+        if (passages.size() >= maxChunkLimit) {
+            throw new IllegalStateException("Exceed max chunk number in fixed token length algorithm");
         }
         passages.add(passage);
     }
 
-    private void validatePositiveIntegerParameter(Map<String, Object> parameters, String fieldName) {
+    private void validatePositiveIntegerParameter(Map<String, Object> parameters, String fieldName, boolean requirePositive) {
         // this method validate that parameter is a positive integer
-        // this method accepts positive float or double number
         if (!parameters.containsKey(fieldName)) {
             // all parameters are optional
             return;
@@ -125,16 +121,22 @@ public class FixedTokenLengthChunker implements IFieldChunker {
                 "fixed length parameter [" + fieldName + "] cannot be cast to [" + Number.class.getName() + "]"
             );
         }
-        if (((Number) parameters.get(fieldName)).intValue() <= 0) {
-            throw new IllegalArgumentException("fixed length parameter [" + fieldName + "] must be positive");
+        if (requirePositive) {
+            if (((Number) parameters.get(fieldName)).intValue() <= 0) {
+                throw new IllegalArgumentException("fixed length parameter [" + fieldName + "] must be positive");
+            }
+        } else {
+            if (((Number) parameters.get(fieldName)).intValue() < 0) {
+                throw new IllegalArgumentException("fixed length parameter [" + fieldName + "] cannot be negative");
+            }
         }
     }
 
     @Override
     public void validateParameters(Map<String, Object> parameters) {
-        validatePositiveIntegerParameter(parameters, TOKEN_LIMIT_FIELD);
-        validatePositiveIntegerParameter(parameters, MAX_CHUNK_LIMIT_FIELD);
-        validatePositiveIntegerParameter(parameters, MAX_TOKEN_COUNT_FIELD);
+        validatePositiveIntegerParameter(parameters, TOKEN_LIMIT_FIELD, true);
+        validatePositiveIntegerParameter(parameters, MAX_CHUNK_LIMIT_FIELD, false);
+        validatePositiveIntegerParameter(parameters, MAX_TOKEN_COUNT_FIELD, true);
 
         if (parameters.containsKey(OVERLAP_RATE_FIELD)) {
             if (!(parameters.get(OVERLAP_RATE_FIELD) instanceof Number)) {

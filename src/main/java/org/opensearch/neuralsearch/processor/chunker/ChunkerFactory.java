@@ -13,7 +13,7 @@ public class ChunkerFactory {
     public static final String FIXED_LENGTH_ALGORITHM = "fix_length";
     public static final String DELIMITER_ALGORITHM = "delimiter";
 
-    public static IFieldChunker create(String type, AnalysisRegistry analysisRegistry) {
+    public static FieldChunker create(String type, AnalysisRegistry analysisRegistry) {
         switch (type) {
             case FIXED_LENGTH_ALGORITHM:
                 return new FixedTokenLengthChunker(analysisRegistry);

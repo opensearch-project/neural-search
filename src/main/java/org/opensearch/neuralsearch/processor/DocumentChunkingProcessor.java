@@ -24,7 +24,7 @@ import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
-import org.opensearch.neuralsearch.processor.chunker.IFieldChunker;
+import org.opensearch.neuralsearch.processor.chunker.FieldChunker;
 import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 
@@ -41,6 +41,11 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
 
     public static final String ALGORITHM_FIELD = "algorithm";
 
+    public static String MAX_CHUNK_LIMIT_FIELD = "max_chunk_limit";
+
+    private static final int DEFAULT_MAX_CHUNK_LIMIT = 100;
+
+    private int current_max_chunk_limit = DEFAULT_MAX_CHUNK_LIMIT;
     private final Set<String> supportedChunkers = ChunkerFactory.getAllChunkers();
 
     private String chunkerType;
@@ -107,8 +112,14 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                     "Unable to create the processor as [" + ALGORITHM_FIELD + "] cannot be cast to [" + Map.class.getName() + "]"
                 );
             }
+            FieldChunker chunker = ChunkerFactory.create(algorithmKey, analysisRegistry);
+            chunker.validateParameters((Map<String, Object>) algorithmValue);
             this.chunkerType = algorithmKey;
             this.chunkerParameters = (Map<String, Object>) algorithmValue;
+            chunker.validateParameters(chunkerParameters);
+            if (((Map<String, Object>) algorithmValue).containsKey(MAX_CHUNK_LIMIT_FIELD)) {
+                this.current_max_chunk_limit = ((Number) ((Map<String, Object>) algorithmValue).get(MAX_CHUNK_LIMIT_FIELD)).intValue();
+            }
         }
     }
 
@@ -128,7 +139,13 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
 
     private List<String> chunkString(String content) {
         // assume that content is either a map, list or string
-        IFieldChunker chunker = ChunkerFactory.create(chunkerType, analysisRegistry);
+        if (current_max_chunk_limit <= 0) {
+            throw new IllegalStateException("Exceed [" + MAX_CHUNK_LIMIT_FIELD + "] in [" + chunkerType+ "] algorithm");
+        }
+        FieldChunker chunker = ChunkerFactory.create(chunkerType, analysisRegistry);
+        List<String> result = chunker.chunk(content, chunkerParameters);
+        current_max_chunk_limit -= result.size();
+        chunkerParameters.put(MAX_CHUNK_LIMIT_FIELD, current_max_chunk_limit);
         return chunker.chunk(content, chunkerParameters);
     }
 
