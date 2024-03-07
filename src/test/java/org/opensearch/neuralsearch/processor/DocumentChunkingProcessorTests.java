@@ -74,7 +74,6 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
 
     @Before
     public void setup() {
-        Settings settings = Settings.builder().build();
         Metadata metadata = mock(Metadata.class);
         ClusterState clusterState = mock(ClusterState.class);
         ClusterService clusterService = mock(ClusterService.class);
@@ -82,7 +81,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         when(metadata.index(anyString())).thenReturn(null);
         when(clusterState.metadata()).thenReturn(metadata);
         when(clusterService.state()).thenReturn(clusterState);
-        factory = new DocumentChunkingProcessor.Factory(settings, clusterService, indicesService, getAnalysisRegistry());
+        factory = new DocumentChunkingProcessor.Factory(environment, clusterService, indicesService, getAnalysisRegistry());
     }
 
     private Map<String, Object> createFixedTokenLengthParameters() {

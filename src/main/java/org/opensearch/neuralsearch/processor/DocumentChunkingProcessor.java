@@ -120,7 +120,11 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
             this.chunkerParameters = (Map<String, Object>) algorithmValue;
             chunker.validateParameters(chunkerParameters);
             if (((Map<String, Object>) algorithmValue).containsKey(MAX_CHUNK_LIMIT_FIELD)) {
-                this.max_chunk_limit = ((Number) ((Map<String, Object>) algorithmValue).get(MAX_CHUNK_LIMIT_FIELD)).intValue();
+                int max_chunk_limit = ((Number) ((Map<String, Object>) algorithmValue).get(MAX_CHUNK_LIMIT_FIELD)).intValue();
+                if (max_chunk_limit <= 0) {
+                    throw new IllegalArgumentException("Parameter [" + MAX_CHUNK_LIMIT_FIELD + "] must be a positive integer");
+                }
+                this.max_chunk_limit = max_chunk_limit;
             }
         }
     }
