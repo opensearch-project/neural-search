@@ -119,7 +119,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                 createPipelineProcessor(modelId, DENSE_INGEST_PIPELINE_NAME);
                 createIndexWithConfiguration(
                     getIndexNameForTest(),
-                    Files.readString(Path.of(classLoader.getResource("processor/IndexMappingMultipleShard.json").toURI())),
+                    Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
                     DENSE_INGEST_PIPELINE_NAME
                 );
 
