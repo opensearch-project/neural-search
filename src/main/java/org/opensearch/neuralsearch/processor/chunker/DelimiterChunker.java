@@ -16,6 +16,8 @@ public class DelimiterChunker implements FieldChunker {
 
     public static String MAX_CHUNK_LIMIT_FIELD = "max_chunk_limit";
 
+    private static final int DEFAULT_MAX_CHUNK_LIMIT = 100;
+
     @Override
     public void validateParameters(Map<String, Object> parameters) {
         if (parameters.containsKey(DELIMITER_FIELD)) {
@@ -30,8 +32,8 @@ public class DelimiterChunker implements FieldChunker {
             Object maxChunkLimit = parameters.get(MAX_CHUNK_LIMIT_FIELD);
             if (!(maxChunkLimit instanceof Integer)) {
                 throw new IllegalArgumentException("Parameter max_chunk_limit:" + maxChunkLimit.toString() + " should be integer.");
-            } else if ((int) maxChunkLimit <= 0) {
-                throw new IllegalArgumentException("Parameter max_chunk_limit:" + maxChunkLimit + " is not greater than 0.");
+            } else if ((int) maxChunkLimit < 0) {
+                throw new IllegalArgumentException("Parameter max_chunk_limit:" + maxChunkLimit + " is negative.");
             }
         }
     }
