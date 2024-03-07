@@ -33,7 +33,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         Version bwcVersion = parseVersionFromString(getBWCVersion().get());
         // skip this test before we have neural_sparse search in 2.11
-        if (!bwcVersion.onOrAfter(Version.V_2_11_0)) {
+        if (bwcVersion.before(Version.V_2_11_0)) {
             return;
         }
 
@@ -125,7 +125,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
 
                 addDocument(getIndexNameForTest(), "0", TEST_TEXT_FIELD, TEXT_1, null, null);
 
-                if (!bwcVersion.onOrAfter(Version.V_2_11_0)) {
+                if (bwcVersion.before(Version.V_2_11_0)) {
                     // before we have neural_query_enricher
                     expectThrows(ResponseException.class, () -> search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1));
                 } else {
@@ -145,7 +145,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                 loadModel(modelId);
                 neuralQueryBuilderWithModelId.modelId(modelId);
 
-                if (!bwcVersion.onOrAfter(Version.V_2_11_0)) {
+                if (bwcVersion.before(Version.V_2_11_0)) {
                     // before we have neural_query_enricher
                     expectThrows(ResponseException.class, () -> search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1));
                 } else {
@@ -167,7 +167,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                     neuralQueryBuilderWithModelId.modelId(modelId);
 
                     // create the neural_query_enricher processor if we don't create them before
-                    if (!bwcVersion.onOrAfter(Version.V_2_11_0)) {
+                    if (bwcVersion.before(Version.V_2_11_0)) {
                         createSearchRequestProcessor(modelId, DENSE_SEARCH_PIPELINE_NAME);
                         updateIndexSettings(
                             getIndexNameForTest(),
