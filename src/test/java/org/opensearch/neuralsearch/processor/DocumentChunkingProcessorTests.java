@@ -389,6 +389,29 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
+    public void testExecute_withFixedTokenLength_andFieldMapNestedMap_sourceList_successful() {
+        DocumentChunkingProcessor processor = createFixedTokenLengthInstance(createNestedFieldMap());
+        IngestDocument ingestDocument = createIngestDocumentWithNestedSourceData(createSourceDataListNestedMap());
+        IngestDocument document = processor.execute(ingestDocument);
+        assert document.getSourceAndMetadata().containsKey(INPUT_NESTED_FIELD_KEY);
+        Object nestedResult = document.getSourceAndMetadata().get(INPUT_NESTED_FIELD_KEY);
+        List<String> expectedPassages = new ArrayList<>();
+
+        expectedPassages.add("This is an example document to be chunked The document");
+        expectedPassages.add("The document contains a single paragraph two sentences and 24");
+        expectedPassages.add("and 24 tokens by standard tokenizer in OpenSearch");
+        assert (nestedResult instanceof List);
+        assertEquals(((List<?>) nestedResult).size(), 2);
+        for (Object result : (List<Object>) nestedResult) {
+            assert (result instanceof Map);
+            assert ((Map<String, Object>) result).containsKey(OUTPUT_FIELD);
+            Object passages = ((Map<?, ?>) result).get(OUTPUT_FIELD);
+            assert (passages instanceof List);
+            assertEquals(expectedPassages, passages);
+        }
+    }
+
+    @SneakyThrows
     public void testExecute_withDelimiter_andSourceDataString_successful() {
         DocumentChunkingProcessor processor = createDelimiterInstance();
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
