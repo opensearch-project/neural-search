@@ -17,14 +17,6 @@ import static org.opensearch.neuralsearch.processor.chunker.DelimiterChunker.MAX
 
 public class DelimiterChunkerTests extends OpenSearchTestCase {
 
-    public void testChunkerWithNoDelimiterField() {
-        DelimiterChunker chunker = new DelimiterChunker();
-        String content = "a\nb\nc\nd";
-        Map<String, Object> inputParameters = Map.of("", "");
-        Exception exception = assertThrows(IllegalArgumentException.class, () -> chunker.validateParameters(inputParameters));
-        Assert.assertEquals("You must contain field: " + DELIMITER_FIELD + " in your parameter.", exception.getMessage());
-    }
-
     public void testChunkerWithWrongLimitFieldList() {
         DelimiterChunker chunker = new DelimiterChunker();
         String content = "a\nb\nc\nd";
@@ -79,6 +71,14 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
         Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, "\n");
         List<String> chunkResult = chunker.chunk(content, inputParameters);
         assertEquals(List.of("a\n", "b\n", "c\n", "d"), chunkResult);
+    }
+
+    public void testChunkerWithDefaultDelimiter() {
+        DelimiterChunker chunker = new DelimiterChunker();
+        String content = "a.b.c.d";
+        Map<String, Object> inputParameters = Map.of();
+        List<String> chunkResult = chunker.chunk(content, inputParameters);
+        assertEquals(List.of("a.", "b.", "c.", "d"), chunkResult);
     }
 
     public void testChunkerWithDelimiterEnd() {

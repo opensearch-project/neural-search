@@ -25,8 +25,6 @@ public class DelimiterChunker implements IFieldChunker {
             } else if (((String) delimiter).isEmpty()) {
                 throw new IllegalArgumentException("delimiter parameters should not be empty.");
             }
-        } else {
-            throw new IllegalArgumentException("You must contain field: " + DELIMITER_FIELD + " in your parameter.");
         }
         if (parameters.containsKey(MAX_CHUNK_LIMIT_FIELD)) {
             Object maxChunkLimit = parameters.get(MAX_CHUNK_LIMIT_FIELD);
@@ -40,7 +38,7 @@ public class DelimiterChunker implements IFieldChunker {
 
     @Override
     public List<String> chunk(String content, Map<String, Object> parameters) {
-        String delimiter = (String) parameters.get(DELIMITER_FIELD);
+        String delimiter = (String) parameters.getOrDefault(DELIMITER_FIELD, ".");
         int maxChunkingNumber = (int) parameters.getOrDefault(MAX_CHUNK_LIMIT_FIELD, -1);
         List<String> chunkResult = new ArrayList<>();
         int start = 0;
