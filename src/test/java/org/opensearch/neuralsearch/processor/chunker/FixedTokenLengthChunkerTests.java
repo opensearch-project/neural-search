@@ -97,13 +97,13 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
 
     public void testValidateParameters_whenIllegalOverlapRateValue_thenFail() {
         Map<String, Object> parameters = new HashMap<>();
-        parameters.put(OVERLAP_RATE_FIELD, 1.0);
+        parameters.put(OVERLAP_RATE_FIELD, 0.6);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
             () -> FixedTokenLengthChunker.validateParameters(parameters)
         );
         assertEquals(
-            "fixed length parameter [" + OVERLAP_RATE_FIELD + "] must be between 0 and 1, 1 is not included.",
+            "fixed length parameter [" + OVERLAP_RATE_FIELD + "] must be between 0 and 0.5",
             illegalArgumentException.getMessage()
         );
     }
@@ -129,8 +129,8 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         List<String> passages = FixedTokenLengthChunker.chunk(content, parameters);
         List<String> expectedPassages = new ArrayList<>();
         expectedPassages.add("This is an example document to be chunked The document");
-        expectedPassages.add("The document contains a single paragraph two sentences and 24");
-        expectedPassages.add("and 24 tokens by standard tokenizer in OpenSearch");
+        expectedPassages.add("contains a single paragraph two sentences and 24 tokens by");
+        expectedPassages.add("standard tokenizer in OpenSearch");
         assertEquals(expectedPassages, passages);
     }
 
@@ -144,7 +144,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         expectedPassages.add(
             "This is an example document to be chunked The document contains a single paragraph two sentences and 24 tokens by"
         );
-        expectedPassages.add("and 24 tokens by standard tokenizer in OpenSearch");
+        expectedPassages.add("standard tokenizer in OpenSearch");
         assertEquals(expectedPassages, passages);
     }
 
