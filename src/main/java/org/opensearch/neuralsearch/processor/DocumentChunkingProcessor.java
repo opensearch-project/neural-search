@@ -179,7 +179,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
     @Override
     public IngestDocument execute(IngestDocument ingestDocument) {
         validateEmbeddingFieldsValue(ingestDocument);
-
+        current_chunk_count = 0;
         if (Objects.equals(chunkerType, FIXED_LENGTH_ALGORITHM)) {
             // add maxTokenCount setting from index metadata to chunker parameters
             Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
