@@ -152,7 +152,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                 "Unable to create the processor as the number of chunks ["
                     + current_chunk_count
                     + "] exceeds the maximum chunk limit ["
-                    + MAX_CHUNK_LIMIT_FIELD
+                    + max_chunk_limit
                     + "]"
             );
         }
