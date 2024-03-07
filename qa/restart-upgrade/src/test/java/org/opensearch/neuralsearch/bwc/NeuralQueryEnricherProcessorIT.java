@@ -34,7 +34,11 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
     public void testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         Version bwcVersion = parseVersionFromString(getBWCVersion().get());
-        logger.info("bwc version: " + bwcVersion.toString());
+
+        // skip this test before we have neural_sparse search in 2.11
+        if (!bwcVersion.onOrAfter(Version.V_2_11_0)) {
+            return;
+        }
 
         if (isRunningAgainstOldCluster()) {
             String modelId = uploadSparseEncodingModel();
@@ -53,16 +57,17 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
                 getIndexNameForTest(),
                 Settings.builder().put("index.search.default_pipeline", SPARSE_SEARCH_PIPELINE_NAME)
             );
+
+            NeuralSparseQueryBuilder sparseEncodingQueryBuilderWithoutModelId = new NeuralSparseQueryBuilder().fieldName(
+                    TEST_ENCODING_FIELD
+            ).queryText(TEXT_1);
+
             if (bwcVersion.onOrAfter(Version.V_2_13_0)) {
                 // after we support default model id in neural_sparse query
                 // do nothing here. need to add test codes after finishing backport
                 ;
             } else {
                 // before we support default model id in neural_sparse query
-                NeuralSparseQueryBuilder sparseEncodingQueryBuilderWithoutModelId = new NeuralSparseQueryBuilder().fieldName(
-                    TEST_ENCODING_FIELD
-                ).queryText(TEXT_1);
-
                 expectThrows(ResponseException.class, () -> search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1));
             }
         } else {
@@ -89,7 +94,6 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
     public void testNeuralQueryEnricherProcessor_NeuralSearch_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         Version bwcVersion = parseVersionFromString(getBWCVersion().get());
-        logger.info("bwc version: " + bwcVersion.toString());
 
         if (isRunningAgainstOldCluster()) {
             String modelId = uploadTextEmbeddingModel();
@@ -103,22 +107,33 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
 
             addDocument(getIndexNameForTest(), "0", TEST_TEXT_FIELD, TEXT_1, null, null);
 
-            createSearchRequestProcessor(modelId, DENSE_SEARCH_PIPELINE_NAME);
-            updateIndexSettings(getIndexNameForTest(), Settings.builder().put("index.search.default_pipeline", DENSE_SEARCH_PIPELINE_NAME));
-
             NeuralQueryBuilder neuralQueryBuilderWithoutModelId = new NeuralQueryBuilder().fieldName(TEST_ENCODING_FIELD).queryText(TEXT_1);
             NeuralQueryBuilder neuralQueryBuilderWithModelId = new NeuralQueryBuilder().fieldName(TEST_ENCODING_FIELD)
-                .queryText(TEXT_1)
-                .modelId(modelId);
-            assertEquals(
-                search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
-                search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
-            );
+                    .queryText(TEXT_1)
+                    .modelId(modelId);
+
+            if (!bwcVersion.onOrAfter(Version.V_2_11_0)) {
+                // before we have neural_query_enricher
+                expectThrows(ResponseException.class, () -> search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1));
+            } else {
+                createSearchRequestProcessor(modelId, DENSE_SEARCH_PIPELINE_NAME);
+                updateIndexSettings(getIndexNameForTest(), Settings.builder().put("index.search.default_pipeline", DENSE_SEARCH_PIPELINE_NAME));
+                assertEquals(
+                        search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
+                        search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
+                );
+            }
         } else {
             String modelId = null;
             try {
                 modelId = TestUtils.getModelId(getIngestionPipeline(DENSE_INGEST_PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
                 loadModel(modelId);
+
+                // create the neural_query_enricher processor if we don't create them before
+                if (!bwcVersion.onOrAfter(Version.V_2_11_0)) {
+                    createSearchRequestProcessor(modelId, DENSE_SEARCH_PIPELINE_NAME);
+                    updateIndexSettings(getIndexNameForTest(), Settings.builder().put("index.search.default_pipeline", DENSE_SEARCH_PIPELINE_NAME));
+                }
 
                 NeuralQueryBuilder neuralQueryBuilderWithoutModelId = new NeuralQueryBuilder().fieldName(TEST_ENCODING_FIELD)
                     .queryText(TEXT_1);
@@ -130,7 +145,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
                     search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
                 );
             } finally {
-                wipeOfTestResources(getIndexNameForTest(), SPARSE_INGEST_PIPELINE_NAME, modelId, SPARSE_SEARCH_PIPELINE_NAME);
+                wipeOfTestResources(getIndexNameForTest(), DENSE_INGEST_PIPELINE_NAME, modelId, DENSE_SEARCH_PIPELINE_NAME);
             }
         }
     }
