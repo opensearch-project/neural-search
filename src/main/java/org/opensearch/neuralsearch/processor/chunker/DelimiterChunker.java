@@ -14,10 +14,6 @@ public class DelimiterChunker implements FieldChunker {
 
     public static String DELIMITER_FIELD = "delimiter";
 
-    public static String MAX_CHUNK_LIMIT_FIELD = "max_chunk_limit";
-
-    private static final int DEFAULT_MAX_CHUNK_LIMIT = 100;
-
     @Override
     public void validateParameters(Map<String, Object> parameters) {
         if (parameters.containsKey(DELIMITER_FIELD)) {
@@ -28,41 +24,25 @@ public class DelimiterChunker implements FieldChunker {
                 throw new IllegalArgumentException("delimiter parameters should not be empty.");
             }
         }
-        if (parameters.containsKey(MAX_CHUNK_LIMIT_FIELD)) {
-            Object maxChunkLimit = parameters.get(MAX_CHUNK_LIMIT_FIELD);
-            if (!(maxChunkLimit instanceof Integer)) {
-                throw new IllegalArgumentException("Parameter max_chunk_limit:" + maxChunkLimit.toString() + " should be integer.");
-            } else if ((int) maxChunkLimit < 0) {
-                throw new IllegalArgumentException("Parameter max_chunk_limit:" + maxChunkLimit + " is negative.");
-            }
-        }
     }
 
     @Override
     public List<String> chunk(String content, Map<String, Object> parameters) {
         String delimiter = (String) parameters.getOrDefault(DELIMITER_FIELD, ".");
-        int maxChunkingNumber = (int) parameters.getOrDefault(MAX_CHUNK_LIMIT_FIELD, -1);
         List<String> chunkResult = new ArrayList<>();
         int start = 0;
         int end = content.indexOf(delimiter);
 
         while (end != -1) {
-            addChunkResult(chunkResult, maxChunkingNumber, content.substring(start, end + delimiter.length()));
+            chunkResult.add(content.substring(start, end + delimiter.length()));
             start = end + delimiter.length();
             end = content.indexOf(delimiter, start);
         }
 
         if (start < content.length()) {
-            addChunkResult(chunkResult, maxChunkingNumber, content.substring(start));
+            chunkResult.add(content.substring(start));
         }
         return chunkResult;
 
-    }
-
-    private void addChunkResult(List<String> chunkResult, int maxChunkingNumber, String candidate) {
-        if (chunkResult.size() >= maxChunkingNumber && maxChunkingNumber > 0) {
-            throw new IllegalStateException("Exceed max chunk number: " + maxChunkingNumber);
-        }
-        chunkResult.add(candidate);
     }
 }
