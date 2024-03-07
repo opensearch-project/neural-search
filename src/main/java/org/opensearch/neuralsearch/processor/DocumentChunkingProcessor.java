@@ -139,7 +139,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
 
     private List<String> chunkString(String content) {
         // assume that content is either a map, list or string
-        if (current_max_chunk_limit <= 0) {
+        if (current_max_chunk_limit < 0) {
             throw new IllegalStateException("Exceed [" + MAX_CHUNK_LIMIT_FIELD + "] in [" + chunkerType+ "] algorithm");
         }
         FieldChunker chunker = ChunkerFactory.create(chunkerType, analysisRegistry);
