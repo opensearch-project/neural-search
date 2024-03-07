@@ -315,6 +315,5 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                 analysisRegistry
             );
         }
-
     }
 }
