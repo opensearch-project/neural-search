@@ -145,7 +145,9 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
         current_chunk_count += result.size();
         if (max_chunk_limit != DEFAULT_MAX_CHUNK_LIMIT && current_chunk_count > max_chunk_limit) {
             throw new IllegalArgumentException(
-                "Unable to create the processor as the number of chunks [" + current_chunk_count + "] exceeds the maximum chunk limit ["
+                "Unable to create the processor as the number of chunks ["
+                    + current_chunk_count
+                    + "] exceeds the maximum chunk limit ["
                     + MAX_CHUNK_LIMIT_FIELD
                     + "]"
             );
