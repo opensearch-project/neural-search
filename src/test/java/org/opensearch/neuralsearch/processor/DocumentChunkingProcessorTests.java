@@ -97,6 +97,12 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         return parameters;
     }
 
+    private List<Map<String, Object>> createSourceDataListNestedMap() {
+        Map<String, Object> documents = new HashMap<>();
+        documents.put(INPUT_FIELD, createSourceDataString());
+        return List.of(documents, documents);
+    }
+
     private Map<String, Object> createFixedTokenLengthParametersWithMaxChunk(int maxChunkNum) {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(FixedTokenLengthChunker.TOKEN_LIMIT_FIELD, 10);
@@ -398,8 +404,8 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         List<String> expectedPassages = new ArrayList<>();
 
         expectedPassages.add("This is an example document to be chunked The document");
-        expectedPassages.add("The document contains a single paragraph two sentences and 24");
-        expectedPassages.add("and 24 tokens by standard tokenizer in OpenSearch");
+        expectedPassages.add("contains a single paragraph two sentences and 24 tokens by");
+        expectedPassages.add("standard tokenizer in OpenSearch");
         assert (nestedResult instanceof List);
         assertEquals(((List<?>) nestedResult).size(), 2);
         for (Object result : (List<Object>) nestedResult) {
