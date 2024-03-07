@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.math.BigDecimal;
+import java.util.stream.Collectors;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
@@ -22,15 +23,15 @@ public class FixedTokenLengthChunker implements FieldChunker {
     public static final String TOKEN_LIMIT_FIELD = "token_limit";
     public static final String OVERLAP_RATE_FIELD = "overlap_rate";
     public static final String MAX_TOKEN_COUNT_FIELD = "max_token_count";
-    public static String MAX_CHUNK_LIMIT_FIELD = "max_chunk_limit";
     public static final String TOKENIZER_FIELD = "tokenizer";
 
     // default values for each parameter
     private static final int DEFAULT_TOKEN_LIMIT = 500;
-    private static final double DEFAULT_OVERLAP_RATE = 0.2;
+    private static final BigDecimal DEFAULT_OVERLAP_RATE = new BigDecimal("0");
     private static final int DEFAULT_MAX_TOKEN_COUNT = 10000;
-    private static final int DEFAULT_MAX_CHUNK_LIMIT = 100;
     private static final String DEFAULT_TOKENIZER = "standard";
+
+    private static final BigDecimal OVERLAP_RATE_UPPER_BOUND = new BigDecimal("0.5");
 
     private final AnalysisRegistry analysisRegistry;
 
@@ -44,12 +45,7 @@ public class FixedTokenLengthChunker implements FieldChunker {
         analyzeRequest.tokenizer(tokenizer);
         try {
             AnalyzeAction.Response analyzeResponse = analyze(analyzeRequest, analysisRegistry, null, maxTokenCount);
-            List<AnalyzeAction.AnalyzeToken> analyzeTokenList = analyzeResponse.getTokens();
-            List<String> tokenList = new ArrayList<>();
-            for (AnalyzeAction.AnalyzeToken analyzeToken : analyzeTokenList) {
-                tokenList.add(analyzeToken.getTerm());
-            }
-            return tokenList;
+            return analyzeResponse.getTokens().stream().map(AnalyzeAction.AnalyzeToken::getTerm).collect(Collectors.toList());
         } catch (IOException e) {
             throw new RuntimeException("Fixed token length algorithm meet with exception: " + e);
         }
@@ -61,7 +57,6 @@ public class FixedTokenLengthChunker implements FieldChunker {
         int tokenLimit = DEFAULT_TOKEN_LIMIT;
         BigDecimal overlap_rate = new BigDecimal(String.valueOf(DEFAULT_OVERLAP_RATE));
         int maxTokenCount = DEFAULT_MAX_TOKEN_COUNT;
-        int maxChunkLimit = DEFAULT_MAX_CHUNK_LIMIT;
 
         String tokenizer = DEFAULT_TOKENIZER;
 
@@ -77,17 +72,16 @@ public class FixedTokenLengthChunker implements FieldChunker {
         if (parameters.containsKey(TOKENIZER_FIELD)) {
             tokenizer = (String) parameters.get(TOKENIZER_FIELD);
         }
-        if (parameters.containsKey(MAX_CHUNK_LIMIT_FIELD)) {
-            maxChunkLimit = ((Number) parameters.get(MAX_CHUNK_LIMIT_FIELD)).intValue();
-        }
 
         List<String> tokens = tokenize(content, tokenizer, maxTokenCount);
         List<String> passages = new ArrayList<>();
 
         String passage;
         int startToken = 0;
-        BigDecimal overlapTokenNumberBigDecimal = overlap_rate.multiply(new BigDecimal(String.valueOf(tokenLimit))).setScale(0, RoundingMode.DOWN);
-        int overlapTokenNumber = overlapTokenNumberBigDecimal.intValue();;
+        BigDecimal overlapTokenNumberBigDecimal = overlap_rate.multiply(new BigDecimal(String.valueOf(tokenLimit)))
+            .setScale(0, RoundingMode.DOWN);
+        int overlapTokenNumber = overlapTokenNumberBigDecimal.intValue();
+        ;
         // overlapTokenNumber must be smaller than the token limit
         overlapTokenNumber = Math.min(overlapTokenNumber, tokenLimit - 1);
 
@@ -95,25 +89,18 @@ public class FixedTokenLengthChunker implements FieldChunker {
             if (startToken + tokenLimit >= tokens.size()) {
                 // break the loop when already cover the last token
                 passage = String.join(" ", tokens.subList(startToken, tokens.size()));
-                addPassageToList(passages, passage, maxChunkLimit);
+                passages.add(passage);
                 break;
             } else {
                 passage = String.join(" ", tokens.subList(startToken, startToken + tokenLimit));
-                addPassageToList(passages, passage, maxChunkLimit);
+                passages.add(passage);
             }
             startToken += tokenLimit - overlapTokenNumber;
         }
         return passages;
     }
 
-    private void addPassageToList(List<String> passages, String passage, int maxChunkLimit) {
-        if (passages.size() >= maxChunkLimit) {
-            throw new IllegalStateException("Exceed max chunk number in fixed token length algorithm");
-        }
-        passages.add(passage);
-    }
-
-    private void validatePositiveIntegerParameter(Map<String, Object> parameters, String fieldName, boolean requirePositive) {
+    private void validatePositiveIntegerParameter(Map<String, Object> parameters, String fieldName) {
         // this method validate that parameter is a positive integer
         if (!parameters.containsKey(fieldName)) {
             // all parameters are optional
@@ -124,22 +111,15 @@ public class FixedTokenLengthChunker implements FieldChunker {
                 "fixed length parameter [" + fieldName + "] cannot be cast to [" + Number.class.getName() + "]"
             );
         }
-        if (requirePositive) {
-            if (((Number) parameters.get(fieldName)).intValue() <= 0) {
-                throw new IllegalArgumentException("fixed length parameter [" + fieldName + "] must be positive");
-            }
-        } else {
-            if (((Number) parameters.get(fieldName)).intValue() < 0) {
-                throw new IllegalArgumentException("fixed length parameter [" + fieldName + "] cannot be negative");
-            }
+        if (((Number) parameters.get(fieldName)).intValue() <= 0) {
+            throw new IllegalArgumentException("fixed length parameter [" + fieldName + "] must be positive");
         }
     }
 
     @Override
     public void validateParameters(Map<String, Object> parameters) {
-        validatePositiveIntegerParameter(parameters, TOKEN_LIMIT_FIELD, true);
-        validatePositiveIntegerParameter(parameters, MAX_CHUNK_LIMIT_FIELD, false);
-        validatePositiveIntegerParameter(parameters, MAX_TOKEN_COUNT_FIELD, true);
+        validatePositiveIntegerParameter(parameters, TOKEN_LIMIT_FIELD);
+        validatePositiveIntegerParameter(parameters, MAX_TOKEN_COUNT_FIELD);
 
         if (parameters.containsKey(OVERLAP_RATE_FIELD)) {
             if (!(parameters.get(OVERLAP_RATE_FIELD) instanceof Number)) {
@@ -148,9 +128,9 @@ public class FixedTokenLengthChunker implements FieldChunker {
                 );
             }
             BigDecimal overlap_rate = new BigDecimal(String.valueOf(parameters.get(OVERLAP_RATE_FIELD)));
-            if (overlap_rate.compareTo(BigDecimal.ZERO) < 0 || overlap_rate.compareTo(BigDecimal.ONE) >= 0) {
+            if (overlap_rate.compareTo(BigDecimal.ZERO) < 0 || overlap_rate.compareTo(OVERLAP_RATE_UPPER_BOUND) > 0) {
                 throw new IllegalArgumentException(
-                    "fixed length parameter [" + OVERLAP_RATE_FIELD + "] must be between 0 and 1, 1 is not included."
+                    "fixed length parameter [" + OVERLAP_RATE_FIELD + "] must be between 0 and " + OVERLAP_RATE_UPPER_BOUND
                 );
             }
         }

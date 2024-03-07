@@ -26,7 +26,6 @@ import static java.util.Collections.singletonMap;
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.TOKENIZER_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.TOKEN_LIMIT_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.OVERLAP_RATE_FIELD;
-import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.MAX_CHUNK_LIMIT_FIELD;
 
 public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
 
@@ -122,29 +121,6 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         );
     }
 
-    public void testValidateParameters_whenIllegalChunkLimitType_thenFail() {
-        Map<String, Object> parameters = new HashMap<>();
-        parameters.put(MAX_CHUNK_LIMIT_FIELD, "invalid chunk limit");
-        IllegalArgumentException illegalArgumentException = assertThrows(
-            IllegalArgumentException.class,
-            () -> FixedTokenLengthChunker.validateParameters(parameters)
-        );
-        assertEquals(
-            "fixed length parameter [" + MAX_CHUNK_LIMIT_FIELD + "] cannot be cast to [" + Number.class.getName() + "]",
-            illegalArgumentException.getMessage()
-        );
-    }
-
-    public void testValidateParameters_whenIllegalChunkLimitValue_thenFail() {
-        Map<String, Object> parameters = new HashMap<>();
-        parameters.put(MAX_CHUNK_LIMIT_FIELD, -1);
-        IllegalArgumentException illegalArgumentException = assertThrows(
-            IllegalArgumentException.class,
-            () -> FixedTokenLengthChunker.validateParameters(parameters)
-        );
-        assertEquals("fixed length parameter [" + MAX_CHUNK_LIMIT_FIELD + "] must be positive", illegalArgumentException.getMessage());
-    }
-
     public void testChunk_withTokenLimit_10() {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(TOKEN_LIMIT_FIELD, 10);
@@ -184,33 +160,6 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         expectedPassages.add("to be chunked The document contains a single paragraph two");
         expectedPassages.add("contains a single paragraph two sentences and 24 tokens by");
         expectedPassages.add("sentences and 24 tokens by standard tokenizer in OpenSearch");
-        assertEquals(expectedPassages, passages);
-    }
-
-    public void testChunk_withMaxChunkLimitOne_thenFail() {
-        Map<String, Object> parameters = new HashMap<>();
-        parameters.put(TOKEN_LIMIT_FIELD, 10);
-        parameters.put(MAX_CHUNK_LIMIT_FIELD, 1);
-        String content =
-            "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
-        IllegalStateException illegalStateException = assertThrows(
-            IllegalStateException.class,
-            () -> FixedTokenLengthChunker.chunk(content, parameters)
-        );
-        assertEquals("Exceed max chunk number: 1", illegalStateException.getMessage());
-    }
-
-    public void testChunk_withMaxChunkLimitTen_thenSuccess() {
-        Map<String, Object> parameters = new HashMap<>();
-        parameters.put(TOKEN_LIMIT_FIELD, 10);
-        parameters.put(MAX_CHUNK_LIMIT_FIELD, 10);
-        String content =
-            "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
-        List<String> passages = FixedTokenLengthChunker.chunk(content, parameters);
-        List<String> expectedPassages = new ArrayList<>();
-        expectedPassages.add("This is an example document to be chunked The document");
-        expectedPassages.add("The document contains a single paragraph two sentences and 24");
-        expectedPassages.add("and 24 tokens by standard tokenizer in OpenSearch");
         assertEquals(expectedPassages, passages);
     }
 }
