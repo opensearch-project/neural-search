@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The implementation of delimiter algorithm
+ * The implementation {@link FieldChunker<String>} for delimiter algorithm
  */
 public class DelimiterChunker implements FieldChunker {
 

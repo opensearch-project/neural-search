@@ -9,6 +9,7 @@ import java.util.Set;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.cluster.metadata.IndexMetadata;
@@ -183,6 +184,10 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
         return chunkedResult;
     }
 
+    /**
+     * This method will be invoked by PipelineService to perform chunking and then write back chunking results to the document.
+     * @param ingestDocument {@link IngestDocument} which is the document passed to processor.
+     */
     @Override
     public IngestDocument execute(IngestDocument ingestDocument) {
         validateFieldsValue(ingestDocument);
