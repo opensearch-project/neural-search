@@ -34,7 +34,6 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
     public void testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         Version bwcVersion = parseVersionFromString(getBWCVersion().get());
-
         NeuralSparseQueryBuilder sparseEncodingQueryBuilderWithoutModelId = new NeuralSparseQueryBuilder().fieldName(TEST_ENCODING_FIELD)
             .queryText(TEXT_1);
         // will set the model_id after we obtain the id
