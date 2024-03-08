@@ -130,8 +130,8 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
             this.chunkerType = algorithmKey;
             this.chunkerParameters = (Map<String, Object>) algorithmValue;
             chunker.validateParameters(chunkerParameters);
-            if (((Map<String, Object>) algorithmValue).containsKey(MAX_CHUNK_LIMIT_FIELD)) {
-                String maxChunkLimitString = ((Map<String, Object>) algorithmValue).get(MAX_CHUNK_LIMIT_FIELD).toString();
+            if (chunkerParameters.containsKey(MAX_CHUNK_LIMIT_FIELD)) {
+                String maxChunkLimitString = chunkerParameters.get(MAX_CHUNK_LIMIT_FIELD).toString();
                 if (!(NumberUtils.isParsable(maxChunkLimitString))) {
                     throw new IllegalArgumentException(
                         "Parameter [" + MAX_CHUNK_LIMIT_FIELD + "] cannot be cast to [" + Number.class.getName() + "]"
@@ -147,7 +147,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
     }
 
     @SuppressWarnings("unchecked")
-    private boolean isListString(Object value) {
+    private boolean isListOfString(Object value) {
         // an empty list is also List<String>
         if (!(value instanceof List)) {
             return false;
@@ -191,7 +191,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
         List<String> chunkedResult = null;
         if (value instanceof String) {
             chunkedResult = chunkString(value.toString(), chunkCountWrapper);
-        } else if (isListString(value)) {
+        } else if (isListOfString(value)) {
             chunkedResult = chunkList((List<String>) value, chunkCountWrapper);
         }
         return chunkedResult;
