@@ -59,6 +59,5 @@ public class DelimiterChunker implements FieldChunker {
             chunkResult.add(content.substring(start));
         }
         return chunkResult;
-
     }
 }

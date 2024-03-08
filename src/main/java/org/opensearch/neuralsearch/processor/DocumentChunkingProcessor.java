@@ -21,12 +21,10 @@ import org.opensearch.indices.IndicesService;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
-import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
 import org.opensearch.neuralsearch.processor.chunker.FieldChunker;
 import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
-import static org.opensearch.ingest.ConfigurationUtils.readMap;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerFactory.DELIMITER_ALGORITHM;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerFactory.FIXED_LENGTH_ALGORITHM;
 
@@ -47,9 +45,9 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
 
     private static final int DEFAULT_MAX_CHUNK_LIMIT = -1;
 
-    private int current_chunk_count = 0;
+    private int currentChunkCount = 0;
 
-    private int max_chunk_limit = DEFAULT_MAX_CHUNK_LIMIT;
+    private int maxChunkLimit = DEFAULT_MAX_CHUNK_LIMIT;
     private final Set<String> supportedChunkers = ChunkerFactory.getAllChunkers();
 
     private String chunkerType;
@@ -122,11 +120,17 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
             this.chunkerParameters = (Map<String, Object>) algorithmValue;
             chunker.validateParameters(chunkerParameters);
             if (((Map<String, Object>) algorithmValue).containsKey(MAX_CHUNK_LIMIT_FIELD)) {
-                int max_chunk_limit = ((Number) ((Map<String, Object>) algorithmValue).get(MAX_CHUNK_LIMIT_FIELD)).intValue();
-                if (max_chunk_limit <= 0) {
+                Object maxChunkLimitObject = ((Map<String, Object>) algorithmValue).get(MAX_CHUNK_LIMIT_FIELD);
+                if (!(maxChunkLimitObject instanceof Number)) {
+                    throw new IllegalArgumentException(
+                        "Parameter [" + MAX_CHUNK_LIMIT_FIELD + "] cannot be cast to [" + Number.class.getName() + "]"
+                    );
+                }
+                int maxChunkLimit = ((Number) maxChunkLimitObject).intValue();
+                if (maxChunkLimit <= 0 && maxChunkLimit != DEFAULT_MAX_CHUNK_LIMIT) {
                     throw new IllegalArgumentException("Parameter [" + MAX_CHUNK_LIMIT_FIELD + "] must be a positive integer");
                 }
-                this.max_chunk_limit = max_chunk_limit;
+                this.maxChunkLimit = maxChunkLimit;
             }
         }
     }
@@ -148,13 +152,13 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
     private List<String> chunkString(String content) {
         FieldChunker chunker = ChunkerFactory.create(chunkerType, analysisRegistry);
         List<String> result = chunker.chunk(content, chunkerParameters);
-        current_chunk_count += result.size();
-        if (max_chunk_limit != DEFAULT_MAX_CHUNK_LIMIT && current_chunk_count > max_chunk_limit) {
+        currentChunkCount += result.size();
+        if (maxChunkLimit != DEFAULT_MAX_CHUNK_LIMIT && currentChunkCount > maxChunkLimit) {
             throw new IllegalArgumentException(
                 "Unable to create the processor as the number of chunks ["
-                    + current_chunk_count
+                    + currentChunkCount
                     + "] exceeds the maximum chunk limit ["
-                    + max_chunk_limit
+                    + maxChunkLimit
                     + "]"
             );
         }
@@ -189,7 +193,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
     @Override
     public IngestDocument execute(IngestDocument ingestDocument) {
         validateFieldsValue(ingestDocument);
-        current_chunk_count = 0;
+        currentChunkCount = 0;
         if (Objects.equals(chunkerType, FIXED_LENGTH_ALGORITHM)) {
             // add maxTokenCount setting from index metadata to chunker parameters
             Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
@@ -281,53 +285,6 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                     sourceAndMetadataMap.put(String.valueOf(targetKey), chunkedResult);
                 }
             }
-        }
-    }
-
-    /**
-     * Factory for chunking  ingest processor for ingestion pipeline. Instantiates processor based on user provided input.
-     */
-    public static class Factory implements Processor.Factory {
-
-        private final Environment environment;
-
-        private final ClusterService clusterService;
-
-        private final IndicesService indicesService;
-
-        private final AnalysisRegistry analysisRegistry;
-
-        public Factory(
-            Environment environment,
-            ClusterService clusterService,
-            IndicesService indicesService,
-            AnalysisRegistry analysisRegistry
-        ) {
-            this.environment = environment;
-            this.clusterService = clusterService;
-            this.indicesService = indicesService;
-            this.analysisRegistry = analysisRegistry;
-        }
-
-        @Override
-        public DocumentChunkingProcessor create(
-            Map<String, Processor.Factory> registry,
-            String processorTag,
-            String description,
-            Map<String, Object> config
-        ) throws Exception {
-            Map<String, Object> fieldMap = readMap(TYPE, processorTag, config, FIELD_MAP_FIELD);
-            Map<String, Object> algorithmMap = readMap(TYPE, processorTag, config, ALGORITHM_FIELD);
-            return new DocumentChunkingProcessor(
-                processorTag,
-                description,
-                fieldMap,
-                algorithmMap,
-                environment,
-                clusterService,
-                indicesService,
-                analysisRegistry
-            );
         }
     }
 }

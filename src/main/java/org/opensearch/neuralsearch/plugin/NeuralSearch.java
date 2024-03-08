@@ -35,6 +35,7 @@ import org.opensearch.neuralsearch.processor.DocumentChunkingProcessor;
 import org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
+import org.opensearch.neuralsearch.processor.factory.DocumentChunkingProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.SparseEncodingProcessorFactory;
@@ -117,7 +118,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
             TextImageEmbeddingProcessor.TYPE,
             new TextImageEmbeddingProcessorFactory(clientAccessor, parameters.env, parameters.ingestService.getClusterService()),
             DocumentChunkingProcessor.TYPE,
-            new DocumentChunkingProcessor.Factory(
+            new DocumentChunkingProcessorFactory(
                 parameters.env,
                 parameters.ingestService.getClusterService(),
                 parameters.indicesService,

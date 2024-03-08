@@ -26,7 +26,6 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
 
     public void testChunkerWithDelimiterFieldNoString() {
         DelimiterChunker chunker = new DelimiterChunker();
-        String content = "a\nb\nc\nd";
         Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, "");
         Exception exception = assertThrows(IllegalArgumentException.class, () -> chunker.validateParameters(inputParameters));
         Assert.assertEquals("delimiter parameters should not be empty.", exception.getMessage());
@@ -87,5 +86,4 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
         List<String> chunkResult = chunker.chunk(content, inputParameters);
         assertEquals(List.of("\n\n", "a\n\n", "\n"), chunkResult);
     }
-
 }

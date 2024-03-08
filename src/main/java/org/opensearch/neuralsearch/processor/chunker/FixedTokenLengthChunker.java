@@ -122,7 +122,7 @@ public class FixedTokenLengthChunker implements FieldChunker {
     public List<String> chunk(String content, Map<String, Object> parameters) {
         // prior to chunking, parameters have been validated
         int tokenLimit = DEFAULT_TOKEN_LIMIT;
-        BigDecimal overlap_rate = new BigDecimal(String.valueOf(DEFAULT_OVERLAP_RATE));
+        BigDecimal overlap_rate = DEFAULT_OVERLAP_RATE;
         int maxTokenCount = DEFAULT_MAX_TOKEN_COUNT;
 
         String tokenizer = DEFAULT_TOKENIZER;
@@ -148,7 +148,6 @@ public class FixedTokenLengthChunker implements FieldChunker {
         BigDecimal overlapTokenNumberBigDecimal = overlap_rate.multiply(new BigDecimal(String.valueOf(tokenLimit)))
             .setScale(0, RoundingMode.DOWN);
         int overlapTokenNumber = overlapTokenNumberBigDecimal.intValue();
-        ;
         // overlapTokenNumber must be smaller than the token limit
         overlapTokenNumber = Math.min(overlapTokenNumber, tokenLimit - 1);
 
