@@ -67,7 +67,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
                 expectThrows(ResponseException.class, () -> search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1));
             }
         } else {
-            String modelId = "";
+            String modelId = null;
             try {
                 modelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
                 loadModel(modelId);
@@ -107,7 +107,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
                 search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
             );
         } else {
-            String modelId = "";
+            String modelId = null;
             try {
                 modelId = TestUtils.getModelId(getIngestionPipeline(DENSE_INGEST_PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
                 loadModel(modelId);
