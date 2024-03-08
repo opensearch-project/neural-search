@@ -31,6 +31,10 @@ import static org.opensearch.ingest.ConfigurationUtils.readMap;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerFactory.DELIMITER_ALGORITHM;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerFactory.FIXED_LENGTH_ALGORITHM;
 
+/**
+ * This processor is used for chunking user input data text embedding processing, algorithm can be used to indicate chunking algorithm and parameters,
+ * and field_map can be used to indicate which fields needs chunking and the corresponding keys for the chunking results.
+ */
 @Log4j2
 public final class DocumentChunkingProcessor extends AbstractProcessor {
 
@@ -277,6 +281,9 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
         }
     }
 
+    /**
+     * Factory for chunking  ingest processor for ingestion pipeline. Instantiates processor based on user provided input.
+     */
     public static class Factory implements Processor.Factory {
 
         private final Environment environment;

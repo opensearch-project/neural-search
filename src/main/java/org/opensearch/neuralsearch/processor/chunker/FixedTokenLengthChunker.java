@@ -17,6 +17,9 @@ import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
 import org.opensearch.index.analysis.AnalysisRegistry;
 import static org.opensearch.action.admin.indices.analyze.TransportAnalyzeAction.analyze;
 
+/**
+ * The implementation of fixed token length chunker algorithm.
+ */
 @Log4j2
 public class FixedTokenLengthChunker implements FieldChunker {
 
@@ -39,6 +42,22 @@ public class FixedTokenLengthChunker implements FieldChunker {
         this.analysisRegistry = analysisRegistry;
     }
 
+    private void validatePositiveIntegerParameter(Map<String, Object> parameters, String fieldName) {
+        // this method validate that parameter is a positive integer
+        if (!parameters.containsKey(fieldName)) {
+            // all parameters are optional
+            return;
+        }
+        if (!(parameters.get(fieldName) instanceof Number)) {
+            throw new IllegalArgumentException(
+                    "fixed length parameter [" + fieldName + "] cannot be cast to [" + Number.class.getName() + "]"
+            );
+        }
+        if (((Number) parameters.get(fieldName)).intValue() <= 0) {
+            throw new IllegalArgumentException("fixed length parameter [" + fieldName + "] must be positive");
+        }
+    }
+
     private List<String> tokenize(String content, String tokenizer, int maxTokenCount) {
         AnalyzeAction.Request analyzeRequest = new AnalyzeAction.Request();
         analyzeRequest.text(content);
@@ -49,8 +68,56 @@ public class FixedTokenLengthChunker implements FieldChunker {
         } catch (IOException e) {
             throw new RuntimeException("Fixed token length algorithm meet with exception: " + e);
         }
-    };
+    }
 
+    /**
+     * Validate the chunked passages for fixed token length algorithm
+     *
+     * @param parameters a map containing parameters, containing the following parameters
+     * 1. tokenizer the analyzer tokenizer in opensearch, please check https://opensearch.org/docs/latest/analyzers/tokenizers/index/
+     * 2. token_limit the token limit for each chunked passage
+     * 3. overlap_rate the overlapping degree for each chunked passage, indicating how many token comes from the previous passage
+     * 4. max_token_count the max token limit for the tokenizer
+     * @throws IllegalArgumentException If max_token_count and token_limit is not a positive integer
+     * @throws IllegalArgumentException If overlap_rate < 0  or overlap_rate > 0.5
+     * @throws IllegalArgumentException If tokenizer is not a string
+     */
+    @Override
+    public void validateParameters(Map<String, Object> parameters) {
+        validatePositiveIntegerParameter(parameters, TOKEN_LIMIT_FIELD);
+        validatePositiveIntegerParameter(parameters, MAX_TOKEN_COUNT_FIELD);
+
+        if (parameters.containsKey(OVERLAP_RATE_FIELD)) {
+            if (!(parameters.get(OVERLAP_RATE_FIELD) instanceof Number)) {
+                throw new IllegalArgumentException(
+                        "fixed length parameter [" + OVERLAP_RATE_FIELD + "] cannot be cast to [" + Number.class.getName() + "]"
+                );
+            }
+            BigDecimal overlap_rate = new BigDecimal(String.valueOf(parameters.get(OVERLAP_RATE_FIELD)));
+            if (overlap_rate.compareTo(BigDecimal.ZERO) < 0 || overlap_rate.compareTo(OVERLAP_RATE_UPPER_BOUND) > 0) {
+                throw new IllegalArgumentException(
+                        "fixed length parameter [" + OVERLAP_RATE_FIELD + "] must be between 0 and " + OVERLAP_RATE_UPPER_BOUND
+                );
+            }
+        }
+
+        if (parameters.containsKey(TOKENIZER_FIELD) && !(parameters.get(TOKENIZER_FIELD) instanceof String)) {
+            throw new IllegalArgumentException(
+                    "fixed length parameter [" + TOKENIZER_FIELD + "] cannot be cast to [" + String.class.getName() + "]"
+            );
+        }
+    }
+
+    /**
+     * Return the chunked passages for fixed token length algorithm
+     *
+     * @param content input string
+     * @param parameters a map containing parameters, containing the following parameters
+     * 1. tokenizer the analyzer tokenizer in opensearch, please check https://opensearch.org/docs/latest/analyzers/tokenizers/index/
+     * 2. token_limit the token limit for each chunked passage
+     * 3. overlap_rate the overlapping degree for each chunked passage, indicating how many token comes from the previous passage
+     * 4. max_token_count the max token limit for the tokenizer
+     */
     @Override
     public List<String> chunk(String content, Map<String, Object> parameters) {
         // prior to chunking, parameters have been validated
@@ -98,47 +165,5 @@ public class FixedTokenLengthChunker implements FieldChunker {
             startToken += tokenLimit - overlapTokenNumber;
         }
         return passages;
-    }
-
-    private void validatePositiveIntegerParameter(Map<String, Object> parameters, String fieldName) {
-        // this method validate that parameter is a positive integer
-        if (!parameters.containsKey(fieldName)) {
-            // all parameters are optional
-            return;
-        }
-        if (!(parameters.get(fieldName) instanceof Number)) {
-            throw new IllegalArgumentException(
-                "fixed length parameter [" + fieldName + "] cannot be cast to [" + Number.class.getName() + "]"
-            );
-        }
-        if (((Number) parameters.get(fieldName)).intValue() <= 0) {
-            throw new IllegalArgumentException("fixed length parameter [" + fieldName + "] must be positive");
-        }
-    }
-
-    @Override
-    public void validateParameters(Map<String, Object> parameters) {
-        validatePositiveIntegerParameter(parameters, TOKEN_LIMIT_FIELD);
-        validatePositiveIntegerParameter(parameters, MAX_TOKEN_COUNT_FIELD);
-
-        if (parameters.containsKey(OVERLAP_RATE_FIELD)) {
-            if (!(parameters.get(OVERLAP_RATE_FIELD) instanceof Number)) {
-                throw new IllegalArgumentException(
-                    "fixed length parameter [" + OVERLAP_RATE_FIELD + "] cannot be cast to [" + Number.class.getName() + "]"
-                );
-            }
-            BigDecimal overlap_rate = new BigDecimal(String.valueOf(parameters.get(OVERLAP_RATE_FIELD)));
-            if (overlap_rate.compareTo(BigDecimal.ZERO) < 0 || overlap_rate.compareTo(OVERLAP_RATE_UPPER_BOUND) > 0) {
-                throw new IllegalArgumentException(
-                    "fixed length parameter [" + OVERLAP_RATE_FIELD + "] must be between 0 and " + OVERLAP_RATE_UPPER_BOUND
-                );
-            }
-        }
-
-        if (parameters.containsKey(TOKENIZER_FIELD) && !(parameters.get(TOKENIZER_FIELD) instanceof String)) {
-            throw new IllegalArgumentException(
-                "fixed length parameter [" + TOKENIZER_FIELD + "] cannot be cast to [" + String.class.getName() + "]"
-            );
-        }
     }
 }

@@ -8,12 +8,23 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * The implementation of delimiter algorithm
+ */
 public class DelimiterChunker implements FieldChunker {
 
     public DelimiterChunker() {}
 
     public static String DELIMITER_FIELD = "delimiter";
 
+
+    /**
+     * Validate the chunked passages for delimiter algorithm
+     *
+     * @param parameters a map containing parameters, containing the following parameters
+     * 1. A string as the paragraph split indicator
+     * @throws IllegalArgumentException If delimiter is not a string or empty
+     */
     @Override
     public void validateParameters(Map<String, Object> parameters) {
         if (parameters.containsKey(DELIMITER_FIELD)) {
@@ -26,6 +37,13 @@ public class DelimiterChunker implements FieldChunker {
         }
     }
 
+
+    /**
+     * Return the chunked passages for delimiter algorithm
+     *
+     * @param content input string
+     * @param parameters a map containing parameters, containing the following parameters
+     */
     @Override
     public List<String> chunk(String content, Map<String, Object> parameters) {
         String delimiter = (String) parameters.getOrDefault(DELIMITER_FIELD, ".");

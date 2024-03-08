@@ -8,6 +8,9 @@ import org.opensearch.index.analysis.AnalysisRegistry;
 
 import java.util.Set;
 
+/**
+ * A factory to create different chunking algorithm classes.
+ */
 public class ChunkerFactory {
 
     public static final String FIXED_LENGTH_ALGORITHM = "fix_length";
