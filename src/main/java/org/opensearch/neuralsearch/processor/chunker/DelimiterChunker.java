@@ -17,9 +17,9 @@ public class DelimiterChunker implements Chunker {
 
     public DelimiterChunker() {}
 
-    public static String DELIMITER_FIELD = "delimiter";
+    public static final String DELIMITER_FIELD = "delimiter";
 
-    public static String DEFAULT_DELIMITER = ".";
+    public static final String DEFAULT_DELIMITER = ".";
 
     /**
      * Validate the chunked passages for delimiter algorithm
