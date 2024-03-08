@@ -19,7 +19,7 @@
           "body_chunk_intermediate": "body_chunk"
         },
         "algorithm": {
-          "fix_length": {
+          "fixed_token_length": {
             "token_limit": 10
           }
         }
