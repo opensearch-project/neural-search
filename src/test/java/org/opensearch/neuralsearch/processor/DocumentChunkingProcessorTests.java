@@ -7,6 +7,16 @@ package org.opensearch.neuralsearch.processor;
 import lombok.SneakyThrows;
 import org.apache.lucene.tests.analysis.MockTokenizer;
 import org.junit.Before;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import static java.util.Collections.singletonList;
+import static java.util.Collections.singletonMap;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mock;
+
 import org.opensearch.OpenSearchParseException;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.metadata.Metadata;
@@ -26,17 +36,6 @@ import org.opensearch.neuralsearch.processor.chunker.DelimiterChunker;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.plugins.AnalysisPlugin;
 import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static java.util.Collections.singletonList;
-import static java.util.Collections.singletonMap;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.mock;
 import static org.opensearch.neuralsearch.processor.DocumentChunkingProcessor.FIELD_MAP_FIELD;
 import static org.opensearch.neuralsearch.processor.DocumentChunkingProcessor.ALGORITHM_FIELD;
 import static org.opensearch.neuralsearch.processor.DocumentChunkingProcessor.MAX_CHUNK_LIMIT_FIELD;

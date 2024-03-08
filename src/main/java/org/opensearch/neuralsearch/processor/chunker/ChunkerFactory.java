@@ -4,9 +4,9 @@
  */
 package org.opensearch.neuralsearch.processor.chunker;
 
-import org.opensearch.index.analysis.AnalysisRegistry;
-
 import java.util.Set;
+
+import org.opensearch.index.analysis.AnalysisRegistry;
 
 /**
  * A factory to create different chunking algorithm classes and return all supported chunking algorithms.
@@ -38,5 +38,4 @@ public class ChunkerFactory {
     public static Set<String> getAllChunkers() {
         return Set.of(FIXED_LENGTH_ALGORITHM, DELIMITER_ALGORITHM);
     }
-
 }

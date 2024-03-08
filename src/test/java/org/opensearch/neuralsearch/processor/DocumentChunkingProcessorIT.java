@@ -9,18 +9,17 @@ import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.message.BasicHeader;
 import org.junit.Before;
-import org.opensearch.client.Response;
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.common.xcontent.XContentType;
-import org.opensearch.index.query.MatchAllQueryBuilder;
-import org.opensearch.neuralsearch.BaseNeuralSearchIT;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.opensearch.client.Response;
+import org.opensearch.common.xcontent.XContentHelper;
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.index.query.MatchAllQueryBuilder;
+import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import static org.opensearch.neuralsearch.TestUtils.DEFAULT_USER_AGENT;
 
 public class DocumentChunkingProcessorIT extends BaseNeuralSearchIT {

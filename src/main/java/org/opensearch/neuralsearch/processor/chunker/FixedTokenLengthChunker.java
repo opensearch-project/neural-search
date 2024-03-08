@@ -5,14 +5,14 @@
 package org.opensearch.neuralsearch.processor.chunker;
 
 import java.io.IOException;
-import java.math.RoundingMode;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.stream.Collectors;
-
 import lombok.extern.log4j.Log4j2;
+
 import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
 import org.opensearch.index.analysis.AnalysisRegistry;
 import static org.opensearch.action.admin.indices.analyze.TransportAnalyzeAction.analyze;

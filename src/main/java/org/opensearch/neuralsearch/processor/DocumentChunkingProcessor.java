@@ -26,7 +26,6 @@ import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
 import org.opensearch.neuralsearch.processor.chunker.FieldChunker;
 import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
-
 import static org.opensearch.ingest.ConfigurationUtils.readMap;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerFactory.DELIMITER_ALGORITHM;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerFactory.FIXED_LENGTH_ALGORITHM;

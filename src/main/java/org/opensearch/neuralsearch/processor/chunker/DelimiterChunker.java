@@ -4,9 +4,9 @@
  */
 package org.opensearch.neuralsearch.processor.chunker;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
 
 /**
  * The implementation {@link FieldChunker<String>} for delimiter algorithm
@@ -16,7 +16,6 @@ public class DelimiterChunker implements FieldChunker {
     public DelimiterChunker() {}
 
     public static String DELIMITER_FIELD = "delimiter";
-
 
     /**
      * Validate the chunked passages for delimiter algorithm
@@ -36,7 +35,6 @@ public class DelimiterChunker implements FieldChunker {
             }
         }
     }
-
 
     /**
      * Return the chunked passages for delimiter algorithm
