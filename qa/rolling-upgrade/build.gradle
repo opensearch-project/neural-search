@@ -65,12 +65,14 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.plugin_bwc_version', ext.neural_search_bwc_version
     systemProperty 'tests.skip_delete_model_index', 'true'
 
-    //Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT tests from neural search version 2.9 and 2.10 because these features were released in 2.11 version.
+    //Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT, NeuralQueryEnricherProcessorIT tests from neural search version 2.9 and 2.10
+    // because these features were released in 2.11 version.
     if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10")){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.*"
         }
     }
 
@@ -99,12 +101,14 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.skip_delete_model_index', 'true'
     systemProperty 'tests.plugin_bwc_version', ext.neural_search_bwc_version
 
-    //Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT tests from neural search version 2.9 and 2.10 because these features were released in 2.11 version.
+    //Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT, NeuralQueryEnricherProcessorIT tests from neural search version 2.9 and 2.10
+    // because these features were released in 2.11 version.
     if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10")){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.*"
         }
     }
 
@@ -132,12 +136,14 @@ task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.skip_delete_model_index', 'true'
     systemProperty 'tests.plugin_bwc_version', ext.neural_search_bwc_version
 
-    //Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT tests from neural search version 2.9 and 2.10 because these features were released in 2.11 version.
+    //Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT, NeuralQueryEnricherProcessorIT tests from neural search version 2.9 and 2.10
+    // because these features were released in 2.11 version.
     if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10")){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.*"
         }
     }
 
