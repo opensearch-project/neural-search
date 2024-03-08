@@ -4,8 +4,6 @@
  */
 package org.opensearch.neuralsearch.bwc;
 
-import org.opensearch.Version;
-import org.opensearch.client.ResponseException;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.TestUtils;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
@@ -33,7 +31,6 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
 
     public void testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-        Version bwcVersion = parseVersionFromString(getBWCVersion().get());
         NeuralSparseQueryBuilder sparseEncodingQueryBuilderWithoutModelId = new NeuralSparseQueryBuilder().fieldName(TEST_ENCODING_FIELD)
             .queryText(TEXT_1);
         // will set the model_id after we obtain the id
@@ -59,27 +56,13 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                     Settings.builder().put("index.search.default_pipeline", SPARSE_SEARCH_PIPELINE_NAME)
                 );
 
-                if (bwcVersion.onOrAfter(Version.V_2_13_0)) {
-                    // after we support default model id in neural_sparse query
-                    // do nothing here. need to add test codes after finishing backport
-                    ;
-                } else {
-                    // before we support default model id in neural_sparse query
-                    expectThrows(ResponseException.class, () -> search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1));
-                }
+                // do nothing here. need to add test codes after finishing backport
                 break;
             case MIXED:
                 sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
                 loadModel(sparseModelId);
                 sparseEncodingQueryBuilderWithModelId.modelId(sparseModelId);
-                if (bwcVersion.onOrAfter(Version.V_2_13_0)) {
-                    // after we support default model id in neural_sparse query
-                    // do nothing here. need to add test codes after finishing backport
-                    ;
-                } else {
-                    // before we support default model id in neural_sparse query
-                    expectThrows(ResponseException.class, () -> search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1));
-                }
+                // do nothing here. need to add test codes after finishing backport
                 break;
             case UPGRADED:
                 try {

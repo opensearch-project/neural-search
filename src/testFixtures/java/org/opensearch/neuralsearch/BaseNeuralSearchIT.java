@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch;
 
-import org.opensearch.Version;
 import org.opensearch.ml.common.model.MLModelState;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 
@@ -1069,15 +1068,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         if (indexName != null) {
             deleteIndex(indexName);
         }
-    }
-
-    // parse the version from string like: "2.12.0","2.13.0-SNAPSHOT"
-    protected Version parseVersionFromString(String version) {
-        /* snapshot labels are not supported in OpenSearch Version.fromStringSlow */
-        if (version.endsWith("-SNAPSHOT")) {
-            version = version.substring(0, version.length() - "-SNAPSHOT".length());
-        }
-        return Version.fromString(version);
     }
 
     /**

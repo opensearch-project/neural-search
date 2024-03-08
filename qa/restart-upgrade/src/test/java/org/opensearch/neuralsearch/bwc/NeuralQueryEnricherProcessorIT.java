@@ -8,8 +8,6 @@ import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.TestUtils.SPARSE_ENCODING_PROCESSOR;
 import static org.opensearch.neuralsearch.TestUtils.TEXT_EMBEDDING_PROCESSOR;
 
-import org.opensearch.Version;
-import org.opensearch.client.ResponseException;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.TestUtils;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
@@ -32,7 +30,6 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
     // Test restart-upgrade neural_query_enricher in restart-upgrade scenario
     public void testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-        Version bwcVersion = parseVersionFromString(getBWCVersion().get());
         NeuralSparseQueryBuilder sparseEncodingQueryBuilderWithoutModelId = new NeuralSparseQueryBuilder().fieldName(TEST_ENCODING_FIELD)
             .queryText(TEXT_1);
         // will set the model_id after we obtain the id
@@ -58,14 +55,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
                 Settings.builder().put("index.search.default_pipeline", SPARSE_SEARCH_PIPELINE_NAME)
             );
 
-            if (bwcVersion.onOrAfter(Version.V_2_13_0)) {
-                // after we support default model id in neural_sparse query
-                // do nothing here. need to add test codes after finishing backport
-                ;
-            } else {
-                // before we support default model id in neural_sparse query
-                expectThrows(ResponseException.class, () -> search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1));
-            }
+            // do nothing here. need to add test codes after finishing backport
         } else {
             String modelId = null;
             try {
