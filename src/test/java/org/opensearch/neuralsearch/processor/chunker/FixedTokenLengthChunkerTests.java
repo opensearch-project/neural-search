@@ -26,6 +26,7 @@ import static java.util.Collections.singletonMap;
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.TOKENIZER_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.TOKEN_LIMIT_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.OVERLAP_RATE_FIELD;
+import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.MAX_TOKEN_COUNT_FIELD;
 
 public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
 
@@ -55,7 +56,6 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
 
     public void testValidateParameters_whenNoParams_thenSuccessful() {
         Map<String, Object> parameters = new HashMap<>();
-        ;
         FixedTokenLengthChunker.validateParameters(parameters);
     }
 
@@ -124,6 +124,8 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
     public void testChunk_withTokenLimit_10() {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(TOKEN_LIMIT_FIELD, 10);
+        parameters.put(TOKENIZER_FIELD, "standard");
+        parameters.put(MAX_TOKEN_COUNT_FIELD, 10000);
         String content =
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
         List<String> passages = FixedTokenLengthChunker.chunk(content, parameters);
@@ -137,6 +139,8 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
     public void testChunk_withTokenLimit_20() {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(TOKEN_LIMIT_FIELD, 20);
+        parameters.put(TOKENIZER_FIELD, "standard");
+        parameters.put(MAX_TOKEN_COUNT_FIELD, 10000);
         String content =
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
         List<String> passages = FixedTokenLengthChunker.chunk(content, parameters);
