@@ -53,19 +53,22 @@ public class DelimiterChunker implements FieldChunker {
             Object delimiterObject = parameters.get(DELIMITER_FIELD);
             delimiter = delimiterObject.toString();
         }
-        List<String> chunkResult = new ArrayList<>();
-        int start = 0;
-        int end = content.indexOf(delimiter);
 
-        while (end != -1) {
-            chunkResult.add(content.substring(start, end + delimiter.length()));
-            start = end + delimiter.length();
-            end = content.indexOf(delimiter, start);
+        List<String> chunkResult = new ArrayList<>();
+        int start = 0, end;
+        int nextDelimiterPosition = content.indexOf(delimiter);
+
+        while (nextDelimiterPosition != -1) {
+            end = nextDelimiterPosition + delimiter.length();
+            chunkResult.add(content.substring(start, end));
+            start = end;
+            nextDelimiterPosition = content.indexOf(delimiter, start);
         }
 
         if (start < content.length()) {
             chunkResult.add(content.substring(start));
         }
+
         return chunkResult;
     }
 }
