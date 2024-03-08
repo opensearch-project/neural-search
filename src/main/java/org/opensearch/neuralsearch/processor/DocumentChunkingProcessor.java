@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.env.Environment;
@@ -25,7 +26,6 @@ import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
 import org.opensearch.neuralsearch.processor.chunker.FieldChunker;
 import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
-import static org.opensearch.neuralsearch.processor.chunker.ChunkerFactory.DELIMITER_ALGORITHM;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerFactory.FIXED_LENGTH_ALGORITHM;
 
 /**
@@ -41,14 +41,14 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
 
     public static final String ALGORITHM_FIELD = "algorithm";
 
-    public static String MAX_CHUNK_LIMIT_FIELD = "max_chunk_limit";
+    @VisibleForTesting
+    static final String MAX_CHUNK_LIMIT_FIELD = "max_chunk_limit";
 
     private static final int DEFAULT_MAX_CHUNK_LIMIT = -1;
 
     private int currentChunkCount = 0;
 
     private int maxChunkLimit = DEFAULT_MAX_CHUNK_LIMIT;
-    private final Set<String> supportedChunkers = ChunkerFactory.getAllChunkers();
 
     private String chunkerType;
 
@@ -98,15 +98,13 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
         for (Map.Entry<String, Object> algorithmEntry : algorithmMap.entrySet()) {
             String algorithmKey = algorithmEntry.getKey();
             Object algorithmValue = algorithmEntry.getValue();
+            Set<String> supportedChunkers = ChunkerFactory.getAllChunkers();
             if (!supportedChunkers.contains(algorithmKey)) {
                 throw new IllegalArgumentException(
                     "Unable to create the processor as chunker algorithm ["
                         + algorithmKey
-                        + "] is not supported. Supported chunkers types are ["
-                        + FIXED_LENGTH_ALGORITHM
-                        + ", "
-                        + DELIMITER_ALGORITHM
-                        + "]"
+                        + "] is not supported. Supported chunkers types are "
+                        + supportedChunkers
                 );
             }
             if (!(algorithmValue instanceof Map)) {
@@ -115,7 +113,6 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                 );
             }
             FieldChunker chunker = ChunkerFactory.create(algorithmKey, analysisRegistry);
-            chunker.validateParameters((Map<String, Object>) algorithmValue);
             this.chunkerType = algorithmKey;
             this.chunkerParameters = (Map<String, Object>) algorithmValue;
             chunker.validateParameters(chunkerParameters);
