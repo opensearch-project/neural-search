@@ -11,7 +11,7 @@ import java.util.List;
  * The interface for all chunking algorithms.
  * All algorithms need to validate parameters and chunk the content,
  */
-public interface FieldChunker {
+public interface Chunker {
 
     /**
      * Validate the parameters for chunking algorithm,

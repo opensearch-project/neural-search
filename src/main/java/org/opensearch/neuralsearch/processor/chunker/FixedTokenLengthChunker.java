@@ -20,10 +20,10 @@ import org.opensearch.index.analysis.AnalysisRegistry;
 import static org.opensearch.action.admin.indices.analyze.TransportAnalyzeAction.analyze;
 
 /**
- * The implementation {@link FieldChunker} for fixed token length algorithm.
+ * The implementation {@link Chunker} for fixed token length algorithm.
  */
 @Log4j2
-public class FixedTokenLengthChunker implements FieldChunker {
+public class FixedTokenLengthChunker implements Chunker {
 
     public static final String TOKEN_LIMIT_FIELD = "token_limit";
     public static final String OVERLAP_RATE_FIELD = "overlap_rate";
@@ -94,7 +94,7 @@ public class FixedTokenLengthChunker implements FieldChunker {
         String fieldValue = parameters.get(fieldName).toString();
         if (!(NumberUtils.isParsable(fieldValue))) {
             throw new IllegalArgumentException(
-                    "fixed length parameter [" + fieldName + "] cannot be cast to [" + Number.class.getName() + "]"
+                "fixed length parameter [" + fieldName + "] cannot be cast to [" + Number.class.getName() + "]"
             );
         }
         if (NumberUtils.createInteger(fieldValue) <= 0) {

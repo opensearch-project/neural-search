@@ -7,6 +7,12 @@ package org.opensearch.neuralsearch.processor.factory;
 import lombok.SneakyThrows;
 import org.apache.lucene.tests.analysis.MockTokenizer;
 import org.junit.Before;
+import java.util.HashMap;
+import java.util.Map;
+import static java.util.Collections.singletonList;
+import static java.util.Collections.singletonMap;
+import static org.mockito.Mockito.mock;
+
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.env.Environment;
@@ -20,13 +26,6 @@ import org.opensearch.neuralsearch.processor.DocumentChunkingProcessor;
 import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
 import org.opensearch.plugins.AnalysisPlugin;
 import org.opensearch.test.OpenSearchTestCase;
-
-import java.util.HashMap;
-import java.util.Map;
-
-import static java.util.Collections.singletonList;
-import static java.util.Collections.singletonMap;
-import static org.mockito.Mockito.mock;
 import static org.opensearch.neuralsearch.processor.DocumentChunkingProcessor.TYPE;
 import static org.opensearch.neuralsearch.processor.DocumentChunkingProcessor.FIELD_MAP_FIELD;
 import static org.opensearch.neuralsearch.processor.DocumentChunkingProcessor.ALGORITHM_FIELD;
@@ -35,7 +34,7 @@ public class DocumentChunkingProcessorFactoryTests extends OpenSearchTestCase {
 
     private static final String PROCESSOR_TAG = "mockTag";
     private static final String DESCRIPTION = "mockDescription";
-    private static final Map<String, Object> algorithmMap = Map.of(ChunkerFactory.FIXED_LENGTH_ALGORITHM, new HashMap<>());
+    private static final Map<String, Object> algorithmMap = Map.of(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, new HashMap<>());
 
     private DocumentChunkingProcessorFactory documentChunkingProcessorFactory;
 

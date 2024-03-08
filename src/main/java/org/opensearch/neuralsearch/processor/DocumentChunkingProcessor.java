@@ -25,10 +25,10 @@ import org.opensearch.index.IndexSettings;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
-import org.opensearch.neuralsearch.processor.chunker.FieldChunker;
+import org.opensearch.neuralsearch.processor.chunker.Chunker;
 import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
-import static org.opensearch.neuralsearch.processor.chunker.ChunkerFactory.FIXED_LENGTH_ALGORITHM;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM;
 
 /**
  * This processor is used for chunking user input data and chunked data could be used for downstream embedding processor,
@@ -126,7 +126,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                     "Unable to create the processor as [" + algorithmKey + "] parameters cannot be cast to [" + Map.class.getName() + "]"
                 );
             }
-            FieldChunker chunker = ChunkerFactory.create(algorithmKey, analysisRegistry);
+            Chunker chunker = ChunkerFactory.create(algorithmKey, analysisRegistry);
             this.chunkerType = algorithmKey;
             this.chunkerParameters = (Map<String, Object>) algorithmValue;
             chunker.validateParameters(chunkerParameters);
@@ -161,7 +161,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
     }
 
     private List<String> chunkString(String content, ChunkCountWrapper chunkCountWrapper) {
-        FieldChunker chunker = ChunkerFactory.create(chunkerType, analysisRegistry);
+        Chunker chunker = ChunkerFactory.create(chunkerType, analysisRegistry);
         List<String> result = chunker.chunk(content, chunkerParameters);
         chunkCountWrapper.chunkCount += result.size();
         if (maxChunkLimit != DEFAULT_MAX_CHUNK_LIMIT && chunkCountWrapper.chunkCount > maxChunkLimit) {
@@ -205,7 +205,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
     public IngestDocument execute(IngestDocument ingestDocument) {
         validateFieldsValue(ingestDocument);
         ChunkCountWrapper chunkCountWrapper = new ChunkCountWrapper(0);
-        if (Objects.equals(chunkerType, FIXED_LENGTH_ALGORITHM)) {
+        if (Objects.equals(chunkerType, FIXED_TOKEN_LENGTH_ALGORITHM)) {
             // add maxTokenCount setting from index metadata to chunker parameters
             Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
             String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();

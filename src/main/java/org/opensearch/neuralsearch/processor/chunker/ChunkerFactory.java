@@ -13,12 +13,12 @@ import org.opensearch.index.analysis.AnalysisRegistry;
  */
 public class ChunkerFactory {
 
-    public static final String FIXED_LENGTH_ALGORITHM = "fix_length";
+    public static final String FIXED_TOKEN_LENGTH_ALGORITHM = "fixed_token_length";
     public static final String DELIMITER_ALGORITHM = "delimiter";
 
-    public static FieldChunker create(String type, AnalysisRegistry analysisRegistry) {
+    public static Chunker create(String type, AnalysisRegistry analysisRegistry) {
         switch (type) {
-            case FIXED_LENGTH_ALGORITHM:
+            case FIXED_TOKEN_LENGTH_ALGORITHM:
                 return new FixedTokenLengthChunker(analysisRegistry);
             case DELIMITER_ALGORITHM:
                 return new DelimiterChunker();
@@ -30,6 +30,6 @@ public class ChunkerFactory {
     }
 
     public static Set<String> getAllChunkers() {
-        return Set.of(FIXED_LENGTH_ALGORITHM, DELIMITER_ALGORITHM);
+        return Set.of(FIXED_TOKEN_LENGTH_ALGORITHM, DELIMITER_ALGORITHM);
     }
 }

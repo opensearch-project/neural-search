@@ -11,9 +11,9 @@ import java.util.ArrayList;
 import org.apache.commons.lang3.StringUtils;
 
 /**
- * The implementation {@link FieldChunker} for delimiter algorithm
+ * The implementation {@link Chunker} for delimiter algorithm
  */
-public class DelimiterChunker implements FieldChunker {
+public class DelimiterChunker implements Chunker {
 
     public DelimiterChunker() {}
 

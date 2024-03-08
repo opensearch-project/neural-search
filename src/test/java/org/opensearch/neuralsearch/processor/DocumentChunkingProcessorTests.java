@@ -133,7 +133,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
     private DocumentChunkingProcessor createFixedTokenLengthInstance(Map<String, Object> fieldMap) {
         Map<String, Object> config = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
-        algorithmMap.put(ChunkerFactory.FIXED_LENGTH_ALGORITHM, createFixedTokenLengthParameters());
+        algorithmMap.put(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, createFixedTokenLengthParameters());
         config.put(FIELD_MAP_FIELD, fieldMap);
         config.put(ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
@@ -144,7 +144,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
     private DocumentChunkingProcessor createFixedTokenLengthInstanceWithMaxChunkNum(Map<String, Object> fieldMap, int maxChunkNum) {
         Map<String, Object> config = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
-        algorithmMap.put(ChunkerFactory.FIXED_LENGTH_ALGORITHM, createFixedTokenLengthParametersWithMaxChunk(maxChunkNum));
+        algorithmMap.put(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, createFixedTokenLengthParametersWithMaxChunk(maxChunkNum));
         config.put(FIELD_MAP_FIELD, fieldMap);
         config.put(ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
@@ -183,7 +183,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> fieldMap = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
         fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
-        algorithmMap.put(ChunkerFactory.FIXED_LENGTH_ALGORITHM, createFixedTokenLengthParametersWithMaxChunk(-2));
+        algorithmMap.put(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, createFixedTokenLengthParametersWithMaxChunk(-2));
         config.put(FIELD_MAP_FIELD, fieldMap);
         config.put(ALGORITHM_FIELD, algorithmMap);
         IllegalArgumentException illegalArgumentException = assertThrows(
@@ -218,7 +218,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> algorithmMap = new HashMap<>();
         fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
         config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
-        algorithmMap.put(ChunkerFactory.FIXED_LENGTH_ALGORITHM, createFixedTokenLengthParameters());
+        algorithmMap.put(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, createFixedTokenLengthParameters());
         algorithmMap.put(ChunkerFactory.DELIMITER_ALGORITHM, createDelimiterParameters());
         config.put(ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
@@ -256,7 +256,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> algorithmMap = new HashMap<>();
         fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
         config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
-        algorithmMap.put(ChunkerFactory.FIXED_LENGTH_ALGORITHM, 1);
+        algorithmMap.put(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, 1);
         config.put(ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
         IllegalArgumentException illegalArgumentException = assertThrows(
@@ -265,7 +265,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         );
         assertEquals(
             "Unable to create the processor as ["
-                + ChunkerFactory.FIXED_LENGTH_ALGORITHM
+                + ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM
                 + "] parameters cannot be cast to ["
                 + Map.class.getName()
                 + "]",
