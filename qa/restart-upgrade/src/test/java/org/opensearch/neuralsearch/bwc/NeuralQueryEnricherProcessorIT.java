@@ -34,7 +34,6 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         Version bwcVersion = parseVersionFromString(getBWCVersion().get());
 
-        String modelId = null;
         NeuralSparseQueryBuilder sparseEncodingQueryBuilderWithoutModelId = new NeuralSparseQueryBuilder().fieldName(TEST_ENCODING_FIELD)
             .queryText(TEXT_1);
         // will set the model_id after we obtain the id
@@ -42,7 +41,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
             .queryText(TEXT_1);
 
         if (isRunningAgainstOldCluster()) {
-            modelId = uploadSparseEncodingModel();
+            String modelId = uploadSparseEncodingModel();
             loadModel(modelId);
             sparseEncodingQueryBuilderWithModelId.modelId(modelId);
             createPipelineForSparseEncodingProcessor(modelId, SPARSE_INGEST_PIPELINE_NAME);
@@ -69,6 +68,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
                 expectThrows(ResponseException.class, () -> search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1));
             }
         } else {
+            String modelId = "";
             try {
                 modelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
                 loadModel(modelId);
@@ -85,14 +85,11 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
 
     public void testNeuralQueryEnricherProcessor_NeuralSearch_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-        Version bwcVersion = parseVersionFromString(getBWCVersion().get());
-
-        String modelId = null;
         NeuralQueryBuilder neuralQueryBuilderWithoutModelId = new NeuralQueryBuilder().fieldName(TEST_ENCODING_FIELD).queryText(TEXT_1);
         NeuralQueryBuilder neuralQueryBuilderWithModelId = new NeuralQueryBuilder().fieldName(TEST_ENCODING_FIELD).queryText(TEXT_1);
 
         if (isRunningAgainstOldCluster()) {
-            modelId = uploadTextEmbeddingModel();
+            String modelId = uploadTextEmbeddingModel();
             loadModel(modelId);
             neuralQueryBuilderWithModelId.modelId(modelId);
             createPipelineProcessor(modelId, DENSE_INGEST_PIPELINE_NAME);
@@ -111,6 +108,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
                 search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
             );
         } else {
+            String modelId = "";
             try {
                 modelId = TestUtils.getModelId(getIngestionPipeline(DENSE_INGEST_PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
                 loadModel(modelId);
