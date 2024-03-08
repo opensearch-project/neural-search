@@ -221,7 +221,6 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
 
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
         chunkMapType(sourceAndMetadataMap, fieldMap, chunkCountWrapper);
-        sourceAndMetadataMap.forEach(ingestDocument::setFieldValue);
         return ingestDocument;
     }
 
