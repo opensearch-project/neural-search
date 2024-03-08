@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.Objects;
 
 import lombok.extern.log4j.Log4j2;
-import org.apache.commons.lang3.StringUtils;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.env.Environment;
 import org.opensearch.index.IndexService;
@@ -111,7 +110,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
             }
             if (!(algorithmValue instanceof Map)) {
                 throw new IllegalArgumentException(
-                    "Unable to create the processor as [" + ALGORITHM_FIELD + "] cannot be cast to [" + Map.class.getName() + "]"
+                    "Unable to create the processor as [" + algorithmKey + "] parameters cannot be cast to [" + Map.class.getName() + "]"
                 );
             }
             FieldChunker chunker = ChunkerFactory.create(algorithmKey, analysisRegistry);
@@ -215,8 +214,6 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                     validateNestedTypeValue(sourceKey, sourceValue, 1);
                 } else if (!String.class.isAssignableFrom(sourceValueClass)) {
                     throw new IllegalArgumentException("field [" + sourceKey + "] is neither string nor nested type, cannot process it");
-                } else if (StringUtils.isBlank(sourceValue.toString())) {
-                    throw new IllegalArgumentException("field [" + sourceKey + "] has empty string value, cannot process it");
                 }
             }
         }
@@ -247,8 +244,6 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                 throw new IllegalArgumentException("list type field [" + sourceKey + "] has null, cannot process it");
             } else if (!(value instanceof String)) {
                 throw new IllegalArgumentException("list type field [" + sourceKey + "] has non string value, cannot process it");
-            } else if (StringUtils.isBlank(value.toString())) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has empty string, cannot process it");
             }
         }
     }
