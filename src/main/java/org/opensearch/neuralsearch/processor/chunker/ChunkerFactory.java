@@ -9,7 +9,7 @@ import org.opensearch.index.analysis.AnalysisRegistry;
 import java.util.Set;
 
 /**
- * A factory to create different chunking algorithm classes.
+ * A factory to create different chunking algorithm classes and return all supported chunking algorithms.
  */
 public class ChunkerFactory {
 

@@ -50,7 +50,7 @@ public class FixedTokenLengthChunker implements FieldChunker {
         }
         if (!(parameters.get(fieldName) instanceof Number)) {
             throw new IllegalArgumentException(
-                    "fixed length parameter [" + fieldName + "] cannot be cast to [" + Number.class.getName() + "]"
+                "fixed length parameter [" + fieldName + "] cannot be cast to [" + Number.class.getName() + "]"
             );
         }
         if (((Number) parameters.get(fieldName)).intValue() <= 0) {
@@ -90,20 +90,20 @@ public class FixedTokenLengthChunker implements FieldChunker {
         if (parameters.containsKey(OVERLAP_RATE_FIELD)) {
             if (!(parameters.get(OVERLAP_RATE_FIELD) instanceof Number)) {
                 throw new IllegalArgumentException(
-                        "fixed length parameter [" + OVERLAP_RATE_FIELD + "] cannot be cast to [" + Number.class.getName() + "]"
+                    "fixed length parameter [" + OVERLAP_RATE_FIELD + "] cannot be cast to [" + Number.class.getName() + "]"
                 );
             }
             BigDecimal overlap_rate = new BigDecimal(String.valueOf(parameters.get(OVERLAP_RATE_FIELD)));
             if (overlap_rate.compareTo(BigDecimal.ZERO) < 0 || overlap_rate.compareTo(OVERLAP_RATE_UPPER_BOUND) > 0) {
                 throw new IllegalArgumentException(
-                        "fixed length parameter [" + OVERLAP_RATE_FIELD + "] must be between 0 and " + OVERLAP_RATE_UPPER_BOUND
+                    "fixed length parameter [" + OVERLAP_RATE_FIELD + "] must be between 0 and " + OVERLAP_RATE_UPPER_BOUND
                 );
             }
         }
 
         if (parameters.containsKey(TOKENIZER_FIELD) && !(parameters.get(TOKENIZER_FIELD) instanceof String)) {
             throw new IllegalArgumentException(
-                    "fixed length parameter [" + TOKENIZER_FIELD + "] cannot be cast to [" + String.class.getName() + "]"
+                "fixed length parameter [" + TOKENIZER_FIELD + "] cannot be cast to [" + String.class.getName() + "]"
             );
         }
     }
