@@ -315,6 +315,24 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         return documents;
     }
 
+    private Map<String, Object> createSourceDataInvalidNestedMap() {
+        Map<String, Object> documents = new HashMap<>();
+        documents.put(INPUT_FIELD, Map.of(INPUT_NESTED_FIELD_KEY, 1));
+        return documents;
+    }
+
+    private Map<String, Object> createMaxDepthLimitExceedMap(int maxDepth) {
+        if (maxDepth > 21) {
+            return null;
+        }
+        Map<String, Object> resultMap = new HashMap<>();
+        Map<String, Object> innerMap = createMaxDepthLimitExceedMap(maxDepth + 1);
+        if (innerMap != null) {
+            resultMap.put(INPUT_FIELD, innerMap);
+        }
+        return resultMap;
+    }
+
     private IngestDocument createIngestDocumentWithNestedSourceData(Object sourceData) {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put(INPUT_NESTED_FIELD_KEY, sourceData);
@@ -392,6 +410,23 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
+    public void testExecute_withFixedTokenLength_andSourceDataInvalidType_failure() {
+        DocumentChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(INPUT_FIELD, 1);
+        sourceAndMetadata.put(IndexFieldMapper.NAME, INDEX_NAME);
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> processor.execute(ingestDocument)
+        );
+        assertEquals(
+            "field [" + INPUT_FIELD + "] is neither string nor nested type, cannot process it",
+            illegalArgumentException.getMessage()
+        );
+    }
+
+    @SneakyThrows
     public void testExecute_withFixedTokenLength_andSourceDataListStrings_successful() {
         DocumentChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataListStrings());
@@ -453,6 +488,34 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         expectedPassages.add("contains a single paragraph two sentences and 24 tokens by");
         expectedPassages.add("standard tokenizer in OpenSearch");
         assertEquals(expectedPassages, passages);
+    }
+
+    @SneakyThrows
+    public void testExecute_withFixedTokenLength_andMaxDepthLimitExceedFieldMap_failure() {
+        DocumentChunkingProcessor processor = createFixedTokenLengthInstance(createNestedFieldMap());
+        IngestDocument ingestDocument = createIngestDocumentWithNestedSourceData(createMaxDepthLimitExceedMap(0));
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> processor.execute(ingestDocument)
+        );
+        assertEquals(
+            "map type field [" + INPUT_NESTED_FIELD_KEY + "] reached max depth limit, cannot process it",
+            illegalArgumentException.getMessage()
+        );
+    }
+
+    @SneakyThrows
+    public void testExecute_withFixedTokenLength_andFieldMapNestedMap_failure() {
+        DocumentChunkingProcessor processor = createFixedTokenLengthInstance(createNestedFieldMap());
+        IngestDocument ingestDocument = createIngestDocumentWithNestedSourceData(createSourceDataInvalidNestedMap());
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> processor.execute(ingestDocument)
+        );
+        assertEquals(
+            "map type field [" + INPUT_NESTED_FIELD_KEY + "] has non-string type, cannot process it",
+            illegalArgumentException.getMessage()
+        );
     }
 
     @SneakyThrows
