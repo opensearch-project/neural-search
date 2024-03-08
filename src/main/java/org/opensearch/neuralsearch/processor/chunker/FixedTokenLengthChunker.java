@@ -79,7 +79,7 @@ public class FixedTokenLengthChunker implements FieldChunker {
      * 3. overlap_rate the overlapping degree for each chunked passage, indicating how many token comes from the previous passage
      * 4. max_token_count the max token limit for the tokenizer
      * @throws IllegalArgumentException If max_token_count and token_limit is not a positive integer
-     * @throws IllegalArgumentException If overlap_rate < 0  or overlap_rate > 0.5
+     * @throws IllegalArgumentException If overlap_rate is not within range [0, 0.5]
      * @throws IllegalArgumentException If tokenizer is not a string
      */
     @Override
