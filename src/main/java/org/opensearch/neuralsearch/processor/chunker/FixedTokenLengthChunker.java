@@ -44,35 +44,6 @@ public class FixedTokenLengthChunker implements FieldChunker {
         this.analysisRegistry = analysisRegistry;
     }
 
-    private void validatePositiveIntegerParameter(Map<String, Object> parameters, String fieldName) {
-        // this method validate that parameter is a positive integer
-        if (!parameters.containsKey(fieldName)) {
-            // all parameters are optional
-            return;
-        }
-        String fieldValue = parameters.get(fieldName).toString();
-        if (!(NumberUtils.isParsable(fieldValue))) {
-            throw new IllegalArgumentException(
-                "fixed length parameter [" + fieldName + "] cannot be cast to [" + Number.class.getName() + "]"
-            );
-        }
-        if (NumberUtils.createInteger(fieldValue) <= 0) {
-            throw new IllegalArgumentException("fixed length parameter [" + fieldName + "] must be positive");
-        }
-    }
-
-    private List<String> tokenize(String content, String tokenizer, int maxTokenCount) {
-        AnalyzeAction.Request analyzeRequest = new AnalyzeAction.Request();
-        analyzeRequest.text(content);
-        analyzeRequest.tokenizer(tokenizer);
-        try {
-            AnalyzeAction.Response analyzeResponse = analyze(analyzeRequest, analysisRegistry, null, maxTokenCount);
-            return analyzeResponse.getTokens().stream().map(AnalyzeAction.AnalyzeToken::getTerm).collect(Collectors.toList());
-        } catch (IOException e) {
-            throw new RuntimeException("Fixed token length algorithm meet with exception: " + e);
-        }
-    }
-
     /**
      * Validate the chunked passages for fixed token length algorithm
      *
@@ -109,6 +80,23 @@ public class FixedTokenLengthChunker implements FieldChunker {
             throw new IllegalArgumentException(
                 "fixed length parameter [" + TOKENIZER_FIELD + "] cannot be cast to [" + String.class.getName() + "]"
             );
+        }
+    }
+
+    private void validatePositiveIntegerParameter(Map<String, Object> parameters, String fieldName) {
+        // this method validate that parameter is a positive integer
+        if (!parameters.containsKey(fieldName)) {
+            // all parameters are optional
+            return;
+        }
+        String fieldValue = parameters.get(fieldName).toString();
+        if (!(NumberUtils.isParsable(fieldValue))) {
+            throw new IllegalArgumentException(
+                    "fixed length parameter [" + fieldName + "] cannot be cast to [" + Number.class.getName() + "]"
+            );
+        }
+        if (NumberUtils.createInteger(fieldValue) <= 0) {
+            throw new IllegalArgumentException("fixed length parameter [" + fieldName + "] must be positive");
         }
     }
 
@@ -166,5 +154,17 @@ public class FixedTokenLengthChunker implements FieldChunker {
             startToken += tokenLimit - overlapTokenNumber;
         }
         return passages;
+    }
+
+    private List<String> tokenize(String content, String tokenizer, int maxTokenCount) {
+        AnalyzeAction.Request analyzeRequest = new AnalyzeAction.Request();
+        analyzeRequest.text(content);
+        analyzeRequest.tokenizer(tokenizer);
+        try {
+            AnalyzeAction.Response analyzeResponse = analyze(analyzeRequest, analysisRegistry, null, maxTokenCount);
+            return analyzeResponse.getTokens().stream().map(AnalyzeAction.AnalyzeToken::getTerm).collect(Collectors.toList());
+        } catch (IOException e) {
+            throw new RuntimeException("Fixed token length algorithm meet with exception: " + e);
+        }
     }
 }
