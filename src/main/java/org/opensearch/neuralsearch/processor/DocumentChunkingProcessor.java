@@ -155,7 +155,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
                     + "]"
             );
         }
-        return chunker.chunk(content, chunkerParameters);
+        return result;
     }
 
     private List<String> chunkList(List<String> contentList) {
