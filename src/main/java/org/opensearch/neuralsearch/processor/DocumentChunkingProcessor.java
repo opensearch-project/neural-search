@@ -12,6 +12,8 @@ import java.util.Objects;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.log4j.Log4j2;
+import org.apache.commons.lang3.math.NumberUtils;
+
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.env.Environment;
 import org.opensearch.index.IndexService;
@@ -118,13 +120,13 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
             this.chunkerParameters = (Map<String, Object>) algorithmValue;
             chunker.validateParameters(chunkerParameters);
             if (((Map<String, Object>) algorithmValue).containsKey(MAX_CHUNK_LIMIT_FIELD)) {
-                Object maxChunkLimitObject = ((Map<String, Object>) algorithmValue).get(MAX_CHUNK_LIMIT_FIELD);
-                if (!(maxChunkLimitObject instanceof Number)) {
+                String maxChunkLimitString = ((Map<String, Object>) algorithmValue).get(MAX_CHUNK_LIMIT_FIELD).toString();
+                if (!(NumberUtils.isParsable(maxChunkLimitString))) {
                     throw new IllegalArgumentException(
                         "Parameter [" + MAX_CHUNK_LIMIT_FIELD + "] cannot be cast to [" + Number.class.getName() + "]"
                     );
                 }
-                int maxChunkLimit = ((Number) maxChunkLimitObject).intValue();
+                int maxChunkLimit = NumberUtils.createInteger(maxChunkLimitString);
                 if (maxChunkLimit <= 0 && maxChunkLimit != DEFAULT_MAX_CHUNK_LIMIT) {
                     throw new IllegalArgumentException("Parameter [" + MAX_CHUNK_LIMIT_FIELD + "] must be a positive integer");
                 }

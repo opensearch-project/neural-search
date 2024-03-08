@@ -4,11 +4,11 @@
  */
 package org.opensearch.neuralsearch.processor.chunker;
 
-import org.apache.commons.lang3.StringUtils;
-
 import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
+
+import org.apache.commons.lang3.StringUtils;
 
 /**
  * The implementation {@link FieldChunker} for delimiter algorithm
