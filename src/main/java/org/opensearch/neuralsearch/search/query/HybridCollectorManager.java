@@ -78,9 +78,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     }
 
     @Override
-    abstract public Collector newCollector();
-
-    Collector getCollector() {
+    public Collector newCollector() {
         Collector hybridcollector = new HybridTopScoreDocCollector(numHits, hitsThresholdChecker);
         return hybridcollector;
     }
@@ -211,7 +209,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
      * use saved state of collector
      */
     static class HybridCollectorNonConcurrentManager extends HybridCollectorManager {
-        Collector maxScoreCollector;
+        private final Collector scoreCollector;
 
         public HybridCollectorNonConcurrentManager(
             int numHits,
@@ -221,18 +219,18 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             SortAndFormats sortAndFormats
         ) {
             super(numHits, hitsThresholdChecker, isSingleShard, trackTotalHitsUpTo, sortAndFormats);
+            scoreCollector = Objects.requireNonNull(super.newCollector(), "collector for hybrid query cannot be null");
         }
 
         @Override
         public Collector newCollector() {
-            if (Objects.isNull(maxScoreCollector)) {
-                maxScoreCollector = getCollector();
-                return maxScoreCollector;
-            } else {
-                Collector toReturnCollector = maxScoreCollector;
-                maxScoreCollector = null;
-                return toReturnCollector;
-            }
+            return scoreCollector;
+        }
+
+        @Override
+        public ReduceableSearchResult reduce(Collection<Collector> collectors) {
+            assert collectors.isEmpty() : "reduce on HybridCollectorNonConcurrentManager called with non-empty collectors";
+            return super.reduce(List.of(scoreCollector));
         }
     }
 
@@ -250,11 +248,6 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             SortAndFormats sortAndFormats
         ) {
             super(numHits, hitsThresholdChecker, isSingleShard, trackTotalHitsUpTo, sortAndFormats);
-        }
-
-        @Override
-        public Collector newCollector() {
-            return getCollector();
         }
     }
 }

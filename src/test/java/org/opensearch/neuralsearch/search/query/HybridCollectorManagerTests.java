@@ -39,7 +39,6 @@ import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.QuerySearchResult;
 import org.opensearch.search.query.ReduceableSearchResult;
 
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -175,8 +174,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         scorer.score(leafCollector, leafReaderContext.reader().getLiveDocs());
         leafCollector.finish();
 
-        final Collection<Collector> collectors = List.of(collector);
-        Object results = hybridCollectorManager.reduce(collectors);
+        Object results = hybridCollectorManager.reduce(List.of());
 
         assertNotNull(results);
         ReduceableSearchResult reduceableSearchResult = ((ReduceableSearchResult) results);

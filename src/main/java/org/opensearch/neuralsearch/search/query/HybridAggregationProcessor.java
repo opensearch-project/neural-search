@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.search.query;
 
 import lombok.AllArgsConstructor;
 import org.apache.lucene.search.CollectorManager;
+import org.opensearch.search.aggregations.AggregationInitializationException;
 import org.opensearch.search.aggregations.AggregationProcessor;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.QueryPhaseExecutionException;
@@ -13,7 +14,6 @@ import org.opensearch.search.query.QuerySearchResult;
 import org.opensearch.search.query.ReduceableSearchResult;
 
 import java.io.IOException;
-import java.util.Collection;
 import java.util.List;
 
 import static org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher.isHybridQuery;
@@ -36,8 +36,8 @@ public class HybridAggregationProcessor implements AggregationProcessor {
             CollectorManager collectorManager;
             try {
                 collectorManager = HybridCollectorManager.createHybridCollectorManager(context);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
+            } catch (IOException exception) {
+                throw new AggregationInitializationException("could not initialize hybrid aggregation processor", exception);
             }
             context.queryCollectorManagers().put(HybridCollectorManager.class, collectorManager);
         }
@@ -67,8 +67,7 @@ public class HybridAggregationProcessor implements AggregationProcessor {
     private void reduceCollectorResults(SearchContext context) {
         CollectorManager<?, ReduceableSearchResult> collectorManager = context.queryCollectorManagers().get(HybridCollectorManager.class);
         try {
-            final Collection collectors = List.of(collectorManager.newCollector());
-            collectorManager.reduce(collectors).reduce(context.queryResult());
+            collectorManager.reduce(List.of()).reduce(context.queryResult());
         } catch (IOException e) {
             throw new QueryPhaseExecutionException(context.shardTarget(), "failed to execute hybrid query aggregation processor", e);
         }
