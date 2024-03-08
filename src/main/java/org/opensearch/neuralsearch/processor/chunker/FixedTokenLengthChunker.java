@@ -18,7 +18,7 @@ import org.opensearch.index.analysis.AnalysisRegistry;
 import static org.opensearch.action.admin.indices.analyze.TransportAnalyzeAction.analyze;
 
 /**
- * The implementation {@link FieldChunker<String>} for fixed token length algorithm.
+ * The implementation {@link FieldChunker} for fixed token length algorithm.
  */
 @Log4j2
 public class FixedTokenLengthChunker implements FieldChunker {
