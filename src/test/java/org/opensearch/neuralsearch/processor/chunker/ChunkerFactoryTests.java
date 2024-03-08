@@ -33,13 +33,11 @@ public class ChunkerFactoryTests extends OpenSearchTestCase {
     }
 
     public void testCreate_Invalid() {
+        String invalidChunkerType = "Invalid Chunker Type";
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> ChunkerFactory.create("Invalid Chunker Type", analysisRegistry)
+            () -> ChunkerFactory.create(invalidChunkerType, analysisRegistry)
         );
-        assertEquals(
-            "chunker type [Invalid Chunker Type] is not supported. Supported chunkers types are [fix_length, delimiter]",
-            illegalArgumentException.getMessage()
-        );
+        assert (illegalArgumentException.getMessage().contains("chunker type [" + invalidChunkerType + "] is not supported."));
     }
 }

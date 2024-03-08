@@ -11,8 +11,10 @@ import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.stream.Collectors;
+
 import lombok.extern.log4j.Log4j2;
 
+import org.apache.commons.lang3.math.NumberUtils;
 import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
 import org.opensearch.index.analysis.AnalysisRegistry;
 import static org.opensearch.action.admin.indices.analyze.TransportAnalyzeAction.analyze;
@@ -48,12 +50,13 @@ public class FixedTokenLengthChunker implements FieldChunker {
             // all parameters are optional
             return;
         }
-        if (!(parameters.get(fieldName) instanceof Number)) {
+        String fieldValue = parameters.get(fieldName).toString();
+        if (!(NumberUtils.isParsable(fieldValue))) {
             throw new IllegalArgumentException(
                 "fixed length parameter [" + fieldName + "] cannot be cast to [" + Number.class.getName() + "]"
             );
         }
-        if (((Number) parameters.get(fieldName)).intValue() <= 0) {
+        if (NumberUtils.createInteger(fieldValue) <= 0) {
             throw new IllegalArgumentException("fixed length parameter [" + fieldName + "] must be positive");
         }
     }
@@ -88,13 +91,14 @@ public class FixedTokenLengthChunker implements FieldChunker {
         validatePositiveIntegerParameter(parameters, MAX_TOKEN_COUNT_FIELD);
 
         if (parameters.containsKey(OVERLAP_RATE_FIELD)) {
-            if (!(parameters.get(OVERLAP_RATE_FIELD) instanceof Number)) {
+            String overlapRateString = parameters.get(OVERLAP_RATE_FIELD).toString();
+            if (!(NumberUtils.isParsable(overlapRateString))) {
                 throw new IllegalArgumentException(
                     "fixed length parameter [" + OVERLAP_RATE_FIELD + "] cannot be cast to [" + Number.class.getName() + "]"
                 );
             }
-            BigDecimal overlap_rate = new BigDecimal(String.valueOf(parameters.get(OVERLAP_RATE_FIELD)));
-            if (overlap_rate.compareTo(BigDecimal.ZERO) < 0 || overlap_rate.compareTo(OVERLAP_RATE_UPPER_BOUND) > 0) {
+            BigDecimal overlapRate = new BigDecimal(overlapRateString);
+            if (overlapRate.compareTo(BigDecimal.ZERO) < 0 || overlapRate.compareTo(OVERLAP_RATE_UPPER_BOUND) > 0) {
                 throw new IllegalArgumentException(
                     "fixed length parameter [" + OVERLAP_RATE_FIELD + "] must be between 0 and " + OVERLAP_RATE_UPPER_BOUND
                 );
@@ -122,7 +126,7 @@ public class FixedTokenLengthChunker implements FieldChunker {
     public List<String> chunk(String content, Map<String, Object> parameters) {
         // prior to chunking, parameters have been validated
         int tokenLimit = DEFAULT_TOKEN_LIMIT;
-        BigDecimal overlap_rate = DEFAULT_OVERLAP_RATE;
+        BigDecimal overlapRate = DEFAULT_OVERLAP_RATE;
         int maxTokenCount = DEFAULT_MAX_TOKEN_COUNT;
 
         String tokenizer = DEFAULT_TOKENIZER;
@@ -131,7 +135,7 @@ public class FixedTokenLengthChunker implements FieldChunker {
             tokenLimit = ((Number) parameters.get(TOKEN_LIMIT_FIELD)).intValue();
         }
         if (parameters.containsKey(OVERLAP_RATE_FIELD)) {
-            overlap_rate = new BigDecimal(String.valueOf(parameters.get(OVERLAP_RATE_FIELD)));
+            overlapRate = new BigDecimal(parameters.get(OVERLAP_RATE_FIELD).toString());
         }
         if (parameters.containsKey(MAX_TOKEN_COUNT_FIELD)) {
             maxTokenCount = ((Number) parameters.get(MAX_TOKEN_COUNT_FIELD)).intValue();
@@ -145,11 +149,9 @@ public class FixedTokenLengthChunker implements FieldChunker {
 
         String passage;
         int startToken = 0;
-        BigDecimal overlapTokenNumberBigDecimal = overlap_rate.multiply(new BigDecimal(String.valueOf(tokenLimit)))
+        BigDecimal overlapTokenNumberBigDecimal = overlapRate.multiply(new BigDecimal(String.valueOf(tokenLimit)))
             .setScale(0, RoundingMode.DOWN);
         int overlapTokenNumber = overlapTokenNumberBigDecimal.intValue();
-        // overlapTokenNumber must be smaller than the token limit
-        overlapTokenNumber = Math.min(overlapTokenNumber, tokenLimit - 1);
 
         while (startToken < tokens.size()) {
             if (startToken + tokenLimit >= tokens.size()) {

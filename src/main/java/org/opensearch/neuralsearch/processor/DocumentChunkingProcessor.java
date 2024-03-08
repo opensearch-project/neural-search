@@ -29,7 +29,8 @@ import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerFactory.FIXED_LENGTH_ALGORITHM;
 
 /**
- * This processor is used for chunking user input data text embedding processing, algorithm can be used to indicate chunking algorithm and parameters,
+ * This processor is used for chunking user input data and chunked data could be used for downstream embedding processor,
+ * algorithm can be used to indicate chunking algorithm and parameters,
  * and field_map can be used to indicate which fields needs chunking and the corresponding keys for the chunking results.
  */
 @Log4j2
@@ -176,7 +177,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
         // leaf type is either String or List<String>
         List<String> chunkedResult = null;
         if (value instanceof String) {
-            chunkedResult = chunkString(String.valueOf(value));
+            chunkedResult = chunkString(value.toString());
         } else if (isListString(value)) {
             chunkedResult = chunkList((List<String>) value);
         }
@@ -217,10 +218,9 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
             Object sourceValue = sourceAndMetadataMap.get(embeddingFieldsEntry.getKey());
             if (sourceValue != null) {
                 String sourceKey = embeddingFieldsEntry.getKey();
-                Class<?> sourceValueClass = sourceValue.getClass();
-                if (List.class.isAssignableFrom(sourceValueClass) || Map.class.isAssignableFrom(sourceValueClass)) {
+                if (sourceValue instanceof List || sourceValue instanceof Map) {
                     validateNestedTypeValue(sourceKey, sourceValue, 1);
-                } else if (!String.class.isAssignableFrom(sourceValueClass)) {
+                } else if (!(sourceValue instanceof String)) {
                     throw new IllegalArgumentException("field [" + sourceKey + "] is neither string nor nested type, cannot process it");
                 }
             }
@@ -231,14 +231,14 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
     private void validateNestedTypeValue(String sourceKey, Object sourceValue, int maxDepth) {
         if (maxDepth > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())) {
             throw new IllegalArgumentException("map type field [" + sourceKey + "] reached max depth limit, cannot process it");
-        } else if ((List.class.isAssignableFrom(sourceValue.getClass()))) {
+        } else if (sourceValue instanceof List) {
             validateListTypeValue(sourceKey, sourceValue, maxDepth);
-        } else if (Map.class.isAssignableFrom(sourceValue.getClass())) {
+        } else if (sourceValue instanceof Map) {
             ((Map) sourceValue).values()
                 .stream()
                 .filter(Objects::nonNull)
                 .forEach(x -> validateNestedTypeValue(sourceKey, x, maxDepth + 1));
-        } else if (!String.class.isAssignableFrom(sourceValue.getClass())) {
+        } else if (!(sourceValue instanceof String)) {
             throw new IllegalArgumentException("map type field [" + sourceKey + "] has non-string type, cannot process it");
         }
     }

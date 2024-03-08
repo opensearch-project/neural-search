@@ -14,15 +14,15 @@ import java.util.List;
 public interface FieldChunker {
 
     /**
-     * Chunk the incoming string and return chunked passages
+     * Validate the parameters for chunking algorithm,
+     * will throw IllegalArgumentException when parameters are invalid
      *
      * @param parameters a map containing parameters for chunking algorithms
-     * @throws IllegalArgumentException parameters are invalid
      */
     void validateParameters(Map<String, Object> parameters);
 
     /**
-     * Chunk the incoming string and return chunked passages
+     * Chunk the incoming string according to parameters and return chunked passages
      *
      * @param content input string
      * @param parameters a map containing parameters for chunking algorithms

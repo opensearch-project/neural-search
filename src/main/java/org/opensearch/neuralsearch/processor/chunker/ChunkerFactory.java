@@ -24,13 +24,7 @@ public class ChunkerFactory {
                 return new DelimiterChunker();
             default:
                 throw new IllegalArgumentException(
-                    "chunker type ["
-                        + type
-                        + "] is not supported. Supported chunkers types are ["
-                        + FIXED_LENGTH_ALGORITHM
-                        + ", "
-                        + DELIMITER_ALGORITHM
-                        + "]"
+                    "chunker type [" + type + "] is not supported. Supported chunkers types are " + ChunkerFactory.getAllChunkers()
                 );
         }
     }
