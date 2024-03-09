@@ -29,6 +29,8 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
     private String sparseModelId = "";
     private String denseModelId = "";
 
+    // test of NeuralQueryEnricherProcessor supports neural_sparse query default model_id
+    // the feature is introduced from 2.13
     public void testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         NeuralSparseQueryBuilder sparseEncodingQueryBuilderWithoutModelId = new NeuralSparseQueryBuilder().fieldName(TEST_ENCODING_FIELD)
@@ -82,6 +84,8 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
         }
     }
 
+    // test of NeuralQueryEnricherProcessor supports neural query default model_id
+    // the feature is introduced from 2.11
     public void testNeuralQueryEnricherProcessor_NeuralSearch_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         NeuralQueryBuilder neuralQueryBuilderWithoutModelId = new NeuralQueryBuilder().fieldName(TEST_ENCODING_FIELD).queryText(TEXT_1);
