@@ -10,13 +10,12 @@ import java.math.RoundingMode;
 import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
-import java.util.stream.Collectors;
-
 import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.math.NumberUtils;
 
-import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
 import org.opensearch.index.analysis.AnalysisRegistry;
+import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
+import org.opensearch.action.admin.indices.analyze.AnalyzeAction.AnalyzeToken;
 import static org.opensearch.action.admin.indices.analyze.TransportAnalyzeAction.analyze;
 
 /**
@@ -107,7 +106,7 @@ public class FixedTokenLengthChunker implements Chunker {
      *
      * @param content input string
      * @param parameters a map containing parameters, containing the following parameters
-     * 1. tokenizer the analyzer tokenizer in opensearch, please check https://opensearch.org/docs/latest/analyzers/tokenizers/index/
+     * 1. tokenizer the <a href="https://opensearch.org/docs/latest/analyzers/tokenizers/index/">analyzer tokenizer</a> in OpenSearch
      * 2. token_limit the token limit for each chunked passage
      * 3. overlap_rate the overlapping degree for each chunked passage, indicating how many token comes from the previous passage
      * 4. max_token_count the max token limit for the tokenizer
@@ -134,37 +133,35 @@ public class FixedTokenLengthChunker implements Chunker {
             tokenizer = (String) parameters.get(TOKENIZER_FIELD);
         }
 
-        List<String> tokens = tokenize(content, tokenizer, maxTokenCount);
+        List<AnalyzeToken> tokens = tokenize(content, tokenizer, maxTokenCount);
         List<String> passages = new ArrayList<>();
 
-        String passage;
-        int startToken = 0;
+        int startTokenIndex = 0, endTokenIndex;
+        int startContentPosition, endContentPosition;
         BigDecimal overlapTokenNumberBigDecimal = overlapRate.multiply(new BigDecimal(String.valueOf(tokenLimit)))
             .setScale(0, RoundingMode.DOWN);
         int overlapTokenNumber = overlapTokenNumberBigDecimal.intValue();
 
-        while (startToken < tokens.size()) {
-            if (startToken + tokenLimit >= tokens.size()) {
-                // break the loop when already cover the last token
-                passage = String.join(" ", tokens.subList(startToken, tokens.size()));
-                passages.add(passage);
+        while (startTokenIndex < tokens.size()) {
+            endTokenIndex = Math.min(tokens.size(), startTokenIndex + tokenLimit) - 1;
+            startContentPosition = tokens.get(startTokenIndex).getStartOffset();
+            endContentPosition = tokens.get(endTokenIndex).getEndOffset();
+            passages.add(content.substring(startContentPosition, endContentPosition));
+            if (startTokenIndex + tokenLimit >= tokens.size()) {
                 break;
-            } else {
-                passage = String.join(" ", tokens.subList(startToken, startToken + tokenLimit));
-                passages.add(passage);
             }
-            startToken += tokenLimit - overlapTokenNumber;
+            startTokenIndex += tokenLimit - overlapTokenNumber;
         }
         return passages;
     }
 
-    private List<String> tokenize(String content, String tokenizer, int maxTokenCount) {
+    private List<AnalyzeToken> tokenize(String content, String tokenizer, int maxTokenCount) {
         AnalyzeAction.Request analyzeRequest = new AnalyzeAction.Request();
         analyzeRequest.text(content);
         analyzeRequest.tokenizer(tokenizer);
         try {
             AnalyzeAction.Response analyzeResponse = analyze(analyzeRequest, analysisRegistry, null, maxTokenCount);
-            return analyzeResponse.getTokens().stream().map(AnalyzeAction.AnalyzeToken::getTerm).collect(Collectors.toList());
+            return analyzeResponse.getTokens();
         } catch (IOException e) {
             throw new RuntimeException("Fixed token length algorithm meet with exception: " + e);
         }

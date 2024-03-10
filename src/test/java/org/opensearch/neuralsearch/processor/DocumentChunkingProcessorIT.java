@@ -74,8 +74,8 @@ public class DocumentChunkingProcessorIT extends BaseNeuralSearchIT {
             ingestDocument(TEST_DOCUMENT);
 
             List<String> expectedPassages = new ArrayList<>();
-            expectedPassages.add("This is an example document to be chunked The document");
-            expectedPassages.add("contains a single paragraph two sentences and 24 tokens by");
+            expectedPassages.add("This is an example document to be chunked. The document");
+            expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by");
             expectedPassages.add("standard tokenizer in OpenSearch");
             validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
         } finally {
@@ -90,8 +90,8 @@ public class DocumentChunkingProcessorIT extends BaseNeuralSearchIT {
             ingestDocument(TEST_DOCUMENT);
 
             List<String> expectedPassages = new ArrayList<>();
-            expectedPassages.add("This is an example document to be chunked The document");
-            expectedPassages.add("contains a single paragraph two sentences and tokens by standard");
+            expectedPassages.add("This is an example document to be chunked. The document");
+            expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by standard");
             expectedPassages.add("tokenizer in OpenSearch");
             validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
         } finally {
@@ -101,15 +101,14 @@ public class DocumentChunkingProcessorIT extends BaseNeuralSearchIT {
 
     public void testDocumentChunkingProcessor_withFixedTokenLengthAlgorithmLowercaseTokenizer_thenSucceed() throws Exception {
         try {
-            // lowercase tokenizer also excludes numbers
             createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME);
             createDocumentChunkingIndex(FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME);
             ingestDocument(TEST_DOCUMENT);
 
             List<String> expectedPassages = new ArrayList<>();
-            expectedPassages.add("this is an example document to be chunked the document");
-            expectedPassages.add("contains a single paragraph two sentences and tokens by standard");
-            expectedPassages.add("tokenizer in opensearch");
+            expectedPassages.add("This is an example document to be chunked. The document");
+            expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by standard");
+            expectedPassages.add("tokenizer in OpenSearch");
             validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
         } finally {
             wipeOfTestResources(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME, null, null);
@@ -155,9 +154,8 @@ public class DocumentChunkingProcessorIT extends BaseNeuralSearchIT {
             ingestDocument(TEST_DOCUMENT);
 
             List<String> expectedPassages = new ArrayList<>();
-            // " ", "." and "," will not be included in fixed token length output
             expectedPassages.add("This is an example document to be chunked");
-            expectedPassages.add("The document contains a single paragraph two sentences and 24");
+            expectedPassages.add("The document contains a single paragraph, two sentences and 24");
             expectedPassages.add("tokens by standard tokenizer in OpenSearch");
             validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
 
