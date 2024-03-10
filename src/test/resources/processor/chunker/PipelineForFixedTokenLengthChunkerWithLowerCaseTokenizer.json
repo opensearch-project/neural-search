@@ -1,5 +1,5 @@
 {
-  "description": "An example fixed token length chunker pipeline",
+  "description": "An example fixed token length chunker pipeline with lowercase tokenizer",
   "processors" : [
     {
       "chunking": {
@@ -8,7 +8,8 @@
         },
         "algorithm": {
           "fixed_token_length": {
-            "token_limit": 10
+            "token_limit": 10,
+            "tokenizer": "lowercase"
           }
         }
       }

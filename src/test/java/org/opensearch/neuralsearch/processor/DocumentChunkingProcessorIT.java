@@ -9,6 +9,8 @@ import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.message.BasicHeader;
 import org.junit.Before;
+
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -29,7 +31,14 @@ public class DocumentChunkingProcessorIT extends BaseNeuralSearchIT {
 
     private static final String INTERMEDIATE_FIELD = "body_chunk_intermediate";
 
-    private static final String FIXED_TOKEN_LENGTH_PIPELINE_NAME = "pipeline-document-chunking-fixed-token-length";
+    private static final String FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME =
+        "pipeline-document-chunking-fixed-token-length-standard-tokenizer";
+
+    private static final String FIXED_TOKEN_LENGTH_PIPELINE_WITH_LETTER_TOKENIZER_NAME =
+        "pipeline-document-chunking-fixed-token-length-letter-tokenizer";
+
+    private static final String FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME =
+        "pipeline-document-chunking-fixed-token-length-lowercase-tokenizer";
 
     private static final String DELIMITER_PIPELINE_NAME = "pipeline-document-chunking-delimiter";
 
@@ -40,8 +49,12 @@ public class DocumentChunkingProcessorIT extends BaseNeuralSearchIT {
     private static final String TEST_LONG_DOCUMENT = "processor/chunker/DocumentChunkingTestLongDocument.json";
 
     private static final Map<String, String> PIPELINE_CONFIGS_BY_NAME = Map.of(
-        FIXED_TOKEN_LENGTH_PIPELINE_NAME,
-        "processor/chunker/PipelineForFixedTokenLengthChunker.json",
+        FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME,
+        "processor/chunker/PipelineForFixedTokenLengthChunkerWithStandardTokenizer.json",
+        FIXED_TOKEN_LENGTH_PIPELINE_WITH_LETTER_TOKENIZER_NAME,
+        "processor/chunker/PipelineForFixedTokenLengthChunkerWithLetterTokenizer.json",
+        FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME,
+        "processor/chunker/PipelineForFixedTokenLengthChunkerWithLowercaseTokenizer.json",
         DELIMITER_PIPELINE_NAME,
         "processor/chunker/PipelineForDelimiterChunker.json",
         CASCADE_PIPELINE_NAME,
@@ -54,10 +67,10 @@ public class DocumentChunkingProcessorIT extends BaseNeuralSearchIT {
         updateClusterSettings();
     }
 
-    public void testDocumentChunkingProcessor_withFixedTokenLength_successful() throws Exception {
+    public void testDocumentChunkingProcessor_withFixedTokenLengthAlgorithmStandardTokenizer_thenSucceed() throws Exception {
         try {
-            createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_NAME);
-            createDocumentChunkingIndex(FIXED_TOKEN_LENGTH_PIPELINE_NAME);
+            createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
+            createDocumentChunkingIndex(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
             ingestDocument(TEST_DOCUMENT);
 
             List<String> expectedPassages = new ArrayList<>();
@@ -66,25 +79,59 @@ public class DocumentChunkingProcessorIT extends BaseNeuralSearchIT {
             expectedPassages.add("standard tokenizer in OpenSearch");
             validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
         } finally {
-            wipeOfTestResources(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_NAME, null, null);
+            wipeOfTestResources(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME, null, null);
         }
     }
 
-    public void testDocumentChunkingProcessor_withFixedTokenLength_fail() throws Exception {
+    public void testDocumentChunkingProcessor_withFixedTokenLengthAlgorithmLetterTokenizer_thenSucceed() throws Exception {
         try {
-            createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_NAME);
-            createDocumentChunkingIndex(FIXED_TOKEN_LENGTH_PIPELINE_NAME);
+            createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_LETTER_TOKENIZER_NAME);
+            createDocumentChunkingIndex(FIXED_TOKEN_LENGTH_PIPELINE_WITH_LETTER_TOKENIZER_NAME);
+            ingestDocument(TEST_DOCUMENT);
+
+            List<String> expectedPassages = new ArrayList<>();
+            expectedPassages.add("This is an example document to be chunked The document");
+            expectedPassages.add("contains a single paragraph two sentences and tokens by standard");
+            expectedPassages.add("tokenizer in OpenSearch");
+            validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
+        } finally {
+            wipeOfTestResources(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_LETTER_TOKENIZER_NAME, null, null);
+        }
+    }
+
+    public void testDocumentChunkingProcessor_withFixedTokenLengthAlgorithmLowercaseTokenizer_thenSucceed() throws Exception {
+        try {
+            // lowercase tokenizer also excludes numbers
+            createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME);
+            createDocumentChunkingIndex(FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME);
+            ingestDocument(TEST_DOCUMENT);
+
+            List<String> expectedPassages = new ArrayList<>();
+            expectedPassages.add("this is an example document to be chunked the document");
+            expectedPassages.add("contains a single paragraph two sentences and tokens by standard");
+            expectedPassages.add("tokenizer in opensearch");
+            validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
+        } finally {
+            wipeOfTestResources(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME, null, null);
+        }
+    }
+
+    public void testDocumentChunkingProcessor_withFixedTokenLengthAlgorithmStandardTokenizer_whenExceedMaxTokenCount_thenFail()
+        throws Exception {
+        try {
+            createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
+            createDocumentChunkingIndex(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
             Exception exception = assertThrows(Exception.class, () -> ingestDocument(TEST_LONG_DOCUMENT));
             // max_token_count is 100 by index settings
             assert (exception.getMessage()
                 .contains("The number of tokens produced by calling _analyze has exceeded the allowed maximum of [100]."));
             assertEquals(0, getDocCount(INDEX_NAME));
         } finally {
-            wipeOfTestResources(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_NAME, null, null);
+            wipeOfTestResources(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME, null, null);
         }
     }
 
-    public void testDocumentChunkingProcessor_withDelimiter_successful() throws Exception {
+    public void testDocumentChunkingProcessor_withDelimiterAlgorithm_successful() throws Exception {
         try {
             createPipelineProcessor(DELIMITER_PIPELINE_NAME);
             createDocumentChunkingIndex(DELIMITER_PIPELINE_NAME);
@@ -101,7 +148,7 @@ public class DocumentChunkingProcessorIT extends BaseNeuralSearchIT {
         }
     }
 
-    public void testDocumentChunkingProcessor_withCascade_successful() throws Exception {
+    public void testDocumentChunkingProcessor_withCascadePipeline_successful() throws Exception {
         try {
             createPipelineProcessor(CASCADE_PIPELINE_NAME);
             createDocumentChunkingIndex(CASCADE_PIPELINE_NAME);
@@ -142,8 +189,10 @@ public class DocumentChunkingProcessorIT extends BaseNeuralSearchIT {
         assertEquals(expected, ingestOutputs);
     }
 
-    private void createPipelineProcessor(final String pipelineName) throws Exception {
-        String requestBody = Files.readString(Path.of(classLoader.getResource(PIPELINE_CONFIGS_BY_NAME.get(pipelineName)).toURI()));
+    private void createPipelineProcessor(String pipelineName) throws Exception {
+        URL pipelineURLPath = classLoader.getResource(PIPELINE_CONFIGS_BY_NAME.get(pipelineName));
+        assert pipelineURLPath != null;
+        String requestBody = Files.readString(Path.of(pipelineURLPath.toURI()));
         Response pipelineCreateResponse = makeRequest(
             client(),
             "PUT",
@@ -161,15 +210,15 @@ public class DocumentChunkingProcessorIT extends BaseNeuralSearchIT {
     }
 
     private void createDocumentChunkingIndex(String pipelineName) throws Exception {
-        createIndexWithConfiguration(
-            INDEX_NAME,
-            Files.readString(Path.of(classLoader.getResource("processor/chunker/DocumentChunkingIndexSettings.json").toURI())),
-            pipelineName
-        );
+        URL indexSettingsURLPath = classLoader.getResource("processor/chunker/DocumentChunkingIndexSettings.json");
+        assert indexSettingsURLPath != null;
+        createIndexWithConfiguration(INDEX_NAME, Files.readString(Path.of(indexSettingsURLPath.toURI())), pipelineName);
     }
 
     private void ingestDocument(String documentPath) throws Exception {
-        String ingestDocument = Files.readString(Path.of(classLoader.getResource(documentPath).toURI()));
+        URL documentURLPath = classLoader.getResource(documentPath);
+        assert documentURLPath != null;
+        String ingestDocument = Files.readString(Path.of(documentURLPath.toURI()));
         Response response = makeRequest(
             client(),
             "POST",
