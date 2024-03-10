@@ -95,7 +95,6 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
     private Map<String, Object> createFixedTokenLengthParameters() {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(FixedTokenLengthChunker.TOKEN_LIMIT_FIELD, 10);
-        parameters.put(FixedTokenLengthChunker.TOKENIZER_FIELD, "letter");
         return parameters;
     }
 
