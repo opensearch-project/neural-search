@@ -15,6 +15,8 @@ import org.apache.commons.lang3.math.NumberUtils;
 import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
 import static org.opensearch.action.admin.indices.analyze.TransportAnalyzeAction.analyze;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerUtils.validatePositiveIntegerParameter;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerUtils.validateStringParameters;
 
 /**
  * The implementation {@link Chunker} for fixed token length algorithm.
@@ -93,42 +95,9 @@ public class FixedTokenLengthChunker implements Chunker {
         this.tokenConcatenator = validateStringParameters(parameters, TOKEN_CONCATENATOR_FIELD, DEFAULT_TOKEN_CONCATENATOR, true);
     }
 
-    public static String validateStringParameters(
-        Map<String, Object> parameters,
-        String fieldName,
-        String defaultValue,
-        boolean allowEmpty
-    ) {
-        if (!parameters.containsKey(fieldName)) {
-            // all parameters are optional
-            return defaultValue;
-        }
-        Object fieldValue = parameters.get(fieldName);
-        if (!(fieldValue instanceof String)) {
-            throw new IllegalArgumentException("Chunker parameter [" + fieldName + "] cannot be cast to [" + String.class.getName() + "]");
-        } else if (!allowEmpty && StringUtils.isEmpty(fieldValue.toString())) {
-            throw new IllegalArgumentException("Chunker parameter: " + fieldName + " should not be empty.");
-        }
-        return (String) fieldValue;
-    }
 
-    private int validatePositiveIntegerParameter(Map<String, Object> parameters, String fieldName, int defaultValue) {
-        // this method validate that parameter is a positive integer
-        if (!parameters.containsKey(fieldName)) {
-            // all parameters are optional
-            return defaultValue;
-        }
-        String fieldValue = parameters.get(fieldName).toString();
-        if (!(NumberUtils.isParsable(fieldValue))) {
-            throw new IllegalArgumentException(
-                "fixed length parameter [" + fieldName + "] cannot be cast to [" + Number.class.getName() + "]"
-            );
-        }
-        if (NumberUtils.createInteger(fieldValue) <= 0) {
-            throw new IllegalArgumentException("fixed length parameter [" + fieldName + "] must be positive");
-        }
-        return Integer.valueOf(fieldValue);
-    }
+
+
 
     /**
      * Return the chunked passages for fixed token length algorithm

@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
 
-import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.validateStringParameters;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerUtils.validateStringParameters;
 
 /**
  * The implementation {@link Chunker} for delimiter algorithm
