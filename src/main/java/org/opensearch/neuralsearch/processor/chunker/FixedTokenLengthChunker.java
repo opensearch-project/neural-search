@@ -56,14 +56,14 @@ public class FixedTokenLengthChunker implements Chunker {
     }
 
     /**
-     * Validate the chunked passages for fixed token length algorithm,
+     * Validate and parse the parameters for fixed token length algorithm,
      * will throw IllegalArgumentException when parameters are invalid
      *
      * @param parameters a map containing parameters, containing the following parameters:
-     * 1. tokenizer the analyzer tokenizer in opensearch, please check https://opensearch.org/docs/latest/analyzers/tokenizers/index/
-     * 2. token_limit the token limit for each chunked passage
-     * 3. overlap_rate the overlapping degree for each chunked passage, indicating how many token comes from the previous passage
-     * 4. max_token_count the max token limit for the tokenizer
+     * 1. tokenizer: the <a href="https://opensearch.org/docs/latest/analyzers/tokenizers/index/">analyzer tokenizer</a> in opensearch
+     * 2. token_limit: the token limit for each chunked passage
+     * 3. overlap_rate: the overlapping degree for each chunked passage, indicating how many token comes from the previous passage
+     * 4. max_token_count: the max token limit for the tokenizer
      * Here are requirements for parameters:
      * max_token_count and token_limit should be a positive integer
      * overlap_rate should be within range [0, 0.5]
