@@ -23,9 +23,10 @@ import java.util.Map;
 
 import static java.util.Collections.singletonList;
 import static java.util.Collections.singletonMap;
-import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.TOKENIZER_FIELD;
+import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.TOKEN_LIMIT_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.OVERLAP_RATE_FIELD;
+import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.TOKENIZER_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.MAX_TOKEN_COUNT_FIELD;
 
 public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
@@ -40,6 +41,8 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public FixedTokenLengthChunker createFixedTokenLengthChunker(Map<String, Object> parameters) {
+        Map<String, Object> nonruntimeParameters = new HashMap<>();
+        nonruntimeParameters.putAll(parameters);
         Settings settings = Settings.builder().put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString()).build();
         Environment environment = TestEnvironment.newEnvironment(settings);
         AnalysisPlugin plugin = new AnalysisPlugin() {
@@ -56,7 +59,8 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             }
         };
         AnalysisRegistry analysisRegistry = new AnalysisModule(environment, singletonList(plugin)).getAnalysisRegistry();
-        return new FixedTokenLengthChunker(analysisRegistry, parameters);
+        nonruntimeParameters.put(ANALYSIS_REGISTRY_FIELD, analysisRegistry);
+        return new FixedTokenLengthChunker(nonruntimeParameters);
     }
 
     public void testValidateParameters_whenNoParams_thenSuccessful() {

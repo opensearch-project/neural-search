@@ -7,10 +7,6 @@ package org.opensearch.neuralsearch.processor.chunker;
 import java.util.Map;
 import java.util.Set;
 
-import org.opensearch.index.analysis.AnalysisRegistry;
-
-import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD;
-
 /**
  * A factory to create different chunking algorithm classes and return all supported chunking algorithms.
  */
@@ -22,7 +18,7 @@ public class ChunkerFactory {
     public static Chunker create(String type, Map<String, Object> parameters) {
         switch (type) {
             case FIXED_TOKEN_LENGTH_ALGORITHM:
-                return new FixedTokenLengthChunker((AnalysisRegistry) parameters.get(ANALYSIS_REGISTRY_FIELD), parameters);
+                return new FixedTokenLengthChunker(parameters);
             case DELIMITER_ALGORITHM:
                 return new DelimiterChunker(parameters);
             default:
