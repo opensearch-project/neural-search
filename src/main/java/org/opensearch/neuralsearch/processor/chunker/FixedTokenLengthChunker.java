@@ -75,13 +75,13 @@ public class FixedTokenLengthChunker implements Chunker {
             String overlapRateString = parameters.get(OVERLAP_RATE_FIELD).toString();
             if (!(NumberUtils.isParsable(overlapRateString))) {
                 throw new IllegalArgumentException(
-                        "fixed length parameter [" + OVERLAP_RATE_FIELD + "] cannot be cast to [" + Number.class.getName() + "]"
+                    "fixed length parameter [" + OVERLAP_RATE_FIELD + "] cannot be cast to [" + Number.class.getName() + "]"
                 );
             }
             Double overlapRate = Double.valueOf(overlapRateString);
             if (overlapRate < 0 || overlapRate.compareTo(OVERLAP_RATE_UPPER_BOUND) > 0) {
                 throw new IllegalArgumentException(
-                        "fixed length parameter [" + OVERLAP_RATE_FIELD + "] must be between 0 and " + OVERLAP_RATE_UPPER_BOUND
+                    "fixed length parameter [" + OVERLAP_RATE_FIELD + "] must be between 0 and " + OVERLAP_RATE_UPPER_BOUND
                 );
             }
             this.overlapRate = overlapRate;
@@ -119,7 +119,7 @@ public class FixedTokenLengthChunker implements Chunker {
         String fieldValue = parameters.get(fieldName).toString();
         if (!(NumberUtils.isParsable(fieldValue))) {
             throw new IllegalArgumentException(
-                    "fixed length parameter [" + fieldName + "] cannot be cast to [" + Number.class.getName() + "]"
+                "fixed length parameter [" + fieldName + "] cannot be cast to [" + Number.class.getName() + "]"
             );
         }
         if (NumberUtils.createInteger(fieldValue) <= 0) {
