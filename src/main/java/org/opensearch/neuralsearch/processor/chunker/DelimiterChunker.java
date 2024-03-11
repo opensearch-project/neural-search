@@ -57,14 +57,4 @@ public class DelimiterChunker implements Chunker {
         return chunkResult;
     }
 
-    /**
-     * Return the chunked passages for delimiter algorithm
-     *
-     * @param content input string
-     * @param parameters a map containing parameters, containing the following parameters
-     */
-    @Override
-    public List<String> chunk(String content, Map<String, Object> parameters) {
-        return chunk(content);
-    }
 }
