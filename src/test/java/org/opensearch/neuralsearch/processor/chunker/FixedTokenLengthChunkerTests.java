@@ -35,6 +35,11 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
     @Before
     @SneakyThrows
     public void setup() {
+        FixedTokenLengthChunker = createFixedTokenLengthChunker(Map.of());
+    }
+
+    @SneakyThrows
+    public FixedTokenLengthChunker createFixedTokenLengthChunker(Map<String, Object> parameters) {
         Settings settings = Settings.builder().put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString()).build();
         Environment environment = TestEnvironment.newEnvironment(settings);
         AnalysisPlugin plugin = new AnalysisPlugin() {
@@ -51,7 +56,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             }
         };
         AnalysisRegistry analysisRegistry = new AnalysisModule(environment, singletonList(plugin)).getAnalysisRegistry();
-        FixedTokenLengthChunker = new FixedTokenLengthChunker(analysisRegistry);
+        return new FixedTokenLengthChunker(analysisRegistry, parameters);
     }
 
     public void testValidateParameters_whenNoParams_thenSuccessful() {
@@ -116,7 +121,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             () -> FixedTokenLengthChunker.validateParameters(parameters)
         );
         assertEquals(
-            "fixed length parameter [" + TOKENIZER_FIELD + "] cannot be cast to [" + String.class.getName() + "]",
+            "Chunker parameter [" + TOKENIZER_FIELD + "] cannot be cast to [" + String.class.getName() + "]",
             illegalArgumentException.getMessage()
         );
     }
@@ -125,13 +130,15 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(TOKEN_LIMIT_FIELD, 10);
         parameters.put(TOKENIZER_FIELD, "standard");
-        parameters.put(MAX_TOKEN_COUNT_FIELD, 10000);
+        FixedTokenLengthChunker fixedTokenLengthChunker = createFixedTokenLengthChunker(parameters);
+        Map<String, Object> runtimeParameters = new HashMap<>();
+        runtimeParameters.put(MAX_TOKEN_COUNT_FIELD, 10000);
         String content =
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
-        List<String> passages = FixedTokenLengthChunker.chunk(content, parameters);
+        List<String> passages = fixedTokenLengthChunker.chunk(content, runtimeParameters);
         List<String> expectedPassages = new ArrayList<>();
-        expectedPassages.add("This is an example document to be chunked. The document");
-        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by");
+        expectedPassages.add("This is an example document to be chunked The document");
+        expectedPassages.add("contains a single paragraph two sentences and 24 tokens by");
         expectedPassages.add("standard tokenizer in OpenSearch");
         assertEquals(expectedPassages, passages);
     }
@@ -140,13 +147,15 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(TOKEN_LIMIT_FIELD, 20);
         parameters.put(TOKENIZER_FIELD, "standard");
-        parameters.put(MAX_TOKEN_COUNT_FIELD, 10000);
+        FixedTokenLengthChunker fixedTokenLengthChunker = createFixedTokenLengthChunker(parameters);
+        Map<String, Object> runtimeParameters = new HashMap<>();
+        runtimeParameters.put(MAX_TOKEN_COUNT_FIELD, 10000);
         String content =
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
-        List<String> passages = FixedTokenLengthChunker.chunk(content, parameters);
+        List<String> passages = fixedTokenLengthChunker.chunk(content, runtimeParameters);
         List<String> expectedPassages = new ArrayList<>();
         expectedPassages.add(
-            "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by"
+            "This is an example document to be chunked The document contains a single paragraph two sentences and 24 tokens by"
         );
         expectedPassages.add("standard tokenizer in OpenSearch");
         assertEquals(expectedPassages, passages);
@@ -156,13 +165,14 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(TOKEN_LIMIT_FIELD, 10);
         parameters.put(OVERLAP_RATE_FIELD, 0.5);
+        FixedTokenLengthChunker fixedTokenLengthChunker = createFixedTokenLengthChunker(parameters);
         String content =
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
-        List<String> passages = FixedTokenLengthChunker.chunk(content, parameters);
+        List<String> passages = fixedTokenLengthChunker.chunk(content, Map.of());
         List<String> expectedPassages = new ArrayList<>();
-        expectedPassages.add("This is an example document to be chunked. The document");
-        expectedPassages.add("to be chunked. The document contains a single paragraph, two");
-        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by");
+        expectedPassages.add("This is an example document to be chunked The document");
+        expectedPassages.add("to be chunked The document contains a single paragraph two");
+        expectedPassages.add("contains a single paragraph two sentences and 24 tokens by");
         expectedPassages.add("sentences and 24 tokens by standard tokenizer in OpenSearch");
         assertEquals(expectedPassages, passages);
     }

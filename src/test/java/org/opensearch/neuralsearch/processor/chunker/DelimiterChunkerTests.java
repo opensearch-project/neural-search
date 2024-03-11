@@ -17,30 +17,31 @@ import static org.opensearch.neuralsearch.processor.chunker.DelimiterChunker.DEL
 public class DelimiterChunkerTests extends OpenSearchTestCase {
 
     public void testChunkerWithDelimiterFieldNotString() {
-        DelimiterChunker chunker = new DelimiterChunker();
-        String content = "a\nb\nc\nd";
-        Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, List.of(""));
-        Exception exception = assertThrows(IllegalArgumentException.class, () -> chunker.validateParameters(inputParameters));
-        Assert.assertEquals("delimiter parameters: " + List.of("") + " must be string.", exception.getMessage());
+        Exception exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> new DelimiterChunker(Map.of(DELIMITER_FIELD, List.of("")))
+        );
+        Assert.assertEquals(
+            "Chunker parameter [" + DELIMITER_FIELD + "] cannot be cast to [" + String.class.getName() + "]",
+            exception.getMessage()
+        );
     }
 
     public void testChunkerWithDelimiterFieldNoString() {
-        DelimiterChunker chunker = new DelimiterChunker();
-        Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, "");
-        Exception exception = assertThrows(IllegalArgumentException.class, () -> chunker.validateParameters(inputParameters));
-        Assert.assertEquals("delimiter parameters should not be empty.", exception.getMessage());
+        Exception exception = assertThrows(IllegalArgumentException.class, () -> new DelimiterChunker(Map.of(DELIMITER_FIELD, "")));
+        Assert.assertEquals("Chunker parameter: " + DELIMITER_FIELD + " should not be empty.", exception.getMessage());
     }
 
     public void testChunker() {
-        DelimiterChunker chunker = new DelimiterChunker();
+        DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n"));
         String content = "a\nb\nc\nd";
-        Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, "\n");
+        Map<String, Object> inputParameters = Map.of();
         List<String> chunkResult = chunker.chunk(content, inputParameters);
         assertEquals(List.of("a\n", "b\n", "c\n", "d"), chunkResult);
     }
 
     public void testChunkerWithDefaultDelimiter() {
-        DelimiterChunker chunker = new DelimiterChunker();
+        DelimiterChunker chunker = new DelimiterChunker(Map.of());
         String content = "a.b.c.d";
         Map<String, Object> inputParameters = Map.of();
         List<String> chunkResult = chunker.chunk(content, inputParameters);
@@ -48,41 +49,40 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
     }
 
     public void testChunkerWithDelimiterEnd() {
-        DelimiterChunker chunker = new DelimiterChunker();
+        DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n"));
         String content = "a\nb\nc\nd\n";
-        Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, "\n");
+        Map<String, Object> inputParameters = Map.of();
         List<String> chunkResult = chunker.chunk(content, inputParameters);
         assertEquals(List.of("a\n", "b\n", "c\n", "d\n"), chunkResult);
     }
 
     public void testChunkerWithOnlyDelimiter() {
-        DelimiterChunker chunker = new DelimiterChunker();
+        DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n"));
         String content = "\n";
-        Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, "\n");
+        Map<String, Object> inputParameters = Map.of();
         List<String> chunkResult = chunker.chunk(content, inputParameters);
         assertEquals(List.of("\n"), chunkResult);
     }
 
     public void testChunkerWithAllDelimiters() {
-        DelimiterChunker chunker = new DelimiterChunker();
+        DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n"));
         String content = "\n\n\n";
-        Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, "\n");
+        Map<String, Object> inputParameters = Map.of();
         List<String> chunkResult = chunker.chunk(content, inputParameters);
         assertEquals(List.of("\n", "\n", "\n"), chunkResult);
     }
 
     public void testChunkerWithDifferentDelimiters() {
-        DelimiterChunker chunker = new DelimiterChunker();
+        DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "."));
         String content = "a.b.cc.d.";
-        Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, ".");
-        List<String> chunkResult = chunker.chunk(content, inputParameters);
+        List<String> chunkResult = chunker.chunk(content, Map.of());
         assertEquals(List.of("a.", "b.", "cc.", "d."), chunkResult);
     }
 
     public void testChunkerWithStringDelimiter() {
-        DelimiterChunker chunker = new DelimiterChunker();
+        DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n\n"));
         String content = "\n\na\n\n\n";
-        Map<String, Object> inputParameters = Map.of(DELIMITER_FIELD, "\n\n");
+        Map<String, Object> inputParameters = Map.of();
         List<String> chunkResult = chunker.chunk(content, inputParameters);
         assertEquals(List.of("\n\n", "a\n\n", "\n"), chunkResult);
     }

@@ -93,10 +93,10 @@ public class FixedTokenLengthChunker implements Chunker {
     }
 
     public static String validateStringParameters(
-            Map<String, Object> parameters,
-            String fieldName,
-            String defaultValue,
-            boolean allowEmpty
+        Map<String, Object> parameters,
+        String fieldName,
+        String defaultValue,
+        boolean allowEmpty
     ) {
         if (!parameters.containsKey(fieldName)) {
             // all parameters are optional

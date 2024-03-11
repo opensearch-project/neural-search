@@ -8,6 +8,7 @@ import org.mockito.Mock;
 import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.test.OpenSearchTestCase;
 
+import java.util.Map;
 import java.util.Set;
 
 public class ChunkerFactoryTests extends OpenSearchTestCase {
@@ -21,13 +22,13 @@ public class ChunkerFactoryTests extends OpenSearchTestCase {
     }
 
     public void testCreate_FixedTokenLength() {
-        Chunker chunker = ChunkerFactory.create(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, analysisRegistry);
+        Chunker chunker = ChunkerFactory.create(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, analysisRegistry, Map.of());
         assertNotNull(chunker);
         assertTrue(chunker instanceof FixedTokenLengthChunker);
     }
 
     public void testCreate_Delimiter() {
-        Chunker chunker = ChunkerFactory.create(ChunkerFactory.DELIMITER_ALGORITHM, analysisRegistry);
+        Chunker chunker = ChunkerFactory.create(ChunkerFactory.DELIMITER_ALGORITHM, analysisRegistry, Map.of());
         assertNotNull(chunker);
         assertTrue(chunker instanceof DelimiterChunker);
     }
@@ -36,7 +37,7 @@ public class ChunkerFactoryTests extends OpenSearchTestCase {
         String invalidChunkerType = "Invalid Chunker Type";
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> ChunkerFactory.create(invalidChunkerType, analysisRegistry)
+            () -> ChunkerFactory.create(invalidChunkerType, analysisRegistry, Map.of())
         );
         assert (illegalArgumentException.getMessage().contains("chunker type [" + invalidChunkerType + "] is not supported."));
     }
