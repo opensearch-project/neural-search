@@ -16,8 +16,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Features
 ### Enhancements
 ### Bug Fixes
-Fix typo for sparse encoding processor factory([#600](https://github.com/opensearch-project/neural-search/pull/600))
-Add non-null check for queryBuilder in NeuralQueryEnricherProcessor ([#619](https://github.com/opensearch-project/neural-search/pull/619))
+- Fix typo for sparse encoding processor factory([#600](https://github.com/opensearch-project/neural-search/pull/600))
+- Add non-null check for queryBuilder in NeuralQueryEnricherProcessor ([#619](https://github.com/opensearch-project/neural-search/pull/619))
+- Fix runtime exceptions in hybrid query for case when sub-query scorer return TwoPhase iterator that is incompatible with DISI iterator ([#624](https://github.com/opensearch-project/neural-search/pull/624))
 ### Infrastructure
 ### Documentation
 ### Maintenance

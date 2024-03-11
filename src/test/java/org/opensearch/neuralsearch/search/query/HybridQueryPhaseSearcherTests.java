@@ -20,10 +20,12 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.TextField;
@@ -61,6 +63,7 @@ import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.search.SearchShardTarget;
+import org.opensearch.search.aggregations.AggregationProcessor;
 import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.QueryCollectorContext;
@@ -159,7 +162,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         releaseResources(directory, w, reader);
 
-        verify(hybridQueryPhaseSearcher, atLeastOnce()).searchWithCollector(any(), any(), any(), any(), anyBoolean(), anyBoolean());
+        verify(hybridQueryPhaseSearcher, atLeastOnce()).searchWith(any(), any(), any(), any(), anyBoolean(), anyBoolean());
     }
 
     @SneakyThrows
@@ -226,7 +229,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         releaseResources(directory, w, reader);
 
-        verify(hybridQueryPhaseSearcher, never()).searchWithCollector(any(), any(), any(), any(), anyBoolean(), anyBoolean());
+        verify(hybridQueryPhaseSearcher, never()).extractHybridQuery(any(), any());
     }
 
     @SneakyThrows
@@ -305,17 +308,8 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         assertEquals(1, topDocs.totalHits.value);
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         assertNotNull(scoreDocs);
-        assertEquals(4, scoreDocs.length);
-        assertTrue(isHybridQueryStartStopElement(scoreDocs[0]));
-        assertTrue(isHybridQueryStartStopElement(scoreDocs[scoreDocs.length - 1]));
-        List<TopDocs> compoundTopDocs = getSubQueryResultsForSingleShard(topDocs);
-        assertNotNull(compoundTopDocs);
-        assertEquals(1, compoundTopDocs.size());
-        TopDocs subQueryTopDocs = compoundTopDocs.get(0);
-        assertEquals(1, subQueryTopDocs.totalHits.value);
-        assertNotNull(subQueryTopDocs.scoreDocs);
-        assertEquals(1, subQueryTopDocs.scoreDocs.length);
-        ScoreDoc scoreDoc = subQueryTopDocs.scoreDocs[0];
+        assertEquals(1, scoreDocs.length);
+        ScoreDoc scoreDoc = scoreDocs[0];
         assertNotNull(scoreDoc);
         int actualDocId = Integer.parseInt(reader.document(scoreDoc.doc).getField("id").stringValue());
         assertEquals(docId1, actualDocId);
@@ -403,24 +397,10 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         assertEquals(4, topDocs.totalHits.value);
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         assertNotNull(scoreDocs);
-        assertEquals(10, scoreDocs.length);
-        assertTrue(isHybridQueryStartStopElement(scoreDocs[0]));
-        assertTrue(isHybridQueryStartStopElement(scoreDocs[scoreDocs.length - 1]));
-        List<TopDocs> compoundTopDocs = getSubQueryResultsForSingleShard(topDocs);
-        assertNotNull(compoundTopDocs);
-        assertEquals(3, compoundTopDocs.size());
-
-        TopDocs subQueryTopDocs1 = compoundTopDocs.get(0);
-        List<Integer> expectedIds1 = List.of(docId1);
-        assertQueryResults(subQueryTopDocs1, expectedIds1, reader);
-
-        TopDocs subQueryTopDocs2 = compoundTopDocs.get(1);
-        List<Integer> expectedIds2 = List.of();
-        assertQueryResults(subQueryTopDocs2, expectedIds2, reader);
-
-        TopDocs subQueryTopDocs3 = compoundTopDocs.get(2);
-        List<Integer> expectedIds3 = List.of(docId1, docId2, docId3, docId4);
-        assertQueryResults(subQueryTopDocs3, expectedIds3, reader);
+        assertEquals(4, scoreDocs.length);
+        List<Integer> expectedIds = List.of(0, 1, 2, 3);
+        List<Integer> actualDocIds = Arrays.stream(scoreDocs).map(sd -> sd.doc).collect(Collectors.toList());
+        assertEquals(expectedIds, actualDocIds);
 
         releaseResources(directory, w, reader);
     }
@@ -726,20 +706,10 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         assertTrue(topDocs.totalHits.value > 0);
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         assertNotNull(scoreDocs);
-        assertTrue(scoreDocs.length > 0);
-        assertTrue(isHybridQueryStartStopElement(scoreDocs[0]));
-        assertTrue(isHybridQueryStartStopElement(scoreDocs[scoreDocs.length - 1]));
-        List<TopDocs> compoundTopDocs = getSubQueryResultsForSingleShard(topDocs);
-        assertNotNull(compoundTopDocs);
-        assertEquals(2, compoundTopDocs.size());
-
-        TopDocs subQueryTopDocs1 = compoundTopDocs.get(0);
-        List<Integer> expectedIds1 = List.of(docId1);
-        assertQueryResults(subQueryTopDocs1, expectedIds1, reader);
-
-        TopDocs subQueryTopDocs2 = compoundTopDocs.get(1);
-        List<Integer> expectedIds2 = List.of();
-        assertQueryResults(subQueryTopDocs2, expectedIds2, reader);
+        assertEquals(1, scoreDocs.length);
+        ScoreDoc scoreDoc = scoreDocs[0];
+        assertTrue(scoreDoc.score > 0);
+        assertEquals(0, scoreDoc.doc);
 
         releaseResources(directory, w, reader);
     }
@@ -829,6 +799,15 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         assertFalse(isHybridQueryStartStopElement(scoreDocs[scoreDocs.length - 1]));
 
         releaseResources(directory, w, reader);
+    }
+
+    @SneakyThrows
+    public void testAggsProcessor_whenGettingAggsProcessor_thenSuccess() {
+        HybridQueryPhaseSearcher hybridQueryPhaseSearcher = new HybridQueryPhaseSearcher();
+        SearchContext searchContext = mock(SearchContext.class);
+        AggregationProcessor aggregationProcessor = hybridQueryPhaseSearcher.aggregationProcessor(searchContext);
+        assertNotNull(aggregationProcessor);
+        assertTrue(aggregationProcessor instanceof HybridAggregationProcessor);
     }
 
     @SneakyThrows
