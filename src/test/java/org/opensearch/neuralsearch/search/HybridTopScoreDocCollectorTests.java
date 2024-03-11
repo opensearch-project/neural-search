@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -27,12 +28,15 @@ import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.MatchNoDocsQuery;
+import org.apache.lucene.search.Scorable;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.ScoreMode;
+import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.tests.analysis.MockAnalyzer;
+import org.apache.lucene.util.PriorityQueue;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
@@ -394,6 +398,111 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
         // assert
         assertEquals(3, hybridScores.size());
         assertFalse(hybridScores.stream().anyMatch(score -> score[0] <= 0.0));
+
+        w.close();
+        reader.close();
+        directory.close();
+    }
+
+    @SneakyThrows
+    public void testCompoundScorer_whenHybridScorerIsChildScorer_thenSuccessful() {
+        HybridTopScoreDocCollector hybridTopScoreDocCollector = new HybridTopScoreDocCollector(
+            NUM_DOCS,
+            new HitsThresholdChecker(Integer.MAX_VALUE)
+        );
+
+        final Directory directory = newDirectory();
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
+        ft.setOmitNorms(random().nextBoolean());
+        ft.freeze();
+
+        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_1, FIELD_1_VALUE, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_2, FIELD_2_VALUE, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_3, FIELD_3_VALUE, ft));
+        w.commit();
+
+        DirectoryReader reader = DirectoryReader.open(w);
+
+        LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
+        LeafCollector leafCollector = hybridTopScoreDocCollector.getLeafCollector(leafReaderContext);
+
+        assertNotNull(leafCollector);
+
+        Weight weight = mock(Weight.class);
+        Weight subQueryWeight = mock(Weight.class);
+        Scorer subQueryScorer = mock(Scorer.class);
+        when(subQueryScorer.getWeight()).thenReturn(subQueryWeight);
+        DocIdSetIterator iterator = mock(DocIdSetIterator.class);
+        when(subQueryScorer.iterator()).thenReturn(iterator);
+
+        HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(weight, Arrays.asList(subQueryScorer));
+
+        Scorer scorer = mock(Scorer.class);
+        Collection<Scorable.ChildScorable> childrenCollectors = List.of(new Scorable.ChildScorable(hybridQueryScorer, "MUST"));
+        when(scorer.getChildren()).thenReturn(childrenCollectors);
+        leafCollector.setScorer(scorer);
+        int nextDoc = hybridQueryScorer.iterator().nextDoc();
+        leafCollector.collect(nextDoc);
+
+        assertNotNull(hybridTopScoreDocCollector.getCompoundScores());
+        PriorityQueue<ScoreDoc>[] compoundScoresPQ = hybridTopScoreDocCollector.getCompoundScores();
+        assertEquals(1, compoundScoresPQ.length);
+        PriorityQueue<ScoreDoc> scoreDoc = compoundScoresPQ[0];
+        assertNotNull(scoreDoc);
+        assertNotNull(scoreDoc.top());
+
+        w.close();
+        reader.close();
+        directory.close();
+    }
+
+    @SneakyThrows
+    public void testCompoundScorer_whenHybridScorerIsTopLevelScorer_thenSuccessful() {
+        HybridTopScoreDocCollector hybridTopScoreDocCollector = new HybridTopScoreDocCollector(
+            NUM_DOCS,
+            new HitsThresholdChecker(Integer.MAX_VALUE)
+        );
+
+        final Directory directory = newDirectory();
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
+        ft.setOmitNorms(random().nextBoolean());
+        ft.freeze();
+
+        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_1, FIELD_1_VALUE, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_2, FIELD_2_VALUE, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_3, FIELD_3_VALUE, ft));
+        w.commit();
+
+        DirectoryReader reader = DirectoryReader.open(w);
+
+        LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
+        LeafCollector leafCollector = hybridTopScoreDocCollector.getLeafCollector(leafReaderContext);
+
+        assertNotNull(leafCollector);
+
+        Weight weight = mock(Weight.class);
+        Weight subQueryWeight = mock(Weight.class);
+        Scorer subQueryScorer = mock(Scorer.class);
+        when(subQueryScorer.getWeight()).thenReturn(subQueryWeight);
+        DocIdSetIterator iterator = mock(DocIdSetIterator.class);
+        when(subQueryScorer.iterator()).thenReturn(iterator);
+
+        HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(weight, Arrays.asList(subQueryScorer));
+
+        leafCollector.setScorer(hybridQueryScorer);
+        int nextDoc = hybridQueryScorer.iterator().nextDoc();
+        leafCollector.collect(nextDoc);
+
+        assertNotNull(hybridTopScoreDocCollector.getCompoundScores());
+        PriorityQueue<ScoreDoc>[] compoundScoresPQ = hybridTopScoreDocCollector.getCompoundScores();
+        assertEquals(1, compoundScoresPQ.length);
+        PriorityQueue<ScoreDoc> scoreDoc = compoundScoresPQ[0];
+        assertNotNull(scoreDoc);
+        assertNotNull(scoreDoc.top());
 
         w.close();
         reader.close();
