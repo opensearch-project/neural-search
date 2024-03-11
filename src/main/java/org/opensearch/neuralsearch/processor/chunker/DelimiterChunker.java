@@ -8,6 +8,8 @@ import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
 
+import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.validateStringParameters;
+
 /**
  * The implementation {@link Chunker} for delimiter algorithm
  */
@@ -21,7 +23,7 @@ public class DelimiterChunker implements Chunker {
 
     public static final String DEFAULT_DELIMITER = ".";
 
-    private String delimiter = DEFAULT_DELIMITER;
+    private String delimiter;
 
     /**
      * Validate the chunked passages for delimiter algorithm
@@ -32,24 +34,9 @@ public class DelimiterChunker implements Chunker {
      */
     @Override
     public void validateParameters(Map<String, Object> parameters) {
-        if (parameters.containsKey(DELIMITER_FIELD)) {
-            if (!(parameters.get(DELIMITER_FIELD) instanceof String)) {
-                throw new IllegalArgumentException(
-                    "delimiter parameter [" + DELIMITER_FIELD + "] cannot be cast to [" + String.class.getName() + "]"
-                );
-            }
-            this.delimiter = parameters.get(DELIMITER_FIELD).toString();
-            if (delimiter.isEmpty()) {
-                throw new IllegalArgumentException("delimiter parameter [" + DELIMITER_FIELD + "] should not be empty.");
-            }
-        }
+        this.delimiter = validateStringParameters(parameters, DELIMITER_FIELD, DEFAULT_DELIMITER, false);
     }
 
-    /**
-     * Return the chunked passages for delimiter algorithm
-     *
-     * @param content input string
-     */
     @Override
     public List<String> chunk(String content) {
         List<String> chunkResult = new ArrayList<>();
@@ -68,5 +55,16 @@ public class DelimiterChunker implements Chunker {
         }
 
         return chunkResult;
+    }
+
+    /**
+     * Return the chunked passages for delimiter algorithm
+     *
+     * @param content input string
+     * @param parameters a map containing parameters, containing the following parameters
+     */
+    @Override
+    public List<String> chunk(String content, Map<String, Object> parameters) {
+        return chunk(content);
     }
 }
