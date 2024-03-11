@@ -360,9 +360,9 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         Object passages = document.getSourceAndMetadata().get(OUTPUT_FIELD);
         assert (passages instanceof List<?>);
         List<String> expectedPassages = new ArrayList<>();
-        expectedPassages.add("This is an example document to be chunked The document");
-        expectedPassages.add("contains a single paragraph two sentences and 24 tokens by");
-        expectedPassages.add("standard tokenizer in OpenSearch");
+        expectedPassages.add("This is an example document to be chunked. The document");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by");
+        expectedPassages.add("standard tokenizer in OpenSearch.");
         assertEquals(expectedPassages, passages);
     }
 
@@ -376,9 +376,9 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
             Object passages = document.getSourceAndMetadata().get(OUTPUT_FIELD);
             assert (passages instanceof List<?>);
             List<String> expectedPassages = new ArrayList<>();
-            expectedPassages.add("This is an example document to be chunked The document");
-            expectedPassages.add("contains a single paragraph two sentences and 24 tokens by");
-            expectedPassages.add("standard tokenizer in OpenSearch");
+            expectedPassages.add("This is an example document to be chunked. The document");
+            expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by");
+            expectedPassages.add("standard tokenizer in OpenSearch.");
             assertEquals(expectedPassages, passages);
         }
     }
@@ -407,9 +407,9 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         Object passages = document.getSourceAndMetadata().get(OUTPUT_FIELD);
         assert (passages instanceof List<?>);
         List<String> expectedPassages = new ArrayList<>();
-        expectedPassages.add("This is an example document to be chunked The document");
-        expectedPassages.add("contains a single paragraph two sentences and 24 tokens by");
-        expectedPassages.add("standard tokenizer in OpenSearch");
+        expectedPassages.add("This is an example document to be chunked. The document");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by");
+        expectedPassages.add("standard tokenizer in OpenSearch.");
         assertEquals(expectedPassages, passages);
     }
 
@@ -440,12 +440,12 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         assert (passages instanceof List<?>);
 
         List<String> expectedPassages = new ArrayList<>();
-        expectedPassages.add("This is the first document to be chunked The document");
-        expectedPassages.add("contains a single paragraph two sentences and 24 tokens by");
-        expectedPassages.add("standard tokenizer in OpenSearch");
-        expectedPassages.add("This is the second document to be chunked The document");
-        expectedPassages.add("contains a single paragraph two sentences and 24 tokens by");
-        expectedPassages.add("standard tokenizer in OpenSearch");
+        expectedPassages.add("This is the first document to be chunked. The document");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by");
+        expectedPassages.add("standard tokenizer in OpenSearch.");
+        expectedPassages.add("This is the second document to be chunked. The document");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by");
+        expectedPassages.add("standard tokenizer in OpenSearch.");
         assertEquals(expectedPassages, passages);
     }
 
@@ -488,9 +488,9 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         assert (passages instanceof List);
 
         List<String> expectedPassages = new ArrayList<>();
-        expectedPassages.add("This is an example document to be chunked The document");
-        expectedPassages.add("contains a single paragraph two sentences and 24 tokens by");
-        expectedPassages.add("standard tokenizer in OpenSearch");
+        expectedPassages.add("This is an example document to be chunked. The document");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by");
+        expectedPassages.add("standard tokenizer in OpenSearch.");
         assertEquals(expectedPassages, passages);
     }
 
@@ -524,17 +524,17 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
 
     @SneakyThrows
     @SuppressWarnings("unchecked")
-    public void testExecute_withFixedTokenLength_andFieldMapNestedMap_sourceList_thenSucceed() {
+    public void testExecute_withFixedTokenLength_andFieldMapNestedMap_sourceDataList_thenSucceed() {
         DocumentChunkingProcessor processor = createFixedTokenLengthInstance(createNestedFieldMap());
         IngestDocument ingestDocument = createIngestDocumentWithNestedSourceData(createSourceDataListNestedMap());
         IngestDocument document = processor.execute(ingestDocument);
         assert document.getSourceAndMetadata().containsKey(INPUT_NESTED_FIELD_KEY);
         Object nestedResult = document.getSourceAndMetadata().get(INPUT_NESTED_FIELD_KEY);
-        List<String> expectedPassages = new ArrayList<>();
 
-        expectedPassages.add("This is an example document to be chunked The document");
-        expectedPassages.add("contains a single paragraph two sentences and 24 tokens by");
-        expectedPassages.add("standard tokenizer in OpenSearch");
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked. The document");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by");
+        expectedPassages.add("standard tokenizer in OpenSearch.");
         assert (nestedResult instanceof List);
         assertEquals(((List<?>) nestedResult).size(), 2);
         for (Object result : (List<Object>) nestedResult) {

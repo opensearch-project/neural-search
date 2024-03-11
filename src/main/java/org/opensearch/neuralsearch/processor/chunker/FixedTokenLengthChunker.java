@@ -13,9 +13,10 @@ import org.apache.commons.lang3.math.NumberUtils;
 
 import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
+import org.opensearch.action.admin.indices.analyze.AnalyzeAction.AnalyzeToken;
 import static org.opensearch.action.admin.indices.analyze.TransportAnalyzeAction.analyze;
-import static org.opensearch.neuralsearch.processor.chunker.ChunkerUtils.validatePositiveIntegerParameter;
-import static org.opensearch.neuralsearch.processor.chunker.ChunkerUtils.validateStringParameters;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterValidator.validatePositiveIntegerParameter;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterValidator.validateStringParameters;
 
 /**
  * The implementation {@link Chunker} for fixed token length algorithm.
@@ -29,24 +30,17 @@ public class FixedTokenLengthChunker implements Chunker {
     public static final String MAX_TOKEN_COUNT_FIELD = "max_token_count";
     public static final String TOKENIZER_FIELD = "tokenizer";
 
-    public static final String TOKEN_CONCATENATOR_FIELD = "token_concatenator";
-
     // default values for each parameter
     private static final int DEFAULT_TOKEN_LIMIT = 384;
     private static final double DEFAULT_OVERLAP_RATE = 0.0;
     private static final int DEFAULT_MAX_TOKEN_COUNT = 10000;
     private static final String DEFAULT_TOKENIZER = "standard";
 
-    private static final String DEFAULT_TOKEN_CONCATENATOR = " ";
-
     private static final double OVERLAP_RATE_UPPER_BOUND = 0.5;
 
     private double overlapRate;
 
     private int tokenLimit;
-
-    private String tokenConcatenator;
-
     private String tokenizer;
 
     private final AnalysisRegistry analysisRegistry;
@@ -91,7 +85,6 @@ public class FixedTokenLengthChunker implements Chunker {
             this.overlapRate = DEFAULT_OVERLAP_RATE;
         }
         this.tokenizer = validateStringParameters(parameters, TOKENIZER_FIELD, DEFAULT_TOKENIZER, false);
-        this.tokenConcatenator = validateStringParameters(parameters, TOKEN_CONCATENATOR_FIELD, DEFAULT_TOKEN_CONCATENATOR, true);
     }
 
     /**
@@ -106,38 +99,37 @@ public class FixedTokenLengthChunker implements Chunker {
         // prior to chunking, runtimeParameters have been validated
         int maxTokenCount = validatePositiveIntegerParameter(runtimeParameters, MAX_TOKEN_COUNT_FIELD, DEFAULT_MAX_TOKEN_COUNT);
 
-        List<String> tokens = tokenize(content, tokenizer, maxTokenCount);
+        List<AnalyzeToken> tokens = tokenize(content, tokenizer, maxTokenCount);
         List<String> passages = new ArrayList<>();
 
-        double overlapTokenNumberDouble = overlapRate * tokenLimit;
-        int overlapTokenNumber = (int) Math.round(overlapTokenNumberDouble);
-
         int startTokenIndex = 0;
+        int startContentPosition, endContentPosition;
+        int overlapTokenNumber = (int) Math.floor(tokenLimit * overlapRate);
+
         while (startTokenIndex < tokens.size()) {
+            startContentPosition = tokens.get(startTokenIndex).getStartOffset();
             if (startTokenIndex + tokenLimit >= tokens.size()) {
-                // break the loop when already cover the last token
-                passages.add(String.join(tokenConcatenator, tokens.subList(startTokenIndex, tokens.size())));
+                // include all characters till the end if no next passage
+                endContentPosition = content.length();
+                passages.add(content.substring(startContentPosition, endContentPosition));
                 break;
             } else {
-                passages.add(String.join(tokenConcatenator, tokens.subList(startTokenIndex, startTokenIndex + tokenLimit)));
+                // include gap characters between two passages
+                endContentPosition = tokens.get(startTokenIndex + tokenLimit).getStartOffset() - 1;
+                passages.add(content.substring(startContentPosition, endContentPosition));
             }
             startTokenIndex += tokenLimit - overlapTokenNumber;
         }
         return passages;
     }
 
-    private List<String> tokenize(String content, String tokenizer, int maxTokenCount) {
+    private List<AnalyzeToken> tokenize(String content, String tokenizer, int maxTokenCount) {
         AnalyzeAction.Request analyzeRequest = new AnalyzeAction.Request();
         analyzeRequest.text(content);
         analyzeRequest.tokenizer(tokenizer);
         try {
             AnalyzeAction.Response analyzeResponse = analyze(analyzeRequest, analysisRegistry, null, maxTokenCount);
-            List<String> tokenList = new ArrayList<>();
-            List<AnalyzeAction.AnalyzeToken> analyzeTokenList = analyzeResponse.getTokens();
-            for (AnalyzeAction.AnalyzeToken analyzeToken : analyzeTokenList) {
-                tokenList.add(analyzeToken.getTerm());
-            }
-            return tokenList;
+            return analyzeResponse.getTokens();
         } catch (IOException e) {
             throw new RuntimeException("Fixed token length algorithm meet with exception: " + e);
         }

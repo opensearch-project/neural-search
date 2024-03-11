@@ -9,7 +9,8 @@ import org.apache.commons.lang3.math.NumberUtils;
 
 import java.util.Map;
 
-public class ChunkerUtils {
+public class ChunkerParameterValidator {
+
     public static String validateStringParameters(
         Map<String, Object> parameters,
         String fieldName,
