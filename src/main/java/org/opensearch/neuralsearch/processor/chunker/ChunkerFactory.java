@@ -7,8 +7,6 @@ package org.opensearch.neuralsearch.processor.chunker;
 import java.util.Map;
 import java.util.Set;
 
-import org.opensearch.index.analysis.AnalysisRegistry;
-
 /**
  * A factory to create different chunking algorithm classes and return all supported chunking algorithms.
  */

@@ -6,7 +6,6 @@ package org.opensearch.neuralsearch.processor.chunker;
 
 import com.google.common.collect.ImmutableList;
 
-import java.util.ArrayList;
 import java.util.Map;
 import java.util.List;
 
