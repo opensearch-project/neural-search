@@ -2,7 +2,6 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch.processor.chunker;
 
 import org.apache.commons.lang3.StringUtils;
@@ -12,10 +11,10 @@ import java.util.Map;
 
 public class ChunkerUtils {
     public static String validateStringParameters(
-            Map<String, Object> parameters,
-            String fieldName,
-            String defaultValue,
-            boolean allowEmpty
+        Map<String, Object> parameters,
+        String fieldName,
+        String defaultValue,
+        boolean allowEmpty
     ) {
         if (!parameters.containsKey(fieldName)) {
             // all parameters are optional
@@ -39,7 +38,7 @@ public class ChunkerUtils {
         String fieldValue = parameters.get(fieldName).toString();
         if (!(NumberUtils.isParsable(fieldValue))) {
             throw new IllegalArgumentException(
-                    "fixed length parameter [" + fieldName + "] cannot be cast to [" + Number.class.getName() + "]"
+                "fixed length parameter [" + fieldName + "] cannot be cast to [" + Number.class.getName() + "]"
             );
         }
         if (NumberUtils.createInteger(fieldValue) <= 0) {

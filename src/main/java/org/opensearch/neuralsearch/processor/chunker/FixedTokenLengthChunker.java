@@ -9,7 +9,6 @@ import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
 import lombok.extern.log4j.Log4j2;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 
 import org.opensearch.index.analysis.AnalysisRegistry;
@@ -95,15 +94,11 @@ public class FixedTokenLengthChunker implements Chunker {
         this.tokenConcatenator = validateStringParameters(parameters, TOKEN_CONCATENATOR_FIELD, DEFAULT_TOKEN_CONCATENATOR, true);
     }
 
-
-
-
-
     /**
      * Return the chunked passages for fixed token length algorithm
      *
      * @param content input string
-     * @param runtimeParameters a map containing runtimeParameters, containing the following runtimeParameters
+     * @param runtimeParameters a map for runtime parameters, containing the following runtime parameters:
      * max_token_count the max token limit for the tokenizer
      */
     @Override
@@ -114,19 +109,19 @@ public class FixedTokenLengthChunker implements Chunker {
         List<String> tokens = tokenize(content, tokenizer, maxTokenCount);
         List<String> passages = new ArrayList<>();
 
-        Double overlapTokenNumberDouble = overlapRate * tokenLimit;
-        int overlapTokenNumber = overlapTokenNumberDouble.intValue();
+        double overlapTokenNumberDouble = overlapRate * tokenLimit;
+        int overlapTokenNumber = (int) Math.round(overlapTokenNumberDouble);
 
-        int startToken = 0;
-        while (startToken < tokens.size()) {
-            if (startToken + tokenLimit >= tokens.size()) {
+        int startTokenIndex = 0;
+        while (startTokenIndex < tokens.size()) {
+            if (startTokenIndex + tokenLimit >= tokens.size()) {
                 // break the loop when already cover the last token
-                passages.add(String.join(tokenConcatenator, tokens.subList(startToken, tokens.size())));
+                passages.add(String.join(tokenConcatenator, tokens.subList(startTokenIndex, tokens.size())));
                 break;
             } else {
-                passages.add(String.join(tokenConcatenator, tokens.subList(startToken, startToken + tokenLimit)));
+                passages.add(String.join(tokenConcatenator, tokens.subList(startTokenIndex, startTokenIndex + tokenLimit)));
             }
-            startToken += tokenLimit - overlapTokenNumber;
+            startTokenIndex += tokenLimit - overlapTokenNumber;
         }
         return passages;
     }
