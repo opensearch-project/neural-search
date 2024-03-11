@@ -15,11 +15,15 @@ import org.apache.commons.lang3.StringUtils;
  */
 public class DelimiterChunker implements Chunker {
 
-    public DelimiterChunker() {}
+    public DelimiterChunker(Map<String, Object> parameters) {
+        validateParameters(parameters);
+    }
 
     public static final String DELIMITER_FIELD = "delimiter";
 
     public static final String DEFAULT_DELIMITER = ".";
+
+    private String delimiter = DEFAULT_DELIMITER;
 
     /**
      * Validate the chunked passages for delimiter algorithm
@@ -31,11 +35,14 @@ public class DelimiterChunker implements Chunker {
     @Override
     public void validateParameters(Map<String, Object> parameters) {
         if (parameters.containsKey(DELIMITER_FIELD)) {
-            Object delimiter = parameters.get(DELIMITER_FIELD);
-            if (!(delimiter instanceof String)) {
-                throw new IllegalArgumentException("delimiter parameters: " + delimiter + " must be string.");
-            } else if (StringUtils.isBlank(delimiter.toString())) {
-                throw new IllegalArgumentException("delimiter parameters should not be empty.");
+            if (!(parameters.get(DELIMITER_FIELD) instanceof String)) {
+                throw new IllegalArgumentException(
+                        "delimiter parameter [" + DELIMITER_FIELD + "] cannot be cast to [" + String.class.getName() + "]"
+                );
+            }
+            this.delimiter = parameters.get(DELIMITER_FIELD).toString();
+            if (StringUtils.isBlank(delimiter)) {
+                throw new IllegalArgumentException("delimiter parameter [" + DELIMITER_FIELD + "] should not be empty.");
             }
         }
     }
@@ -44,11 +51,9 @@ public class DelimiterChunker implements Chunker {
      * Return the chunked passages for delimiter algorithm
      *
      * @param content input string
-     * @param parameters a map containing parameters, containing the following parameters
      */
     @Override
-    public List<String> chunk(String content, Map<String, Object> parameters) {
-        String delimiter = DEFAULT_DELIMITER;
+    public List<String> chunk(String content) {
         if (parameters.containsKey(DELIMITER_FIELD)) {
             Object delimiterObject = parameters.get(DELIMITER_FIELD);
             delimiter = delimiterObject.toString();

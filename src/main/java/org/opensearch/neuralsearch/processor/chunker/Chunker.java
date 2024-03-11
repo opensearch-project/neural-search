@@ -4,6 +4,9 @@
  */
 package org.opensearch.neuralsearch.processor.chunker;
 
+import com.google.common.collect.ImmutableList;
+
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.List;
 
@@ -25,8 +28,20 @@ public interface Chunker {
      * Chunk the incoming string according to parameters and return chunked passages
      *
      * @param content input string
-     * @param parameters a map containing parameters for chunking algorithms
      * @return Chunked passages
      */
-    List<String> chunk(String content, Map<String, Object> parameters);
+    default List<String> chunk(String content) {
+        return ImmutableList.of();
+    }
+
+    /**
+     * Chunk the incoming string according to parameters and return chunked passages
+     *
+     * @param content input string
+     * @param runtimeParameters a map containing runtime parameters for chunking algorithms
+     * @return Chunked passages
+     */
+    default List<String> chunk(String content, Map<String, Object> runtimeParameters) {
+        return ImmutableList.of();
+    }
 }
