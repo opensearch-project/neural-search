@@ -22,6 +22,7 @@ import static org.opensearch.action.admin.indices.analyze.TransportAnalyzeAction
 @Log4j2
 public class FixedTokenLengthChunker implements Chunker {
 
+    public static final String ANALYSIS_REGISTRY_FIELD = "analysis_registry";
     public static final String TOKEN_LIMIT_FIELD = "token_limit";
     public static final String OVERLAP_RATE_FIELD = "overlap_rate";
     public static final String MAX_TOKEN_COUNT_FIELD = "max_token_count";

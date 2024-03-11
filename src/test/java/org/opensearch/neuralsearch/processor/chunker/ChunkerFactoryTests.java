@@ -11,6 +11,8 @@ import org.opensearch.test.OpenSearchTestCase;
 import java.util.Map;
 import java.util.Set;
 
+import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD;
+
 public class ChunkerFactoryTests extends OpenSearchTestCase {
 
     @Mock
@@ -22,13 +24,13 @@ public class ChunkerFactoryTests extends OpenSearchTestCase {
     }
 
     public void testCreate_FixedTokenLength() {
-        Chunker chunker = ChunkerFactory.create(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, analysisRegistry, Map.of());
+        Chunker chunker = ChunkerFactory.create(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, Map.of(ANALYSIS_REGISTRY_FIELD, analysisRegistry));
         assertNotNull(chunker);
         assertTrue(chunker instanceof FixedTokenLengthChunker);
     }
 
     public void testCreate_Delimiter() {
-        Chunker chunker = ChunkerFactory.create(ChunkerFactory.DELIMITER_ALGORITHM, analysisRegistry, Map.of());
+        Chunker chunker = ChunkerFactory.create(ChunkerFactory.DELIMITER_ALGORITHM, Map.of(ANALYSIS_REGISTRY_FIELD, analysisRegistry));
         assertNotNull(chunker);
         assertTrue(chunker instanceof DelimiterChunker);
     }
@@ -37,7 +39,7 @@ public class ChunkerFactoryTests extends OpenSearchTestCase {
         String invalidChunkerType = "Invalid Chunker Type";
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> ChunkerFactory.create(invalidChunkerType, analysisRegistry, Map.of())
+            () -> ChunkerFactory.create(invalidChunkerType, Map.of(ANALYSIS_REGISTRY_FIELD, analysisRegistry))
         );
         assert (illegalArgumentException.getMessage().contains("chunker type [" + invalidChunkerType + "] is not supported."));
     }
