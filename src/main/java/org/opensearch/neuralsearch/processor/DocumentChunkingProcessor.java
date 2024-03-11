@@ -76,12 +76,12 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
         AnalysisRegistry analysisRegistry
     ) {
         super(tag, description);
-        validateAndParseAlgorithmMap(algorithmMap);
         this.fieldMap = fieldMap;
         this.environment = environment;
         this.clusterService = clusterService;
         this.indicesService = indicesService;
         this.analysisRegistry = analysisRegistry;
+        validateAndParseAlgorithmMap(algorithmMap);
     }
 
     public String getType() {
