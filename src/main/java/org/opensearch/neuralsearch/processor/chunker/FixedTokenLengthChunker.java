@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
-import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.math.NumberUtils;
 
 import org.opensearch.index.analysis.AnalysisRegistry;
@@ -21,7 +20,6 @@ import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterVali
 /**
  * The implementation {@link Chunker} for fixed token length algorithm.
  */
-@Log4j2
 public class FixedTokenLengthChunker implements Chunker {
 
     public static final String ANALYSIS_REGISTRY_FIELD = "analysis_registry";
@@ -131,7 +129,7 @@ public class FixedTokenLengthChunker implements Chunker {
             AnalyzeAction.Response analyzeResponse = analyze(analyzeRequest, analysisRegistry, null, maxTokenCount);
             return analyzeResponse.getTokens();
         } catch (IOException e) {
-            throw new RuntimeException("Fixed token length algorithm meet with exception: " + e);
+            throw new IllegalStateException("Fixed token length algorithm encounters exception: " + e.getMessage(), e);
         }
     }
 }
