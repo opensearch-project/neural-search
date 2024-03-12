@@ -52,6 +52,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     private final float[] testVector2 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector3 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector4 = createRandomVector(TEST_DIMENSION);
+    private final float[] testVector5 = createRandomVector(TEST_DIMENSION);
+    private final float[] testVector6 = createRandomVector(TEST_DIMENSION);
 
     @Before
     public void setUp() throws Exception {
@@ -318,7 +320,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
                 TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
                 "5",
                 Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector4).toArray()),
+                Collections.singletonList(Floats.asList(testVector5).toArray()),
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT4)
             );
@@ -365,7 +367,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
                 TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
                 "5",
                 Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector4).toArray()),
+                Collections.singletonList(Floats.asList(testVector5).toArray()),
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT4)
             );
@@ -373,7 +375,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
                 TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
                 "6",
                 Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector4).toArray()),
+                Collections.singletonList(Floats.asList(testVector6).toArray()),
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT5)
             );

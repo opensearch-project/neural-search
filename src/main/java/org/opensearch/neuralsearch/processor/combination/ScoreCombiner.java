@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.apache.lucene.search.ScoreDoc;
@@ -131,13 +132,18 @@ public class ScoreCombiner {
         compoundQueryTopDocs.setTotalHits(getTotalHits(topDocsPerSubQuery, maxHits));
     }
 
+    /**
+     * Get max hits as number of unique doc ids from results of all sub-queries
+     * @param topDocsPerSubQuery list of topDocs objects for one shard
+     * @return number of unique doc ids
+     */
     protected int getMaxHits(final List<TopDocs> topDocsPerSubQuery) {
-        int maxHits = 0;
-        for (TopDocs topDocs : topDocsPerSubQuery) {
-            int hits = topDocs.scoreDocs.length;
-            maxHits = Math.max(maxHits, hits);
-        }
-        return maxHits;
+        Set<Integer> docIds = topDocsPerSubQuery.stream()
+            .filter(topDocs -> Objects.nonNull(topDocs.scoreDocs))
+            .flatMap(topDocs -> Arrays.stream(topDocs.scoreDocs))
+            .map(scoreDoc -> scoreDoc.doc)
+            .collect(Collectors.toSet());
+        return docIds.size();
     }
 
     private TotalHits getTotalHits(final List<TopDocs> topDocsPerSubQuery, int maxHits) {
