@@ -19,7 +19,9 @@ import static org.opensearch.ingest.ConfigurationUtils.readMap;
 
 /**
  * Factory for chunking ingest processor for ingestion pipeline.
- * Instantiates processor based on user provided input.
+ * Instantiates processor based on user provided input, which includes:
+ * 1. field_map: the input and output fields specified by the user
+ * 2. algorithm: chunking algorithm and its parameters
  */
 public class TextChunkingProcessorFactory implements Processor.Factory {
 
