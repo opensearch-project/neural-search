@@ -5,7 +5,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased 3.0](https://github.com/opensearch-project/neural-search/compare/2.x...HEAD)
 ### Features
-- Implement document chunking processor with fixed token length and delimiter algorithm ([#607](https://github.com/opensearch-project/neural-search/pull/607/))
 ### Enhancements
 ### Bug Fixes
 - Fix async actions are left in neural_sparse query ([#438](https://github.com/opensearch-project/neural-search/pull/438))
