@@ -138,8 +138,8 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
         List<String> passages = fixedTokenLengthChunker.chunk(content, runtimeParameters);
         List<String> expectedPassages = new ArrayList<>();
-        expectedPassages.add("This is an example document to be chunked. The document");
-        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by");
+        expectedPassages.add("This is an example document to be chunked. The document ");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by ");
         expectedPassages.add("standard tokenizer in OpenSearch.");
         assertEquals(expectedPassages, passages);
     }
@@ -156,7 +156,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         List<String> passages = fixedTokenLengthChunker.chunk(content, runtimeParameters);
         List<String> expectedPassages = new ArrayList<>();
         expectedPassages.add(
-            "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by"
+            "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by "
         );
         expectedPassages.add("standard tokenizer in OpenSearch.");
         assertEquals(expectedPassages, passages);
@@ -171,9 +171,9 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
         List<String> passages = fixedTokenLengthChunker.chunk(content, Map.of());
         List<String> expectedPassages = new ArrayList<>();
-        expectedPassages.add("This is an example document to be chunked. The document");
-        expectedPassages.add("to be chunked. The document contains a single paragraph, two");
-        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by");
+        expectedPassages.add("This is an example document to be chunked. The document ");
+        expectedPassages.add("to be chunked. The document contains a single paragraph, two ");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by ");
         expectedPassages.add("sentences and 24 tokens by standard tokenizer in OpenSearch.");
         assertEquals(expectedPassages, passages);
     }

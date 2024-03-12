@@ -105,7 +105,12 @@ public class FixedTokenLengthChunker implements Chunker {
         int overlapTokenNumber = (int) Math.floor(tokenLimit * overlapRate);
 
         while (startTokenIndex < tokens.size()) {
-            startContentPosition = tokens.get(startTokenIndex).getStartOffset();
+            if (startTokenIndex == 0) {
+                // include all characters till the start if no previous passage
+                startContentPosition = 0;
+            } else {
+                startContentPosition = tokens.get(startTokenIndex).getStartOffset();
+            }
             if (startTokenIndex + tokenLimit >= tokens.size()) {
                 // include all characters till the end if no next passage
                 endContentPosition = content.length();
@@ -113,7 +118,7 @@ public class FixedTokenLengthChunker implements Chunker {
                 break;
             } else {
                 // include gap characters between two passages
-                endContentPosition = tokens.get(startTokenIndex + tokenLimit).getStartOffset() - 1;
+                endContentPosition = tokens.get(startTokenIndex + tokenLimit).getStartOffset();
                 passages.add(content.substring(startContentPosition, endContentPosition));
             }
             startTokenIndex += tokenLimit - overlapTokenNumber;
