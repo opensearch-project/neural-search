@@ -22,6 +22,7 @@ import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterVali
  */
 public class FixedTokenLengthChunker implements Chunker {
 
+    public static final String ALGORITHM_NAME = "fixed_token_length";
     public static final String ANALYSIS_REGISTRY_FIELD = "analysis_registry";
     public static final String TOKEN_LIMIT_FIELD = "token_limit";
     public static final String OVERLAP_RATE_FIELD = "overlap_rate";

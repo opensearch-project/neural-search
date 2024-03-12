@@ -30,8 +30,6 @@ import org.opensearch.neuralsearch.processor.chunker.Chunker;
 import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 
-import static org.opensearch.neuralsearch.processor.chunker.ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM;
-
 /**
  * This processor is used for chunking user input data and chunked data could be used for downstream embedding processor,
  * algorithm can be used to indicate chunking algorithm and parameters,
@@ -111,7 +109,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
             );
         }
         Map<String, Object> chunkerParameters = (Map<String, Object>) algorithmValue;
-        if (Objects.equals(algorithmKey, FIXED_TOKEN_LENGTH_ALGORITHM)) {
+        if (Objects.equals(algorithmKey, FixedTokenLengthChunker.ALGORITHM_NAME)) {
             chunkerParameters.put(FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD, analysisRegistry);
         }
         this.chunker = ChunkerFactory.create(algorithmKey, chunkerParameters);

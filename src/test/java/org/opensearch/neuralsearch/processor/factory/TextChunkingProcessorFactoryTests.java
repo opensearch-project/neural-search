@@ -23,7 +23,7 @@ import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.analysis.AnalysisModule;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.processor.TextChunkingProcessor;
-import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
+import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.plugins.AnalysisPlugin;
 import org.opensearch.test.OpenSearchTestCase;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.TYPE;
@@ -34,7 +34,7 @@ public class TextChunkingProcessorFactoryTests extends OpenSearchTestCase {
 
     private static final String PROCESSOR_TAG = "mockTag";
     private static final String DESCRIPTION = "mockDescription";
-    private static final Map<String, Object> algorithmMap = Map.of(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, new HashMap<>());
+    private static final Map<String, Object> algorithmMap = Map.of(FixedTokenLengthChunker.ALGORITHM_NAME, new HashMap<>());
 
     private TextChunkingProcessorFactory textChunkingProcessorFactory;
 

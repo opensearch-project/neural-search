@@ -31,7 +31,6 @@ import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.analysis.AnalysisModule;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.Processor;
-import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
 import org.opensearch.neuralsearch.processor.chunker.DelimiterChunker;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.neuralsearch.processor.factory.TextChunkingProcessorFactory;
@@ -128,7 +127,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     private TextChunkingProcessor createFixedTokenLengthInstance(Map<String, Object> fieldMap) {
         Map<String, Object> config = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
-        algorithmMap.put(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, createFixedTokenLengthParameters());
+        algorithmMap.put(FixedTokenLengthChunker.ALGORITHM_NAME, createFixedTokenLengthParameters());
         config.put(FIELD_MAP_FIELD, fieldMap);
         config.put(ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
@@ -139,7 +138,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     private TextChunkingProcessor createFixedTokenLengthInstanceWithMaxChunkNum(Map<String, Object> fieldMap, int maxChunkNum) {
         Map<String, Object> config = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
-        algorithmMap.put(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, createFixedTokenLengthParametersWithMaxChunk(maxChunkNum));
+        algorithmMap.put(FixedTokenLengthChunker.ALGORITHM_NAME, createFixedTokenLengthParametersWithMaxChunk(maxChunkNum));
         config.put(FIELD_MAP_FIELD, fieldMap);
         config.put(ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
@@ -151,7 +150,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> config = new HashMap<>();
         Map<String, Object> fieldMap = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
-        algorithmMap.put(ChunkerFactory.DELIMITER_ALGORITHM, createDelimiterParameters());
+        algorithmMap.put(DelimiterChunker.ALGORITHM_NAME, createDelimiterParameters());
         fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
         config.put(FIELD_MAP_FIELD, fieldMap);
         config.put(ALGORITHM_FIELD, algorithmMap);
@@ -178,7 +177,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> fieldMap = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
         fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
-        algorithmMap.put(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, createFixedTokenLengthParametersWithMaxChunk(-2));
+        algorithmMap.put(FixedTokenLengthChunker.ALGORITHM_NAME, createFixedTokenLengthParametersWithMaxChunk(-2));
         config.put(FIELD_MAP_FIELD, fieldMap);
         config.put(ALGORITHM_FIELD, algorithmMap);
         IllegalArgumentException illegalArgumentException = assertThrows(
@@ -213,8 +212,8 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> algorithmMap = new HashMap<>();
         fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
         config.put(TextChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
-        algorithmMap.put(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, createFixedTokenLengthParameters());
-        algorithmMap.put(ChunkerFactory.DELIMITER_ALGORITHM, createDelimiterParameters());
+        algorithmMap.put(FixedTokenLengthChunker.ALGORITHM_NAME, createFixedTokenLengthParameters());
+        algorithmMap.put(DelimiterChunker.ALGORITHM_NAME, createDelimiterParameters());
         config.put(ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
         IllegalArgumentException illegalArgumentException = assertThrows(
@@ -251,7 +250,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> algorithmMap = new HashMap<>();
         fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
         config.put(TextChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
-        algorithmMap.put(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, 1);
+        algorithmMap.put(FixedTokenLengthChunker.ALGORITHM_NAME, 1);
         config.put(ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
         IllegalArgumentException illegalArgumentException = assertThrows(
@@ -260,7 +259,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         );
         assertEquals(
             "Unable to create the processor as ["
-                + ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM
+                + FixedTokenLengthChunker.ALGORITHM_NAME
                 + "] parameters cannot be cast to ["
                 + Map.class.getName()
                 + "]",

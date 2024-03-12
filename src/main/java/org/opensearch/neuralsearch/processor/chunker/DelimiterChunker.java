@@ -15,15 +15,15 @@ import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterVali
  */
 public class DelimiterChunker implements Chunker {
 
-    public DelimiterChunker(Map<String, Object> parameters) {
-        validateAndParseParameters(parameters);
-    }
-
+    public static final String ALGORITHM_NAME = "delimiter";
     public static final String DELIMITER_FIELD = "delimiter";
-
     public static final String DEFAULT_DELIMITER = "\n\n";
 
     private String delimiter;
+
+    public DelimiterChunker(Map<String, Object> parameters) {
+        validateAndParseParameters(parameters);
+    }
 
     /**
      * Validate the chunked passages for delimiter algorithm

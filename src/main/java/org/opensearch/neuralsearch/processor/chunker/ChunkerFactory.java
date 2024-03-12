@@ -12,14 +12,11 @@ import java.util.Set;
  */
 public class ChunkerFactory {
 
-    public static final String FIXED_TOKEN_LENGTH_ALGORITHM = "fixed_token_length";
-    public static final String DELIMITER_ALGORITHM = "delimiter";
-
     public static Chunker create(String type, Map<String, Object> parameters) {
         switch (type) {
-            case FIXED_TOKEN_LENGTH_ALGORITHM:
+            case FixedTokenLengthChunker.ALGORITHM_NAME:
                 return new FixedTokenLengthChunker(parameters);
-            case DELIMITER_ALGORITHM:
+            case DelimiterChunker.ALGORITHM_NAME:
                 return new DelimiterChunker(parameters);
             default:
                 throw new IllegalArgumentException(
@@ -29,6 +26,6 @@ public class ChunkerFactory {
     }
 
     public static Set<String> getAllChunkers() {
-        return Set.of(FIXED_TOKEN_LENGTH_ALGORITHM, DELIMITER_ALGORITHM);
+        return Set.of(FixedTokenLengthChunker.ALGORITHM_NAME, DelimiterChunker.ALGORITHM_NAME);
     }
 }

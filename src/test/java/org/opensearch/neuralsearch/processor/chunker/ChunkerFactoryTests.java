@@ -20,18 +20,18 @@ public class ChunkerFactoryTests extends OpenSearchTestCase {
     private AnalysisRegistry analysisRegistry;
 
     public void testGetAllChunkers() {
-        Set<String> expected = Set.of(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, ChunkerFactory.DELIMITER_ALGORITHM);
+        Set<String> expected = Set.of(FixedTokenLengthChunker.ALGORITHM_NAME, DelimiterChunker.ALGORITHM_NAME);
         assertEquals(expected, ChunkerFactory.getAllChunkers());
     }
 
     public void testCreate_FixedTokenLength() {
-        Chunker chunker = ChunkerFactory.create(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, createChunkParameters());
+        Chunker chunker = ChunkerFactory.create(FixedTokenLengthChunker.ALGORITHM_NAME, createChunkParameters());
         assertNotNull(chunker);
         assertTrue(chunker instanceof FixedTokenLengthChunker);
     }
 
     public void testCreate_Delimiter() {
-        Chunker chunker = ChunkerFactory.create(ChunkerFactory.DELIMITER_ALGORITHM, createChunkParameters());
+        Chunker chunker = ChunkerFactory.create(DelimiterChunker.ALGORITHM_NAME, createChunkParameters());
         assertNotNull(chunker);
         assertTrue(chunker instanceof DelimiterChunker);
     }
