@@ -181,6 +181,11 @@ Additionally, to run integration tests on multi nodes with security enabled, run
 ./gradlew :integTest -Dsecurity.enabled=true -PnumNodes=3
 ```
 
+Some integration tests are skipped by default, mainly to save time and resources. A special parameter is required to include those tests in the executed test suite. For example, the following command enables additional tests for aggregations when they are bundled with hybrid queries
+```
+./gradlew :integTest -PnumNodes=3 -Dtest_aggs=true
+```
+
 Integration tests can be run with remote cluster. For that run the following command and replace host/port/cluster name values with ones for the target cluster:
 
 ```
