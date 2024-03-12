@@ -38,10 +38,11 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
     }
 
     public void testChunkerWithDefaultDelimiter() {
+        // default delimiter is \n\n
         DelimiterChunker chunker = new DelimiterChunker(Map.of());
-        String content = "a.b.c.d";
+        String content = "a.b\n\nc.d";
         List<String> chunkResult = chunker.chunk(content);
-        assertEquals(List.of("a.", "b.", "c.", "d"), chunkResult);
+        assertEquals(List.of("a.b\n\n", "c.d"), chunkResult);
     }
 
     public void testChunkerWithDelimiterEnd() {

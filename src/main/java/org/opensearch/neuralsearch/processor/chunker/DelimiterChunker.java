@@ -21,7 +21,7 @@ public class DelimiterChunker implements Chunker {
 
     public static final String DELIMITER_FIELD = "delimiter";
 
-    public static final String DEFAULT_DELIMITER = ".";
+    public static final String DEFAULT_DELIMITER = "\n\n";
 
     private String delimiter;
 
