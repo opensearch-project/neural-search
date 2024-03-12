@@ -148,12 +148,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
 
     private int chunkString(String content, List<String> result, Map<String, Object> runTimeParameters, int chunkCount) {
         // chunk the content, return the updated chunkCount and add chunk passages to result
-        List<String> contentResult;
-        if (chunker instanceof FixedTokenLengthChunker) {
-            contentResult = chunker.chunk(content, runTimeParameters);
-        } else {
-            contentResult = chunker.chunk(content);
-        }
+        List<String> contentResult = chunker.chunk(content, runTimeParameters);
         chunkCount += contentResult.size();
         if (maxChunkLimit != DEFAULT_MAX_CHUNK_LIMIT && chunkCount > maxChunkLimit) {
             throw new IllegalArgumentException(

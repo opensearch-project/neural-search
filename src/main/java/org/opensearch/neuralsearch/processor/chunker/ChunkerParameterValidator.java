@@ -9,6 +9,9 @@ import org.apache.commons.lang3.math.NumberUtils;
 
 import java.util.Map;
 
+/**
+ * Validate and parse the parameter for chunking algorithms
+ */
 public class ChunkerParameterValidator {
 
     public static String validateStringParameters(

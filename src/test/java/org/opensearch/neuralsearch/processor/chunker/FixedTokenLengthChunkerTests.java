@@ -61,16 +61,16 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         return new FixedTokenLengthChunker(nonRuntimeParameters);
     }
 
-    public void testValidateParameters_whenNoParams_thenSuccessful() {
-        fixedTokenLengthChunker.validateParameters(Map.of());
+    public void testValidateAndParseParameters_whenNoParams_thenSuccessful() {
+        fixedTokenLengthChunker.validateAndParseParameters(Map.of());
     }
 
-    public void testValidateParameters_whenIllegalTokenLimitType_thenFail() {
+    public void testValidateAndParseParameters_whenIllegalTokenLimitType_thenFail() {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(TOKEN_LIMIT_FIELD, "invalid token limit");
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.validateParameters(parameters)
+            () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
         );
         assertEquals(
             "fixed length parameter [" + TOKEN_LIMIT_FIELD + "] cannot be cast to [" + Number.class.getName() + "]",
@@ -78,22 +78,22 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         );
     }
 
-    public void testValidateParameters_whenIllegalTokenLimitValue_thenFail() {
+    public void testValidateAndParseParameters_whenIllegalTokenLimitValue_thenFail() {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(TOKEN_LIMIT_FIELD, -1);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.validateParameters(parameters)
+            () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
         );
         assertEquals("fixed length parameter [" + TOKEN_LIMIT_FIELD + "] must be positive", illegalArgumentException.getMessage());
     }
 
-    public void testValidateParameters_whenIllegalOverlapRateType_thenFail() {
+    public void testValidateAndParseParameters_whenIllegalOverlapRateType_thenFail() {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(OVERLAP_RATE_FIELD, "invalid overlap rate");
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.validateParameters(parameters)
+            () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
         );
         assertEquals(
             "fixed length parameter [" + OVERLAP_RATE_FIELD + "] cannot be cast to [" + Number.class.getName() + "]",
@@ -101,12 +101,12 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         );
     }
 
-    public void testValidateParameters_whenIllegalOverlapRateValue_thenFail() {
+    public void testValidateAndParseParameters_whenIllegalOverlapRateValue_thenFail() {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(OVERLAP_RATE_FIELD, 0.6);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.validateParameters(parameters)
+            () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
         );
         assertEquals(
             "fixed length parameter [" + OVERLAP_RATE_FIELD + "] must be between 0 and 0.5",
@@ -114,12 +114,12 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         );
     }
 
-    public void testValidateParameters_whenIllegalTokenizerType_thenFail() {
+    public void testValidateAndParseParameters_whenIllegalTokenizerType_thenFail() {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(TOKENIZER_FIELD, 111);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.validateParameters(parameters)
+            () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
         );
         assertEquals(
             "Chunker parameter [" + TOKENIZER_FIELD + "] cannot be cast to [" + String.class.getName() + "]",

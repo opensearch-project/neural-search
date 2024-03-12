@@ -44,7 +44,7 @@ public class FixedTokenLengthChunker implements Chunker {
     private final AnalysisRegistry analysisRegistry;
 
     public FixedTokenLengthChunker(Map<String, Object> parameters) {
-        validateParameters(parameters);
+        validateAndParseParameters(parameters);
         this.analysisRegistry = (AnalysisRegistry) parameters.get(ANALYSIS_REGISTRY_FIELD);
     }
 
@@ -63,7 +63,7 @@ public class FixedTokenLengthChunker implements Chunker {
      * tokenizer should be string
      */
     @Override
-    public void validateParameters(Map<String, Object> parameters) {
+    public void validateAndParseParameters(Map<String, Object> parameters) {
         this.tokenLimit = validatePositiveIntegerParameter(parameters, TOKEN_LIMIT_FIELD, DEFAULT_TOKEN_LIMIT);
         if (parameters.containsKey(OVERLAP_RATE_FIELD)) {
             String overlapRateString = parameters.get(OVERLAP_RATE_FIELD).toString();

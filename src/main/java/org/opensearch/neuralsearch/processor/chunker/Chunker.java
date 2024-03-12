@@ -4,8 +4,6 @@
  */
 package org.opensearch.neuralsearch.processor.chunker;
 
-import com.google.common.collect.ImmutableList;
-
 import java.util.Map;
 import java.util.List;
 
@@ -16,22 +14,12 @@ import java.util.List;
 public interface Chunker {
 
     /**
-     * Validate the parameters for chunking algorithm,
+     * Validate and parse the parameters for chunking algorithm,
      * will throw IllegalArgumentException when parameters are invalid
      *
      * @param parameters a map containing parameters for chunking algorithms
      */
-    void validateParameters(Map<String, Object> parameters);
-
-    /**
-     * Chunk the incoming string according to parameters and return chunked passages
-     *
-     * @param content input string
-     * @return Chunked passages
-     */
-    default List<String> chunk(String content) {
-        return ImmutableList.of();
-    }
+    void validateAndParseParameters(Map<String, Object> parameters);
 
     /**
      * Chunk the incoming string according to parameters and return chunked passages
@@ -40,7 +28,5 @@ public interface Chunker {
      * @param runtimeParameters a map containing runtime parameters for chunking algorithms
      * @return Chunked passages
      */
-    default List<String> chunk(String content, Map<String, Object> runtimeParameters) {
-        return ImmutableList.of();
-    }
+    List<String> chunk(String content, Map<String, Object> runtimeParameters);
 }

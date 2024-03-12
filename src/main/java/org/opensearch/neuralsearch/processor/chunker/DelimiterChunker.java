@@ -16,7 +16,7 @@ import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterVali
 public class DelimiterChunker implements Chunker {
 
     public DelimiterChunker(Map<String, Object> parameters) {
-        validateParameters(parameters);
+        validateAndParseParameters(parameters);
     }
 
     public static final String DELIMITER_FIELD = "delimiter";
@@ -33,12 +33,18 @@ public class DelimiterChunker implements Chunker {
      * @throws IllegalArgumentException If delimiter is not a string or empty
      */
     @Override
-    public void validateParameters(Map<String, Object> parameters) {
+    public void validateAndParseParameters(Map<String, Object> parameters) {
         this.delimiter = validateStringParameters(parameters, DELIMITER_FIELD, DEFAULT_DELIMITER, false);
     }
 
+    /**
+     * Return the chunked passages for fixed token length algorithm
+     *
+     * @param content input string
+     * @param runtimeParameters a map for runtime parameters, but not needed by delimiter algorithm
+     */
     @Override
-    public List<String> chunk(String content) {
+    public List<String> chunk(String content, Map<String, Object> runtimeParameters) {
         List<String> chunkResult = new ArrayList<>();
         int start = 0, end;
         int nextDelimiterPosition = content.indexOf(delimiter);
@@ -56,5 +62,4 @@ public class DelimiterChunker implements Chunker {
 
         return chunkResult;
     }
-
 }
