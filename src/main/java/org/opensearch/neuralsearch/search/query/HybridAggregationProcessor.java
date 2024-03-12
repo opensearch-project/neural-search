@@ -16,7 +16,7 @@ import org.opensearch.search.query.ReduceableSearchResult;
 import java.io.IOException;
 import java.util.List;
 
-import static org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher.isHybridQuery;
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQuery;
 
 /**
  * Defines logic for pre- and post-phases of document scores collection. Responsible for registering custom
