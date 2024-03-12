@@ -2,7 +2,7 @@
   "description": "An example fixed token length chunker pipeline with lowercase tokenizer",
   "processors" : [
     {
-      "chunking": {
+      "text_chunking": {
         "field_map": {
           "body": "body_chunk"
         },

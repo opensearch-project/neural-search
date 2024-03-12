@@ -2,7 +2,7 @@
   "description": "An example cascaded pipeline with fixed token length algorithm after chunking algorithm",
   "processors" : [
     {
-      "chunking": {
+      "text_chunking": {
         "field_map": {
           "body": "body_chunk_intermediate"
         },
@@ -14,7 +14,7 @@
       }
     },
     {
-      "chunking": {
+      "text_chunking": {
         "field_map": {
           "body_chunk_intermediate": "body_chunk"
         },

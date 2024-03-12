@@ -2,7 +2,7 @@
   "description": "An example delimiter chunker pipeline",
   "processors" : [
     {
-      "chunking": {
+      "text_chunking": {
         "field_map": {
           "body": "body_chunk"
         },
