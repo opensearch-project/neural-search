@@ -11,17 +11,17 @@ import org.opensearch.env.Environment;
 import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.ingest.Processor;
-import org.opensearch.neuralsearch.processor.DocumentChunkingProcessor;
-import static org.opensearch.neuralsearch.processor.DocumentChunkingProcessor.TYPE;
-import static org.opensearch.neuralsearch.processor.DocumentChunkingProcessor.FIELD_MAP_FIELD;
-import static org.opensearch.neuralsearch.processor.DocumentChunkingProcessor.ALGORITHM_FIELD;
+import org.opensearch.neuralsearch.processor.TextChunkingProcessor;
+import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.TYPE;
+import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.FIELD_MAP_FIELD;
+import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.ALGORITHM_FIELD;
 import static org.opensearch.ingest.ConfigurationUtils.readMap;
 
 /**
  * Factory for chunking ingest processor for ingestion pipeline.
  * Instantiates processor based on user provided input.
  */
-public class DocumentChunkingProcessorFactory implements Processor.Factory {
+public class TextChunkingProcessorFactory implements Processor.Factory {
 
     private final Environment environment;
 
@@ -31,7 +31,7 @@ public class DocumentChunkingProcessorFactory implements Processor.Factory {
 
     private final AnalysisRegistry analysisRegistry;
 
-    public DocumentChunkingProcessorFactory(
+    public TextChunkingProcessorFactory(
         Environment environment,
         ClusterService clusterService,
         IndicesService indicesService,
@@ -44,7 +44,7 @@ public class DocumentChunkingProcessorFactory implements Processor.Factory {
     }
 
     @Override
-    public DocumentChunkingProcessor create(
+    public TextChunkingProcessor create(
         Map<String, Processor.Factory> registry,
         String processorTag,
         String description,
@@ -52,7 +52,7 @@ public class DocumentChunkingProcessorFactory implements Processor.Factory {
     ) throws Exception {
         Map<String, Object> fieldMap = readMap(TYPE, processorTag, config, FIELD_MAP_FIELD);
         Map<String, Object> algorithmMap = readMap(TYPE, processorTag, config, ALGORITHM_FIELD);
-        return new DocumentChunkingProcessor(
+        return new TextChunkingProcessor(
             processorTag,
             description,
             fieldMap,

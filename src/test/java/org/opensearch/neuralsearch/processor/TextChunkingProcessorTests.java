@@ -34,16 +34,16 @@ import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
 import org.opensearch.neuralsearch.processor.chunker.DelimiterChunker;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
-import org.opensearch.neuralsearch.processor.factory.DocumentChunkingProcessorFactory;
+import org.opensearch.neuralsearch.processor.factory.TextChunkingProcessorFactory;
 import org.opensearch.plugins.AnalysisPlugin;
 import org.opensearch.test.OpenSearchTestCase;
-import static org.opensearch.neuralsearch.processor.DocumentChunkingProcessor.FIELD_MAP_FIELD;
-import static org.opensearch.neuralsearch.processor.DocumentChunkingProcessor.ALGORITHM_FIELD;
-import static org.opensearch.neuralsearch.processor.DocumentChunkingProcessor.MAX_CHUNK_LIMIT_FIELD;
+import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.FIELD_MAP_FIELD;
+import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.ALGORITHM_FIELD;
+import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.MAX_CHUNK_LIMIT_FIELD;
 
-public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
+public class TextChunkingProcessorTests extends OpenSearchTestCase {
 
-    private DocumentChunkingProcessorFactory documentChunkingProcessorFactory;
+    private TextChunkingProcessorFactory textChunkingProcessorFactory;
 
     private static final String PROCESSOR_TAG = "mockTag";
     private static final String DESCRIPTION = "mockDescription";
@@ -84,12 +84,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         when(metadata.index(anyString())).thenReturn(null);
         when(clusterState.metadata()).thenReturn(metadata);
         when(clusterService.state()).thenReturn(clusterState);
-        documentChunkingProcessorFactory = new DocumentChunkingProcessorFactory(
-            environment,
-            clusterService,
-            indicesService,
-            getAnalysisRegistry()
-        );
+        textChunkingProcessorFactory = new TextChunkingProcessorFactory(environment, clusterService, indicesService, getAnalysisRegistry());
     }
 
     private Map<String, Object> createFixedTokenLengthParameters() {
@@ -130,29 +125,29 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    private DocumentChunkingProcessor createFixedTokenLengthInstance(Map<String, Object> fieldMap) {
+    private TextChunkingProcessor createFixedTokenLengthInstance(Map<String, Object> fieldMap) {
         Map<String, Object> config = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
         algorithmMap.put(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, createFixedTokenLengthParameters());
         config.put(FIELD_MAP_FIELD, fieldMap);
         config.put(ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
-        return documentChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+        return textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
     }
 
     @SneakyThrows
-    private DocumentChunkingProcessor createFixedTokenLengthInstanceWithMaxChunkNum(Map<String, Object> fieldMap, int maxChunkNum) {
+    private TextChunkingProcessor createFixedTokenLengthInstanceWithMaxChunkNum(Map<String, Object> fieldMap, int maxChunkNum) {
         Map<String, Object> config = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
         algorithmMap.put(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, createFixedTokenLengthParametersWithMaxChunk(maxChunkNum));
         config.put(FIELD_MAP_FIELD, fieldMap);
         config.put(ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
-        return documentChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+        return textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
     }
 
     @SneakyThrows
-    private DocumentChunkingProcessor createDelimiterInstance() {
+    private TextChunkingProcessor createDelimiterInstance() {
         Map<String, Object> config = new HashMap<>();
         Map<String, Object> fieldMap = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
@@ -161,7 +156,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         config.put(FIELD_MAP_FIELD, fieldMap);
         config.put(ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
-        return documentChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+        return textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
     }
 
     public void testCreate_whenAlgorithmFieldMissing_thenFail() {
@@ -171,7 +166,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         Map<String, Processor.Factory> registry = new HashMap<>();
         OpenSearchParseException openSearchParseException = assertThrows(
             OpenSearchParseException.class,
-            () -> documentChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
+            () -> textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
         );
         assertEquals("[" + ALGORITHM_FIELD + "] required property is missing", openSearchParseException.getMessage());
     }
@@ -188,7 +183,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         config.put(ALGORITHM_FIELD, algorithmMap);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> documentChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
+            () -> textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
         );
         assertEquals("Parameter [" + MAX_CHUNK_LIMIT_FIELD + "] must be a positive integer", illegalArgumentException.getMessage());
 
@@ -199,12 +194,12 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> fieldMap = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
         fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
-        config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
+        config.put(TextChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
         config.put(ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> documentChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
+            () -> textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
         );
         assertEquals(
             "Unable to create the processor as [" + ALGORITHM_FIELD + "] must contain and only contain 1 algorithm",
@@ -217,14 +212,14 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> fieldMap = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
         fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
-        config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
+        config.put(TextChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
         algorithmMap.put(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, createFixedTokenLengthParameters());
         algorithmMap.put(ChunkerFactory.DELIMITER_ALGORITHM, createDelimiterParameters());
         config.put(ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> documentChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
+            () -> textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
         );
         assertEquals(
             "Unable to create the processor as [" + ALGORITHM_FIELD + "] must contain and only contain 1 algorithm",
@@ -238,13 +233,13 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> algorithmMap = new HashMap<>();
         String invalid_algorithm_type = "invalid algorithm";
         fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
-        config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
+        config.put(TextChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
         algorithmMap.put(invalid_algorithm_type, createFixedTokenLengthParameters());
         config.put(ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> documentChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
+            () -> textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
         );
         assert (illegalArgumentException.getMessage()
             .contains("Unable to create the processor as chunker algorithm [" + invalid_algorithm_type + "] is not supported"));
@@ -255,13 +250,13 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> fieldMap = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
         fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
-        config.put(DocumentChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
+        config.put(TextChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
         algorithmMap.put(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, 1);
         config.put(ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> documentChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
+            () -> textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
         );
         assertEquals(
             "Unable to create the processor as ["
@@ -275,9 +270,9 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testGetType() {
-        DocumentChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
+        TextChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
         String type = processor.getType();
-        assertEquals(DocumentChunkingProcessor.TYPE, type);
+        assertEquals(TextChunkingProcessor.TYPE, type);
     }
 
     private String createSourceDataString() {
@@ -353,7 +348,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testExecute_withFixedTokenLength_andSourceDataStringWithMaxChunkNum_thenSucceed() {
-        DocumentChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkNum(createStringFieldMap(), 5);
+        TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkNum(createStringFieldMap(), 5);
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
         IngestDocument document = processor.execute(ingestDocument);
         assert document.getSourceAndMetadata().containsKey(OUTPUT_FIELD);
@@ -368,7 +363,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testExecute_withFixedTokenLength_andSourceDataStringWithMaxChunkNumTwice_thenSucceed() {
-        DocumentChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkNum(createStringFieldMap(), 5);
+        TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkNum(createStringFieldMap(), 5);
         for (int i = 0; i < 2; i++) {
             IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
             IngestDocument document = processor.execute(ingestDocument);
@@ -385,7 +380,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testExecute_withFixedTokenLength_andSourceDataStringWithMaxChunkNumExceed_thenFail() {
-        DocumentChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkNum(createStringFieldMap(), 1);
+        TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkNum(createStringFieldMap(), 1);
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
@@ -400,7 +395,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testExecute_withFixedTokenLength_andSourceDataString_thenSucceed() {
-        DocumentChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
+        TextChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
         IngestDocument document = processor.execute(ingestDocument);
         assert document.getSourceAndMetadata().containsKey(OUTPUT_FIELD);
@@ -415,7 +410,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testExecute_withFixedTokenLength_andSourceDataInvalidType_thenFail() {
-        DocumentChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
+        TextChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put(INPUT_FIELD, 1);
         sourceAndMetadata.put(IndexFieldMapper.NAME, INDEX_NAME);
@@ -432,7 +427,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testExecute_withFixedTokenLength_andSourceDataListStrings_thenSucceed() {
-        DocumentChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
+        TextChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataListStrings());
         IngestDocument document = processor.execute(ingestDocument);
         assert document.getSourceAndMetadata().containsKey(OUTPUT_FIELD);
@@ -451,7 +446,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testExecute_withFixedTokenLength_andSourceDataListHybridType_thenFail() {
-        DocumentChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
+        TextChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataListHybridType());
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
@@ -465,7 +460,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testExecute_withFixedTokenLength_andSourceDataListWithNull_thenFail() {
-        DocumentChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
+        TextChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataListWithNull());
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
@@ -477,7 +472,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
     @SuppressWarnings("unchecked")
     @SneakyThrows
     public void testExecute_withFixedTokenLength_andFieldMapNestedMap_thenSucceed() {
-        DocumentChunkingProcessor processor = createFixedTokenLengthInstance(createNestedFieldMap());
+        TextChunkingProcessor processor = createFixedTokenLengthInstance(createNestedFieldMap());
         IngestDocument ingestDocument = createIngestDocumentWithNestedSourceData(createSourceDataNestedMap());
         IngestDocument document = processor.execute(ingestDocument);
         assert document.getSourceAndMetadata().containsKey(INPUT_NESTED_FIELD_KEY);
@@ -496,7 +491,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testExecute_withFixedTokenLength_andMaxDepthLimitExceedFieldMap_thenFail() {
-        DocumentChunkingProcessor processor = createFixedTokenLengthInstance(createNestedFieldMap());
+        TextChunkingProcessor processor = createFixedTokenLengthInstance(createNestedFieldMap());
         IngestDocument ingestDocument = createIngestDocumentWithNestedSourceData(createMaxDepthLimitExceedMap(0));
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
@@ -510,7 +505,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testExecute_withFixedTokenLength_andFieldMapNestedMap_thenFail() {
-        DocumentChunkingProcessor processor = createFixedTokenLengthInstance(createNestedFieldMap());
+        TextChunkingProcessor processor = createFixedTokenLengthInstance(createNestedFieldMap());
         IngestDocument ingestDocument = createIngestDocumentWithNestedSourceData(createSourceDataInvalidNestedMap());
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
@@ -525,7 +520,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
     @SneakyThrows
     @SuppressWarnings("unchecked")
     public void testExecute_withFixedTokenLength_andFieldMapNestedMap_sourceDataList_thenSucceed() {
-        DocumentChunkingProcessor processor = createFixedTokenLengthInstance(createNestedFieldMap());
+        TextChunkingProcessor processor = createFixedTokenLengthInstance(createNestedFieldMap());
         IngestDocument ingestDocument = createIngestDocumentWithNestedSourceData(createSourceDataListNestedMap());
         IngestDocument document = processor.execute(ingestDocument);
         assert document.getSourceAndMetadata().containsKey(INPUT_NESTED_FIELD_KEY);
@@ -548,7 +543,7 @@ public class DocumentChunkingProcessorTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testExecute_withDelimiter_andSourceDataString_thenSucceed() {
-        DocumentChunkingProcessor processor = createDelimiterInstance();
+        TextChunkingProcessor processor = createDelimiterInstance();
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
         IngestDocument document = processor.execute(ingestDocument);
         assert document.getSourceAndMetadata().containsKey(OUTPUT_FIELD);

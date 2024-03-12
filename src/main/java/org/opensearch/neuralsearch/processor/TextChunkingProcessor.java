@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.Objects;
 
 import com.google.common.annotations.VisibleForTesting;
-import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.math.NumberUtils;
 
 import org.opensearch.cluster.metadata.IndexMetadata;
@@ -38,10 +37,9 @@ import static org.opensearch.neuralsearch.processor.chunker.ChunkerFactory.FIXED
  * algorithm can be used to indicate chunking algorithm and parameters,
  * and field_map can be used to indicate which fields needs chunking and the corresponding keys for the chunking results.
  */
-@Log4j2
-public final class DocumentChunkingProcessor extends AbstractProcessor {
+public final class TextChunkingProcessor extends AbstractProcessor {
 
-    public static final String TYPE = "chunking";
+    public static final String TYPE = "text_chunking";
 
     public static final String FIELD_MAP_FIELD = "field_map";
 
@@ -65,7 +63,7 @@ public final class DocumentChunkingProcessor extends AbstractProcessor {
 
     private final Environment environment;
 
-    public DocumentChunkingProcessor(
+    public TextChunkingProcessor(
         String tag,
         String description,
         Map<String, Object> fieldMap,

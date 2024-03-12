@@ -31,11 +31,11 @@ import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
-import org.opensearch.neuralsearch.processor.DocumentChunkingProcessor;
+import org.opensearch.neuralsearch.processor.TextChunkingProcessor;
 import org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
-import org.opensearch.neuralsearch.processor.factory.DocumentChunkingProcessorFactory;
+import org.opensearch.neuralsearch.processor.factory.TextChunkingProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.SparseEncodingProcessorFactory;
@@ -117,8 +117,8 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
             new SparseEncodingProcessorFactory(clientAccessor, parameters.env),
             TextImageEmbeddingProcessor.TYPE,
             new TextImageEmbeddingProcessorFactory(clientAccessor, parameters.env, parameters.ingestService.getClusterService()),
-            DocumentChunkingProcessor.TYPE,
-            new DocumentChunkingProcessorFactory(
+            TextChunkingProcessor.TYPE,
+            new TextChunkingProcessorFactory(
                 parameters.env,
                 parameters.ingestService.getClusterService(),
                 parameters.indicesService,

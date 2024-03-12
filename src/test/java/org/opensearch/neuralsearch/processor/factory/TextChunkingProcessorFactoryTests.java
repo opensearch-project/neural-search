@@ -22,21 +22,21 @@ import org.opensearch.index.analysis.TokenizerFactory;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.analysis.AnalysisModule;
 import org.opensearch.ingest.Processor;
-import org.opensearch.neuralsearch.processor.DocumentChunkingProcessor;
+import org.opensearch.neuralsearch.processor.TextChunkingProcessor;
 import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
 import org.opensearch.plugins.AnalysisPlugin;
 import org.opensearch.test.OpenSearchTestCase;
-import static org.opensearch.neuralsearch.processor.DocumentChunkingProcessor.TYPE;
-import static org.opensearch.neuralsearch.processor.DocumentChunkingProcessor.FIELD_MAP_FIELD;
-import static org.opensearch.neuralsearch.processor.DocumentChunkingProcessor.ALGORITHM_FIELD;
+import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.TYPE;
+import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.FIELD_MAP_FIELD;
+import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.ALGORITHM_FIELD;
 
-public class DocumentChunkingProcessorFactoryTests extends OpenSearchTestCase {
+public class TextChunkingProcessorFactoryTests extends OpenSearchTestCase {
 
     private static final String PROCESSOR_TAG = "mockTag";
     private static final String DESCRIPTION = "mockDescription";
     private static final Map<String, Object> algorithmMap = Map.of(ChunkerFactory.FIXED_TOKEN_LENGTH_ALGORITHM, new HashMap<>());
 
-    private DocumentChunkingProcessorFactory documentChunkingProcessorFactory;
+    private TextChunkingProcessorFactory textChunkingProcessorFactory;
 
     @SneakyThrows
     private AnalysisRegistry getAnalysisRegistry() {
@@ -63,7 +63,7 @@ public class DocumentChunkingProcessorFactoryTests extends OpenSearchTestCase {
         Environment environment = mock(Environment.class);
         ClusterService clusterService = mock(ClusterService.class);
         IndicesService indicesService = mock(IndicesService.class);
-        this.documentChunkingProcessorFactory = new DocumentChunkingProcessorFactory(
+        this.textChunkingProcessorFactory = new TextChunkingProcessorFactory(
             environment,
             clusterService,
             indicesService,
@@ -72,41 +72,41 @@ public class DocumentChunkingProcessorFactoryTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testDocumentChunkingProcessorFactory_whenAllParamsPassed_thenSuccessful() {
+    public void testTextChunkingProcessorFactory_whenAllParamsPassed_thenSuccessful() {
         final Map<String, Processor.Factory> processorFactories = new HashMap<>();
         Map<String, Object> config = new HashMap<>();
         config.put(ALGORITHM_FIELD, algorithmMap);
         config.put(FIELD_MAP_FIELD, new HashMap<>());
-        DocumentChunkingProcessor documentChunkingProcessor = documentChunkingProcessorFactory.create(
+        TextChunkingProcessor textChunkingProcessor = textChunkingProcessorFactory.create(
             processorFactories,
             PROCESSOR_TAG,
             DESCRIPTION,
             config
         );
-        assertNotNull(documentChunkingProcessor);
-        assertEquals(TYPE, documentChunkingProcessor.getType());
+        assertNotNull(textChunkingProcessor);
+        assertEquals(TYPE, textChunkingProcessor.getType());
     }
 
     @SneakyThrows
-    public void testDocumentChunkingProcessorFactory_whenOnlyFieldMap_thenFail() {
+    public void testTextChunkingProcessorFactory_whenOnlyFieldMap_thenFail() {
         final Map<String, Processor.Factory> processorFactories = new HashMap<>();
         Map<String, Object> config = new HashMap<>();
         config.put(FIELD_MAP_FIELD, new HashMap<>());
         Exception exception = assertThrows(
             Exception.class,
-            () -> documentChunkingProcessorFactory.create(processorFactories, PROCESSOR_TAG, DESCRIPTION, config)
+            () -> textChunkingProcessorFactory.create(processorFactories, PROCESSOR_TAG, DESCRIPTION, config)
         );
         assertEquals("[" + ALGORITHM_FIELD + "] required property is missing", exception.getMessage());
     }
 
     @SneakyThrows
-    public void testDocumentChunkingProcessorFactory_whenOnlyAlgorithm_thenFail() {
+    public void testTextChunkingProcessorFactory_whenOnlyAlgorithm_thenFail() {
         final Map<String, Processor.Factory> processorFactories = new HashMap<>();
         Map<String, Object> config = new HashMap<>();
         config.put(ALGORITHM_FIELD, algorithmMap);
         Exception exception = assertThrows(
             Exception.class,
-            () -> documentChunkingProcessorFactory.create(processorFactories, PROCESSOR_TAG, DESCRIPTION, config)
+            () -> textChunkingProcessorFactory.create(processorFactories, PROCESSOR_TAG, DESCRIPTION, config)
         );
         assertEquals("[" + FIELD_MAP_FIELD + "] required property is missing", exception.getMessage());
     }
