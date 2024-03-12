@@ -4,6 +4,8 @@
  */
 package org.opensearch.neuralsearch.util;
 
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.FieldExistsQuery;
@@ -16,6 +18,7 @@ import org.opensearch.search.internal.SearchContext;
 /**
  * Utility class for anything related to hybrid query
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class HybridQueryUtil {
 
     public static boolean isHybridQuery(final Query query, final SearchContext searchContext) {
