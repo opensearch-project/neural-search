@@ -161,9 +161,11 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         Collector collector = hybridCollectorManager.newCollector();
         assertNotNull(collector);
         assertTrue(collector instanceof FilteredCollector);
+        assertTrue(((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector);
 
         Collector secondCollector = hybridCollectorManager.newCollector();
         assertSame(collector, secondCollector);
+        assertTrue(((FilteredCollector) secondCollector).getCollector() instanceof HybridTopScoreDocCollector);
     }
 
     @SneakyThrows
@@ -203,9 +205,11 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         Collector collector = hybridCollectorManager.newCollector();
         assertNotNull(collector);
         assertTrue(collector instanceof FilteredCollector);
+        assertTrue(((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector);
 
         Collector secondCollector = hybridCollectorManager.newCollector();
         assertNotSame(collector, secondCollector);
+        assertTrue(((FilteredCollector) secondCollector).getCollector() instanceof HybridTopScoreDocCollector);
     }
 
     @SneakyThrows

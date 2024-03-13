@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.query;
 import lombok.SneakyThrows;
 
 import org.junit.Before;
+import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.TermQueryBuilder;
@@ -46,6 +47,7 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
         "test-neural-aggs-pipeline-multi-doc-index-multiple-shards";
     private static final String TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD = "test-neural-aggs-multi-doc-index-single-shard";
     private static final String TEST_QUERY_TEXT3 = "hello";
+    private static final String TEST_QUERY_TEXT4 = "everyone";
     private static final String TEST_QUERY_TEXT5 = "welcome";
     private static final String TEST_DOC_TEXT1 = "Hello world";
     private static final String TEST_DOC_TEXT2 = "Hi to this place";
@@ -183,39 +185,80 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    public void testPostFilter_WhenConcurrentSearchNotEnabled_thenSuccessful() {
+    public void testPostFilterOnIndexWithMultipleShards_WhenConcurrentSearchNotEnabled_thenSuccessful() {
+        updateClusterSettings("search.concurrent_segment_search.enabled", false);
+        testPostFilterWithSimpleHybridQuery(false, true);
+        testPostFilterWithComplexHybridQuery(false, true);
+    }
+
+    @SneakyThrows
+    public void testPostFilterOnIndexWithMultipleShards_WhenConcurrentSearchEnabled_thenSuccessful() {
         updateClusterSettings("search.concurrent_segment_search.enabled", true);
+        testPostFilterWithSimpleHybridQuery(false, true);
+        testPostFilterWithComplexHybridQuery(false, true);
+    }
+
+    @SneakyThrows
+    private void testPostFilterWithSimpleHybridQuery(boolean isSingleShard, boolean hasPostFilterQuery) {
         try {
-            prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+            if (isSingleShard) {
+                prepareResourcesForSingleShardIndex(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, SEARCH_PIPELINE);
+            } else {
+                prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+            }
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_1);
+            HybridQueryBuilder simpleHybridQueryBuilder = createHybridQueryBuilder(false);
 
-            TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
-            TermQueryBuilder termQueryBuilder3 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT5);
+            QueryBuilder rangeFilterQuery = QueryBuilders.rangeQuery(INTEGER_FIELD_1).gte(2000).lte(5000);
 
-            HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
-            hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder1);
-            hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder3);
+            Map<String, Object> searchResponseAsMap;
 
-            QueryBuilder rangeFilterQuery = QueryBuilders.rangeQuery(INTEGER_FIELD_1).gte(3000).lte(5000);
+            if (isSingleShard && hasPostFilterQuery) {
+                searchResponseAsMap = search(
+                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD,
+                    simpleHybridQueryBuilder,
+                    null,
+                    10,
+                    Map.of("search_pipeline", SEARCH_PIPELINE),
+                    null,
+                    rangeFilterQuery
+                );
 
-            Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
-                hybridQueryBuilderNeuralThenTerm,
-                null,
-                10,
-                Map.of("search_pipeline", SEARCH_PIPELINE),
-                List.of(aggsBuilder),
-                rangeFilterQuery
-            );
-
-            Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
-            assertNotNull(aggregations);
-            assertTrue(aggregations.containsKey(SUM_AGGREGATION_NAME));
-            double maxAggsValue = getAggregationValue(aggregations, SUM_AGGREGATION_NAME);
-            assertEquals(7035.0, maxAggsValue, DELTA_FOR_SCORE_ASSERTION);
-
-            assertHitResultsFromQuery(1, searchResponseAsMap);
+                assertHitResultsFromQuery(1, searchResponseAsMap);
+            } else if (isSingleShard && !hasPostFilterQuery) {
+                searchResponseAsMap = search(
+                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD,
+                    simpleHybridQueryBuilder,
+                    null,
+                    10,
+                    Map.of("search_pipeline", SEARCH_PIPELINE),
+                    null,
+                    null
+                );
+                assertHitResultsFromQuery(2, searchResponseAsMap);
+            } else if (!isSingleShard && hasPostFilterQuery) {
+                searchResponseAsMap = search(
+                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+                    simpleHybridQueryBuilder,
+                    null,
+                    10,
+                    Map.of("search_pipeline", SEARCH_PIPELINE),
+                    null,
+                    rangeFilterQuery
+                );
+                assertHitResultsFromQuery(2, searchResponseAsMap);
+            } else {
+                searchResponseAsMap = search(
+                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+                    simpleHybridQueryBuilder,
+                    null,
+                    10,
+                    Map.of("search_pipeline", SEARCH_PIPELINE),
+                    null,
+                    null
+                );
+                assertHitResultsFromQuery(3, searchResponseAsMap);
+            }
 
             // assert post-filter
             List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
@@ -227,9 +270,115 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 int docIndex = (int) source.get(INTEGER_FIELD_1);
                 docIndexes.add(docIndex);
             }
-            assertEquals(0, docIndexes.stream().filter(docIndex -> docIndex < 3000 || docIndex > 5000).count());
+            if (isSingleShard && hasPostFilterQuery) {
+                assertEquals(0, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
+
+            } else if (isSingleShard && !hasPostFilterQuery) {
+                assertEquals(1, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
+
+            } else if (!isSingleShard && hasPostFilterQuery) {
+                assertEquals(0, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
+            } else {
+                assertEquals(1, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
+            }
         } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
+            if (isSingleShard) {
+                wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, null, null, SEARCH_PIPELINE);
+            } else {
+                wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
+            }
+        }
+    }
+
+    @SneakyThrows
+    private void testPostFilterWithComplexHybridQuery(boolean isSingleShard, boolean hasPostFilterQuery) {
+        try {
+            if (isSingleShard) {
+                prepareResourcesForSingleShardIndex(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, SEARCH_PIPELINE);
+            } else {
+                prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+            }
+
+            HybridQueryBuilder complexHybridQueryBuilder = createHybridQueryBuilder(true);
+
+            QueryBuilder rangeFilterQuery = QueryBuilders.rangeQuery(INTEGER_FIELD_1).gte(2000).lte(5000);
+
+            Map<String, Object> searchResponseAsMap;
+
+            if (isSingleShard && hasPostFilterQuery) {
+                searchResponseAsMap = search(
+                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD,
+                    complexHybridQueryBuilder,
+                    null,
+                    10,
+                    Map.of("search_pipeline", SEARCH_PIPELINE),
+                    null,
+                    rangeFilterQuery
+                );
+
+                assertHitResultsFromQuery(1, searchResponseAsMap);
+            } else if (isSingleShard && !hasPostFilterQuery) {
+                searchResponseAsMap = search(
+                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD,
+                    complexHybridQueryBuilder,
+                    null,
+                    10,
+                    Map.of("search_pipeline", SEARCH_PIPELINE),
+                    null,
+                    null
+                );
+                assertHitResultsFromQuery(2, searchResponseAsMap);
+            } else if (!isSingleShard && hasPostFilterQuery) {
+                searchResponseAsMap = search(
+                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+                    complexHybridQueryBuilder,
+                    null,
+                    10,
+                    Map.of("search_pipeline", SEARCH_PIPELINE),
+                    null,
+                    rangeFilterQuery
+                );
+                assertHitResultsFromQuery(4, searchResponseAsMap);
+            } else {
+                searchResponseAsMap = search(
+                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+                    complexHybridQueryBuilder,
+                    null,
+                    10,
+                    Map.of("search_pipeline", SEARCH_PIPELINE),
+                    null,
+                    null
+                );
+                assertHitResultsFromQuery(3, searchResponseAsMap);
+            }
+
+            // assert post-filter
+            List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
+
+            List<Integer> docIndexes = new ArrayList<>();
+            for (Map<String, Object> oneHit : hitsNestedList) {
+                assertNotNull(oneHit.get("_source"));
+                Map<String, Object> source = (Map<String, Object>) oneHit.get("_source");
+                int docIndex = (int) source.get(INTEGER_FIELD_1);
+                docIndexes.add(docIndex);
+            }
+            if (isSingleShard && hasPostFilterQuery) {
+                assertEquals(0, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
+
+            } else if (isSingleShard && !hasPostFilterQuery) {
+                assertEquals(1, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
+
+            } else if (!isSingleShard && hasPostFilterQuery) {
+                assertEquals(0, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
+            } else {
+                assertEquals(1, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
+            }
+        } finally {
+            if (isSingleShard) {
+                wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, null, null, SEARCH_PIPELINE);
+            } else {
+                wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
+            }
         }
     }
 
@@ -276,6 +425,20 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
         } finally {
             wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
         }
+    }
+
+    @SneakyThrows
+    public void testPostFilterOnIndexWithSingleShards_WhenConcurrentSearchNotEnabled_thenSuccessful() {
+        updateClusterSettings("search.concurrent_segment_search.enabled", false);
+        testPostFilterWithSimpleHybridQuery(true, true);
+        testPostFilterWithComplexHybridQuery(true, true);
+    }
+
+    @SneakyThrows
+    public void testPostFilterOnIndexWithSingleShards_WhenConcurrentSearchEnabled_thenSuccessful() {
+        updateClusterSettings("search.concurrent_segment_search.enabled", true);
+        testPostFilterWithSimpleHybridQuery(true, true);
+        testPostFilterWithComplexHybridQuery(true, true);
     }
 
     private void testMaxAggsOnSingleShardCluster() throws Exception {
@@ -645,4 +808,29 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
+
+    private HybridQueryBuilder createHybridQueryBuilder(boolean isComplex) {
+        if (isComplex) {
+            BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
+            boolQueryBuilder.should().add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
+
+            QueryBuilder rangeFilterQuery = QueryBuilders.rangeQuery(INTEGER_FIELD_1).gte(2000).lte(5000);
+
+            QueryBuilder matchQuery = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
+
+            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+            hybridQueryBuilder.add(boolQueryBuilder).add(rangeFilterQuery).add(matchQuery);
+            return hybridQueryBuilder;
+
+        } else {
+            TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+            TermQueryBuilder termQueryBuilder3 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT5);
+
+            HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
+            hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder1);
+            hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder3);
+            return hybridQueryBuilderNeuralThenTerm;
+        }
+    }
+
 }

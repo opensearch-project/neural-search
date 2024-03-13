@@ -21,6 +21,8 @@ import org.opensearch.search.internal.SearchContext;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class HybridQueryUtil {
 
+    public static final float boost_factor = 1f;
+
     public static boolean isHybridQuery(final Query query, final SearchContext searchContext) {
         if (query instanceof HybridQuery) {
             return true;

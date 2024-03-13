@@ -39,6 +39,7 @@ import java.util.Optional;
 
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createDelimiterElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.boost_factor;
 
 /**
  * Collector manager based on HybridTopScoreDocCollector that allows users to parallelize counting the number of hits.
@@ -52,7 +53,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     private final boolean isSingleShard;
     private final int trackTotalHitsUpTo;
     private final SortAndFormats sortAndFormats;
-    private final Optional<Weight> filterWeight;
+    private final Optional<Weight> optionalFilterWeight;
 
     /**
      * Create new instance of HybridCollectorManager depending on the concurrent search beeing enabled or disabled.
@@ -68,11 +69,16 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         int trackTotalHitsUpTo = searchContext.trackTotalHitsUpTo();
 
         Weight filteringWeight = null;
-        // Check for post filter to create weight
+        // Check for post filter to create weight for filter query and later use that weight in the search workflow
         if (Objects.nonNull(searchContext.parsedPostFilter())) {
             Query filterQuery = searchContext.parsedPostFilter().query();
             ContextIndexSearcher searcher = searchContext.searcher();
-            filteringWeight = searcher.createWeight(searcher.rewrite(filterQuery), ScoreMode.COMPLETE_NO_SCORES, 1f);
+            // ScoreMode COMPLETE_NO_SCORES will be passed as post_filter does not contribute in scoring. COMPLETE_NO_SCORES means it is not
+            // a scoring clause
+            // Boost factor 1f is taken because if boost is multiplicative of 1 then it means "no boost"
+            // Previously this code in OpenSearch looked like
+            // https://github.com/opensearch-project/OpenSearch/commit/36a5cf8f35e5cbaa1ff857b5a5db8c02edc1a187
+            filteringWeight = searcher.createWeight(searcher.rewrite(filterQuery), ScoreMode.COMPLETE_NO_SCORES, boost_factor);
         }
 
         return searchContext.shouldUseConcurrentSearch()
@@ -99,10 +105,10 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         Collector hybridcollector = new HybridTopScoreDocCollector(numHits, hitsThresholdChecker);
         // Check if filterWeight is present. If it is present then return wrap Hybrid collector object underneath the FilteredCollector
         // object and return it.
-        if (filterWeight.isEmpty()) {
+        if (optionalFilterWeight.isEmpty()) {
             return hybridcollector;
         }
-        return new FilteredCollector(hybridcollector, filterWeight.get());
+        return new FilteredCollector(hybridcollector, optionalFilterWeight.get());
     }
 
     /**
