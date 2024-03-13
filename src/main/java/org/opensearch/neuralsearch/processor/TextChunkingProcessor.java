@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.Locale;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -86,9 +87,13 @@ public final class TextChunkingProcessor extends AbstractProcessor {
 
     @SuppressWarnings("unchecked")
     private void validateAndParseAlgorithmMap(Map<String, Object> algorithmMap) {
-        if (algorithmMap.size() != 1) {
+        if (algorithmMap.isEmpty()) {
             throw new IllegalArgumentException(
-                "Unable to create the processor as [" + ALGORITHM_FIELD + "] must contain and only contain 1 algorithm"
+                String.format(Locale.ROOT, "Unable to create %s processor as [%s] does not contain any algorithm", TYPE, ALGORITHM_FIELD)
+            );
+        } else if (algorithmMap.size() > 1) {
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "Unable to create %s processor as [%s] contain multiple algorithms", TYPE, ALGORITHM_FIELD)
             );
         }
         Entry<String, Object> algorithmEntry = algorithmMap.entrySet().iterator().next();
@@ -97,15 +102,24 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         Set<String> supportedChunkers = ChunkerFactory.getAllChunkers();
         if (!supportedChunkers.contains(algorithmKey)) {
             throw new IllegalArgumentException(
-                "Unable to create the processor as chunker algorithm ["
-                    + algorithmKey
-                    + "] is not supported. Supported chunkers types are "
-                    + supportedChunkers
+                String.format(
+                    Locale.ROOT,
+                    "Unable to create %s processor as chunker algorithm [%s] is not supported. Supported chunkers types are %s",
+                    TYPE,
+                    algorithmKey,
+                    supportedChunkers
+                )
             );
         }
         if (!(algorithmValue instanceof Map)) {
             throw new IllegalArgumentException(
-                "Unable to create the processor as [" + algorithmKey + "] parameters cannot be cast to [" + Map.class.getName() + "]"
+                String.format(
+                    Locale.ROOT,
+                    "Unable to create %s processor as [%s] parameters cannot be cast to [%s]",
+                    TYPE,
+                    algorithmKey,
+                    Map.class.getName()
+                )
             );
         }
         Map<String, Object> chunkerParameters = (Map<String, Object>) algorithmValue;
@@ -117,12 +131,14 @@ public final class TextChunkingProcessor extends AbstractProcessor {
             String maxChunkLimitString = chunkerParameters.get(MAX_CHUNK_LIMIT_FIELD).toString();
             if (!(NumberUtils.isParsable(maxChunkLimitString))) {
                 throw new IllegalArgumentException(
-                    "Parameter [" + MAX_CHUNK_LIMIT_FIELD + "] cannot be cast to [" + Number.class.getName() + "]"
+                    String.format(Locale.ROOT, "Parameter [%s] cannot be cast to [%s]", MAX_CHUNK_LIMIT_FIELD, Number.class.getName())
                 );
             }
             int maxChunkLimit = NumberUtils.createInteger(maxChunkLimitString);
             if (maxChunkLimit <= 0 && maxChunkLimit != DEFAULT_MAX_CHUNK_LIMIT) {
-                throw new IllegalArgumentException("Parameter [" + MAX_CHUNK_LIMIT_FIELD + "] must be a positive integer");
+                throw new IllegalArgumentException(
+                    String.format(Locale.ROOT, "Parameter [%s] must be a positive integer", MAX_CHUNK_LIMIT_FIELD)
+                );
             }
             this.maxChunkLimit = maxChunkLimit;
         } else {
@@ -150,11 +166,12 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         chunkCount += contentResult.size();
         if (maxChunkLimit != DEFAULT_MAX_CHUNK_LIMIT && chunkCount > maxChunkLimit) {
             throw new IllegalArgumentException(
-                "Unable to create the processor as the number of chunks ["
-                    + chunkCount
-                    + "] exceeds the maximum chunk limit ["
-                    + maxChunkLimit
-                    + "]"
+                String.format(
+                    Locale.ROOT,
+                    "Unable to chunk the document as the number of chunks [%s] exceeds the maximum chunk limit [%s]",
+                    chunkCount,
+                    maxChunkLimit
+                )
             );
         }
         result.addAll(contentResult);
@@ -222,7 +239,9 @@ public final class TextChunkingProcessor extends AbstractProcessor {
                 if (sourceValue instanceof List || sourceValue instanceof Map) {
                     validateNestedTypeValue(sourceKey, sourceValue, 1);
                 } else if (!(sourceValue instanceof String)) {
-                    throw new IllegalArgumentException("field [" + sourceKey + "] is neither string nor nested type, cannot process it");
+                    throw new IllegalArgumentException(
+                        String.format(Locale.ROOT, "field [%s] is neither string nor nested type, cannot process it", sourceKey)
+                    );
                 }
             }
         }
@@ -231,7 +250,9 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     @SuppressWarnings({ "rawtypes", "unchecked" })
     private void validateNestedTypeValue(String sourceKey, Object sourceValue, int maxDepth) {
         if (maxDepth > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())) {
-            throw new IllegalArgumentException("map type field [" + sourceKey + "] reached max depth limit, cannot process it");
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "map type field [%s] reached max depth limit, cannot process it", sourceKey)
+            );
         } else if (sourceValue instanceof List) {
             validateListTypeValue(sourceKey, sourceValue, maxDepth);
         } else if (sourceValue instanceof Map) {
@@ -240,7 +261,9 @@ public final class TextChunkingProcessor extends AbstractProcessor {
                 .filter(Objects::nonNull)
                 .forEach(x -> validateNestedTypeValue(sourceKey, x, maxDepth + 1));
         } else if (!(sourceValue instanceof String)) {
-            throw new IllegalArgumentException("map type field [" + sourceKey + "] has non-string type, cannot process it");
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "map type field [%s] has non-string type, cannot process it", sourceKey)
+            );
         }
     }
 
@@ -250,9 +273,13 @@ public final class TextChunkingProcessor extends AbstractProcessor {
             if (value instanceof Map) {
                 validateNestedTypeValue(sourceKey, value, maxDepth + 1);
             } else if (value == null) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has null, cannot process it");
+                throw new IllegalArgumentException(
+                    String.format(Locale.ROOT, "list type field [%s] has null, cannot process it", sourceKey)
+                );
             } else if (!(value instanceof String)) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has non string value, cannot process it");
+                throw new IllegalArgumentException(
+                    String.format(Locale.ROOT, "list type field [%s] has non-string value, cannot process it", sourceKey)
+                );
             }
         }
     }

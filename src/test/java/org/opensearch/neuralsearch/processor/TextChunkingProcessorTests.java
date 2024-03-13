@@ -10,6 +10,7 @@ import org.junit.Before;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import static java.util.Collections.singletonList;
 import static java.util.Collections.singletonMap;
@@ -36,6 +37,7 @@ import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.neuralsearch.processor.factory.TextChunkingProcessorFactory;
 import org.opensearch.plugins.AnalysisPlugin;
 import org.opensearch.test.OpenSearchTestCase;
+import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.TYPE;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.FIELD_MAP_FIELD;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.ALGORITHM_FIELD;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.MAX_CHUNK_LIMIT_FIELD;
@@ -167,7 +169,10 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             OpenSearchParseException.class,
             () -> textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
         );
-        assertEquals("[" + ALGORITHM_FIELD + "] required property is missing", openSearchParseException.getMessage());
+        assertEquals(
+            String.format(Locale.ROOT, "[%s] required property is missing", ALGORITHM_FIELD),
+            openSearchParseException.getMessage()
+        );
     }
 
     @SneakyThrows
@@ -184,8 +189,10 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             IllegalArgumentException.class,
             () -> textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
         );
-        assertEquals("Parameter [" + MAX_CHUNK_LIMIT_FIELD + "] must be a positive integer", illegalArgumentException.getMessage());
-
+        assertEquals(
+            String.format(Locale.ROOT, "Parameter [%s] must be a positive integer", MAX_CHUNK_LIMIT_FIELD),
+            illegalArgumentException.getMessage()
+        );
     }
 
     public void testCreate_whenAlgorithmFieldNoAlgorithm_thenFail() {
@@ -201,7 +208,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             () -> textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
         );
         assertEquals(
-            "Unable to create the processor as [" + ALGORITHM_FIELD + "] must contain and only contain 1 algorithm",
+            String.format(Locale.ROOT, "Unable to create %s processor as [%s] does not contain any algorithm", TYPE, ALGORITHM_FIELD),
             illegalArgumentException.getMessage()
         );
     }
@@ -221,7 +228,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             () -> textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
         );
         assertEquals(
-            "Unable to create the processor as [" + ALGORITHM_FIELD + "] must contain and only contain 1 algorithm",
+            String.format(Locale.ROOT, "Unable to create %s processor as [%s] contain multiple algorithms", TYPE, ALGORITHM_FIELD),
             illegalArgumentException.getMessage()
         );
     }
@@ -241,7 +248,14 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             () -> textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
         );
         assert (illegalArgumentException.getMessage()
-            .contains("Unable to create the processor as chunker algorithm [" + invalid_algorithm_type + "] is not supported"));
+            .contains(
+                String.format(
+                    Locale.ROOT,
+                    "Unable to create %s processor as chunker algorithm [%s] is not supported.",
+                    TYPE,
+                    invalid_algorithm_type
+                )
+            ));
     }
 
     public void testCreate_whenAlgorithmFieldInvalidAlgorithmContent_thenFail() {
@@ -258,11 +272,13 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             () -> textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
         );
         assertEquals(
-            "Unable to create the processor as ["
-                + FixedTokenLengthChunker.ALGORITHM_NAME
-                + "] parameters cannot be cast to ["
-                + Map.class.getName()
-                + "]",
+            String.format(
+                Locale.ROOT,
+                "Unable to create %s processor as [%s] parameters cannot be cast to [%s]",
+                TYPE,
+                FixedTokenLengthChunker.ALGORITHM_NAME,
+                Map.class.getName()
+            ),
             illegalArgumentException.getMessage()
         );
     }
@@ -271,7 +287,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     public void testGetType() {
         TextChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
         String type = processor.getType();
-        assertEquals(TextChunkingProcessor.TYPE, type);
+        assertEquals(TYPE, type);
     }
 
     private String createSourceDataString() {
@@ -386,8 +402,13 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             () -> processor.execute(ingestDocument)
         );
         assertEquals(
-            illegalArgumentException.getMessage(),
-            "Unable to create the processor as the number of chunks [" + "3" + "] exceeds the maximum chunk limit [" + "1" + "]"
+            String.format(
+                Locale.ROOT,
+                "Unable to chunk the document as the number of chunks [%s] exceeds the maximum chunk limit [%s]",
+                3,
+                1
+            ),
+            illegalArgumentException.getMessage()
         );
 
     }
@@ -419,7 +440,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             () -> processor.execute(ingestDocument)
         );
         assertEquals(
-            "field [" + INPUT_FIELD + "] is neither string nor nested type, cannot process it",
+            String.format(Locale.ROOT, "field [%s] is neither string nor nested type, cannot process it", INPUT_FIELD),
             illegalArgumentException.getMessage()
         );
     }
@@ -452,7 +473,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             () -> processor.execute(ingestDocument)
         );
         assertEquals(
-            "list type field [" + INPUT_FIELD + "] has non string value, cannot process it",
+            String.format(Locale.ROOT, "list type field [%s] has non-string value, cannot process it", INPUT_FIELD),
             illegalArgumentException.getMessage()
         );
     }
@@ -465,7 +486,10 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             IllegalArgumentException.class,
             () -> processor.execute(ingestDocument)
         );
-        assertEquals("list type field [" + INPUT_FIELD + "] has null, cannot process it", illegalArgumentException.getMessage());
+        assertEquals(
+            String.format(Locale.ROOT, "list type field [%s] has null, cannot process it", INPUT_FIELD),
+            illegalArgumentException.getMessage()
+        );
     }
 
     @SuppressWarnings("unchecked")
@@ -497,7 +521,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             () -> processor.execute(ingestDocument)
         );
         assertEquals(
-            "map type field [" + INPUT_NESTED_FIELD_KEY + "] reached max depth limit, cannot process it",
+            String.format(Locale.ROOT, "map type field [%s] reached max depth limit, cannot process it", INPUT_NESTED_FIELD_KEY),
             illegalArgumentException.getMessage()
         );
     }
@@ -511,7 +535,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             () -> processor.execute(ingestDocument)
         );
         assertEquals(
-            "map type field [" + INPUT_NESTED_FIELD_KEY + "] has non-string type, cannot process it",
+            String.format(Locale.ROOT, "map type field [%s] has non-string type, cannot process it", INPUT_NESTED_FIELD_KEY),
             illegalArgumentException.getMessage()
         );
     }
