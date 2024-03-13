@@ -105,7 +105,12 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
         );
         assertEquals(
-            "fixed length parameter [" + OVERLAP_RATE_FIELD + "] cannot be cast to [" + Number.class.getName() + "]",
+            String.format(
+                Locale.ROOT,
+                "Chunking algorithm parameter [%s] cannot be cast to [%s]",
+                OVERLAP_RATE_FIELD,
+                Number.class.getName()
+            ),
             illegalArgumentException.getMessage()
         );
     }
@@ -118,7 +123,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
         );
         assertEquals(
-            "fixed length parameter [" + OVERLAP_RATE_FIELD + "] must be between 0 and 0.5",
+            String.format(Locale.ROOT, "Chunking algorithm parameter [%s] must be between %s and %s", OVERLAP_RATE_FIELD, 0.0, 0.5),
             illegalArgumentException.getMessage()
         );
     }

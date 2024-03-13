@@ -38,8 +38,8 @@ public class ChunkerParameterValidator {
         return (String) fieldValue;
     }
 
-    public static int validatePositiveIntegerParameter(Map<String, Object> parameters, String fieldName, int defaultValue) {
-        // this method validate that parameter is a positive integer
+    public static Number validateNumberParameter(Map<String, Object> parameters, String fieldName, double defaultValue) {
+        // this method validate that parameter is a number
         if (!parameters.containsKey(fieldName)) {
             // all parameters are optional
             return defaultValue;
@@ -50,12 +50,36 @@ public class ChunkerParameterValidator {
                 String.format(Locale.ROOT, "Chunking algorithm parameter [%s] cannot be cast to [%s]", fieldName, Number.class.getName())
             );
         }
-        int fieldValueInt = NumberUtils.createInteger(fieldValue);
+        return NumberUtils.createNumber(fieldValue);
+    }
+
+    public static int validatePositiveIntegerParameter(Map<String, Object> parameters, String fieldName, int defaultValue) {
+        // this method validate that parameter is a positive integer
+        Number fieldValueNumber = validateNumberParameter(parameters, fieldName, defaultValue);
+        int fieldValueInt = fieldValueNumber.intValue();
         if (fieldValueInt <= 0) {
             throw new IllegalArgumentException(
                 String.format(Locale.ROOT, "Chunking algorithm parameter [%s] must be positive.", fieldName)
             );
         }
         return fieldValueInt;
+    }
+
+    public static double validateRangeDoubleParameter(
+        Map<String, Object> parameters,
+        String fieldName,
+        double lowerBound,
+        double upperBound,
+        double defaultValue
+    ) {
+        // this method validate that parameter is a double within [lowerBound, upperBound]
+        Number fieldValueNumber = validateNumberParameter(parameters, fieldName, defaultValue);
+        double fieldValueDouble = fieldValueNumber.doubleValue();
+        if (fieldValueDouble < lowerBound || fieldValueDouble > upperBound) {
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "Chunking algorithm parameter [%s] must be between %s and %s", fieldName, lowerBound, upperBound)
+            );
+        }
+        return fieldValueDouble;
     }
 }

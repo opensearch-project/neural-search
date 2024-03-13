@@ -8,12 +8,12 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
-import org.apache.commons.lang3.math.NumberUtils;
 
 import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
 import org.opensearch.action.admin.indices.analyze.AnalyzeAction.AnalyzeToken;
 import static org.opensearch.action.admin.indices.analyze.TransportAnalyzeAction.analyze;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterValidator.validateRangeDoubleParameter;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterValidator.validatePositiveIntegerParameter;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterValidator.validateStringParameters;
 
@@ -66,23 +66,13 @@ public class FixedTokenLengthChunker implements Chunker {
     @Override
     public void validateAndParseParameters(Map<String, Object> parameters) {
         this.tokenLimit = validatePositiveIntegerParameter(parameters, TOKEN_LIMIT_FIELD, DEFAULT_TOKEN_LIMIT);
-        if (parameters.containsKey(OVERLAP_RATE_FIELD)) {
-            String overlapRateString = parameters.get(OVERLAP_RATE_FIELD).toString();
-            if (!(NumberUtils.isParsable(overlapRateString))) {
-                throw new IllegalArgumentException(
-                    "fixed length parameter [" + OVERLAP_RATE_FIELD + "] cannot be cast to [" + Number.class.getName() + "]"
-                );
-            }
-            double overlapRate = NumberUtils.createDouble(overlapRateString);
-            if (overlapRate < 0 || overlapRate > OVERLAP_RATE_UPPER_BOUND) {
-                throw new IllegalArgumentException(
-                    "fixed length parameter [" + OVERLAP_RATE_FIELD + "] must be between 0 and " + OVERLAP_RATE_UPPER_BOUND
-                );
-            }
-            this.overlapRate = overlapRate;
-        } else {
-            this.overlapRate = DEFAULT_OVERLAP_RATE;
-        }
+        this.overlapRate = validateRangeDoubleParameter(
+            parameters,
+            OVERLAP_RATE_FIELD,
+            DEFAULT_OVERLAP_RATE,
+            OVERLAP_RATE_UPPER_BOUND,
+            DEFAULT_OVERLAP_RATE
+        );
         this.tokenizer = validateStringParameters(parameters, TOKENIZER_FIELD, DEFAULT_TOKENIZER, false);
     }
 
