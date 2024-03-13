@@ -26,11 +26,11 @@ public class DelimiterChunker implements Chunker {
     }
 
     /**
-     * Validate the chunked passages for delimiter algorithm
+     * Validate and parse the parameters for delimiter algorithm,
+     * will throw IllegalArgumentException if delimiter is not a string or empty
      *
      * @param parameters a map containing parameters, containing the following parameters
      * 1. A string as the paragraph split indicator
-     * @throws IllegalArgumentException If delimiter is not a string or empty
      */
     @Override
     public void validateAndParseParameters(Map<String, Object> parameters) {
