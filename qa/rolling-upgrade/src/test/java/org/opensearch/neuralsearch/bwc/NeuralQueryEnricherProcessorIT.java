@@ -57,14 +57,11 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                     getIndexNameForTest(),
                     Settings.builder().put("index.search.default_pipeline", SPARSE_SEARCH_PIPELINE_NAME)
                 );
-
-                // do nothing here. need to add test codes after finishing backport
                 break;
             case MIXED:
                 sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
                 loadModel(sparseModelId);
                 sparseEncodingQueryBuilderWithModelId.modelId(sparseModelId);
-                // do nothing here. need to add test codes after finishing backport
                 break;
             case UPGRADED:
                 try {

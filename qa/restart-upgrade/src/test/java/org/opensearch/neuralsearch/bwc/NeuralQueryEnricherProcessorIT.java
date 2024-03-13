@@ -54,8 +54,6 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
                 getIndexNameForTest(),
                 Settings.builder().put("index.search.default_pipeline", SPARSE_SEARCH_PIPELINE_NAME)
             );
-
-            // do nothing here. need to add test codes after finishing backport
         } else {
             String modelId = null;
             try {
