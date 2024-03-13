@@ -106,7 +106,7 @@ public class FixedTokenLengthChunker implements Chunker {
      *
      * @param content input string
      * @param runtimeParameters a map for runtime parameters, containing the following runtime parameters:
-     * max_token_count the max token limit for the tokenizer
+     * 1. max_token_count the max token limit for the tokenizer
      */
     @Override
     public List<String> chunk(String content, Map<String, Object> runtimeParameters) {
