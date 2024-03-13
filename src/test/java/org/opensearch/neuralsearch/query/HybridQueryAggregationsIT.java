@@ -183,6 +183,57 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
+    public void testPostFilter_WhenConcurrentSearchNotEnabled_thenSuccessful() {
+        updateClusterSettings("search.concurrent_segment_search.enabled", true);
+        try {
+            prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+
+            AggregationBuilder aggsBuilder = AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_1);
+
+            TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+            TermQueryBuilder termQueryBuilder3 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT5);
+
+            HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
+            hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder1);
+            hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder3);
+
+            QueryBuilder rangeFilterQuery = QueryBuilders.rangeQuery(INTEGER_FIELD_1).gte(3000).lte(5000);
+
+            Map<String, Object> searchResponseAsMap = search(
+                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+                hybridQueryBuilderNeuralThenTerm,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                List.of(aggsBuilder),
+                rangeFilterQuery
+            );
+
+            Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
+            assertNotNull(aggregations);
+            assertTrue(aggregations.containsKey(SUM_AGGREGATION_NAME));
+            double maxAggsValue = getAggregationValue(aggregations, SUM_AGGREGATION_NAME);
+            assertEquals(7035.0, maxAggsValue, DELTA_FOR_SCORE_ASSERTION);
+
+            assertHitResultsFromQuery(1, searchResponseAsMap);
+
+            // assert post-filter
+            List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
+
+            List<Integer> docIndexes = new ArrayList<>();
+            for (Map<String, Object> oneHit : hitsNestedList) {
+                assertNotNull(oneHit.get("_source"));
+                Map<String, Object> source = (Map<String, Object>) oneHit.get("_source");
+                int docIndex = (int) source.get(INTEGER_FIELD_1);
+                docIndexes.add(docIndex);
+            }
+            assertEquals(0, docIndexes.stream().filter(docIndex -> docIndex < 3000 || docIndex > 5000).count());
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
+        }
+    }
+
+    @SneakyThrows
     private void testAvgSumMinMaxAggs() {
         try {
             prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
