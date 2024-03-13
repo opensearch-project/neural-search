@@ -19,6 +19,7 @@ import org.opensearch.test.OpenSearchTestCase;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import static java.util.Collections.singletonList;
 import static java.util.Collections.singletonMap;
@@ -73,7 +74,12 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
         );
         assertEquals(
-            "fixed length parameter [" + TOKEN_LIMIT_FIELD + "] cannot be cast to [" + Number.class.getName() + "]",
+            String.format(
+                Locale.ROOT,
+                "Chunking algorithm parameter [%s] cannot be cast to [%s]",
+                TOKEN_LIMIT_FIELD,
+                Number.class.getName()
+            ),
             illegalArgumentException.getMessage()
         );
     }
@@ -85,7 +91,10 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             IllegalArgumentException.class,
             () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
         );
-        assertEquals("fixed length parameter [" + TOKEN_LIMIT_FIELD + "] must be positive", illegalArgumentException.getMessage());
+        assertEquals(
+            String.format(Locale.ROOT, "Chunking algorithm parameter [%s] must be positive.", TOKEN_LIMIT_FIELD),
+            illegalArgumentException.getMessage()
+        );
     }
 
     public void testValidateAndParseParameters_whenIllegalOverlapRateType_thenFail() {
@@ -122,7 +131,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
         );
         assertEquals(
-            "Chunker parameter [" + TOKENIZER_FIELD + "] cannot be cast to [" + String.class.getName() + "]",
+            String.format(Locale.ROOT, "Chunking algorithm parameter [%s] cannot be cast to [%s]", TOKENIZER_FIELD, String.class.getName()),
             illegalArgumentException.getMessage()
         );
     }

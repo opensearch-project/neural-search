@@ -8,6 +8,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 
 import java.util.Map;
+import java.util.Locale;
 
 /**
  * Validate and parse the parameter for chunking algorithms
@@ -26,9 +27,13 @@ public class ChunkerParameterValidator {
         }
         Object fieldValue = parameters.get(fieldName);
         if (!(fieldValue instanceof String)) {
-            throw new IllegalArgumentException("Chunker parameter [" + fieldName + "] cannot be cast to [" + String.class.getName() + "]");
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "Chunking algorithm parameter [%s] cannot be cast to [%s]", fieldName, String.class.getName())
+            );
         } else if (!allowEmpty && StringUtils.isEmpty(fieldValue.toString())) {
-            throw new IllegalArgumentException("Chunker parameter: " + fieldName + " should not be empty.");
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "Chunking algorithm parameter [%s] should not be empty.", fieldName)
+            );
         }
         return (String) fieldValue;
     }
@@ -42,12 +47,15 @@ public class ChunkerParameterValidator {
         String fieldValue = parameters.get(fieldName).toString();
         if (!(NumberUtils.isParsable(fieldValue))) {
             throw new IllegalArgumentException(
-                "fixed length parameter [" + fieldName + "] cannot be cast to [" + Number.class.getName() + "]"
+                String.format(Locale.ROOT, "Chunking algorithm parameter [%s] cannot be cast to [%s]", fieldName, Number.class.getName())
             );
         }
-        if (NumberUtils.createInteger(fieldValue) <= 0) {
-            throw new IllegalArgumentException("fixed length parameter [" + fieldName + "] must be positive");
+        int fieldValueInt = NumberUtils.createInteger(fieldValue);
+        if (fieldValueInt <= 0) {
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "Chunking algorithm parameter [%s] must be positive.", fieldName)
+            );
         }
-        return Integer.valueOf(fieldValue);
+        return fieldValueInt;
     }
 }
