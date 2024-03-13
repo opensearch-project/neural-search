@@ -93,7 +93,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
             );
         } else if (algorithmMap.size() > 1) {
             throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "Unable to create %s processor as [%s] contain multiple algorithms", TYPE, ALGORITHM_FIELD)
+                String.format(Locale.ROOT, "Unable to create %s processor as [%s] contains multiple algorithms", TYPE, ALGORITHM_FIELD)
             );
         }
         Entry<String, Object> algorithmEntry = algorithmMap.entrySet().iterator().next();

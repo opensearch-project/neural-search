@@ -228,7 +228,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             () -> textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
         );
         assertEquals(
-            String.format(Locale.ROOT, "Unable to create %s processor as [%s] contain multiple algorithms", TYPE, ALGORITHM_FIELD),
+            String.format(Locale.ROOT, "Unable to create %s processor as [%s] contains multiple algorithms", TYPE, ALGORITHM_FIELD),
             illegalArgumentException.getMessage()
         );
     }
