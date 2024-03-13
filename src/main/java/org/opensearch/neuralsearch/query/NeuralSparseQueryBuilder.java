@@ -119,7 +119,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         xContentBuilder.startObject(NAME);
         xContentBuilder.startObject(fieldName);
         xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
-        if (modelId != null) {
+        if (Objects.nonNull(modelId)) {
             xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
         }
         printBoostAndQueryName(xContentBuilder);

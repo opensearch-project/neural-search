@@ -5,7 +5,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased 3.0](https://github.com/opensearch-project/neural-search/compare/2.x...HEAD)
 ### Features
-- Enabled support for applying default modelId in neural sparse query ([#614](https://github.com/opensearch-project/neural-search/pull/614)
 ### Enhancements
 ### Bug Fixes
 - Fix async actions are left in neural_sparse query ([#438](https://github.com/opensearch-project/neural-search/pull/438))
@@ -21,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased 2.x](https://github.com/opensearch-project/neural-search/compare/2.12...2.x)
 ### Features
+- Enabled support for applying default modelId in neural sparse query ([#614](https://github.com/opensearch-project/neural-search/pull/614)
 ### Enhancements
 ### Bug Fixes
 ### Infrastructure
