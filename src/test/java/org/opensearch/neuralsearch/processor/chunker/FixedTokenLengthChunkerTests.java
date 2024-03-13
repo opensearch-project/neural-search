@@ -23,7 +23,7 @@ import java.util.Locale;
 import java.util.Map;
 import static java.util.Collections.singletonList;
 import static java.util.Collections.singletonMap;
-
+import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.ALGORITHM_NAME;
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.TOKEN_LIMIT_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.OVERLAP_RATE_FIELD;
@@ -139,6 +139,18 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             String.format(Locale.ROOT, "Chunking algorithm parameter [%s] cannot be cast to [%s]", TOKENIZER_FIELD, String.class.getName()),
             illegalArgumentException.getMessage()
         );
+    }
+
+    public void testValidateAndParseParameters_whenUnsupportedTokenizer_thenFail() {
+        String ngramTokenizer = "ngram";
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put(TOKENIZER_FIELD, "ngram");
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
+        );
+        assert (illegalArgumentException.getMessage()
+            .contains(String.format(Locale.ROOT, "tokenizer [%s] is not supported for [%s] algorithm.", ngramTokenizer, ALGORITHM_NAME)));
     }
 
     public void testChunk_withTokenLimit_10() {

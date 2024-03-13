@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.util.Locale;
 import java.util.Map;
 import java.util.List;
+import java.util.Set;
 import java.util.ArrayList;
 
 import org.opensearch.index.analysis.AnalysisRegistry;
@@ -35,14 +36,20 @@ public class FixedTokenLengthChunker implements Chunker {
     private static final double DEFAULT_OVERLAP_RATE = 0.0;
     private static final int DEFAULT_MAX_TOKEN_COUNT = 10000;
     private static final String DEFAULT_TOKENIZER = "standard";
-
     private static final double OVERLAP_RATE_UPPER_BOUND = 0.5;
-
-    private double overlapRate;
+    private static final Set<String> WORD_TOKENIZERS = Set.of(
+        "standard",
+        "letter",
+        "lowercase",
+        "whitespace",
+        "uax_url_email",
+        "classic",
+        "thai"
+    );
 
     private int tokenLimit;
     private String tokenizer;
-
+    private double overlapRate;
     private final AnalysisRegistry analysisRegistry;
 
     public FixedTokenLengthChunker(Map<String, Object> parameters) {
@@ -75,6 +82,17 @@ public class FixedTokenLengthChunker implements Chunker {
             DEFAULT_OVERLAP_RATE
         );
         this.tokenizer = validateStringParameters(parameters, TOKENIZER_FIELD, DEFAULT_TOKENIZER, false);
+        if (!WORD_TOKENIZERS.contains(this.tokenizer)) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "tokenizer [%s] is not supported for [%s] algorithm. Supported tokenizers are %s",
+                    this.tokenizer,
+                    ALGORITHM_NAME,
+                    WORD_TOKENIZERS
+                )
+            );
+        }
     }
 
     /**

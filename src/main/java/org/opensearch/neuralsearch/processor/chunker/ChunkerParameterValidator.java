@@ -15,6 +15,9 @@ import java.util.Locale;
  */
 public class ChunkerParameterValidator {
 
+    /**
+     * Validate and parse the parameter for string parameters
+     */
     public static String validateStringParameters(
         Map<String, Object> parameters,
         String fieldName,
@@ -22,7 +25,7 @@ public class ChunkerParameterValidator {
         boolean allowEmpty
     ) {
         if (!parameters.containsKey(fieldName)) {
-            // all parameters are optional
+            // all chunking algorithm parameters are optional
             return defaultValue;
         }
         Object fieldValue = parameters.get(fieldName);
@@ -38,10 +41,12 @@ public class ChunkerParameterValidator {
         return (String) fieldValue;
     }
 
-    public static Number validateNumberParameter(Map<String, Object> parameters, String fieldName, double defaultValue) {
-        // this method validate that parameter is a number
+    /**
+     * Validate and parse the parameter for numeric parameters
+     */
+    public static Number validateNumberParameter(Map<String, Object> parameters, String fieldName, Number defaultValue) {
         if (!parameters.containsKey(fieldName)) {
-            // all parameters are optional
+            // all chunking algorithm parameters are optional
             return defaultValue;
         }
         String fieldValue = parameters.get(fieldName).toString();
@@ -53,8 +58,10 @@ public class ChunkerParameterValidator {
         return NumberUtils.createNumber(fieldValue);
     }
 
+    /**
+     * Validate and parse the parameter for positive integer parameters
+     */
     public static int validatePositiveIntegerParameter(Map<String, Object> parameters, String fieldName, int defaultValue) {
-        // this method validate that parameter is a positive integer
         Number fieldValueNumber = validateNumberParameter(parameters, fieldName, defaultValue);
         int fieldValueInt = fieldValueNumber.intValue();
         if (fieldValueInt <= 0) {
@@ -65,6 +72,9 @@ public class ChunkerParameterValidator {
         return fieldValueInt;
     }
 
+    /**
+     * Validate and parse the parameter for double parameters within [lowerBound, upperBound]
+     */
     public static double validateRangeDoubleParameter(
         Map<String, Object> parameters,
         String fieldName,
@@ -72,7 +82,6 @@ public class ChunkerParameterValidator {
         double upperBound,
         double defaultValue
     ) {
-        // this method validate that parameter is a double within [lowerBound, upperBound]
         Number fieldValueNumber = validateNumberParameter(parameters, fieldName, defaultValue);
         double fieldValueDouble = fieldValueNumber.doubleValue();
         if (fieldValueDouble < lowerBound || fieldValueDouble > upperBound) {
