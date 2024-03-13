@@ -17,7 +17,7 @@ public interface Chunker {
      * Validate and parse the parameters for chunking algorithm,
      * will throw IllegalArgumentException when parameters are invalid
      *
-     * @param parameters a map containing parameters for chunking algorithms
+     * @param parameters a map containing non-runtime parameters for chunking algorithms
      */
     void validateAndParseParameters(Map<String, Object> parameters);
 

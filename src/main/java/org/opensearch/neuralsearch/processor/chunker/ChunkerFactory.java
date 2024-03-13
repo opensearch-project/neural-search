@@ -9,7 +9,7 @@ import java.util.Set;
 import java.util.Locale;
 
 /**
- * A factory to create different chunking algorithm classes and return all supported chunking algorithms.
+ * A factory to create different chunking algorithm objects and return all supported chunking algorithms.
  */
 public class ChunkerFactory {
 
