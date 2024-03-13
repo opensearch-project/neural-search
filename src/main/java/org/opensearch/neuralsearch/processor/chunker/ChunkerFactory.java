@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.processor.chunker;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.Locale;
 
 /**
  * A factory to create different chunking algorithm classes and return all supported chunking algorithms.
@@ -20,7 +21,12 @@ public class ChunkerFactory {
                 return new DelimiterChunker(parameters);
             default:
                 throw new IllegalArgumentException(
-                    "chunker type [" + type + "] is not supported. Supported chunkers types are " + ChunkerFactory.getAllChunkers()
+                    String.format(
+                        Locale.ROOT,
+                        "chunking algorithm [%s] is not supported. Supported chunking algorithms are %s",
+                        type,
+                        ChunkerFactory.getAllChunkers()
+                    )
                 );
         }
     }

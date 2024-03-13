@@ -9,6 +9,7 @@ import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -42,7 +43,8 @@ public class ChunkerFactoryTests extends OpenSearchTestCase {
             IllegalArgumentException.class,
             () -> ChunkerFactory.create(invalidChunkerType, createChunkParameters())
         );
-        assert (illegalArgumentException.getMessage().contains("chunker type [" + invalidChunkerType + "] is not supported."));
+        assert (illegalArgumentException.getMessage()
+            .contains(String.format(Locale.ROOT, "chunking algorithm [%s] is not supported.", invalidChunkerType)));
     }
 
     private Map<String, Object> createChunkParameters() {
