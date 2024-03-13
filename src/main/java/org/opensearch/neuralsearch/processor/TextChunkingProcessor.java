@@ -96,6 +96,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
                 String.format(Locale.ROOT, "Unable to create %s processor as [%s] contains multiple algorithms", TYPE, ALGORITHM_FIELD)
             );
         }
+
         Entry<String, Object> algorithmEntry = algorithmMap.entrySet().iterator().next();
         String algorithmKey = algorithmEntry.getKey();
         Object algorithmValue = algorithmEntry.getValue();
@@ -122,7 +123,9 @@ public final class TextChunkingProcessor extends AbstractProcessor {
                 )
             );
         }
+
         Map<String, Object> chunkerParameters = (Map<String, Object>) algorithmValue;
+        // fixed token length algorithm needs analysis registry for tokenization
         if (Objects.equals(algorithmKey, FixedTokenLengthChunker.ALGORITHM_NAME)) {
             chunkerParameters.put(FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD, analysisRegistry);
         }
