@@ -9,7 +9,7 @@ import java.util.List;
 
 /**
  * The interface for all chunking algorithms.
- * All algorithms need to validate parameters and chunk the content,
+ * All algorithms need to validate parameters and chunk the content.
  */
 public interface Chunker {
 
