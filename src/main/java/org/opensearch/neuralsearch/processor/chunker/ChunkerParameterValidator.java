@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.Locale;
 
 /**
- * Validate and parse the parameter for chunking algorithms
+ * Validate and parse the parameter for text chunking processor and algorithms
  */
 public class ChunkerParameterValidator {
 
@@ -31,12 +31,10 @@ public class ChunkerParameterValidator {
         Object fieldValue = parameters.get(fieldName);
         if (!(fieldValue instanceof String)) {
             throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "Chunking algorithm parameter [%s] cannot be cast to [%s]", fieldName, String.class.getName())
+                String.format(Locale.ROOT, "Parameter [%s] cannot be cast to [%s]", fieldName, String.class.getName())
             );
         } else if (!allowEmpty && StringUtils.isEmpty(fieldValue.toString())) {
-            throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "Chunking algorithm parameter [%s] should not be empty.", fieldName)
-            );
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "Parameter [%s] should not be empty.", fieldName));
         }
         return (String) fieldValue;
     }
@@ -52,7 +50,7 @@ public class ChunkerParameterValidator {
         String fieldValue = parameters.get(fieldName).toString();
         if (!(NumberUtils.isParsable(fieldValue))) {
             throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "Chunking algorithm parameter [%s] cannot be cast to [%s]", fieldName, Number.class.getName())
+                String.format(Locale.ROOT, "Parameter [%s] cannot be cast to [%s]", fieldName, Number.class.getName())
             );
         }
         return NumberUtils.createNumber(fieldValue);
@@ -64,10 +62,9 @@ public class ChunkerParameterValidator {
     public static int validatePositiveIntegerParameter(Map<String, Object> parameters, String fieldName, int defaultValue) {
         Number fieldValueNumber = validateNumberParameter(parameters, fieldName, defaultValue);
         int fieldValueInt = fieldValueNumber.intValue();
-        if (fieldValueInt <= 0) {
-            throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "Chunking algorithm parameter [%s] must be positive.", fieldName)
-            );
+        // sometimes parameter has negative default value, indicating that this parameter is not effective
+        if (fieldValueInt != defaultValue && fieldValueInt <= 0) {
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "Parameter [%s] must be positive.", fieldName));
         }
         return fieldValueInt;
     }
@@ -86,7 +83,7 @@ public class ChunkerParameterValidator {
         double fieldValueDouble = fieldValueNumber.doubleValue();
         if (fieldValueDouble < lowerBound || fieldValueDouble > upperBound) {
             throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "Chunking algorithm parameter [%s] must be between %s and %s", fieldName, lowerBound, upperBound)
+                String.format(Locale.ROOT, "Parameter [%s] must be between %s and %s", fieldName, lowerBound, upperBound)
             );
         }
         return fieldValueDouble;

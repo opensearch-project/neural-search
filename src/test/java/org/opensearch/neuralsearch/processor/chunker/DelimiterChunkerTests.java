@@ -21,17 +21,14 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
             () -> new DelimiterChunker(Map.of(DELIMITER_FIELD, List.of("")))
         );
         Assert.assertEquals(
-            String.format(Locale.ROOT, "Chunking algorithm parameter [%s] cannot be cast to [%s]", DELIMITER_FIELD, String.class.getName()),
+            String.format(Locale.ROOT, "Parameter [%s] cannot be cast to [%s]", DELIMITER_FIELD, String.class.getName()),
             exception.getMessage()
         );
     }
 
     public void testChunkerWithDelimiterFieldNoString() {
         Exception exception = assertThrows(IllegalArgumentException.class, () -> new DelimiterChunker(Map.of(DELIMITER_FIELD, "")));
-        Assert.assertEquals(
-            String.format(Locale.ROOT, "Chunking algorithm parameter [%s] should not be empty.", DELIMITER_FIELD),
-            exception.getMessage()
-        );
+        Assert.assertEquals(String.format(Locale.ROOT, "Parameter [%s] should not be empty.", DELIMITER_FIELD), exception.getMessage());
     }
 
     public void testChunker() {

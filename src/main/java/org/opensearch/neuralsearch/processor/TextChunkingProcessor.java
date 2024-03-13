@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.Objects;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.apache.commons.lang3.math.NumberUtils;
 
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.env.Environment;
@@ -29,6 +28,7 @@ import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
 import org.opensearch.neuralsearch.processor.chunker.Chunker;
 import org.opensearch.index.mapper.IndexFieldMapper;
+import org.opensearch.neuralsearch.processor.chunker.ChunkerParameterValidator;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 
 /**
@@ -130,23 +130,11 @@ public final class TextChunkingProcessor extends AbstractProcessor {
             chunkerParameters.put(FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD, analysisRegistry);
         }
         this.chunker = ChunkerFactory.create(algorithmKey, chunkerParameters);
-        if (chunkerParameters.containsKey(MAX_CHUNK_LIMIT_FIELD)) {
-            String maxChunkLimitString = chunkerParameters.get(MAX_CHUNK_LIMIT_FIELD).toString();
-            if (!(NumberUtils.isParsable(maxChunkLimitString))) {
-                throw new IllegalArgumentException(
-                    String.format(Locale.ROOT, "Parameter [%s] cannot be cast to [%s]", MAX_CHUNK_LIMIT_FIELD, Number.class.getName())
-                );
-            }
-            int maxChunkLimit = NumberUtils.createInteger(maxChunkLimitString);
-            if (maxChunkLimit <= 0 && maxChunkLimit != DEFAULT_MAX_CHUNK_LIMIT) {
-                throw new IllegalArgumentException(
-                    String.format(Locale.ROOT, "Parameter [%s] must be a positive integer", MAX_CHUNK_LIMIT_FIELD)
-                );
-            }
-            this.maxChunkLimit = maxChunkLimit;
-        } else {
-            this.maxChunkLimit = DEFAULT_MAX_CHUNK_LIMIT;
-        }
+        this.maxChunkLimit = ChunkerParameterValidator.validatePositiveIntegerParameter(
+            chunkerParameters,
+            MAX_CHUNK_LIMIT_FIELD,
+            DEFAULT_MAX_CHUNK_LIMIT
+        );
     }
 
     @SuppressWarnings("unchecked")

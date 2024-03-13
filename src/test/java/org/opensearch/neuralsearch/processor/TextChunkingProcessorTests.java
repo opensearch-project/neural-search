@@ -190,7 +190,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             () -> textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
         );
         assertEquals(
-            String.format(Locale.ROOT, "Parameter [%s] must be a positive integer", MAX_CHUNK_LIMIT_FIELD),
+            String.format(Locale.ROOT, "Parameter [%s] must be positive.", MAX_CHUNK_LIMIT_FIELD),
             illegalArgumentException.getMessage()
         );
     }

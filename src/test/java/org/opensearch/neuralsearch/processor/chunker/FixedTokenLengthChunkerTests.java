@@ -74,12 +74,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
         );
         assertEquals(
-            String.format(
-                Locale.ROOT,
-                "Chunking algorithm parameter [%s] cannot be cast to [%s]",
-                TOKEN_LIMIT_FIELD,
-                Number.class.getName()
-            ),
+            String.format(Locale.ROOT, "Parameter [%s] cannot be cast to [%s]", TOKEN_LIMIT_FIELD, Number.class.getName()),
             illegalArgumentException.getMessage()
         );
     }
@@ -92,7 +87,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
         );
         assertEquals(
-            String.format(Locale.ROOT, "Chunking algorithm parameter [%s] must be positive.", TOKEN_LIMIT_FIELD),
+            String.format(Locale.ROOT, "Parameter [%s] must be positive.", TOKEN_LIMIT_FIELD),
             illegalArgumentException.getMessage()
         );
     }
@@ -105,12 +100,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
         );
         assertEquals(
-            String.format(
-                Locale.ROOT,
-                "Chunking algorithm parameter [%s] cannot be cast to [%s]",
-                OVERLAP_RATE_FIELD,
-                Number.class.getName()
-            ),
+            String.format(Locale.ROOT, "Parameter [%s] cannot be cast to [%s]", OVERLAP_RATE_FIELD, Number.class.getName()),
             illegalArgumentException.getMessage()
         );
     }
@@ -123,7 +113,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
         );
         assertEquals(
-            String.format(Locale.ROOT, "Chunking algorithm parameter [%s] must be between %s and %s", OVERLAP_RATE_FIELD, 0.0, 0.5),
+            String.format(Locale.ROOT, "Parameter [%s] must be between %s and %s", OVERLAP_RATE_FIELD, 0.0, 0.5),
             illegalArgumentException.getMessage()
         );
     }
@@ -136,7 +126,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
         );
         assertEquals(
-            String.format(Locale.ROOT, "Chunking algorithm parameter [%s] cannot be cast to [%s]", TOKENIZER_FIELD, String.class.getName()),
+            String.format(Locale.ROOT, "Parameter [%s] cannot be cast to [%s]", TOKENIZER_FIELD, String.class.getName()),
             illegalArgumentException.getMessage()
         );
     }
