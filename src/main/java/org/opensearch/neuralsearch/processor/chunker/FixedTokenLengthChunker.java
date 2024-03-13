@@ -25,6 +25,8 @@ import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterVali
 public class FixedTokenLengthChunker implements Chunker {
 
     public static final String ALGORITHM_NAME = "fixed_token_length";
+
+    // field name for each parameter
     public static final String ANALYSIS_REGISTRY_FIELD = "analysis_registry";
     public static final String TOKEN_LIMIT_FIELD = "token_limit";
     public static final String OVERLAP_RATE_FIELD = "overlap_rate";
@@ -36,6 +38,9 @@ public class FixedTokenLengthChunker implements Chunker {
     private static final double DEFAULT_OVERLAP_RATE = 0.0;
     private static final int DEFAULT_MAX_TOKEN_COUNT = 10000;
     private static final String DEFAULT_TOKENIZER = "standard";
+
+    // parameter restrictions
+    private static final double OVERLAP_RATE_LOWER_BOUND = 0.0;
     private static final double OVERLAP_RATE_UPPER_BOUND = 0.5;
     private static final Set<String> WORD_TOKENIZERS = Set.of(
         "standard",
@@ -47,6 +52,7 @@ public class FixedTokenLengthChunker implements Chunker {
         "thai"
     );
 
+    // parameter value
     private int tokenLimit;
     private String tokenizer;
     private double overlapRate;
@@ -77,7 +83,7 @@ public class FixedTokenLengthChunker implements Chunker {
         this.overlapRate = validateRangeDoubleParameter(
             parameters,
             OVERLAP_RATE_FIELD,
-            DEFAULT_OVERLAP_RATE,
+            OVERLAP_RATE_LOWER_BOUND,
             OVERLAP_RATE_UPPER_BOUND,
             DEFAULT_OVERLAP_RATE
         );
@@ -104,11 +110,11 @@ public class FixedTokenLengthChunker implements Chunker {
      */
     @Override
     public List<String> chunk(String content, Map<String, Object> runtimeParameters) {
-        // prior to chunking, runtimeParameters have been validated
+        // before chunking, validate and parse runtimeParameters
         int maxTokenCount = validatePositiveIntegerParameter(runtimeParameters, MAX_TOKEN_COUNT_FIELD, DEFAULT_MAX_TOKEN_COUNT);
 
         List<AnalyzeToken> tokens = tokenize(content, tokenizer, maxTokenCount);
-        List<String> passages = new ArrayList<>();
+        List<String> chunkResult = new ArrayList<>();
 
         int startTokenIndex = 0;
         int startContentPosition, endContentPosition;
@@ -124,16 +130,16 @@ public class FixedTokenLengthChunker implements Chunker {
             if (startTokenIndex + tokenLimit >= tokens.size()) {
                 // include all characters till the end if no next passage
                 endContentPosition = content.length();
-                passages.add(content.substring(startContentPosition, endContentPosition));
+                chunkResult.add(content.substring(startContentPosition, endContentPosition));
                 break;
             } else {
                 // include gap characters between two passages
                 endContentPosition = tokens.get(startTokenIndex + tokenLimit).getStartOffset();
-                passages.add(content.substring(startContentPosition, endContentPosition));
+                chunkResult.add(content.substring(startContentPosition, endContentPosition));
             }
             startTokenIndex += tokenLimit - overlapTokenNumber;
         }
-        return passages;
+        return chunkResult;
     }
 
     private List<AnalyzeToken> tokenize(String content, String tokenizer, int maxTokenCount) {
