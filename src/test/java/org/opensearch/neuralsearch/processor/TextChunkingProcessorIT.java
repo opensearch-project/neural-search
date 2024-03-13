@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.processor;
 
 import com.google.common.collect.ImmutableList;
+import lombok.SneakyThrows;
 import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.message.BasicHeader;
@@ -67,7 +68,8 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         updateClusterSettings();
     }
 
-    public void testTextChunkingProcessor_withFixedTokenLengthAlgorithmStandardTokenizer_thenSucceed() throws Exception {
+    @SneakyThrows
+    public void testTextChunkingProcessor_withFixedTokenLengthAlgorithmStandardTokenizer_thenSucceed() {
         try {
             createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
             createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
@@ -83,7 +85,8 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         }
     }
 
-    public void testTextChunkingProcessor_withFixedTokenLengthAlgorithmLetterTokenizer_thenSucceed() throws Exception {
+    @SneakyThrows
+    public void testTextChunkingProcessor_withFixedTokenLengthAlgorithmLetterTokenizer_thenSucceed() {
         try {
             createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_LETTER_TOKENIZER_NAME);
             createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_LETTER_TOKENIZER_NAME);
@@ -99,7 +102,8 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         }
     }
 
-    public void testTextChunkingProcessor_withFixedTokenLengthAlgorithmLowercaseTokenizer_thenSucceed() throws Exception {
+    @SneakyThrows
+    public void testTextChunkingProcessor_withFixedTokenLengthAlgorithmLowercaseTokenizer_thenSucceed() {
         try {
             createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME);
             createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME);
@@ -115,8 +119,8 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         }
     }
 
-    public void testTextChunkingProcessor_withFixedTokenLengthAlgorithmStandardTokenizer_whenExceedMaxTokenCount_thenFail()
-        throws Exception {
+    @SneakyThrows
+    public void testTextChunkingProcessor_withFixedTokenLengthAlgorithmStandardTokenizer_whenExceedMaxTokenCount_thenFail() {
         try {
             createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
             createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
@@ -130,7 +134,8 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         }
     }
 
-    public void testTextChunkingProcessor_withDelimiterAlgorithm_successful() throws Exception {
+    @SneakyThrows
+    public void testTextChunkingProcessor_withDelimiterAlgorithm_successful() {
         try {
             createPipelineProcessor(DELIMITER_PIPELINE_NAME);
             createTextChunkingIndex(INDEX_NAME, DELIMITER_PIPELINE_NAME);
@@ -147,7 +152,8 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         }
     }
 
-    public void testTextChunkingProcessor_withCascadePipeline_successful() throws Exception {
+    @SneakyThrows
+    public void testTextChunkingProcessor_withCascadePipeline_successful() {
         try {
             createPipelineProcessor(CASCADE_PIPELINE_NAME);
             createTextChunkingIndex(INDEX_NAME, CASCADE_PIPELINE_NAME);
