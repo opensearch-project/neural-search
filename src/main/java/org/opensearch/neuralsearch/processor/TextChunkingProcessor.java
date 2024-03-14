@@ -105,10 +105,9 @@ public final class TextChunkingProcessor extends AbstractProcessor {
                 throw new IllegalArgumentException(
                     String.format(
                         Locale.ROOT,
-                        "Unable to create %s processor as [%s] parameters cannot be cast to [%s]",
+                        "Unable to create %s processor as parameters for [%s] algorithm must be an object",
                         TYPE,
-                        algorithmKey,
-                        Map.class.getName()
+                        algorithmKey
                     )
                 );
             }

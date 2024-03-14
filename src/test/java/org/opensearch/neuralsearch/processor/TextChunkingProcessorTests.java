@@ -259,10 +259,9 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         assertEquals(
             String.format(
                 Locale.ROOT,
-                "Unable to create %s processor as [%s] parameters cannot be cast to [%s]",
+                "Unable to create %s processor as parameters for [%s] algorithm must be an object",
                 TYPE,
-                FixedTokenLengthChunker.ALGORITHM_NAME,
-                Map.class.getName()
+                FixedTokenLengthChunker.ALGORITHM_NAME
             ),
             illegalArgumentException.getMessage()
         );
