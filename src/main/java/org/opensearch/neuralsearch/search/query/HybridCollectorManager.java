@@ -54,7 +54,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     private final SortAndFormats sortAndFormats;
     @Nullable
     private final Weight filterWeight;
-    public static final float boost_factor = 1f;
+    private static final float boost_factor = 1f;
 
     /**
      * Create new instance of HybridCollectorManager depending on the concurrent search beeing enabled or disabled.
