@@ -248,14 +248,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             () -> textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
         );
         assert (illegalArgumentException.getMessage()
-            .contains(
-                String.format(
-                    Locale.ROOT,
-                    "Unable to create %s processor as chunker algorithm [%s] is not supported.",
-                    TYPE,
-                    invalid_algorithm_type
-                )
-            ));
+            .contains(String.format(Locale.ROOT, "Chunking algorithm [%s] is not supported.", invalid_algorithm_type)));
     }
 
     public void testCreate_whenAlgorithmFieldInvalidAlgorithmContent_thenFail() {

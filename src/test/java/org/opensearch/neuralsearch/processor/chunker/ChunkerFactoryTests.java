@@ -11,7 +11,6 @@ import org.opensearch.test.OpenSearchTestCase;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD;
 
@@ -19,11 +18,6 @@ public class ChunkerFactoryTests extends OpenSearchTestCase {
 
     @Mock
     private AnalysisRegistry analysisRegistry;
-
-    public void testGetAllChunkers() {
-        Set<String> expected = Set.of(FixedTokenLengthChunker.ALGORITHM_NAME, DelimiterChunker.ALGORITHM_NAME);
-        assertEquals(expected, ChunkerFactory.getAllChunkers());
-    }
 
     public void testCreate_FixedTokenLength() {
         Chunker chunker = ChunkerFactory.create(FixedTokenLengthChunker.ALGORITHM_NAME, createChunkParameters());
@@ -38,13 +32,13 @@ public class ChunkerFactoryTests extends OpenSearchTestCase {
     }
 
     public void testCreate_Invalid() {
-        String invalidChunkerType = "Invalid Chunker Type";
+        String invalidChunkerName = "Invalid Chunker Algorithm";
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> ChunkerFactory.create(invalidChunkerType, createChunkParameters())
+            () -> ChunkerFactory.create(invalidChunkerName, createChunkParameters())
         );
         assert (illegalArgumentException.getMessage()
-            .contains(String.format(Locale.ROOT, "chunking algorithm [%s] is not supported.", invalidChunkerType)));
+            .contains(String.format(Locale.ROOT, "Chunking algorithm [%s] is not supported.", invalidChunkerName)));
     }
 
     private Map<String, Object> createChunkParameters() {

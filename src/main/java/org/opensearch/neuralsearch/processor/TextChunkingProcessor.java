@@ -7,7 +7,6 @@ package org.opensearch.neuralsearch.processor;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Set;
 import java.util.Locale;
 import java.util.ArrayList;
 import java.util.List;
@@ -101,18 +100,6 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         Entry<String, Object> algorithmEntry = algorithmMap.entrySet().iterator().next();
         String algorithmKey = algorithmEntry.getKey();
         Object algorithmValue = algorithmEntry.getValue();
-        Set<String> supportedChunkers = ChunkerFactory.getAllChunkers();
-        if (!supportedChunkers.contains(algorithmKey)) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "Unable to create %s processor as chunker algorithm [%s] is not supported. Supported chunkers types are %s",
-                    TYPE,
-                    algorithmKey,
-                    supportedChunkers
-                )
-            );
-        }
         if (!(algorithmValue instanceof Map)) {
             throw new IllegalArgumentException(
                 String.format(

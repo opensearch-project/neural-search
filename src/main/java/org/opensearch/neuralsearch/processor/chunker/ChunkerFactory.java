@@ -5,10 +5,8 @@
 package org.opensearch.neuralsearch.processor.chunker;
 
 import com.google.common.collect.ImmutableMap;
-import lombok.Getter;
 
 import java.util.Map;
-import java.util.Set;
 import java.util.Locale;
 import java.util.function.Function;
 
@@ -24,16 +22,13 @@ public class ChunkerFactory {
         DelimiterChunker::new
     );
 
-    @Getter
-    private static final Set<String> allChunkers = chunkers.keySet();
-
     public static Chunker create(final String type, final Map<String, Object> parameters) {
         Function<Map<String, Object>, Chunker> chunkerConstructionFunction = chunkers.get(type);
         if (chunkerConstructionFunction == null) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
-                    "chunking algorithm [%s] is not supported. Supported chunking algorithms are %s",
+                    "Chunking algorithm [%s] is not supported. Supported chunking algorithms are %s",
                     type,
                     chunkers.keySet()
                 )
