@@ -58,7 +58,7 @@ public class FixedTokenLengthChunker implements Chunker {
     private double overlapRate;
     private final AnalysisRegistry analysisRegistry;
 
-    public FixedTokenLengthChunker(Map<String, Object> parameters) {
+    public FixedTokenLengthChunker(final Map<String, Object> parameters) {
         validateAndParseParameters(parameters);
         this.analysisRegistry = (AnalysisRegistry) parameters.get(ANALYSIS_REGISTRY_FIELD);
     }
@@ -78,7 +78,7 @@ public class FixedTokenLengthChunker implements Chunker {
      * tokenizer should be string
      */
     @Override
-    public void validateAndParseParameters(Map<String, Object> parameters) {
+    public void validateAndParseParameters(final Map<String, Object> parameters) {
         this.tokenLimit = validatePositiveIntegerParameter(parameters, TOKEN_LIMIT_FIELD, DEFAULT_TOKEN_LIMIT);
         this.overlapRate = validateRangeDoubleParameter(
             parameters,
@@ -109,7 +109,7 @@ public class FixedTokenLengthChunker implements Chunker {
      * 1. max_token_count the max token limit for the tokenizer
      */
     @Override
-    public List<String> chunk(String content, Map<String, Object> runtimeParameters) {
+    public List<String> chunk(final String content, final Map<String, Object> runtimeParameters) {
         // before chunking, validate and parse runtimeParameters
         int maxTokenCount = validatePositiveIntegerParameter(runtimeParameters, MAX_TOKEN_COUNT_FIELD, DEFAULT_MAX_TOKEN_COUNT);
 
@@ -142,7 +142,7 @@ public class FixedTokenLengthChunker implements Chunker {
         return chunkResult;
     }
 
-    private List<AnalyzeToken> tokenize(String content, String tokenizer, int maxTokenCount) {
+    private List<AnalyzeToken> tokenize(final String content, final String tokenizer, final int maxTokenCount) {
         AnalyzeAction.Request analyzeRequest = new AnalyzeAction.Request();
         analyzeRequest.text(content);
         analyzeRequest.tokenizer(tokenizer);

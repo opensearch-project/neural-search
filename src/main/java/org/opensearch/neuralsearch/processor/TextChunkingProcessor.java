@@ -64,14 +64,14 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     private final Environment environment;
 
     public TextChunkingProcessor(
-        String tag,
-        String description,
-        Map<String, Object> fieldMap,
-        Map<String, Object> algorithmMap,
-        Environment environment,
-        ClusterService clusterService,
-        IndicesService indicesService,
-        AnalysisRegistry analysisRegistry
+        final String tag,
+        final String description,
+        final Map<String, Object> fieldMap,
+        final Map<String, Object> algorithmMap,
+        final Environment environment,
+        final ClusterService clusterService,
+        final IndicesService indicesService,
+        final AnalysisRegistry analysisRegistry
     ) {
         super(tag, description);
         this.fieldMap = fieldMap;
@@ -87,7 +87,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     }
 
     @SuppressWarnings("unchecked")
-    private void validateAndParseAlgorithmMap(Map<String, Object> algorithmMap) {
+    private void validateAndParseAlgorithmMap(final Map<String, Object> algorithmMap) {
         if (algorithmMap.isEmpty()) {
             throw new IllegalArgumentException(
                 String.format(Locale.ROOT, "Unable to create %s processor as [%s] does not contain any algorithm", TYPE, ALGORITHM_FIELD)
@@ -139,7 +139,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     }
 
     @SuppressWarnings("unchecked")
-    private boolean isListOfString(Object value) {
+    private boolean isListOfString(final Object value) {
         // an empty list is also List<String>
         if (!(value instanceof List)) {
             return false;
@@ -152,7 +152,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         return true;
     }
 
-    private int getMaxTokenCount(Map<String, Object> sourceAndMetadataMap) {
+    private int getMaxTokenCount(final Map<String, Object> sourceAndMetadataMap) {
         String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
         IndexMetadata indexMetadata = clusterService.state().metadata().index(indexName);
         int maxTokenCount;
@@ -185,7 +185,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         return ingestDocument;
     }
 
-    private void validateFieldsValue(IngestDocument ingestDocument) {
+    private void validateFieldsValue(final IngestDocument ingestDocument) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
         for (Map.Entry<String, Object> embeddingFieldsEntry : fieldMap.entrySet()) {
             Object sourceValue = sourceAndMetadataMap.get(embeddingFieldsEntry.getKey());
@@ -203,7 +203,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     }
 
     @SuppressWarnings({ "rawtypes", "unchecked" })
-    private void validateNestedTypeValue(String sourceKey, Object sourceValue, int maxDepth) {
+    private void validateNestedTypeValue(final String sourceKey, final Object sourceValue, final int maxDepth) {
         if (maxDepth > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())) {
             throw new IllegalArgumentException(
                 String.format(Locale.ROOT, "map type field [%s] reached max depth limit, cannot process it", sourceKey)
@@ -223,7 +223,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     }
 
     @SuppressWarnings({ "rawtypes" })
-    private void validateListTypeValue(String sourceKey, Object sourceValue, int maxDepth) {
+    private void validateListTypeValue(final String sourceKey, final Object sourceValue, final int maxDepth) {
         for (Object value : (List) sourceValue) {
             if (value instanceof Map) {
                 validateNestedTypeValue(sourceKey, value, maxDepth + 1);
@@ -242,8 +242,8 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     @SuppressWarnings("unchecked")
     private int chunkMapType(
         Map<String, Object> sourceAndMetadataMap,
-        Map<String, Object> fieldMap,
-        Map<String, Object> runtimeParameters,
+        final Map<String, Object> fieldMap,
+        final Map<String, Object> runtimeParameters,
         int chunkCount
     ) {
         for (Map.Entry<String, Object> fieldMapEntry : fieldMap.entrySet()) {
@@ -283,7 +283,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         return chunkCount;
     }
 
-    private int chunkString(String content, List<String> result, Map<String, Object> runTimeParameters, int chunkCount) {
+    private int chunkString(final String content, List<String> result, final Map<String, Object> runTimeParameters, int chunkCount) {
         // chunk the content, return the updated chunkCount and add chunk passages into result
         List<String> contentResult = chunker.chunk(content, runTimeParameters);
         chunkCount += contentResult.size();
@@ -301,7 +301,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         return chunkCount;
     }
 
-    private int chunkList(List<String> contentList, List<String> result, Map<String, Object> runTimeParameters, int chunkCount) {
+    private int chunkList(final List<String> contentList, List<String> result, final Map<String, Object> runTimeParameters, int chunkCount) {
         // flatten original output format from List<List<String>> to List<String>
         for (String content : contentList) {
             chunkCount = chunkString(content, result, runTimeParameters, chunkCount);
@@ -310,7 +310,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     }
 
     @SuppressWarnings("unchecked")
-    private int chunkLeafType(Object value, List<String> result, Map<String, Object> runTimeParameters, int chunkCount) {
+    private int chunkLeafType(final Object value, List<String> result, final Map<String, Object> runTimeParameters, int chunkCount) {
         // leaf type means either String or List<String>
         // the result should be an empty list
         if (value instanceof String) {

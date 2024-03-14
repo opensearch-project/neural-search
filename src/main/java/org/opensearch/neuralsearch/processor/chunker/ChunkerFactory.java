@@ -13,7 +13,7 @@ import java.util.Locale;
  */
 public class ChunkerFactory {
 
-    public static Chunker create(String type, Map<String, Object> parameters) {
+    public static Chunker create(final String type, final Map<String, Object> parameters) {
         switch (type) {
             case FixedTokenLengthChunker.ALGORITHM_NAME:
                 return new FixedTokenLengthChunker(parameters);

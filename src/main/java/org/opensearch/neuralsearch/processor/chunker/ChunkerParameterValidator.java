@@ -19,10 +19,10 @@ public class ChunkerParameterValidator {
      * Validate and parse the parameter for string parameters
      */
     public static String validateStringParameters(
-        Map<String, Object> parameters,
-        String fieldName,
-        String defaultValue,
-        boolean allowEmpty
+        final Map<String, Object> parameters,
+        final String fieldName,
+        final String defaultValue,
+        final boolean allowEmpty
     ) {
         if (!parameters.containsKey(fieldName)) {
             // all chunking algorithm parameters are optional
@@ -42,7 +42,7 @@ public class ChunkerParameterValidator {
     /**
      * Validate and parse the parameter for numeric parameters
      */
-    public static Number validateNumberParameter(Map<String, Object> parameters, String fieldName, Number defaultValue) {
+    public static Number validateNumberParameter(final Map<String, Object> parameters, final String fieldName, final Number defaultValue) {
         if (!parameters.containsKey(fieldName)) {
             // all chunking algorithm parameters are optional
             return defaultValue;
@@ -59,7 +59,7 @@ public class ChunkerParameterValidator {
     /**
      * Validate and parse the parameter for positive integer parameters
      */
-    public static int validatePositiveIntegerParameter(Map<String, Object> parameters, String fieldName, int defaultValue) {
+    public static int validatePositiveIntegerParameter(final Map<String, Object> parameters, final String fieldName, final int defaultValue) {
         Number fieldValueNumber = validateNumberParameter(parameters, fieldName, defaultValue);
         int fieldValueInt = fieldValueNumber.intValue();
         // sometimes parameter has negative default value, indicating that this parameter is not effective
@@ -73,11 +73,11 @@ public class ChunkerParameterValidator {
      * Validate and parse the parameter for double parameters within [lowerBound, upperBound]
      */
     public static double validateRangeDoubleParameter(
-        Map<String, Object> parameters,
-        String fieldName,
-        double lowerBound,
-        double upperBound,
-        double defaultValue
+        final Map<String, Object> parameters,
+        final String fieldName,
+        final double lowerBound,
+        final double upperBound,
+        final double defaultValue
     ) {
         Number fieldValueNumber = validateNumberParameter(parameters, fieldName, defaultValue);
         double fieldValueDouble = fieldValueNumber.doubleValue();

@@ -21,7 +21,7 @@ public class DelimiterChunker implements Chunker {
 
     private String delimiter;
 
-    public DelimiterChunker(Map<String, Object> parameters) {
+    public DelimiterChunker(final Map<String, Object> parameters) {
         validateAndParseParameters(parameters);
     }
 
@@ -33,7 +33,7 @@ public class DelimiterChunker implements Chunker {
      * 1. A string as the paragraph split indicator
      */
     @Override
-    public void validateAndParseParameters(Map<String, Object> parameters) {
+    public void validateAndParseParameters(final Map<String, Object> parameters) {
         this.delimiter = validateStringParameters(parameters, DELIMITER_FIELD, DEFAULT_DELIMITER, false);
     }
 
@@ -44,7 +44,7 @@ public class DelimiterChunker implements Chunker {
      * @param runtimeParameters a map for runtime parameters, but not needed by delimiter algorithm
      */
     @Override
-    public List<String> chunk(String content, Map<String, Object> runtimeParameters) {
+    public List<String> chunk(final String content, final Map<String, Object> runtimeParameters) {
         List<String> chunkResult = new ArrayList<>();
         int start = 0, end;
         int nextDelimiterPosition = content.indexOf(delimiter);
