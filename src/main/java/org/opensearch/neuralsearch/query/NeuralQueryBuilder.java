@@ -12,6 +12,7 @@ import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Supplier;
 
 import org.apache.commons.lang.StringUtils;
@@ -58,7 +59,7 @@ import lombok.extern.log4j.Log4j2;
 @Accessors(chain = true, fluent = true)
 @NoArgsConstructor
 @AllArgsConstructor
-public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder> {
+public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder> implements ModelInferenceQueryBuilder {
 
     public static final String NAME = "neural";
 
@@ -133,11 +134,11 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         xContentBuilder.startObject(NAME);
         xContentBuilder.startObject(fieldName);
         xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
-        if (modelId != null) {
+        if (Objects.nonNull(modelId)) {
             xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
         }
         xContentBuilder.field(K_FIELD.getPreferredName(), k);
-        if (filter != null) {
+        if (Objects.nonNull(filter)) {
             xContentBuilder.field(FILTER_FIELD.getPreferredName(), filter);
         }
         printBoostAndQueryName(xContentBuilder);
