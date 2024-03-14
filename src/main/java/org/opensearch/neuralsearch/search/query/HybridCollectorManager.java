@@ -106,7 +106,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         Collector hybridcollector = new HybridTopScoreDocCollector(numHits, hitsThresholdChecker);
         // Check if filterWeight is present. If it is present then return wrap Hybrid collector object underneath the FilteredCollector
         // object and return it.
-        return filterWeight == null ? hybridcollector : new FilteredCollector(hybridcollector, filterWeight);
+        return Objects.nonNull(filterWeight) ? new FilteredCollector(hybridcollector, filterWeight) : hybridcollector;
     }
 
     /**
