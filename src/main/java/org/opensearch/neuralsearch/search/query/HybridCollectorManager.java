@@ -11,10 +11,16 @@ import org.apache.lucene.search.CollectorManager;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
+import org.apache.lucene.search.Weight;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.ScoreMode;
+import org.opensearch.common.Nullable;
+import org.opensearch.common.lucene.search.FilteredCollector;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 import org.opensearch.neuralsearch.search.HybridTopScoreDocCollector;
 import org.opensearch.search.DocValueFormat;
+import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.MultiCollectorWrapper;
 import org.opensearch.search.query.QuerySearchResult;
@@ -46,6 +52,9 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     private final boolean isSingleShard;
     private final int trackTotalHitsUpTo;
     private final SortAndFormats sortAndFormats;
+    @Nullable
+    private final Weight filterWeight;
+    private static final float boost_factor = 1f;
 
     /**
      * Create new instance of HybridCollectorManager depending on the concurrent search beeing enabled or disabled.
@@ -60,27 +69,44 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         int numDocs = Math.min(searchContext.from() + searchContext.size(), totalNumDocs);
         int trackTotalHitsUpTo = searchContext.trackTotalHitsUpTo();
 
+        Weight filteringWeight = null;
+        // Check for post filter to create weight for filter query and later use that weight in the search workflow
+        if (Objects.nonNull(searchContext.parsedPostFilter()) && Objects.nonNull(searchContext.parsedPostFilter().query())) {
+            Query filterQuery = searchContext.parsedPostFilter().query();
+            ContextIndexSearcher searcher = searchContext.searcher();
+            // ScoreMode COMPLETE_NO_SCORES will be passed as post_filter does not contribute in scoring. COMPLETE_NO_SCORES means it is not
+            // a scoring clause
+            // Boost factor 1f is taken because if boost is multiplicative of 1 then it means "no boost"
+            // Previously this code in OpenSearch looked like
+            // https://github.com/opensearch-project/OpenSearch/commit/36a5cf8f35e5cbaa1ff857b5a5db8c02edc1a187
+            filteringWeight = searcher.createWeight(searcher.rewrite(filterQuery), ScoreMode.COMPLETE_NO_SCORES, boost_factor);
+        }
+
         return searchContext.shouldUseConcurrentSearch()
             ? new HybridCollectorConcurrentSearchManager(
                 numDocs,
                 new HitsThresholdChecker(Math.max(numDocs, searchContext.trackTotalHitsUpTo())),
                 isSingleShard,
                 trackTotalHitsUpTo,
-                searchContext.sort()
+                searchContext.sort(),
+                filteringWeight
             )
             : new HybridCollectorNonConcurrentManager(
                 numDocs,
                 new HitsThresholdChecker(Math.max(numDocs, searchContext.trackTotalHitsUpTo())),
                 isSingleShard,
                 trackTotalHitsUpTo,
-                searchContext.sort()
+                searchContext.sort(),
+                filteringWeight
             );
     }
 
     @Override
     public Collector newCollector() {
         Collector hybridcollector = new HybridTopScoreDocCollector(numHits, hitsThresholdChecker);
-        return hybridcollector;
+        // Check if filterWeight is present. If it is present then return wrap Hybrid collector object underneath the FilteredCollector
+        // object and return it.
+        return Objects.nonNull(filterWeight) ? new FilteredCollector(hybridcollector, filterWeight) : hybridcollector;
     }
 
     /**
@@ -108,7 +134,10 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 }
             } else if (collector instanceof HybridTopScoreDocCollector) {
                 hybridTopScoreDocCollectors.add((HybridTopScoreDocCollector) collector);
-            }
+            } else if (collector instanceof FilteredCollector
+                && ((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector) {
+                    hybridTopScoreDocCollectors.add((HybridTopScoreDocCollector) ((FilteredCollector) collector).getCollector());
+                }
         }
 
         if (!hybridTopScoreDocCollectors.isEmpty()) {
@@ -216,9 +245,10 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             HitsThresholdChecker hitsThresholdChecker,
             boolean isSingleShard,
             int trackTotalHitsUpTo,
-            SortAndFormats sortAndFormats
+            SortAndFormats sortAndFormats,
+            Weight filteringWeight
         ) {
-            super(numHits, hitsThresholdChecker, isSingleShard, trackTotalHitsUpTo, sortAndFormats);
+            super(numHits, hitsThresholdChecker, isSingleShard, trackTotalHitsUpTo, sortAndFormats, filteringWeight);
             scoreCollector = Objects.requireNonNull(super.newCollector(), "collector for hybrid query cannot be null");
         }
 
@@ -245,9 +275,10 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             HitsThresholdChecker hitsThresholdChecker,
             boolean isSingleShard,
             int trackTotalHitsUpTo,
-            SortAndFormats sortAndFormats
+            SortAndFormats sortAndFormats,
+            Weight filteringWeight
         ) {
-            super(numHits, hitsThresholdChecker, isSingleShard, trackTotalHitsUpTo, sortAndFormats);
+            super(numHits, hitsThresholdChecker, isSingleShard, trackTotalHitsUpTo, sortAndFormats, filteringWeight);
         }
     }
 }
