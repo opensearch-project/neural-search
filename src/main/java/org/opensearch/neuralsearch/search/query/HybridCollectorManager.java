@@ -39,7 +39,6 @@ import java.util.Optional;
 
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createDelimiterElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
-import static org.opensearch.neuralsearch.util.HybridQueryUtil.boost_factor;
 
 /**
  * Collector manager based on HybridTopScoreDocCollector that allows users to parallelize counting the number of hits.
@@ -54,6 +53,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     private final int trackTotalHitsUpTo;
     private final SortAndFormats sortAndFormats;
     private final Optional<Weight> optionalFilterWeight;
+    public static final float boost_factor = 1f;
 
     /**
      * Create new instance of HybridCollectorManager depending on the concurrent search beeing enabled or disabled.
@@ -70,7 +70,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
 
         Weight filteringWeight = null;
         // Check for post filter to create weight for filter query and later use that weight in the search workflow
-        if (Objects.nonNull(searchContext.parsedPostFilter())) {
+        if (Objects.nonNull(searchContext.parsedPostFilter()) && Objects.nonNull(searchContext.parsedPostFilter().query())) {
             Query filterQuery = searchContext.parsedPostFilter().query();
             ContextIndexSearcher searcher = searchContext.searcher();
             // ScoreMode COMPLETE_NO_SCORES will be passed as post_filter does not contribute in scoring. COMPLETE_NO_SCORES means it is not
