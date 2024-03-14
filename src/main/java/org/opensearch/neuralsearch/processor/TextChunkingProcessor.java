@@ -163,11 +163,9 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         int chunkCount = 0;
         Map<String, Object> runtimeParameters = new HashMap<>();
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
-        if (chunker instanceof FixedTokenLengthChunker) {
-            // fixed token length algorithm needs max_token_count for tokenization
-            int maxTokenCount = getMaxTokenCount(sourceAndMetadataMap);
-            runtimeParameters.put(FixedTokenLengthChunker.MAX_TOKEN_COUNT_FIELD, maxTokenCount);
-        }
+        // fixed token length algorithm needs max_token_count for tokenization
+        int maxTokenCount = getMaxTokenCount(sourceAndMetadataMap);
+        runtimeParameters.put(FixedTokenLengthChunker.MAX_TOKEN_COUNT_FIELD, maxTokenCount);
         chunkMapType(sourceAndMetadataMap, fieldMap, runtimeParameters, chunkCount);
         return ingestDocument;
     }
