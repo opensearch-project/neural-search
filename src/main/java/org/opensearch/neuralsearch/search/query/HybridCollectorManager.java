@@ -14,6 +14,7 @@ import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreMode;
+import org.opensearch.common.Nullable;
 import org.opensearch.common.lucene.search.FilteredCollector;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
@@ -35,7 +36,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.Optional;
 
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createDelimiterElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
@@ -52,7 +52,8 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     private final boolean isSingleShard;
     private final int trackTotalHitsUpTo;
     private final SortAndFormats sortAndFormats;
-    private final Optional<Weight> optionalFilterWeight;
+    @Nullable
+    private final Weight filterWeight;
     public static final float boost_factor = 1f;
 
     /**
@@ -105,10 +106,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         Collector hybridcollector = new HybridTopScoreDocCollector(numHits, hitsThresholdChecker);
         // Check if filterWeight is present. If it is present then return wrap Hybrid collector object underneath the FilteredCollector
         // object and return it.
-        if (optionalFilterWeight.isEmpty()) {
-            return hybridcollector;
-        }
-        return new FilteredCollector(hybridcollector, optionalFilterWeight.get());
+        return filterWeight == null ? hybridcollector : new FilteredCollector(hybridcollector, filterWeight);
     }
 
     /**
@@ -250,7 +248,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             SortAndFormats sortAndFormats,
             Weight filteringWeight
         ) {
-            super(numHits, hitsThresholdChecker, isSingleShard, trackTotalHitsUpTo, sortAndFormats, Optional.ofNullable(filteringWeight));
+            super(numHits, hitsThresholdChecker, isSingleShard, trackTotalHitsUpTo, sortAndFormats, filteringWeight);
             scoreCollector = Objects.requireNonNull(super.newCollector(), "collector for hybrid query cannot be null");
         }
 
@@ -280,7 +278,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             SortAndFormats sortAndFormats,
             Weight filteringWeight
         ) {
-            super(numHits, hitsThresholdChecker, isSingleShard, trackTotalHitsUpTo, sortAndFormats, Optional.ofNullable(filteringWeight));
+            super(numHits, hitsThresholdChecker, isSingleShard, trackTotalHitsUpTo, sortAndFormats, filteringWeight);
         }
     }
 }
