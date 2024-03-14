@@ -63,7 +63,7 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
         assertNotNull(queryTopDocs);
         assertEquals(3, queryTopDocs.size());
 
-        assertEquals(3, queryTopDocs.get(0).getScoreDocs().size());
+        assertEquals(5, queryTopDocs.get(0).getScoreDocs().size());
         assertEquals(.5, queryTopDocs.get(0).getScoreDocs().get(0).score, DELTA_FOR_SCORE_ASSERTION);
         assertEquals(1, queryTopDocs.get(0).getScoreDocs().get(0).doc);
         assertEquals(.5, queryTopDocs.get(0).getScoreDocs().get(1).score, DELTA_FOR_SCORE_ASSERTION);
