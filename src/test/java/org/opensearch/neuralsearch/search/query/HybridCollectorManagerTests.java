@@ -178,10 +178,10 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)));
 
         QueryBuilder postFilterQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, "world");
-        ParsedQuery parsedQuery = new ParsedQuery(postFilterQuery.toQuery(mockQueryShardContext));
+        Query pfQuery = postFilterQuery.toQuery(mockQueryShardContext);
+        ParsedQuery parsedQuery = new ParsedQuery(pfQuery);
         searchContext.parsedQuery(parsedQuery);
 
-        Query pfQuery = postFilterQuery.toQuery(mockQueryShardContext);
         when(searchContext.parsedPostFilter()).thenReturn(parsedQuery);
 
         when(searchContext.query()).thenReturn(hybridQuery);
@@ -258,17 +258,36 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
         HybridTopScoreDocCollector collector = (HybridTopScoreDocCollector) hybridCollectorManager.newCollector();
 
+        QueryBuilder postFilterQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
+
+        Query pfQuery = postFilterQuery.toQuery(mockQueryShardContext);
+        ParsedQuery parsedQuery = new ParsedQuery(pfQuery);
+        searchContext.parsedQuery(parsedQuery);
+        when(searchContext.parsedPostFilter()).thenReturn(parsedQuery);
+        when(indexSearcher.rewrite(pfQuery)).thenReturn(pfQuery);
+        Weight postFilterWeight = mock(Weight.class);
+        when(indexSearcher.createWeight(pfQuery, ScoreMode.COMPLETE_NO_SCORES, 1f)).thenReturn(postFilterWeight);
+
+        CollectorManager hybridCollectorManager1 = HybridCollectorManager.createHybridCollectorManager(searchContext);
+        FilteredCollector collector1 = (FilteredCollector) hybridCollectorManager1.newCollector();
+
         Weight weight = new HybridQueryWeight(hybridQueryWithTerm, searcher, ScoreMode.TOP_SCORES, BoostingQueryBuilder.DEFAULT_BOOST);
         collector.setWeight(weight);
+        collector1.setWeight(weight);
         LeafReaderContext leafReaderContext = searcher.getIndexReader().leaves().get(0);
         LeafCollector leafCollector = collector.getLeafCollector(leafReaderContext);
+        LeafCollector leafCollector1 = collector1.getLeafCollector(leafReaderContext);
         BulkScorer scorer = weight.bulkScorer(leafReaderContext);
         scorer.score(leafCollector, leafReaderContext.reader().getLiveDocs());
         leafCollector.finish();
+        scorer.score(leafCollector1, leafReaderContext.reader().getLiveDocs());
+        leafCollector1.finish();
 
         Object results = hybridCollectorManager.reduce(List.of());
+        Object results1 = hybridCollectorManager1.reduce(List.of());
 
         assertNotNull(results);
+        assertNotNull(results1);
         ReduceableSearchResult reduceableSearchResult = ((ReduceableSearchResult) results);
         QuerySearchResult querySearchResult = new QuerySearchResult();
         reduceableSearchResult.reduce(querySearchResult);
