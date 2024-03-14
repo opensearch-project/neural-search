@@ -40,15 +40,13 @@ import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterPars
 public final class TextChunkingProcessor extends AbstractProcessor {
 
     public static final String TYPE = "text_chunking";
-
     public static final String FIELD_MAP_FIELD = "field_map";
-
     public static final String ALGORITHM_FIELD = "algorithm";
-
     @VisibleForTesting
     static final String MAX_CHUNK_LIMIT_FIELD = "max_chunk_limit";
 
     private static final int DEFAULT_MAX_CHUNK_LIMIT = -1;
+    private static final String DEFAULT_ALGORITHM = FixedTokenLengthChunker.ALGORITHM_NAME;
 
     private int maxChunkLimit;
 
@@ -88,29 +86,32 @@ public final class TextChunkingProcessor extends AbstractProcessor {
 
     @SuppressWarnings("unchecked")
     private void validateAndParseAlgorithmMap(final Map<String, Object> algorithmMap) {
-        if (algorithmMap.isEmpty()) {
-            throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "Unable to create %s processor as [%s] does not contain any algorithm", TYPE, ALGORITHM_FIELD)
-            );
-        } else if (algorithmMap.size() > 1) {
+        if (algorithmMap.size() > 1) {
             throw new IllegalArgumentException(
                 String.format(Locale.ROOT, "Unable to create %s processor as [%s] contains multiple algorithms", TYPE, ALGORITHM_FIELD)
             );
         }
 
-        Entry<String, Object> algorithmEntry = algorithmMap.entrySet().iterator().next();
-        String algorithmKey = algorithmEntry.getKey();
-        Object algorithmValue = algorithmEntry.getValue();
-        if (!(algorithmValue instanceof Map)) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "Unable to create %s processor as [%s] parameters cannot be cast to [%s]",
-                    TYPE,
-                    algorithmKey,
-                    Map.class.getName()
-                )
-            );
+        String algorithmKey;
+        Object algorithmValue;
+        if (algorithmMap.isEmpty()) {
+            algorithmKey = DEFAULT_ALGORITHM;
+            algorithmValue = new HashMap<>();
+        } else {
+            Entry<String, Object> algorithmEntry = algorithmMap.entrySet().iterator().next();
+            algorithmKey = algorithmEntry.getKey();
+            algorithmValue = algorithmEntry.getValue();
+            if (!(algorithmValue instanceof Map)) {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "Unable to create %s processor as [%s] parameters cannot be cast to [%s]",
+                        TYPE,
+                        algorithmKey,
+                        Map.class.getName()
+                    )
+                );
+            }
         }
 
         Map<String, Object> chunkerParameters = (Map<String, Object>) algorithmValue;

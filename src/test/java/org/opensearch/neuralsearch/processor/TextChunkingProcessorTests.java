@@ -126,6 +126,16 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
+    private TextChunkingProcessor createDefaultAlgorithmInstance(Map<String, Object> fieldMap) {
+        Map<String, Object> config = new HashMap<>();
+        Map<String, Object> algorithmMap = new HashMap<>();
+        config.put(FIELD_MAP_FIELD, fieldMap);
+        config.put(ALGORITHM_FIELD, algorithmMap);
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        return textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+    }
+
+    @SneakyThrows
     private TextChunkingProcessor createFixedTokenLengthInstance(Map<String, Object> fieldMap) {
         Map<String, Object> config = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
@@ -191,24 +201,6 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         );
         assertEquals(
             String.format(Locale.ROOT, "Parameter [%s] must be positive.", MAX_CHUNK_LIMIT_FIELD),
-            illegalArgumentException.getMessage()
-        );
-    }
-
-    public void testCreate_whenAlgorithmFieldNoAlgorithm_thenFail() {
-        Map<String, Object> config = new HashMap<>();
-        Map<String, Object> fieldMap = new HashMap<>();
-        Map<String, Object> algorithmMap = new HashMap<>();
-        fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
-        config.put(TextChunkingProcessor.FIELD_MAP_FIELD, fieldMap);
-        config.put(ALGORITHM_FIELD, algorithmMap);
-        Map<String, Processor.Factory> registry = new HashMap<>();
-        IllegalArgumentException illegalArgumentException = assertThrows(
-            IllegalArgumentException.class,
-            () -> textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
-        );
-        assertEquals(
-            String.format(Locale.ROOT, "Unable to create %s processor as [%s] does not contain any algorithm", TYPE, ALGORITHM_FIELD),
             illegalArgumentException.getMessage()
         );
     }
@@ -403,7 +395,21 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             ),
             illegalArgumentException.getMessage()
         );
+    }
 
+    @SneakyThrows
+    public void testCreate_withDefaultAlgorithm_andSourceDataString_thenSucceed() {
+        TextChunkingProcessor processor = createDefaultAlgorithmInstance(createStringFieldMap());
+        IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
+        IngestDocument document = processor.execute(ingestDocument);
+        assert document.getSourceAndMetadata().containsKey(OUTPUT_FIELD);
+        Object passages = document.getSourceAndMetadata().get(OUTPUT_FIELD);
+        assert (passages instanceof List<?>);
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add(
+            "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch."
+        );
+        assertEquals(expectedPassages, passages);
     }
 
     @SneakyThrows
