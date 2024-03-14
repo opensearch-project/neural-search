@@ -47,6 +47,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.knn.index.SpaceType;
 import org.opensearch.knn.index.VectorDataType;
 import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
 import org.opensearch.knn.index.query.KNNQuery;
@@ -89,6 +90,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         when(mockKNNVectorField.getDimension()).thenReturn(4);
         when(mockKNNVectorField.getVectorDataType()).thenReturn(VectorDataType.FLOAT);
         when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
+        when(mockKNNVectorField.getSpaceType()).thenReturn(SpaceType.L2);
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
             .queryText(QUERY_TEXT)
@@ -117,6 +119,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         when(mockQueryShardContext.index()).thenReturn(dummyIndex);
         when(mockKNNVectorField.getDimension()).thenReturn(4);
         when(mockKNNVectorField.getVectorDataType()).thenReturn(VectorDataType.FLOAT);
+        when(mockKNNVectorField.getSpaceType()).thenReturn(SpaceType.L2);
         when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
