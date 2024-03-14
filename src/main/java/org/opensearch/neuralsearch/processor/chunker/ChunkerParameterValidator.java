@@ -59,7 +59,11 @@ public class ChunkerParameterValidator {
     /**
      * Validate and parse the parameter for positive integer parameters
      */
-    public static int validatePositiveIntegerParameter(final Map<String, Object> parameters, final String fieldName, final int defaultValue) {
+    public static int validatePositiveIntegerParameter(
+        final Map<String, Object> parameters,
+        final String fieldName,
+        final int defaultValue
+    ) {
         Number fieldValueNumber = validateNumberParameter(parameters, fieldName, defaultValue);
         int fieldValueInt = fieldValueNumber.intValue();
         // sometimes parameter has negative default value, indicating that this parameter is not effective

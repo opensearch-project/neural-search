@@ -28,13 +28,13 @@ public class ChunkerFactoryTests extends OpenSearchTestCase {
     public void testCreate_FixedTokenLength() {
         Chunker chunker = ChunkerFactory.create(FixedTokenLengthChunker.ALGORITHM_NAME, createChunkParameters());
         assertNotNull(chunker);
-        assertTrue(chunker instanceof FixedTokenLengthChunker);
+        assert (chunker instanceof FixedTokenLengthChunker);
     }
 
     public void testCreate_Delimiter() {
         Chunker chunker = ChunkerFactory.create(DelimiterChunker.ALGORITHM_NAME, createChunkParameters());
         assertNotNull(chunker);
-        assertTrue(chunker instanceof DelimiterChunker);
+        assert (chunker instanceof DelimiterChunker);
     }
 
     public void testCreate_Invalid() {

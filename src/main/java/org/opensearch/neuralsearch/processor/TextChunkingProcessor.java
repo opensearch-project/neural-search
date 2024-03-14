@@ -301,7 +301,12 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         return chunkCount;
     }
 
-    private int chunkList(final List<String> contentList, List<String> result, final Map<String, Object> runTimeParameters, int chunkCount) {
+    private int chunkList(
+        final List<String> contentList,
+        List<String> result,
+        final Map<String, Object> runTimeParameters,
+        int chunkCount
+    ) {
         // flatten original output format from List<List<String>> to List<String>
         for (String content : contentList) {
             chunkCount = chunkString(content, result, runTimeParameters, chunkCount);
