@@ -24,9 +24,9 @@ import org.opensearch.indices.IndicesService;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
-import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
 import org.opensearch.neuralsearch.processor.chunker.Chunker;
 import org.opensearch.index.mapper.IndexFieldMapper;
+import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterValidator.validatePositiveIntegerParameter;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseIntegerParameter;
@@ -155,19 +155,18 @@ public final class TextChunkingProcessor extends AbstractProcessor {
      */
     @Override
     public IngestDocument execute(IngestDocument ingestDocument) {
-        validateFieldsValue(ingestDocument);
+        Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
+        validateFieldsValue(sourceAndMetadataMap);
+        // fixed token length algorithm needs runtime parameter max_token_count for tokenization
         int chunkCount = 0;
         Map<String, Object> runtimeParameters = new HashMap<>();
-        Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
-        // fixed token length algorithm needs max_token_count for tokenization
         int maxTokenCount = getMaxTokenCount(sourceAndMetadataMap);
         runtimeParameters.put(FixedTokenLengthChunker.MAX_TOKEN_COUNT_FIELD, maxTokenCount);
         chunkMapType(sourceAndMetadataMap, fieldMap, runtimeParameters, chunkCount);
         return ingestDocument;
     }
 
-    private void validateFieldsValue(final IngestDocument ingestDocument) {
-        Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
+    private void validateFieldsValue(final Map<String, Object> sourceAndMetadataMap) {
         for (Map.Entry<String, Object> embeddingFieldsEntry : fieldMap.entrySet()) {
             Object sourceValue = sourceAndMetadataMap.get(embeddingFieldsEntry.getKey());
             if (sourceValue != null) {
@@ -297,8 +296,8 @@ public final class TextChunkingProcessor extends AbstractProcessor {
 
     @SuppressWarnings("unchecked")
     private int chunkLeafType(final Object value, List<String> result, final Map<String, Object> runTimeParameters, int chunkCount) {
-        // leaf type means either String or List<String>
-        // the result should be an empty list
+        // leaf type means null, String or List<String>
+        // the result should be an empty list when the input is null
         if (value instanceof String) {
             chunkCount = chunkString(value.toString(), result, runTimeParameters, chunkCount);
         } else if (isListOfString(value)) {

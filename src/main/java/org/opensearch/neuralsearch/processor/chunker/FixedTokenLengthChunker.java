@@ -104,7 +104,7 @@ public class FixedTokenLengthChunker implements Chunker {
      * will throw IllegalArgumentException when parameters are invalid
      *
      * @param parameters a map non-runtime parameters as the following:
-     * 1. tokenizer: the <a href="https://opensearch.org/docs/latest/analyzers/tokenizers/index/">analyzer tokenizer</a> in opensearch
+     * 1. tokenizer: the <a href="https://opensearch.org/docs/latest/analyzers/tokenizers/index/">word tokenizer</a> in opensearch
      * 2. token_limit: the token limit for each chunked passage
      * 3. overlap_rate: the overlapping degree for each chunked passage, indicating how many token comes from the previous passage
      */
