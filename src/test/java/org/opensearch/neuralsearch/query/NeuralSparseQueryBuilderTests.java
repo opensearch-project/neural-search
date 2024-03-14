@@ -22,7 +22,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
+import org.junit.Before;
+import org.opensearch.Version;
 import org.opensearch.client.Client;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.SetOnce;
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.common.xcontent.XContentFactory;
@@ -38,6 +41,8 @@ import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.test.OpenSearchTestCase;
 
 import lombok.SneakyThrows;
@@ -50,6 +55,11 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     private static final float BOOST = 1.8f;
     private static final String QUERY_NAME = "queryName";
     private static final Supplier<Map<String, Float>> QUERY_TOKENS_SUPPLIER = () -> Map.of("hello", 1.f, "world", 2.f);
+
+    @Before
+    public void setupClusterServiceToCurrentVersion() {
+        setUpClusterService(Version.CURRENT);
+    }
 
     @SneakyThrows
     public void testFromXContent_whenBuiltWithQueryText_thenBuildSuccessfully() {
@@ -162,7 +172,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testFromXContent_whenBuildWithMissingModelId_thenFail() {
+    public void testFromXContent_whenBuildWithMissingModelIdInCurrentVersion_thenSuccess() {
         /*
           {
               "VECTOR_FIELD": {
@@ -170,6 +180,30 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
               }
           }
         */
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = NeuralSparseQueryBuilder.fromXContent(contentParser);
+
+        assertNull(sparseEncodingQueryBuilder.modelId());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuildWithMissingModelIdInOldVersion_thenFail() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": "string"
+              }
+          }
+        */
+        setUpClusterService(Version.V_2_12_0);
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject(FIELD_NAME)
@@ -239,6 +273,11 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
 
         assertEquals(MODEL_ID, secondInnerMap.get(MODEL_ID_FIELD.getPreferredName()));
         assertEquals(QUERY_TEXT, secondInnerMap.get(QUERY_TEXT_FIELD.getPreferredName()));
+    }
+
+    public void testStreams_whenMinVersionIsBeforeDefaultModelId_thenSuccess() {
+        setUpClusterService(Version.V_2_12_0);
+        testStreams();
     }
 
     @SneakyThrows
@@ -436,10 +475,15 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .modelId(MODEL_ID)
             .queryTokensSupplier(QUERY_TOKENS_SUPPLIER);
         QueryBuilder queryBuilder = sparseEncodingQueryBuilder.doRewrite(null);
-        assertTrue(queryBuilder == sparseEncodingQueryBuilder);
+        assertSame(queryBuilder, sparseEncodingQueryBuilder);
 
         sparseEncodingQueryBuilder.queryTokensSupplier(() -> null);
         queryBuilder = sparseEncodingQueryBuilder.doRewrite(null);
-        assertTrue(queryBuilder == sparseEncodingQueryBuilder);
+        assertSame(queryBuilder, sparseEncodingQueryBuilder);
+    }
+
+    private void setUpClusterService(Version version) {
+        ClusterService clusterService = NeuralSearchClusterTestUtils.mockClusterService(version);
+        NeuralSearchClusterUtil.instance().initialize(clusterService);
     }
 }
