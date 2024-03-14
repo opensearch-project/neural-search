@@ -15,9 +15,12 @@ import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
 import org.opensearch.action.admin.indices.analyze.AnalyzeAction.AnalyzeToken;
 import static org.opensearch.action.admin.indices.analyze.TransportAnalyzeAction.analyze;
-import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterValidator.validateRangeDoubleParameter;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseStringParameter;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseDoubleParameter;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseIntegerParameter;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterValidator.validateStringParameter;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterValidator.validatePositiveIntegerParameter;
-import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterValidator.validateStringParameters;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterValidator.validateDoubleParameterWithinRange;
 
 /**
  * The implementation {@link Chunker} for fixed token length algorithm.
@@ -59,46 +62,57 @@ public class FixedTokenLengthChunker implements Chunker {
     private final AnalysisRegistry analysisRegistry;
 
     public FixedTokenLengthChunker(final Map<String, Object> parameters) {
-        validateAndParseParameters(parameters);
+        validateParameters(parameters);
+        parseParameters(parameters);
         this.analysisRegistry = (AnalysisRegistry) parameters.get(ANALYSIS_REGISTRY_FIELD);
     }
 
     /**
-     * Validate and parse the parameters for fixed token length algorithm,
+     * Validate the parameters for fixed token length algorithm,
      * will throw IllegalArgumentException when parameters are invalid
      *
-     * @param parameters a map containing parameters, containing the following parameters:
+     * @param parameters a map containing non-runtime parameters as the following:
      * 1. tokenizer: the <a href="https://opensearch.org/docs/latest/analyzers/tokenizers/index/">analyzer tokenizer</a> in opensearch
      * 2. token_limit: the token limit for each chunked passage
      * 3. overlap_rate: the overlapping degree for each chunked passage, indicating how many token comes from the previous passage
-     * 4. max_token_count: the max token limit for the tokenizer
      * Here are requirements for parameters:
      * max_token_count and token_limit should be a positive integer
      * overlap_rate should be within range [0, 0.5]
      * tokenizer should be string
      */
     @Override
-    public void validateAndParseParameters(final Map<String, Object> parameters) {
-        this.tokenLimit = validatePositiveIntegerParameter(parameters, TOKEN_LIMIT_FIELD, DEFAULT_TOKEN_LIMIT);
-        this.overlapRate = validateRangeDoubleParameter(
-            parameters,
-            OVERLAP_RATE_FIELD,
-            OVERLAP_RATE_LOWER_BOUND,
-            OVERLAP_RATE_UPPER_BOUND,
-            DEFAULT_OVERLAP_RATE
-        );
-        this.tokenizer = validateStringParameters(parameters, TOKENIZER_FIELD, DEFAULT_TOKENIZER, false);
-        if (!WORD_TOKENIZERS.contains(this.tokenizer)) {
+    public void validateParameters(Map<String, Object> parameters) {
+        validatePositiveIntegerParameter(parameters, TOKEN_LIMIT_FIELD, DEFAULT_TOKEN_LIMIT);
+        validateDoubleParameterWithinRange(parameters, OVERLAP_RATE_FIELD, OVERLAP_RATE_LOWER_BOUND, OVERLAP_RATE_UPPER_BOUND);
+        validateStringParameter(parameters, TOKENIZER_FIELD, false);
+        String tokenizer = parseStringParameter(parameters, TOKENIZER_FIELD, DEFAULT_TOKENIZER);
+        if (!WORD_TOKENIZERS.contains(tokenizer)) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
                     "tokenizer [%s] is not supported for [%s] algorithm. Supported tokenizers are %s",
-                    this.tokenizer,
+                    tokenizer,
                     ALGORITHM_NAME,
                     WORD_TOKENIZERS
                 )
             );
         }
+    }
+
+    /**
+     * Parse the parameters for fixed token length algorithm,
+     * will throw IllegalArgumentException when parameters are invalid
+     *
+     * @param parameters a map non-runtime parameters as the following:
+     * 1. tokenizer: the <a href="https://opensearch.org/docs/latest/analyzers/tokenizers/index/">analyzer tokenizer</a> in opensearch
+     * 2. token_limit: the token limit for each chunked passage
+     * 3. overlap_rate: the overlapping degree for each chunked passage, indicating how many token comes from the previous passage
+     */
+    @Override
+    public void parseParameters(Map<String, Object> parameters) {
+        this.tokenLimit = parseIntegerParameter(parameters, TOKEN_LIMIT_FIELD, DEFAULT_TOKEN_LIMIT);
+        this.overlapRate = parseDoubleParameter(parameters, OVERLAP_RATE_FIELD, DEFAULT_OVERLAP_RATE);
+        this.tokenizer = parseStringParameter(parameters, TOKENIZER_FIELD, DEFAULT_TOKENIZER);
     }
 
     /**
@@ -111,7 +125,8 @@ public class FixedTokenLengthChunker implements Chunker {
     @Override
     public List<String> chunk(final String content, final Map<String, Object> runtimeParameters) {
         // before chunking, validate and parse runtimeParameters
-        int maxTokenCount = validatePositiveIntegerParameter(runtimeParameters, MAX_TOKEN_COUNT_FIELD, DEFAULT_MAX_TOKEN_COUNT);
+        validatePositiveIntegerParameter(runtimeParameters, MAX_TOKEN_COUNT_FIELD, DEFAULT_MAX_TOKEN_COUNT);
+        int maxTokenCount = parseIntegerParameter(runtimeParameters, MAX_TOKEN_COUNT_FIELD, DEFAULT_MAX_TOKEN_COUNT);
 
         List<AnalyzeToken> tokens = tokenize(content, tokenizer, maxTokenCount);
         List<String> chunkResult = new ArrayList<>();

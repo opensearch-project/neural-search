@@ -63,7 +63,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
     }
 
     public void testValidateAndParseParameters_whenNoParams_thenSuccessful() {
-        fixedTokenLengthChunker.validateAndParseParameters(Map.of());
+        fixedTokenLengthChunker.validateParameters(Map.of());
     }
 
     public void testValidateAndParseParameters_whenIllegalTokenLimitType_thenFail() {
@@ -71,7 +71,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         parameters.put(TOKEN_LIMIT_FIELD, "invalid token limit");
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
+            () -> fixedTokenLengthChunker.validateParameters(parameters)
         );
         assertEquals(
             String.format(Locale.ROOT, "Parameter [%s] cannot be cast to [%s]", TOKEN_LIMIT_FIELD, Number.class.getName()),
@@ -84,7 +84,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         parameters.put(TOKEN_LIMIT_FIELD, -1);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
+            () -> fixedTokenLengthChunker.validateParameters(parameters)
         );
         assertEquals(
             String.format(Locale.ROOT, "Parameter [%s] must be positive.", TOKEN_LIMIT_FIELD),
@@ -97,7 +97,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         parameters.put(OVERLAP_RATE_FIELD, "invalid overlap rate");
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
+            () -> fixedTokenLengthChunker.validateParameters(parameters)
         );
         assertEquals(
             String.format(Locale.ROOT, "Parameter [%s] cannot be cast to [%s]", OVERLAP_RATE_FIELD, Number.class.getName()),
@@ -110,7 +110,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         parameters.put(OVERLAP_RATE_FIELD, 0.6);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
+            () -> fixedTokenLengthChunker.validateParameters(parameters)
         );
         assertEquals(
             String.format(Locale.ROOT, "Parameter [%s] must be between %s and %s", OVERLAP_RATE_FIELD, 0.0, 0.5),
@@ -123,7 +123,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         parameters.put(TOKENIZER_FIELD, 111);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
+            () -> fixedTokenLengthChunker.validateParameters(parameters)
         );
         assertEquals(
             String.format(Locale.ROOT, "Parameter [%s] cannot be cast to [%s]", TOKENIZER_FIELD, String.class.getName()),
@@ -133,11 +133,10 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
 
     public void testValidateAndParseParameters_whenUnsupportedTokenizer_thenFail() {
         String ngramTokenizer = "ngram";
-        Map<String, Object> parameters = new HashMap<>();
-        parameters.put(TOKENIZER_FIELD, "ngram");
+        Map<String, Object> parameters = Map.of(TOKENIZER_FIELD, ngramTokenizer);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.validateAndParseParameters(parameters)
+            () -> fixedTokenLengthChunker.validateParameters(parameters)
         );
         assert (illegalArgumentException.getMessage()
             .contains(String.format(Locale.ROOT, "tokenizer [%s] is not supported for [%s] algorithm.", ngramTokenizer, ALGORITHM_NAME)));

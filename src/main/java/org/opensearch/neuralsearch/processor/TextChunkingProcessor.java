@@ -27,8 +27,9 @@ import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
 import org.opensearch.neuralsearch.processor.chunker.Chunker;
 import org.opensearch.index.mapper.IndexFieldMapper;
-import org.opensearch.neuralsearch.processor.chunker.ChunkerParameterValidator;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterValidator.validatePositiveIntegerParameter;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseIntegerParameter;
 
 /**
  * This processor is used for user input data text chunking.
@@ -116,11 +117,8 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         // fixed token length algorithm needs analysis registry for tokenization
         chunkerParameters.put(FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD, analysisRegistry);
         this.chunker = ChunkerFactory.create(algorithmKey, chunkerParameters);
-        this.maxChunkLimit = ChunkerParameterValidator.validatePositiveIntegerParameter(
-            chunkerParameters,
-            MAX_CHUNK_LIMIT_FIELD,
-            DEFAULT_MAX_CHUNK_LIMIT
-        );
+        validatePositiveIntegerParameter(chunkerParameters, MAX_CHUNK_LIMIT_FIELD, DEFAULT_MAX_CHUNK_LIMIT);
+        this.maxChunkLimit = parseIntegerParameter(chunkerParameters, MAX_CHUNK_LIMIT_FIELD, DEFAULT_MAX_CHUNK_LIMIT);
     }
 
     @SuppressWarnings("unchecked")
