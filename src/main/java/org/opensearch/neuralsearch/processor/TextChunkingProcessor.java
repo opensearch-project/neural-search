@@ -113,10 +113,8 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         }
 
         Map<String, Object> chunkerParameters = (Map<String, Object>) algorithmValue;
-        if (Objects.equals(algorithmKey, FixedTokenLengthChunker.ALGORITHM_NAME)) {
-            // fixed token length algorithm needs analysis registry for tokenization
-            chunkerParameters.put(FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD, analysisRegistry);
-        }
+        // fixed token length algorithm needs analysis registry for tokenization
+        chunkerParameters.put(FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD, analysisRegistry);
         this.chunker = ChunkerFactory.create(algorithmKey, chunkerParameters);
         this.maxChunkLimit = ChunkerParameterValidator.validatePositiveIntegerParameter(
             chunkerParameters,
