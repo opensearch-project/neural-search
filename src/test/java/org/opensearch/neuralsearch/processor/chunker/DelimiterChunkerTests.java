@@ -21,7 +21,7 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
             () -> new DelimiterChunker(Map.of(DELIMITER_FIELD, List.of("")))
         );
         Assert.assertEquals(
-            String.format(Locale.ROOT, "Parameter [%s] cannot be cast to [%s]", DELIMITER_FIELD, String.class.getName()),
+            String.format(Locale.ROOT, "Parameter [%s] must be of %s type", DELIMITER_FIELD, String.class.getName()),
             exception.getMessage()
         );
     }

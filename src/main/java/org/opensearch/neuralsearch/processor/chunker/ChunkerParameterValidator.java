@@ -26,7 +26,7 @@ public class ChunkerParameterValidator {
         Object fieldValue = parameters.get(fieldName);
         if (!(fieldValue instanceof String)) {
             throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "Parameter [%s] cannot be cast to [%s]", fieldName, String.class.getName())
+                String.format(Locale.ROOT, "Parameter [%s] must be of %s type", fieldName, String.class.getName())
             );
         }
         if (!allowEmpty && StringUtils.isEmpty(fieldValue.toString())) {
@@ -49,7 +49,7 @@ public class ChunkerParameterValidator {
         String fieldValueString = parameters.get(fieldName).toString();
         if (!(NumberUtils.isParsable(fieldValueString))) {
             throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "Parameter [%s] cannot be cast to [%s]", fieldName, Number.class.getName())
+                String.format(Locale.ROOT, "Parameter [%s] must be of %s type", fieldName, Number.class.getName())
             );
         }
         int fieldValueInt = NumberUtils.createInteger(fieldValueString);
@@ -75,7 +75,7 @@ public class ChunkerParameterValidator {
         String fieldValueString = parameters.get(fieldName).toString();
         if (!(NumberUtils.isParsable(fieldValueString))) {
             throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "Parameter [%s] cannot be cast to [%s]", fieldName, Number.class.getName())
+                String.format(Locale.ROOT, "Parameter [%s] must be of %s type", fieldName, Number.class.getName())
             );
         }
         double fieldValueDouble = NumberUtils.createDouble(fieldValueString);

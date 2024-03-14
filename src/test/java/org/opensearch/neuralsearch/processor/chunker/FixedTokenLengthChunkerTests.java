@@ -74,7 +74,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             () -> fixedTokenLengthChunker.validateParameters(parameters)
         );
         assertEquals(
-            String.format(Locale.ROOT, "Parameter [%s] cannot be cast to [%s]", TOKEN_LIMIT_FIELD, Number.class.getName()),
+            String.format(Locale.ROOT, "Parameter [%s] must be of %s type", TOKEN_LIMIT_FIELD, Number.class.getName()),
             illegalArgumentException.getMessage()
         );
     }
@@ -100,7 +100,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             () -> fixedTokenLengthChunker.validateParameters(parameters)
         );
         assertEquals(
-            String.format(Locale.ROOT, "Parameter [%s] cannot be cast to [%s]", OVERLAP_RATE_FIELD, Number.class.getName()),
+            String.format(Locale.ROOT, "Parameter [%s] must be of %s type", OVERLAP_RATE_FIELD, Number.class.getName()),
             illegalArgumentException.getMessage()
         );
     }
@@ -126,7 +126,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             () -> fixedTokenLengthChunker.validateParameters(parameters)
         );
         assertEquals(
-            String.format(Locale.ROOT, "Parameter [%s] cannot be cast to [%s]", TOKENIZER_FIELD, String.class.getName()),
+            String.format(Locale.ROOT, "Parameter [%s] must be of %s type", TOKENIZER_FIELD, String.class.getName()),
             illegalArgumentException.getMessage()
         );
     }
