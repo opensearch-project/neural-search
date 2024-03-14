@@ -23,14 +23,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
-<<<<<<< HEAD
 import org.apache.lucene.document.FeatureField;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
-=======
 import org.junit.Before;
 import org.opensearch.Version;
->>>>>>> e41fba7 ([FEATURE] support default model id in neural_sparse query (#614))
 import org.opensearch.client.Client;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.SetOnce;

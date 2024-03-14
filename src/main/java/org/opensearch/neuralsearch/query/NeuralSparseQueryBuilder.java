@@ -91,16 +91,12 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         super(in);
         this.fieldName = in.readString();
         this.queryText = in.readString();
-<<<<<<< HEAD
-        this.modelId = in.readString();
-        this.maxTokenScore = in.readOptionalFloat();
-=======
         if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
             this.modelId = in.readOptionalString();
         } else {
             this.modelId = in.readString();
         }
->>>>>>> e41fba7 ([FEATURE] support default model id in neural_sparse query (#614))
+        this.maxTokenScore = in.readOptionalFloat();
         if (in.readBoolean()) {
             Map<String, Float> queryTokens = in.readMap(StreamInput::readString, StreamInput::readFloat);
             this.queryTokensSupplier = () -> queryTokens;
@@ -111,18 +107,13 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     protected void doWriteTo(StreamOutput out) throws IOException {
         out.writeString(fieldName);
         out.writeString(queryText);
-<<<<<<< HEAD
-        out.writeString(modelId);
-        out.writeOptionalFloat(maxTokenScore);
-        if (queryTokensSupplier != null && queryTokensSupplier.get() != null) {
-=======
         if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
             out.writeOptionalString(this.modelId);
         } else {
             out.writeString(this.modelId);
         }
+        out.writeOptionalFloat(maxTokenScore);
         if (!Objects.isNull(queryTokensSupplier) && !Objects.isNull(queryTokensSupplier.get())) {
->>>>>>> e41fba7 ([FEATURE] support default model id in neural_sparse query (#614))
             out.writeBoolean(true);
             out.writeMap(queryTokensSupplier.get(), StreamOutput::writeString, StreamOutput::writeFloat);
         } else {
@@ -135,14 +126,10 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         xContentBuilder.startObject(NAME);
         xContentBuilder.startObject(fieldName);
         xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
-<<<<<<< HEAD
-        xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
-        if (maxTokenScore != null) xContentBuilder.field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), maxTokenScore);
-=======
         if (Objects.nonNull(modelId)) {
             xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
         }
->>>>>>> e41fba7 ([FEATURE] support default model id in neural_sparse query (#614))
+        if (maxTokenScore != null) xContentBuilder.field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), maxTokenScore);
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
         xContentBuilder.endObject();
