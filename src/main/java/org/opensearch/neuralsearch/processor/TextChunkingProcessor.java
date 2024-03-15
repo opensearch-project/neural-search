@@ -278,7 +278,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
                     );
                 }
             } else {
-                // chunk the object when target key is a string
+                // chunk the object when target key is of leaf type (null, string and list of string)
                 Object chunkObject = sourceAndMetadataMap.get(originalKey);
                 List<String> chunkedResult = new ArrayList<>();
                 updatedChunkCount = chunkLeafType(chunkObject, chunkedResult, runtimeParameters, updatedChunkCount);
