@@ -611,6 +611,17 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
+    public void testExecute_withFixedTokenLength_andSourceDataNull_thenSucceed() {
+        TextChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
+        IngestDocument ingestDocument = createIngestDocumentWithSourceData(null);
+        IngestDocument document = processor.execute(ingestDocument);
+        assert document.getSourceAndMetadata().containsKey(INPUT_FIELD);
+        Object listResult = document.getSourceAndMetadata().get(OUTPUT_FIELD);
+        assert (listResult instanceof List);
+        assertEquals(((List<?>) listResult).size(), 0);
+    }
+
+    @SneakyThrows
     public void testExecute_withDelimiter_andSourceDataString_thenSucceed() {
         TextChunkingProcessor processor = createDelimiterInstance();
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
