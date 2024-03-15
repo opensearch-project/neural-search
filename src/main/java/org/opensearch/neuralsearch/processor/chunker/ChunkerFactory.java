@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.processor.chunker;
 
 import com.google.common.collect.ImmutableMap;
-import lombok.Getter;
 
 import java.util.Map;
 import java.util.Objects;
@@ -19,18 +18,17 @@ public final class ChunkerFactory {
 
     private ChunkerFactory() {} // no instance of this factory class
 
-    private static final Map<String, Function<Map<String, Object>, Chunker>> chunkerConstructors = ImmutableMap.of(
+    private static final Map<String, Function<Map<String, Object>, Chunker>> CHUNKERS_CONSTRUCTORS = ImmutableMap.of(
         FixedTokenLengthChunker.ALGORITHM_NAME,
         FixedTokenLengthChunker::new,
         DelimiterChunker.ALGORITHM_NAME,
         DelimiterChunker::new
     );
 
-    @Getter
-    public static Set<String> allChunkerAlgorithms = chunkerConstructors.keySet();
+    public static Set<String> CHUNKER_ALGORITHMS = CHUNKERS_CONSTRUCTORS.keySet();
 
     public static Chunker create(final String type, final Map<String, Object> parameters) {
-        Function<Map<String, Object>, Chunker> chunkerConstructionFunction = chunkerConstructors.get(type);
+        Function<Map<String, Object>, Chunker> chunkerConstructionFunction = CHUNKERS_CONSTRUCTORS.get(type);
         // chunkerConstructionFunction is not null because we have validated the type in text chunking processor
         Objects.requireNonNull(chunkerConstructionFunction);
         return chunkerConstructionFunction.apply(parameters);

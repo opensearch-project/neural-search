@@ -11,7 +11,6 @@ import java.util.Locale;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -116,14 +115,13 @@ public final class TextChunkingProcessor extends AbstractProcessor {
             }
         }
 
-        Set<String> allChunkerAlgorithms = ChunkerFactory.allChunkerAlgorithms;
-        if (!allChunkerAlgorithms.contains(algorithmKey)) {
+        if (!ChunkerFactory.CHUNKER_ALGORITHMS.contains(algorithmKey)) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
                     "Chunking algorithm [%s] is not supported. Supported chunking algorithms are %s",
                     algorithmKey,
-                    allChunkerAlgorithms
+                    ChunkerFactory.CHUNKER_ALGORITHMS
                 )
             );
         }
