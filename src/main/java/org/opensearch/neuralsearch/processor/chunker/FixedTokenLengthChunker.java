@@ -66,11 +66,11 @@ public final class FixedTokenLengthChunker implements Chunker {
      * Parse the parameters for fixed token length algorithm.
      * Throw IllegalArgumentException when parameters are invalid.
      *
-     * @param parameters a map non-runtime parameters as the following:
+     * @param parameters a map with non-runtime parameters as the following:
      * 1. tokenizer: the <a href="https://opensearch.org/docs/latest/analyzers/tokenizers/index/">word tokenizer</a> in opensearch
      * 2. token_limit: the token limit for each chunked passage
      * 3. overlap_rate: the overlapping degree for each chunked passage, indicating how many token comes from the previous passage
-     * Here are requirements for parameters:
+     * Here are requirements for non-runtime parameters:
      * 1. token_limit must be a positive integer
      * 2. overlap_rate must be within range [0, 0.5]
      * 3. tokenizer must be a word tokenizer

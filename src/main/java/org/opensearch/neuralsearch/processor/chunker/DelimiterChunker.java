@@ -27,9 +27,9 @@ public final class DelimiterChunker implements Chunker {
 
     /**
      * Parse the parameters for delimiter algorithm.
-     * Throw IllegalArgumentException if delimiter is not a string or empty.
+     * Throw IllegalArgumentException if delimiter is not a string or an empty string.
      *
-     * @param parameters a map containing parameters, containing the following parameters
+     * @param parameters a map with non-runtime parameters as the following:
      * 1. delimiter A string as the paragraph split indicator
      */
     @Override
@@ -38,7 +38,7 @@ public final class DelimiterChunker implements Chunker {
     }
 
     /**
-     * Return the chunked passages for fixed token length algorithm
+     * Return the chunked passages for delimiter algorithm
      *
      * @param content input string
      * @param runtimeParameters a map for runtime parameters, but not needed by delimiter algorithm

@@ -12,7 +12,7 @@ import java.util.Set;
 import java.util.function.Function;
 
 /**
- * A factory to create different chunking algorithm objects and return all supported chunking algorithms.
+ * A factory to create different chunking algorithm objects.
  */
 public final class ChunkerFactory {
 

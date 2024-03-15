@@ -51,16 +51,11 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     private static final String DEFAULT_ALGORITHM = FixedTokenLengthChunker.ALGORITHM_NAME;
 
     private int maxChunkLimit;
-
     private Chunker chunker;
     private final Map<String, Object> fieldMap;
-
     private final ClusterService clusterService;
-
     private final IndicesService indicesService;
-
     private final AnalysisRegistry analysisRegistry;
-
     private final Environment environment;
 
     public TextChunkingProcessor(

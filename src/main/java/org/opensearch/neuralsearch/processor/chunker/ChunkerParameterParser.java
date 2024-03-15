@@ -19,8 +19,8 @@ public final class ChunkerParameterParser {
     private ChunkerParameterParser() {} // no instance of this util class
 
     /**
-     * Parse string type parameter.
-     * Throw IllegalArgumentException if parameter is not a string or empty.
+     * Parse String type parameter.
+     * Throw IllegalArgumentException if parameter is not a string or an empty string.
      */
     public static String parseStringParameter(final Map<String, Object> parameters, final String fieldName, final String defaultValue) {
         if (!parameters.containsKey(fieldName)) {
@@ -40,7 +40,7 @@ public final class ChunkerParameterParser {
     }
 
     /**
-     * Parse Integer type parameter.
+     * Parse integer type parameter.
      * Throw IllegalArgumentException if parameter is not an integer.
      */
     public static int parseIntegerParameter(final Map<String, Object> parameters, final String fieldName, final int defaultValue) {
@@ -59,7 +59,7 @@ public final class ChunkerParameterParser {
     }
 
     /**
-     * Parse Integer type parameter with positive value.
+     * Parse integer type parameter with positive value.
      * Throw IllegalArgumentException if parameter is not a positive integer.
      */
     public static int parsePositiveIntegerParameter(final Map<String, Object> parameters, final String fieldName, final int defaultValue) {
