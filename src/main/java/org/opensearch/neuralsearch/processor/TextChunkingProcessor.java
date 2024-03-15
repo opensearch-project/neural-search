@@ -153,15 +153,12 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     private int getMaxTokenCount(final Map<String, Object> sourceAndMetadataMap) {
         String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
         IndexMetadata indexMetadata = clusterService.state().metadata().index(indexName);
-        int maxTokenCount;
-        if (Objects.nonNull(indexMetadata)) {
-            // if the index is specified in the metadata, read maxTokenCount from the index setting
-            IndexService indexService = indicesService.indexServiceSafe(indexMetadata.getIndex());
-            maxTokenCount = indexService.getIndexSettings().getMaxTokenCount();
-        } else {
-            maxTokenCount = IndexSettings.MAX_TOKEN_COUNT_SETTING.get(environment.settings());
+        if (Objects.isNull(indexMetadata)) {
+            return IndexSettings.MAX_TOKEN_COUNT_SETTING.get(environment.settings());
         }
-        return maxTokenCount;
+        // if the index is specified in the metadata, read maxTokenCount from the index setting
+        IndexService indexService = indicesService.indexServiceSafe(indexMetadata.getIndex());
+        return indexService.getIndexSettings().getMaxTokenCount();
     }
 
     /**
