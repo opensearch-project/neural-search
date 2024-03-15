@@ -38,23 +38,30 @@ public class ChunkerParameterParser {
     }
 
     /**
-     * Parse Integer type parameter with positive value.
-     * Throw IllegalArgumentException if parameter is not a positive integer.
+     * Parse Integer type parameter.
+     * Throw IllegalArgumentException if parameter is not an integer.
      */
-    public static int parsePositiveIntegerParameter(final Map<String, Object> parameters, final String fieldName, final int defaultValue) {
+    public static int parseIntegerParameter(final Map<String, Object> parameters, final String fieldName, final int defaultValue) {
         if (!parameters.containsKey(fieldName)) {
-            // all chunking algorithm parameters are optional
+            // all integer parameters are optional
             return defaultValue;
         }
-        int fieldValueInt;
         String fieldValueString = parameters.get(fieldName).toString();
         try {
-            fieldValueInt = NumberUtils.createInteger(fieldValueString);
+            return NumberUtils.createInteger(fieldValueString);
         } catch (Exception e) {
             throw new IllegalArgumentException(
                 String.format(Locale.ROOT, "Parameter [%s] must be of %s type", fieldName, Integer.class.getName())
             );
         }
+    }
+
+    /**
+     * Parse Integer type parameter with positive value.
+     * Throw IllegalArgumentException if parameter is not a positive integer.
+     */
+    public static int parsePositiveIntegerParameter(final Map<String, Object> parameters, final String fieldName, final int defaultValue) {
+        int fieldValueInt = parseIntegerParameter(parameters, fieldName, defaultValue);
         if (fieldValueInt <= 0) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "Parameter [%s] must be positive.", fieldName));
         }

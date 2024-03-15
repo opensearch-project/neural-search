@@ -29,7 +29,8 @@ import org.opensearch.neuralsearch.processor.chunker.Chunker;
 import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
-import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parsePositiveIntegerParameter;
+
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseIntegerParameter;
 
 /**
  * This processor is used for user input data text chunking.
@@ -47,6 +48,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     static final String MAX_CHUNK_LIMIT_FIELD = "max_chunk_limit";
 
     private static final int DEFAULT_MAX_CHUNK_LIMIT = 100;
+    private static final int DISABLED_MAX_CHUNK_LIMIT = -1;
     private static final String DEFAULT_ALGORITHM = FixedTokenLengthChunker.ALGORITHM_NAME;
 
     private int maxChunkLimit;
@@ -131,7 +133,17 @@ public final class TextChunkingProcessor extends AbstractProcessor {
             chunkerParameters.put(FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD, analysisRegistry);
         }
         this.chunker = ChunkerFactory.create(algorithmKey, chunkerParameters);
-        this.maxChunkLimit = parsePositiveIntegerParameter(chunkerParameters, MAX_CHUNK_LIMIT_FIELD, DEFAULT_MAX_CHUNK_LIMIT);
+        this.maxChunkLimit = parseIntegerParameter(chunkerParameters, MAX_CHUNK_LIMIT_FIELD, DEFAULT_MAX_CHUNK_LIMIT);
+        if (maxChunkLimit <= 0 && maxChunkLimit != DISABLED_MAX_CHUNK_LIMIT) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "Parameter [%s] must be positive or %s to disable this parameter",
+                    MAX_CHUNK_LIMIT_FIELD,
+                    DISABLED_MAX_CHUNK_LIMIT
+                )
+            );
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -283,13 +295,14 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         int updatedChunkCount = chunkCount;
         List<String> contentResult = chunker.chunk(content, runTimeParameters);
         updatedChunkCount += contentResult.size();
-        if (updatedChunkCount > maxChunkLimit) {
-            throw new IllegalArgumentException(
+        if (updatedChunkCount > maxChunkLimit && maxChunkLimit != DISABLED_MAX_CHUNK_LIMIT) {
+            throw new IllegalStateException(
                 String.format(
                     Locale.ROOT,
-                    "Unable to chunk the document as the number of chunks [%s] exceeds the maximum chunk limit [%s]",
-                    updatedChunkCount,
-                    maxChunkLimit
+                    "The number of chunks produced by %s processor has exceeded the allowed maximum of [%s]. This limit can be set by changing the [%s] parameter.",
+                    TYPE,
+                    maxChunkLimit,
+                    MAX_CHUNK_LIMIT_FIELD
                 )
             );
         }

@@ -201,10 +201,21 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             IllegalArgumentException.class,
             () -> textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
         );
-        assertEquals(
-            String.format(Locale.ROOT, "Parameter [%s] must be positive.", MAX_CHUNK_LIMIT_FIELD),
-            illegalArgumentException.getMessage()
-        );
+        assert (illegalArgumentException.getMessage()
+            .contains(String.format(Locale.ROOT, "Parameter [%s] must be positive", MAX_CHUNK_LIMIT_FIELD)));
+    }
+
+    @SneakyThrows
+    public void testCreate_whenMaxChunkNumDisabledValue_thenSucceed() {
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        Map<String, Object> fieldMap = new HashMap<>();
+        Map<String, Object> algorithmMap = new HashMap<>();
+        fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
+        algorithmMap.put(FixedTokenLengthChunker.ALGORITHM_NAME, createFixedTokenLengthParametersWithMaxChunk(-1));
+        config.put(FIELD_MAP_FIELD, fieldMap);
+        config.put(ALGORITHM_FIELD, algorithmMap);
+        textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
     }
 
     public void testCreate_whenAlgorithmFieldMultipleAlgorithm_thenFail() {
@@ -380,22 +391,35 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testExecute_withFixedTokenLength_andSourceDataStringWithMaxChunkNumExceed_thenFail() {
-        TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkNum(createStringFieldMap(), 1);
+    public void testExecute_withFixedTokenLength_andSourceDataStringWithMaxChunkNumDisabled_thenFail() {
+        TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkNum(createStringFieldMap(), -1);
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
-        IllegalArgumentException illegalArgumentException = assertThrows(
-            IllegalArgumentException.class,
-            () -> processor.execute(ingestDocument)
-        );
-        assertEquals(
-            String.format(
-                Locale.ROOT,
-                "Unable to chunk the document as the number of chunks [%s] exceeds the maximum chunk limit [%s]",
-                3,
-                1
-            ),
-            illegalArgumentException.getMessage()
-        );
+        IngestDocument document = processor.execute(ingestDocument);
+        assert document.getSourceAndMetadata().containsKey(OUTPUT_FIELD);
+        Object passages = document.getSourceAndMetadata().get(OUTPUT_FIELD);
+        assert (passages instanceof List<?>);
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked. The document ");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by ");
+        expectedPassages.add("standard tokenizer in OpenSearch.");
+        assertEquals(expectedPassages, passages);
+    }
+
+    @SneakyThrows
+    public void testExecute_withFixedTokenLength_andSourceDataStringWithMaxChunkNumExceed_thenFail() {
+        int maxChunkLimit = 1;
+        TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkNum(createStringFieldMap(), maxChunkLimit);
+        IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
+        IllegalStateException illegalStateException = assertThrows(IllegalStateException.class, () -> processor.execute(ingestDocument));
+        assert (illegalStateException.getMessage()
+            .contains(
+                String.format(
+                    Locale.ROOT,
+                    "The number of chunks produced by %s processor has exceeded the allowed maximum of [%s].",
+                    TYPE,
+                    maxChunkLimit
+                )
+            ));
     }
 
     @SneakyThrows
