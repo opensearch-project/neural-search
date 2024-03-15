@@ -103,10 +103,10 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         return List.of(documents, documents);
     }
 
-    private Map<String, Object> createFixedTokenLengthParametersWithMaxChunk(int maxChunkNum) {
+    private Map<String, Object> createFixedTokenLengthParametersWithMaxChunkLimit(int maxChunkLimit) {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(FixedTokenLengthChunker.TOKEN_LIMIT_FIELD, 10);
-        parameters.put(MAX_CHUNK_LIMIT_FIELD, maxChunkNum);
+        parameters.put(MAX_CHUNK_LIMIT_FIELD, maxChunkLimit);
         return parameters;
     }
 
@@ -150,10 +150,10 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    private TextChunkingProcessor createFixedTokenLengthInstanceWithMaxChunkNum(Map<String, Object> fieldMap, int maxChunkNum) {
+    private TextChunkingProcessor createFixedTokenLengthInstanceWithMaxChunkLimit(Map<String, Object> fieldMap, int maxChunkLimit) {
         Map<String, Object> config = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
-        algorithmMap.put(FixedTokenLengthChunker.ALGORITHM_NAME, createFixedTokenLengthParametersWithMaxChunk(maxChunkNum));
+        algorithmMap.put(FixedTokenLengthChunker.ALGORITHM_NAME, createFixedTokenLengthParametersWithMaxChunkLimit(maxChunkLimit));
         config.put(FIELD_MAP_FIELD, fieldMap);
         config.put(ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
@@ -189,13 +189,13 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testCreate_whenMaxChunkNumInvalidValue_thenFail() {
+    public void testCreate_whenMaxChunkLimitInvalidValue_thenFail() {
         Map<String, Processor.Factory> registry = new HashMap<>();
         Map<String, Object> config = new HashMap<>();
         Map<String, Object> fieldMap = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
         fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
-        algorithmMap.put(FixedTokenLengthChunker.ALGORITHM_NAME, createFixedTokenLengthParametersWithMaxChunk(-2));
+        algorithmMap.put(FixedTokenLengthChunker.ALGORITHM_NAME, createFixedTokenLengthParametersWithMaxChunkLimit(-2));
         config.put(FIELD_MAP_FIELD, fieldMap);
         config.put(ALGORITHM_FIELD, algorithmMap);
         IllegalArgumentException illegalArgumentException = assertThrows(
@@ -207,13 +207,13 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testCreate_whenMaxChunkNumDisabledValue_thenSucceed() {
+    public void testCreate_whenMaxChunkLimitDisabledValue_thenSucceed() {
         Map<String, Processor.Factory> registry = new HashMap<>();
         Map<String, Object> config = new HashMap<>();
         Map<String, Object> fieldMap = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
         fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
-        algorithmMap.put(FixedTokenLengthChunker.ALGORITHM_NAME, createFixedTokenLengthParametersWithMaxChunk(-1));
+        algorithmMap.put(FixedTokenLengthChunker.ALGORITHM_NAME, createFixedTokenLengthParametersWithMaxChunkLimit(-1));
         config.put(FIELD_MAP_FIELD, fieldMap);
         config.put(ALGORITHM_FIELD, algorithmMap);
         textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
@@ -369,8 +369,8 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testExecute_withFixedTokenLength_andSourceDataStringWithMaxChunkNum_thenSucceed() {
-        TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkNum(createStringFieldMap(), 5);
+    public void testExecute_withFixedTokenLength_andSourceDataStringWithMaxChunkLimit_thenSucceed() {
+        TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkLimit(createStringFieldMap(), 5);
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
         IngestDocument document = processor.execute(ingestDocument);
         assert document.getSourceAndMetadata().containsKey(OUTPUT_FIELD);
@@ -384,8 +384,8 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testExecute_withFixedTokenLength_andSourceDataStringWithMaxChunkNumTwice_thenSucceed() {
-        TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkNum(createStringFieldMap(), 5);
+    public void testExecute_withFixedTokenLength_andSourceDataStringWithMaxChunkLimitTwice_thenSucceed() {
+        TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkLimit(createStringFieldMap(), 5);
         for (int i = 0; i < 2; i++) {
             IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
             IngestDocument document = processor.execute(ingestDocument);
@@ -401,8 +401,8 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testExecute_withFixedTokenLength_andSourceDataStringWithMaxChunkNumDisabled_thenSucceed() {
-        TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkNum(createStringFieldMap(), -1);
+    public void testExecute_withFixedTokenLength_andSourceDataStringWithMaxChunkLimitDisabled_thenSucceed() {
+        TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkLimit(createStringFieldMap(), -1);
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
         IngestDocument document = processor.execute(ingestDocument);
         assert document.getSourceAndMetadata().containsKey(OUTPUT_FIELD);
@@ -418,7 +418,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     @SneakyThrows
     public void testExecute_withFixedTokenLength_andSourceDataStringExceedMaxChunkLimit_thenFail() {
         int maxChunkLimit = 1;
-        TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkNum(createStringFieldMap(), maxChunkLimit);
+        TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkLimit(createStringFieldMap(), maxChunkLimit);
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
         IllegalStateException illegalStateException = assertThrows(IllegalStateException.class, () -> processor.execute(ingestDocument));
         assert (illegalStateException.getMessage()
@@ -433,9 +433,9 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testExecute_withFixedTokenLength_andSourceDataListWithMaxChunkLimitExceed_thenFail() {
+    public void testExecute_withFixedTokenLength_andSourceDataListExceedMaxChunkLimit_thenFail() {
         int maxChunkLimit = 5;
-        TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkNum(createStringFieldMap(), maxChunkLimit);
+        TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkLimit(createStringFieldMap(), maxChunkLimit);
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataListStrings());
         IllegalStateException illegalStateException = assertThrows(IllegalStateException.class, () -> processor.execute(ingestDocument));
         assert (illegalStateException.getMessage()
