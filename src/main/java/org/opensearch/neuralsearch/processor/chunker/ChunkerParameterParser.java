@@ -51,7 +51,7 @@ public final class ChunkerParameterParser {
         String fieldValueString = parameters.get(fieldName).toString();
         try {
             return NumberUtils.createInteger(fieldValueString);
-        } catch (Exception e) {
+        } catch (NumberFormatException e) {
             throw new IllegalArgumentException(
                 String.format(Locale.ROOT, "Parameter [%s] must be of %s type", fieldName, Integer.class.getName())
             );
@@ -82,7 +82,7 @@ public final class ChunkerParameterParser {
         String fieldValueString = parameters.get(fieldName).toString();
         try {
             return NumberUtils.createDouble(fieldValueString);
-        } catch (Exception e) {
+        } catch (NumberFormatException e) {
             throw new IllegalArgumentException(
                 String.format(Locale.ROOT, "Parameter [%s] must be of %s type", fieldName, Double.class.getName())
             );
