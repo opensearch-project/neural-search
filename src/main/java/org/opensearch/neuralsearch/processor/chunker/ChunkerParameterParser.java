@@ -55,8 +55,7 @@ public class ChunkerParameterParser {
                 String.format(Locale.ROOT, "Parameter [%s] must be of %s type", fieldName, Integer.class.getName())
             );
         }
-        // some parameter has negative default value, indicating that this parameter is not effective
-        if (fieldValueInt != defaultValue && fieldValueInt <= 0) {
+        if (fieldValueInt <= 0) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "Parameter [%s] must be positive.", fieldName));
         }
         return fieldValueInt;

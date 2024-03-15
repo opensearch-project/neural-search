@@ -45,7 +45,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     @VisibleForTesting
     static final String MAX_CHUNK_LIMIT_FIELD = "max_chunk_limit";
 
-    private static final int DEFAULT_MAX_CHUNK_LIMIT = -1;
+    private static final int DEFAULT_MAX_CHUNK_LIMIT = 100;
     private static final String DEFAULT_ALGORITHM = FixedTokenLengthChunker.ALGORITHM_NAME;
 
     private int maxChunkLimit;
@@ -114,8 +114,10 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         }
 
         Map<String, Object> chunkerParameters = (Map<String, Object>) algorithmValue;
-        // fixed token length algorithm needs analysis registry for tokenization
-        chunkerParameters.put(FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD, analysisRegistry);
+        if (algorithmKey.equals(FixedTokenLengthChunker.ALGORITHM_NAME)) {
+            // fixed token length algorithm needs analysis registry for tokenization
+            chunkerParameters.put(FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD, analysisRegistry);
+        }
         this.chunker = ChunkerFactory.create(algorithmKey, chunkerParameters);
         this.maxChunkLimit = parsePositiveIntegerParameter(chunkerParameters, MAX_CHUNK_LIMIT_FIELD, DEFAULT_MAX_CHUNK_LIMIT);
     }
@@ -269,7 +271,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         int updatedChunkCount = chunkCount;
         List<String> contentResult = chunker.chunk(content, runTimeParameters);
         updatedChunkCount += contentResult.size();
-        if (maxChunkLimit != DEFAULT_MAX_CHUNK_LIMIT && updatedChunkCount > maxChunkLimit) {
+        if (updatedChunkCount > maxChunkLimit) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
