@@ -13,9 +13,9 @@ import java.util.List;
  */
 public interface Chunker {
 
-    static final String MAX_CHUNK_LIMIT_FIELD = "max_chunk_limit";
-    static final int DEFAULT_MAX_CHUNK_LIMIT = 100;
-    static final int DISABLED_MAX_CHUNK_LIMIT = -1;
+    String MAX_CHUNK_LIMIT_FIELD = "max_chunk_limit";
+    int DEFAULT_MAX_CHUNK_LIMIT = 100;
+    int DISABLED_MAX_CHUNK_LIMIT = -1;
 
     /**
      * Parse the parameters for chunking algorithm.
