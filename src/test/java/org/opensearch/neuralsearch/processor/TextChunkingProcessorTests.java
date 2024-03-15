@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor;
 
+import com.google.common.collect.ImmutableMap;
 import lombok.SneakyThrows;
 import org.apache.lucene.tests.analysis.MockTokenizer;
 import org.junit.Before;
@@ -302,12 +303,21 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         return documents;
     }
 
-    private List<Object> createSourceDataListHybridType() {
+    private List<Object> createSourceDataListWithInvalidType() {
         List<Object> documents = new ArrayList<>();
         documents.add(
             "This is the first document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch."
         );
         documents.add(1);
+        return documents;
+    }
+
+    private List<Object> createSourceDataListWithHybridType() {
+        List<Object> documents = new ArrayList<>();
+        documents.add(
+            "This is the first document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch."
+        );
+        documents.add(ImmutableMap.of());
         return documents;
     }
 
@@ -489,9 +499,9 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testExecute_withFixedTokenLength_andSourceDataListHybridType_thenFail() {
+    public void testExecute_withFixedTokenLength_andSourceDataListWithInvalidType_thenFail() {
         TextChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
-        IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataListHybridType());
+        IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataListWithInvalidType());
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
             () -> processor.execute(ingestDocument)
@@ -586,6 +596,18 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             assert (passages instanceof List);
             assertEquals(expectedPassages, passages);
         }
+    }
+
+    @SneakyThrows
+    public void testExecute_withFixedTokenLength_andSourceDataListWithHybridType_thenSucceed() {
+        TextChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
+        List<Object> sourceDataList = createSourceDataListWithHybridType();
+        IngestDocument ingestDocument = createIngestDocumentWithSourceData(sourceDataList);
+        IngestDocument document = processor.execute(ingestDocument);
+        assert document.getSourceAndMetadata().containsKey(INPUT_FIELD);
+        Object listResult = document.getSourceAndMetadata().get(OUTPUT_FIELD);
+        assert (listResult instanceof List);
+        assertEquals(((List<?>) listResult).size(), 0);
     }
 
     @SneakyThrows
