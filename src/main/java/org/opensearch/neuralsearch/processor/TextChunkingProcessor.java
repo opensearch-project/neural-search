@@ -77,7 +77,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         this.clusterService = clusterService;
         this.indicesService = indicesService;
         this.analysisRegistry = analysisRegistry;
-        validateAndParseAlgorithmMap(algorithmMap);
+        parseAlgorithmMap(algorithmMap);
     }
 
     public String getType() {
@@ -85,7 +85,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     }
 
     @SuppressWarnings("unchecked")
-    private void validateAndParseAlgorithmMap(final Map<String, Object> algorithmMap) {
+    private void parseAlgorithmMap(final Map<String, Object> algorithmMap) {
         if (algorithmMap.size() > 1) {
             throw new IllegalArgumentException(
                 String.format(Locale.ROOT, "Unable to create %s processor as [%s] contains multiple algorithms", TYPE, ALGORITHM_FIELD)
@@ -154,15 +154,16 @@ public final class TextChunkingProcessor extends AbstractProcessor {
      * @param ingestDocument {@link IngestDocument} which is the document passed to processor.
      */
     @Override
-    public IngestDocument execute(IngestDocument ingestDocument) {
+    public IngestDocument execute(final IngestDocument ingestDocument) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
         validateFieldsValue(sourceAndMetadataMap);
         // fixed token length algorithm needs runtime parameter max_token_count for tokenization
-        int chunkCount = 0;
         Map<String, Object> runtimeParameters = new HashMap<>();
-        int maxTokenCount = getMaxTokenCount(sourceAndMetadataMap);
-        runtimeParameters.put(FixedTokenLengthChunker.MAX_TOKEN_COUNT_FIELD, maxTokenCount);
-        chunkMapType(sourceAndMetadataMap, fieldMap, runtimeParameters, chunkCount);
+        if (chunker instanceof FixedTokenLengthChunker) {
+            int maxTokenCount = getMaxTokenCount(sourceAndMetadataMap);
+            runtimeParameters.put(FixedTokenLengthChunker.MAX_TOKEN_COUNT_FIELD, maxTokenCount);
+        }
+        chunkMapType(sourceAndMetadataMap, fieldMap, runtimeParameters, 0);
         return ingestDocument;
     }
 
@@ -224,8 +225,9 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         Map<String, Object> sourceAndMetadataMap,
         final Map<String, Object> fieldMap,
         final Map<String, Object> runtimeParameters,
-        int chunkCount
+        final int chunkCount
     ) {
+        int updatedChunkCount = chunkCount;
         for (Map.Entry<String, Object> fieldMapEntry : fieldMap.entrySet()) {
             String originalKey = fieldMapEntry.getKey();
             Object targetKey = fieldMapEntry.getValue();
@@ -236,73 +238,76 @@ public final class TextChunkingProcessor extends AbstractProcessor {
                     List<Object> sourceObjectList = (List<Object>) sourceObject;
                     for (Object source : sourceObjectList) {
                         if (source instanceof Map) {
-                            chunkCount = chunkMapType(
+                            updatedChunkCount = chunkMapType(
                                 (Map<String, Object>) source,
                                 (Map<String, Object>) targetKey,
                                 runtimeParameters,
-                                chunkCount
+                                updatedChunkCount
                             );
                         }
                     }
                 } else if (sourceObject instanceof Map) {
-                    chunkCount = chunkMapType(
+                    updatedChunkCount = chunkMapType(
                         (Map<String, Object>) sourceObject,
                         (Map<String, Object>) targetKey,
                         runtimeParameters,
-                        chunkCount
+                        updatedChunkCount
                     );
                 }
             } else {
                 // chunk the object when target key is a string
                 Object chunkObject = sourceAndMetadataMap.get(originalKey);
                 List<String> chunkedResult = new ArrayList<>();
-                chunkCount = chunkLeafType(chunkObject, chunkedResult, runtimeParameters, chunkCount);
+                updatedChunkCount = chunkLeafType(chunkObject, chunkedResult, runtimeParameters, updatedChunkCount);
                 sourceAndMetadataMap.put(String.valueOf(targetKey), chunkedResult);
             }
         }
-        return chunkCount;
+        return updatedChunkCount;
     }
 
-    private int chunkString(final String content, List<String> result, final Map<String, Object> runTimeParameters, int chunkCount) {
+    private int chunkString(final String content, List<String> result, final Map<String, Object> runTimeParameters, final int chunkCount) {
         // chunk the content, return the updated chunkCount and add chunk passages into result
+        int updatedChunkCount = chunkCount;
         List<String> contentResult = chunker.chunk(content, runTimeParameters);
-        chunkCount += contentResult.size();
-        if (maxChunkLimit != DEFAULT_MAX_CHUNK_LIMIT && chunkCount > maxChunkLimit) {
+        updatedChunkCount += contentResult.size();
+        if (maxChunkLimit != DEFAULT_MAX_CHUNK_LIMIT && updatedChunkCount > maxChunkLimit) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
                     "Unable to chunk the document as the number of chunks [%s] exceeds the maximum chunk limit [%s]",
-                    chunkCount,
+                    updatedChunkCount,
                     maxChunkLimit
                 )
             );
         }
         result.addAll(contentResult);
-        return chunkCount;
+        return updatedChunkCount;
     }
 
     private int chunkList(
         final List<String> contentList,
         List<String> result,
         final Map<String, Object> runTimeParameters,
-        int chunkCount
+        final int chunkCount
     ) {
         // flatten original output format from List<List<String>> to List<String>
+        int updatedChunkCount = chunkCount;
         for (String content : contentList) {
-            chunkCount = chunkString(content, result, runTimeParameters, chunkCount);
+            updatedChunkCount = chunkString(content, result, runTimeParameters, updatedChunkCount);
         }
-        return chunkCount;
+        return updatedChunkCount;
     }
 
     @SuppressWarnings("unchecked")
-    private int chunkLeafType(final Object value, List<String> result, final Map<String, Object> runTimeParameters, int chunkCount) {
+    private int chunkLeafType(final Object value, List<String> result, final Map<String, Object> runTimeParameters, final int chunkCount) {
         // leaf type means null, String or List<String>
         // the result should be an empty list when the input is null
+        int updatedChunkCount = chunkCount;
         if (value instanceof String) {
-            chunkCount = chunkString(value.toString(), result, runTimeParameters, chunkCount);
+            updatedChunkCount = chunkString(value.toString(), result, runTimeParameters, updatedChunkCount);
         } else if (isListOfString(value)) {
-            chunkCount = chunkList((List<String>) value, result, runTimeParameters, chunkCount);
+            updatedChunkCount = chunkList((List<String>) value, result, runTimeParameters, updatedChunkCount);
         }
-        return chunkCount;
+        return updatedChunkCount;
     }
 }
