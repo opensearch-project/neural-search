@@ -12,6 +12,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+
 import static java.util.Collections.singletonList;
 import static java.util.Collections.singletonMap;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -325,7 +327,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         }
         Map<String, Object> resultMap = new HashMap<>();
         Map<String, Object> innerMap = createMaxDepthLimitExceedMap(maxDepth + 1);
-        if (innerMap != null) {
+        if (Objects.nonNull(innerMap)) {
             resultMap.put(INPUT_FIELD, innerMap);
         }
         return resultMap;

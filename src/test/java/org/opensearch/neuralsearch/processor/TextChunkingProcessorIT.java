@@ -17,6 +17,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
@@ -194,7 +195,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
 
     private void createPipelineProcessor(String pipelineName) throws Exception {
         URL pipelineURLPath = classLoader.getResource(PIPELINE_CONFIGS_BY_NAME.get(pipelineName));
-        assert pipelineURLPath != null;
+        Objects.requireNonNull(pipelineURLPath);
         String requestBody = Files.readString(Path.of(pipelineURLPath.toURI()));
         Response pipelineCreateResponse = makeRequest(
             client(),
@@ -214,13 +215,13 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
 
     private void createTextChunkingIndex(String indexName, String pipelineName) throws Exception {
         URL indexSettingsURLPath = classLoader.getResource("processor/chunker/TextChunkingIndexSettings.json");
-        assert indexSettingsURLPath != null;
+        Objects.requireNonNull(indexSettingsURLPath);
         createIndexWithConfiguration(indexName, Files.readString(Path.of(indexSettingsURLPath.toURI())), pipelineName);
     }
 
     private void ingestDocument(String documentPath) throws Exception {
         URL documentURLPath = classLoader.getResource(documentPath);
-        assert documentURLPath != null;
+        Objects.requireNonNull(documentURLPath);
         String ingestDocument = Files.readString(Path.of(documentURLPath.toURI()));
         Response response = makeRequest(
             client(),

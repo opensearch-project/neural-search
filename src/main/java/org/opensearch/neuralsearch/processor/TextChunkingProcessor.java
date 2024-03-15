@@ -139,7 +139,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
         IndexMetadata indexMetadata = clusterService.state().metadata().index(indexName);
         int maxTokenCount;
-        if (indexMetadata != null) {
+        if (Objects.nonNull(indexMetadata)) {
             // if the index is specified in the metadata, read maxTokenCount from the index setting
             IndexService indexService = indicesService.indexServiceSafe(indexMetadata.getIndex());
             maxTokenCount = indexService.getIndexSettings().getMaxTokenCount();
@@ -169,7 +169,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     private void validateFieldsValue(final Map<String, Object> sourceAndMetadataMap) {
         for (Map.Entry<String, Object> embeddingFieldsEntry : fieldMap.entrySet()) {
             Object sourceValue = sourceAndMetadataMap.get(embeddingFieldsEntry.getKey());
-            if (sourceValue != null) {
+            if (Objects.nonNull(sourceValue)) {
                 String sourceKey = embeddingFieldsEntry.getKey();
                 if (sourceValue instanceof List || sourceValue instanceof Map) {
                     validateNestedTypeValue(sourceKey, sourceValue, 1);
