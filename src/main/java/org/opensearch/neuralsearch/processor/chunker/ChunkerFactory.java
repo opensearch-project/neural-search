@@ -19,7 +19,7 @@ public final class ChunkerFactory {
 
     private ChunkerFactory() {} // no instance of this factory class
 
-    private static final ImmutableMap<String, Function<Map<String, Object>, Chunker>> chunkers = ImmutableMap.of(
+    private static final Map<String, Function<Map<String, Object>, Chunker>> chunkerConstructors = ImmutableMap.of(
         FixedTokenLengthChunker.ALGORITHM_NAME,
         FixedTokenLengthChunker::new,
         DelimiterChunker.ALGORITHM_NAME,
@@ -27,10 +27,10 @@ public final class ChunkerFactory {
     );
 
     @Getter
-    public static Set<String> allChunkerAlgorithms = chunkers.keySet();
+    public static Set<String> allChunkerAlgorithms = chunkerConstructors.keySet();
 
     public static Chunker create(final String type, final Map<String, Object> parameters) {
-        Function<Map<String, Object>, Chunker> chunkerConstructionFunction = chunkers.get(type);
+        Function<Map<String, Object>, Chunker> chunkerConstructionFunction = chunkerConstructors.get(type);
         // chunkerConstructionFunction is not null because we have validated the type in text chunking processor
         Objects.requireNonNull(chunkerConstructionFunction);
         return chunkerConstructionFunction.apply(parameters);

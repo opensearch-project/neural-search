@@ -33,8 +33,8 @@ import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseIntegerParameter;
 
 /**
- * This processor is used for user input data text chunking.
- * The chunking results could be fed to downstream embedding processor.
+ * This processor is used for text chunking.
+ * The text chunking results could be fed to downstream embedding processor.
  * The processor needs two fields: algorithm and field_map,
  * where algorithm defines chunking algorithm and parameters,
  * and field_map specifies which fields needs chunking and the corresponding keys for the chunking results.
