@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch.processor.chunker;
 
-import java.io.IOException;
 import java.util.Locale;
 import java.util.Map;
 import java.util.List;
@@ -156,7 +155,7 @@ public class FixedTokenLengthChunker implements Chunker {
         try {
             AnalyzeAction.Response analyzeResponse = analyze(analyzeRequest, analysisRegistry, null, maxTokenCount);
             return analyzeResponse.getTokens();
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new IllegalStateException(
                 String.format(Locale.ROOT, "%s algorithm encounters exception in tokenization: %s", ALGORITHM_NAME, e.getMessage()),
                 e
