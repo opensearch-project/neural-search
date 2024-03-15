@@ -14,15 +14,8 @@ import java.util.List;
 public interface Chunker {
 
     /**
-     * Validate the parameters for chunking algorithm,
-     * will throw IllegalArgumentException when parameters are invalid
-     *
-     * @param parameters a map containing non-runtime parameters for chunking algorithms
-     */
-    void validateParameters(Map<String, Object> parameters);
-
-    /**
      * Parse the parameters for chunking algorithm.
+     * Throw IllegalArgumentException when parameters are invalid.
      * The parameters must be validated before parsing.
      *
      * @param parameters a map containing non-runtime parameters for chunking algorithms

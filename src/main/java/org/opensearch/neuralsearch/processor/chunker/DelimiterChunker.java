@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.ArrayList;
 
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseStringParameter;
-import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterValidator.validateStringParameter;
 
 /**
  * The implementation {@link Chunker} for delimiter algorithm
@@ -23,28 +22,15 @@ public class DelimiterChunker implements Chunker {
     private String delimiter;
 
     public DelimiterChunker(final Map<String, Object> parameters) {
-        validateParameters(parameters);
         parseParameters(parameters);
     }
 
     /**
-     * Validate the parameters for delimiter algorithm,
-     * will throw IllegalArgumentException if delimiter is not a string or empty
+     * Parse the parameters for delimiter algorithm.
+     * Throw IllegalArgumentException if delimiter is not a string or empty.
      *
      * @param parameters a map containing parameters, containing the following parameters
-     * 1. A string as the paragraph split indicator
-     */
-    @Override
-    public void validateParameters(Map<String, Object> parameters) {
-        validateStringParameter(parameters, DELIMITER_FIELD, false);
-    }
-
-    /**
-     * Parse the parameters for delimiter algorithm,
-     * will throw IllegalArgumentException if delimiter is not a string or empty
-     *
-     * @param parameters a map containing parameters, containing the following parameters
-     * 1. A string as the paragraph split indicator
+     * 1. delimiter A string as the paragraph split indicator
      */
     @Override
     public void parseParameters(Map<String, Object> parameters) {

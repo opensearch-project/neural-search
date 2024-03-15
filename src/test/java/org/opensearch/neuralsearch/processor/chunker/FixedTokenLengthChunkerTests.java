@@ -63,7 +63,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
     }
 
     public void testValidateAndParseParameters_whenNoParams_thenSuccessful() {
-        fixedTokenLengthChunker.validateParameters(Map.of());
+        fixedTokenLengthChunker.parseParameters(Map.of());
     }
 
     public void testValidateAndParseParameters_whenIllegalTokenLimitType_thenFail() {
@@ -71,10 +71,10 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         parameters.put(TOKEN_LIMIT_FIELD, "invalid token limit");
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.validateParameters(parameters)
+            () -> fixedTokenLengthChunker.parseParameters(parameters)
         );
         assertEquals(
-            String.format(Locale.ROOT, "Parameter [%s] must be of %s type", TOKEN_LIMIT_FIELD, Number.class.getName()),
+            String.format(Locale.ROOT, "Parameter [%s] must be of %s type", TOKEN_LIMIT_FIELD, Integer.class.getName()),
             illegalArgumentException.getMessage()
         );
     }
@@ -84,7 +84,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         parameters.put(TOKEN_LIMIT_FIELD, -1);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.validateParameters(parameters)
+            () -> fixedTokenLengthChunker.parseParameters(parameters)
         );
         assertEquals(
             String.format(Locale.ROOT, "Parameter [%s] must be positive.", TOKEN_LIMIT_FIELD),
@@ -97,10 +97,10 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         parameters.put(OVERLAP_RATE_FIELD, "invalid overlap rate");
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.validateParameters(parameters)
+            () -> fixedTokenLengthChunker.parseParameters(parameters)
         );
         assertEquals(
-            String.format(Locale.ROOT, "Parameter [%s] must be of %s type", OVERLAP_RATE_FIELD, Number.class.getName()),
+            String.format(Locale.ROOT, "Parameter [%s] must be of %s type", OVERLAP_RATE_FIELD, Double.class.getName()),
             illegalArgumentException.getMessage()
         );
     }
@@ -110,7 +110,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         parameters.put(OVERLAP_RATE_FIELD, 0.6);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.validateParameters(parameters)
+            () -> fixedTokenLengthChunker.parseParameters(parameters)
         );
         assertEquals(
             String.format(Locale.ROOT, "Parameter [%s] must be between %s and %s", OVERLAP_RATE_FIELD, 0.0, 0.5),
@@ -123,7 +123,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         parameters.put(TOKENIZER_FIELD, 111);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.validateParameters(parameters)
+            () -> fixedTokenLengthChunker.parseParameters(parameters)
         );
         assertEquals(
             String.format(Locale.ROOT, "Parameter [%s] must be of %s type", TOKENIZER_FIELD, String.class.getName()),
@@ -136,10 +136,10 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         Map<String, Object> parameters = Map.of(TOKENIZER_FIELD, ngramTokenizer);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.validateParameters(parameters)
+            () -> fixedTokenLengthChunker.parseParameters(parameters)
         );
         assert (illegalArgumentException.getMessage()
-            .contains(String.format(Locale.ROOT, "tokenizer [%s] is not supported for [%s] algorithm.", ngramTokenizer, ALGORITHM_NAME)));
+            .contains(String.format(Locale.ROOT, "Tokenizer [%s] is not supported for [%s] algorithm.", ngramTokenizer, ALGORITHM_NAME)));
     }
 
     public void testChunk_withTokenLimit_10() {
