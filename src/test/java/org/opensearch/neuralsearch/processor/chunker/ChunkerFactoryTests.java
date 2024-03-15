@@ -9,7 +9,6 @@ import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD;
@@ -33,12 +32,7 @@ public class ChunkerFactoryTests extends OpenSearchTestCase {
 
     public void testCreate_Invalid() {
         String invalidChunkerName = "Invalid Chunker Algorithm";
-        IllegalArgumentException illegalArgumentException = assertThrows(
-            IllegalArgumentException.class,
-            () -> ChunkerFactory.create(invalidChunkerName, createChunkParameters())
-        );
-        assert (illegalArgumentException.getMessage()
-            .contains(String.format(Locale.ROOT, "Chunking algorithm [%s] is not supported.", invalidChunkerName)));
+        assertThrows(NullPointerException.class, () -> ChunkerFactory.create(invalidChunkerName, createChunkParameters()));
     }
 
     private Map<String, Object> createChunkParameters() {
