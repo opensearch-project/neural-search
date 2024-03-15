@@ -119,7 +119,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         Map<String, Object> chunkerParameters = (Map<String, Object>) algorithmValue;
         // parse processor level max chunk limit
         this.maxChunkLimit = parseIntegerParameter(chunkerParameters, MAX_CHUNK_LIMIT_FIELD, DEFAULT_MAX_CHUNK_LIMIT);
-        if (maxChunkLimit <= 0 && maxChunkLimit != DISABLED_MAX_CHUNK_LIMIT) {
+        if (maxChunkLimit < 0 && maxChunkLimit != DISABLED_MAX_CHUNK_LIMIT) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
