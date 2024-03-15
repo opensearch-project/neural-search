@@ -105,9 +105,22 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         );
     }
 
-    public void testParseParameters_whenIllegalOverlapRateValue_thenFail() {
+    public void testParseParameters_whenTooLargeOverlapRate_thenFail() {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(OVERLAP_RATE_FIELD, 0.6);
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> fixedTokenLengthChunker.parseParameters(parameters)
+        );
+        assertEquals(
+            String.format(Locale.ROOT, "Parameter [%s] must be between %s and %s", OVERLAP_RATE_FIELD, 0.0, 0.5),
+            illegalArgumentException.getMessage()
+        );
+    }
+
+    public void testParseParameters_whenTooSmallOverlapRateValue_thenFail() {
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put(OVERLAP_RATE_FIELD, -1);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
             () -> fixedTokenLengthChunker.parseParameters(parameters)
