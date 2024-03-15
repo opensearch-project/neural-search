@@ -43,7 +43,7 @@ import org.opensearch.test.OpenSearchTestCase;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.TYPE;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.FIELD_MAP_FIELD;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.ALGORITHM_FIELD;
-import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.MAX_CHUNK_LIMIT_FIELD;
+import static org.opensearch.neuralsearch.processor.chunker.Chunker.MAX_CHUNK_LIMIT_FIELD;
 
 public class TextChunkingProcessorTests extends OpenSearchTestCase {
 
