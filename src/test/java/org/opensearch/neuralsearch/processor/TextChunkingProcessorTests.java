@@ -401,7 +401,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testExecute_withFixedTokenLength_andSourceDataStringWithMaxChunkNumDisabled_thenFail() {
+    public void testExecute_withFixedTokenLength_andSourceDataStringWithMaxChunkNumDisabled_thenSucceed() {
         TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkNum(createStringFieldMap(), -1);
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
         IngestDocument document = processor.execute(ingestDocument);
@@ -416,10 +416,27 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testExecute_withFixedTokenLength_andSourceDataStringWithMaxChunkNumExceed_thenFail() {
+    public void testExecute_withFixedTokenLength_andSourceDataStringExceedMaxChunkLimit_thenFail() {
         int maxChunkLimit = 1;
         TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkNum(createStringFieldMap(), maxChunkLimit);
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
+        IllegalStateException illegalStateException = assertThrows(IllegalStateException.class, () -> processor.execute(ingestDocument));
+        assert (illegalStateException.getMessage()
+            .contains(
+                String.format(
+                    Locale.ROOT,
+                    "The number of chunks produced by %s processor has exceeded the allowed maximum of [%s].",
+                    TYPE,
+                    maxChunkLimit
+                )
+            ));
+    }
+
+    @SneakyThrows
+    public void testExecute_withFixedTokenLength_andSourceDataListWithMaxChunkLimitExceed_thenFail() {
+        int maxChunkLimit = 5;
+        TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkNum(createStringFieldMap(), maxChunkLimit);
+        IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataListStrings());
         IllegalStateException illegalStateException = assertThrows(IllegalStateException.class, () -> processor.execute(ingestDocument));
         assert (illegalStateException.getMessage()
             .contains(
