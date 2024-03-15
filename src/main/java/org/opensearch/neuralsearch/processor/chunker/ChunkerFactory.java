@@ -15,7 +15,9 @@ import java.util.function.Function;
 /**
  * A factory to create different chunking algorithm objects and return all supported chunking algorithms.
  */
-public class ChunkerFactory {
+public final class ChunkerFactory {
+
+    private ChunkerFactory() {} // no instance of this factory class
 
     private static final ImmutableMap<String, Function<Map<String, Object>, Chunker>> chunkers = ImmutableMap.of(
         FixedTokenLengthChunker.ALGORITHM_NAME,

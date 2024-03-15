@@ -21,7 +21,7 @@ import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterPars
 /**
  * The implementation {@link Chunker} for fixed token length algorithm.
  */
-public class FixedTokenLengthChunker implements Chunker {
+public final class FixedTokenLengthChunker implements Chunker {
 
     public static final String ALGORITHM_NAME = "fixed_token_length";
 

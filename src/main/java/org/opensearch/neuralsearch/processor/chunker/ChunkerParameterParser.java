@@ -14,7 +14,9 @@ import java.util.Map;
  * Parse the parameter for text chunking processor and algorithms.
  * Throw IllegalArgumentException when parameters are invalid.
  */
-public class ChunkerParameterParser {
+public final class ChunkerParameterParser {
+
+    private ChunkerParameterParser() {} // no instance of this util class
 
     /**
      * Parse string type parameter.

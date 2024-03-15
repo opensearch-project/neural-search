@@ -13,7 +13,7 @@ import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterPars
 /**
  * The implementation {@link Chunker} for delimiter algorithm
  */
-public class DelimiterChunker implements Chunker {
+public final class DelimiterChunker implements Chunker {
 
     public static final String ALGORITHM_NAME = "delimiter";
     public static final String DELIMITER_FIELD = "delimiter";
