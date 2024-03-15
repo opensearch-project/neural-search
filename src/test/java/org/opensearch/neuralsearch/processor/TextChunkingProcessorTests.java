@@ -219,7 +219,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
     }
 
-    public void testCreate_whenAlgorithmFieldMultipleAlgorithm_thenFail() {
+    public void testCreate_whenAlgorithmMapMultipleAlgorithms_thenFail() {
         Map<String, Object> config = new HashMap<>();
         Map<String, Object> fieldMap = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
@@ -239,7 +239,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         );
     }
 
-    public void testCreate_whenAlgorithmFieldInvalidAlgorithmName_thenFail() {
+    public void testCreate_wheAlgorithmMapInvalidAlgorithmName_thenFail() {
         Map<String, Object> config = new HashMap<>();
         Map<String, Object> fieldMap = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
@@ -257,7 +257,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             .contains(String.format(Locale.ROOT, "Chunking algorithm [%s] is not supported.", invalid_algorithm_type)));
     }
 
-    public void testCreate_whenAlgorithmFieldInvalidAlgorithmContent_thenFail() {
+    public void testCreate_whenAlgorithmMapInvalidAlgorithmType_thenFail() {
         Map<String, Object> config = new HashMap<>();
         Map<String, Object> fieldMap = new HashMap<>();
         Map<String, Object> algorithmMap = new HashMap<>();
