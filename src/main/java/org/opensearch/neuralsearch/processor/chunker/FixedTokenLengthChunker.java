@@ -13,7 +13,6 @@ import java.util.ArrayList;
 import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
 import org.opensearch.action.admin.indices.analyze.AnalyzeAction.AnalyzeToken;
-import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.TYPE;
 import static org.opensearch.action.admin.indices.analyze.TransportAnalyzeAction.analyze;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseStringParameter;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseDoubleParameter;
@@ -73,10 +72,12 @@ public final class FixedTokenLengthChunker implements Chunker {
      * 1. tokenizer: the <a href="https://opensearch.org/docs/latest/analyzers/tokenizers/index/">word tokenizer</a> in opensearch
      * 2. token_limit: the token limit for each chunked passage
      * 3. overlap_rate: the overlapping degree for each chunked passage, indicating how many token comes from the previous passage
+     * 4. max_chunk_limit processor level max chunk level
      * Here are requirements for non-runtime parameters:
      * 1. token_limit must be a positive integer
      * 2. overlap_rate must be within range [0, 0.5]
      * 3. tokenizer must be a word tokenizer
+     *
      */
     @Override
     public void parseParameters(Map<String, Object> parameters) {
@@ -115,7 +116,7 @@ public final class FixedTokenLengthChunker implements Chunker {
      * @param content input string
      * @param runtimeParameters a map for runtime parameters, containing the following runtime parameters:
      * 1. max_token_count the max token limit for the tokenizer
-     * 2. runtime_max_chunk_limit runtime max chunk limit for the algorithm
+     * 2. max_chunk_limit field level max chunk limit
      */
     @Override
     public List<String> chunk(final String content, final Map<String, Object> runtimeParameters) {
@@ -130,18 +131,7 @@ public final class FixedTokenLengthChunker implements Chunker {
         int overlapTokenNumber = (int) Math.floor(tokenLimit * overlapRate);
 
         while (startTokenIndex < tokens.size()) {
-            if (chunkResult.size() == runtimeMaxChunkLimit) {
-                // need processor level max chunk level to keep exception message consistent
-                throw new IllegalStateException(
-                    String.format(
-                        Locale.ROOT,
-                        "The number of chunks produced by %s processor has exceeded the allowed maximum of [%s]. This limit can be set by changing the [%s] parameter.",
-                        TYPE,
-                        maxChunkLimit,
-                        MAX_CHUNK_LIMIT_FIELD
-                    )
-                );
-            }
+            ChunkerUtil.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, maxChunkLimit);
             if (startTokenIndex == 0) {
                 // include all characters till the start if no previous passage
                 startContentPosition = 0;

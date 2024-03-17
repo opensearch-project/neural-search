@@ -6,10 +6,8 @@ package org.opensearch.neuralsearch.processor.chunker;
 
 import java.util.Map;
 import java.util.List;
-import java.util.Locale;
 import java.util.ArrayList;
 
-import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.TYPE;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseIntegerParameter;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseStringParameter;
 
@@ -37,7 +35,7 @@ public final class DelimiterChunker implements Chunker {
      *
      * @param parameters a map with non-runtime parameters as the following:
      * 1. delimiter A string as the paragraph split indicator
-     * 2. max_chunk_limit processor level max chunk level
+     * 2. max_chunk_limit processor level max chunk limit
      */
     @Override
     public void parseParameters(Map<String, Object> parameters) {
@@ -50,7 +48,7 @@ public final class DelimiterChunker implements Chunker {
      *
      * @param content input string
      * @param runtimeParameters a map for runtime parameters, containing the following runtime parameters:
-     * 1. max_chunk_level content level max chunk limit
+     * 1. max_chunk_limit field level max chunk limit
      */
     @Override
     public List<String> chunk(final String content, final Map<String, Object> runtimeParameters) {
@@ -61,7 +59,7 @@ public final class DelimiterChunker implements Chunker {
         int nextDelimiterPosition = content.indexOf(delimiter);
 
         while (nextDelimiterPosition != -1) {
-            checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit);
+            ChunkerUtil.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, maxChunkLimit);
             end = nextDelimiterPosition + delimiter.length();
             chunkResult.add(content.substring(start, end));
             start = end;
@@ -69,25 +67,10 @@ public final class DelimiterChunker implements Chunker {
         }
 
         if (start < content.length()) {
-            checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit);
+            ChunkerUtil.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, maxChunkLimit);
             chunkResult.add(content.substring(start));
         }
 
         return chunkResult;
-    }
-
-    private void checkRunTimeMaxChunkLimit(int chunkResultLength, int runtimeMaxChunkLimit) {
-        if (chunkResultLength == runtimeMaxChunkLimit) {
-            // need processorMaxChunkLimit to keep exception message consistent
-            throw new IllegalStateException(
-                String.format(
-                    Locale.ROOT,
-                    "The number of chunks produced by %s processor has exceeded the allowed maximum of [%s]. This limit can be set by changing the [%s] parameter.",
-                    TYPE,
-                    maxChunkLimit,
-                    MAX_CHUNK_LIMIT_FIELD
-                )
-            );
-        }
     }
 }
