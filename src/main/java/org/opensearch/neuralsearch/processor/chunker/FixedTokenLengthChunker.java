@@ -162,7 +162,7 @@ public final class FixedTokenLengthChunker implements Chunker {
             return analyzeResponse.getTokens();
         } catch (Exception e) {
             throw new IllegalStateException(
-                String.format(Locale.ROOT, "%s algorithm encounters exception in tokenization: %s", ALGORITHM_NAME, e.getMessage()),
+                String.format(Locale.ROOT, "analyzer %s encounters exception: %s", tokenizer, e.getMessage()),
                 e
             );
         }

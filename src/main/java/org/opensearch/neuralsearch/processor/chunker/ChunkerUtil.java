@@ -26,7 +26,7 @@ public class ChunkerUtil {
      */
     public static void checkRunTimeMaxChunkLimit(int chunkResultSize, int runtimeMaxChunkLimit, int nonRuntimeMaxChunkLimit) {
         if (chunkResultSize == runtimeMaxChunkLimit) {
-            throw new IllegalStateException(
+            throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
                     "The number of chunks produced by %s processor has exceeded the allowed maximum of [%s]. This limit can be set by changing the [%s] parameter.",

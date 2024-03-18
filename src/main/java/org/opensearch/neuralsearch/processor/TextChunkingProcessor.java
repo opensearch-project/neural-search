@@ -129,10 +129,8 @@ public final class TextChunkingProcessor extends AbstractProcessor {
                 )
             );
         }
-        if (algorithmKey.equals(FixedTokenLengthChunker.ALGORITHM_NAME)) {
-            // fixed token length algorithm needs analysis registry for tokenization
-            chunkerParameters.put(FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD, analysisRegistry);
-        }
+        // fixed token length algorithm needs analysis registry for tokenization
+        chunkerParameters.put(FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD, analysisRegistry);
         this.chunker = ChunkerFactory.create(algorithmKey, chunkerParameters);
     }
 
@@ -171,10 +169,8 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         validateFieldsValue(sourceAndMetadataMap);
         // fixed token length algorithm needs runtime parameter max_token_count for tokenization
         Map<String, Object> runtimeParameters = new HashMap<>();
-        if (chunker instanceof FixedTokenLengthChunker) {
-            int maxTokenCount = getMaxTokenCount(sourceAndMetadataMap);
-            runtimeParameters.put(FixedTokenLengthChunker.MAX_TOKEN_COUNT_FIELD, maxTokenCount);
-        }
+        int maxTokenCount = getMaxTokenCount(sourceAndMetadataMap);
+        runtimeParameters.put(FixedTokenLengthChunker.MAX_TOKEN_COUNT_FIELD, maxTokenCount);
         runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, maxChunkLimit);
         chunkMapType(sourceAndMetadataMap, fieldMap, runtimeParameters, 0);
         return ingestDocument;
