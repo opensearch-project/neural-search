@@ -1,0 +1,6 @@
+{
+  "settings":{
+    "index.analyze.max_token_count" : 100,
+    "default_pipeline": "%s"
+  }
+}

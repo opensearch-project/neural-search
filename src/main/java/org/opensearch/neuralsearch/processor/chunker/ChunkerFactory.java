@@ -1,0 +1,36 @@
+/*
+ * Copyright OpenSearch Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+package org.opensearch.neuralsearch.processor.chunker;
+
+import com.google.common.collect.ImmutableMap;
+
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
+
+/**
+ * A factory to create different chunking algorithm objects.
+ */
+public final class ChunkerFactory {
+
+    private ChunkerFactory() {} // no instance of this factory class
+
+    private static final Map<String, Function<Map<String, Object>, Chunker>> CHUNKERS_CONSTRUCTORS = ImmutableMap.of(
+        FixedTokenLengthChunker.ALGORITHM_NAME,
+        FixedTokenLengthChunker::new,
+        DelimiterChunker.ALGORITHM_NAME,
+        DelimiterChunker::new
+    );
+
+    public static Set<String> CHUNKER_ALGORITHMS = CHUNKERS_CONSTRUCTORS.keySet();
+
+    public static Chunker create(final String type, final Map<String, Object> parameters) {
+        Function<Map<String, Object>, Chunker> chunkerConstructionFunction = CHUNKERS_CONSTRUCTORS.get(type);
+        // chunkerConstructionFunction is not null because we have validated the type in text chunking processor
+        Objects.requireNonNull(chunkerConstructionFunction);
+        return chunkerConstructionFunction.apply(parameters);
+    }
+}
