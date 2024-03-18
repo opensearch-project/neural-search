@@ -10,6 +10,3 @@ Compatible with OpenSearch 2.13.0
 - Support for post filter in hybrid query ([#633](https://github.com/opensearch-project/neural-search/pull/633))
 ### Bug Fixes
 - Fix runtime exceptions in hybrid query for case when sub-query scorer return TwoPhase iterator that is incompatible with DISI iterator ([#624](https://github.com/opensearch-project/neural-search/pull/624))
-### Infrastructure
-### Maintenance
-### Refactoring
