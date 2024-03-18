@@ -456,6 +456,14 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
+    public void testExecute_withFixedTokenLength_andSourceDataListDisabledMaxChunkLimit_thenFail() {
+        int maxChunkLimit = -1;
+        TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkLimit(createStringFieldMap(), maxChunkLimit);
+        IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataListStrings());
+        processor.execute(ingestDocument);
+    }
+
+    @SneakyThrows
     public void testCreate_withDefaultAlgorithm_andSourceDataString_thenSucceed() {
         TextChunkingProcessor processor = createDefaultAlgorithmInstance(createStringFieldMap());
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());

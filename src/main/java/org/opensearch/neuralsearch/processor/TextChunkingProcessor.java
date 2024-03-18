@@ -277,10 +277,12 @@ public final class TextChunkingProcessor extends AbstractProcessor {
      * Chunk the content, update the runtime max_chunk_limit and return the result
      */
     private List<String> chunkString(final String content, final Map<String, Object> runTimeParameters) {
-        // update runtime max_chunk_limit for each content
+        // update runtime max_chunk_limit if not disabled
         List<String> contentResult = chunker.chunk(content, runTimeParameters);
         int runtimeMaxChunkLimit = parseIntegerParameter(runTimeParameters, MAX_CHUNK_LIMIT_FIELD, maxChunkLimit);
-        runTimeParameters.put(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit - contentResult.size());
+        if (runtimeMaxChunkLimit != DISABLED_MAX_CHUNK_LIMIT) {
+            runTimeParameters.put(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit - contentResult.size());
+        }
         return contentResult;
     }
 
