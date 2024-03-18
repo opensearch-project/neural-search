@@ -1,0 +1,17 @@
+{
+  "description": "An example delimiter chunker pipeline",
+  "processors" : [
+    {
+      "text_chunking": {
+        "field_map": {
+          "body": "body_chunk"
+        },
+        "algorithm": {
+          "delimiter": {
+            "delimiter": "."
+          }
+        }
+      }
+    }
+  ]
+}
