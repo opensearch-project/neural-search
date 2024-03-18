@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.processor.chunker;
 import java.util.Locale;
 
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.TYPE;
+import static org.opensearch.neuralsearch.processor.chunker.Chunker.DISABLED_MAX_CHUNK_LIMIT;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.MAX_CHUNK_LIMIT_FIELD;
 
 /**
@@ -25,7 +26,7 @@ public class ChunkerUtil {
      * @param nonRuntimeMaxChunkLimit non-runtime max_chunk_limit, used to keep exception message consistent
      */
     public static void checkRunTimeMaxChunkLimit(int chunkResultSize, int runtimeMaxChunkLimit, int nonRuntimeMaxChunkLimit) {
-        if (chunkResultSize == runtimeMaxChunkLimit) {
+        if (runtimeMaxChunkLimit != DISABLED_MAX_CHUNK_LIMIT && chunkResultSize >= runtimeMaxChunkLimit) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,

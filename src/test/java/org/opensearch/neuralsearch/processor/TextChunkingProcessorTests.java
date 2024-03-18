@@ -420,8 +420,11 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         int maxChunkLimit = 1;
         TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkLimit(createStringFieldMap(), maxChunkLimit);
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
-        IllegalStateException illegalStateException = assertThrows(IllegalStateException.class, () -> processor.execute(ingestDocument));
-        assert (illegalStateException.getMessage()
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> processor.execute(ingestDocument)
+        );
+        assert (illegalArgumentException.getMessage()
             .contains(
                 String.format(
                     Locale.ROOT,
@@ -437,8 +440,11 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         int maxChunkLimit = 5;
         TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkLimit(createStringFieldMap(), maxChunkLimit);
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataListStrings());
-        IllegalStateException illegalStateException = assertThrows(IllegalStateException.class, () -> processor.execute(ingestDocument));
-        assert (illegalStateException.getMessage()
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> processor.execute(ingestDocument)
+        );
+        assert (illegalArgumentException.getMessage()
             .contains(
                 String.format(
                     Locale.ROOT,

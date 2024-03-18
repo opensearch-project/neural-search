@@ -80,8 +80,11 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
         int maxChunkLimit = 2;
         DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n\n", MAX_CHUNK_LIMIT_FIELD, maxChunkLimit));
         String content = "\n\na\n\n\n";
-        IllegalStateException illegalStateException = assertThrows(IllegalStateException.class, () -> chunker.chunk(content, Map.of()));
-        assert (illegalStateException.getMessage()
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> chunker.chunk(content, Map.of())
+        );
+        assert (illegalArgumentException.getMessage()
             .contains(
                 String.format(
                     Locale.ROOT,
@@ -105,11 +108,11 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
         DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n\n", MAX_CHUNK_LIMIT_FIELD, maxChunkLimit));
         String content = "\n\na\n\n\n";
         int runtimeMaxChunkLimit = 2;
-        IllegalStateException illegalStateException = assertThrows(
-            IllegalStateException.class,
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
             () -> chunker.chunk(content, Map.of(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit))
         );
-        assert (illegalStateException.getMessage()
+        assert (illegalArgumentException.getMessage()
             .contains(
                 String.format(
                     Locale.ROOT,

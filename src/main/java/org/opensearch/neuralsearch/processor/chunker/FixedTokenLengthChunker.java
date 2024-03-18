@@ -161,10 +161,7 @@ public final class FixedTokenLengthChunker implements Chunker {
             AnalyzeAction.Response analyzeResponse = analyze(analyzeRequest, analysisRegistry, null, maxTokenCount);
             return analyzeResponse.getTokens();
         } catch (Exception e) {
-            throw new IllegalStateException(
-                String.format(Locale.ROOT, "analyzer %s encounters exception: %s", tokenizer, e.getMessage()),
-                e
-            );
+            throw new IllegalStateException(String.format(Locale.ROOT, "analyzer %s throws exception: %s", tokenizer, e.getMessage()), e);
         }
     }
 }

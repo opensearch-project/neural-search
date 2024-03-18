@@ -169,7 +169,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             () -> fixedTokenLengthChunker.chunk(content, parameters)
         );
         assert (illegalStateException.getMessage()
-            .contains(String.format(Locale.ROOT, "%s algorithm encounters exception in tokenization", ALGORITHM_NAME)));
+            .contains(String.format(Locale.ROOT, "analyzer %s throws exception", lowercaseTokenizer)));
     }
 
     public void testChunk_withEmptyInput_thenSucceed() {
@@ -246,11 +246,11 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         runtimeParameters.put(MAX_TOKEN_COUNT_FIELD, 10000);
         String content =
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
-        IllegalStateException illegalStateException = assertThrows(
-            IllegalStateException.class,
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
             () -> fixedTokenLengthChunker.chunk(content, runtimeParameters)
         );
-        assert (illegalStateException.getMessage()
+        assert (illegalArgumentException.getMessage()
             .contains(
                 String.format(
                     Locale.ROOT,
@@ -292,11 +292,11 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit);
         String content =
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
-        IllegalStateException illegalStateException = assertThrows(
-            IllegalStateException.class,
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
             () -> fixedTokenLengthChunker.chunk(content, runtimeParameters)
         );
-        assert (illegalStateException.getMessage()
+        assert (illegalArgumentException.getMessage()
             .contains(
                 String.format(
                     Locale.ROOT,
