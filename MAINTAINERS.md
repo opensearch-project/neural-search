@@ -20,6 +20,7 @@ This document contains a list of maintainers in this repo. See [opensearch-proje
 | Naveen Tatikonda        | [naveentatikonda](https://github.com/naveentatikonda)     | Amazon      |
 | Vijayan Balasubramanian | [VijayanB](https://github.com/VijayanB)                   | Amazon      |
 | Varun Jain              | [vibrantvarun](https://github.com/vibrantvarun)           | Amazon      |
+| Zhichao Geng            | [zhichao-aws](https://github.com/zhichao-aws)             | Amazon      |
 
 ## Emeritus
 
