@@ -55,8 +55,8 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
                 Settings.builder().put("index.search.default_pipeline", SPARSE_SEARCH_PIPELINE_NAME)
             );
             assertEquals(
-                    search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
-                    search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
+                search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
+                search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
             );
         } else {
             String modelId = null;

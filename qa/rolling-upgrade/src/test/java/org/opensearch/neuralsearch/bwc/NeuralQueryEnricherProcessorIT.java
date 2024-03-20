@@ -58,8 +58,8 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                     Settings.builder().put("index.search.default_pipeline", SPARSE_SEARCH_PIPELINE_NAME)
                 );
                 assertEquals(
-                        search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
-                        search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
+                    search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
+                    search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
                 );
                 break;
             case MIXED:
@@ -68,8 +68,8 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                 sparseEncodingQueryBuilderWithModelId.modelId(sparseModelId);
 
                 assertEquals(
-                        search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
-                        search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
+                    search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
+                    search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
                 );
                 break;
             case UPGRADED:
