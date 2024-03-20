@@ -57,11 +57,20 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                     getIndexNameForTest(),
                     Settings.builder().put("index.search.default_pipeline", SPARSE_SEARCH_PIPELINE_NAME)
                 );
+                assertEquals(
+                        search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
+                        search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
+                );
                 break;
             case MIXED:
                 sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
                 loadModel(sparseModelId);
                 sparseEncodingQueryBuilderWithModelId.modelId(sparseModelId);
+
+                assertEquals(
+                        search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
+                        search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
+                );
                 break;
             case UPGRADED:
                 try {
@@ -117,11 +126,6 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                 loadModel(denseModelId);
                 neuralQueryBuilderWithModelId.modelId(denseModelId);
 
-                createSearchRequestProcessor(denseModelId, DENSE_SEARCH_PIPELINE_NAME);
-                updateIndexSettings(
-                    getIndexNameForTest(),
-                    Settings.builder().put("index.search.default_pipeline", DENSE_SEARCH_PIPELINE_NAME)
-                );
                 assertEquals(
                     search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
                     search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
