@@ -12,7 +12,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 
-import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexSearcher;
@@ -77,12 +76,12 @@ public final class HybridQuery extends Query implements Iterable<Query> {
     /**
      * Re-writes queries into primitive queries. Callers are expected to call rewrite multiple times if necessary,
      * until the rewritten query is the same as the original query.
-     * @param reader
+     * @param indexSearcher
      * @return
      * @throws IOException
      */
     @Override
-    public Query rewrite(IndexReader reader) throws IOException {
+    public Query rewrite(IndexSearcher indexSearcher) throws IOException {
         if (subQueries.isEmpty()) {
             return new MatchNoDocsQuery("empty HybridQuery");
         }
@@ -90,7 +89,7 @@ public final class HybridQuery extends Query implements Iterable<Query> {
         boolean actuallyRewritten = false;
         List<Query> rewrittenSubQueries = new ArrayList<>();
         for (Query subQuery : subQueries) {
-            Query rewrittenSub = subQuery.rewrite(reader);
+            Query rewrittenSub = subQuery.rewrite(indexSearcher);
             /* we keep rewrite sub-query unless it's not equal to itself, it may take multiple levels of recursive calls
                queries need to be rewritten from high-level clauses into lower-level clauses because low-level clauses
                perform better. For hybrid query we need to track progress of re-write for all sub-queries */
@@ -102,7 +101,7 @@ public final class HybridQuery extends Query implements Iterable<Query> {
             return new HybridQuery(rewrittenSubQueries);
         }
 
-        return super.rewrite(reader);
+        return super.rewrite(indexSearcher);
     }
 
     /**

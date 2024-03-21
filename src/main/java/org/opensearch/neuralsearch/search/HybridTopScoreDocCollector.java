@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -19,7 +20,6 @@ import org.apache.lucene.search.Scorable;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.search.TopScoreDocCollector;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.util.PriorityQueue;
 import org.opensearch.neuralsearch.query.HybridQueryScorer;
@@ -47,20 +47,55 @@ public class HybridTopScoreDocCollector implements Collector {
     }
 
     @Override
-    public LeafCollector getLeafCollector(LeafReaderContext context) throws IOException {
+    public LeafCollector getLeafCollector(LeafReaderContext context) {
         docBase = context.docBase;
 
-        return new TopScoreDocCollector.ScorerLeafCollector() {
+        return new LeafCollector() {
             HybridQueryScorer compoundQueryScorer;
 
             @Override
             public void setScorer(Scorable scorer) throws IOException {
-                super.setScorer(scorer);
-                compoundQueryScorer = (HybridQueryScorer) scorer;
+                if (scorer instanceof HybridQueryScorer) {
+                    log.debug("passed scorer is of type HybridQueryScorer, saving it for collecting documents and scores");
+                    compoundQueryScorer = (HybridQueryScorer) scorer;
+                } else {
+                    compoundQueryScorer = getHybridQueryScorer(scorer);
+                    if (Objects.isNull(compoundQueryScorer)) {
+                        log.error(
+                            String.format(Locale.ROOT, "cannot find scorer of type HybridQueryScorer in a hierarchy of scorer %s", scorer)
+                        );
+                    }
+                }
+            }
+
+            private HybridQueryScorer getHybridQueryScorer(final Scorable scorer) throws IOException {
+                if (scorer == null) {
+                    return null;
+                }
+                if (scorer instanceof HybridQueryScorer) {
+                    return (HybridQueryScorer) scorer;
+                }
+                for (Scorable.ChildScorable childScorable : scorer.getChildren()) {
+                    HybridQueryScorer hybridQueryScorer = getHybridQueryScorer(childScorable.child);
+                    if (Objects.nonNull(hybridQueryScorer)) {
+                        log.debug(
+                            String.format(
+                                Locale.ROOT,
+                                "found hybrid query scorer, it's child of scorer %s",
+                                childScorable.child.getClass().getSimpleName()
+                            )
+                        );
+                        return hybridQueryScorer;
+                    }
+                }
+                return null;
             }
 
             @Override
             public void collect(int doc) throws IOException {
+                if (Objects.isNull(compoundQueryScorer)) {
+                    throw new IllegalArgumentException("scorers are null for all sub-queries in hybrid query");
+                }
                 float[] subScoresByQuery = compoundQueryScorer.hybridScores();
                 // iterate over results for each query
                 if (compoundScores == null) {

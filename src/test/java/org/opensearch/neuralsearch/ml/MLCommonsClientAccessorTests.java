@@ -328,7 +328,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         Mockito.verify(singleSentenceResultListener).onFailure(nodeNodeConnectedException);
     }
-    
+
     public void testInferenceMultimodal_whenInvalidInputAndEmptyTensorOutput_thenFail() {
         List<ModelTensors> tensorsList = new ArrayList<>();
         List<ModelTensor> mlModelTensorList = List.of(

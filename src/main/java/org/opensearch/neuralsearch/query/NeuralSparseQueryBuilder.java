@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Supplier;
 
 import org.apache.commons.lang.StringUtils;
@@ -17,6 +18,7 @@ import org.apache.lucene.document.FeatureField;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
+import org.opensearch.Version;
 import org.opensearch.common.SetOnce;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.action.ActionListener;
@@ -31,6 +33,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -54,7 +57,7 @@ import lombok.extern.log4j.Log4j2;
 @Accessors(chain = true, fluent = true)
 @NoArgsConstructor
 @AllArgsConstructor
-public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQueryBuilder> {
+public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQueryBuilder> implements ModelInferenceQueryBuilder {
     public static final String NAME = "neural_sparse";
     @VisibleForTesting
     static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
@@ -77,6 +80,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     private String modelId;
     private Float maxTokenScore;
     private Supplier<Map<String, Float>> queryTokensSupplier;
+    private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
 
     /**
      * Constructor from stream input
@@ -88,7 +92,11 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         super(in);
         this.fieldName = in.readString();
         this.queryText = in.readString();
-        this.modelId = in.readString();
+        if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
+            this.modelId = in.readOptionalString();
+        } else {
+            this.modelId = in.readString();
+        }
         this.maxTokenScore = in.readOptionalFloat();
         if (in.readBoolean()) {
             Map<String, Float> queryTokens = in.readMap(StreamInput::readString, StreamInput::readFloat);
@@ -100,9 +108,13 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     protected void doWriteTo(StreamOutput out) throws IOException {
         out.writeString(fieldName);
         out.writeString(queryText);
-        out.writeString(modelId);
+        if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
+            out.writeOptionalString(this.modelId);
+        } else {
+            out.writeString(this.modelId);
+        }
         out.writeOptionalFloat(maxTokenScore);
-        if (queryTokensSupplier != null && queryTokensSupplier.get() != null) {
+        if (!Objects.isNull(queryTokensSupplier) && !Objects.isNull(queryTokensSupplier.get())) {
             out.writeBoolean(true);
             out.writeMap(queryTokensSupplier.get(), StreamOutput::writeString, StreamOutput::writeFloat);
         } else {
@@ -115,7 +127,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         xContentBuilder.startObject(NAME);
         xContentBuilder.startObject(fieldName);
         xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
-        xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
+        if (Objects.nonNull(modelId)) {
+            xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
+        }
         if (maxTokenScore != null) xContentBuilder.field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), maxTokenScore);
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
@@ -161,11 +175,12 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             sparseEncodingQueryBuilder.queryText(),
             String.format(Locale.ROOT, "%s field must be provided for [%s] query", QUERY_TEXT_FIELD.getPreferredName(), NAME)
         );
-        requireValue(
-            sparseEncodingQueryBuilder.modelId(),
-            String.format(Locale.ROOT, "%s field must be provided for [%s] query", MODEL_ID_FIELD.getPreferredName(), NAME)
-        );
-
+        if (!isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
+            requireValue(
+                sparseEncodingQueryBuilder.modelId(),
+                String.format(Locale.ROOT, "%s field must be provided for [%s] query", MODEL_ID_FIELD.getPreferredName(), NAME)
+            );
+        }
         return sparseEncodingQueryBuilder;
     }
 
@@ -303,5 +318,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     @Override
     public String getWriteableName() {
         return NAME;
+    }
+
+    private static boolean isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport() {
+        return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID);
     }
 }

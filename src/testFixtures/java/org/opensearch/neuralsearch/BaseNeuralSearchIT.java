@@ -413,13 +413,53 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final int resultSize,
         final Map<String, String> requestParams
     ) {
-        XContentBuilder builder = XContentFactory.jsonBuilder().startObject().field("query");
-        queryBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
+        return search(index, queryBuilder, rescorer, resultSize, requestParams, null);
+    }
+
+    @SneakyThrows
+    protected Map<String, Object> search(
+        String index,
+        QueryBuilder queryBuilder,
+        QueryBuilder rescorer,
+        int resultSize,
+        Map<String, String> requestParams,
+        List<Object> aggs
+    ) {
+        return search(index, queryBuilder, rescorer, resultSize, requestParams, aggs, null);
+    }
+
+    @SneakyThrows
+    protected Map<String, Object> search(
+        String index,
+        QueryBuilder queryBuilder,
+        QueryBuilder rescorer,
+        int resultSize,
+        Map<String, String> requestParams,
+        List<Object> aggs,
+        QueryBuilder postFilterBuilder
+    ) {
+        XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
+
+        if (queryBuilder != null) {
+            builder.field("query");
+            queryBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
+        }
 
         if (rescorer != null) {
             builder.startObject("rescore").startObject("query").field("query_weight", 0.0f).field("rescore_query");
             rescorer.toXContent(builder, ToXContent.EMPTY_PARAMS);
             builder.endObject().endObject();
+        }
+        if (Objects.nonNull(aggs)) {
+            builder.startObject("aggs");
+            for (Object agg : aggs) {
+                builder.value(agg);
+            }
+            builder.endObject();
+        }
+        if (Objects.nonNull(postFilterBuilder)) {
+            builder.field("post_filter");
+            postFilterBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
         }
 
         builder.endObject();
@@ -463,6 +503,35 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         addKnnDoc(index, docId, vectorFieldNames, vectors, textFieldNames, texts, Collections.emptyList(), Collections.emptyList());
     }
 
+    @SneakyThrows
+    protected void addKnnDoc(
+        String index,
+        String docId,
+        List<String> vectorFieldNames,
+        List<Object[]> vectors,
+        List<String> textFieldNames,
+        List<String> texts,
+        List<String> nestedFieldNames,
+        List<Map<String, String>> nestedFields
+    ) {
+        addKnnDoc(
+            index,
+            docId,
+            vectorFieldNames,
+            vectors,
+            textFieldNames,
+            texts,
+            nestedFieldNames,
+            nestedFields,
+            Collections.emptyList(),
+            Collections.emptyList(),
+            Collections.emptyList(),
+            Collections.emptyList(),
+            Collections.emptyList(),
+            Collections.emptyList()
+        );
+    }
+
     /**
      * Add a set of knn vectors and text to an index
      *
@@ -484,7 +553,13 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final List<String> textFieldNames,
         final List<String> texts,
         final List<String> nestedFieldNames,
-        final List<Map<String, String>> nestedFields
+        final List<Map<String, String>> nestedFields,
+        final List<String> integerFieldNames,
+        final List<Integer> integerFieldValues,
+        final List<String> keywordFieldNames,
+        final List<String> keywordFieldValues,
+        final List<String> dateFieldNames,
+        final List<String> dateFieldValues
     ) {
         Request request = new Request("POST", "/" + index + "/_doc/" + docId + "?refresh=true");
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
@@ -504,6 +579,18 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
                 builder.field(entry.getKey(), entry.getValue());
             }
             builder.endObject();
+        }
+
+        for (int i = 0; i < integerFieldNames.size(); i++) {
+            builder.field(integerFieldNames.get(i), integerFieldValues.get(i));
+        }
+
+        for (int i = 0; i < keywordFieldNames.size(); i++) {
+            builder.field(keywordFieldNames.get(i), keywordFieldValues.get(i));
+        }
+
+        for (int i = 0; i < dateFieldNames.size(); i++) {
+            builder.field(dateFieldNames.get(i), dateFieldValues.get(i));
         }
         builder.endObject();
 
@@ -668,6 +755,25 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final List<String> nestedFields,
         final int numberOfShards
     ) {
+        return buildIndexConfiguration(
+            knnFieldConfigs,
+            nestedFields,
+            Collections.emptyList(),
+            Collections.emptyList(),
+            Collections.emptyList(),
+            numberOfShards
+        );
+    }
+
+    @SneakyThrows
+    protected String buildIndexConfiguration(
+        final List<KNNFieldConfig> knnFieldConfigs,
+        final List<String> nestedFields,
+        final List<String> intFields,
+        final List<String> keywordFields,
+        final List<String> dateFields,
+        final int numberOfShards
+    ) {
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject("settings")
@@ -688,9 +794,31 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
                 .endObject()
                 .endObject();
         }
+        // treat the list in a manner that first element is always the type name and all others are keywords
+        if (!nestedFields.isEmpty()) {
+            String nestedFieldName = nestedFields.get(0);
+            xContentBuilder.startObject(nestedFieldName).field("type", "nested");
+            if (nestedFields.size() > 1) {
+                xContentBuilder.startObject("properties");
+                for (int i = 1; i < nestedFields.size(); i++) {
+                    String innerNestedTypeField = nestedFields.get(i);
+                    xContentBuilder.startObject(innerNestedTypeField).field("type", "keyword").endObject();
+                }
+                xContentBuilder.endObject();
+            }
+            xContentBuilder.endObject();
+        }
 
-        for (String nestedField : nestedFields) {
-            xContentBuilder.startObject(nestedField).field("type", "nested").endObject();
+        for (String intField : intFields) {
+            xContentBuilder.startObject(intField).field("type", "integer").endObject();
+        }
+
+        for (String keywordField : keywordFields) {
+            xContentBuilder.startObject(keywordField).field("type", "keyword").endObject();
+        }
+
+        for (String dateField : dateFields) {
+            xContentBuilder.startObject(dateField).field("type", "date").field("format", "MM/dd/yyyy").endObject();
         }
 
         xContentBuilder.endObject().endObject().endObject();
@@ -1057,7 +1185,13 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             deleteSearchPipeline(searchPipeline);
         }
         if (modelId != null) {
-            deleteModel(modelId);
+            try {
+                deleteModel(modelId);
+            } catch (AssertionError e) {
+                // sometimes we have flaky test that the model state doesn't change after call undeploy api
+                // for this case we can call undeploy api one more time
+                deleteModel(modelId);
+            }
         }
         if (indexName != null) {
             deleteIndex(indexName);
