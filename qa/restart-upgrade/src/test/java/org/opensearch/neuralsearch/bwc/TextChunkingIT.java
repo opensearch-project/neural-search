@@ -19,7 +19,8 @@ public class TextChunkingIT extends AbstractRestartUpgradeRestTestCase {
     private static final String PIPELINE_NAME = "pipeline-text-chunking";
     private static final String INPUT_FIELD = "body";
     private static final String OUTPUT_FIELD = "body_chunk";
-    private static final String DOCUMENT_PATH = "processor/ChunkingTestDocument.json";
+    private static final String TEST_DOCUMENT_PATH = "processor/ChunkingTestDocument.json";
+    private static final String TEST_INDEX_SETTING_PATH = "processor/ChunkingIndexSettings.json";
     List<String> expectedPassages = List.of(
         "This is an example document to be chunked. The document ",
         "contains a single paragraph, two sentences and 24 tokens by ",
@@ -31,7 +32,7 @@ public class TextChunkingIT extends AbstractRestartUpgradeRestTestCase {
     // Validate process, pipeline and document count in restart-upgrade scenario
     public void testTextChunkingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-        URL documentURLPath = classLoader.getResource(DOCUMENT_PATH);
+        URL documentURLPath = classLoader.getResource(TEST_DOCUMENT_PATH);
         Objects.requireNonNull(documentURLPath);
         String document = Files.readString(Path.of(documentURLPath.toURI()));
         String indexName = getIndexNameForTest();
@@ -51,7 +52,10 @@ public class TextChunkingIT extends AbstractRestartUpgradeRestTestCase {
     }
 
     private void createChunkingIndex() throws Exception {
-        createIndexWithConfiguration(getIndexNameForTest(), "{}", PIPELINE_NAME);
+        URL documentURLPath = classLoader.getResource(TEST_INDEX_SETTING_PATH);
+        Objects.requireNonNull(documentURLPath);
+        String indexSetting = Files.readString(Path.of(documentURLPath.toURI()));
+        createIndexWithConfiguration(getIndexNameForTest(), indexSetting, PIPELINE_NAME);
     }
 
     private void validateTestIndex(String indexName, String fieldName, int documentCount, Object expected) {
