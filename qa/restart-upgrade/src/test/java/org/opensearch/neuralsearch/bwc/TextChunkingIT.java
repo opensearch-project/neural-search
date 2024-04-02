@@ -38,7 +38,7 @@ public class TextChunkingIT extends AbstractRestartUpgradeRestTestCase {
         String indexName = getIndexNameForTest();
         if (isRunningAgainstOldCluster()) {
             createPipelineForTextChunkingProcessor(PIPELINE_NAME);
-            createChunkingIndex();
+            createChunkingIndex(indexName);
             addDocument(indexName, "0", INPUT_FIELD, document, null, null);
             validateTestIndex(indexName, OUTPUT_FIELD, 1, expectedPassages);
         } else {
