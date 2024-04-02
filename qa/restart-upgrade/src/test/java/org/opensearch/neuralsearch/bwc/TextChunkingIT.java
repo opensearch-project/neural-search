@@ -39,10 +39,11 @@ public class TextChunkingIT extends AbstractRestartUpgradeRestTestCase {
             createPipelineForTextChunkingProcessor(PIPELINE_NAME);
             createChunkingIndex();
             addDocument(indexName, "0", INPUT_FIELD, document, null, null);
+            validateTestIndex(indexName, OUTPUT_FIELD, 1, expectedPassages);
         } else {
             try {
                 addDocument(indexName, "1", INPUT_FIELD, document, null, null);
-                validateTestIndex(indexName, OUTPUT_FIELD, expectedPassages);
+                validateTestIndex(indexName, OUTPUT_FIELD, 2, expectedPassages);
             } finally {
                 wipeOfTestResources(indexName, PIPELINE_NAME, null, null);
             }
@@ -53,9 +54,9 @@ public class TextChunkingIT extends AbstractRestartUpgradeRestTestCase {
         createIndexWithConfiguration(getIndexNameForTest(), "{}", PIPELINE_NAME);
     }
 
-    private void validateTestIndex(String indexName, String fieldName, Object expected) {
+    private void validateTestIndex(String indexName, String fieldName, int documentCount, Object expected) {
         int docCount = getDocCount(indexName);
-        assertEquals(2, docCount);
+        assertEquals(documentCount, docCount);
         MatchAllQueryBuilder query = new MatchAllQueryBuilder();
         Map<String, Object> searchResults = search(getIndexNameForTest(), query, 10);
         assertNotNull(searchResults);
