@@ -13,7 +13,6 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.opensearch.index.query.MatchAllQueryBuilder;
-import org.opensearch.neuralsearch.TestUtils;
 import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
 
 public class TextChunkingIT extends AbstractRollingUpgradeTestCase {
@@ -23,7 +22,11 @@ public class TextChunkingIT extends AbstractRollingUpgradeTestCase {
     private static final String OUTPUT_FIELD = "body_chunk";
     private static final String DOCUMENT_PATH = "processor/ChunkingTestDocument.json";
     private static final int NUM_DOCS_PER_ROUND = 1;
-    List<String> expectedPassages = List.of("This is an example document to be chunked. The document ", "contains a single paragraph, two sentences and 24 tokens by ", "standard tokenizer in OpenSearch.");
+    List<String> expectedPassages = List.of(
+        "This is an example document to be chunked. The document ",
+        "contains a single paragraph, two sentences and 24 tokens by ",
+        "standard tokenizer in OpenSearch."
+    );
 
     // Test rolling-upgrade text chunking processor
     // Create Text Chunking Processor, Ingestion Pipeline and add document
