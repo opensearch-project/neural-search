@@ -40,7 +40,7 @@ public class TextChunkingIT extends AbstractRollingUpgradeTestCase {
         switch (getClusterType()) {
             case OLD:
                 createPipelineForTextChunkingProcessor(PIPELINE_NAME);
-                createChunkingIndex();
+                createChunkingIndex(indexName);
                 addDocument(indexName, "0", INPUT_FIELD, document, null, null);
                 break;
             case MIXED:
@@ -60,7 +60,7 @@ public class TextChunkingIT extends AbstractRollingUpgradeTestCase {
                     addDocument(indexName, "2", INPUT_FIELD, document, null, null);
                     validateTestIndex(indexName, OUTPUT_FIELD, totalDocsCountUpgraded, expectedPassages);
                 } finally {
-                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, null, null);
+                    wipeOfTestResources(indexName, PIPELINE_NAME, null, null);
                 }
                 break;
             default:
@@ -68,11 +68,11 @@ public class TextChunkingIT extends AbstractRollingUpgradeTestCase {
         }
     }
 
-    private void createChunkingIndex() throws Exception {
+    private void createChunkingIndex(String indexName) throws Exception {
         URL documentURLPath = classLoader.getResource(TEST_INDEX_SETTING_PATH);
         Objects.requireNonNull(documentURLPath);
         String indexSetting = Files.readString(Path.of(documentURLPath.toURI()));
-        createIndexWithConfiguration(getIndexNameForTest(), indexSetting, PIPELINE_NAME);
+        createIndexWithConfiguration(indexName, indexSetting, PIPELINE_NAME);
     }
 
     private void validateTestIndex(String indexName, String fieldName, int documentCount, Object expected) {

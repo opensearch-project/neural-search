@@ -51,11 +51,11 @@ public class TextChunkingIT extends AbstractRestartUpgradeRestTestCase {
         }
     }
 
-    private void createChunkingIndex() throws Exception {
+    private void createChunkingIndex(String indexName) throws Exception {
         URL documentURLPath = classLoader.getResource(TEST_INDEX_SETTING_PATH);
         Objects.requireNonNull(documentURLPath);
         String indexSetting = Files.readString(Path.of(documentURLPath.toURI()));
-        createIndexWithConfiguration(getIndexNameForTest(), indexSetting, PIPELINE_NAME);
+        createIndexWithConfiguration(indexName, indexSetting, PIPELINE_NAME);
     }
 
     private void validateTestIndex(String indexName, String fieldName, int documentCount, Object expected) {
