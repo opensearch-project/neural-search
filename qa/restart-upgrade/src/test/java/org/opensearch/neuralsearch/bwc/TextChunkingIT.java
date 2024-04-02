@@ -62,7 +62,7 @@ public class TextChunkingIT extends AbstractRestartUpgradeRestTestCase {
         int docCount = getDocCount(indexName);
         assertEquals(documentCount, docCount);
         MatchAllQueryBuilder query = new MatchAllQueryBuilder();
-        Map<String, Object> searchResults = search(getIndexNameForTest(), query, 10);
+        Map<String, Object> searchResults = search(indexName, query, 10);
         assertNotNull(searchResults);
         Map<String, Object> document = getFirstInnerHit(searchResults);
         assertNotNull(document);
