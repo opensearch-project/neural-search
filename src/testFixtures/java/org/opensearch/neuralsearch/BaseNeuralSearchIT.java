@@ -291,7 +291,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         createPipelineProcessor(requestBody, pipelineName, modelId);
     }
 
-    protected void createPipelineProcessor(final String requestBody, final String pipelineName) throws Exception {
+    protected void createPipelineProcessorWithoutModelId(final String requestBody, final String pipelineName) throws Exception {
         Response pipelineCreateResponse = makeRequest(
             client(),
             "PUT",

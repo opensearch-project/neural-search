@@ -137,6 +137,6 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
         URL pipelineURLPath = classLoader.getResource("processor/PipelineForTextChunkingProcessorConfiguration.json");
         Objects.requireNonNull(pipelineURLPath);
         String requestBody = Files.readString(Path.of(pipelineURLPath.toURI()));
-        createPipelineProcessor(requestBody, pipelineName);
+        createPipelineProcessorWithoutModelId(requestBody, pipelineName);
     }
 }

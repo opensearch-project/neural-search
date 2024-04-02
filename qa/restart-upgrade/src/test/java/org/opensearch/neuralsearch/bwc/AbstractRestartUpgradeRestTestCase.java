@@ -106,6 +106,6 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
         URL pipelineURLPath = classLoader.getResource("processor/PipelineForTextChunkingProcessorConfiguration.json");
         Objects.requireNonNull(pipelineURLPath);
         String requestBody = Files.readString(Path.of(pipelineURLPath.toURI()));
-        createPipelineProcessor(requestBody, pipelineName);
+        createPipelineProcessorWithoutModelId(requestBody, pipelineName);
     }
 }
