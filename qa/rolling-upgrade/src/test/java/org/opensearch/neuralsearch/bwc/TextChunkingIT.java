@@ -19,9 +19,11 @@ public class TextChunkingIT extends AbstractRollingUpgradeTestCase {
     private static final String PIPELINE_NAME = "pipeline-text-chunking";
     private static final String INPUT_FIELD = "body";
     private static final String OUTPUT_FIELD = "body_chunk";
-    private static final String TEST_DOCUMENT_PATH = "processor/ChunkingTestDocument.json";
     private static final String TEST_INDEX_SETTING_PATH = "processor/ChunkingIndexSettings.json";
     private static final int NUM_DOCS_PER_ROUND = 1;
+    private static final String TEST_INGEST_TEXT =
+        "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
+
     List<String> expectedPassages = List.of(
         "This is an example document to be chunked. The document ",
         "contains a single paragraph, two sentences and 24 tokens by ",
@@ -33,22 +35,19 @@ public class TextChunkingIT extends AbstractRollingUpgradeTestCase {
     // Validate process, pipeline and document count in rolling-upgrade scenario
     public void testTextChunkingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-        URL documentURLPath = classLoader.getResource(TEST_DOCUMENT_PATH);
-        Objects.requireNonNull(documentURLPath);
-        String document = Files.readString(Path.of(documentURLPath.toURI()));
         String indexName = getIndexNameForTest();
         switch (getClusterType()) {
             case OLD:
                 createPipelineForTextChunkingProcessor(PIPELINE_NAME);
                 createChunkingIndex(indexName);
-                addDocument(indexName, "0", INPUT_FIELD, document, null, null);
+                addDocument(indexName, "0", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
                 break;
             case MIXED:
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
                     validateTestIndex(indexName, OUTPUT_FIELD, totalDocsCountMixed, expectedPassages);
-                    addDocument(indexName, "1", INPUT_FIELD, document, null, null);
+                    addDocument(indexName, "1", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
                 } else {
                     totalDocsCountMixed = 2 * NUM_DOCS_PER_ROUND;
                     validateTestIndex(indexName, OUTPUT_FIELD, totalDocsCountMixed, expectedPassages);
@@ -57,7 +56,7 @@ public class TextChunkingIT extends AbstractRollingUpgradeTestCase {
             case UPGRADED:
                 try {
                     int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                    addDocument(indexName, "2", INPUT_FIELD, document, null, null);
+                    addDocument(indexName, "2", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
                     validateTestIndex(indexName, OUTPUT_FIELD, totalDocsCountUpgraded, expectedPassages);
                 } finally {
                     wipeOfTestResources(indexName, PIPELINE_NAME, null, null);

@@ -19,8 +19,9 @@ public class TextChunkingIT extends AbstractRestartUpgradeRestTestCase {
     private static final String PIPELINE_NAME = "pipeline-text-chunking";
     private static final String INPUT_FIELD = "body";
     private static final String OUTPUT_FIELD = "body_chunk";
-    private static final String TEST_DOCUMENT_PATH = "processor/ChunkingTestDocument.json";
     private static final String TEST_INDEX_SETTING_PATH = "processor/ChunkingIndexSettings.json";
+    private static final String TEST_INGEST_TEXT =
+        "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
     List<String> expectedPassages = List.of(
         "This is an example document to be chunked. The document ",
         "contains a single paragraph, two sentences and 24 tokens by ",
@@ -32,18 +33,15 @@ public class TextChunkingIT extends AbstractRestartUpgradeRestTestCase {
     // Validate process, pipeline and document count in restart-upgrade scenario
     public void testTextChunkingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-        URL documentURLPath = classLoader.getResource(TEST_DOCUMENT_PATH);
-        Objects.requireNonNull(documentURLPath);
-        String document = Files.readString(Path.of(documentURLPath.toURI()));
         String indexName = getIndexNameForTest();
         if (isRunningAgainstOldCluster()) {
             createPipelineForTextChunkingProcessor(PIPELINE_NAME);
             createChunkingIndex(indexName);
-            addDocument(indexName, "0", INPUT_FIELD, document, null, null);
+            addDocument(indexName, "0", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
             validateTestIndex(indexName, OUTPUT_FIELD, 1, expectedPassages);
         } else {
             try {
-                addDocument(indexName, "1", INPUT_FIELD, document, null, null);
+                addDocument(indexName, "1", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
                 validateTestIndex(indexName, OUTPUT_FIELD, 2, expectedPassages);
             } finally {
                 wipeOfTestResources(indexName, PIPELINE_NAME, null, null);
