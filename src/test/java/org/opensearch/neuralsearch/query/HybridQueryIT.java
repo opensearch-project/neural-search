@@ -29,6 +29,7 @@ import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.index.query.RangeQueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
@@ -43,14 +44,17 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD = "test-hybrid-multi-doc-single-shard-index";
     private static final String TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD =
         "test-hybrid-multi-doc-nested-type-single-shard-index";
+    private static final String TEST_INDEX_WITH_KEYWORDS_ONE_SHARD = "test-hybrid-keywords-single-shard-index";
     private static final String TEST_QUERY_TEXT = "greetings";
     private static final String TEST_QUERY_TEXT2 = "salute";
     private static final String TEST_QUERY_TEXT3 = "hello";
     private static final String TEST_QUERY_TEXT4 = "place";
     private static final String TEST_QUERY_TEXT5 = "welcome";
+    private static final String TEST_QUERY_TEXT6 = "machine";
     private static final String TEST_DOC_TEXT1 = "Hello world";
     private static final String TEST_DOC_TEXT2 = "Hi to this place";
     private static final String TEST_DOC_TEXT3 = "We would like to welcome everyone";
+    private static final String TEST_DOC_TEXT4 = "There was no telling what thoughts would come from the machine";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_1 = "test-knn-vector-1";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_2 = "test-knn-vector-2";
     private static final String TEST_TEXT_FIELD_NAME_1 = "test-text-field-1";
@@ -59,6 +63,18 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     private static final String NESTED_FIELD_2 = "lastname";
     private static final String NESTED_FIELD_1_VALUE = "john";
     private static final String NESTED_FIELD_2_VALUE = "black";
+    private static final String KEYWORD_FIELD_1 = "doc_keyword";
+    private static final String KEYWORD_FIELD_1_VALUE = "workable";
+    private static final String KEYWORD_FIELD_2_VALUE = "angry";
+    private static final String KEYWORD_FIELD_3_VALUE = "likeable";
+    private static final String KEYWORD_FIELD_4_VALUE = "entire";
+    private static final String INTEGER_FIELD_PRICE = "doc_price";
+    private static final int INTEGER_FIELD_PRICE_1_VALUE = 130;
+    private static final int INTEGER_FIELD_PRICE_2_VALUE = 100;
+    private static final int INTEGER_FIELD_PRICE_3_VALUE = 200;
+    private static final int INTEGER_FIELD_PRICE_4_VALUE = 25;
+    private static final int INTEGER_FIELD_PRICE_5_VALUE = 30;
+    private static final int INTEGER_FIELD_PRICE_6_VALUE = 350;
     private final float[] testVector1 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector2 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector3 = createRandomVector(TEST_DIMENSION);
@@ -400,6 +416,87 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
+    public void testRequestCache_whenQueryReturnResults_thenSuccessful() {
+        String modelId = null;
+        try {
+            initializeIndexIfNotExist(TEST_INDEX_WITH_KEYWORDS_ONE_SHARD);
+            modelId = prepareModel();
+            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+            MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(KEYWORD_FIELD_1, KEYWORD_FIELD_2_VALUE);
+            RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery(INTEGER_FIELD_PRICE).gte(10).lte(1000);
+
+            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+            hybridQueryBuilder.add(matchQueryBuilder);
+            hybridQueryBuilder.add(rangeQueryBuilder);
+
+            // first query with cache flag executed normally by reading documents from index
+            Map<String, Object> firstSearchResponseAsMap = search(
+                TEST_INDEX_WITH_KEYWORDS_ONE_SHARD,
+                hybridQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE, "request_cache", Boolean.TRUE.toString())
+            );
+
+            assertEquals(6, getHitCount(firstSearchResponseAsMap));
+
+            List<Map<String, Object>> hits1NestedList = getNestedHits(firstSearchResponseAsMap);
+            List<String> ids = new ArrayList<>();
+            List<Double> scores = new ArrayList<>();
+            for (Map<String, Object> oneHit : hits1NestedList) {
+                ids.add((String) oneHit.get("_id"));
+                scores.add((Double) oneHit.get("_score"));
+            }
+
+            // verify that scores are in desc order
+            assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
+            // verify that all ids are unique
+            assertEquals(Set.copyOf(ids).size(), ids.size());
+
+            Map<String, Object> total = getTotalHits(firstSearchResponseAsMap);
+            assertNotNull(total.get("value"));
+            assertEquals(6, total.get("value"));
+            assertNotNull(total.get("relation"));
+            assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+
+            // second query is served from the cache
+            Map<String, Object> secondSearchResponseAsMap = search(
+                TEST_INDEX_WITH_KEYWORDS_ONE_SHARD,
+                hybridQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE, "request_cache", Boolean.TRUE.toString())
+            );
+
+            assertEquals(6, getHitCount(secondSearchResponseAsMap));
+
+            List<Map<String, Object>> hitsNestedListSecondQuery = getNestedHits(secondSearchResponseAsMap);
+            List<String> idsSecondQuery = new ArrayList<>();
+            List<Double> scoresSecondQuery = new ArrayList<>();
+            for (Map<String, Object> oneHit : hitsNestedListSecondQuery) {
+                idsSecondQuery.add((String) oneHit.get("_id"));
+                scoresSecondQuery.add((Double) oneHit.get("_score"));
+            }
+
+            // verify that scores are in desc order
+            assertTrue(
+                IntStream.range(0, scoresSecondQuery.size() - 1)
+                    .noneMatch(idx -> scoresSecondQuery.get(idx) < scoresSecondQuery.get(idx + 1))
+            );
+            // verify that all ids are unique
+            assertEquals(Set.copyOf(idsSecondQuery).size(), idsSecondQuery.size());
+
+            Map<String, Object> totalSecondQuery = getTotalHits(secondSearchResponseAsMap);
+            assertNotNull(totalSecondQuery.get("value"));
+            assertEquals(6, totalSecondQuery.get("value"));
+            assertNotNull(totalSecondQuery.get("relation"));
+            assertEquals(RELATION_EQUAL_TO, totalSecondQuery.get("relation"));
+        } finally {
+            wipeOfTestResources(TEST_INDEX_WITH_KEYWORDS_ONE_SHARD, null, modelId, SEARCH_PIPELINE);
+        }
+    }
+
+    @SneakyThrows
     private void initializeIndexIfNotExist(String indexName) throws IOException {
         if (TEST_BASIC_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_INDEX_NAME)) {
             prepareKnnIndex(
@@ -488,6 +585,111 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 List.of(),
                 List.of(TEST_NESTED_TYPE_FIELD_NAME_1),
                 List.of(Map.of(NESTED_FIELD_1, NESTED_FIELD_1_VALUE, NESTED_FIELD_2, NESTED_FIELD_2_VALUE))
+            );
+        }
+
+        if (TEST_INDEX_WITH_KEYWORDS_ONE_SHARD.equals(indexName) && !indexExists(TEST_INDEX_WITH_KEYWORDS_ONE_SHARD)) {
+            createIndexWithConfiguration(
+                indexName,
+                buildIndexConfiguration(List.of(), List.of(), List.of(INTEGER_FIELD_PRICE), List.of(KEYWORD_FIELD_1), List.of(), 1),
+                ""
+            );
+
+            addKnnDoc(
+                indexName,
+                "1",
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(INTEGER_FIELD_PRICE),
+                List.of(INTEGER_FIELD_PRICE_1_VALUE),
+                List.of(KEYWORD_FIELD_1),
+                List.of(KEYWORD_FIELD_1_VALUE),
+                List.of(),
+                List.of()
+            );
+            addKnnDoc(
+                indexName,
+                "2",
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(INTEGER_FIELD_PRICE),
+                List.of(INTEGER_FIELD_PRICE_2_VALUE),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of()
+            );
+            addKnnDoc(
+                indexName,
+                "3",
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(INTEGER_FIELD_PRICE),
+                List.of(INTEGER_FIELD_PRICE_3_VALUE),
+                List.of(KEYWORD_FIELD_1),
+                List.of(KEYWORD_FIELD_2_VALUE),
+                List.of(),
+                List.of()
+            );
+            addKnnDoc(
+                indexName,
+                "4",
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(INTEGER_FIELD_PRICE),
+                List.of(INTEGER_FIELD_PRICE_4_VALUE),
+                List.of(KEYWORD_FIELD_1),
+                List.of(KEYWORD_FIELD_3_VALUE),
+                List.of(),
+                List.of()
+            );
+            addKnnDoc(
+                indexName,
+                "5",
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(INTEGER_FIELD_PRICE),
+                List.of(INTEGER_FIELD_PRICE_5_VALUE),
+                List.of(KEYWORD_FIELD_1),
+                List.of(KEYWORD_FIELD_4_VALUE),
+                List.of(),
+                List.of()
+            );
+            addKnnDoc(
+                indexName,
+                "6",
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(INTEGER_FIELD_PRICE),
+                List.of(INTEGER_FIELD_PRICE_6_VALUE),
+                List.of(KEYWORD_FIELD_1),
+                List.of(KEYWORD_FIELD_4_VALUE),
+                List.of(),
+                List.of()
             );
         }
     }
