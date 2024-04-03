@@ -37,7 +37,7 @@ public class TextChunkingIT extends AbstractRestartUpgradeRestTestCase {
         if (isRunningAgainstOldCluster()) {
             createPipelineForTextChunkingProcessor(PIPELINE_NAME);
             createChunkingIndex(indexName);
-            waitForClusterHealthGreen(NODES_BWC_CLUSTER);
+            waitForClusterHealthGreen(NODES_BWC_CLUSTER); // ensure index has been created
             addDocument(indexName, "0", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
             validateTestIndex(indexName, OUTPUT_FIELD, 1, expectedPassages);
         } else {

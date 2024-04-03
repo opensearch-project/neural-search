@@ -40,7 +40,7 @@ public class TextChunkingIT extends AbstractRollingUpgradeTestCase {
             case OLD:
                 createPipelineForTextChunkingProcessor(PIPELINE_NAME);
                 createChunkingIndex(indexName);
-                waitForClusterHealthGreen(NODES_BWC_CLUSTER);
+                waitForClusterHealthGreen(NODES_BWC_CLUSTER); // ensure index has been created
                 addDocument(indexName, "0", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
                 break;
             case MIXED:
