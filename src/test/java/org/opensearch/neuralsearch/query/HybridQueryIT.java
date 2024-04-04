@@ -28,6 +28,7 @@ import org.opensearch.client.ResponseException;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.NestedQueryBuilder;
+import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.RangeQueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
@@ -575,6 +576,54 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertEquals(RELATION_EQUAL_TO, totalSecondQuery.get("relation"));
         } finally {
             wipeOfTestResources(TEST_INDEX_WITH_KEYWORDS_THREE_SHARDS, null, modelId, SEARCH_PIPELINE);
+        }
+    }
+
+    @SneakyThrows
+    public void testIndexAlias_whenHybridQueryAndIndexAliasHasFilter_thenSuccess() {
+        String modelId = null;
+        String alias = "alias_with_filter";
+        try {
+            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
+            modelId = prepareModel();
+            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+            // create alias for index
+            QueryBuilder aliasFilter = QueryBuilders.boolQuery()
+                .mustNot(QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
+            createIndexAlias(TEST_MULTI_DOC_INDEX_NAME, alias, aliasFilter);
+
+            NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
+                TEST_KNN_VECTOR_FIELD_NAME_1,
+                TEST_QUERY_TEXT,
+                "",
+                modelId,
+                5,
+                null,
+                null
+            );
+            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+            hybridQueryBuilder.add(neuralQueryBuilder);
+
+            Map<String, Object> searchResponseAsMap = search(
+                alias,
+                hybridQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            );
+
+            assertEquals(2, getHitCount(searchResponseAsMap));
+            assertTrue(getMaxScore(searchResponseAsMap).isPresent());
+            assertEquals(1.0f, getMaxScore(searchResponseAsMap).get(), DELTA_FOR_SCORE_ASSERTION);
+
+            Map<String, Object> total = getTotalHits(searchResponseAsMap);
+            assertNotNull(total.get("value"));
+            assertEquals(2, total.get("value"));
+            assertNotNull(total.get("relation"));
+            assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+        } finally {
+            deleteIndexAlias(TEST_MULTI_DOC_INDEX_NAME, alias);
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME, null, modelId, SEARCH_PIPELINE);
         }
     }
 

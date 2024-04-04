@@ -29,12 +29,32 @@ public final class HybridQuery extends Query implements Iterable<Query> {
 
     private final List<Query> subQueries;
 
-    public HybridQuery(Collection<Query> subQueries) {
+    /**
+     * Create new instance of hybrid query object based on collection of sub queries and filter query
+     * @param subQueries collection of queries that are executed individually and contribute to a final list of combined scores
+     * @param filterQuery filter that will be applied to each sub query. If this is null sub queries will be executed as is
+     */
+    public HybridQuery(final Collection<Query> subQueries, final Query filterQuery) {
         Objects.requireNonNull(subQueries, "collection of queries must not be null");
         if (subQueries.isEmpty()) {
             throw new IllegalArgumentException("collection of queries must not be empty");
         }
-        this.subQueries = new ArrayList<>(subQueries);
+        if (Objects.isNull(filterQuery)) {
+            this.subQueries = new ArrayList<>(subQueries);
+        } else {
+            List<Query> modifiedSubQueries = new ArrayList<>();
+            for (Query subQuery : subQueries) {
+                BooleanQuery.Builder builder = new BooleanQuery.Builder();
+                builder.add(subQuery, BooleanClause.Occur.MUST);
+                builder.add(filterQuery, BooleanClause.Occur.FILTER);
+                modifiedSubQueries.add(builder.build());
+            }
+            this.subQueries = modifiedSubQueries;
+        }
+    }
+
+    public HybridQuery(final Collection<Query> subQueries) {
+        this(subQueries, null);
     }
 
     /**

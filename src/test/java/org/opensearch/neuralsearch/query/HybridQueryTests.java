@@ -24,7 +24,9 @@ import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.Term;
+import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopDocs;
@@ -275,5 +277,41 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
 
         String queryString = query.toString(TEXT_FIELD_NAME);
         assertEquals("(keyword | anotherkeyword | (keyword anotherkeyword))", queryString);
+    }
+
+    @SneakyThrows
+    public void testFilter_whenSubQueriesWithFilterPassed_thenSuccessful() {
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+
+        Query filter = QueryBuilders.boolQuery().mustNot(QueryBuilders.matchQuery(TERM_QUERY_TEXT, "test")).toQuery(mockQueryShardContext);
+
+        HybridQuery hybridQuery = new HybridQuery(
+            List.of(
+                QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext),
+                QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_ANOTHER_QUERY_TEXT).toQuery(mockQueryShardContext)
+            ),
+            filter
+        );
+        QueryUtils.check(hybridQuery);
+
+        Iterator<Query> queryIterator = hybridQuery.iterator();
+        assertNotNull(queryIterator);
+        int countOfQueries = 0;
+        while (queryIterator.hasNext()) {
+            Query query = queryIterator.next();
+            assertNotNull(query);
+            assertTrue(query instanceof BooleanQuery);
+            BooleanQuery booleanQuery = (BooleanQuery) query;
+            assertEquals(2, booleanQuery.clauses().size());
+            Query subQuery = booleanQuery.clauses().get(0).getQuery();
+            assertTrue(subQuery instanceof TermQuery);
+            Query filterQuery = booleanQuery.clauses().get(1).getQuery();
+            assertTrue(filterQuery instanceof BooleanQuery);
+            assertTrue(((BooleanQuery) filterQuery).clauses().get(0).getQuery() instanceof MatchNoDocsQuery);
+            countOfQueries++;
+        }
+        assertEquals(2, countOfQueries);
     }
 }
