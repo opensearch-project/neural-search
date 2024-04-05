@@ -69,7 +69,6 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             }
             HybridQuery hybridQuery = (HybridQuery) booleanClauses.stream().findFirst().get().getQuery();
             List<Query> filterQueries = booleanClauses.stream()
-                .skip(1)
                 .filter(clause -> BooleanClause.Occur.FILTER == clause.getOccur())
                 .map(BooleanClause::getQuery)
                 .collect(Collectors.toList());
