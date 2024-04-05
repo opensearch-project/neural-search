@@ -230,10 +230,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testResultProcessor_whenMultipleShardsAndNoMatches_thenSuccessful() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
-            modelId = prepareModel();
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
 
             HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
@@ -249,16 +247,14 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             );
             assertQueryResults(searchResponseAsMap, 0, true);
         } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, null, modelId, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, null, null, SEARCH_PIPELINE);
         }
     }
 
     @SneakyThrows
     public void testResultProcessor_whenMultipleShardsAndPartialMatches_thenSuccessful() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
-            modelId = prepareModel();
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
 
             HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
@@ -275,7 +271,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             );
             assertQueryResults(searchResponseAsMap, 4, true, Range.between(0.33f, 1.0f));
         } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, null, modelId, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, null, null, SEARCH_PIPELINE);
         }
     }
 

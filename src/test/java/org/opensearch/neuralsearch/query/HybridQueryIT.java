@@ -131,10 +131,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testComplexQuery_whenMultipleSubqueries_thenSuccessful() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
-            modelId = prepareModel();
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
             TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
             TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
@@ -175,7 +173,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertNotNull(total.get("relation"));
             assertEquals(RELATION_EQUAL_TO, total.get("relation"));
         } finally {
-            wipeOfTestResources(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, null, modelId, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, null, null, SEARCH_PIPELINE);
         }
     }
 
@@ -207,10 +205,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testComplexQuery_whenMultipleIdenticalSubQueries_thenSuccessful() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
-            modelId = prepareModel();
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
             TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
             TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
@@ -250,16 +246,14 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertNotNull(total.get("relation"));
             assertEquals(RELATION_EQUAL_TO, total.get("relation"));
         } finally {
-            wipeOfTestResources(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, null, modelId, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, null, null, SEARCH_PIPELINE);
         }
     }
 
     @SneakyThrows
     public void testNoMatchResults_whenOnlyTermSubQueryWithoutMatch_thenEmptyResult() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME);
-            modelId = prepareModel();
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
             TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
             TermQueryBuilder termQuery2Builder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT2);
@@ -285,16 +279,14 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertNotNull(total.get("relation"));
             assertEquals(RELATION_EQUAL_TO, total.get("relation"));
         } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME, null, modelId, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME, null, null, SEARCH_PIPELINE);
         }
     }
 
     @SneakyThrows
     public void testNestedQuery_whenHybridQueryIsWrappedIntoOtherQuery_thenFail() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
-            modelId = prepareModel();
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
             MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
             MatchQueryBuilder matchQuery2Builder = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
@@ -338,16 +330,14 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 )
             );
         } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, null, modelId, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, null, null, SEARCH_PIPELINE);
         }
     }
 
     @SneakyThrows
     public void testIndexWithNestedFields_whenHybridQuery_thenSuccess() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
-            modelId = prepareModel();
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
             TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
             TermQueryBuilder termQuery2Builder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT2);
@@ -373,16 +363,14 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertNotNull(total.get("relation"));
             assertEquals(RELATION_EQUAL_TO, total.get("relation"));
         } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD, null, modelId, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD, null, null, SEARCH_PIPELINE);
         }
     }
 
     @SneakyThrows
     public void testIndexWithNestedFields_whenHybridQueryIncludesNested_thenSuccess() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
-            modelId = prepareModel();
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
             TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
             NestedQueryBuilder nestedQueryBuilder = QueryBuilders.nestedQuery(
@@ -412,16 +400,14 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertNotNull(total.get("relation"));
             assertEquals(RELATION_EQUAL_TO, total.get("relation"));
         } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD, null, modelId, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD, null, null, SEARCH_PIPELINE);
         }
     }
 
     @SneakyThrows
     public void testRequestCache_whenOneShardAndQueryReturnResults_thenSuccessful() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_INDEX_WITH_KEYWORDS_ONE_SHARD);
-            modelId = prepareModel();
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
             MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(KEYWORD_FIELD_1, KEYWORD_FIELD_2_VALUE);
             RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery(INTEGER_FIELD_PRICE).gte(10).lte(1000);
@@ -494,16 +480,14 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertNotNull(totalSecondQuery.get("relation"));
             assertEquals(RELATION_EQUAL_TO, totalSecondQuery.get("relation"));
         } finally {
-            wipeOfTestResources(TEST_INDEX_WITH_KEYWORDS_ONE_SHARD, null, modelId, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_INDEX_WITH_KEYWORDS_ONE_SHARD, null, null, SEARCH_PIPELINE);
         }
     }
 
     @SneakyThrows
     public void testRequestCache_whenMultipleShardsQueryReturnResults_thenSuccessful() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_INDEX_WITH_KEYWORDS_THREE_SHARDS);
-            modelId = prepareModel();
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
             MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(KEYWORD_FIELD_1, KEYWORD_FIELD_2_VALUE);
             RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery(INTEGER_FIELD_PRICE).gte(10).lte(1000);
@@ -576,7 +560,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertNotNull(totalSecondQuery.get("relation"));
             assertEquals(RELATION_EQUAL_TO, totalSecondQuery.get("relation"));
         } finally {
-            wipeOfTestResources(TEST_INDEX_WITH_KEYWORDS_THREE_SHARDS, null, modelId, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_INDEX_WITH_KEYWORDS_THREE_SHARDS, null, null, SEARCH_PIPELINE);
         }
     }
 
