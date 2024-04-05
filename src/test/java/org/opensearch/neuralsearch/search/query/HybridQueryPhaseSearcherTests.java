@@ -15,6 +15,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.opensearch.index.mapper.SeqNoFieldMapper.PRIMARY_TERM_NAME;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryStartStopElement;
 
 import java.io.IOException;
@@ -25,7 +26,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.apache.lucene.document.Document;
+import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
+import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexOptions;
@@ -458,6 +462,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         IndexMetadata indexMetadata = mock(IndexMetadata.class);
         when(indexMetadata.getIndex()).thenReturn(new Index(TEST_INDEX, INDEX_UUID.toString()));
         when(indexMetadata.getSettings()).thenReturn(Settings.EMPTY);
+        when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
         IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
         when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
@@ -565,6 +570,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         IndexMetadata indexMetadata = mock(IndexMetadata.class);
         when(indexMetadata.getIndex()).thenReturn(new Index(TEST_INDEX, INDEX_UUID.toString()));
         when(indexMetadata.getSettings()).thenReturn(Settings.EMPTY);
+        when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
         IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
         when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
@@ -599,7 +605,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         org.hamcrest.MatcherAssert.assertThat(
             exception.getMessage(),
-            containsString("cannot process hybrid query due to incorrect structure of top level bool query")
+            containsString("cannot process hybrid query due to incorrect structure of top level query")
         );
 
         releaseResources(directory, w, reader);
@@ -629,6 +635,13 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
         when(mockQueryShardContext.getMapperService()).thenReturn(mapperService);
         when(mockQueryShardContext.simpleMatchToIndexNames(anyString())).thenReturn(Set.of(TEXT_FIELD_NAME));
+        IndexMetadata indexMetadata = mock(IndexMetadata.class);
+        when(indexMetadata.getIndex()).thenReturn(new Index(TEST_INDEX, INDEX_UUID.toString()));
+        when(indexMetadata.getSettings()).thenReturn(Settings.EMPTY);
+        when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
+        Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
+        when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
 
         Directory directory = newDirectory();
         IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
@@ -640,10 +653,10 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         int docId2 = RandomizedTest.randomInt();
         int docId3 = RandomizedTest.randomInt();
         int docId4 = RandomizedTest.randomInt();
-        w.addDocument(getDocument(TEXT_FIELD_NAME, docId1, TEST_DOC_TEXT1, ft));
-        w.addDocument(getDocument(TEXT_FIELD_NAME, docId2, TEST_DOC_TEXT2, ft));
-        w.addDocument(getDocument(TEXT_FIELD_NAME, docId3, TEST_DOC_TEXT3, ft));
-        w.addDocument(getDocument(TEXT_FIELD_NAME, docId4, TEST_DOC_TEXT4, ft));
+        w.addDocument(document(TEXT_FIELD_NAME, docId1, TEST_DOC_TEXT1, ft));
+        w.addDocument(document(TEXT_FIELD_NAME, docId2, TEST_DOC_TEXT2, ft));
+        w.addDocument(document(TEXT_FIELD_NAME, docId3, TEST_DOC_TEXT3, ft));
+        w.addDocument(document(TEXT_FIELD_NAME, docId4, TEST_DOC_TEXT4, ft));
         w.commit();
 
         IndexReader reader = DirectoryReader.open(w);
@@ -678,6 +691,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.indexShard()).thenReturn(indexShard);
         when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
         when(searchContext.mapperService()).thenReturn(mapperService);
+        when(searchContext.getQueryShardContext()).thenReturn(mockQueryShardContext);
 
         LinkedList<QueryCollectorContext> collectors = new LinkedList<>();
         boolean hasFilterCollector = randomBoolean();
@@ -689,7 +703,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         queryBuilder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT2));
 
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
-        builder.add(queryBuilder.toQuery(mockQueryShardContext), BooleanClause.Occur.SHOULD)
+        builder.add(queryBuilder.toQuery(mockQueryShardContext), BooleanClause.Occur.MUST)
             .add(Queries.newNonNestedFilter(), BooleanClause.Occur.FILTER);
         Query query = builder.build();
 
@@ -767,6 +781,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         IndexMetadata indexMetadata = mock(IndexMetadata.class);
         when(indexMetadata.getIndex()).thenReturn(new Index(TEST_INDEX, INDEX_UUID.toString()));
         when(indexMetadata.getSettings()).thenReturn(Settings.EMPTY);
+        when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
         IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
         when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
@@ -1002,5 +1017,13 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
         builder.add(createNestedBoolQuery(query1, query2, level - 1), BooleanClause.Occur.MUST);
         return builder.build();
+    }
+
+    private static Document document(final String fieldName, int docId, final String fieldValue, final FieldType ft) {
+        Document doc = new Document();
+        doc.add(new TextField("id", Integer.toString(docId), Field.Store.YES));
+        doc.add(new Field(fieldName, fieldValue, ft));
+        doc.add(new NumericDocValuesField(PRIMARY_TERM_NAME, 0));
+        return doc;
     }
 }

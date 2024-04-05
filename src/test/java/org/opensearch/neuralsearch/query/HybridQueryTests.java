@@ -292,7 +292,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext),
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_ANOTHER_QUERY_TEXT).toQuery(mockQueryShardContext)
             ),
-            filter
+            List.of(filter)
         );
         QueryUtils.check(hybridQuery);
 

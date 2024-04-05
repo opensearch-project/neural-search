@@ -580,7 +580,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    public void testIndexAlias_whenHybridQueryAndIndexAliasHasFilter_thenSuccess() {
+    public void testWrappedQueryWithFilter_whenIndexAliasHasFilterAndIndexWithNestedFields_thenSuccess() {
         String modelId = null;
         String alias = "alias_with_filter";
         try {
@@ -678,10 +678,19 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         }
 
         if (TEST_MULTI_DOC_INDEX_NAME.equals(indexName) && !indexExists(TEST_MULTI_DOC_INDEX_NAME)) {
-            prepareKnnIndex(
+            createIndexWithConfiguration(
+                indexName,
+                buildIndexConfiguration(
+                    Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)),
+                    List.of(TEST_NESTED_TYPE_FIELD_NAME_1),
+                    1
+                ),
+                ""
+            );
+            /*prepareKnnIndex(
                 TEST_MULTI_DOC_INDEX_NAME,
                 Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE))
-            );
+            );*/
             addDocsToIndex(TEST_MULTI_DOC_INDEX_NAME);
         }
 

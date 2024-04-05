@@ -6,11 +6,8 @@ package org.opensearch.neuralsearch.util;
 
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
-import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.FieldExistsQuery;
 import org.apache.lucene.search.Query;
-import org.opensearch.index.mapper.SeqNoFieldMapper;
 import org.opensearch.index.search.NestedHelper;
 import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.search.internal.SearchContext;
@@ -27,43 +24,30 @@ public class HybridQueryUtil {
         if (query instanceof HybridQuery) {
             return true;
         } else if (isWrappedHybridQuery(query)) {
-            if ((hasNestedFieldOrNestedDocs(query, searchContext))) {
-                /* Checking if this is a hybrid query that is wrapped into a Bool query by core Opensearch code
-                https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/search/DefaultSearchContext.java#L367-L370.
-                main reason for that is performance optimization, at time of writing we are ok with loosing on performance if that's unblocks
-                hybrid query for indexes with nested field types.
-                in such case we consider query a valid hybrid query. Later in the code we will extract it and execute as a main query for
-                this search request.
-                below is sample structure of such query:
+            /* Checking if this is a hybrid query that is wrapped into a Bool query by core Opensearch code
+            https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/search/DefaultSearchContext.java#L367-L370.
+            main reason for that is performance optimization, at time of writing we are ok with loosing on performance if that's unblocks
+            hybrid query for indexes with nested field types.
+            in such case we consider query a valid hybrid query. Later in the code we will extract it and execute as a main query for
+            this search request.
+            below is sample structure of such query:
 
-                Boolean {
-                   should: {
+            Boolean {
+                should: {
                        hybrid: {
                            sub_query1 {}
                            sub_query2 {}
                        }
-                   }
-                   filter: {
+                }
+                filter: {
                        exists: {
                            field: "_primary_term"
                        }
-                   }
                 }
-                TODO Need to add logic for passing hybrid sub-queries through the same logic in core to ensure there is no latency regression */
-                // we have already checked if query in instance of Boolean in higher level else if condition
-                return ((BooleanQuery) query).clauses()
-                    .stream()
-                    .filter(clause -> clause.getQuery() instanceof HybridQuery == false)
-                    .allMatch(
-                        clause -> clause.getOccur() == BooleanClause.Occur.FILTER
-                            && clause.getQuery() instanceof FieldExistsQuery
-                            && SeqNoFieldMapper.PRIMARY_TERM_NAME.equals(((FieldExistsQuery) clause.getQuery()).getField())
-                    );
-            } else if (hasAliasFilter(query, searchContext)) {
-                // Checking case with alias that has a filter
-                return true;
             }
-            return false;
+            */
+            // we have already checked if query in instance of Boolean in higher level else if condition
+            return hasNestedFieldOrNestedDocs(query, searchContext) || hasAliasFilter(query, searchContext);
         }
         return false;
     }

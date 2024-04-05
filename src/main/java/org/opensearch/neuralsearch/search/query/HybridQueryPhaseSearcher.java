@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.search.query;
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.lucene.search.BooleanClause;
@@ -59,22 +60,20 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
 
     @VisibleForTesting
     protected Query extractHybridQuery(final SearchContext searchContext, final Query query) {
-        if (hasNestedFieldOrNestedDocs(query, searchContext)
+        if ((hasAliasFilter(query, searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
             && isWrappedHybridQuery(query)
             && !((BooleanQuery) query).clauses().isEmpty()) {
-            // extract hybrid query and replace bool with hybrid query
-            List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
-            if (booleanClauses.isEmpty() || booleanClauses.get(0).getQuery() instanceof HybridQuery == false) {
-                throw new IllegalStateException("cannot process hybrid query due to incorrect structure of top level bool query");
-            }
-            return booleanClauses.get(0).getQuery();
-        } else if (hasAliasFilter(query, searchContext) && isWrappedHybridQuery(query) && !((BooleanQuery) query).clauses().isEmpty()) {
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
             if (!(booleanClauses.get(0).getQuery() instanceof HybridQuery)) {
                 throw new IllegalStateException("cannot process hybrid query due to incorrect structure of top level query");
             }
-            HybridQuery hybridQuery = (HybridQuery) booleanClauses.get(0).getQuery();
-            HybridQuery hybridQueryWithFilter = new HybridQuery(hybridQuery.getSubQueries(), searchContext.aliasFilter());
+            HybridQuery hybridQuery = (HybridQuery) booleanClauses.stream().findFirst().get().getQuery();
+            List<Query> filterQueries = booleanClauses.stream()
+                .skip(1)
+                .filter(clause -> BooleanClause.Occur.FILTER == clause.getOccur())
+                .map(BooleanClause::getQuery)
+                .collect(Collectors.toList());
+            HybridQuery hybridQueryWithFilter = new HybridQuery(hybridQuery.getSubQueries(), filterQueries);
             return hybridQueryWithFilter;
         }
         return query;

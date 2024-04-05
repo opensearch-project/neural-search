@@ -32,21 +32,21 @@ public final class HybridQuery extends Query implements Iterable<Query> {
     /**
      * Create new instance of hybrid query object based on collection of sub queries and filter query
      * @param subQueries collection of queries that are executed individually and contribute to a final list of combined scores
-     * @param filterQuery filter that will be applied to each sub query. If this is null sub queries will be executed as is
+     * @param filterQueries list of filters that will be applied to each sub query. Each filter from the list is added as bool "filter" clause. If this is null sub queries will be executed as is
      */
-    public HybridQuery(final Collection<Query> subQueries, final Query filterQuery) {
+    public HybridQuery(final Collection<Query> subQueries, final List<Query> filterQueries) {
         Objects.requireNonNull(subQueries, "collection of queries must not be null");
         if (subQueries.isEmpty()) {
             throw new IllegalArgumentException("collection of queries must not be empty");
         }
-        if (Objects.isNull(filterQuery)) {
+        if (Objects.isNull(filterQueries) || filterQueries.isEmpty()) {
             this.subQueries = new ArrayList<>(subQueries);
         } else {
             List<Query> modifiedSubQueries = new ArrayList<>();
             for (Query subQuery : subQueries) {
                 BooleanQuery.Builder builder = new BooleanQuery.Builder();
                 builder.add(subQuery, BooleanClause.Occur.MUST);
-                builder.add(filterQuery, BooleanClause.Occur.FILTER);
+                filterQueries.forEach(filterQuery -> builder.add(filterQuery, BooleanClause.Occur.FILTER));
                 modifiedSubQueries.add(builder.build());
             }
             this.subQueries = modifiedSubQueries;
@@ -54,7 +54,7 @@ public final class HybridQuery extends Query implements Iterable<Query> {
     }
 
     public HybridQuery(final Collection<Query> subQueries) {
-        this(subQueries, null);
+        this(subQueries, List.of());
     }
 
     /**
