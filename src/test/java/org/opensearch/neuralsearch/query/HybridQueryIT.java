@@ -41,6 +41,7 @@ import lombok.SneakyThrows;
 public class HybridQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_BASIC_INDEX_NAME = "test-hybrid-basic-index";
     private static final String TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME = "test-hybrid-vector-doc-field-index";
+    private static final String TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME = "test-hybrid-multi-doc-nested-fields-index";
     private static final String TEST_MULTI_DOC_INDEX_NAME = "test-hybrid-multi-doc-index";
     private static final String TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD = "test-hybrid-multi-doc-single-shard-index";
     private static final String TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD =
@@ -257,7 +258,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     public void testNoMatchResults_whenOnlyTermSubQueryWithoutMatch_thenEmptyResult() {
         String modelId = null;
         try {
-            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
+            initializeIndexIfNotExist(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME);
             modelId = prepareModel();
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
             TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
@@ -267,7 +268,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             hybridQueryBuilderOnlyTerm.add(termQuery2Builder);
 
             Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_INDEX_NAME,
+                TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME,
                 hybridQueryBuilderOnlyTerm,
                 null,
                 10,
@@ -284,7 +285,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertNotNull(total.get("relation"));
             assertEquals(RELATION_EQUAL_TO, total.get("relation"));
         } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME, null, modelId, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME, null, modelId, SEARCH_PIPELINE);
         }
     }
 
@@ -584,6 +585,54 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         String modelId = null;
         String alias = "alias_with_filter";
         try {
+            initializeIndexIfNotExist(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME);
+            modelId = prepareModel();
+            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+            // create alias for index
+            QueryBuilder aliasFilter = QueryBuilders.boolQuery()
+                .mustNot(QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
+            createIndexAlias(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME, alias, aliasFilter);
+
+            NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
+                TEST_KNN_VECTOR_FIELD_NAME_1,
+                TEST_QUERY_TEXT,
+                "",
+                modelId,
+                5,
+                null,
+                null
+            );
+            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+            hybridQueryBuilder.add(neuralQueryBuilder);
+
+            Map<String, Object> searchResponseAsMap = search(
+                alias,
+                hybridQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            );
+
+            assertEquals(2, getHitCount(searchResponseAsMap));
+            assertTrue(getMaxScore(searchResponseAsMap).isPresent());
+            assertEquals(1.0f, getMaxScore(searchResponseAsMap).get(), DELTA_FOR_SCORE_ASSERTION);
+
+            Map<String, Object> total = getTotalHits(searchResponseAsMap);
+            assertNotNull(total.get("value"));
+            assertEquals(2, total.get("value"));
+            assertNotNull(total.get("relation"));
+            assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+        } finally {
+            deleteIndexAlias(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME, alias);
+            wipeOfTestResources(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME, null, modelId, SEARCH_PIPELINE);
+        }
+    }
+
+    @SneakyThrows
+    public void testWrappedQueryWithFilter_whenIndexAliasHasFilters_thenSuccess() {
+        String modelId = null;
+        String alias = "alias_with_filter";
+        try {
             initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
             modelId = prepareModel();
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
@@ -677,7 +726,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertEquals(3, getDocCount(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME));
         }
 
-        if (TEST_MULTI_DOC_INDEX_NAME.equals(indexName) && !indexExists(TEST_MULTI_DOC_INDEX_NAME)) {
+        if (TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME.equals(indexName) && !indexExists(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME)) {
             createIndexWithConfiguration(
                 indexName,
                 buildIndexConfiguration(
@@ -687,10 +736,19 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 ),
                 ""
             );
-            /*prepareKnnIndex(
-                TEST_MULTI_DOC_INDEX_NAME,
-                Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE))
-            );*/
+            addDocsToIndex(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME);
+        }
+
+        if (TEST_MULTI_DOC_INDEX_NAME.equals(indexName) && !indexExists(TEST_MULTI_DOC_INDEX_NAME)) {
+            createIndexWithConfiguration(
+                indexName,
+                buildIndexConfiguration(
+                    Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)),
+                    List.of(),
+                    1
+                ),
+                ""
+            );
             addDocsToIndex(TEST_MULTI_DOC_INDEX_NAME);
         }
 
