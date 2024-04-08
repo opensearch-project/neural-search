@@ -138,7 +138,13 @@ public class NormalizationProcessorWorkflow {
         // 3. update original scores to normalized and combined values
         // 4. order scores based on normalized and combined values
         FetchSearchResult fetchSearchResult = fetchSearchResultOptional.get();
-        SearchHit[] searchHitArray = getSearchHits(docIds, fetchSearchResult);
+        // checking case when results are cached
+        boolean requestCache = Objects.nonNull(querySearchResults)
+            && !querySearchResults.isEmpty()
+            && Objects.nonNull(querySearchResults.get(0).getShardSearchRequest().requestCache())
+            && querySearchResults.get(0).getShardSearchRequest().requestCache();
+
+        SearchHit[] searchHitArray = getSearchHits(docIds, fetchSearchResult, requestCache);
 
         // create map of docId to index of search hits. This solves (2), duplicates are from
         // delimiter and start/stop elements, they all have same valid doc_id. For this map
@@ -168,7 +174,7 @@ public class NormalizationProcessorWorkflow {
         fetchSearchResult.hits(updatedSearchHits);
     }
 
-    private SearchHit[] getSearchHits(final List<Integer> docIds, final FetchSearchResult fetchSearchResult) {
+    private SearchHit[] getSearchHits(final List<Integer> docIds, final FetchSearchResult fetchSearchResult, final boolean requestCache) {
         SearchHits searchHits = fetchSearchResult.hits();
         SearchHit[] searchHitArray = searchHits.getHits();
         // validate the both collections are of the same size
@@ -177,7 +183,9 @@ public class NormalizationProcessorWorkflow {
                 "score normalization processor cannot produce final query result, fetch query phase returns empty results"
             );
         }
-        if (searchHitArray.length != docIds.size()) {
+        // in case of cached request results of fetch and query may be different, only restriction is
+        // that number of query results size is greater or equal size of fetch results
+        if ((!requestCache && searchHitArray.length != docIds.size()) || requestCache && docIds.size() < searchHitArray.length) {
             throw new IllegalStateException(
                 String.format(
                     Locale.ROOT,
