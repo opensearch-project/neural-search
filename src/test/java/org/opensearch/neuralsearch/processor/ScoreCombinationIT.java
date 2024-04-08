@@ -85,10 +85,8 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testArithmeticWeightedMean_whenWeightsPassed_thenSuccessful() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
-            modelId = prepareModel();
             // check case when number of weights and sub-queries are same
             createSearchPipeline(
                 SEARCH_PIPELINE,
@@ -189,7 +187,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
                 )
             );
         } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, null, modelId, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, null, null, SEARCH_PIPELINE);
         }
     }
 
