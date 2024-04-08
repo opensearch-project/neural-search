@@ -348,6 +348,43 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertEquals("true", node.get("acknowledged").toString());
     }
 
+    protected void createIndexAlias(final String index, final String alias, final QueryBuilder filterBuilder) throws Exception {
+        XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
+        builder.startArray("actions");
+        builder.startObject();
+        builder.startObject("add");
+        builder.field("index", index);
+        builder.field("alias", alias);
+        // filter object
+        if (Objects.nonNull(filterBuilder)) {
+            builder.field("filter");
+            filterBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
+        }
+        builder.endObject();
+        builder.endObject();
+        builder.endArray();
+        builder.endObject();
+
+        Request request = new Request("POST", "/_aliases");
+        request.setJsonEntity(builder.toString());
+
+        Response response = client().performRequest(request);
+
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+    }
+
+    @SneakyThrows
+    protected void deleteIndexAlias(final String index, final String alias) {
+        makeRequest(
+            client(),
+            "DELETE",
+            String.format(Locale.ROOT, "%s/_alias/%s", index, alias),
+            null,
+            null,
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+    }
+
     /**
      * Get the number of documents in a particular index
      *
