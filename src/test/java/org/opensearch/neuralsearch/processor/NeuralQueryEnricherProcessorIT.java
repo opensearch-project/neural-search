@@ -86,12 +86,10 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testNeuralQueryEnricherProcessor_whenGetEmptyQueryBody_thenSuccess() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(index);
-            modelId = prepareModel();
-            createSearchRequestProcessor(modelId, search_pipeline);
-            createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
+            createSearchRequestProcessor(null, search_pipeline);
+            createPipelineProcessor(null, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
             updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
             Request request = new Request("POST", "/" + index + "/_search");
             Response response = client().performRequest(request);
@@ -101,7 +99,7 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
             assertFalse(responseInMap.isEmpty());
             assertEquals(3, ((Map) responseInMap.get("hits")).size());
         } finally {
-            wipeOfTestResources(index, ingest_pipeline, modelId, search_pipeline);
+            wipeOfTestResources(index, ingest_pipeline, null, search_pipeline);
         }
     }
 

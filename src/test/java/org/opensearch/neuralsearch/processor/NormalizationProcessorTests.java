@@ -53,6 +53,7 @@ import org.opensearch.search.aggregations.InternalAggregation;
 import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
 import org.opensearch.search.fetch.FetchSearchResult;
 import org.opensearch.search.fetch.QueryFetchSearchResult;
+import org.opensearch.search.internal.ShardSearchRequest;
 import org.opensearch.search.query.QuerySearchResult;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.threadpool.TestThreadPool;
@@ -401,6 +402,9 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
 
         QueryFetchSearchResult queryFetchSearchResult = new QueryFetchSearchResult(querySearchResult, fetchSearchResult);
         queryFetchSearchResult.setShardIndex(shardId);
+        ShardSearchRequest shardSearchRequest = mock(ShardSearchRequest.class);
+        when(shardSearchRequest.requestCache()).thenReturn(Boolean.TRUE);
+        querySearchResult.setShardSearchRequest(shardSearchRequest);
 
         queryPhaseResultConsumer.consumeResult(queryFetchSearchResult, partialReduceLatch::countDown);
 
@@ -485,6 +489,9 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
 
         QueryFetchSearchResult queryFetchSearchResult = new QueryFetchSearchResult(querySearchResult, fetchSearchResult);
         queryFetchSearchResult.setShardIndex(shardId);
+        ShardSearchRequest shardSearchRequest = mock(ShardSearchRequest.class);
+        when(shardSearchRequest.requestCache()).thenReturn(Boolean.FALSE);
+        querySearchResult.setShardSearchRequest(shardSearchRequest);
 
         queryPhaseResultConsumer.consumeResult(queryFetchSearchResult, partialReduceLatch::countDown);
 

@@ -18,9 +18,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 2.x](https://github.com/opensearch-project/neural-search/compare/2.13...2.x)
 ### Features
 ### Enhancements
-- Update bwc tests for neural_query_enricher neural_sparse search ([#652](https://github.com/opensearch-project/neural-search/pull/652))
+- Allowing execution of hybrid query on index alias with filters ([#670](https://github.com/opensearch-project/neural-search/pull/670))
 ### Bug Fixes
+- Add support for request_cache flag in hybrid query ([#663](https://github.com/opensearch-project/neural-search/pull/663))
 ### Infrastructure
 ### Documentation
 ### Maintenance
+- Update bwc tests for neural_query_enricher neural_sparse search ([#652](https://github.com/opensearch-project/neural-search/pull/652))
 ### Refactoring
