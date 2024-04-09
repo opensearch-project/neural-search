@@ -5,6 +5,9 @@
 package org.opensearch.neuralsearch.plugin;
 
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SEARCH_HYBRID_SEARCH_DISABLED;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DISABLED;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_RATIO;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_WINDOW_SIZE;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER_MAX_DOC_FIELDS;
 
 import java.util.Arrays;
@@ -25,6 +28,7 @@ import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
 import org.opensearch.ingest.Processor;
 import org.opensearch.ml.client.MachineLearningNodeClient;
+import org.opensearch.ml.repackage.com.google.common.collect.ImmutableList;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
@@ -155,7 +159,13 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED, RERANKER_MAX_DOC_FIELDS);
+        return ImmutableList.of(
+            NEURAL_SEARCH_HYBRID_SEARCH_DISABLED,
+            RERANKER_MAX_DOC_FIELDS,
+            NEURAL_SPARSE_TWO_PHASE_DISABLED,
+            NEURAL_SPARSE_TWO_PHASE_WINDOW_SIZE,
+            NEURAL_SPARSE_TWO_PHASE_RATIO
+        );
     }
 
     @Override
@@ -185,4 +195,5 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
             )
         );
     }
+
 }

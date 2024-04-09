@@ -25,6 +25,7 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_TEXT_AND_NEURAL_SPARSE_FIELD_INDEX_NAME = "test-sparse-text-and-field-index";
     private static final String TEST_NESTED_INDEX_NAME = "test-sparse-nested-index";
     private static final String TEST_QUERY_TEXT = "Hello world a b";
+    private static final String TEST_QUERY_TEXT_V2 = "Hello world a b cat cache dog war pop nice nick neck question";
     private static final String TEST_NEURAL_SPARSE_FIELD_NAME_1 = "test-sparse-encoding-1";
     private static final String TEST_NEURAL_SPARSE_FIELD_NAME_2 = "test-sparse-encoding-2";
     private static final String TEST_TEXT_FIELD_NAME_1 = "test-text-field";
@@ -273,4 +274,5 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
             assertEquals(1, getDocCount(TEST_NESTED_INDEX_NAME));
         }
     }
+
 }

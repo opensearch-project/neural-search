@@ -34,4 +34,25 @@ public final class NeuralSearchSettings {
         50,
         Setting.Property.NodeScope
     );
+
+    public static final Setting<Boolean> NEURAL_SPARSE_TWO_PHASE_DISABLED = Setting.boolSetting(
+        "index.neural_sparse_two_phase_disabled",
+        false,
+        Setting.Property.IndexScope,
+        Setting.Property.Dynamic
+    );
+
+    public static final Setting<Integer> NEURAL_SPARSE_TWO_PHASE_WINDOW_SIZE = Setting.intSetting(
+        "index.neural_sparse_two_phase_window_size",
+        50,
+        Setting.Property.IndexScope,
+        Setting.Property.Dynamic
+    );
+
+    public static final Setting<Float> NEURAL_SPARSE_TWO_PHASE_RATIO = Setting.floatSetting(
+        "index.neural_sparse_two_phase_ratio",
+        0.4f,
+        Setting.Property.IndexScope,
+        Setting.Property.Dynamic
+    );
 }

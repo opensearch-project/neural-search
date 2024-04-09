@@ -5,11 +5,15 @@
 package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
@@ -44,6 +48,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.log4j.Log4j2;
+
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DISABLED;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_RATIO;
 
 /**
  * SparseEncodingQueryBuilder is responsible for handling "neural_sparse" query types. It uses an ML SPARSE_ENCODING model
@@ -234,15 +241,22 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     protected Query doToQuery(QueryShardContext context) throws IOException {
         final MappedFieldType ft = context.fieldMapper(fieldName);
         validateFieldType(ft);
-
-        Map<String, Float> queryTokens = queryTokensSupplier.get();
-        validateQueryTokens(queryTokens);
-
-        BooleanQuery.Builder builder = new BooleanQuery.Builder();
-        for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
-            builder.add(FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()), BooleanClause.Occur.SHOULD);
+        if (NEURAL_SPARSE_TWO_PHASE_DISABLED.get(context.getIndexSettings().getSettings())) {
+            return buildFeatureFieldQueryFormTokens(getAllTokens(), fieldName);
         }
-        return builder.build();
+        float ratio = NEURAL_SPARSE_TWO_PHASE_RATIO.get(context.getIndexSettings().getSettings());
+        if (ratio >= 0.9f || ratio < 0f) {
+            log.warn(
+                "Two-Phase Ratio is {}, but for NeuralSparseQuery must be a valid value between 0.0 to 0.9, reset it into 0.4 this time.",
+                ratio
+            );
+            ratio = 0.4f;
+        }
+        return new NeuralSparseQuery(
+            buildFeatureFieldQueryFormTokens(getAllTokens(), fieldName),
+            buildFeatureFieldQueryFormTokens(getHighScoreTokens(ratio), fieldName),
+            buildFeatureFieldQueryFormTokens(getLowScoreTokens(ratio), fieldName)
+        );
     }
 
     private static void validateForRewrite(String queryText, String modelId) {
@@ -308,5 +322,45 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
 
     private static boolean isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport() {
         return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID);
+    }
+
+    private Map<String, Float> getAllTokens() {
+        Map<String, Float> queryTokens = queryTokensSupplier.get();
+        validateQueryTokens(queryTokens);
+        return queryTokens;
+    }
+
+    private Map<String, Float> getHighScoreTokens(float ratio) {
+        return getFilteredScoreTokens(true, ratio);
+    }
+
+    private Map<String, Float> getLowScoreTokens(float ratio) {
+        return getFilteredScoreTokens(false, ratio);
+    }
+
+    private Map<String, Float> getFilteredScoreTokens(boolean aboveThreshold, float ratio) {
+        Map<String, Float> queryTokens = queryTokensSupplier.get();
+        validateQueryTokens(queryTokens);
+        float max = queryTokens.values().stream().max(Float::compare).orElse(0f);
+        float threshold = ratio * max;
+        if (max == 0) {
+            return Collections.emptyMap();
+        }
+        return queryTokens.entrySet()
+            .stream()
+            .filter(entry -> (aboveThreshold == (entry.getValue() > threshold)))
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    public BooleanQuery buildFeatureFieldQueryFormTokens(Map<String, Float> Tokens, String fieldName) {
+        BooleanQuery.Builder builder = new BooleanQuery.Builder();
+        Collection<BooleanClause> clauses = Collections.synchronizedList(new ArrayList<>());
+        Tokens.forEach((key, value) -> {
+            Query query = FeatureField.newLinearQuery(fieldName, key, value);
+            BooleanClause clause = new BooleanClause(query, BooleanClause.Occur.SHOULD);
+            clauses.add(clause);
+        });
+        clauses.forEach(builder::add);
+        return builder.build();
     }
 }
