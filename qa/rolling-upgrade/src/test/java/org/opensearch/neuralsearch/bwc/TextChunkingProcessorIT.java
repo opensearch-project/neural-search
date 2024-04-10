@@ -14,7 +14,7 @@ import java.util.Objects;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
 
-public class TextChunkingIT extends AbstractRollingUpgradeTestCase {
+public class TextChunkingProcessorIT extends AbstractRollingUpgradeTestCase {
 
     private static final String PIPELINE_NAME = "pipeline-text-chunking";
     private static final String INPUT_FIELD = "body";
