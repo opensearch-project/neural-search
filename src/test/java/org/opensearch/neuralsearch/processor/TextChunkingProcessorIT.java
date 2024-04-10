@@ -71,7 +71,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testTextChunkingProcessor_withFixedTokenLengthAlgorithmStandardTokenizer_thenSucceed() {
         try {
-            createPipelineWithChunkingProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
+            createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
             createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
             ingestDocument(TEST_DOCUMENT);
 
@@ -88,7 +88,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testTextChunkingProcessor_withFixedTokenLengthAlgorithmLetterTokenizer_thenSucceed() {
         try {
-            createPipelineWithChunkingProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_LETTER_TOKENIZER_NAME);
+            createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_LETTER_TOKENIZER_NAME);
             createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_LETTER_TOKENIZER_NAME);
             ingestDocument(TEST_DOCUMENT);
 
@@ -105,7 +105,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testTextChunkingProcessor_withFixedTokenLengthAlgorithmLowercaseTokenizer_thenSucceed() {
         try {
-            createPipelineWithChunkingProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME);
+            createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME);
             createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME);
             ingestDocument(TEST_DOCUMENT);
 
@@ -122,7 +122,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testTextChunkingProcessor_withFixedTokenLengthAlgorithmStandardTokenizer_whenExceedMaxTokenCount_thenFail() {
         try {
-            createPipelineWithChunkingProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
+            createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
             createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
             Exception exception = assertThrows(Exception.class, () -> ingestDocument(TEST_LONG_DOCUMENT));
             // max_token_count is 100 by index settings
@@ -137,7 +137,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testTextChunkingProcessor_withDelimiterAlgorithm_successful() {
         try {
-            createPipelineWithChunkingProcessor(DELIMITER_PIPELINE_NAME);
+            createPipelineProcessor(DELIMITER_PIPELINE_NAME);
             createTextChunkingIndex(INDEX_NAME, DELIMITER_PIPELINE_NAME);
             ingestDocument(TEST_DOCUMENT);
 
@@ -155,7 +155,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testTextChunkingProcessor_withCascadePipeline_successful() {
         try {
-            createPipelineWithChunkingProcessor(CASCADE_PIPELINE_NAME);
+            createPipelineProcessor(CASCADE_PIPELINE_NAME);
             createTextChunkingIndex(INDEX_NAME, CASCADE_PIPELINE_NAME);
             ingestDocument(TEST_DOCUMENT);
 
@@ -192,7 +192,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         assertEquals(expected, ingestOutputs);
     }
 
-    private void createPipelineWithChunkingProcessor(String pipelineName) throws Exception {
+    private void createPipelineProcessor(String pipelineName) throws Exception {
         URL pipelineURLPath = classLoader.getResource(PIPELINE_CONFIGS_BY_NAME.get(pipelineName));
         Objects.requireNonNull(pipelineURLPath);
         String requestBody = Files.readString(Path.of(pipelineURLPath.toURI()));
