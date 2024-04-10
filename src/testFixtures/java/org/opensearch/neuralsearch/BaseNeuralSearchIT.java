@@ -292,18 +292,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     protected void createPipelineProcessor(final String requestBody, final String pipelineName, final String modelId) throws Exception {
-        HttpEntity httpEntity;
-        if (StringUtils.isNotBlank(modelId)) {
-            httpEntity = toHttpEntity(String.format(LOCALE, requestBody, modelId));
-        } else {
-            httpEntity = toHttpEntity(String.format(LOCALE, requestBody));
-        }
         Response pipelineCreateResponse = makeRequest(
             client(),
             "PUT",
             "/_ingest/pipeline/" + pipelineName,
             null,
-            httpEntity,
+            toHttpEntity(String.format(LOCALE, requestBody, modelId)),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
         Map<String, Object> node = XContentHelper.convertToMap(
