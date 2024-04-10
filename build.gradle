@@ -76,12 +76,15 @@ ext {
     currentBundleVersion = opensearch_version.replace("-SNAPSHOT","")
 
     // Config below including files are copied from security demo configuration
-    ['esnode.pem', 'esnode-key.pem', 'root-ca.pem','kirk.pem','kirk-key.pem'].forEach { file ->
-        File local = Paths.get(opensearch_tmp_dir.absolutePath, file).toFile()
-        download.run {
-            src "https://raw.githubusercontent.com/opensearch-project/security/main/bwc-test/src/test/resources/security/" + file
-            dest local
-            overwrite false
+    runIntegTestWithSecurityPlugin= System.getProperty("security.enabled")
+    if (runIntegTestWithSecurityPlugin == "true"){
+        ['esnode.pem', 'esnode-key.pem', 'root-ca.pem','kirk.pem','kirk-key.pem'].forEach { file ->
+            File local = Paths.get(opensearch_tmp_dir.absolutePath, file).toFile()
+            download.run {
+                src "https://raw.githubusercontent.com/opensearch-project/security/main/bwc-test/src/test/resources/security/" + file
+                dest local
+                overwrite false
+            }
         }
     }
 
