@@ -164,7 +164,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    public void testResultProcessor_whenMultipleShardsAndQueryMatches_thenSuccessful() {
+    public void testQueryMatches_whenMultipleShards_thenSuccessful() {
         String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
@@ -223,55 +223,37 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
 
             // verify that all ids are unique
             assertEquals(Set.copyOf(ids).size(), ids.size());
+
+            // very case when there are partial match
+            HybridQueryBuilder hybridQueryBuilderPartialMatch = new HybridQueryBuilder();
+            hybridQueryBuilderPartialMatch.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
+            hybridQueryBuilderPartialMatch.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4));
+            hybridQueryBuilderPartialMatch.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT7));
+
+            Map<String, Object> searchResponseAsMapPartialMatch = search(
+                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+                hybridQueryBuilderPartialMatch,
+                null,
+                5,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            );
+            assertQueryResults(searchResponseAsMapPartialMatch, 4, true, Range.between(0.33f, 1.0f));
+
+            // verify case when query doesn't have a match
+            HybridQueryBuilder hybridQueryBuilderNoMatches = new HybridQueryBuilder();
+            hybridQueryBuilderNoMatches.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT6));
+            hybridQueryBuilderNoMatches.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT7));
+
+            Map<String, Object> searchResponseAsMapNoMatches = search(
+                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+                hybridQueryBuilderNoMatches,
+                null,
+                5,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            );
+            assertQueryResults(searchResponseAsMapNoMatches, 0, true);
         } finally {
             wipeOfTestResources(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, null, modelId, SEARCH_PIPELINE);
-        }
-    }
-
-    @SneakyThrows
-    public void testResultProcessor_whenMultipleShardsAndNoMatches_thenSuccessful() {
-        try {
-            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-
-            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-            hybridQueryBuilder.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT6));
-            hybridQueryBuilder.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT7));
-
-            Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-                hybridQueryBuilder,
-                null,
-                5,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
-            );
-            assertQueryResults(searchResponseAsMap, 0, true);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, null, null, SEARCH_PIPELINE);
-        }
-    }
-
-    @SneakyThrows
-    public void testResultProcessor_whenMultipleShardsAndPartialMatches_thenSuccessful() {
-        try {
-            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-
-            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-            hybridQueryBuilder.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
-            hybridQueryBuilder.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4));
-            hybridQueryBuilder.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT7));
-
-            Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-                hybridQueryBuilder,
-                null,
-                5,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
-            );
-            assertQueryResults(searchResponseAsMap, 4, true, Range.between(0.33f, 1.0f));
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, null, null, SEARCH_PIPELINE);
         }
     }
 
