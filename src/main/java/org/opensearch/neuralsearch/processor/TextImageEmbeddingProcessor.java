@@ -12,15 +12,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiConsumer;
-import java.util.function.Supplier;
 
 import org.apache.commons.lang3.StringUtils;
 import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
-import org.opensearch.index.mapper.IndexFieldMapper;
-import org.opensearch.index.mapper.MapperService;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
@@ -28,6 +24,7 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import com.google.common.annotations.VisibleForTesting;
 
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.util.ProcessorDocumentUtils;
 
 /**
  * This processor is used for user input data text and image embedding processing, model_id can be used to indicate which model user use,
@@ -51,6 +48,7 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
     private final Map<String, String> fieldMap;
 
     private final MLCommonsClientAccessor mlCommonsClientAccessor;
+
     private final Environment environment;
     private final ClusterService clusterService;
 
@@ -173,61 +171,13 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
 
     private void validateEmbeddingFieldsValue(final IngestDocument ingestDocument) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
-        for (Map.Entry<String, String> embeddingFieldsEntry : fieldMap.entrySet()) {
-            String mappedSourceKey = embeddingFieldsEntry.getValue();
-            Object sourceValue = sourceAndMetadataMap.get(mappedSourceKey);
-            if (Objects.isNull(sourceValue)) {
-                continue;
-            }
-            Class<?> sourceValueClass = sourceValue.getClass();
-            if (List.class.isAssignableFrom(sourceValueClass) || Map.class.isAssignableFrom(sourceValueClass)) {
-                String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
-                validateNestedTypeValue(mappedSourceKey, sourceValue, () -> 1, indexName);
-            } else if (!String.class.isAssignableFrom(sourceValueClass)) {
-                throw new IllegalArgumentException("field [" + mappedSourceKey + "] is neither string nor nested type, can not process it");
-            } else if (StringUtils.isBlank(sourceValue.toString())) {
-                throw new IllegalArgumentException("field [" + mappedSourceKey + "] has empty string value, can not process it");
-            }
-
-        }
-    }
-
-    @SuppressWarnings({ "rawtypes", "unchecked" })
-    private void validateNestedTypeValue(
-        final String sourceKey,
-        final Object sourceValue,
-        final Supplier<Integer> maxDepthSupplier,
-        final String indexName
-    ) {
-        int maxDepth = maxDepthSupplier.get();
-        Settings indexSettings = clusterService.state().metadata().index(indexName).getSettings();
-        if (maxDepth > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(indexSettings)) {
-            throw new IllegalArgumentException("map type field [" + sourceKey + "] reached max depth limit, can not process it");
-        } else if ((List.class.isAssignableFrom(sourceValue.getClass()))) {
-            validateListTypeValue(sourceKey, (List) sourceValue);
-        } else if (Map.class.isAssignableFrom(sourceValue.getClass())) {
-            ((Map) sourceValue).values()
-                .stream()
-                .filter(Objects::nonNull)
-                .forEach(x -> validateNestedTypeValue(sourceKey, x, () -> maxDepth + 1, indexName));
-        } else if (!String.class.isAssignableFrom(sourceValue.getClass())) {
-            throw new IllegalArgumentException("map type field [" + sourceKey + "] has non-string type, can not process it");
-        } else if (StringUtils.isBlank(sourceValue.toString())) {
-            throw new IllegalArgumentException("map type field [" + sourceKey + "] has empty string, can not process it");
-        }
-    }
-
-    @SuppressWarnings({ "rawtypes" })
-    private static void validateListTypeValue(final String sourceKey, final List<Object> sourceValue) {
-        for (Object value : sourceValue) {
-            if (value == null) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has null, can not process it");
-            } else if (!(value instanceof String)) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has non string value, can not process it");
-            } else if (StringUtils.isBlank(value.toString())) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has empty string, can not process it");
-            }
-        }
+        ProcessorDocumentUtils.validateMapTypeValue(
+            "field_map",
+            sourceAndMetadataMap,
+            fieldMap,
+            1,
+            ProcessorDocumentUtils.getMaxDepth(sourceAndMetadataMap, clusterService, environment)
+        );
     }
 
     @Override

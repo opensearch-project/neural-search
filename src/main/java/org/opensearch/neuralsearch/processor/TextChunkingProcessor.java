@@ -17,7 +17,6 @@ import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.env.Environment;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.index.analysis.AnalysisRegistry;
-import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
@@ -25,6 +24,7 @@ import org.opensearch.neuralsearch.processor.chunker.Chunker;
 import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
+import org.opensearch.neuralsearch.util.ProcessorDocumentUtils;
 
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.MAX_CHUNK_LIMIT_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.DEFAULT_MAX_CHUNK_LIMIT;
@@ -164,7 +164,13 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     @Override
     public IngestDocument execute(final IngestDocument ingestDocument) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
-        validateFieldsValue(sourceAndMetadataMap);
+        ProcessorDocumentUtils.validateMapTypeValue(
+            "field_map",
+            sourceAndMetadataMap,
+            fieldMap,
+            1,
+            ProcessorDocumentUtils.getMaxDepth(sourceAndMetadataMap, clusterService, environment)
+        );
         // fixed token length algorithm needs runtime parameter max_token_count for tokenization
         Map<String, Object> runtimeParameters = new HashMap<>();
         int maxTokenCount = getMaxTokenCount(sourceAndMetadataMap);
@@ -174,59 +180,6 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         runtimeParameters.put(CHUNK_STRING_COUNT_FIELD, chunkStringCount);
         chunkMapType(sourceAndMetadataMap, fieldMap, runtimeParameters);
         return ingestDocument;
-    }
-
-    private void validateFieldsValue(final Map<String, Object> sourceAndMetadataMap) {
-        for (Map.Entry<String, Object> embeddingFieldsEntry : fieldMap.entrySet()) {
-            Object sourceValue = sourceAndMetadataMap.get(embeddingFieldsEntry.getKey());
-            if (Objects.nonNull(sourceValue)) {
-                String sourceKey = embeddingFieldsEntry.getKey();
-                if (sourceValue instanceof List || sourceValue instanceof Map) {
-                    validateNestedTypeValue(sourceKey, sourceValue, 1);
-                } else if (!(sourceValue instanceof String)) {
-                    throw new IllegalArgumentException(
-                        String.format(Locale.ROOT, "field [%s] is neither string nor nested type, cannot process it", sourceKey)
-                    );
-                }
-            }
-        }
-    }
-
-    @SuppressWarnings({ "rawtypes", "unchecked" })
-    private void validateNestedTypeValue(final String sourceKey, final Object sourceValue, final int maxDepth) {
-        if (maxDepth > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())) {
-            throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "map type field [%s] reached max depth limit, cannot process it", sourceKey)
-            );
-        } else if (sourceValue instanceof List) {
-            validateListTypeValue(sourceKey, sourceValue, maxDepth);
-        } else if (sourceValue instanceof Map) {
-            ((Map) sourceValue).values()
-                .stream()
-                .filter(Objects::nonNull)
-                .forEach(x -> validateNestedTypeValue(sourceKey, x, maxDepth + 1));
-        } else if (!(sourceValue instanceof String)) {
-            throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "map type field [%s] has non-string type, cannot process it", sourceKey)
-            );
-        }
-    }
-
-    @SuppressWarnings({ "rawtypes" })
-    private void validateListTypeValue(final String sourceKey, final Object sourceValue, final int maxDepth) {
-        for (Object value : (List) sourceValue) {
-            if (value instanceof Map) {
-                validateNestedTypeValue(sourceKey, value, maxDepth + 1);
-            } else if (value == null) {
-                throw new IllegalArgumentException(
-                    String.format(Locale.ROOT, "list type field [%s] has null, cannot process it", sourceKey)
-                );
-            } else if (!(value instanceof String)) {
-                throw new IllegalArgumentException(
-                    String.format(Locale.ROOT, "list type field [%s] has non-string value, cannot process it", sourceKey)
-                );
-            }
-        }
     }
 
     @SuppressWarnings("unchecked")

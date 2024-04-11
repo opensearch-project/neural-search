@@ -112,9 +112,9 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         clientAccessor = new MLCommonsClientAccessor(new MachineLearningNodeClient(parameters.client));
         return Map.of(
             TextEmbeddingProcessor.TYPE,
-            new TextEmbeddingProcessorFactory(clientAccessor, parameters.env),
+            new TextEmbeddingProcessorFactory(clientAccessor, parameters.env, parameters.ingestService.getClusterService()),
             SparseEncodingProcessor.TYPE,
-            new SparseEncodingProcessorFactory(clientAccessor, parameters.env),
+            new SparseEncodingProcessorFactory(clientAccessor, parameters.env, parameters.ingestService.getClusterService()),
             TextImageEmbeddingProcessor.TYPE,
             new TextImageEmbeddingProcessorFactory(clientAccessor, parameters.env, parameters.ingestService.getClusterService()),
             TextChunkingProcessor.TYPE,
