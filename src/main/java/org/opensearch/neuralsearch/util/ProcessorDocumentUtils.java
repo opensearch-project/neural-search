@@ -35,7 +35,8 @@ public class ProcessorDocumentUtils {
         final Map<String, Object> sourceValue,
         final Object fieldMap,
         final int depth,
-        final long maxDepth
+        final long maxDepth,
+        final boolean allowEmpty
     ) {
         if (sourceValue == null) return; // allow map type value to be null.
         validateDepth(sourceKey, depth, maxDepth);
@@ -55,12 +56,12 @@ public class ProcessorDocumentUtils {
             Object nextSourceValue = sourceValue.get(key);
             if (nextSourceValue != null) {
                 if (nextSourceValue instanceof List) {
-                    validateListTypeValue(key, (List) nextSourceValue, fieldMap, depth + 1, maxDepth);
+                    validateListTypeValue(key, (List) nextSourceValue, fieldMap, depth + 1, maxDepth, allowEmpty);
                 } else if (nextSourceValue instanceof Map) {
-                    validateMapTypeValue(key, (Map<String, Object>) nextSourceValue, nextFieldMap, depth + 1, maxDepth);
+                    validateMapTypeValue(key, (Map<String, Object>) nextSourceValue, nextFieldMap, depth + 1, maxDepth, allowEmpty);
                 } else if (!(nextSourceValue instanceof String)) {
                     throw new IllegalArgumentException("map type field [" + key + "] is neither string nor nested type, cannot process it");
-                } else if (StringUtils.isBlank((String) nextSourceValue)) {
+                } else if (!allowEmpty && StringUtils.isBlank((String) nextSourceValue)) {
                     throw new IllegalArgumentException("map type field [" + key + "] has empty string value, cannot process it");
                 }
             }
@@ -68,16 +69,30 @@ public class ProcessorDocumentUtils {
     }
 
     @SuppressWarnings({ "rawtypes", "unchecked" })
-    private static void validateListTypeValue(String sourceKey, List sourceValue, Object fieldMap, int depth, long maxDepth) {
+    private static void validateListTypeValue(
+        String sourceKey,
+        List sourceValue,
+        Object fieldMap,
+        int depth,
+        long maxDepth,
+        boolean allowEmpty
+    ) {
         validateDepth(sourceKey, depth, maxDepth);
         if (sourceValue == null || sourceValue.isEmpty()) return;
         Object firstNonNullElement = sourceValue.stream().filter(Objects::nonNull).findFirst().orElse(null);
         if (firstNonNullElement == null) return;
         for (Object element : sourceValue) {
             if (firstNonNullElement instanceof List) { // nested list case.
-                validateListTypeValue(sourceKey, (List) element, fieldMap, depth + 1, maxDepth);
+                validateListTypeValue(sourceKey, (List) element, fieldMap, depth + 1, maxDepth, allowEmpty);
             } else if (firstNonNullElement instanceof Map) {
-                validateMapTypeValue(sourceKey, (Map<String, Object>) element, ((Map) fieldMap).get(sourceKey), depth + 1, maxDepth);
+                validateMapTypeValue(
+                    sourceKey,
+                    (Map<String, Object>) element,
+                    ((Map) fieldMap).get(sourceKey),
+                    depth + 1,
+                    maxDepth,
+                    allowEmpty
+                );
             } else if (!(firstNonNullElement instanceof String)) {
                 throw new IllegalArgumentException("list type field [" + sourceKey + "] has non string value, cannot process it");
             } else {
@@ -85,7 +100,7 @@ public class ProcessorDocumentUtils {
                     throw new IllegalArgumentException("list type field [" + sourceKey + "] has null, cannot process it");
                 } else if (!(element instanceof String)) {
                     throw new IllegalArgumentException("list type field [" + sourceKey + "] has non string value, cannot process it");
-                } else if (StringUtils.isBlank(element.toString())) {
+                } else if (!allowEmpty && StringUtils.isBlank(element.toString())) {
                     throw new IllegalArgumentException("list type field [" + sourceKey + "] has empty string, cannot process it");
                 }
             }

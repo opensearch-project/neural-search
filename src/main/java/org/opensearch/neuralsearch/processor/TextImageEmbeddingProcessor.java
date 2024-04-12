@@ -176,7 +176,8 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
             sourceAndMetadataMap,
             fieldMap,
             1,
-            ProcessorDocumentUtils.getMaxDepth(sourceAndMetadataMap, clusterService, environment)
+            ProcessorDocumentUtils.getMaxDepth(sourceAndMetadataMap, clusterService, environment),
+            true
         );
     }
 
