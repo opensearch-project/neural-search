@@ -224,7 +224,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             // verify that all ids are unique
             assertEquals(Set.copyOf(ids).size(), ids.size());
 
-            // very case when there are partial match
+            // verify case when there are partial match
             HybridQueryBuilder hybridQueryBuilderPartialMatch = new HybridQueryBuilder();
             hybridQueryBuilderPartialMatch.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
             hybridQueryBuilderPartialMatch.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4));
