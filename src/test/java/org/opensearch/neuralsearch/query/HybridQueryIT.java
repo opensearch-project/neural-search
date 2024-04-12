@@ -566,28 +566,17 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testWrappedQueryWithFilter_whenIndexAliasHasFilterAndIndexWithNestedFields_thenSuccess() {
-        String modelId = null;
         String alias = "alias_with_filter";
         try {
             initializeIndexIfNotExist(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME);
-            modelId = prepareModel();
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
             // create alias for index
             QueryBuilder aliasFilter = QueryBuilders.boolQuery()
                 .mustNot(QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
             createIndexAlias(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME, alias, aliasFilter);
 
-            NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
-                TEST_KNN_VECTOR_FIELD_NAME_1,
-                TEST_QUERY_TEXT,
-                "",
-                modelId,
-                5,
-                null,
-                null
-            );
             HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-            hybridQueryBuilder.add(neuralQueryBuilder);
+            hybridQueryBuilder.add(QueryBuilders.existsQuery(TEST_TEXT_FIELD_NAME_1));
 
             Map<String, Object> searchResponseAsMap = search(
                 alias,
@@ -608,34 +597,23 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertEquals(RELATION_EQUAL_TO, total.get("relation"));
         } finally {
             deleteIndexAlias(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME, alias);
-            wipeOfTestResources(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME, null, modelId, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME, null, null, SEARCH_PIPELINE);
         }
     }
 
     @SneakyThrows
     public void testWrappedQueryWithFilter_whenIndexAliasHasFilters_thenSuccess() {
-        String modelId = null;
         String alias = "alias_with_filter";
         try {
             initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
-            modelId = prepareModel();
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
             // create alias for index
             QueryBuilder aliasFilter = QueryBuilders.boolQuery()
                 .mustNot(QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
             createIndexAlias(TEST_MULTI_DOC_INDEX_NAME, alias, aliasFilter);
 
-            NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
-                TEST_KNN_VECTOR_FIELD_NAME_1,
-                TEST_QUERY_TEXT,
-                "",
-                modelId,
-                5,
-                null,
-                null
-            );
             HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-            hybridQueryBuilder.add(neuralQueryBuilder);
+            hybridQueryBuilder.add(QueryBuilders.existsQuery(TEST_TEXT_FIELD_NAME_1));
 
             Map<String, Object> searchResponseAsMap = search(
                 alias,
@@ -656,7 +634,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertEquals(RELATION_EQUAL_TO, total.get("relation"));
         } finally {
             deleteIndexAlias(TEST_MULTI_DOC_INDEX_NAME, alias);
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME, null, modelId, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME, null, null, SEARCH_PIPELINE);
         }
     }
 
@@ -892,7 +870,15 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
             Collections.singletonList(TEST_DOC_TEXT2)
         );
-        assertEquals(3, getDocCount(testMultiDocIndexName));
+        addKnnDoc(
+            testMultiDocIndexName,
+            "4",
+            Collections.emptyList(),
+            Collections.emptyList(),
+            Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+            Collections.singletonList(TEST_DOC_TEXT3)
+        );
+        assertEquals(4, getDocCount(testMultiDocIndexName));
     }
 
     private List<Map<String, Object>> getNestedHits(Map<String, Object> searchResponseAsMap) {
