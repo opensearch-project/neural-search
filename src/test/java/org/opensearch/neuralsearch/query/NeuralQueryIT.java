@@ -27,7 +27,6 @@ import lombok.SneakyThrows;
 public class NeuralQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_BASIC_INDEX_NAME = "test-neural-basic-index";
     private static final String TEST_MULTI_VECTOR_FIELD_INDEX_NAME = "test-neural-multi-vector-field-index";
-    private static final String TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME = "test-neural-text-and-vector-field-index";
     private static final String TEST_NESTED_INDEX_NAME = "test-neural-nested-index";
     private static final String TEST_MULTI_DOC_INDEX_NAME = "test-neural-multi-doc-index";
     private static final String TEST_QUERY_TEXT = "Hello world";
@@ -45,46 +44,6 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     }
 
     /**
-     * Tests basic query:
-     * {
-     *     "query": {
-     *         "neural": {
-     *             "text_knn": {
-     *                 "query_text": "Hello world",
-     *                 "model_id": "dcsdcasd",
-     *                 "k": 1
-     *             }
-     *         }
-     *     }
-     * }
-     */
-    @SneakyThrows
-    public void testBasicQuery() {
-        String modelId = null;
-        try {
-            initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-            modelId = prepareModel();
-            NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
-                TEST_KNN_VECTOR_FIELD_NAME_1,
-                TEST_QUERY_TEXT,
-                "",
-                modelId,
-                1,
-                null,
-                null
-            );
-            Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, neuralQueryBuilder, 1);
-            Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
-
-            assertEquals("1", firstInnerHit.get("_id"));
-            float expectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
-            assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
-        } finally {
-            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
-        }
-    }
-
-    /**
      * Tests basic query with boost parameter:
      * {
      *     "query": {
@@ -98,14 +57,27 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
      *         }
      *     }
      * }
+     * and query with image query part
+     * {
+     *     "query": {
+     *         "neural": {
+     *             "text_knn": {
+     *                 "query_text": "Hello world",
+     *                 "query_image": "base64_1234567890",
+     *                 "model_id": "dcsdcasd",
+     *                 "k": 1
+     *             }
+     *         }
+     *     }
+     * }
      */
     @SneakyThrows
-    public void testBoostQuery() {
+    public void testQueryWithBoostAndImageQuery() {
         String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
             modelId = prepareModel();
-            NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
+            NeuralQueryBuilder neuralQueryBuilderTextQuery = new NeuralQueryBuilder(
                 TEST_KNN_VECTOR_FIELD_NAME_1,
                 TEST_QUERY_TEXT,
                 "",
@@ -116,13 +88,33 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
             );
 
             final float boost = 2.0f;
-            neuralQueryBuilder.boost(boost);
-            Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, neuralQueryBuilder, 1);
-            Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+            neuralQueryBuilderTextQuery.boost(boost);
+            Map<String, Object> searchResponseAsMapTextQuery = search(TEST_BASIC_INDEX_NAME, neuralQueryBuilderTextQuery, 1);
+            Map<String, Object> firstInnerHitTextQuery = getFirstInnerHit(searchResponseAsMapTextQuery);
 
-            assertEquals("1", firstInnerHit.get("_id"));
+            assertEquals("1", firstInnerHitTextQuery.get("_id"));
             float expectedScore = 2 * computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
-            assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
+            assertEquals(expectedScore, objectToFloat(firstInnerHitTextQuery.get("_score")), DELTA_FOR_SCORE_ASSERTION);
+
+            NeuralQueryBuilder neuralQueryBuilderMultimodalQuery = new NeuralQueryBuilder(
+                TEST_KNN_VECTOR_FIELD_NAME_1,
+                TEST_QUERY_TEXT,
+                TEST_IMAGE_TEXT,
+                modelId,
+                1,
+                null,
+                null
+            );
+            Map<String, Object> searchResponseAsMapMultimodalQuery = search(TEST_BASIC_INDEX_NAME, neuralQueryBuilderMultimodalQuery, 1);
+            Map<String, Object> firstInnerHitMultimodalQuery = getFirstInnerHit(searchResponseAsMapMultimodalQuery);
+
+            assertEquals("1", firstInnerHitMultimodalQuery.get("_id"));
+            float expectedScoreMultimodalQuery = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
+            assertEquals(
+                expectedScoreMultimodalQuery,
+                objectToFloat(firstInnerHitMultimodalQuery.get("_score")),
+                DELTA_FOR_SCORE_ASSERTION
+            );
         } finally {
             wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
         }
@@ -200,49 +192,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
      *         }
      *     }
      * }
-     */
-    @SneakyThrows
-    public void testBooleanQuery_withMultipleNeuralQueries() {
-        String modelId = null;
-        try {
-            initializeIndexIfNotExist(TEST_MULTI_VECTOR_FIELD_INDEX_NAME);
-            modelId = prepareModel();
-            BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
-
-            NeuralQueryBuilder neuralQueryBuilder1 = new NeuralQueryBuilder(
-                TEST_KNN_VECTOR_FIELD_NAME_1,
-                TEST_QUERY_TEXT,
-                "",
-                modelId,
-                1,
-                null,
-                null
-            );
-            NeuralQueryBuilder neuralQueryBuilder2 = new NeuralQueryBuilder(
-                TEST_KNN_VECTOR_FIELD_NAME_2,
-                TEST_QUERY_TEXT,
-                "",
-                modelId,
-                1,
-                null,
-                null
-            );
-
-            boolQueryBuilder.should(neuralQueryBuilder1).should(neuralQueryBuilder2);
-
-            Map<String, Object> searchResponseAsMap = search(TEST_MULTI_VECTOR_FIELD_INDEX_NAME, boolQueryBuilder, 1);
-            Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
-
-            assertEquals("1", firstInnerHit.get("_id"));
-            float expectedScore = 2 * computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
-            assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_VECTOR_FIELD_INDEX_NAME, null, modelId, null);
-        }
-    }
-
-    /**
-     * Tests bool should with BM25 and neural query:
+     * and bool should with BM25 and neural query:
      * {
      *     "query": {
      *         "bool" : {
@@ -265,13 +215,47 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
      * }
      */
     @SneakyThrows
-    public void testBooleanQuery_withNeuralAndBM25Queries() {
+    public void testBooleanQuery_withMultipleNeuralQueries() {
         String modelId = null;
         try {
-            initializeIndexIfNotExist(TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME);
+            initializeIndexIfNotExist(TEST_MULTI_VECTOR_FIELD_INDEX_NAME);
             modelId = prepareModel();
-            BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
+            // verify two neural queries wrapped into bool
+            BoolQueryBuilder boolQueryBuilderTwoNeuralQueries = new BoolQueryBuilder();
+            NeuralQueryBuilder neuralQueryBuilder1 = new NeuralQueryBuilder(
+                TEST_KNN_VECTOR_FIELD_NAME_1,
+                TEST_QUERY_TEXT,
+                "",
+                modelId,
+                1,
+                null,
+                null
+            );
+            NeuralQueryBuilder neuralQueryBuilder2 = new NeuralQueryBuilder(
+                TEST_KNN_VECTOR_FIELD_NAME_2,
+                TEST_QUERY_TEXT,
+                "",
+                modelId,
+                1,
+                null,
+                null
+            );
 
+            boolQueryBuilderTwoNeuralQueries.should(neuralQueryBuilder1).should(neuralQueryBuilder2);
+
+            Map<String, Object> searchResponseAsMapTwoNeuralQueries = search(
+                TEST_MULTI_VECTOR_FIELD_INDEX_NAME,
+                boolQueryBuilderTwoNeuralQueries,
+                1
+            );
+            Map<String, Object> firstInnerHitTwoNeuralQueries = getFirstInnerHit(searchResponseAsMapTwoNeuralQueries);
+
+            assertEquals("1", firstInnerHitTwoNeuralQueries.get("_id"));
+            float expectedScore = 2 * computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
+            assertEquals(expectedScore, objectToFloat(firstInnerHitTwoNeuralQueries.get("_score")), DELTA_FOR_SCORE_ASSERTION);
+
+            // verify bool with one neural and one bm25 query
+            BoolQueryBuilder boolQueryBuilderMixOfNeuralAndBM25 = new BoolQueryBuilder();
             NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
                 TEST_KNN_VECTOR_FIELD_NAME_1,
                 TEST_QUERY_TEXT,
@@ -284,16 +268,20 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
 
             MatchQueryBuilder matchQueryBuilder = new MatchQueryBuilder(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
 
-            boolQueryBuilder.should(neuralQueryBuilder).should(matchQueryBuilder);
+            boolQueryBuilderMixOfNeuralAndBM25.should(neuralQueryBuilder).should(matchQueryBuilder);
 
-            Map<String, Object> searchResponseAsMap = search(TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME, boolQueryBuilder, 1);
-            Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+            Map<String, Object> searchResponseAsMapMixOfNeuralAndBM25 = search(
+                TEST_MULTI_VECTOR_FIELD_INDEX_NAME,
+                boolQueryBuilderMixOfNeuralAndBM25,
+                1
+            );
+            Map<String, Object> firstInnerHitMixOfNeuralAndBM25 = getFirstInnerHit(searchResponseAsMapMixOfNeuralAndBM25);
 
-            assertEquals("1", firstInnerHit.get("_id"));
+            assertEquals("1", firstInnerHitMixOfNeuralAndBM25.get("_id"));
             float minExpectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
-            assertTrue(minExpectedScore < objectToFloat(firstInnerHit.get("_score")));
+            assertTrue(minExpectedScore < objectToFloat(firstInnerHitMixOfNeuralAndBM25.get("_score")));
         } finally {
-            wipeOfTestResources(TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME, null, modelId, null);
+            wipeOfTestResources(TEST_MULTI_VECTOR_FIELD_INDEX_NAME, null, modelId, null);
         }
     }
 
@@ -389,47 +377,6 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         }
     }
 
-    /**
-     * Tests basic query for multimodal:
-     * {
-     *     "query": {
-     *         "neural": {
-     *             "text_knn": {
-     *                 "query_text": "Hello world",
-     *                 "query_image": "base64_1234567890",
-     *                 "model_id": "dcsdcasd",
-     *                 "k": 1
-     *             }
-     *         }
-     *     }
-     * }
-     */
-    @SneakyThrows
-    public void testMultimodalQuery() {
-        String modelId = null;
-        try {
-            initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-            modelId = prepareModel();
-            NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
-                TEST_KNN_VECTOR_FIELD_NAME_1,
-                TEST_QUERY_TEXT,
-                TEST_IMAGE_TEXT,
-                modelId,
-                1,
-                null,
-                null
-            );
-            Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, neuralQueryBuilder, 1);
-            Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
-
-            assertEquals("1", firstInnerHit.get("_id"));
-            float expectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
-            assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
-        } finally {
-            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
-        }
-    }
-
     @SneakyThrows
     private void initializeIndexIfNotExist(String indexName) {
         if (TEST_BASIC_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_INDEX_NAME)) {
@@ -458,7 +405,9 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 TEST_MULTI_VECTOR_FIELD_INDEX_NAME,
                 "1",
                 List.of(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_KNN_VECTOR_FIELD_NAME_2),
-                List.of(Floats.asList(testVector).toArray(), Floats.asList(testVector).toArray())
+                List.of(Floats.asList(testVector).toArray(), Floats.asList(testVector).toArray()),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+                Collections.singletonList(TEST_QUERY_TEXT)
             );
             assertEquals(1, getDocCount(TEST_MULTI_VECTOR_FIELD_INDEX_NAME));
         }
@@ -475,22 +424,6 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 Collections.singletonList(Floats.asList(testVector).toArray())
             );
             assertEquals(1, getDocCount(TEST_NESTED_INDEX_NAME));
-        }
-
-        if (TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME.equals(indexName) && !indexExists(TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME)) {
-            prepareKnnIndex(
-                TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME,
-                Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE))
-            );
-            addKnnDoc(
-                TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME,
-                "1",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector).toArray()),
-                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
-                Collections.singletonList(TEST_QUERY_TEXT)
-            );
-            assertEquals(1, getDocCount(TEST_TEXT_AND_VECTOR_FIELD_INDEX_NAME));
         }
 
         if (TEST_MULTI_DOC_INDEX_NAME.equals(indexName) && !indexExists(TEST_MULTI_DOC_INDEX_NAME)) {

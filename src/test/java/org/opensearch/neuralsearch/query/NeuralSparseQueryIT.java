@@ -42,40 +42,7 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
     }
 
     /**
-     * Tests basic query:
-     * {
-     *     "query": {
-     *         "neural_sparse": {
-     *             "text_sparse": {
-     *                 "query_text": "Hello world a b",
-     *                 "model_id": "dcsdcasd"
-     *             }
-     *         }
-     *     }
-     * }
-     */
-    @SneakyThrows
-    public void testBasicQueryUsingQueryText() {
-        String modelId = null;
-        try {
-            initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-            modelId = prepareSparseEncodingModel();
-            NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
-                .queryText(TEST_QUERY_TEXT)
-                .modelId(modelId);
-            Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, sparseEncodingQueryBuilder, 1);
-            Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
-
-            assertEquals("1", firstInnerHit.get("_id"));
-            float expectedScore = computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
-            assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
-        } finally {
-            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
-        }
-    }
-
-    /**
-     * Tests basic query:
+     * Tests basic query with boost:
      * {
      *     "query": {
      *         "neural_sparse": {
@@ -89,7 +56,7 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
      * }
      */
     @SneakyThrows
-    public void testBoostQuery() {
+    public void testBasicQueryUsingQueryText() {
         String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
