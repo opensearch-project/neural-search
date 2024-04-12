@@ -490,6 +490,28 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         assertEquals(2, ((List<?>) ingestDocument.getSourceAndMetadata().get("oriKey6_knn")).size());
     }
 
+    public void test_doublyNestedList_withMapType_successful() {
+        Map<String, Object> config = createNestedListConfiguration();
+
+        Map<String, Object> toEmbeddings = new HashMap<>();
+        toEmbeddings.put("textField", "text to embedding");
+        List<Map<String, Object>> l1List = new ArrayList<>();
+        l1List.add(toEmbeddings);
+        List<List<Map<String, Object>>> l2List = new ArrayList<>();
+        l2List.add(l1List);
+        Map<String, Object> document = new HashMap<>();
+        document.put("nestedField", l2List);
+        document.put(IndexFieldMapper.NAME, "my_index");
+
+        IngestDocument ingestDocument = new IngestDocument(document, new HashMap<>());
+        TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        ArgumentCaptor<IllegalArgumentException> argumentCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
+        verify(handler).accept(isNull(), argumentCaptor.capture());
+        assertEquals("list type field [nestedField] is nested list type, cannot process it", argumentCaptor.getValue().getMessage());
+    }
+
     public void test_batchExecute_successful() {
         final int docCount = 5;
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);

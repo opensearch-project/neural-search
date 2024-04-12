@@ -866,7 +866,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             IllegalArgumentException.class,
             () -> processor.execute(ingestDocument)
         );
-        assertEquals("map type field [body] reached max depth limit, cannot process it", illegalArgumentException.getMessage());
+        assertEquals("map type field [body] reaches max depth limit, cannot process it", illegalArgumentException.getMessage());
     }
 
     @SneakyThrows
@@ -916,7 +916,10 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             IllegalArgumentException.class,
             () -> processor.execute(ingestDocument)
         );
-        assertEquals("list type field [body] has non string value, cannot process it", illegalArgumentException.getMessage());
+        assertEquals(
+            "[body] configuration doesn't match actual value type, configuration type is: java.lang.String, actual value type is: com.google.common.collect.RegularImmutableMap",
+            illegalArgumentException.getMessage()
+        );
     }
 
     @SneakyThrows

@@ -8,6 +8,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.env.Environment;
 import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.index.mapper.MapperService;
@@ -15,10 +16,21 @@ import org.opensearch.index.mapper.MapperService;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 
+/**
+ * This class is used to accommodate the common code pieces of parsing, validating and processing the document for multiple
+ * pipeline processors.
+ */
 public class ProcessorDocumentUtils {
 
+    /**
+     * This method is used to get the max depth of the index or from system settings.
+     *
+     * @param  sourceAndMetadataMap   _source and metadata info in document.
+     * @param  clusterService         cluster service passed from OpenSearch core.
+     * @param  environment            environment passed from OpenSearch core.
+     * @return                        max depth of the index or from system settings.
+     */
     public static long getMaxDepth(Map<String, Object> sourceAndMetadataMap, ClusterService clusterService, Environment environment) {
         String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
         IndexMetadata indexMetadata = clusterService.state().metadata().index(indexName);
@@ -29,12 +41,23 @@ public class ProcessorDocumentUtils {
         return MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings());
     }
 
+    /**
+     * Validates a map type value recursively up to a specified depth. Supports Map type, List type and String type.
+     * If current sourceValue is Map or List type, recursively validates its values, otherwise validates its value.
+     *
+     * @param  sourceKey    the key of the source map being validated, the first level is always the "field_map" key.
+     * @param  sourceValue  the source map being validated, the first level is always the sourceAndMetadataMap.
+     * @param  fieldMap     the configuration map for validation, the first level is always the value of "field_map" in the processor configuration.
+     * @param  depth        the current depth of recursion
+     * @param  maxDepth     the maximum allowed depth for recursion
+     * @param  allowEmpty   flag to allow empty values in map type validation.
+     */
     @SuppressWarnings({ "rawtypes", "unchecked" })
     public static void validateMapTypeValue(
         final String sourceKey,
         final Map<String, Object> sourceValue,
         final Object fieldMap,
-        final int depth,
+        final long depth,
         final long maxDepth,
         final boolean allowEmpty
     ) {
@@ -73,18 +96,19 @@ public class ProcessorDocumentUtils {
         String sourceKey,
         List sourceValue,
         Object fieldMap,
-        int depth,
+        long depth,
         long maxDepth,
         boolean allowEmpty
     ) {
         validateDepth(sourceKey, depth, maxDepth);
-        if (sourceValue == null || sourceValue.isEmpty()) return;
-        Object firstNonNullElement = sourceValue.stream().filter(Objects::nonNull).findFirst().orElse(null);
-        if (firstNonNullElement == null) return;
+        if (CollectionUtils.isEmpty(sourceValue)) return;
         for (Object element : sourceValue) {
-            if (firstNonNullElement instanceof List) { // nested list case.
-                validateListTypeValue(sourceKey, (List) element, fieldMap, depth + 1, maxDepth, allowEmpty);
-            } else if (firstNonNullElement instanceof Map) {
+            if (element == null) {
+                throw new IllegalArgumentException("list type field [" + sourceKey + "] has null, cannot process it");
+            }
+            if (element instanceof List) { // nested list case.
+                throw new IllegalArgumentException("list type field [" + sourceKey + "] is nested list type, cannot process it");
+            } else if (element instanceof Map) {
                 validateMapTypeValue(
                     sourceKey,
                     (Map<String, Object>) element,
@@ -93,23 +117,17 @@ public class ProcessorDocumentUtils {
                     maxDepth,
                     allowEmpty
                 );
-            } else if (!(firstNonNullElement instanceof String)) {
+            } else if (!(element instanceof String)) {
                 throw new IllegalArgumentException("list type field [" + sourceKey + "] has non string value, cannot process it");
-            } else {
-                if (element == null) {
-                    throw new IllegalArgumentException("list type field [" + sourceKey + "] has null, cannot process it");
-                } else if (!(element instanceof String)) {
-                    throw new IllegalArgumentException("list type field [" + sourceKey + "] has non string value, cannot process it");
-                } else if (!allowEmpty && StringUtils.isBlank(element.toString())) {
-                    throw new IllegalArgumentException("list type field [" + sourceKey + "] has empty string, cannot process it");
-                }
+            } else if (!allowEmpty && StringUtils.isBlank(element.toString())) {
+                throw new IllegalArgumentException("list type field [" + sourceKey + "] has empty string, cannot process it");
             }
         }
     }
 
-    private static void validateDepth(String sourceKey, int depth, long maxDepth) {
+    private static void validateDepth(String sourceKey, long depth, long maxDepth) {
         if (depth > maxDepth) {
-            throw new IllegalArgumentException("map type field [" + sourceKey + "] reached max depth limit, cannot process it");
+            throw new IllegalArgumentException("map type field [" + sourceKey + "] reaches max depth limit, cannot process it");
         }
     }
 }
