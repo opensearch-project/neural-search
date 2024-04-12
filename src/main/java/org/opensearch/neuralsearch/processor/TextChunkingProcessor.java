@@ -170,7 +170,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
             fieldMap,
             1,
             ProcessorDocumentUtils.getMaxDepth(sourceAndMetadataMap, clusterService, environment),
-            false
+            true
         );
         // fixed token length algorithm needs runtime parameter max_token_count for tokenization
         Map<String, Object> runtimeParameters = new HashMap<>();

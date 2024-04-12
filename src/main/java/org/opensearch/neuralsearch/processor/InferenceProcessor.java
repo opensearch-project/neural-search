@@ -339,7 +339,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
             fieldMap,
             1,
             ProcessorDocumentUtils.getMaxDepth(sourceAndMetadataMap, clusterService, environment),
-            true
+            false
         );
     }
 
