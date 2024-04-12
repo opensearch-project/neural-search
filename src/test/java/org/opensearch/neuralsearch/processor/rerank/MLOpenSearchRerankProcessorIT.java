@@ -12,8 +12,6 @@ import java.util.Map;
 import org.apache.http.HttpHeaders;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
-import org.junit.After;
-import org.junit.Before;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
@@ -36,33 +34,19 @@ public class MLOpenSearchRerankProcessorIT extends BaseNeuralSearchIT {
     private final static String TEXT_REP_1 = "Jacques loves fish. Fish make Jacques happy";
     private final static String TEXT_REP_2 = "Fish like to eat plankton";
     private final static String INDEX_CONFIG = "{\"mappings\": {\"properties\": {\"text_representation\": {\"type\": \"text\"}}}}";
-    private String modelId;
-
-    @After
-    @SneakyThrows
-    public void tearDown() {
-        super.tearDown();
-        /* this is required to minimize chance of model not being deployed due to open memory CB,
-         * this happens in case we leave model from previous test case. We use new model for every test, and old model
-         * can be undeployed and deleted to free resources after each test case execution.
-         */
-        deleteModel(modelId);
-        deleteSearchPipeline(PIPELINE_NAME);
-        deleteIndex(INDEX_NAME);
-    }
-
-    @Before
-    @SneakyThrows
-    public void setup() {
-        modelId = uploadTextSimilarityModel();
-        loadModel(modelId);
-    }
 
     @SneakyThrows
     public void testCrossEncoderRerankProcessor() {
-        createSearchPipelineViaConfig(modelId, PIPELINE_NAME, "processor/RerankMLOpenSearchPipelineConfiguration.json");
-        setupIndex();
-        runQueries();
+        String modelId = null;
+        try {
+            modelId = uploadTextSimilarityModel();
+            loadModel(modelId);
+            createSearchPipelineViaConfig(modelId, PIPELINE_NAME, "processor/RerankMLOpenSearchPipelineConfiguration.json");
+            setupIndex();
+            runQueries();
+        } finally {
+            wipeOfTestResources(INDEX_NAME, null, modelId, PIPELINE_NAME);
+        }
     }
 
     private String uploadTextSimilarityModel() throws Exception {

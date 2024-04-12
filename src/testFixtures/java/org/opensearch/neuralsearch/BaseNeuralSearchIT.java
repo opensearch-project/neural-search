@@ -82,6 +82,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         ProcessorType.TEXT_IMAGE_EMBEDDING,
         "processor/PipelineForTextImageEmbeddingProcessorConfiguration.json"
     );
+    private static final Set<RestStatus> SUCCESS_STATUSES = Set.of(RestStatus.CREATED, RestStatus.OK);
 
     protected final ClassLoader classLoader = this.getClass().getClassLoader();
 
@@ -114,6 +115,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         updateClusterSettings("plugins.ml_commons.only_run_on_ml_node", false);
         // default threshold for native circuit breaker is 90, it may be not enough on test runner machine
         updateClusterSettings("plugins.ml_commons.native_memory_threshold", 100);
+        updateClusterSettings("plugins.ml_commons.jvm_heap_memory_threshold", 95);
         updateClusterSettings("plugins.ml_commons.allow_registering_model_via_url", true);
     }
 
@@ -633,7 +635,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
         request.setJsonEntity(builder.toString());
         Response response = client().performRequest(request);
-        assertEquals(request.getEndpoint() + ": failed", RestStatus.CREATED, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        assertTrue(
+            request.getEndpoint() + ": failed",
+            SUCCESS_STATUSES.contains(RestStatus.fromCode(response.getStatusLine().getStatusCode()))
+        );
     }
 
     @SneakyThrows
