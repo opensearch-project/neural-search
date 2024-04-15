@@ -25,6 +25,7 @@ import org.opensearch.common.collect.Tuple;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
+import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.IngestDocumentWrapper;
@@ -333,12 +334,15 @@ public abstract class InferenceProcessor extends AbstractProcessor {
 
     private void validateEmbeddingFieldsValue(IngestDocument ingestDocument) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
+        String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
         ProcessorDocumentUtils.validateMapTypeValue(
             "field_map",
             sourceAndMetadataMap,
             fieldMap,
             1,
-            ProcessorDocumentUtils.getMaxDepth(sourceAndMetadataMap, clusterService, environment),
+            indexName,
+            clusterService,
+            environment,
             false
         );
     }

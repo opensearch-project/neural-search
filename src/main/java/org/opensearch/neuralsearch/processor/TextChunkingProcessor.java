@@ -164,12 +164,15 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     @Override
     public IngestDocument execute(final IngestDocument ingestDocument) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
+        String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
         ProcessorDocumentUtils.validateMapTypeValue(
             "field_map",
             sourceAndMetadataMap,
             fieldMap,
             1,
-            ProcessorDocumentUtils.getMaxDepth(sourceAndMetadataMap, clusterService, environment),
+            indexName,
+            clusterService,
+            environment,
             true
         );
         // fixed token length algorithm needs runtime parameter max_token_count for tokenization

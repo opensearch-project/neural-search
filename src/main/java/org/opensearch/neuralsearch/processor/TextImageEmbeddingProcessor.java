@@ -17,6 +17,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
+import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
@@ -171,12 +172,15 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
 
     private void validateEmbeddingFieldsValue(final IngestDocument ingestDocument) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
+        String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
         ProcessorDocumentUtils.validateMapTypeValue(
             "field_map",
             sourceAndMetadataMap,
             fieldMap,
             1,
-            ProcessorDocumentUtils.getMaxDepth(sourceAndMetadataMap, clusterService, environment),
+            indexName,
+            clusterService,
+            environment,
             false
         );
     }
