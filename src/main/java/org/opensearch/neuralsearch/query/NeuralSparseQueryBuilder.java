@@ -66,6 +66,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     static final ParseField QUERY_TOKENS_FIELD = new ParseField("query_tokens");
     @VisibleForTesting
     static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
+    private static final String EMPTY_STRING = "";
 
     private static MLCommonsClientAccessor ML_CLIENT;
 
@@ -98,16 +99,26 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             Map<String, Float> queryTokens = in.readMap(StreamInput::readString, StreamInput::readFloat);
             this.queryTokensSupplier = () -> queryTokens;
         }
+        // to be backward compatible with previous version, we need to writeString/readString API instead of optionalString API
+        // after supporting query by tokens, queryText and modelId can be null. here we write an empty String instead
+        if (EMPTY_STRING.equals(queryText)) {
+            this.queryText = null;
+        }
+        if (EMPTY_STRING.equals(modelId)) {
+            this.modelId = null;
+        }
     }
 
     @Override
     protected void doWriteTo(StreamOutput out) throws IOException {
         out.writeString(fieldName);
-        out.writeString(queryText);
+        // to be backward compatible with previous version, we need to use out.writeString instead of writeOptionalString here
+        // after supporting query by tokens, queryText and modelId can be null. here we write an empty String instead
+        out.writeString(Objects.isNull(queryText) ? EMPTY_STRING : queryText);
         if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
-            out.writeOptionalString(this.modelId);
+            out.writeOptionalString(modelId);
         } else {
-            out.writeString(this.modelId);
+            out.writeString(Objects.isNull(modelId) ? EMPTY_STRING : modelId);
         }
         if (!Objects.isNull(queryTokensSupplier) && !Objects.isNull(queryTokensSupplier.get())) {
             out.writeBoolean(true);
@@ -217,9 +228,6 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
                     sparseEncodingQueryBuilder.boost(parser.floatValue());
                 } else if (QUERY_TEXT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     sparseEncodingQueryBuilder.queryText(parser.text());
-                } else if (QUERY_TOKENS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    Map<String, Float> queryTokens = parser.map(HashMap::new, XContentParser::floatValue);
-                    sparseEncodingQueryBuilder.queryTokensSupplier(() -> queryTokens);
                 } else if (MODEL_ID_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     sparseEncodingQueryBuilder.modelId(parser.text());
                 } else {
@@ -228,6 +236,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
                         String.format(Locale.ROOT, "[%s] query does not support [%s] field", NAME, currentFieldName)
                     );
                 }
+            } else if (QUERY_TOKENS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                Map<String, Float> queryTokens = parser.map(HashMap::new, XContentParser::floatValue);
+                sparseEncodingQueryBuilder.queryTokensSupplier(() -> queryTokens);
             } else {
                 throw new ParsingException(
                     parser.getTokenLocation(),
