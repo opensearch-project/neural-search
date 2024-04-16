@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -61,6 +62,8 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     public static final String NAME = "neural_sparse";
     @VisibleForTesting
     static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
+    @VisibleForTesting
+    static final ParseField QUERY_TOKENS_FIELD = new ParseField("query_tokens");
     @VisibleForTesting
     static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
 
@@ -122,6 +125,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (Objects.nonNull(modelId)) {
             xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
         }
+        if (Objects.nonNull(queryTokensSupplier) && Objects.nonNull(queryTokensSupplier.get())) {
+            xContentBuilder.field(QUERY_TOKENS_FIELD.getPreferredName(), queryTokensSupplier.get());
+        }
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
         xContentBuilder.endObject();
@@ -133,6 +139,16 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
      *    "query_text": "string",
      *    "model_id": "string"
      *  }
+     *
+     *  or
+     *  "SAMPLE_FIELD": {
+     *      "query_tokens": {
+     *          "token_a": float,
+     *          "token_b": float,
+     *          ...
+     *       }
+     *  }
+     *
      *
      * @param parser XContentParser
      * @return NeuralQueryBuilder
@@ -159,18 +175,32 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
                 )
             );
         }
-
-        requireValue(sparseEncodingQueryBuilder.fieldName(), "Field name must be provided for " + NAME + " query");
-        requireValue(
-            sparseEncodingQueryBuilder.queryText(),
-            String.format(Locale.ROOT, "%s field must be provided for [%s] query", QUERY_TEXT_FIELD.getPreferredName(), NAME)
-        );
-        if (!isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
+        if (Objects.isNull(sparseEncodingQueryBuilder.queryTokensSupplier)) {
+            requireValue(sparseEncodingQueryBuilder.fieldName(), "Field name must be provided for " + NAME + " query");
             requireValue(
-                sparseEncodingQueryBuilder.modelId(),
-                String.format(Locale.ROOT, "%s field must be provided for [%s] query", MODEL_ID_FIELD.getPreferredName(), NAME)
+                sparseEncodingQueryBuilder.queryText(),
+                String.format(
+                    Locale.ROOT,
+                    "either %s field or %s field must be provided for [%s] query",
+                    QUERY_TEXT_FIELD.getPreferredName(),
+                    QUERY_TOKENS_FIELD.getPreferredName(),
+                    NAME
+                )
             );
+            if (!isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
+                requireValue(
+                    sparseEncodingQueryBuilder.modelId(),
+                    String.format(
+                        Locale.ROOT,
+                        "using %s, %s field must be provided for [%s] query",
+                        QUERY_TEXT_FIELD.getPreferredName(),
+                        MODEL_ID_FIELD.getPreferredName(),
+                        NAME
+                    )
+                );
+            }
         }
+
         return sparseEncodingQueryBuilder;
     }
 
@@ -187,6 +217,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
                     sparseEncodingQueryBuilder.boost(parser.floatValue());
                 } else if (QUERY_TEXT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     sparseEncodingQueryBuilder.queryText(parser.text());
+                } else if (QUERY_TOKENS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    Map<String, Float> queryTokens = parser.map(HashMap::new, XContentParser::floatValue);
+                    sparseEncodingQueryBuilder.queryTokensSupplier(() -> queryTokens);
                 } else if (MODEL_ID_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     sparseEncodingQueryBuilder.modelId(parser.text());
                 } else {
