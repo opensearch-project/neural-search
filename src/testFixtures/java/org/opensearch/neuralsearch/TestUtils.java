@@ -62,6 +62,7 @@ public class TestUtils {
     public static final String DEFAULT_COMBINATION_METHOD = "arithmetic_mean";
     public static final String PARAM_NAME_WEIGHTS = "weights";
     public static final String SPARSE_ENCODING_PROCESSOR = "sparse_encoding";
+    public static final String TEXT_CHUNKING_PROCESSOR = "text_chunking";
     public static final int MAX_TIME_OUT_INTERVAL = 3000;
     public static final int MAX_RETRY = 5;
 

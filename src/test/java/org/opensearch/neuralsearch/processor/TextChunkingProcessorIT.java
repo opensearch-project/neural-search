@@ -24,7 +24,6 @@ import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
-import static org.opensearch.neuralsearch.TestUtils.DEFAULT_USER_AGENT;
 
 public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
     private static final String INDEX_NAME = "text_chunking_test_index";
@@ -197,20 +196,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         URL pipelineURLPath = classLoader.getResource(PIPELINE_CONFIGS_BY_NAME.get(pipelineName));
         Objects.requireNonNull(pipelineURLPath);
         String requestBody = Files.readString(Path.of(pipelineURLPath.toURI()));
-        Response pipelineCreateResponse = makeRequest(
-            client(),
-            "PUT",
-            "/_ingest/pipeline/" + pipelineName,
-            null,
-            toHttpEntity(String.format(LOCALE, requestBody)),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
-        );
-        Map<String, Object> node = XContentHelper.convertToMap(
-            XContentType.JSON.xContent(),
-            EntityUtils.toString(pipelineCreateResponse.getEntity()),
-            false
-        );
-        assertEquals("true", node.get("acknowledged").toString());
+        createPipelineProcessor(requestBody, pipelineName, "");
     }
 
     private void createTextChunkingIndex(String indexName, String pipelineName) throws Exception {
@@ -222,13 +208,13 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
     private void ingestDocument(String documentPath) throws Exception {
         URL documentURLPath = classLoader.getResource(documentPath);
         Objects.requireNonNull(documentURLPath);
-        String ingestDocument = Files.readString(Path.of(documentURLPath.toURI()));
+        String document = Files.readString(Path.of(documentURLPath.toURI()));
         Response response = makeRequest(
             client(),
             "POST",
             INDEX_NAME + "/_doc?refresh",
             null,
-            toHttpEntity(ingestDocument),
+            toHttpEntity(document),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
         Map<String, Object> map = XContentHelper.convertToMap(
