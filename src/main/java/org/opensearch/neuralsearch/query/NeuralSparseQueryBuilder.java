@@ -186,8 +186,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
                 )
             );
         }
+
+        requireValue(sparseEncodingQueryBuilder.fieldName(), "Field name must be provided for " + NAME + " query");
         if (Objects.isNull(sparseEncodingQueryBuilder.queryTokensSupplier)) {
-            requireValue(sparseEncodingQueryBuilder.fieldName(), "Field name must be provided for " + NAME + " query");
             requireValue(
                 sparseEncodingQueryBuilder.queryText(),
                 String.format(
