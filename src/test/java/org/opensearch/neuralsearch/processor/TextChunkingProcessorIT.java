@@ -24,7 +24,7 @@ import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
-import static org.opensearch.neuralsearch.TestUtils.DEFAULT_USER_AGENT;
+import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_USER_AGENT;
 
 public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
     private static final String INDEX_NAME = "text_chunking_test_index";

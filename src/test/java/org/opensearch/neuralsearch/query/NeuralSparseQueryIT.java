@@ -5,7 +5,7 @@
 package org.opensearch.neuralsearch.query;
 
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
-import static org.opensearch.neuralsearch.TestUtils.objectToFloat;
+import static org.opensearch.neuralsearch.util.TestUtils.objectToFloat;
 
 import java.util.List;
 import java.util.Map;
@@ -15,7 +15,7 @@ import org.opensearch.client.ResponseException;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
-import org.opensearch.neuralsearch.TestUtils;
+import org.opensearch.neuralsearch.util.TestUtils;
 
 import lombok.SneakyThrows;
 

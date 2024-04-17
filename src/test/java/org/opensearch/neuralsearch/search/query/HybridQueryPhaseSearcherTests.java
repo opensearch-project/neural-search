@@ -462,7 +462,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         IndexMetadata indexMetadata = mock(IndexMetadata.class);
         when(indexMetadata.getIndex()).thenReturn(new Index(TEST_INDEX, INDEX_UUID.toString()));
         when(indexMetadata.getSettings()).thenReturn(Settings.EMPTY);
-        when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
+        // when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
         IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
         when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
@@ -570,7 +570,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         IndexMetadata indexMetadata = mock(IndexMetadata.class);
         when(indexMetadata.getIndex()).thenReturn(new Index(TEST_INDEX, INDEX_UUID.toString()));
         when(indexMetadata.getSettings()).thenReturn(Settings.EMPTY);
-        when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
+        // when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
         IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
         when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
@@ -638,7 +638,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         IndexMetadata indexMetadata = mock(IndexMetadata.class);
         when(indexMetadata.getIndex()).thenReturn(new Index(TEST_INDEX, INDEX_UUID.toString()));
         when(indexMetadata.getSettings()).thenReturn(Settings.EMPTY);
-        when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
+        // when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
         IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
         when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
@@ -781,7 +781,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         IndexMetadata indexMetadata = mock(IndexMetadata.class);
         when(indexMetadata.getIndex()).thenReturn(new Index(TEST_INDEX, INDEX_UUID.toString()));
         when(indexMetadata.getSettings()).thenReturn(Settings.EMPTY);
-        when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
+        // when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
         IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
         when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);

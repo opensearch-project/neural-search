@@ -2,13 +2,15 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch;
+package org.opensearch.neuralsearch.util;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getNestedHits;
+import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getTotalHits;
 import static org.opensearch.test.OpenSearchTestCase.randomFloat;
 
 import java.util.ArrayList;
@@ -299,6 +301,29 @@ public class TestUtils {
         assertEquals(0.001f, minScoreScoreFromScoreDocs, DELTA_FOR_SCORE_ASSERTION);
     }
 
+    public static void assertHitResultsFromQuery(int expected, Map<String, Object> searchResponseAsMap) {
+        assertEquals(expected, getHitCount(searchResponseAsMap));
+
+        List<Map<String, Object>> hits1NestedList = getNestedHits(searchResponseAsMap);
+        List<String> ids = new ArrayList<>();
+        List<Double> scores = new ArrayList<>();
+        for (Map<String, Object> oneHit : hits1NestedList) {
+            ids.add((String) oneHit.get("_id"));
+            scores.add((Double) oneHit.get("_score"));
+        }
+
+        // verify that scores are in desc order
+        assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
+        // verify that all ids are unique
+        assertEquals(Set.copyOf(ids).size(), ids.size());
+
+        Map<String, Object> total = getTotalHits(searchResponseAsMap);
+        assertNotNull(total.get("value"));
+        assertEquals(expected, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+    }
+
     private static List<Map<String, Object>> getNestedHits(Map<String, Object> searchResponseAsMap) {
         Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
         return (List<Map<String, Object>>) hitsMap.get("hits");
@@ -314,6 +339,13 @@ public class TestUtils {
         return hitsMap.get("max_score") == null ? Optional.empty() : Optional.of(((Double) hitsMap.get("max_score")).floatValue());
     }
 
+    @SuppressWarnings("unchecked")
+    private static int getHitCount(final Map<String, Object> searchResponseAsMap) {
+        Map<String, Object> hits1map = (Map<String, Object>) searchResponseAsMap.get("hits");
+        List<Object> hits1List = (List<Object>) hits1map.get("hits");
+        return hits1List.size();
+    }
+
     public static String getModelId(Map<String, Object> pipeline, String processor) {
         assertNotNull(pipeline);
         ArrayList<Map<String, Object>> processors = (ArrayList<Map<String, Object>>) pipeline.get("processors");
@@ -326,5 +358,4 @@ public class TestUtils {
     public static String generateModelId() {
         return "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8);
     }
-
 }

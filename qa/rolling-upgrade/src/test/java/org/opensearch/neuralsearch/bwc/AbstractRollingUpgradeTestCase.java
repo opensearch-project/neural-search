@@ -11,14 +11,14 @@ import java.util.Optional;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
-import static org.opensearch.neuralsearch.TestUtils.NEURAL_SEARCH_BWC_PREFIX;
-import static org.opensearch.neuralsearch.TestUtils.OLD_CLUSTER;
-import static org.opensearch.neuralsearch.TestUtils.MIXED_CLUSTER;
-import static org.opensearch.neuralsearch.TestUtils.UPGRADED_CLUSTER;
-import static org.opensearch.neuralsearch.TestUtils.ROLLING_UPGRADE_FIRST_ROUND;
-import static org.opensearch.neuralsearch.TestUtils.BWCSUITE_CLUSTER;
-import static org.opensearch.neuralsearch.TestUtils.BWC_VERSION;
-import static org.opensearch.neuralsearch.TestUtils.generateModelId;
+import static org.opensearch.neuralsearch.util.TestUtils.NEURAL_SEARCH_BWC_PREFIX;
+import static org.opensearch.neuralsearch.util.TestUtils.OLD_CLUSTER;
+import static org.opensearch.neuralsearch.util.TestUtils.MIXED_CLUSTER;
+import static org.opensearch.neuralsearch.util.TestUtils.UPGRADED_CLUSTER;
+import static org.opensearch.neuralsearch.util.TestUtils.ROLLING_UPGRADE_FIRST_ROUND;
+import static org.opensearch.neuralsearch.util.TestUtils.BWCSUITE_CLUSTER;
+import static org.opensearch.neuralsearch.util.TestUtils.BWC_VERSION;
+import static org.opensearch.neuralsearch.util.TestUtils.generateModelId;
 import org.opensearch.test.rest.OpenSearchRestTestCase;
 
 public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT {

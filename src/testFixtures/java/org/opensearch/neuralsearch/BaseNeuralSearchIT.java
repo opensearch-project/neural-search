@@ -56,14 +56,14 @@ import com.carrotsearch.randomizedtesting.RandomizedTest;
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import com.google.common.collect.ImmutableList;
 
-import static org.opensearch.neuralsearch.TestUtils.MAX_TASK_RESULT_QUERY_TIME_IN_SECOND;
-import static org.opensearch.neuralsearch.TestUtils.DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND;
-import static org.opensearch.neuralsearch.TestUtils.DEFAULT_USER_AGENT;
-import static org.opensearch.neuralsearch.TestUtils.DEFAULT_NORMALIZATION_METHOD;
-import static org.opensearch.neuralsearch.TestUtils.DEFAULT_COMBINATION_METHOD;
-import static org.opensearch.neuralsearch.TestUtils.PARAM_NAME_WEIGHTS;
-import static org.opensearch.neuralsearch.TestUtils.MAX_RETRY;
-import static org.opensearch.neuralsearch.TestUtils.MAX_TIME_OUT_INTERVAL;
+import static org.opensearch.neuralsearch.util.TestUtils.MAX_TASK_RESULT_QUERY_TIME_IN_SECOND;
+import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND;
+import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_USER_AGENT;
+import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
+import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
+import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
+import static org.opensearch.neuralsearch.util.TestUtils.MAX_RETRY;
+import static org.opensearch.neuralsearch.util.TestUtils.MAX_TIME_OUT_INTERVAL;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
