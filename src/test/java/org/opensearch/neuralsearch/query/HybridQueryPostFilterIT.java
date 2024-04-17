@@ -122,7 +122,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     private void testPostFilterRangeQuery_WhenMatchTermAndRangeQueries_thenSuccessful(String indexName) {
-        HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderScenario1("mission", "part", 400, 200);
+        HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery("mission", "part", 400, 200);
         QueryBuilder postFilterQuery = createPostFilterQueryBuilderWithRangeQuery(400, 230);
 
         Map<String, Object> searchResponseAsMap = search(
@@ -140,7 +140,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
     @SneakyThrows
     private void testPostFilterBoolQuery_WhenMatchTermAndRangeQueries_thenSuccessful(String indexName) {
         // Case 1
-        HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderScenario1("mission", "part", 400, 200);
+        HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery("mission", "part", 400, 200);
         QueryBuilder postFilterQuery = createPostFilterQueryBuilderWithBoolShouldQuery("impossible", 400, 230);
 
         Map<String, Object> searchResponseAsMap = search(
@@ -183,7 +183,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
         );
         testResults(searchResponseAsMap, 0, 0, 230, 400);
         // Case 4
-        hybridQueryBuilder = createHybridQueryBuilderScenario2("hero", 5000, 1000);
+        hybridQueryBuilder = createHybridQueryBuilderScenarioWithMatchAndRangeQuery("hero", 5000, 1000);
         postFilterQuery = createPostFilterQueryBuilderWithBoolShouldQuery("impossible", 400, 230);
         searchResponseAsMap = search(
             indexName,
@@ -199,7 +199,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     private void testPostFilterMatchAllAndNoneQuery_WhenMatchTermAndRangeQueries_thenSuccessful(String indexName) {
-        HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderScenario1("mission", "part", 400, 200);
+        HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery("mission", "part", 400, 200);
         QueryBuilder postFilterQuery = createPostFilterQueryBuilderWithMatchAllOrNoneQuery(true);
 
         Map<String, Object> searchResponseAsMap = search(
@@ -369,7 +369,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
         }
     }
 
-    private HybridQueryBuilder createHybridQueryBuilderScenario1(String text, String value, int lte, int gte) {
+    private HybridQueryBuilder createHybridQueryBuilderWithMatchTermAndRangeQuery(String text, String value, int lte, int gte) {
         MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEXT_FIELD_1, text);
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEXT_FIELD_1, value);
         RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery(INTEGER_FIELD_1).gte(gte).lte(lte);
@@ -378,7 +378,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
         return hybridQueryBuilder;
     }
 
-    private HybridQueryBuilder createHybridQueryBuilderScenario2(String text, int lte, int gte) {
+    private HybridQueryBuilder createHybridQueryBuilderScenarioWithMatchAndRangeQuery(String text, int lte, int gte) {
         MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEXT_FIELD_1, text);
         RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery(INTEGER_FIELD_1).gte(gte).lte(lte);
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();

@@ -64,6 +64,7 @@ public class TestUtils {
     public static final String DEFAULT_COMBINATION_METHOD = "arithmetic_mean";
     public static final String PARAM_NAME_WEIGHTS = "weights";
     public static final String SPARSE_ENCODING_PROCESSOR = "sparse_encoding";
+    public static final String TEXT_CHUNKING_PROCESSOR = "text_chunking";
     public static final int MAX_TIME_OUT_INTERVAL = 3000;
     public static final int MAX_RETRY = 5;
 
@@ -341,9 +342,9 @@ public class TestUtils {
 
     @SuppressWarnings("unchecked")
     private static int getHitCount(final Map<String, Object> searchResponseAsMap) {
-        Map<String, Object> hits1map = (Map<String, Object>) searchResponseAsMap.get("hits");
-        List<Object> hits1List = (List<Object>) hits1map.get("hits");
-        return hits1List.size();
+        Map<String, Object> hitsmap = (Map<String, Object>) searchResponseAsMap.get("hits");
+        List<Object> hitsList = (List<Object>) hitsmap.get("hits");
+        return hitsList.size();
     }
 
     public static String getModelId(Map<String, Object> pipeline, String processor) {

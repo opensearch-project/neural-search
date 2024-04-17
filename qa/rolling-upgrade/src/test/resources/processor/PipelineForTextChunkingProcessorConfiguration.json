@@ -1,0 +1,18 @@
+{
+  "description": "An example fixed token length chunker pipeline with standard tokenizer",
+  "processors" : [
+    {
+      "text_chunking": {
+        "field_map": {
+          "body": "body_chunk"
+        },
+        "algorithm": {
+          "fixed_token_length": {
+            "token_limit": 10,
+            "tokenizer": "standard"
+          }
+        }
+      }
+    }
+  ]
+}

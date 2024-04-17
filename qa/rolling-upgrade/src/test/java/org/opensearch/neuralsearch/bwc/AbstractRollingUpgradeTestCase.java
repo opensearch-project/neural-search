@@ -130,4 +130,11 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
         );
         createPipelineProcessor(requestBody, pipelineName, modelId);
     }
+
+    protected void createPipelineForTextChunkingProcessor(String pipelineName) throws Exception {
+        String requestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/PipelineForTextChunkingProcessorConfiguration.json").toURI())
+        );
+        createPipelineProcessor(requestBody, pipelineName, "");
+    }
 }
