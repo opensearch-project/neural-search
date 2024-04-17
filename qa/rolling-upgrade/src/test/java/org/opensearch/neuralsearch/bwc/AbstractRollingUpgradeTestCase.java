@@ -4,9 +4,11 @@
  */
 package org.opensearch.neuralsearch.bwc;
 
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
@@ -137,5 +139,12 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
         // default threshold for native circuit breaker is 90, it may be not enough on test runner machine
         updateClusterSettings("plugins.ml_commons.native_memory_threshold", 100);
         updateClusterSettings("plugins.ml_commons.allow_registering_model_via_url", true);
+    }
+
+    protected void createPipelineForTextChunkingProcessor(String pipelineName) throws Exception {
+        String requestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/PipelineForTextChunkingProcessorConfiguration.json").toURI())
+        );
+        createPipelineProcessor(requestBody, pipelineName, "");
     }
 }

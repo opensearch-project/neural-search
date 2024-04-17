@@ -4,9 +4,11 @@
  */
 package org.opensearch.neuralsearch.bwc;
 
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
@@ -98,5 +100,12 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
             Path.of(classLoader.getResource("processor/PipelineForSparseEncodingProcessorConfiguration.json").toURI())
         );
         createPipelineProcessor(requestBody, pipelineName, modelId);
+    }
+
+    protected void createPipelineForTextChunkingProcessor(String pipelineName) throws Exception {
+        String requestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/PipelineForTextChunkingProcessorConfiguration.json").toURI())
+        );
+        createPipelineProcessor(requestBody, pipelineName, "");
     }
 }
