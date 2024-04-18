@@ -236,8 +236,8 @@ public class BucketAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
 
             AggregationBuilder aggsBuilder = AggregationBuilders.filter(
                 GENERIC_AGGREGATION_NAME,
-                QueryBuilders.rangeQuery(INTEGER_FIELD_1).lte(3000)
-            ).subAggregation(AggregationBuilders.avg(AVG_AGGREGATION_NAME).field(INTEGER_FIELD_1));
+                QueryBuilders.rangeQuery(INTEGER_FIELD_DOCINDEX).lte(3000)
+            ).subAggregation(AggregationBuilders.avg(AVG_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX));
             Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
                 aggsBuilder,
                 TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
@@ -259,9 +259,9 @@ public class BucketAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
 
             AggregationBuilder aggsBuilder = AggregationBuilders.filters(
                 GENERIC_AGGREGATION_NAME,
-                QueryBuilders.rangeQuery(INTEGER_FIELD_1).lte(3000),
-                QueryBuilders.termQuery(KEYWORD_FIELD_1, KEYWORD_FIELD_1_VALUE)
-            ).otherBucket(true).subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_1));
+                QueryBuilders.rangeQuery(INTEGER_FIELD_DOCINDEX).lte(3000),
+                QueryBuilders.termQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_WORKABLE)
+            ).otherBucket(true).subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX));
             Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
                 aggsBuilder,
                 TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
@@ -305,7 +305,7 @@ public class BucketAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
             hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder2);
 
             AggregationBuilder aggsBuilder = AggregationBuilders.global(GENERIC_AGGREGATION_NAME)
-                .subAggregation(AggregationBuilders.sum(AVG_AGGREGATION_NAME).field(INTEGER_FIELD_1));
+                .subAggregation(AggregationBuilders.sum(AVG_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX));
 
             Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
                 List.of(aggsBuilder),
@@ -361,10 +361,10 @@ public class BucketAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
         try {
             prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.nested(GENERIC_AGGREGATION_NAME, TEST_NESTED_TYPE_FIELD_NAME_1)
+            AggregationBuilder aggsBuilder = AggregationBuilders.nested(GENERIC_AGGREGATION_NAME, NESTED_TYPE_FIELD_USER)
                 .subAggregation(
                     AggregationBuilders.terms(BUCKETS_AGGREGATION_NAME_1)
-                        .field(String.join(".", TEST_NESTED_TYPE_FIELD_NAME_1, NESTED_FIELD_1))
+                        .field(String.join(".", NESTED_TYPE_FIELD_USER, NESTED_FIELD_FIRSTNAME))
                 );
 
             Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
@@ -387,17 +387,17 @@ public class BucketAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
             Map<String, Object> firstBucket = buckets.get(0);
             assertEquals(2, firstBucket.size());
             assertEquals(1, firstBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(NESTED_FIELD_1_VALUE_2, firstBucket.get(KEY));
+            assertEquals(NESTED_FIELD_FIRSTNAME_FRODO, firstBucket.get(KEY));
 
             Map<String, Object> secondBucket = buckets.get(1);
             assertEquals(2, secondBucket.size());
             assertEquals(1, secondBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(NESTED_FIELD_1_VALUE_1, secondBucket.get(KEY));
+            assertEquals(NESTED_FIELD_FIRSTNAME_JOHN, secondBucket.get(KEY));
 
             Map<String, Object> thirdBucket = buckets.get(2);
             assertEquals(2, thirdBucket.size());
             assertEquals(1, thirdBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(NESTED_FIELD_1_VALUE_4, thirdBucket.get(KEY));
+            assertEquals(NESTED_FIELD_FIRSTNAME_SUN, thirdBucket.get(KEY));
         } finally {
             wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
         }
@@ -408,9 +408,9 @@ public class BucketAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
             prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
             AggregationBuilder aggsBuilder = AggregationBuilders.diversifiedSampler(GENERIC_AGGREGATION_NAME)
-                .field(KEYWORD_FIELD_1)
+                .field(KEYWORD_FIELD_DOCKEYWORD)
                 .shardSize(2)
-                .subAggregation(AggregationBuilders.terms(BUCKETS_AGGREGATION_NAME_1).field(KEYWORD_FIELD_1));
+                .subAggregation(AggregationBuilders.terms(BUCKETS_AGGREGATION_NAME_1).field(KEYWORD_FIELD_DOCKEYWORD));
 
             Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
                 aggsBuilder,
@@ -449,11 +449,11 @@ public class BucketAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
                 GENERIC_AGGREGATION_NAME,
                 Map.of(
                     "grpA",
-                    QueryBuilders.matchQuery(KEYWORD_FIELD_1, KEYWORD_FIELD_1_VALUE),
+                    QueryBuilders.matchQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_WORKABLE),
                     "grpB",
-                    QueryBuilders.matchQuery(KEYWORD_FIELD_1, KEYWORD_FIELD_2_VALUE),
+                    QueryBuilders.matchQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_ANGRY),
                     "grpC",
-                    QueryBuilders.matchQuery(KEYWORD_FIELD_1, KEYWORD_FIELD_3_VALUE)
+                    QueryBuilders.matchQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_LIKABLE)
                 )
             );
             Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
@@ -483,8 +483,8 @@ public class BucketAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
 
             AggregationBuilder aggDateHisto = AggregationBuilders.dateHistogram(GENERIC_AGGREGATION_NAME)
                 .calendarInterval(DateHistogramInterval.YEAR)
-                .field(DATE_FIELD_1)
-                .subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_1));
+                .field(DATE_FIELD)
+                .subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX));
 
             BucketMetricsPipelineAggregationBuilder<AvgBucketPipelineAggregationBuilder> aggAvgBucket = PipelineAggregatorBuilders
                 .avgBucket(BUCKETS_AGGREGATION_NAME_1, GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME);
@@ -558,8 +558,8 @@ public class BucketAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
 
             AggregationBuilder aggDateHisto = AggregationBuilders.dateHistogram(GENERIC_AGGREGATION_NAME)
                 .calendarInterval(DateHistogramInterval.YEAR)
-                .field(DATE_FIELD_1)
-                .subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_1));
+                .field(DATE_FIELD)
+                .subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX));
 
             StatsBucketPipelineAggregationBuilder aggStatsBucket = PipelineAggregatorBuilders.statsBucket(
                 BUCKETS_AGGREGATION_NAME_1,
@@ -594,19 +594,21 @@ public class BucketAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
 
             AggregationBuilder aggBuilder = AggregationBuilders.dateHistogram(DATE_AGGREGATION_NAME)
                 .calendarInterval(DateHistogramInterval.YEAR)
-                .field(DATE_FIELD_1)
+                .field(DATE_FIELD)
                 .subAggregations(
-                    new AggregatorFactories.Builder().addAggregator(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_1))
+                    new AggregatorFactories.Builder().addAggregator(
+                        AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX)
+                    )
                         .addAggregator(
                             AggregationBuilders.filter(
                                 GENERIC_AGGREGATION_NAME,
                                 QueryBuilders.boolQuery()
                                     .should(
                                         QueryBuilders.boolQuery()
-                                            .should(QueryBuilders.termQuery(KEYWORD_FIELD_1, KEYWORD_FIELD_1_VALUE))
-                                            .should(QueryBuilders.termQuery(KEYWORD_FIELD_1, KEYWORD_FIELD_2_VALUE))
+                                            .should(QueryBuilders.termQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_WORKABLE))
+                                            .should(QueryBuilders.termQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_ANGRY))
                                     )
-                                    .should(QueryBuilders.boolQuery().mustNot(QueryBuilders.existsQuery(KEYWORD_FIELD_1)))
+                                    .should(QueryBuilders.boolQuery().mustNot(QueryBuilders.existsQuery(KEYWORD_FIELD_DOCKEYWORD)))
                             ).subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME_2).field(INTEGER_FIELD_PRICE))
                         )
                         .addPipelineAggregator(
@@ -684,7 +686,7 @@ public class BucketAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
 
             AggregationBuilder aggsBuilder = AggregationBuilders.sampler(GENERIC_AGGREGATION_NAME)
                 .shardSize(2)
-                .subAggregation(AggregationBuilders.terms(BUCKETS_AGGREGATION_NAME_1).field(KEYWORD_FIELD_1));
+                .subAggregation(AggregationBuilders.terms(BUCKETS_AGGREGATION_NAME_1).field(KEYWORD_FIELD_DOCKEYWORD));
 
             Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
                 aggsBuilder,
@@ -719,7 +721,7 @@ public class BucketAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
         try {
             prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.terms(GENERIC_AGGREGATION_NAME).field(KEYWORD_FIELD_1);
+            AggregationBuilder aggsBuilder = AggregationBuilders.terms(GENERIC_AGGREGATION_NAME).field(KEYWORD_FIELD_DOCKEYWORD);
             Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
                 aggsBuilder,
                 TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
@@ -734,10 +736,10 @@ public class BucketAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
             assertEquals(2, buckets.size());
             Map<String, Object> firstBucket = buckets.get(0);
             assertEquals(1, firstBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(KEYWORD_FIELD_3_VALUE, firstBucket.get(KEY));
+            assertEquals(KEYWORD_FIELD_DOCKEYWORD_LIKABLE, firstBucket.get(KEY));
             Map<String, Object> secondBucket = buckets.get(1);
             assertEquals(1, secondBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(KEYWORD_FIELD_1_VALUE, secondBucket.get(KEY));
+            assertEquals(KEYWORD_FIELD_DOCKEYWORD_WORKABLE, secondBucket.get(KEY));
         } finally {
             wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
         }
@@ -747,7 +749,7 @@ public class BucketAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
         try {
             prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.significantTerms(GENERIC_AGGREGATION_NAME).field(KEYWORD_FIELD_1);
+            AggregationBuilder aggsBuilder = AggregationBuilders.significantTerms(GENERIC_AGGREGATION_NAME).field(KEYWORD_FIELD_DOCKEYWORD);
             Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
                 aggsBuilder,
                 TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS

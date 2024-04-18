@@ -5,7 +5,7 @@
 package org.opensearch.neuralsearch.query.aggregation;
 
 import lombok.SneakyThrows;
-import org.junit.Before;
+import org.junit.BeforeClass;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 import java.util.ArrayList;
@@ -30,41 +30,41 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
     protected static final String TEST_QUERY_TEXT3 = "hello";
     protected static final String TEST_QUERY_TEXT4 = "cost";
     protected static final String TEST_QUERY_TEXT5 = "welcome";
-    protected static final String TEST_NESTED_TYPE_FIELD_NAME_1 = "user";
-    protected static final String NESTED_FIELD_1 = "firstname";
-    protected static final String NESTED_FIELD_2 = "lastname";
-    protected static final String NESTED_FIELD_1_VALUE_1 = "john";
-    protected static final String NESTED_FIELD_2_VALUE_1 = "black";
-    protected static final String NESTED_FIELD_1_VALUE_2 = "frodo";
-    protected static final String NESTED_FIELD_2_VALUE_2 = "baggins";
-    protected static final String NESTED_FIELD_1_VALUE_3 = "mohammed";
-    protected static final String NESTED_FIELD_2_VALUE_3 = "ezab";
-    protected static final String NESTED_FIELD_1_VALUE_4 = "sun";
-    protected static final String NESTED_FIELD_2_VALUE_4 = "wukong";
-    protected static final String NESTED_FIELD_1_VALUE_5 = "vasilisa";
-    protected static final String NESTED_FIELD_2_VALUE_5 = "the wise";
-    protected static final String INTEGER_FIELD_1 = "doc_index";
-    protected static final int INTEGER_FIELD_1_VALUE = 1234;
-    protected static final int INTEGER_FIELD_2_VALUE = 2345;
-    protected static final int INTEGER_FIELD_3_VALUE = 3456;
-    protected static final int INTEGER_FIELD_4_VALUE = 4567;
-    protected static final String KEYWORD_FIELD_1 = "doc_keyword";
-    protected static final String KEYWORD_FIELD_1_VALUE = "workable";
-    protected static final String KEYWORD_FIELD_2_VALUE = "angry";
-    protected static final String KEYWORD_FIELD_3_VALUE = "likeable";
-    protected static final String KEYWORD_FIELD_4_VALUE = "entire";
-    protected static final String DATE_FIELD_1 = "doc_date";
-    protected static final String DATE_FIELD_1_VALUE = "01/03/1995";
-    private static final String DATE_FIELD_2_VALUE = "05/02/2015";
-    protected static final String DATE_FIELD_3_VALUE = "07/23/2007";
-    protected static final String DATE_FIELD_4_VALUE = "08/21/2012";
+    protected static final String NESTED_TYPE_FIELD_USER = "user";
+    protected static final String NESTED_FIELD_FIRSTNAME = "firstname";
+    protected static final String NESTED_FIELD_LASTNAME = "lastname";
+    protected static final String NESTED_FIELD_FIRSTNAME_JOHN = "john";
+    protected static final String NESTED_FIELD_LASTNAME_BLACK = "black";
+    protected static final String NESTED_FIELD_FIRSTNAME_FRODO = "frodo";
+    protected static final String NESTED_FIELD_LASTNAME_BAGGINS = "baggins";
+    protected static final String NESTED_FIELD_FIRSTNAME_MOHAMMED = "mohammed";
+    protected static final String NESTED_FIELD_LASTNAME_EZAB = "ezab";
+    protected static final String NESTED_FIELD_FIRSTNAME_SUN = "sun";
+    protected static final String NESTED_FIELD_LASTNAME_WUKONG = "wukong";
+    protected static final String NESTED_FIELD_FIRSTNAME_VASILISA = "vasilisa";
+    protected static final String NESTED_FIELD_LASTNAME_WISE = "the wise";
+    protected static final String INTEGER_FIELD_DOCINDEX = "doc_index";
+    protected static final int INTEGER_FIELD_DOCINDEX_1234 = 1234;
+    protected static final int INTEGER_FIELD_DOCINDEX_2345 = 2345;
+    protected static final int INTEGER_FIELD_DOCINDEX_3456 = 3456;
+    protected static final int INTEGER_FIELD_DOCINDEX_4567 = 4567;
+    protected static final String KEYWORD_FIELD_DOCKEYWORD = "doc_keyword";
+    protected static final String KEYWORD_FIELD_DOCKEYWORD_WORKABLE = "workable";
+    protected static final String KEYWORD_FIELD_DOCKEYWORD_ANGRY = "angry";
+    protected static final String KEYWORD_FIELD_DOCKEYWORD_LIKABLE = "likeable";
+    protected static final String KEYWORD_FIELD_DOCKEYWORD_ENTIRE = "entire";
+    protected static final String DATE_FIELD = "doc_date";
+    protected static final String DATE_FIELD_01031995 = "01/03/1995";
+    protected static final String DATE_FIELD_05022015 = "05/02/2015";
+    protected static final String DATE_FIELD_07232007 = "07/23/2007";
+    protected static final String DATE_FIELD_08212012 = "08/21/2012";
     protected static final String INTEGER_FIELD_PRICE = "doc_price";
-    protected static final int INTEGER_FIELD_PRICE_1_VALUE = 130;
-    protected static final int INTEGER_FIELD_PRICE_2_VALUE = 100;
-    protected static final int INTEGER_FIELD_PRICE_3_VALUE = 200;
-    protected static final int INTEGER_FIELD_PRICE_4_VALUE = 25;
-    protected static final int INTEGER_FIELD_PRICE_5_VALUE = 30;
-    protected static final int INTEGER_FIELD_PRICE_6_VALUE = 350;
+    protected static final int INTEGER_FIELD_PRICE_130 = 130;
+    protected static final int INTEGER_FIELD_PRICE_100 = 100;
+    protected static final int INTEGER_FIELD_PRICE_200 = 200;
+    protected static final int INTEGER_FIELD_PRICE_25 = 25;
+    protected static final int INTEGER_FIELD_PRICE_30 = 30;
+    protected static final int INTEGER_FIELD_PRICE_350 = 350;
     protected static final String BUCKET_AGG_DOC_COUNT_FIELD = "doc_count";
     protected static final String BUCKETS_AGGREGATION_NAME_1 = "date_buckets_1";
     protected static final String BUCKETS_AGGREGATION_NAME_2 = "date_buckets_2";
@@ -79,10 +79,14 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
     protected static final String DATE_AGGREGATION_NAME = "date_aggregation";
     protected static final String CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH = "search.concurrent_segment_search.enabled";
 
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();
-        updateClusterSettings();
+    @BeforeClass
+    @SneakyThrows
+    public static void setUpCluster() {
+        // we need new instance because we're calling non-static methods from static method.
+        // main purpose is to minimize network calls, initialization is only needed once
+        BaseAggregationsWithHybridQueryIT instance = new BaseAggregationsWithHybridQueryIT();
+        instance.initClient();
+        instance.updateClusterSettings();
     }
 
     @Override
@@ -107,10 +111,10 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
                 indexName,
                 buildIndexConfiguration(
                     List.of(),
-                    List.of(TEST_NESTED_TYPE_FIELD_NAME_1, NESTED_FIELD_1, NESTED_FIELD_2),
-                    List.of(INTEGER_FIELD_1),
-                    List.of(KEYWORD_FIELD_1),
-                    List.of(DATE_FIELD_1),
+                    List.of(NESTED_TYPE_FIELD_USER, NESTED_FIELD_FIRSTNAME, NESTED_FIELD_LASTNAME),
+                    List.of(INTEGER_FIELD_DOCINDEX),
+                    List.of(KEYWORD_FIELD_DOCKEYWORD),
+                    List.of(DATE_FIELD),
                     3
                 ),
                 ""
@@ -123,14 +127,14 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
                 List.of(),
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT1),
-                List.of(TEST_NESTED_TYPE_FIELD_NAME_1),
-                List.of(Map.of(NESTED_FIELD_1, NESTED_FIELD_1_VALUE_1, NESTED_FIELD_2, NESTED_FIELD_2_VALUE_1)),
-                List.of(INTEGER_FIELD_1, INTEGER_FIELD_PRICE),
-                List.of(INTEGER_FIELD_1_VALUE, INTEGER_FIELD_PRICE_1_VALUE),
-                List.of(KEYWORD_FIELD_1),
-                List.of(KEYWORD_FIELD_1_VALUE),
-                List.of(DATE_FIELD_1),
-                List.of(DATE_FIELD_1_VALUE)
+                List.of(NESTED_TYPE_FIELD_USER),
+                List.of(Map.of(NESTED_FIELD_FIRSTNAME, NESTED_FIELD_FIRSTNAME_JOHN, NESTED_FIELD_LASTNAME, NESTED_FIELD_LASTNAME_BLACK)),
+                List.of(INTEGER_FIELD_DOCINDEX, INTEGER_FIELD_PRICE),
+                List.of(INTEGER_FIELD_DOCINDEX_1234, INTEGER_FIELD_PRICE_130),
+                List.of(KEYWORD_FIELD_DOCKEYWORD),
+                List.of(KEYWORD_FIELD_DOCKEYWORD_WORKABLE),
+                List.of(DATE_FIELD),
+                List.of(DATE_FIELD_01031995)
             );
             addKnnDoc(
                 indexName,
@@ -139,14 +143,14 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
                 List.of(),
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT3),
-                List.of(TEST_NESTED_TYPE_FIELD_NAME_1),
-                List.of(Map.of(NESTED_FIELD_1, NESTED_FIELD_1_VALUE_2, NESTED_FIELD_2, NESTED_FIELD_2_VALUE_2)),
-                List.of(INTEGER_FIELD_1, INTEGER_FIELD_PRICE),
-                List.of(INTEGER_FIELD_2_VALUE, INTEGER_FIELD_PRICE_2_VALUE),
+                List.of(NESTED_TYPE_FIELD_USER),
+                List.of(Map.of(NESTED_FIELD_FIRSTNAME, NESTED_FIELD_FIRSTNAME_FRODO, NESTED_FIELD_LASTNAME, NESTED_FIELD_LASTNAME_BAGGINS)),
+                List.of(INTEGER_FIELD_DOCINDEX, INTEGER_FIELD_PRICE),
+                List.of(INTEGER_FIELD_DOCINDEX_2345, INTEGER_FIELD_PRICE_100),
                 List.of(),
                 List.of(),
-                List.of(DATE_FIELD_1),
-                List.of(DATE_FIELD_2_VALUE)
+                List.of(DATE_FIELD),
+                List.of(DATE_FIELD_05022015)
             );
             addKnnDoc(
                 indexName,
@@ -155,14 +159,14 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
                 List.of(),
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT2),
-                List.of(TEST_NESTED_TYPE_FIELD_NAME_1),
-                List.of(Map.of(NESTED_FIELD_1, NESTED_FIELD_1_VALUE_3, NESTED_FIELD_2, NESTED_FIELD_2_VALUE_3)),
+                List.of(NESTED_TYPE_FIELD_USER),
+                List.of(Map.of(NESTED_FIELD_FIRSTNAME, NESTED_FIELD_FIRSTNAME_MOHAMMED, NESTED_FIELD_LASTNAME, NESTED_FIELD_LASTNAME_EZAB)),
                 List.of(INTEGER_FIELD_PRICE),
-                List.of(INTEGER_FIELD_PRICE_3_VALUE),
-                List.of(KEYWORD_FIELD_1),
-                List.of(KEYWORD_FIELD_2_VALUE),
-                List.of(DATE_FIELD_1),
-                List.of(DATE_FIELD_3_VALUE)
+                List.of(INTEGER_FIELD_PRICE_200),
+                List.of(KEYWORD_FIELD_DOCKEYWORD),
+                List.of(KEYWORD_FIELD_DOCKEYWORD_ANGRY),
+                List.of(DATE_FIELD),
+                List.of(DATE_FIELD_07232007)
             );
             addKnnDoc(
                 indexName,
@@ -171,14 +175,14 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
                 List.of(),
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT4),
-                List.of(TEST_NESTED_TYPE_FIELD_NAME_1),
-                List.of(Map.of(NESTED_FIELD_1, NESTED_FIELD_1_VALUE_4, NESTED_FIELD_2, NESTED_FIELD_2_VALUE_4)),
-                List.of(INTEGER_FIELD_1, INTEGER_FIELD_PRICE),
-                List.of(INTEGER_FIELD_3_VALUE, INTEGER_FIELD_PRICE_4_VALUE),
-                List.of(KEYWORD_FIELD_1),
-                List.of(KEYWORD_FIELD_3_VALUE),
-                List.of(DATE_FIELD_1),
-                List.of(DATE_FIELD_2_VALUE)
+                List.of(NESTED_TYPE_FIELD_USER),
+                List.of(Map.of(NESTED_FIELD_FIRSTNAME, NESTED_FIELD_FIRSTNAME_SUN, NESTED_FIELD_LASTNAME, NESTED_FIELD_LASTNAME_WUKONG)),
+                List.of(INTEGER_FIELD_DOCINDEX, INTEGER_FIELD_PRICE),
+                List.of(INTEGER_FIELD_DOCINDEX_3456, INTEGER_FIELD_PRICE_25),
+                List.of(KEYWORD_FIELD_DOCKEYWORD),
+                List.of(KEYWORD_FIELD_DOCKEYWORD_LIKABLE),
+                List.of(DATE_FIELD),
+                List.of(DATE_FIELD_05022015)
             );
             addKnnDoc(
                 indexName,
@@ -189,12 +193,12 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEST_DOC_TEXT5),
                 List.of(),
                 List.of(),
-                List.of(INTEGER_FIELD_1, INTEGER_FIELD_PRICE),
-                List.of(INTEGER_FIELD_3_VALUE, INTEGER_FIELD_PRICE_5_VALUE),
-                List.of(KEYWORD_FIELD_1),
-                List.of(KEYWORD_FIELD_4_VALUE),
-                List.of(DATE_FIELD_1),
-                List.of(DATE_FIELD_4_VALUE)
+                List.of(INTEGER_FIELD_DOCINDEX, INTEGER_FIELD_PRICE),
+                List.of(INTEGER_FIELD_DOCINDEX_3456, INTEGER_FIELD_PRICE_30),
+                List.of(KEYWORD_FIELD_DOCKEYWORD),
+                List.of(KEYWORD_FIELD_DOCKEYWORD_ENTIRE),
+                List.of(DATE_FIELD),
+                List.of(DATE_FIELD_08212012)
             );
             addKnnDoc(
                 indexName,
@@ -203,14 +207,14 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
                 List.of(),
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT6),
-                List.of(TEST_NESTED_TYPE_FIELD_NAME_1),
-                List.of(Map.of(NESTED_FIELD_1, NESTED_FIELD_1_VALUE_5, NESTED_FIELD_2, NESTED_FIELD_2_VALUE_5)),
-                List.of(INTEGER_FIELD_1, INTEGER_FIELD_PRICE),
-                List.of(INTEGER_FIELD_4_VALUE, INTEGER_FIELD_PRICE_6_VALUE),
-                List.of(KEYWORD_FIELD_1),
-                List.of(KEYWORD_FIELD_4_VALUE),
-                List.of(DATE_FIELD_1),
-                List.of(DATE_FIELD_4_VALUE)
+                List.of(NESTED_TYPE_FIELD_USER),
+                List.of(Map.of(NESTED_FIELD_FIRSTNAME, NESTED_FIELD_FIRSTNAME_VASILISA, NESTED_FIELD_LASTNAME, NESTED_FIELD_LASTNAME_WISE)),
+                List.of(INTEGER_FIELD_DOCINDEX, INTEGER_FIELD_PRICE),
+                List.of(INTEGER_FIELD_DOCINDEX_4567, INTEGER_FIELD_PRICE_350),
+                List.of(KEYWORD_FIELD_DOCKEYWORD),
+                List.of(KEYWORD_FIELD_DOCKEYWORD_ENTIRE),
+                List.of(DATE_FIELD),
+                List.of(DATE_FIELD_08212012)
             );
         }
     }

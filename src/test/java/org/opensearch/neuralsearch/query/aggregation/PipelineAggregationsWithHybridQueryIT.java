@@ -105,8 +105,8 @@ public class PipelineAggregationsWithHybridQueryIT extends BaseAggregationsWithH
 
             AggregationBuilder aggDateHisto = AggregationBuilders.dateHistogram(GENERIC_AGGREGATION_NAME)
                 .calendarInterval(DateHistogramInterval.YEAR)
-                .field(DATE_FIELD_1)
-                .subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_1));
+                .field(DATE_FIELD)
+                .subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX));
 
             StatsBucketPipelineAggregationBuilder aggStatsBucket = PipelineAggregatorBuilders.statsBucket(
                 BUCKETS_AGGREGATION_NAME_1,
@@ -141,19 +141,21 @@ public class PipelineAggregationsWithHybridQueryIT extends BaseAggregationsWithH
 
             AggregationBuilder aggBuilder = AggregationBuilders.dateHistogram(DATE_AGGREGATION_NAME)
                 .calendarInterval(DateHistogramInterval.YEAR)
-                .field(DATE_FIELD_1)
+                .field(DATE_FIELD)
                 .subAggregations(
-                    new AggregatorFactories.Builder().addAggregator(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_1))
+                    new AggregatorFactories.Builder().addAggregator(
+                        AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX)
+                    )
                         .addAggregator(
                             AggregationBuilders.filter(
                                 GENERIC_AGGREGATION_NAME,
                                 QueryBuilders.boolQuery()
                                     .should(
                                         QueryBuilders.boolQuery()
-                                            .should(QueryBuilders.termQuery(KEYWORD_FIELD_1, KEYWORD_FIELD_1_VALUE))
-                                            .should(QueryBuilders.termQuery(KEYWORD_FIELD_1, KEYWORD_FIELD_2_VALUE))
+                                            .should(QueryBuilders.termQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_WORKABLE))
+                                            .should(QueryBuilders.termQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_ANGRY))
                                     )
-                                    .should(QueryBuilders.boolQuery().mustNot(QueryBuilders.existsQuery(KEYWORD_FIELD_1)))
+                                    .should(QueryBuilders.boolQuery().mustNot(QueryBuilders.existsQuery(KEYWORD_FIELD_DOCKEYWORD)))
                             ).subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME_2).field(INTEGER_FIELD_PRICE))
                         )
                         .addPipelineAggregator(
@@ -231,9 +233,11 @@ public class PipelineAggregationsWithHybridQueryIT extends BaseAggregationsWithH
 
             AggregationBuilder aggBuilder = AggregationBuilders.dateHistogram(DATE_AGGREGATION_NAME)
                 .calendarInterval(DateHistogramInterval.YEAR)
-                .field(DATE_FIELD_1)
+                .field(DATE_FIELD)
                 .subAggregations(
-                    new AggregatorFactories.Builder().addAggregator(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_1))
+                    new AggregatorFactories.Builder().addAggregator(
+                        AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX)
+                    )
                         .addPipelineAggregator(
                             PipelineAggregatorBuilders.bucketSort(
                                 BUCKETS_AGGREGATION_NAME_1,
@@ -245,10 +249,10 @@ public class PipelineAggregationsWithHybridQueryIT extends BaseAggregationsWithH
             QueryBuilder queryBuilder = QueryBuilders.boolQuery()
                 .should(
                     QueryBuilders.boolQuery()
-                        .should(QueryBuilders.termQuery(KEYWORD_FIELD_1, KEYWORD_FIELD_1_VALUE))
-                        .should(QueryBuilders.termQuery(KEYWORD_FIELD_1, KEYWORD_FIELD_2_VALUE))
+                        .should(QueryBuilders.termQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_WORKABLE))
+                        .should(QueryBuilders.termQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_ANGRY))
                 )
-                .should(QueryBuilders.boolQuery().mustNot(QueryBuilders.existsQuery(KEYWORD_FIELD_1)));
+                .should(QueryBuilders.boolQuery().mustNot(QueryBuilders.existsQuery(KEYWORD_FIELD_DOCKEYWORD)));
 
             Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
                 List.of(aggBuilder),
@@ -298,19 +302,20 @@ public class PipelineAggregationsWithHybridQueryIT extends BaseAggregationsWithH
 
             AggregationBuilder aggBuilder = AggregationBuilders.dateHistogram(DATE_AGGREGATION_NAME)
                 .calendarInterval(DateHistogramInterval.YEAR)
-                .field(DATE_FIELD_1)
+                .field(DATE_FIELD)
                 .subAggregations(
-                    new AggregatorFactories.Builder().addAggregator(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_1))
-                        .addPipelineAggregator(PipelineAggregatorBuilders.cumulativeSum(BUCKETS_AGGREGATION_NAME_1, SUM_AGGREGATION_NAME))
+                    new AggregatorFactories.Builder().addAggregator(
+                        AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX)
+                    ).addPipelineAggregator(PipelineAggregatorBuilders.cumulativeSum(BUCKETS_AGGREGATION_NAME_1, SUM_AGGREGATION_NAME))
                 );
 
             QueryBuilder queryBuilder = QueryBuilders.boolQuery()
                 .should(
                     QueryBuilders.boolQuery()
-                        .should(QueryBuilders.termQuery(KEYWORD_FIELD_1, KEYWORD_FIELD_1_VALUE))
-                        .should(QueryBuilders.termQuery(KEYWORD_FIELD_1, KEYWORD_FIELD_2_VALUE))
+                        .should(QueryBuilders.termQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_WORKABLE))
+                        .should(QueryBuilders.termQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_ANGRY))
                 )
-                .should(QueryBuilders.boolQuery().mustNot(QueryBuilders.existsQuery(KEYWORD_FIELD_1)));
+                .should(QueryBuilders.boolQuery().mustNot(QueryBuilders.existsQuery(KEYWORD_FIELD_DOCKEYWORD)));
 
             Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
                 List.of(aggBuilder),

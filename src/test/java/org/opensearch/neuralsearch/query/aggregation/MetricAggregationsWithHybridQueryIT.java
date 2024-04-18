@@ -185,7 +185,7 @@ public class MetricAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
         try {
             prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.avg(AVG_AGGREGATION_NAME).field(INTEGER_FIELD_1);
+            AggregationBuilder aggsBuilder = AggregationBuilders.avg(AVG_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX);
             Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
                 aggsBuilder,
                 TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
@@ -204,7 +204,7 @@ public class MetricAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
     private void testCardinalityAggs() throws IOException {
         try {
             prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
-            AggregationBuilder aggsBuilder = AggregationBuilders.cardinality(GENERIC_AGGREGATION_NAME).field(INTEGER_FIELD_1);
+            AggregationBuilder aggsBuilder = AggregationBuilders.cardinality(GENERIC_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX);
             Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
                 aggsBuilder,
                 TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
@@ -223,7 +223,7 @@ public class MetricAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
     private void testExtendedStatsAggs() throws IOException {
         try {
             prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
-            AggregationBuilder aggsBuilder = AggregationBuilders.extendedStats(GENERIC_AGGREGATION_NAME).field(INTEGER_FIELD_1);
+            AggregationBuilder aggsBuilder = AggregationBuilders.extendedStats(GENERIC_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX);
             Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
                 aggsBuilder,
                 TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
@@ -273,7 +273,13 @@ public class MetricAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
             AggregationBuilder aggsBuilder = AggregationBuilders.scriptedMetric(GENERIC_AGGREGATION_NAME)
                 .initScript(new Script("state.price = []"))
                 .mapScript(
-                    new Script("state.price.add(doc[\"" + INTEGER_FIELD_1 + "\"].size() == 0 ? 0 : doc." + INTEGER_FIELD_1 + ".value)")
+                    new Script(
+                        "state.price.add(doc[\""
+                            + INTEGER_FIELD_DOCINDEX
+                            + "\"].size() == 0 ? 0 : doc."
+                            + INTEGER_FIELD_DOCINDEX
+                            + ".value)"
+                    )
                 )
                 .combineScript(new Script("state.price.stream().mapToInt(Integer::intValue).sum()"))
                 .reduceScript(new Script("states.stream().mapToInt(Integer::intValue).sum()"));
@@ -295,7 +301,7 @@ public class MetricAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
     private void testPercentileAggs() throws IOException {
         try {
             prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
-            AggregationBuilder aggsBuilder = AggregationBuilders.percentiles(GENERIC_AGGREGATION_NAME).field(INTEGER_FIELD_1);
+            AggregationBuilder aggsBuilder = AggregationBuilders.percentiles(GENERIC_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX);
             Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
                 aggsBuilder,
                 TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
@@ -328,7 +334,7 @@ public class MetricAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
         try {
             prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
             AggregationBuilder aggsBuilder = AggregationBuilders.percentileRanks(GENERIC_AGGREGATION_NAME, new double[] { 2000, 3000 })
-                .field(INTEGER_FIELD_1);
+                .field(INTEGER_FIELD_DOCINDEX);
             Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
                 aggsBuilder,
                 TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
@@ -354,7 +360,7 @@ public class MetricAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
         try {
             prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_1);
+            AggregationBuilder aggsBuilder = AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX);
             Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
                 aggsBuilder,
                 TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
@@ -373,7 +379,7 @@ public class MetricAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
     private void testValueCountAggs() throws IOException {
         try {
             prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
-            AggregationBuilder aggsBuilder = AggregationBuilders.count(GENERIC_AGGREGATION_NAME).field(INTEGER_FIELD_1);
+            AggregationBuilder aggsBuilder = AggregationBuilders.count(GENERIC_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX);
             Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
                 aggsBuilder,
                 TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
@@ -395,7 +401,7 @@ public class MetricAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
         try {
             prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_1);
+            AggregationBuilder aggsBuilder = AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX);
 
             TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
             TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
@@ -406,7 +412,7 @@ public class MetricAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
             hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder2);
             hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder3);
 
-            QueryBuilder rangeFilterQuery = QueryBuilders.rangeQuery(INTEGER_FIELD_1).gte(3000).lte(5000);
+            QueryBuilder rangeFilterQuery = QueryBuilders.rangeQuery(INTEGER_FIELD_DOCINDEX).gte(3000).lte(5000);
 
             Map<String, Object> searchResponseAsMap = search(
                 TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
@@ -433,7 +439,7 @@ public class MetricAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
             for (Map<String, Object> oneHit : hitsNestedList) {
                 assertNotNull(oneHit.get("_source"));
                 Map<String, Object> source = (Map<String, Object>) oneHit.get("_source");
-                int docIndex = (int) source.get(INTEGER_FIELD_1);
+                int docIndex = (int) source.get(INTEGER_FIELD_DOCINDEX);
                 docIndexes.add(docIndex);
             }
             assertEquals(0, docIndexes.stream().filter(docIndex -> docIndex < 3000 || docIndex > 5000).count());

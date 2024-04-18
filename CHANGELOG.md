@@ -11,7 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fix typo for sparse encoding processor factory([#578](https://github.com/opensearch-project/neural-search/pull/578))
 - Add non-null check for queryBuilder in NeuralQueryEnricherProcessor ([#615](https://github.com/opensearch-project/neural-search/pull/615))
 ### Infrastructure
-- Adding integ tests for aggregations when they're bundled with hybrid query ([#632](https://github.com/opensearch-project/neural-search/pull/632))
+- Adding integration tests for scenario of hybrid query with aggregations ([#632](https://github.com/opensearch-project/neural-search/pull/632))
 ### Documentation
 ### Maintenance
 ### Refactoring
