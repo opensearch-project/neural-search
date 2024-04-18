@@ -305,10 +305,10 @@ public class TestUtils {
     public static void assertHitResultsFromQuery(int expected, Map<String, Object> searchResponseAsMap) {
         assertEquals(expected, getHitCount(searchResponseAsMap));
 
-        List<Map<String, Object>> hits1NestedList = getNestedHits(searchResponseAsMap);
+        List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
         List<String> ids = new ArrayList<>();
         List<Double> scores = new ArrayList<>();
-        for (Map<String, Object> oneHit : hits1NestedList) {
+        for (Map<String, Object> oneHit : hitsNestedList) {
             ids.add((String) oneHit.get("_id"));
             scores.add((Double) oneHit.get("_score"));
         }
@@ -342,8 +342,8 @@ public class TestUtils {
 
     @SuppressWarnings("unchecked")
     private static int getHitCount(final Map<String, Object> searchResponseAsMap) {
-        Map<String, Object> hitsmap = (Map<String, Object>) searchResponseAsMap.get("hits");
-        List<Object> hitsList = (List<Object>) hitsmap.get("hits");
+        Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
+        List<Object> hitsList = (List<Object>) hitsMap.get("hits");
         return hitsList.size();
     }
 
