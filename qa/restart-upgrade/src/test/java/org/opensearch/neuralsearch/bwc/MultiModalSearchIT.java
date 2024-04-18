@@ -53,7 +53,17 @@ public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
     private void validateTestIndex(final String modelId) throws Exception {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(2, docCount);
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder("passage_embedding", TEXT, TEST_IMAGE_TEXT, modelId, 1, null, null);
+        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
+            "passage_embedding",
+            TEXT,
+            TEST_IMAGE_TEXT,
+            modelId,
+            1,
+            null,
+            null,
+            null,
+            null
+        );
         Map<String, Object> response = search(getIndexNameForTest(), neuralQueryBuilder, 1);
         assertNotNull(response);
     }

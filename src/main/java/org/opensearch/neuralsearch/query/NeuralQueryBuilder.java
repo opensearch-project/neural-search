@@ -94,8 +94,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     private String queryImage;
     private String modelId;
     private Integer k = null;
-    private Float max_distance = null;
-    private Float min_score = null;
+    private Float maxDistance = null;
+    private Float minScore = null;
     @VisibleForTesting
     @Getter(AccessLevel.PACKAGE)
     @Setter(AccessLevel.PACKAGE)
@@ -123,8 +123,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         this.k = in.readVInt();
         this.filter = in.readOptionalNamedWriteable(QueryBuilder.class);
         if (isClusterOnOrAfterMinReqVersionForRadialSearch()) {
-            this.max_distance = in.readOptionalFloat();
-            this.min_score = in.readOptionalFloat();
+            this.maxDistance = in.readOptionalFloat();
+            this.minScore = in.readOptionalFloat();
         }
     }
 
@@ -141,8 +141,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         out.writeVInt(this.k);
         out.writeOptionalNamedWriteable(this.filter);
         if (isClusterOnOrAfterMinReqVersionForRadialSearch()) {
-            out.writeOptionalFloat(this.max_distance);
-            out.writeOptionalFloat(this.min_score);
+            out.writeOptionalFloat(this.maxDistance);
+            out.writeOptionalFloat(this.minScore);
         }
     }
 
@@ -160,11 +160,11 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         if (Objects.nonNull(filter)) {
             xContentBuilder.field(FILTER_FIELD.getPreferredName(), filter);
         }
-        if (Objects.nonNull(max_distance)) {
-            xContentBuilder.field(MAX_DISTANCE_FIELD.getPreferredName(), max_distance);
+        if (Objects.nonNull(maxDistance)) {
+            xContentBuilder.field(MAX_DISTANCE_FIELD.getPreferredName(), maxDistance);
         }
-        if (Objects.nonNull(min_score)) {
-            xContentBuilder.field(MIN_SCORE_FIELD.getPreferredName(), min_score);
+        if (Objects.nonNull(minScore)) {
+            xContentBuilder.field(MIN_SCORE_FIELD.getPreferredName(), minScore);
         }
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
@@ -219,8 +219,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             requireValue(neuralQueryBuilder.modelId(), "Model ID must be provided for neural query");
         }
 
-        long queryCountProvided = validateKNNQueryType(neuralQueryBuilder);
-        if (queryCountProvided == 0) {
+        long queryCount = validateKNNQueryType(neuralQueryBuilder);
+        if (queryCount == 0) {
             neuralQueryBuilder.k(DEFAULT_K);
         }
 
@@ -247,9 +247,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 } else if (BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     neuralQueryBuilder.boost(parser.floatValue());
                 } else if (MAX_DISTANCE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    neuralQueryBuilder.max_distance(parser.floatValue());
+                    neuralQueryBuilder.maxDistance(parser.floatValue());
                 } else if (MIN_SCORE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    neuralQueryBuilder.min_score(parser.floatValue());
+                    neuralQueryBuilder.minScore(parser.floatValue());
                 } else {
                     throw new ParsingException(
                         parser.getTokenLocation(),
@@ -283,17 +283,16 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         if (vectorSupplier() != null) {
             if (vectorSupplier().get() == null) {
                 return this;
-            } else {
-                KNNQueryBuilder knnQueryBuilder = new KNNQueryBuilder(fieldName(), vectorSupplier.get()).filter(filter());
-                if (max_distance != null) {
-                    knnQueryBuilder.maxDistance(max_distance);
-                } else if (min_score != null) {
-                    knnQueryBuilder.minScore(min_score);
-                } else {
-                    knnQueryBuilder.k(k);
-                }
-                return knnQueryBuilder;
             }
+            KNNQueryBuilder knnQueryBuilder = new KNNQueryBuilder(fieldName(), vectorSupplier.get()).filter(filter());
+            if (maxDistance != null) {
+                knnQueryBuilder.maxDistance(maxDistance);
+            } else if (minScore != null) {
+                knnQueryBuilder.minScore(minScore);
+            } else {
+                knnQueryBuilder.k(k);
+            }
+            return knnQueryBuilder;
         }
 
         SetOnce<float[]> vectorSetOnce = new SetOnce<>();
@@ -316,8 +315,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             queryImage(),
             modelId(),
             k(),
-            max_distance(),
-            min_score(),
+            maxDistance(),
+            minScore(),
             vectorSetOnce::get,
             filter()
         );
@@ -361,19 +360,19 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     }
 
     private static int validateKNNQueryType(NeuralQueryBuilder neuralQueryBuilder) {
-        int queryCountProvided = 0;
+        int queryCount = 0;
         if (neuralQueryBuilder.k() != null) {
-            queryCountProvided++;
+            queryCount++;
         }
-        if (neuralQueryBuilder.max_distance() != null) {
-            queryCountProvided++;
+        if (neuralQueryBuilder.maxDistance() != null) {
+            queryCount++;
         }
-        if (neuralQueryBuilder.min_score() != null) {
-            queryCountProvided++;
+        if (neuralQueryBuilder.minScore() != null) {
+            queryCount++;
         }
-        if (queryCountProvided > 1) {
+        if (queryCount > 1) {
             throw new IllegalArgumentException("Only one of k, max_distance, or min_score can be provided");
         }
-        return queryCountProvided;
+        return queryCount;
     }
 }

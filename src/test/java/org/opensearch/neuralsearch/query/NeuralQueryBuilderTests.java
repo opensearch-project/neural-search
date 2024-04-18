@@ -710,7 +710,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(FIELD_NAME, neuralQueryBuilder.fieldName());
         assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
         assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
-        assertEquals(MAX_DISTANCE, neuralQueryBuilder.max_distance());
+        assertEquals(MAX_DISTANCE, neuralQueryBuilder.maxDistance());
     }
 
     @SneakyThrows
@@ -742,7 +742,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(FIELD_NAME, neuralQueryBuilder.fieldName());
         assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
         assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
-        assertEquals(MIN_SCORE, neuralQueryBuilder.min_score());
+        assertEquals(MIN_SCORE, neuralQueryBuilder.minScore());
     }
 
     @SneakyThrows

@@ -5,7 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased 3.0](https://github.com/opensearch-project/neural-search/compare/2.x...HEAD)
 ### Features
-- Support k-NN radial search parameters in neural search([#697](https://github.com/opensearch-project/neural-search/pull/697)) 
+- Support k-NN radial search parameters in neural search([#697](https://github.com/opensearch-project/neural-search/pull/697))
 ### Enhancements
 ### Bug Fixes
 - Fix async actions are left in neural_sparse query ([#438](https://github.com/opensearch-project/neural-search/pull/438))
