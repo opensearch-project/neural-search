@@ -141,7 +141,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
      *  "SAMPLE_FIELD": {
      *    "query_text": "string",
      *    "model_id": "string",
-     *    "token_score_upper_bound": float (optional)
+     *    "max_token_score": float (optional)
      *  }
      *
      * @param parser XContentParser
