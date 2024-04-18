@@ -94,6 +94,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
                 modelId,
                 5,
                 null,
+                null,
+                null,
                 null
             );
             TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
@@ -142,6 +144,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
                 modelId,
                 5,
                 null,
+                null,
+                null,
                 null
             );
             TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
@@ -178,6 +182,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
                 "",
                 modelId,
                 6,
+                null,
+                null,
                 null,
                 null
             );

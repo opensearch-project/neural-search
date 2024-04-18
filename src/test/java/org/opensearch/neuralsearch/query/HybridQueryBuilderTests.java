@@ -294,7 +294,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         NeuralQueryBuilder neuralQueryBuilder = (NeuralQueryBuilder) queryTwoSubQueries.queries().get(0);
         assertEquals(VECTOR_FIELD_NAME, neuralQueryBuilder.fieldName());
         assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
-        assertEquals(K, neuralQueryBuilder.k());
+        assertEquals(K, (int) neuralQueryBuilder.k());
         assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
         assertEquals(BOOST, neuralQueryBuilder.boost(), 0f);
         // verify term query
@@ -602,7 +602,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertTrue(queryBuilders.get(0) instanceof KNNQueryBuilder);
         KNNQueryBuilder knnQueryBuilder = (KNNQueryBuilder) queryBuilders.get(0);
         assertEquals(neuralQueryBuilder.fieldName(), knnQueryBuilder.fieldName());
-        assertEquals(neuralQueryBuilder.k(), knnQueryBuilder.getK());
+        assertEquals((int) neuralQueryBuilder.k(), knnQueryBuilder.getK());
         assertTrue(queryBuilders.get(1) instanceof TermQueryBuilder);
         TermQueryBuilder termQueryBuilder = (TermQueryBuilder) queryBuilders.get(1);
         assertEquals(termSubQuery.fieldName(), termQueryBuilder.fieldName());
