@@ -56,6 +56,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
     private static final int lte_of_range_in_post_filter_query = 400;
     private static final int gte_of_range_in_post_filter_query = 230;
 
+    // @Before is a workaround to save extra update cluster settings call to the cluster.
+    // @BeforeClass throws RuntimeException with initializationError
     @Before
     public void setUp() throws Exception {
         super.setUp();
