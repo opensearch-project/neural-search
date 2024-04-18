@@ -463,6 +463,18 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .queryName(queryName1)
             .queryTokensSupplier(() -> queryTokens2);
 
+        // Identical to sparseEncodingQueryBuilder_baseline except null query text
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder_nullQueryText = new NeuralSparseQueryBuilder().fieldName(fieldName1)
+            .modelId(modelId1)
+            .boost(boost1)
+            .queryName(queryName1);
+
+        // Identical to sparseEncodingQueryBuilder_baseline except null query text
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder_nullModelId = new NeuralSparseQueryBuilder().fieldName(fieldName1)
+            .queryText(queryText1)
+            .boost(boost1)
+            .queryName(queryName1);
+
         assertEquals(sparseEncodingQueryBuilder_baseline, sparseEncodingQueryBuilder_baseline);
         assertEquals(sparseEncodingQueryBuilder_baseline.hashCode(), sparseEncodingQueryBuilder_baseline.hashCode());
 
@@ -492,6 +504,12 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
 
         assertNotEquals(sparseEncodingQueryBuilder_nonNullQueryTokens, sparseEncodingQueryBuilder_diffQueryTokens);
         assertNotEquals(sparseEncodingQueryBuilder_nonNullQueryTokens.hashCode(), sparseEncodingQueryBuilder_diffQueryTokens.hashCode());
+
+        assertNotEquals(sparseEncodingQueryBuilder_baseline, sparseEncodingQueryBuilder_nullQueryText);
+        assertNotEquals(sparseEncodingQueryBuilder_baseline.hashCode(), sparseEncodingQueryBuilder_nullQueryText.hashCode());
+
+        assertNotEquals(sparseEncodingQueryBuilder_baseline, sparseEncodingQueryBuilder_nullModelId);
+        assertNotEquals(sparseEncodingQueryBuilder_baseline.hashCode(), sparseEncodingQueryBuilder_nullModelId.hashCode());
     }
 
     @SneakyThrows

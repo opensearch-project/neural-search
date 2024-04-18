@@ -99,7 +99,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             Map<String, Float> queryTokens = in.readMap(StreamInput::readString, StreamInput::readFloat);
             this.queryTokensSupplier = () -> queryTokens;
         }
-        // to be backward compatible with previous version, we need to writeString/readString API instead of optionalString API
+        // to be backward compatible with previous version, we need to use writeString/readString API instead of optionalString API
         // after supporting query by tokens, queryText and modelId can be null. here we write an empty String instead
         if (EMPTY_STRING.equals(queryText)) {
             this.queryText = null;
@@ -112,7 +112,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     @Override
     protected void doWriteTo(StreamOutput out) throws IOException {
         out.writeString(fieldName);
-        // to be backward compatible with previous version, we need to use out.writeString instead of writeOptionalString here
+        // to be backward compatible with previous version, we need to use writeString/readString API instead of optionalString API
         // after supporting query by tokens, queryText and modelId can be null. here we write an empty String instead
         out.writeString(Objects.isNull(queryText) ? EMPTY_STRING : queryText);
         if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
@@ -132,7 +132,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     protected void doXContent(XContentBuilder xContentBuilder, Params params) throws IOException {
         xContentBuilder.startObject(NAME);
         xContentBuilder.startObject(fieldName);
-        xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
+        if (Objects.nonNull(queryText)) {
+            xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
+        }
         if (Objects.nonNull(modelId)) {
             xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
         }

@@ -5,6 +5,8 @@
 package org.opensearch.neuralsearch.query;
 
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+
+import static org.opensearch.neuralsearch.TestUtils.createRandomTokenWeightMap;
 import static org.opensearch.neuralsearch.TestUtils.objectToFloat;
 
 import java.util.List;
@@ -73,6 +75,44 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
             assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
         } finally {
             wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
+        }
+    }
+
+    /**
+     * Tests basic query with boost:
+     * {
+     *     "query": {
+     *         "neural_sparse": {
+     *             "text_sparse": {
+     *                 "query_tokens": {
+     *                     "hello": float,
+     *                     "world": float,
+     *                     "a": float,
+     *                     "b": float,
+     *                     "c": float
+     *                 },
+     *                 "boost": 2
+     *             }
+     *         }
+     *     }
+     * }
+     */
+    @SneakyThrows
+    public void testBasicQueryUsingQueryTokens() {
+        try {
+            initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
+            Map<String, Float> queryTokens = createRandomTokenWeightMap(TEST_TOKENS);
+            NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
+                .queryTokensSupplier(() -> queryTokens)
+                .boost(2.0f);
+            Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, sparseEncodingQueryBuilder, 1);
+            Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+
+            assertEquals("1", firstInnerHit.get("_id"));
+            float expectedScore = 2 * computeExpectedScore(testRankFeaturesDoc, sparseEncodingQueryBuilder.queryTokensSupplier().get());
+            assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
+        } finally {
+            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, null, null);
         }
     }
 
@@ -180,11 +220,8 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
      *                      "model_id": "dcsdcasd"
      *                    }
      *                 },
-     *                "neural_sparse": {
-     *                  "field2": {
-     *                      "query_text": "Hello world a b",
-     *                      "model_id": "dcsdcasd"
-     *                    }
+     *                "match": {
+     *                  "field2": "Hello world a b",
      *                 }
      *             ]
      *         }
