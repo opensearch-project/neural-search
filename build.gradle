@@ -308,6 +308,12 @@ task integTest(type: RestIntegTestTask) {
     description = "Run tests against a cluster"
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
+    boolean runCompleteAggsTestSuite = Boolean.parseBoolean(System.getProperty('test_aggs', "false"))
+    if (!runCompleteAggsTestSuite) {
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.query.aggregation.*IT"
+        }
+    }
 }
 tasks.named("check").configure { dependsOn(integTest) }
 
