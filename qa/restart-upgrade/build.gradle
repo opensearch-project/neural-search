@@ -65,7 +65,7 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.skip_delete_model_index', 'true'
     systemProperty 'tests.plugin_bwc_version', ext.neural_search_bwc_version
 
-    //Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT, NeuralQueryEnricherProcessorIT tests from neural search version 2.9 and 2.10
+    // Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT, NeuralQueryEnricherProcessorIT tests from neural search version 2.9 and 2.10
     // because these features were released in 2.11 version.
     if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10")){
         filter {
@@ -80,6 +80,13 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
     if (ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12")){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow"
+        }
+    }
+
+    // Excluding the text chunking processor test because we introduce this feature in 2.13
+    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10") || ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12")){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.TextChunkingProcessorIT.*"
         }
     }
 
@@ -107,7 +114,7 @@ task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.is_old_cluster', 'false'
     systemProperty 'tests.plugin_bwc_version', ext.neural_search_bwc_version
 
-    //Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT, NeuralQueryEnricherProcessorIT tests from neural search version 2.9 and 2.10
+    // Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT, NeuralQueryEnricherProcessorIT tests from neural search version 2.9 and 2.10
     // because these features were released in 2.11 version.
     if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10")){
         filter {
@@ -122,6 +129,13 @@ task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
     if (ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12")){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow"
+        }
+    }
+
+    // Excluding the text chunking processor test because we introduce this feature in 2.13
+    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10") || ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12")){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.TextChunkingProcessorIT.*"
         }
     }
 
