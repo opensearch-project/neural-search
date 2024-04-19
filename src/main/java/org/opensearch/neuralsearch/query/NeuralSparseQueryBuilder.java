@@ -187,7 +187,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         }
 
         requireValue(sparseEncodingQueryBuilder.fieldName(), "Field name must be provided for " + NAME + " query");
-        if (Objects.isNull(sparseEncodingQueryBuilder.queryTokensSupplier)) {
+        if (Objects.isNull(sparseEncodingQueryBuilder.queryTokensSupplier())) {
             requireValue(
                 sparseEncodingQueryBuilder.queryText(),
                 String.format(
@@ -212,12 +212,12 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             }
         }
 
-        if (Objects.nonNull(sparseEncodingQueryBuilder.queryText) && StringUtils.EMPTY.equals(sparseEncodingQueryBuilder.queryText)) {
+        if (StringUtils.EMPTY.equals(sparseEncodingQueryBuilder.queryText())) {
             throw new IllegalArgumentException(
                 String.format(Locale.ROOT, "%s field can not be empty", QUERY_TEXT_FIELD.getPreferredName())
             );
         }
-        if (Objects.nonNull(sparseEncodingQueryBuilder.modelId) && StringUtils.EMPTY.equals(sparseEncodingQueryBuilder.modelId)) {
+        if (StringUtils.EMPTY.equals(sparseEncodingQueryBuilder.modelId())) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "%s field can not be empty", MODEL_ID_FIELD.getPreferredName()));
         }
 
