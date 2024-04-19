@@ -10,6 +10,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.Accessors;
+import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.opensearch.Version;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
@@ -137,6 +138,25 @@ public class NeuralSparseTwoPhaseParameters implements ToXContentObject, Writeab
         }
 
         return neuralSparseTwoPhaseParameters;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+        NeuralSparseTwoPhaseParameters other = (NeuralSparseTwoPhaseParameters) obj;
+        return Objects.equals(enabled, other.enabled)
+            && Objects.equals(window_size_expansion, other.window_size_expansion)
+            && Objects.equals(pruning_ratio, other.pruning_ratio);
+    }
+
+    public int hashcode() {
+        HashCodeBuilder builder = new HashCodeBuilder().append(enabled).append(window_size_expansion).append(pruning_ratio);
+        return builder.toHashCode();
     }
 
     public static boolean isEnabled(NeuralSparseTwoPhaseParameters neuralSparseTwoPhaseParameters) {

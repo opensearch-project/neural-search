@@ -330,6 +330,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (!Objects.isNull(queryTokensSupplier)) {
             equalsBuilder.append(queryTokensSupplier.get(), obj.queryTokensSupplier.get());
         }
+        equalsBuilder.append(neuralSparseTwoPhaseParameters, obj.neuralSparseTwoPhaseParameters);
         return equalsBuilder.isEquals();
     }
 
@@ -339,6 +340,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (!Objects.isNull(queryTokensSupplier)) {
             builder.append(queryTokensSupplier.get());
         }
+        builder.append(neuralSparseTwoPhaseParameters.hashcode());
         return builder.toHashCode();
     }
 
