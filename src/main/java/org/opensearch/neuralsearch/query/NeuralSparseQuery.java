@@ -29,7 +29,7 @@ public final class NeuralSparseQuery extends Query {
     private Query currentQuery;
     private final Query highScoreTokenQuery;
     private final Query lowScoreTokenQuery;
-    private final Integer rescoreWindowSizeExpansion;
+    private final Float rescoreWindowSizeExpansion;
 
     @Override
     public String toString(String field) {

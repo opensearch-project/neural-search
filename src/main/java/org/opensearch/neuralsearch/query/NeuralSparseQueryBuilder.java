@@ -194,11 +194,11 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             );
         }
 
-        if (sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters.window_size_expansion() < 0) {
+        if (sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters.window_size_expansion() < 1) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
-                    "[%s] %s field value must be non-negative",
+                    "[%s] %s field value can not be smaller than 1",
                     NeuralSparseTwoPhaseParameters.NAME.getPreferredName(),
                     NeuralSparseTwoPhaseParameters.WINDOW_SIZE_EXPANSION.getPreferredName()
                 )

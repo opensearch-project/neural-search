@@ -34,7 +34,7 @@ import java.util.Objects;
 @NoArgsConstructor
 @AllArgsConstructor
 public class NeuralSparseTwoPhaseParameters implements ToXContentObject, Writeable {
-    public static volatile Integer DEFAULT_WINDOW_SIZE_EXPANSION;
+    public static volatile Float DEFAULT_WINDOW_SIZE_EXPANSION;
     public static volatile Float DEFAULT_PRUNING_RATIO;
     public static volatile Boolean DEFAULT_ENABLED;
     public static volatile Integer MAX_WINDOW_SIZE;
@@ -48,7 +48,7 @@ public class NeuralSparseTwoPhaseParameters implements ToXContentObject, Writeab
     static final ParseField ENABLED = new ParseField("enabled");
     private static final Version MINIMAL_SUPPORTED_VERSION_TWO_PHASE_SEARCH = Version.V_2_14_0;
 
-    private Integer window_size_expansion;
+    private Float window_size_expansion;
     private Float pruning_ratio;
     private Boolean enabled;
 
@@ -86,14 +86,14 @@ public class NeuralSparseTwoPhaseParameters implements ToXContentObject, Writeab
      * @throws IOException thrown if unable to read from input stream
      */
     public NeuralSparseTwoPhaseParameters(StreamInput in) throws IOException {
-        window_size_expansion = in.readInt();
+        window_size_expansion = in.readFloat();
         pruning_ratio = in.readFloat();
         enabled = in.readBoolean();
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        out.writeInt(window_size_expansion);
+        out.writeFloat(window_size_expansion);
         out.writeFloat(pruning_ratio);
         out.writeBoolean(enabled);
     }
@@ -117,7 +117,7 @@ public class NeuralSparseTwoPhaseParameters implements ToXContentObject, Writeab
                 currentFieldName = parser.currentName();
             } else if (token.isValue()) {
                 if (WINDOW_SIZE_EXPANSION.match(currentFieldName, parser.getDeprecationHandler())) {
-                    neuralSparseTwoPhaseParameters.window_size_expansion(parser.intValue());
+                    neuralSparseTwoPhaseParameters.window_size_expansion(parser.floatValue());
                 } else if (PRUNING_RATIO.match(currentFieldName, parser.getDeprecationHandler())) {
                     neuralSparseTwoPhaseParameters.pruning_ratio(parser.floatValue());
                 } else if (ENABLED.match(currentFieldName, parser.getDeprecationHandler())) {

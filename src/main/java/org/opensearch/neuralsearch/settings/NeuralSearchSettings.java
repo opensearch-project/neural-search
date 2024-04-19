@@ -41,9 +41,9 @@ public final class NeuralSearchSettings {
         Setting.Property.Dynamic
     );
 
-    public static final Setting<Integer> NEURAL_SPARSE_TWO_PHASE_DEFAULT_WINDOW_SIZE_EXPANSION = Setting.intSetting(
+    public static final Setting<Float> NEURAL_SPARSE_TWO_PHASE_DEFAULT_WINDOW_SIZE_EXPANSION = Setting.floatSetting(
         "plugins.neural_search.neural_sparse.two_phase.default_window_size_expansion",
-        50,
+        5f,
         Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );
