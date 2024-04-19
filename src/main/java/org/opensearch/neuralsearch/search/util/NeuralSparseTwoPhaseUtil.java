@@ -9,6 +9,7 @@ import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.BoostQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.neuralsearch.query.NeuralSparseQuery;
+import org.opensearch.neuralsearch.query.NeuralSparseTwoPhaseParameters;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.rescore.QueryRescorer;
 import org.opensearch.search.rescore.RescoreContext;
@@ -17,21 +18,41 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static java.lang.Float.max;
+import static java.lang.Integer.min;
+import static org.opensearch.index.IndexSettings.MAX_RESCORE_WINDOW_SETTING;
+
 public class NeuralSparseTwoPhaseUtil {
-    private static void populateQueryWeightsMap(final Query query, Map<Query, Float> query2Weight, float weight) {
+
+    private static float populateQueryWeightsMapAndGetWindowSizeExpansion(
+        final Query query,
+        Map<Query, Float> query2Weight,
+        float weight,
+        float windoSizeExpansion
+    ) {
         if (query instanceof BoostQuery) {
             BoostQuery boostQuery = (BoostQuery) query;
             weight *= boostQuery.getBoost();
-            populateQueryWeightsMap(boostQuery.getQuery(), query2Weight, weight);
+            windoSizeExpansion = max(
+                windoSizeExpansion,
+                populateQueryWeightsMapAndGetWindowSizeExpansion(boostQuery.getQuery(), query2Weight, weight, windoSizeExpansion)
+            );
         } else if (query instanceof BooleanQuery) {
             for (BooleanClause clause : (BooleanQuery) query) {
-                if (clause.isScoring()) populateQueryWeightsMap(clause.getQuery(), query2Weight, weight);
+                if (clause.isScoring()) {
+                    windoSizeExpansion = max(
+                        windoSizeExpansion,
+                        populateQueryWeightsMapAndGetWindowSizeExpansion(clause.getQuery(), query2Weight, weight, windoSizeExpansion)
+                    );
+                }
             }
         } else if (query instanceof NeuralSparseQuery) {
             query2Weight.put(((NeuralSparseQuery) query).getLowScoreTokenQuery(), weight);
             ((NeuralSparseQuery) query).extractLowScoreToken();
+            windoSizeExpansion = max(windoSizeExpansion, ((NeuralSparseQuery) query).getRescoreWindowSizeExpansion());
         }
         // ToDo Support for other compound query.
+        return windoSizeExpansion;
     }
 
     private static float getOriginQueryWeightAfterRescore(List<RescoreContext> rescoreContextList) {
@@ -49,7 +70,7 @@ public class NeuralSparseTwoPhaseUtil {
 
     public static void addTwoPhaseNeuralSparseQuery(final Query query, SearchContext searchContext) {
         Map<Query, Float> query2weight = new HashMap<>();
-        populateQueryWeightsMap(query, query2weight, 1.0f);
+        float windowSizeExpansion = populateQueryWeightsMapAndGetWindowSizeExpansion(query, query2weight, 1.0f, 1.0f);
         Query twoPhaseQuery;
         if (query2weight.isEmpty()) {
             return;
@@ -59,10 +80,15 @@ public class NeuralSparseTwoPhaseUtil {
         } else {
             twoPhaseQuery = getNestedTwoPhaseQuery(query2weight);
         }
-        // todo: modify window size based on neural sparse query
-        // from, size
-        int windowSize = 50;
-        QueryRescorer.QueryRescoreContext rescoreContext = new QueryRescorer.QueryRescoreContext(windowSize);
+        int curWindowSize = (int) (searchContext.size() * windowSizeExpansion);
+        if (curWindowSize < 0
+            || curWindowSize > min(
+                NeuralSparseTwoPhaseParameters.MAX_WINDOW_SIZE,
+                MAX_RESCORE_WINDOW_SETTING.get(searchContext.getQueryShardContext().getIndexSettings().getSettings())
+            )) {
+            throw new IllegalArgumentException(String.format("Two phase final windowSize out of score with value %d.", curWindowSize));
+        }
+        QueryRescorer.QueryRescoreContext rescoreContext = new QueryRescorer.QueryRescoreContext(curWindowSize);
         rescoreContext.setQuery(twoPhaseQuery);
         rescoreContext.setRescoreQueryWeight(getOriginQueryWeightAfterRescore(searchContext.rescore()));
         searchContext.addRescore(rescoreContext);
