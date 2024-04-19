@@ -497,7 +497,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .queryText(QUERY_TEXT)
             .modelId(MODEL_ID)
             .queryTokensSupplier(QUERY_TOKENS_SUPPLIER);
-        BooleanQuery booleanQuery = sparseEncodingQueryBuilder.buildFeatureFieldQueryFormTokens(
+        BooleanQuery booleanQuery = sparseEncodingQueryBuilder.buildFeatureFieldQueryFromTokens(
             sparseEncodingQueryBuilder.queryTokensSupplier().get(),
             FIELD_NAME
         );

@@ -17,8 +17,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_WINDOW_SIZE;
-
 public class NeuralSparseTwoPhaseUtil {
     private static void populateQueryWeightsMap(final Query query, Map<Query, Float> query2Weight, float weight) {
         if (query instanceof BoostQuery) {
@@ -61,14 +59,12 @@ public class NeuralSparseTwoPhaseUtil {
         } else {
             twoPhaseQuery = getNestedTwoPhaseQuery(query2weight);
         }
-        int windowSize = NEURAL_SPARSE_TWO_PHASE_WINDOW_SIZE.get(searchContext.getQueryShardContext().getIndexSettings().getSettings());
-        if (windowSize < 0 || windowSize > 3000) {
-            windowSize = 50;
-        }
+        // todo: modify window size based on neural sparse query
+        // from, size
+        int windowSize = 50;
         QueryRescorer.QueryRescoreContext rescoreContext = new QueryRescorer.QueryRescoreContext(windowSize);
         rescoreContext.setQuery(twoPhaseQuery);
         rescoreContext.setRescoreQueryWeight(getOriginQueryWeightAfterRescore(searchContext.rescore()));
         searchContext.addRescore(rescoreContext);
     }
-
 }

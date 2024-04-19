@@ -14,7 +14,6 @@ import lombok.NoArgsConstructor;
  */
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class NeuralSearchSettings {
-
     /**
      * Gates the functionality of hybrid search
      * Currently query phase searcher added with hybrid search will conflict with concurrent search in core.
@@ -35,24 +34,32 @@ public final class NeuralSearchSettings {
         Setting.Property.NodeScope
     );
 
-    public static final Setting<Boolean> NEURAL_SPARSE_TWO_PHASE_DISABLED = Setting.boolSetting(
-        "index.neural_sparse_two_phase_disabled",
-        false,
-        Setting.Property.IndexScope,
+    public static final Setting<Boolean> NEURAL_SPARSE_TWO_PHASE_DEFAULT_ENABLED = Setting.boolSetting(
+        "plugins.neural_search.neural_sparse.two_phase.default_enabled",
+        true,
+        Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );
 
-    public static final Setting<Integer> NEURAL_SPARSE_TWO_PHASE_WINDOW_SIZE = Setting.intSetting(
-        "index.neural_sparse_two_phase_window_size",
+    public static final Setting<Integer> NEURAL_SPARSE_TWO_PHASE_DEFAULT_WINDOW_SIZE_EXPANSION = Setting.intSetting(
+        "plugins.neural_search.neural_sparse.two_phase.default_window_size_expansion",
         50,
-        Setting.Property.IndexScope,
+        Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );
 
-    public static final Setting<Float> NEURAL_SPARSE_TWO_PHASE_RATIO = Setting.floatSetting(
-        "index.neural_sparse_two_phase_ratio",
+    public static final Setting<Float> NEURAL_SPARSE_TWO_PHASE_DEFAULT_PRUNING_RATIO = Setting.floatSetting(
+        "plugins.neural_search.neural_sparse.two_phase.default_pruning_ratio",
         0.4f,
-        Setting.Property.IndexScope,
+        Setting.Property.NodeScope,
+        Setting.Property.Dynamic
+    );
+
+    // the default value is consistent with core settings MAX_RESCORE_WINDOW_SETTING
+    public static final Setting<Integer> NEURAL_SPARSE_TWO_PHASE_MAX_WINDOW_SIZE = Setting.intSetting(
+        "plugins.neural_search.neural_sparse.two_phase.max_window_size",
+        10000,
+        Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );
 }

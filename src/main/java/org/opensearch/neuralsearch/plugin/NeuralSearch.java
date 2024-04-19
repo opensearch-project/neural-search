@@ -5,9 +5,10 @@
 package org.opensearch.neuralsearch.plugin;
 
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SEARCH_HYBRID_SEARCH_DISABLED;
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DISABLED;
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_RATIO;
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_WINDOW_SIZE;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_ENABLED;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_PRUNING_RATIO;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_WINDOW_SIZE_EXPANSION;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_MAX_WINDOW_SIZE;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER_MAX_DOC_FIELDS;
 
 import java.util.Arrays;
@@ -21,6 +22,7 @@ import org.opensearch.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Setting;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.FeatureFlags;
 import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
@@ -51,6 +53,7 @@ import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralSparseTwoPhaseParameters;
 import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
@@ -95,9 +98,11 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         final IndexNameExpressionResolver indexNameExpressionResolver,
         final Supplier<RepositoriesService> repositoriesServiceSupplier
     ) {
+        Settings settings = environment.settings();
         NeuralSearchClusterUtil.instance().initialize(clusterService);
         NeuralQueryBuilder.initialize(clientAccessor);
         NeuralSparseQueryBuilder.initialize(clientAccessor);
+        NeuralSparseTwoPhaseParameters.initialize(clusterService, settings);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
         return List.of(clientAccessor);
     }
@@ -162,9 +167,10 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         return ImmutableList.of(
             NEURAL_SEARCH_HYBRID_SEARCH_DISABLED,
             RERANKER_MAX_DOC_FIELDS,
-            NEURAL_SPARSE_TWO_PHASE_DISABLED,
-            NEURAL_SPARSE_TWO_PHASE_WINDOW_SIZE,
-            NEURAL_SPARSE_TWO_PHASE_RATIO
+            NEURAL_SPARSE_TWO_PHASE_DEFAULT_ENABLED,
+            NEURAL_SPARSE_TWO_PHASE_DEFAULT_WINDOW_SIZE_EXPANSION,
+            NEURAL_SPARSE_TWO_PHASE_DEFAULT_PRUNING_RATIO,
+            NEURAL_SPARSE_TWO_PHASE_MAX_WINDOW_SIZE
         );
     }
 

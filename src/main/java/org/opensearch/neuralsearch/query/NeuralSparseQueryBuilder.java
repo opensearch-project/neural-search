@@ -5,8 +5,6 @@
 package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -49,9 +47,6 @@ import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.log4j.Log4j2;
 
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DISABLED;
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_RATIO;
-
 /**
  * SparseEncodingQueryBuilder is responsible for handling "neural_sparse" query types. It uses an ML SPARSE_ENCODING model
  * or SPARSE_TOKENIZE model to produce a Map with String keys and Float values for input text. Then it will be transformed
@@ -81,6 +76,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     private String queryText;
     private String modelId;
     private Supplier<Map<String, Float>> queryTokensSupplier;
+    private NeuralSparseTwoPhaseParameters neuralSparseTwoPhaseParameters;
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
 
     /**
@@ -102,6 +98,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             Map<String, Float> queryTokens = in.readMap(StreamInput::readString, StreamInput::readFloat);
             this.queryTokensSupplier = () -> queryTokens;
         }
+        if (NeuralSparseTwoPhaseParameters.isClusterOnOrAfterMinReqVersionForTwoPhaseSearchSupport()) {
+            this.neuralSparseTwoPhaseParameters = in.readOptionalWriteable(NeuralSparseTwoPhaseParameters::new);
+        }
     }
 
     @Override
@@ -119,6 +118,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         } else {
             out.writeBoolean(false);
         }
+        if (NeuralSparseTwoPhaseParameters.isClusterOnOrAfterMinReqVersionForTwoPhaseSearchSupport()) {
+            out.writeOptionalWriteable(this.neuralSparseTwoPhaseParameters);
+        }
     }
 
     @Override
@@ -129,6 +131,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (Objects.nonNull(modelId)) {
             xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
         }
+        neuralSparseTwoPhaseParameters.toXContent(xContentBuilder, params);
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
         xContentBuilder.endObject();
@@ -178,12 +181,38 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
                 String.format(Locale.ROOT, "%s field must be provided for [%s] query", MODEL_ID_FIELD.getPreferredName(), NAME)
             );
         }
+
+        if (sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters.pruning_ratio() <= 0
+            || sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters.pruning_ratio() >= 1) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "[%s] %s field value must be in range (0,1)",
+                    NeuralSparseTwoPhaseParameters.NAME.getPreferredName(),
+                    NeuralSparseTwoPhaseParameters.PRUNING_RATIO.getPreferredName()
+                )
+            );
+        }
+
+        if (sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters.window_size_expansion() < 0) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "[%s] %s field value must be non-negative",
+                    NeuralSparseTwoPhaseParameters.NAME.getPreferredName(),
+                    NeuralSparseTwoPhaseParameters.WINDOW_SIZE_EXPANSION.getPreferredName()
+                )
+            );
+        }
+
         return sparseEncodingQueryBuilder;
     }
 
     private static void parseQueryParams(XContentParser parser, NeuralSparseQueryBuilder sparseEncodingQueryBuilder) throws IOException {
         XContentParser.Token token;
         String currentFieldName = "";
+        // set default 2-phase settings
+        sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters(NeuralSparseTwoPhaseParameters.getDefaultSettings());
         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
             if (token == XContentParser.Token.FIELD_NAME) {
                 currentFieldName = parser.currentName();
@@ -202,6 +231,8 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
                         String.format(Locale.ROOT, "[%s] query does not support [%s] field", NAME, currentFieldName)
                     );
                 }
+            } else if (NeuralSparseTwoPhaseParameters.NAME.match(currentFieldName, parser.getDeprecationHandler())) {
+                sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters(NeuralSparseTwoPhaseParameters.parseFromXContent(parser));
             } else {
                 throw new ParsingException(
                     parser.getTokenLocation(),
@@ -234,28 +265,24 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         return new NeuralSparseQueryBuilder().fieldName(fieldName)
             .queryText(queryText)
             .modelId(modelId)
-            .queryTokensSupplier(queryTokensSetOnce::get);
+            .queryTokensSupplier(queryTokensSetOnce::get)
+            .neuralSparseTwoPhaseParameters(neuralSparseTwoPhaseParameters);
     }
 
     @Override
     protected Query doToQuery(QueryShardContext context) throws IOException {
         final MappedFieldType ft = context.fieldMapper(fieldName);
         validateFieldType(ft);
-        if (NEURAL_SPARSE_TWO_PHASE_DISABLED.get(context.getIndexSettings().getSettings())) {
-            return buildFeatureFieldQueryFormTokens(getAllTokens(), fieldName);
+        if (!NeuralSparseTwoPhaseParameters.isEnabled(neuralSparseTwoPhaseParameters)) {
+            return buildFeatureFieldQueryFromTokens(getAllTokens(), fieldName);
         }
-        float ratio = NEURAL_SPARSE_TWO_PHASE_RATIO.get(context.getIndexSettings().getSettings());
-        if (ratio >= 0.9f || ratio < 0f) {
-            log.warn(
-                "Two-Phase Ratio is {}, but for NeuralSparseQuery must be a valid value between 0.0 to 0.9, reset it into 0.4 this time.",
-                ratio
-            );
-            ratio = 0.4f;
-        }
+        // in the last step we make sure neuralSparseTwoPhaseParameters is not null
+        float ratio = neuralSparseTwoPhaseParameters.pruning_ratio();
         return new NeuralSparseQuery(
-            buildFeatureFieldQueryFormTokens(getAllTokens(), fieldName),
-            buildFeatureFieldQueryFormTokens(getHighScoreTokens(ratio), fieldName),
-            buildFeatureFieldQueryFormTokens(getLowScoreTokens(ratio), fieldName)
+            buildFeatureFieldQueryFromTokens(getAllTokens(), fieldName),
+            buildFeatureFieldQueryFromTokens(getHighScoreTokens(ratio), fieldName),
+            buildFeatureFieldQueryFromTokens(getLowScoreTokens(ratio), fieldName),
+            neuralSparseTwoPhaseParameters.window_size_expansion()
         );
     }
 
@@ -352,15 +379,11 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    public BooleanQuery buildFeatureFieldQueryFormTokens(Map<String, Float> Tokens, String fieldName) {
+    public BooleanQuery buildFeatureFieldQueryFromTokens(Map<String, Float> tokens, String fieldName) {
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
-        Collection<BooleanClause> clauses = Collections.synchronizedList(new ArrayList<>());
-        Tokens.forEach((key, value) -> {
-            Query query = FeatureField.newLinearQuery(fieldName, key, value);
-            BooleanClause clause = new BooleanClause(query, BooleanClause.Occur.SHOULD);
-            clauses.add(clause);
-        });
-        clauses.forEach(builder::add);
+        for (Map.Entry<String, Float> entry : tokens.entrySet()) {
+            builder.add(FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()), BooleanClause.Occur.SHOULD);
+        }
         return builder.build();
     }
 }

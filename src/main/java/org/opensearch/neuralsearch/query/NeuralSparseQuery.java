@@ -29,6 +29,7 @@ public final class NeuralSparseQuery extends Query {
     private Query currentQuery;
     private final Query highScoreTokenQuery;
     private final Query lowScoreTokenQuery;
+    private final Integer rescoreWindowSizeExpansion;
 
     @Override
     public String toString(String field) {
@@ -49,7 +50,7 @@ public final class NeuralSparseQuery extends Query {
         if (rewrittenFirstStepQuery == highScoreTokenQuery && rewrittenSecondPhaseQuery == lowScoreTokenQuery) {
             return this;
         }
-        return new NeuralSparseQuery(rewrittenCurrentQuery, rewrittenFirstStepQuery, rewrittenSecondPhaseQuery);
+        return new NeuralSparseQuery(rewrittenCurrentQuery, rewrittenFirstStepQuery, rewrittenSecondPhaseQuery, rescoreWindowSizeExpansion);
     }
 
     @Override
@@ -68,13 +69,15 @@ public final class NeuralSparseQuery extends Query {
     private boolean equalsTo(NeuralSparseQuery other) {
         return Objects.equals(currentQuery, other.currentQuery)
             && Objects.equals(highScoreTokenQuery, other.highScoreTokenQuery)
-            && Objects.equals(lowScoreTokenQuery, other.lowScoreTokenQuery);
+            && Objects.equals(lowScoreTokenQuery, other.lowScoreTokenQuery)
+            && Objects.equals(rescoreWindowSizeExpansion, other.rescoreWindowSizeExpansion);
     }
 
     @Override
     public int hashCode() {
         int h = classHash();
-        h = 31 * h + Objects.hashCode(highScoreTokenQuery) + Objects.hashCode(lowScoreTokenQuery) + Objects.hashCode(currentQuery);
+        h = 31 * h + Objects.hashCode(highScoreTokenQuery) + Objects.hashCode(lowScoreTokenQuery) + Objects.hashCode(currentQuery) + Objects
+            .hashCode(rescoreWindowSizeExpansion);
         return h;
     }
 
