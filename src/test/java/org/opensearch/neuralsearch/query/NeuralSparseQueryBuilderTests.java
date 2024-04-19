@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
+import org.apache.commons.lang.StringUtils;
 import org.junit.Before;
 import org.opensearch.Version;
 import org.opensearch.client.Client;
@@ -268,6 +269,48 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         XContentParser contentParser = createParser(xContentBuilder);
         contentParser.nextToken();
         expectThrows(IOException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuildWithEmptyQuery_thenFail() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": ""
+              }
+          }
+        */
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), StringUtils.EMPTY)
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        expectThrows(IllegalArgumentException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuildWithEmptyModelId_thenFail() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "model_id": ""
+              }
+          }
+        */
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(MODEL_ID_FIELD.getPreferredName(), StringUtils.EMPTY)
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        expectThrows(IllegalArgumentException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser));
     }
 
     @SuppressWarnings("unchecked")

@@ -66,19 +66,16 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     static final ParseField QUERY_TOKENS_FIELD = new ParseField("query_tokens");
     @VisibleForTesting
     static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
-    private static final String EMPTY_STRING = "";
-
     private static MLCommonsClientAccessor ML_CLIENT;
-
-    public static void initialize(MLCommonsClientAccessor mlClient) {
-        NeuralSparseQueryBuilder.ML_CLIENT = mlClient;
-    }
-
     private String fieldName;
     private String queryText;
     private String modelId;
     private Supplier<Map<String, Float>> queryTokensSupplier;
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
+
+    public static void initialize(MLCommonsClientAccessor mlClient) {
+        NeuralSparseQueryBuilder.ML_CLIENT = mlClient;
+    }
 
     /**
      * Constructor from stream input
@@ -101,28 +98,28 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         }
         // to be backward compatible with previous version, we need to use writeString/readString API instead of optionalString API
         // after supporting query by tokens, queryText and modelId can be null. here we write an empty String instead
-        if (EMPTY_STRING.equals(queryText)) {
+        if (StringUtils.EMPTY.equals(this.queryText)) {
             this.queryText = null;
         }
-        if (EMPTY_STRING.equals(modelId)) {
+        if (StringUtils.EMPTY.equals(this.modelId)) {
             this.modelId = null;
         }
     }
 
     @Override
     protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeString(fieldName);
+        out.writeString(this.fieldName);
         // to be backward compatible with previous version, we need to use writeString/readString API instead of optionalString API
         // after supporting query by tokens, queryText and modelId can be null. here we write an empty String instead
-        out.writeString(Objects.isNull(queryText) ? EMPTY_STRING : queryText);
+        out.writeString(StringUtils.defaultString(this.queryText, StringUtils.EMPTY));
         if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
-            out.writeOptionalString(modelId);
+            out.writeOptionalString(this.modelId);
         } else {
-            out.writeString(Objects.isNull(modelId) ? EMPTY_STRING : modelId);
+            out.writeString(StringUtils.defaultString(this.modelId, StringUtils.EMPTY));
         }
-        if (!Objects.isNull(queryTokensSupplier) && !Objects.isNull(queryTokensSupplier.get())) {
+        if (!Objects.isNull(this.queryTokensSupplier) && !Objects.isNull(this.queryTokensSupplier.get())) {
             out.writeBoolean(true);
-            out.writeMap(queryTokensSupplier.get(), StreamOutput::writeString, StreamOutput::writeFloat);
+            out.writeMap(this.queryTokensSupplier.get(), StreamOutput::writeString, StreamOutput::writeFloat);
         } else {
             out.writeBoolean(false);
         }
@@ -213,6 +210,15 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
                     )
                 );
             }
+        }
+
+        if (Objects.nonNull(sparseEncodingQueryBuilder.queryText) && StringUtils.EMPTY.equals(sparseEncodingQueryBuilder.queryText)) {
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "%s field can not be empty", QUERY_TEXT_FIELD.getPreferredName())
+            );
+        }
+        if (Objects.nonNull(sparseEncodingQueryBuilder.modelId) && StringUtils.EMPTY.equals(sparseEncodingQueryBuilder.modelId)) {
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "%s field can not be empty", MODEL_ID_FIELD.getPreferredName()));
         }
 
         return sparseEncodingQueryBuilder;
