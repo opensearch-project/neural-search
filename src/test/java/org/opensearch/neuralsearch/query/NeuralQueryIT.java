@@ -70,9 +70,33 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
      *         }
      *     }
      * }
+     * and query with radial search max distance and min score:
+     * {
+     *     "query": {
+     *         "neural": {
+     *             "text_knn": {
+     *                 "query_text": "Hello world",
+     *                 "model_id": "dcsdcasd",
+     *                 "max_distance": 100.0f,
+     *             }
+     *         }
+     *     }
+     * }
+     * {
+     *     "query": {
+     *         "neural": {
+     *             "text_knn": {
+     *                 "query_text": "Hello world",
+     *                 "model_id": "dcsdcasd",
+     *                 "min_score": 0.01f,
+     *             }
+     *         }
+     *     }
+     * }
+     *
      */
     @SneakyThrows
-    public void testQueryWithBoostAndImageQuery() {
+    public void testQueryWithBoostAndImageQueryAndRadialQuery() {
         String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
@@ -136,12 +160,20 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 null
             );
 
-            Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, neuralQueryWithMaxDistanceBuilder, 1);
-            Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+            Map<String, Object> searchResponseAsMapWithMaxDistanceQuery = search(
+                TEST_BASIC_INDEX_NAME,
+                neuralQueryWithMaxDistanceBuilder,
+                1
+            );
+            Map<String, Object> firstInnerHitWithMaxDistanceQuery = getFirstInnerHit(searchResponseAsMapWithMaxDistanceQuery);
 
-            assertEquals("1", firstInnerHit.get("_id"));
+            assertEquals("1", firstInnerHitWithMaxDistanceQuery.get("_id"));
             float expectedScoreWithMaxDistanceQuery = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
-            assertEquals(expectedScoreWithMaxDistanceQuery, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
+            assertEquals(
+                expectedScoreWithMaxDistanceQuery,
+                objectToFloat(firstInnerHitWithMaxDistanceQuery.get("_score")),
+                DELTA_FOR_SCORE_ASSERTION
+            );
 
             // Test radial search min score query
             NeuralQueryBuilder neuralQueryWithMinScoreBuilder = new NeuralQueryBuilder(
@@ -156,12 +188,16 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 null
             );
 
-            searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, neuralQueryWithMinScoreBuilder, 1);
-            firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+            Map<String, Object> searchResponseAsMapWithMinScoreQuery = search(TEST_BASIC_INDEX_NAME, neuralQueryWithMinScoreBuilder, 1);
+            Map<String, Object> firstInnerHitWithMinScoreQuery = getFirstInnerHit(searchResponseAsMapWithMinScoreQuery);
 
-            assertEquals("1", firstInnerHit.get("_id"));
+            assertEquals("1", firstInnerHitWithMinScoreQuery.get("_id"));
             float expectedScoreWithMinScoreQuery = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
-            assertEquals(expectedScoreWithMinScoreQuery, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
+            assertEquals(
+                expectedScoreWithMinScoreQuery,
+                objectToFloat(firstInnerHitWithMinScoreQuery.get("_score")),
+                DELTA_FOR_SCORE_ASSERTION
+            );
         } finally {
             wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
         }
