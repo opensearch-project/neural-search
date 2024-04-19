@@ -19,7 +19,6 @@ import org.opensearch.core.common.ParsingException;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.xcontent.ToXContentObject;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
@@ -34,7 +33,7 @@ import java.util.Objects;
 @Accessors(chain = true, fluent = true)
 @NoArgsConstructor
 @AllArgsConstructor
-public class NeuralSparseTwoPhaseParameters implements ToXContentObject, Writeable {
+public class NeuralSparseTwoPhaseParameters implements Writeable {
     public static volatile Float DEFAULT_WINDOW_SIZE_EXPANSION;
     public static volatile Float DEFAULT_PRUNING_RATIO;
     public static volatile Boolean DEFAULT_ENABLED;
@@ -99,8 +98,7 @@ public class NeuralSparseTwoPhaseParameters implements ToXContentObject, Writeab
         out.writeBoolean(enabled);
     }
 
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+    public XContentBuilder doXContent(XContentBuilder builder) throws IOException {
         builder.startObject(NAME.getPreferredName());
         builder.field(WINDOW_SIZE_EXPANSION.getPreferredName(), window_size_expansion);
         builder.field(PRUNING_RATIO.getPreferredName(), pruning_ratio);

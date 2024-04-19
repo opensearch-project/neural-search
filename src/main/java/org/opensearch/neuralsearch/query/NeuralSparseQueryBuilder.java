@@ -144,7 +144,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (Objects.nonNull(modelId)) {
             xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
         }
-        neuralSparseTwoPhaseParameters.toXContent(xContentBuilder, params);
+        if (Objects.nonNull(neuralSparseTwoPhaseParameters)) {
+            neuralSparseTwoPhaseParameters.doXContent(xContentBuilder);
+        }
         if (Objects.nonNull(queryTokensSupplier) && Objects.nonNull(queryTokensSupplier.get())) {
             xContentBuilder.field(QUERY_TOKENS_FIELD.getPreferredName(), queryTokensSupplier.get());
         }
@@ -393,7 +395,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (!Objects.isNull(queryTokensSupplier)) {
             builder.append(queryTokensSupplier.get());
         }
-        builder.append(neuralSparseTwoPhaseParameters.hashcode());
+        if (Objects.nonNull(neuralSparseTwoPhaseParameters)) {
+            builder.append(neuralSparseTwoPhaseParameters.hashcode());
+        }
         return builder.toHashCode();
     }
 
