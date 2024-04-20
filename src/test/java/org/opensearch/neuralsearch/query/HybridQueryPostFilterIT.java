@@ -49,12 +49,12 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
     private static final String KEYWORD_FIELD_CATEGORY_3_VALUE = "Sci-fi";
     private static final String AVG_AGGREGATION_NAME = "avg_stock_size";
     private static boolean setUpIsDone = false;
-    private static final int shards_count_in_single_node_cluster = 1;
-    private static final int shards_count_in_multi_node_cluster = 3;
-    private static final int lte_of_range_in_hybrid_query = 400;
-    private static final int gte_of_range_in_hybrid_query = 200;
-    private static final int lte_of_range_in_post_filter_query = 400;
-    private static final int gte_of_range_in_post_filter_query = 230;
+    private static final int SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER = 1;
+    private static final int SHARDS_COUNT_IN_MULTI_NODE_CLUSTER = 3;
+    private static final int LTE_OF_RANGE_IN_HYBRID_QUERY = 400;
+    private static final int GTE_OF_RANGE_IN_HYBRID_QUERY = 200;
+    private static final int LTE_OF_RANGE_IN_POST_FILTER_QUERY = 400;
+    private static final int GTE_OF_RANGE_IN_POST_FILTER_QUERY = 230;
 
     // @Before is a workaround to save extra update cluster settings call to the cluster.
     // @BeforeClass throws RuntimeException with initializationError
@@ -72,10 +72,10 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
     public void testPostFilterOnIndexWithSingleShard_whenConcurrentSearchEnabled_thenSuccessful() {
         try {
             updateClusterSettings("search.concurrent_segment_search.enabled", true);
-            prepareResourcesBeforeTestExecution(shards_count_in_single_node_cluster);
+            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
             testPostFilterRangeQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
             testPostFilterBoolQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
-            testPostFilterMatchAllAndNoneQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+            testPostFilterMatchAllAndMatchNoneQueries(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
         } finally {
             wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, null, null, SEARCH_PIPELINE);
         }
@@ -85,10 +85,10 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
     public void testPostFilterOnIndexWithSingleShard_whenConcurrentSearchDisabled_thenSuccessful() {
         try {
             updateClusterSettings("search.concurrent_segment_search.enabled", false);
-            prepareResourcesBeforeTestExecution(shards_count_in_single_node_cluster);
+            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
             testPostFilterRangeQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
             testPostFilterBoolQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
-            testPostFilterMatchAllAndNoneQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+            testPostFilterMatchAllAndMatchNoneQueries(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
         } finally {
             wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, null, null, SEARCH_PIPELINE);
         }
@@ -98,10 +98,10 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
     public void testPostFilterOnIndexWithMultipleShards_whenConcurrentSearchEnabled_thenSuccessful() {
         try {
             updateClusterSettings("search.concurrent_segment_search.enabled", true);
-            prepareResourcesBeforeTestExecution(shards_count_in_multi_node_cluster);
+            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
             testPostFilterRangeQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
             testPostFilterBoolQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
-            testPostFilterMatchAllAndNoneQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+            testPostFilterMatchAllAndMatchNoneQueries(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
         } finally {
             wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
         }
@@ -111,10 +111,10 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
     public void testPostFilterOnIndexWithMultipleShards_whenConcurrentSearchDisabled_thenSuccessful() {
         try {
             updateClusterSettings("search.concurrent_segment_search.enabled", false);
-            prepareResourcesBeforeTestExecution(shards_count_in_multi_node_cluster);
+            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
             testPostFilterRangeQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
             testPostFilterBoolQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
-            testPostFilterMatchAllAndNoneQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+            testPostFilterMatchAllAndMatchNoneQueries(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
         } finally {
             wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
         }
@@ -162,12 +162,12 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
         HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
             "mission",
             "part",
-            lte_of_range_in_hybrid_query,
-            gte_of_range_in_hybrid_query
+            LTE_OF_RANGE_IN_HYBRID_QUERY,
+            GTE_OF_RANGE_IN_HYBRID_QUERY
         );
         QueryBuilder postFilterQuery = createQueryBuilderWithRangeQuery(
-            lte_of_range_in_post_filter_query,
-            gte_of_range_in_post_filter_query
+            LTE_OF_RANGE_IN_POST_FILTER_QUERY,
+            GTE_OF_RANGE_IN_POST_FILTER_QUERY
         );
 
         Map<String, Object> searchResponseAsMap = search(
@@ -179,7 +179,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             null,
             postFilterQuery
         );
-        assertHybridQueryResults(searchResponseAsMap, 1, 0, gte_of_range_in_post_filter_query, lte_of_range_in_hybrid_query);
+        assertHybridQueryResults(searchResponseAsMap, 1, 0, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
     }
 
     @SneakyThrows
@@ -237,13 +237,13 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
         HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
             "mission",
             "part",
-            lte_of_range_in_hybrid_query,
-            gte_of_range_in_hybrid_query
+            LTE_OF_RANGE_IN_HYBRID_QUERY,
+            GTE_OF_RANGE_IN_HYBRID_QUERY
         );
         QueryBuilder postFilterQuery = createQueryBuilderWithBoolShouldQuery(
             "impossible",
-            lte_of_range_in_post_filter_query,
-            gte_of_range_in_post_filter_query
+            LTE_OF_RANGE_IN_POST_FILTER_QUERY,
+            GTE_OF_RANGE_IN_POST_FILTER_QUERY
         );
 
         Map<String, Object> searchResponseAsMap = search(
@@ -255,7 +255,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             null,
             postFilterQuery
         );
-        assertHybridQueryResults(searchResponseAsMap, 2, 1, gte_of_range_in_post_filter_query, lte_of_range_in_post_filter_query);
+        assertHybridQueryResults(searchResponseAsMap, 2, 1, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
         // Case 2
         /*{
             "query": {
@@ -311,7 +311,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             }
         }
         }*/
-        AggregationBuilder aggsBuilder = createAggregations();
+        AggregationBuilder aggsBuilder = createAvgAggregation();
         searchResponseAsMap = search(
             indexName,
             hybridQueryBuilder,
@@ -321,7 +321,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             List.of(aggsBuilder),
             postFilterQuery
         );
-        assertHybridQueryResults(searchResponseAsMap, 2, 1, gte_of_range_in_post_filter_query, lte_of_range_in_post_filter_query);
+        assertHybridQueryResults(searchResponseAsMap, 2, 1, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
         Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
         assertNotNull(aggregations);
 
@@ -379,8 +379,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
         }*/
         postFilterQuery = createQueryBuilderWithBoolMustQuery(
             "terminal",
-            lte_of_range_in_post_filter_query,
-            gte_of_range_in_post_filter_query
+            LTE_OF_RANGE_IN_POST_FILTER_QUERY,
+            GTE_OF_RANGE_IN_POST_FILTER_QUERY
         );
         searchResponseAsMap = search(
             indexName,
@@ -391,7 +391,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             null,
             postFilterQuery
         );
-        assertHybridQueryResults(searchResponseAsMap, 0, 0, gte_of_range_in_post_filter_query, lte_of_range_in_post_filter_query);
+        assertHybridQueryResults(searchResponseAsMap, 0, 0, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
         // Case 4
         /*{
             "query": {
@@ -438,8 +438,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
         hybridQueryBuilder = createHybridQueryBuilderScenarioWithMatchAndRangeQuery("hero", 5000, 1000);
         postFilterQuery = createQueryBuilderWithBoolShouldQuery(
             "impossible",
-            lte_of_range_in_post_filter_query,
-            gte_of_range_in_post_filter_query
+            LTE_OF_RANGE_IN_POST_FILTER_QUERY,
+            GTE_OF_RANGE_IN_POST_FILTER_QUERY
         );
         searchResponseAsMap = search(
             indexName,
@@ -450,11 +450,11 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             null,
             postFilterQuery
         );
-        assertHybridQueryResults(searchResponseAsMap, 0, 0, gte_of_range_in_post_filter_query, lte_of_range_in_post_filter_query);
+        assertHybridQueryResults(searchResponseAsMap, 0, 0, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
     }
 
     @SneakyThrows
-    private void testPostFilterMatchAllAndNoneQuery(String indexName) {
+    private void testPostFilterMatchAllAndMatchNoneQueries(String indexName) {
         /*{
             "query": {
             "hybrid": {
@@ -489,8 +489,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
         HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
             "mission",
             "part",
-            gte_of_range_in_hybrid_query,
-            lte_of_range_in_hybrid_query
+            LTE_OF_RANGE_IN_HYBRID_QUERY,
+            GTE_OF_RANGE_IN_HYBRID_QUERY
         );
         QueryBuilder postFilterQuery = createPostFilterQueryBuilderWithMatchAllOrNoneQuery(true);
 
@@ -503,7 +503,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             null,
             postFilterQuery
         );
-        assertHybridQueryResults(searchResponseAsMap, 4, 3, gte_of_range_in_post_filter_query, lte_of_range_in_post_filter_query);
+        assertHybridQueryResults(searchResponseAsMap, 4, 3, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
 
         /*{
             "query": {
@@ -546,7 +546,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             null,
             postFilterQuery
         );
-        assertHybridQueryResults(searchResponseAsMap, 0, 0, gte_of_range_in_post_filter_query, lte_of_range_in_post_filter_query);
+        assertHybridQueryResults(searchResponseAsMap, 0, 0, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
     }
 
     private void assertHybridQueryResults(
@@ -726,15 +726,10 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
     }
 
     private QueryBuilder createPostFilterQueryBuilderWithMatchAllOrNoneQuery(boolean isMatchAll) {
-        if (isMatchAll) {
-            return QueryBuilders.matchAllQuery();
-        }
-
-        MatchNoneQueryBuilder matchNoneQueryBuilder = new MatchNoneQueryBuilder();
-        return new MatchNoneQueryBuilder();
+        return isMatchAll ? QueryBuilders.matchAllQuery() : new MatchNoneQueryBuilder();
     }
 
-    private AggregationBuilder createAggregations() {
+    private AggregationBuilder createAvgAggregation() {
         return AggregationBuilders.avg(AVG_AGGREGATION_NAME).field(INTEGER_FIELD_1);
     }
 
