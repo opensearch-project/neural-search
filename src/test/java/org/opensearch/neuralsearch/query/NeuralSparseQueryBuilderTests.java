@@ -10,6 +10,7 @@ import static org.mockito.Mockito.mock;
 import static org.opensearch.index.query.AbstractQueryBuilder.BOOST_FIELD;
 import static org.opensearch.index.query.AbstractQueryBuilder.NAME_FIELD;
 import static org.opensearch.neuralsearch.TestUtils.xContentBuilderToMap;
+import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.MAX_TOKEN_SCORE_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.MODEL_ID_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.NAME;
 import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.QUERY_TEXT_FIELD;
@@ -22,6 +23,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
+import org.apache.lucene.document.FeatureField;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
 import org.junit.Before;
 import org.opensearch.Version;
 import org.opensearch.client.Client;
@@ -37,9 +41,11 @@ import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
+import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
@@ -54,6 +60,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     private static final String MODEL_ID = "mfgfgdsfgfdgsde";
     private static final float BOOST = 1.8f;
     private static final String QUERY_NAME = "queryName";
+    private static final Float MAX_TOKEN_SCORE = 123f;
     private static final Supplier<Map<String, Float>> QUERY_TOKENS_SUPPLIER = () -> Map.of("hello", 1.f, "world", 2.f);
 
     @Before
@@ -119,6 +126,32 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(MODEL_ID, sparseEncodingQueryBuilder.modelId());
         assertEquals(BOOST, sparseEncodingQueryBuilder.boost(), 0.0);
         assertEquals(QUERY_NAME, sparseEncodingQueryBuilder.queryName());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuiltWithMaxTokenScore_thenThrowWarning() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": "string",
+                "model_id": "string",
+                "max_token_score": 123.0
+              }
+          }
+        */
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), MAX_TOKEN_SCORE)
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = NeuralSparseQueryBuilder.fromXContent(contentParser);
+        assertWarnings("Deprecated field [max_token_score] used, this field is unused and will be removed entirely");
     }
 
     @SneakyThrows
@@ -248,7 +281,8 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     public void testToXContent() {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
             .modelId(MODEL_ID)
-            .queryText(QUERY_TEXT);
+            .queryText(QUERY_TEXT)
+            .maxTokenScore(MAX_TOKEN_SCORE);
 
         XContentBuilder builder = XContentFactory.jsonBuilder();
         builder = sparseEncodingQueryBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
@@ -273,6 +307,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
 
         assertEquals(MODEL_ID, secondInnerMap.get(MODEL_ID_FIELD.getPreferredName()));
         assertEquals(QUERY_TEXT, secondInnerMap.get(QUERY_TEXT_FIELD.getPreferredName()));
+        assertEquals(MAX_TOKEN_SCORE, (Double) secondInnerMap.get(MAX_TOKEN_SCORE_FIELD.getPreferredName()), 0.0);
     }
 
     public void testStreams_whenMinVersionIsBeforeDefaultModelId_thenSuccess() {
@@ -285,6 +320,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         NeuralSparseQueryBuilder original = new NeuralSparseQueryBuilder();
         original.fieldName(FIELD_NAME);
         original.queryText(QUERY_TEXT);
+        original.maxTokenScore(MAX_TOKEN_SCORE);
         original.modelId(MODEL_ID);
         original.boost(BOOST);
         original.queryName(QUERY_NAME);
@@ -306,11 +342,11 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         queryTokensSetOnce.set(Map.of("hello", 1.0f, "world", 2.0f));
         original.queryTokensSupplier(queryTokensSetOnce::get);
 
-        BytesStreamOutput streamOutput2 = new BytesStreamOutput();
-        original.writeTo(streamOutput2);
+        streamOutput = new BytesStreamOutput();
+        original.writeTo(streamOutput);
 
         filterStreamInput = new NamedWriteableAwareStreamInput(
-            streamOutput2.bytes().streamInput(),
+            streamOutput.bytes().streamInput(),
             new NamedWriteableRegistry(
                 List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, MatchAllQueryBuilder.NAME, MatchAllQueryBuilder::new))
             )
@@ -327,6 +363,8 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         String queryText2 = "query text 2";
         String modelId1 = "model-1";
         String modelId2 = "model-2";
+        float maxTokenScore1 = 1.1f;
+        float maxTokenScore2 = 2.2f;
         float boost1 = 1.8f;
         float boost2 = 3.8f;
         String queryName1 = "query-1";
@@ -337,6 +375,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder_baseline = new NeuralSparseQueryBuilder().fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId1)
+            .maxTokenScore(maxTokenScore1)
             .boost(boost1)
             .queryName(queryName1);
 
@@ -344,18 +383,21 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder_baselineCopy = new NeuralSparseQueryBuilder().fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId1)
+            .maxTokenScore(maxTokenScore1)
             .boost(boost1)
             .queryName(queryName1);
 
         // Identical to sparseEncodingQueryBuilder_baseline except default boost and query name
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder_defaultBoostAndQueryName = new NeuralSparseQueryBuilder().fieldName(fieldName1)
             .queryText(queryText1)
-            .modelId(modelId1);
+            .modelId(modelId1)
+            .maxTokenScore(maxTokenScore1);
 
         // Identical to sparseEncodingQueryBuilder_baseline except diff field name
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder_diffFieldName = new NeuralSparseQueryBuilder().fieldName(fieldName2)
             .queryText(queryText1)
             .modelId(modelId1)
+            .maxTokenScore(maxTokenScore1)
             .boost(boost1)
             .queryName(queryName1);
 
@@ -363,6 +405,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder_diffQueryText = new NeuralSparseQueryBuilder().fieldName(fieldName1)
             .queryText(queryText2)
             .modelId(modelId1)
+            .maxTokenScore(maxTokenScore1)
             .boost(boost1)
             .queryName(queryName1);
 
@@ -370,6 +413,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder_diffModelId = new NeuralSparseQueryBuilder().fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId2)
+            .maxTokenScore(maxTokenScore1)
             .boost(boost1)
             .queryName(queryName1);
 
@@ -377,6 +421,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder_diffBoost = new NeuralSparseQueryBuilder().fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId1)
+            .maxTokenScore(maxTokenScore1)
             .boost(boost2)
             .queryName(queryName1);
 
@@ -384,13 +429,23 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder_diffQueryName = new NeuralSparseQueryBuilder().fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId1)
+            .maxTokenScore(maxTokenScore1)
             .boost(boost1)
             .queryName(queryName2);
+
+        // Identical to sparseEncodingQueryBuilder_baseline except diff max token score
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder_diffMaxTokenScore = new NeuralSparseQueryBuilder().fieldName(fieldName1)
+            .queryText(queryText1)
+            .modelId(modelId1)
+            .maxTokenScore(maxTokenScore2)
+            .boost(boost1)
+            .queryName(queryName1);
 
         // Identical to sparseEncodingQueryBuilder_baseline except non-null query tokens supplier
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder_nonNullQueryTokens = new NeuralSparseQueryBuilder().fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId1)
+            .maxTokenScore(maxTokenScore1)
             .boost(boost1)
             .queryName(queryName1)
             .queryTokensSupplier(() -> queryTokens1);
@@ -399,6 +454,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder_diffQueryTokens = new NeuralSparseQueryBuilder().fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId1)
+            .maxTokenScore(maxTokenScore1)
             .boost(boost1)
             .queryName(queryName1)
             .queryTokensSupplier(() -> queryTokens2);
@@ -426,6 +482,9 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
 
         assertNotEquals(sparseEncodingQueryBuilder_baseline, sparseEncodingQueryBuilder_diffQueryName);
         assertNotEquals(sparseEncodingQueryBuilder_baseline.hashCode(), sparseEncodingQueryBuilder_diffQueryName.hashCode());
+
+        assertNotEquals(sparseEncodingQueryBuilder_baseline, sparseEncodingQueryBuilder_diffMaxTokenScore);
+        assertNotEquals(sparseEncodingQueryBuilder_baseline.hashCode(), sparseEncodingQueryBuilder_diffMaxTokenScore.hashCode());
 
         assertNotEquals(sparseEncodingQueryBuilder_baseline, sparseEncodingQueryBuilder_nonNullQueryTokens);
         assertNotEquals(sparseEncodingQueryBuilder_baseline.hashCode(), sparseEncodingQueryBuilder_nonNullQueryTokens.hashCode());
@@ -485,5 +544,24 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     private void setUpClusterService(Version version) {
         ClusterService clusterService = NeuralSearchClusterTestUtils.mockClusterService(version);
         NeuralSearchClusterUtil.instance().initialize(clusterService);
+    }
+
+    @SneakyThrows
+    public void testDoToQuery_successfulDoToQuery() {
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensSupplier(QUERY_TOKENS_SUPPLIER);
+        QueryShardContext mockedQueryShardContext = mock(QueryShardContext.class);
+        MappedFieldType mockedMappedFieldType = mock(MappedFieldType.class);
+        doAnswer(invocation -> "rank_features").when(mockedMappedFieldType).typeName();
+        doAnswer(invocation -> mockedMappedFieldType).when(mockedQueryShardContext).fieldMapper(any());
+
+        BooleanQuery.Builder targetQueryBuilder = new BooleanQuery.Builder();
+        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "hello", 1.f), BooleanClause.Occur.SHOULD);
+        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "world", 2.f), BooleanClause.Occur.SHOULD);
+
+        assertEquals(sparseEncodingQueryBuilder.doToQuery(mockedQueryShardContext), targetQueryBuilder.build());
     }
 }
