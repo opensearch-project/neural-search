@@ -30,24 +30,24 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
     private static final String TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD =
         "test-hybrid-post-filter-multi-doc-index-single-shard";
     private static final String SEARCH_PIPELINE = "phase-results-hybrid-post-filter-pipeline";
-    private static final String INTEGER_FIELD_1 = "stock";
-    private static final String TEXT_FIELD_1 = "name";
-    private static final String KEYWORD_FIELD_2 = "category";
-    private static final String TEXT_FIELD_VALUE_1 = "Dunes part 2";
-    private static final String TEXT_FIELD_VALUE_2 = "Dunes part 1";
-    private static final String TEXT_FIELD_VALUE_3 = "Mission Impossible 1";
-    private static final String TEXT_FIELD_VALUE_4 = "Mission Impossible 2";
-    private static final String TEXT_FIELD_VALUE_5 = "The Terminal";
-    private static final String TEXT_FIELD_VALUE_6 = "Avengers";
-    private static final int INTEGER_FIELD_STOCK_1_VALUE = 25;
-    private static final int INTEGER_FIELD_STOCK_2_VALUE = 22;
-    private static final int INTEGER_FIELD_STOCK_3_VALUE = 256;
-    private static final int INTEGER_FIELD_STOCK_4_VALUE = 25;
-    private static final int INTEGER_FIELD_STOCK_5_VALUE = 20;
-    private static final String KEYWORD_FIELD_CATEGORY_1_VALUE = "Drama";
-    private static final String KEYWORD_FIELD_CATEGORY_2_VALUE = "Action";
-    private static final String KEYWORD_FIELD_CATEGORY_3_VALUE = "Sci-fi";
-    private static final String AVG_AGGREGATION_NAME = "avg_stock_size";
+    private static final String INTEGER_FIELD_1_STOCK = "stock";
+    private static final String TEXT_FIELD_1_NAME = "name";
+    private static final String KEYWORD_FIELD_2_CATEGORY = "category";
+    private static final String TEXT_FIELD_VALUE_1_DUNES = "Dunes part 2";
+    private static final String TEXT_FIELD_VALUE_2_DUNES = "Dunes part 1";
+    private static final String TEXT_FIELD_VALUE_3_MI_1 = "Mission Impossible 1";
+    private static final String TEXT_FIELD_VALUE_4_MI_2 = "Mission Impossible 2";
+    private static final String TEXT_FIELD_VALUE_5_TERMINAL = "The Terminal";
+    private static final String TEXT_FIELD_VALUE_6_AVENGERS = "Avengers";
+    private static final int INTEGER_FIELD_STOCK_1_25 = 25;
+    private static final int INTEGER_FIELD_STOCK_2_22 = 22;
+    private static final int INTEGER_FIELD_STOCK_3_256 = 256;
+    private static final int INTEGER_FIELD_STOCK_4_25 = 25;
+    private static final int INTEGER_FIELD_STOCK_5_20 = 20;
+    private static final String KEYWORD_FIELD_CATEGORY_1_DRAMA = "Drama";
+    private static final String KEYWORD_FIELD_CATEGORY_2_ACTION = "Action";
+    private static final String KEYWORD_FIELD_CATEGORY_3_SCI_FI = "Sci-fi";
+    private static final String STOCK_AVG_AGGREGATION_NAME = "avg_stock_size";
     private static boolean setUpIsDone = false;
     private static final int SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER = 1;
     private static final int SHARDS_COUNT_IN_MULTI_NODE_CLUSTER = 3;
@@ -325,7 +325,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
         Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
         assertNotNull(aggregations);
 
-        Map<String, Object> aggValue = getAggregationValues(aggregations, AVG_AGGREGATION_NAME);
+        Map<String, Object> aggValue = getAggregationValues(aggregations, STOCK_AVG_AGGREGATION_NAME);
         assertEquals(1, aggValue.size());
         // Case 3
         /*{
@@ -563,7 +563,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
         for (Map<String, Object> oneHit : hitsNestedList) {
             assertNotNull(oneHit.get("_source"));
             Map<String, Object> source = (Map<String, Object>) oneHit.get("_source");
-            int docIndex = (int) source.get(INTEGER_FIELD_1);
+            int docIndex = (int) source.get(INTEGER_FIELD_1_STOCK);
             docIndexes.add(docIndex);
         }
         assertEquals(postFilterResultsValidationExpected, docIndexes.stream().filter(docIndex -> docIndex < lte || docIndex > gte).count());
@@ -584,7 +584,14 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
         if (!indexExists(indexName)) {
             createIndexWithConfiguration(
                 indexName,
-                buildIndexConfiguration(List.of(), List.of(), List.of(INTEGER_FIELD_1), List.of(KEYWORD_FIELD_2), List.of(), numShards),
+                buildIndexConfiguration(
+                    List.of(),
+                    List.of(),
+                    List.of(INTEGER_FIELD_1_STOCK),
+                    List.of(KEYWORD_FIELD_2_CATEGORY),
+                    List.of(),
+                    numShards
+                ),
                 ""
             );
 
@@ -593,14 +600,14 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
                 "1",
                 List.of(),
                 List.of(),
-                Collections.singletonList(TEXT_FIELD_1),
-                Collections.singletonList(TEXT_FIELD_VALUE_1),
+                Collections.singletonList(TEXT_FIELD_1_NAME),
+                Collections.singletonList(TEXT_FIELD_VALUE_1_DUNES),
                 List.of(),
                 List.of(),
-                List.of(INTEGER_FIELD_1),
-                List.of(INTEGER_FIELD_STOCK_1_VALUE),
-                List.of(KEYWORD_FIELD_2),
-                List.of(KEYWORD_FIELD_CATEGORY_1_VALUE),
+                List.of(INTEGER_FIELD_1_STOCK),
+                List.of(INTEGER_FIELD_STOCK_1_25),
+                List.of(KEYWORD_FIELD_2_CATEGORY),
+                List.of(KEYWORD_FIELD_CATEGORY_1_DRAMA),
                 List.of(),
                 List.of()
             );
@@ -610,14 +617,14 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
                 "2",
                 List.of(),
                 List.of(),
-                Collections.singletonList(TEXT_FIELD_1),
-                Collections.singletonList(TEXT_FIELD_VALUE_2),
+                Collections.singletonList(TEXT_FIELD_1_NAME),
+                Collections.singletonList(TEXT_FIELD_VALUE_2_DUNES),
                 List.of(),
                 List.of(),
-                List.of(INTEGER_FIELD_1),
-                List.of(INTEGER_FIELD_STOCK_2_VALUE),
-                List.of(KEYWORD_FIELD_2),
-                List.of(KEYWORD_FIELD_CATEGORY_1_VALUE),
+                List.of(INTEGER_FIELD_1_STOCK),
+                List.of(INTEGER_FIELD_STOCK_2_22),
+                List.of(KEYWORD_FIELD_2_CATEGORY),
+                List.of(KEYWORD_FIELD_CATEGORY_1_DRAMA),
                 List.of(),
                 List.of()
             );
@@ -627,14 +634,14 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
                 "3",
                 List.of(),
                 List.of(),
-                Collections.singletonList(TEXT_FIELD_1),
-                Collections.singletonList(TEXT_FIELD_VALUE_3),
+                Collections.singletonList(TEXT_FIELD_1_NAME),
+                Collections.singletonList(TEXT_FIELD_VALUE_3_MI_1),
                 List.of(),
                 List.of(),
-                List.of(INTEGER_FIELD_1),
-                List.of(INTEGER_FIELD_STOCK_3_VALUE),
-                List.of(KEYWORD_FIELD_2),
-                List.of(KEYWORD_FIELD_CATEGORY_2_VALUE),
+                List.of(INTEGER_FIELD_1_STOCK),
+                List.of(INTEGER_FIELD_STOCK_3_256),
+                List.of(KEYWORD_FIELD_2_CATEGORY),
+                List.of(KEYWORD_FIELD_CATEGORY_2_ACTION),
                 List.of(),
                 List.of()
             );
@@ -644,14 +651,14 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
                 "4",
                 List.of(),
                 List.of(),
-                Collections.singletonList(TEXT_FIELD_1),
-                Collections.singletonList(TEXT_FIELD_VALUE_4),
+                Collections.singletonList(TEXT_FIELD_1_NAME),
+                Collections.singletonList(TEXT_FIELD_VALUE_4_MI_2),
                 List.of(),
                 List.of(),
-                List.of(INTEGER_FIELD_1),
-                List.of(INTEGER_FIELD_STOCK_4_VALUE),
-                List.of(KEYWORD_FIELD_2),
-                List.of(KEYWORD_FIELD_CATEGORY_2_VALUE),
+                List.of(INTEGER_FIELD_1_STOCK),
+                List.of(INTEGER_FIELD_STOCK_4_25),
+                List.of(KEYWORD_FIELD_2_CATEGORY),
+                List.of(KEYWORD_FIELD_CATEGORY_2_ACTION),
                 List.of(),
                 List.of()
             );
@@ -661,14 +668,14 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
                 "5",
                 List.of(),
                 List.of(),
-                Collections.singletonList(TEXT_FIELD_1),
-                Collections.singletonList(TEXT_FIELD_VALUE_5),
+                Collections.singletonList(TEXT_FIELD_1_NAME),
+                Collections.singletonList(TEXT_FIELD_VALUE_5_TERMINAL),
                 List.of(),
                 List.of(),
-                List.of(INTEGER_FIELD_1),
-                List.of(INTEGER_FIELD_STOCK_5_VALUE),
-                List.of(KEYWORD_FIELD_2),
-                List.of(KEYWORD_FIELD_CATEGORY_1_VALUE),
+                List.of(INTEGER_FIELD_1_STOCK),
+                List.of(INTEGER_FIELD_STOCK_5_20),
+                List.of(KEYWORD_FIELD_2_CATEGORY),
+                List.of(KEYWORD_FIELD_CATEGORY_1_DRAMA),
                 List.of(),
                 List.of()
             );
@@ -678,14 +685,14 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
                 "6",
                 List.of(),
                 List.of(),
-                Collections.singletonList(TEXT_FIELD_1),
-                Collections.singletonList(TEXT_FIELD_VALUE_6),
+                Collections.singletonList(TEXT_FIELD_1_NAME),
+                Collections.singletonList(TEXT_FIELD_VALUE_6_AVENGERS),
                 List.of(),
                 List.of(),
-                List.of(INTEGER_FIELD_1),
-                List.of(INTEGER_FIELD_STOCK_5_VALUE),
-                List.of(KEYWORD_FIELD_2),
-                List.of(KEYWORD_FIELD_CATEGORY_3_VALUE),
+                List.of(INTEGER_FIELD_1_STOCK),
+                List.of(INTEGER_FIELD_STOCK_5_20),
+                List.of(KEYWORD_FIELD_2_CATEGORY),
+                List.of(KEYWORD_FIELD_CATEGORY_3_SCI_FI),
                 List.of(),
                 List.of()
             );
@@ -693,35 +700,35 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
     }
 
     private HybridQueryBuilder createHybridQueryBuilderWithMatchTermAndRangeQuery(String text, String value, int lte, int gte) {
-        MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEXT_FIELD_1, text);
-        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEXT_FIELD_1, value);
-        RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery(INTEGER_FIELD_1).gte(gte).lte(lte);
+        MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEXT_FIELD_1_NAME, text);
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEXT_FIELD_1_NAME, value);
+        RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery(INTEGER_FIELD_1_STOCK).gte(gte).lte(lte);
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
         hybridQueryBuilder.add(matchQueryBuilder).add(termQueryBuilder).add(rangeQueryBuilder);
         return hybridQueryBuilder;
     }
 
     private HybridQueryBuilder createHybridQueryBuilderScenarioWithMatchAndRangeQuery(String text, int lte, int gte) {
-        MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEXT_FIELD_1, text);
-        RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery(INTEGER_FIELD_1).gte(gte).lte(lte);
+        MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEXT_FIELD_1_NAME, text);
+        RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery(INTEGER_FIELD_1_STOCK).gte(gte).lte(lte);
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
         hybridQueryBuilder.add(matchQueryBuilder).add(rangeQueryBuilder);
         return hybridQueryBuilder;
     }
 
     private QueryBuilder createQueryBuilderWithRangeQuery(int lte, int gte) {
-        return QueryBuilders.rangeQuery(INTEGER_FIELD_1).gte(gte).lte(lte);
+        return QueryBuilders.rangeQuery(INTEGER_FIELD_1_STOCK).gte(gte).lte(lte);
     }
 
     private QueryBuilder createQueryBuilderWithBoolShouldQuery(String query, int lte, int gte) {
-        QueryBuilder rangeQuery = QueryBuilders.rangeQuery(INTEGER_FIELD_1).gte(gte).lte(lte);
-        QueryBuilder matchQuery = QueryBuilders.matchQuery(TEXT_FIELD_1, query);
+        QueryBuilder rangeQuery = QueryBuilders.rangeQuery(INTEGER_FIELD_1_STOCK).gte(gte).lte(lte);
+        QueryBuilder matchQuery = QueryBuilders.matchQuery(TEXT_FIELD_1_NAME, query);
         return QueryBuilders.boolQuery().should(rangeQuery).should(matchQuery);
     }
 
     private QueryBuilder createQueryBuilderWithBoolMustQuery(String query, int lte, int gte) {
-        QueryBuilder rangeQuery = QueryBuilders.rangeQuery(INTEGER_FIELD_1).gte(gte).lte(lte);
-        QueryBuilder matchQuery = QueryBuilders.matchQuery(TEXT_FIELD_1, query);
+        QueryBuilder rangeQuery = QueryBuilders.rangeQuery(INTEGER_FIELD_1_STOCK).gte(gte).lte(lte);
+        QueryBuilder matchQuery = QueryBuilders.matchQuery(TEXT_FIELD_1_NAME, query);
         return QueryBuilders.boolQuery().must(rangeQuery).must(matchQuery);
     }
 
@@ -730,7 +737,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
     }
 
     private AggregationBuilder createAvgAggregation() {
-        return AggregationBuilders.avg(AVG_AGGREGATION_NAME).field(INTEGER_FIELD_1);
+        return AggregationBuilders.avg(STOCK_AVG_AGGREGATION_NAME).field(INTEGER_FIELD_1_STOCK);
     }
 
 }
