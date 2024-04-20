@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -64,20 +65,20 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     @VisibleForTesting
     static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
     @VisibleForTesting
+    static final ParseField QUERY_TOKENS_FIELD = new ParseField("query_tokens");
+    @VisibleForTesting
     static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
-
     private static MLCommonsClientAccessor ML_CLIENT;
-
-    public static void initialize(MLCommonsClientAccessor mlClient) {
-        NeuralSparseQueryBuilder.ML_CLIENT = mlClient;
-    }
-
     private String fieldName;
     private String queryText;
     private String modelId;
     private Supplier<Map<String, Float>> queryTokensSupplier;
     private NeuralSparseTwoPhaseParameters neuralSparseTwoPhaseParameters;
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
+
+    public static void initialize(MLCommonsClientAccessor mlClient) {
+        NeuralSparseQueryBuilder.ML_CLIENT = mlClient;
+    }
 
     /**
      * Constructor from stream input
@@ -101,20 +102,30 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (NeuralSparseTwoPhaseParameters.isClusterOnOrAfterMinReqVersionForTwoPhaseSearchSupport()) {
             this.neuralSparseTwoPhaseParameters = in.readOptionalWriteable(NeuralSparseTwoPhaseParameters::new);
         }
+        // to be backward compatible with previous version, we need to use writeString/readString API instead of optionalString API
+        // after supporting query by tokens, queryText and modelId can be null. here we write an empty String instead
+        if (StringUtils.EMPTY.equals(this.queryText)) {
+            this.queryText = null;
+        }
+        if (StringUtils.EMPTY.equals(this.modelId)) {
+            this.modelId = null;
+        }
     }
 
     @Override
     protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeString(fieldName);
-        out.writeString(queryText);
+        out.writeString(this.fieldName);
+        // to be backward compatible with previous version, we need to use writeString/readString API instead of optionalString API
+        // after supporting query by tokens, queryText and modelId can be null. here we write an empty String instead
+        out.writeString(StringUtils.defaultString(this.queryText, StringUtils.EMPTY));
         if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
             out.writeOptionalString(this.modelId);
         } else {
-            out.writeString(this.modelId);
+            out.writeString(StringUtils.defaultString(this.modelId, StringUtils.EMPTY));
         }
-        if (!Objects.isNull(queryTokensSupplier) && !Objects.isNull(queryTokensSupplier.get())) {
+        if (!Objects.isNull(this.queryTokensSupplier) && !Objects.isNull(this.queryTokensSupplier.get())) {
             out.writeBoolean(true);
-            out.writeMap(queryTokensSupplier.get(), StreamOutput::writeString, StreamOutput::writeFloat);
+            out.writeMap(this.queryTokensSupplier.get(), StreamOutput::writeString, StreamOutput::writeFloat);
         } else {
             out.writeBoolean(false);
         }
@@ -127,11 +138,18 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     protected void doXContent(XContentBuilder xContentBuilder, Params params) throws IOException {
         xContentBuilder.startObject(NAME);
         xContentBuilder.startObject(fieldName);
-        xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
+        if (Objects.nonNull(queryText)) {
+            xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
+        }
         if (Objects.nonNull(modelId)) {
             xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
         }
-        neuralSparseTwoPhaseParameters.toXContent(xContentBuilder, params);
+        if (Objects.nonNull(neuralSparseTwoPhaseParameters)) {
+            neuralSparseTwoPhaseParameters.doXContent(xContentBuilder);
+        }
+        if (Objects.nonNull(queryTokensSupplier) && Objects.nonNull(queryTokensSupplier.get())) {
+            xContentBuilder.field(QUERY_TOKENS_FIELD.getPreferredName(), queryTokensSupplier.get());
+        }
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
         xContentBuilder.endObject();
@@ -143,6 +161,16 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
      *    "query_text": "string",
      *    "model_id": "string"
      *  }
+     *
+     *  or
+     *  "SAMPLE_FIELD": {
+     *      "query_tokens": {
+     *          "token_a": float,
+     *          "token_b": float,
+     *          ...
+     *       }
+     *  }
+     *
      *
      * @param parser XContentParser
      * @return NeuralQueryBuilder
@@ -171,15 +199,39 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         }
 
         requireValue(sparseEncodingQueryBuilder.fieldName(), "Field name must be provided for " + NAME + " query");
-        requireValue(
-            sparseEncodingQueryBuilder.queryText(),
-            String.format(Locale.ROOT, "%s field must be provided for [%s] query", QUERY_TEXT_FIELD.getPreferredName(), NAME)
-        );
-        if (!isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
+        if (Objects.isNull(sparseEncodingQueryBuilder.queryTokensSupplier())) {
             requireValue(
-                sparseEncodingQueryBuilder.modelId(),
-                String.format(Locale.ROOT, "%s field must be provided for [%s] query", MODEL_ID_FIELD.getPreferredName(), NAME)
+                sparseEncodingQueryBuilder.queryText(),
+                String.format(
+                    Locale.ROOT,
+                    "either %s field or %s field must be provided for [%s] query",
+                    QUERY_TEXT_FIELD.getPreferredName(),
+                    QUERY_TOKENS_FIELD.getPreferredName(),
+                    NAME
+                )
             );
+            if (!isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
+                requireValue(
+                    sparseEncodingQueryBuilder.modelId(),
+                    String.format(
+                        Locale.ROOT,
+                        "using %s, %s field must be provided for [%s] query",
+                        QUERY_TEXT_FIELD.getPreferredName(),
+                        MODEL_ID_FIELD.getPreferredName(),
+                        NAME
+                    )
+                );
+            }
+        }
+
+        if (StringUtils.EMPTY.equals(sparseEncodingQueryBuilder.queryText())) {
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "%s field can not be empty", QUERY_TEXT_FIELD.getPreferredName())
+            );
+        }
+
+        if (StringUtils.EMPTY.equals(sparseEncodingQueryBuilder.modelId())) {
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "%s field can not be empty", MODEL_ID_FIELD.getPreferredName()));
         }
 
         if (sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters.pruning_ratio() <= 0
@@ -233,6 +285,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
                 }
             } else if (NeuralSparseTwoPhaseParameters.NAME.match(currentFieldName, parser.getDeprecationHandler())) {
                 sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters(NeuralSparseTwoPhaseParameters.parseFromXContent(parser));
+            } else if (QUERY_TOKENS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                Map<String, Float> queryTokens = parser.map(HashMap::new, XContentParser::floatValue);
+                sparseEncodingQueryBuilder.queryTokensSupplier(() -> queryTokens);
             } else {
                 throw new ParsingException(
                     parser.getTokenLocation(),
@@ -340,7 +395,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (!Objects.isNull(queryTokensSupplier)) {
             builder.append(queryTokensSupplier.get());
         }
-        builder.append(neuralSparseTwoPhaseParameters.hashcode());
+        if (Objects.nonNull(neuralSparseTwoPhaseParameters)) {
+            builder.append(neuralSparseTwoPhaseParameters.hashcode());
+        }
         return builder.toHashCode();
     }
 

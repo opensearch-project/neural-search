@@ -7,28 +7,37 @@ package org.opensearch.neuralsearch.query;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.opensearch.index.query.AbstractQueryBuilder.BOOST_FIELD;
 import static org.opensearch.index.query.AbstractQueryBuilder.NAME_FIELD;
 import static org.opensearch.neuralsearch.TestUtils.xContentBuilderToMap;
 import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.MODEL_ID_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.NAME;
 import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.QUERY_TEXT_FIELD;
+import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.QUERY_TOKENS_FIELD;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.commons.lang.StringUtils;
 import org.junit.Before;
 import org.opensearch.Version;
 import org.opensearch.client.Client;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.SetOnce;
 import org.opensearch.common.io.stream.BytesStreamOutput;
+import org.opensearch.common.settings.ClusterSettings;
+import org.opensearch.common.settings.Setting;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.ParsingException;
@@ -42,6 +51,7 @@ import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.test.OpenSearchTestCase;
@@ -58,6 +68,28 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     private static final float BOOST = 1.8f;
     private static final String QUERY_NAME = "queryName";
     private static final Supplier<Map<String, Float>> QUERY_TOKENS_SUPPLIER = () -> Map.of("hello", 1.f, "world", 2.f);
+
+    private Settings settings;
+    private ClusterSettings clusterSettings;
+    private ClusterService clusterService;
+
+    @Before
+    public void setUpNeuralSparseTwoPhaseParameters() {
+        settings = Settings.builder().build();
+        final Set<Setting<?>> settingsSet = Stream.concat(
+            ClusterSettings.BUILT_IN_CLUSTER_SETTINGS.stream(),
+            Stream.of(
+                NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_ENABLED,
+                NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_WINDOW_SIZE_EXPANSION,
+                NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_PRUNING_RATIO,
+                NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_MAX_WINDOW_SIZE
+            )
+        ).collect(Collectors.toSet());
+        clusterSettings = new ClusterSettings(settings, settingsSet);
+        clusterService = mock(ClusterService.class);
+        when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
+        NeuralSparseTwoPhaseParameters.initialize(clusterService, settings);
+    }
 
     @Before
     public void setupClusterServiceToCurrentVersion() {
@@ -90,6 +122,70 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(FIELD_NAME, sparseEncodingQueryBuilder.fieldName());
         assertEquals(QUERY_TEXT, sparseEncodingQueryBuilder.queryText());
         assertEquals(MODEL_ID, sparseEncodingQueryBuilder.modelId());
+        assertEquals(NeuralSparseTwoPhaseParameters.getDefaultSettings(), sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuiltWithQueryTokens_thenBuildSuccessfully() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_tokens": {
+                    "token_a": float_score_a,
+                    "token_b": float_score_b
+              }
+          }
+        */
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TOKENS_FIELD.getPreferredName(), QUERY_TOKENS_SUPPLIER.get())
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = NeuralSparseQueryBuilder.fromXContent(contentParser);
+
+        assertEquals(FIELD_NAME, sparseEncodingQueryBuilder.fieldName());
+        assertEquals(QUERY_TOKENS_SUPPLIER.get(), sparseEncodingQueryBuilder.queryTokensSupplier().get());
+        assertEquals(NeuralSparseTwoPhaseParameters.getDefaultSettings(), sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuiltWithTwoPhaseParams_thenBuildSuccessfully() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": "string",
+                "model_id": "string",
+                "two_phase_settings":{
+                      "window_size_expansion": 5,
+                      "pruning_ratio": 0.4,
+                      "enabled": false
+                  }
+              }
+          }
+        */
+        NeuralSparseTwoPhaseParameters parameters = new NeuralSparseTwoPhaseParameters().enabled(false)
+            .pruning_ratio(0.5f)
+            .window_size_expansion(2f);
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID);
+        parameters.doXContent(xContentBuilder);
+        xContentBuilder.endObject().endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = NeuralSparseQueryBuilder.fromXContent(contentParser);
+
+        assertEquals(FIELD_NAME, sparseEncodingQueryBuilder.fieldName());
+        assertEquals(QUERY_TEXT, sparseEncodingQueryBuilder.queryText());
+        assertEquals(MODEL_ID, sparseEncodingQueryBuilder.modelId());
+        assertEquals(parameters, sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters());
     }
 
     @SneakyThrows
@@ -123,6 +219,79 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(MODEL_ID, sparseEncodingQueryBuilder.modelId());
         assertEquals(BOOST, sparseEncodingQueryBuilder.boost(), 0.0);
         assertEquals(QUERY_NAME, sparseEncodingQueryBuilder.queryName());
+        assertEquals(NeuralSparseTwoPhaseParameters.getDefaultSettings(), sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuiltWithIllegalTwoPhaseWindowSizeExpansion_thenBuildSuccessfully() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": "string",
+                "model_id": "string",
+                "two_phase_settings":{
+                      "window_size_expansion": 0.5,
+                      "pruning_ratio": 0.4,
+                      "enabled": true
+                  }
+              }
+          }
+        */
+        NeuralSparseTwoPhaseParameters parameters = NeuralSparseTwoPhaseParameters.getDefaultSettings()
+            .window_size_expansion(NeuralSparseTwoPhaseParametersTests.TEST_WINDOW_SIZE_EXPANSION);
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID);
+        parameters.doXContent(xContentBuilder);
+        xContentBuilder.endObject().endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        expectThrows(IllegalArgumentException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuiltWithIllegalTwoPhasePruningRate_thenBuildSuccessfully() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": "string",
+                "model_id": "string",
+                "two_phase_settings":{
+                      "window_size_expansion": 0.5,
+                      "pruning_ratio": 0, // or 1
+                      "enabled": true
+                  }
+              }
+          }
+        */
+        NeuralSparseTwoPhaseParameters parameters = NeuralSparseTwoPhaseParameters.getDefaultSettings().pruning_ratio(0f);
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID);
+        parameters.doXContent(xContentBuilder);
+        xContentBuilder.endObject().endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        expectThrows(IllegalArgumentException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser));
+
+        parameters.pruning_ratio(1f);
+        XContentBuilder xContentBuilder2 = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID);
+        parameters.doXContent(xContentBuilder2);
+        xContentBuilder2.endObject().endObject();
+
+        XContentParser contentParser2 = createParser(xContentBuilder2);
+        contentParser2.nextToken();
+        expectThrows(IllegalArgumentException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser2));
     }
 
     @SneakyThrows
@@ -247,9 +416,110 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         expectThrows(IOException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser));
     }
 
+    @SneakyThrows
+    public void testFromXContent_whenBuildWithEmptyQuery_thenFail() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": ""
+              }
+          }
+        */
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), StringUtils.EMPTY)
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        expectThrows(IllegalArgumentException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuildWithEmptyModelId_thenFail() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "model_id": ""
+              }
+          }
+        */
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(MODEL_ID_FIELD.getPreferredName(), StringUtils.EMPTY)
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        expectThrows(IllegalArgumentException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser));
+    }
+
     @SuppressWarnings("unchecked")
     @SneakyThrows
-    public void testToXContent() {
+    public void testToXContentWithFullField() {
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .modelId(MODEL_ID)
+            .queryText(QUERY_TEXT)
+            .queryTokensSupplier(QUERY_TOKENS_SUPPLIER)
+            .neuralSparseTwoPhaseParameters(NeuralSparseTwoPhaseParameters.getDefaultSettings());
+
+        XContentBuilder builder = XContentFactory.jsonBuilder();
+        builder = sparseEncodingQueryBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
+        Map<String, Object> out = xContentBuilderToMap(builder);
+
+        Object outer = out.get(NAME);
+        if (!(outer instanceof Map)) {
+            fail("sparse encoding does not map to nested object");
+        }
+
+        Map<String, Object> outerMap = (Map<String, Object>) outer;
+
+        assertEquals(1, outerMap.size());
+        assertTrue(outerMap.containsKey(FIELD_NAME));
+
+        Object secondInner = outerMap.get(FIELD_NAME);
+        if (!(secondInner instanceof Map)) {
+            fail("field name does not map to nested object");
+        }
+
+        Map<String, Object> secondInnerMap = (Map<String, Object>) secondInner;
+        assertEquals(5, secondInnerMap.size());
+
+        assertEquals(MODEL_ID, secondInnerMap.get(MODEL_ID_FIELD.getPreferredName()));
+        assertEquals(QUERY_TEXT, secondInnerMap.get(QUERY_TEXT_FIELD.getPreferredName()));
+        Map<String, Double> parsedQueryTokens = (Map<String, Double>) secondInnerMap.get(QUERY_TOKENS_FIELD.getPreferredName());
+        assertEquals(QUERY_TOKENS_SUPPLIER.get().keySet(), parsedQueryTokens.keySet());
+        for (Map.Entry<String, Float> entry : QUERY_TOKENS_SUPPLIER.get().entrySet()) {
+            assertEquals(entry.getValue(), parsedQueryTokens.get(entry.getKey()).floatValue(), 0);
+        }
+
+        Map<String, Object> thirdInnerMap = (Map<String, Object>) secondInnerMap.get(
+            NeuralSparseTwoPhaseParameters.NAME.getPreferredName()
+        );
+        assertEquals(
+            NeuralSparseTwoPhaseParameters.DEFAULT_WINDOW_SIZE_EXPANSION.doubleValue(),
+            (Double) thirdInnerMap.get(NeuralSparseTwoPhaseParameters.WINDOW_SIZE_EXPANSION.getPreferredName()),
+            1e-6
+        );
+
+        assertEquals(
+            NeuralSparseTwoPhaseParameters.DEFAULT_PRUNING_RATIO.doubleValue(),
+            (Double) thirdInnerMap.get(NeuralSparseTwoPhaseParameters.PRUNING_RATIO.getPreferredName()),
+            1e-6
+        );
+
+        assertEquals(
+            NeuralSparseTwoPhaseParameters.DEFAULT_ENABLED,
+            thirdInnerMap.get(NeuralSparseTwoPhaseParameters.ENABLED.getPreferredName())
+        );
+    }
+
+    @SneakyThrows
+    public void testToXContentWithNullableField() {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
             .modelId(MODEL_ID)
             .queryText(QUERY_TEXT);
@@ -274,18 +544,27 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         }
 
         Map<String, Object> secondInnerMap = (Map<String, Object>) secondInner;
+        assertEquals(3, secondInnerMap.size());
 
         assertEquals(MODEL_ID, secondInnerMap.get(MODEL_ID_FIELD.getPreferredName()));
         assertEquals(QUERY_TEXT, secondInnerMap.get(QUERY_TEXT_FIELD.getPreferredName()));
     }
 
+    public void testStreams_whenCurrentVersion_thenSuccess() {
+        setUpClusterService(Version.CURRENT);
+        testStreams();
+        testStreamsWithQueryTokensOnly();
+    }
+
     public void testStreams_whenMinVersionIsBeforeDefaultModelId_thenSuccess() {
         setUpClusterService(Version.V_2_12_0);
         testStreams();
+        testStreamsWithQueryTokensOnly();
+        testStreamsWithTwoPhaseParams();
     }
 
     @SneakyThrows
-    public void testStreams() {
+    private void testStreams() {
         NeuralSparseQueryBuilder original = new NeuralSparseQueryBuilder();
         original.fieldName(FIELD_NAME);
         original.queryText(QUERY_TEXT);
@@ -324,6 +603,57 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(original, copy);
     }
 
+    @SneakyThrows
+    private void testStreamsWithQueryTokensOnly() {
+        NeuralSparseQueryBuilder original = new NeuralSparseQueryBuilder();
+        original.fieldName(FIELD_NAME);
+        original.queryTokensSupplier(QUERY_TOKENS_SUPPLIER);
+
+        BytesStreamOutput streamOutput = new BytesStreamOutput();
+        original.writeTo(streamOutput);
+
+        FilterStreamInput filterStreamInput = new NamedWriteableAwareStreamInput(
+            streamOutput.bytes().streamInput(),
+            new NamedWriteableRegistry(
+                List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, MatchAllQueryBuilder.NAME, MatchAllQueryBuilder::new))
+            )
+        );
+
+        NeuralSparseQueryBuilder copy = new NeuralSparseQueryBuilder(filterStreamInput);
+        assertEquals(original, copy);
+    }
+
+    @SneakyThrows
+    private void testStreamsWithTwoPhaseParams() {
+        NeuralSparseQueryBuilder original = new NeuralSparseQueryBuilder();
+        original.fieldName(FIELD_NAME);
+        original.queryText(QUERY_TEXT);
+        original.modelId(MODEL_ID);
+        original.boost(BOOST);
+        original.queryName(QUERY_NAME);
+        original.neuralSparseTwoPhaseParameters(NeuralSparseTwoPhaseParameters.getDefaultSettings());
+
+        BytesStreamOutput streamOutput = new BytesStreamOutput();
+        original.writeTo(streamOutput);
+
+        FilterStreamInput filterStreamInput = new NamedWriteableAwareStreamInput(
+            streamOutput.bytes().streamInput(),
+            new NamedWriteableRegistry(
+                List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, MatchAllQueryBuilder.NAME, MatchAllQueryBuilder::new))
+            )
+        );
+
+        NeuralSparseQueryBuilder copy = new NeuralSparseQueryBuilder(filterStreamInput);
+        if (NeuralSparseTwoPhaseParameters.isClusterOnOrAfterMinReqVersionForTwoPhaseSearchSupport()) {
+            assertEquals(original, copy);
+        } else {
+            assertNull(copy.neuralSparseTwoPhaseParameters());
+            original.neuralSparseTwoPhaseParameters(null);
+            assertEquals(original, copy);
+        }
+
+    }
+
     public void testHashAndEquals() {
         String fieldName1 = "field 1";
         String fieldName2 = "field 2";
@@ -337,6 +667,8 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         String queryName2 = "query-2";
         Map<String, Float> queryTokens1 = Map.of("hello", 1.0f, "world", 2.0f);
         Map<String, Float> queryTokens2 = Map.of("hello", 1.0f, "world", 2.2f);
+        NeuralSparseTwoPhaseParameters parameters1 = NeuralSparseTwoPhaseParameters.getDefaultSettings();
+        NeuralSparseTwoPhaseParameters parameters2 = NeuralSparseTwoPhaseParametersTests.TWO_PHASE_PARAMETERS;
 
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder_baseline = new NeuralSparseQueryBuilder().fieldName(fieldName1)
             .queryText(queryText1)
@@ -407,6 +739,34 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .queryName(queryName1)
             .queryTokensSupplier(() -> queryTokens2);
 
+        // Identical to sparseEncodingQueryBuilder_baseline except non-null neuralSparseTwoPhaseParameters
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder_nonNullTwoPhaseParameters = new NeuralSparseQueryBuilder().fieldName(fieldName1)
+            .queryText(queryText1)
+            .modelId(modelId1)
+            .boost(boost1)
+            .queryName(queryName1)
+            .neuralSparseTwoPhaseParameters(parameters1);
+
+        // Identical to sparseEncodingQueryBuilder_baseline except non-null neuralSparseTwoPhaseParameters
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder_diffTwoPhaseParameters = new NeuralSparseQueryBuilder().fieldName(fieldName1)
+            .queryText(queryText1)
+            .modelId(modelId1)
+            .boost(boost1)
+            .queryName(queryName1)
+            .neuralSparseTwoPhaseParameters(parameters2);
+
+        // Identical to sparseEncodingQueryBuilder_baseline except null query text
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder_nullQueryText = new NeuralSparseQueryBuilder().fieldName(fieldName1)
+            .modelId(modelId1)
+            .boost(boost1)
+            .queryName(queryName1);
+
+        // Identical to sparseEncodingQueryBuilder_baseline except null model id
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder_nullModelId = new NeuralSparseQueryBuilder().fieldName(fieldName1)
+            .queryText(queryText1)
+            .boost(boost1)
+            .queryName(queryName1);
+
         assertEquals(sparseEncodingQueryBuilder_baseline, sparseEncodingQueryBuilder_baseline);
         assertEquals(sparseEncodingQueryBuilder_baseline.hashCode(), sparseEncodingQueryBuilder_baseline.hashCode());
 
@@ -436,6 +796,21 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
 
         assertNotEquals(sparseEncodingQueryBuilder_nonNullQueryTokens, sparseEncodingQueryBuilder_diffQueryTokens);
         assertNotEquals(sparseEncodingQueryBuilder_nonNullQueryTokens.hashCode(), sparseEncodingQueryBuilder_diffQueryTokens.hashCode());
+
+        assertNotEquals(sparseEncodingQueryBuilder_baseline, sparseEncodingQueryBuilder_nonNullTwoPhaseParameters);
+        assertNotEquals(sparseEncodingQueryBuilder_baseline.hashCode(), sparseEncodingQueryBuilder_nonNullTwoPhaseParameters.hashCode());
+
+        assertNotEquals(sparseEncodingQueryBuilder_nonNullTwoPhaseParameters, sparseEncodingQueryBuilder_diffTwoPhaseParameters);
+        assertNotEquals(
+            sparseEncodingQueryBuilder_nonNullTwoPhaseParameters.hashCode(),
+            sparseEncodingQueryBuilder_diffTwoPhaseParameters.hashCode()
+        );
+
+        assertNotEquals(sparseEncodingQueryBuilder_baseline, sparseEncodingQueryBuilder_nullQueryText);
+        assertNotEquals(sparseEncodingQueryBuilder_baseline.hashCode(), sparseEncodingQueryBuilder_nullQueryText.hashCode());
+
+        assertNotEquals(sparseEncodingQueryBuilder_baseline, sparseEncodingQueryBuilder_nullModelId);
+        assertNotEquals(sparseEncodingQueryBuilder_baseline.hashCode(), sparseEncodingQueryBuilder_nullModelId.hashCode());
     }
 
     @SneakyThrows

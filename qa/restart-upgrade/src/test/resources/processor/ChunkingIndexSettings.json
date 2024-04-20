@@ -1,0 +1,17 @@
+{
+  "settings":{
+    "default_pipeline": "%s",
+    "number_of_shards": 3,
+    "number_of_replicas": 1
+  },
+  "mappings": {
+    "properties": {
+      "body": {
+        "type": "text"
+      },
+      "body_chunk": {
+        "type": "text"
+      }
+    }
+  }
+}
