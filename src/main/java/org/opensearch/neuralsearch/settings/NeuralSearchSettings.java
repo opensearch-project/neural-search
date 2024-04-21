@@ -44,6 +44,7 @@ public final class NeuralSearchSettings {
     public static final Setting<Float> NEURAL_SPARSE_TWO_PHASE_DEFAULT_WINDOW_SIZE_EXPANSION = Setting.floatSetting(
         "plugins.neural_search.neural_sparse.two_phase.default_window_size_expansion",
         5f,
+        1f,
         Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );
@@ -51,6 +52,8 @@ public final class NeuralSearchSettings {
     public static final Setting<Float> NEURAL_SPARSE_TWO_PHASE_DEFAULT_PRUNING_RATIO = Setting.floatSetting(
         "plugins.neural_search.neural_sparse.two_phase.default_pruning_ratio",
         0.4f,
+        0.0f,
+        1.0f,
         Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );
@@ -59,6 +62,7 @@ public final class NeuralSearchSettings {
     public static final Setting<Integer> NEURAL_SPARSE_TWO_PHASE_MAX_WINDOW_SIZE = Setting.intSetting(
         "plugins.neural_search.neural_sparse.two_phase.max_window_size",
         10000,
+        0,
         Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );

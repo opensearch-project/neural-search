@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.query;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -17,6 +18,7 @@ import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.QUERY_T
 import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.QUERY_TOKENS_FIELD;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -47,9 +49,11 @@ import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
+import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
@@ -230,15 +234,14 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
                 "query_text": "string",
                 "model_id": "string",
                 "two_phase_settings":{
-                      "window_size_expansion": 0.5,
+                      "window_size_expansion": 0.4,
                       "pruning_ratio": 0.4,
                       "enabled": true
                   }
               }
           }
         */
-        NeuralSparseTwoPhaseParameters parameters = NeuralSparseTwoPhaseParameters.getDefaultSettings()
-            .window_size_expansion(NeuralSparseTwoPhaseParametersTests.TEST_WINDOW_SIZE_EXPANSION);
+        NeuralSparseTwoPhaseParameters parameters = NeuralSparseTwoPhaseParameters.getDefaultSettings().window_size_expansion(0.4f);
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject(FIELD_NAME)
@@ -261,13 +264,13 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
                 "model_id": "string",
                 "two_phase_settings":{
                       "window_size_expansion": 0.5,
-                      "pruning_ratio": 0, // or 1
+                      "pruning_ratio": -0.001, // or 1.001
                       "enabled": true
                   }
               }
           }
         */
-        NeuralSparseTwoPhaseParameters parameters = NeuralSparseTwoPhaseParameters.getDefaultSettings().pruning_ratio(0f);
+        NeuralSparseTwoPhaseParameters parameters = NeuralSparseTwoPhaseParameters.getDefaultSettings().pruning_ratio(-0.001f);
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject(FIELD_NAME)
@@ -280,7 +283,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         contentParser.nextToken();
         expectThrows(IllegalArgumentException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser));
 
-        parameters.pruning_ratio(1f);
+        parameters.pruning_ratio(1.001f);
         XContentBuilder xContentBuilder2 = XContentFactory.jsonBuilder()
             .startObject()
             .startObject(FIELD_NAME)
@@ -878,6 +881,45 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         );
         assertNotNull(booleanQuery);
         assertSame(booleanQuery.clauses().size(), 2);
+    }
+
+    @SneakyThrows
+    public void testTokenDividedByScores_whenDefaultSettings() {
+        Map<String, Float> map = new HashMap<>();
+        for (int i = 1; i < 11; i++) {
+            map.put(String.valueOf(i), (float) i);
+        }
+        final Supplier<Map<String, Float>> tokenSupplier = () -> map;
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName("rank_features")
+            .queryText(QUERY_TEXT)
+            .neuralSparseTwoPhaseParameters(NeuralSparseTwoPhaseParameters.getDefaultSettings())
+            .modelId(MODEL_ID)
+            .queryTokensSupplier(tokenSupplier);
+        QueryShardContext context = mock(QueryShardContext.class);
+        MappedFieldType mappedFieldType = mock(MappedFieldType.class);
+        when(mappedFieldType.typeName()).thenReturn("rank_features");
+        when(context.fieldMapper(anyString())).thenReturn(mappedFieldType);
+        NeuralSparseQuery neuralSparseQuery = (NeuralSparseQuery) sparseEncodingQueryBuilder.doToQuery(context);
+        BooleanQuery highScoreTokenQuery = (BooleanQuery) neuralSparseQuery.getHighScoreTokenQuery();
+        BooleanQuery lowScoreTokenQuery = (BooleanQuery) neuralSparseQuery.getLowScoreTokenQuery();
+        assertNotNull(highScoreTokenQuery.clauses());
+        assertNotNull(lowScoreTokenQuery.clauses());
+        assertEquals(highScoreTokenQuery.clauses().size(), 7);
+        assertEquals(lowScoreTokenQuery.clauses().size(), 3);
+        sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName("rank_features")
+            .queryText(QUERY_TEXT)
+            .neuralSparseTwoPhaseParameters(
+                new NeuralSparseTwoPhaseParameters().enabled(true).window_size_expansion(5f).pruning_ratio(0.6f)
+            )
+            .modelId(MODEL_ID)
+            .queryTokensSupplier(tokenSupplier);
+        neuralSparseQuery = (NeuralSparseQuery) sparseEncodingQueryBuilder.doToQuery(context);
+        highScoreTokenQuery = (BooleanQuery) neuralSparseQuery.getHighScoreTokenQuery();
+        lowScoreTokenQuery = (BooleanQuery) neuralSparseQuery.getLowScoreTokenQuery();
+        assertNotNull(highScoreTokenQuery.clauses());
+        assertNotNull(lowScoreTokenQuery.clauses());
+        assertEquals(highScoreTokenQuery.clauses().size(), 5);
+        assertEquals(lowScoreTokenQuery.clauses().size(), 5);
     }
 
 }

@@ -38,7 +38,7 @@ public class NeuralSparseQueryTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testToStringMethod() {
-        NeuralSparseQuery neuralSparseQuery = new NeuralSparseQuery(currentQuery, highScoreTokenQuery, lowScoreTokenQuery);
+        NeuralSparseQuery neuralSparseQuery = new NeuralSparseQuery(currentQuery, highScoreTokenQuery, lowScoreTokenQuery, 5.0f);
         String expectedString = "NeuralSparseQuery("
             + currentQuery.toString()
             + ','
@@ -52,7 +52,7 @@ public class NeuralSparseQueryTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testRewrite_whenDifferent_thenNotSame() {
         IndexSearcher mockIndexSearcher = mock(IndexSearcher.class);
-        NeuralSparseQuery neuralSparseQuery = new NeuralSparseQuery(currentQuery, highScoreTokenQuery, lowScoreTokenQuery);
+        NeuralSparseQuery neuralSparseQuery = new NeuralSparseQuery(currentQuery, highScoreTokenQuery, lowScoreTokenQuery, 5.0f);
         Query rewrittenQuery = neuralSparseQuery.rewrite(mockIndexSearcher);
         assertNotSame(neuralSparseQuery, rewrittenQuery);
         assertTrue(rewrittenQuery instanceof NeuralSparseQuery);
@@ -64,7 +64,8 @@ public class NeuralSparseQueryTests extends OpenSearchQueryTestCase {
         NeuralSparseQuery neuralSparseQuery = new NeuralSparseQuery(
             new MatchAllDocsQuery(),
             new MatchAllDocsQuery(),
-            new MatchAllDocsQuery()
+            new MatchAllDocsQuery(),
+            5.0f
         );
         Query rewrittenQuery = neuralSparseQuery.rewrite(mockIndexSearcher);
         assertSame(neuralSparseQuery, rewrittenQuery);
@@ -73,18 +74,22 @@ public class NeuralSparseQueryTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testEqualsAndHashCode() {
-        NeuralSparseQuery query1 = new NeuralSparseQuery(currentQuery, highScoreTokenQuery, lowScoreTokenQuery);
-        NeuralSparseQuery query2 = new NeuralSparseQuery(currentQuery, highScoreTokenQuery, lowScoreTokenQuery);
-        NeuralSparseQuery query3 = new NeuralSparseQuery(currentQuery, highScoreTokenQuery, new MatchAllDocsQuery());
+        NeuralSparseQuery query1 = new NeuralSparseQuery(currentQuery, highScoreTokenQuery, lowScoreTokenQuery, 5.0f);
+        NeuralSparseQuery query2 = new NeuralSparseQuery(currentQuery, highScoreTokenQuery, lowScoreTokenQuery, 5.0f);
+        NeuralSparseQuery query3 = new NeuralSparseQuery(currentQuery, highScoreTokenQuery, new MatchAllDocsQuery(), 5.0f);
+        NeuralSparseQuery query4 = new NeuralSparseQuery(currentQuery, highScoreTokenQuery, lowScoreTokenQuery, 6.0f);
         assertEquals(query1, query2);
         assertNotEquals(query1, query3);
+        assertNotEquals(query1, query4);
         assertEquals(query1.hashCode(), query2.hashCode());
         assertNotEquals(query1.hashCode(), query3.hashCode());
+        assertNotEquals(query1.hashCode(), query4.hashCode());
+
     }
 
     @SneakyThrows
     public void testExtractLowScoreToken_thenCurrentChanged() {
-        NeuralSparseQuery neuralSparseQuery = new NeuralSparseQuery(currentQuery, highScoreTokenQuery, lowScoreTokenQuery);
+        NeuralSparseQuery neuralSparseQuery = new NeuralSparseQuery(currentQuery, highScoreTokenQuery, lowScoreTokenQuery, 5.0f);
         assertSame(neuralSparseQuery.getCurrentQuery(), currentQuery);
         neuralSparseQuery.extractLowScoreToken();
         assertSame(neuralSparseQuery.getCurrentQuery(), highScoreTokenQuery);
@@ -92,7 +97,7 @@ public class NeuralSparseQueryTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testVisit_thenSuccess() {
-        NeuralSparseQuery neuralSparseQuery = new NeuralSparseQuery(currentQuery, highScoreTokenQuery, lowScoreTokenQuery);
+        NeuralSparseQuery neuralSparseQuery = new NeuralSparseQuery(currentQuery, highScoreTokenQuery, lowScoreTokenQuery, 5.0f);
         neuralSparseQuery.visit(QueryVisitor.EMPTY_VISITOR);
     }
 

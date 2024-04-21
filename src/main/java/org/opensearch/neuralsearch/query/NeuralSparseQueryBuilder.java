@@ -234,12 +234,12 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             throw new IllegalArgumentException(String.format(Locale.ROOT, "%s field can not be empty", MODEL_ID_FIELD.getPreferredName()));
         }
 
-        if (sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters.pruning_ratio() <= 0
-            || sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters.pruning_ratio() >= 1) {
+        if (sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters.pruning_ratio() < 0
+            || sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters.pruning_ratio() > 1) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
-                    "[%s] %s field value must be in range (0,1)",
+                    "[%s] %s field value must be in range (0,1]",
                     NeuralSparseTwoPhaseParameters.NAME.getPreferredName(),
                     NeuralSparseTwoPhaseParameters.PRUNING_RATIO.getPreferredName()
                 )
@@ -434,7 +434,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         }
         return queryTokens.entrySet()
             .stream()
-            .filter(entry -> (aboveThreshold == (entry.getValue() > threshold)))
+            .filter(entry -> (aboveThreshold == (entry.getValue() >= threshold)))
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 

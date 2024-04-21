@@ -39,20 +39,18 @@ import static org.opensearch.neuralsearch.TestUtils.xContentBuilderToMap;
 
 public class NeuralSparseTwoPhaseParametersTests extends OpenSearchTestCase {
     public static int TEST_MAX_WINDOW_SIZE = 100;
-    public static float TEST_WINDOW_SIZE_EXPANSION = 0.5f;
+    public static float TEST_WINDOW_SIZE_EXPANSION = 6.0f;
     public static float TEST_PRUNING_RATIO = 0.5f;
     public static boolean TEST_ENABLED = false;
     public static NeuralSparseTwoPhaseParameters TWO_PHASE_PARAMETERS = new NeuralSparseTwoPhaseParameters().enabled(TEST_ENABLED)
         .pruning_ratio(TEST_PRUNING_RATIO)
         .window_size_expansion(TEST_WINDOW_SIZE_EXPANSION);
 
-    private Settings settings;
     private ClusterSettings clusterSettings;
-    private ClusterService clusterService;
 
     @Before
     public void setUpNeuralSparseTwoPhaseParameters() {
-        settings = Settings.builder().build();
+        Settings settings = Settings.builder().build();
         final Set<Setting<?>> settingsSet = Stream.concat(
             ClusterSettings.BUILT_IN_CLUSTER_SETTINGS.stream(),
             Stream.of(
@@ -63,7 +61,7 @@ public class NeuralSparseTwoPhaseParametersTests extends OpenSearchTestCase {
             )
         ).collect(Collectors.toSet());
         clusterSettings = new ClusterSettings(settings, settingsSet);
-        clusterService = mock(ClusterService.class);
+        ClusterService clusterService = mock(ClusterService.class);
         when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
         NeuralSparseTwoPhaseParameters.initialize(clusterService, settings);
     }
@@ -138,6 +136,35 @@ public class NeuralSparseTwoPhaseParametersTests extends OpenSearchTestCase {
         assertEquals(TEST_ENABLED, neuralSparseTwoPhaseParameters.enabled());
         assertEquals(TEST_PRUNING_RATIO, neuralSparseTwoPhaseParameters.pruning_ratio(), 0);
         assertEquals(TEST_WINDOW_SIZE_EXPANSION, neuralSparseTwoPhaseParameters.window_size_expansion(), 0);
+    }
+
+    @SneakyThrows
+    public void testFromXContentWithFullBodyOntTimeThenDefaultRecoverSuccess() {
+        /*
+          {
+              "window_size_expansion": 0.5,
+              "pruning_ratio": 0.5,
+              "enabled": false
+          }
+        */
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .field(NeuralSparseTwoPhaseParameters.WINDOW_SIZE_EXPANSION.getPreferredName(), TEST_WINDOW_SIZE_EXPANSION)
+            .field(NeuralSparseTwoPhaseParameters.PRUNING_RATIO.getPreferredName(), TEST_PRUNING_RATIO)
+            .field(NeuralSparseTwoPhaseParameters.ENABLED.getPreferredName(), TEST_ENABLED)
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        NeuralSparseTwoPhaseParameters neuralSparseTwoPhaseParameters = NeuralSparseTwoPhaseParameters.parseFromXContent(contentParser);
+        assertEquals(TEST_ENABLED, neuralSparseTwoPhaseParameters.enabled());
+        assertEquals(TEST_PRUNING_RATIO, neuralSparseTwoPhaseParameters.pruning_ratio(), 0);
+        assertEquals(TEST_WINDOW_SIZE_EXPANSION, neuralSparseTwoPhaseParameters.window_size_expansion(), 0);
+        neuralSparseTwoPhaseParameters = NeuralSparseTwoPhaseParameters.getDefaultSettings();
+        assertEquals(true, neuralSparseTwoPhaseParameters.enabled());
+        assertEquals(0.4f, neuralSparseTwoPhaseParameters.pruning_ratio(), 1e-6);
+        assertEquals(5.0f, neuralSparseTwoPhaseParameters.window_size_expansion(), 1e-6);
+
     }
 
     @SneakyThrows
@@ -256,4 +283,22 @@ public class NeuralSparseTwoPhaseParametersTests extends OpenSearchTestCase {
         NeuralSearchClusterUtil.instance().initialize(clusterServiceCurrent);
         assertTrue(NeuralSparseTwoPhaseParameters.isClusterOnOrAfterMinReqVersionForTwoPhaseSearchSupport());
     }
+
+    @SneakyThrows
+    public void testUpdateSettingsEffectiveness() {
+        Settings updatedSettings = Settings.builder()
+            .put("plugins.neural_search.neural_sparse.two_phase.default_enabled", true)
+            .put("plugins.neural_search.neural_sparse.two_phase.default_window_size_expansion", 10f)
+            .put("plugins.neural_search.neural_sparse.two_phase.default_pruning_ratio", 0.8f)
+            .build();
+
+        clusterSettings.applySettings(updatedSettings);
+        NeuralSparseTwoPhaseParameters updatedParameters = NeuralSparseTwoPhaseParameters.getDefaultSettings();
+        assertEquals(true, updatedParameters.enabled());
+        assertEquals(10f, updatedParameters.window_size_expansion(), 0);
+        assertEquals(0.8f, updatedParameters.pruning_ratio(), 0);
+
+        setUpNeuralSparseTwoPhaseParameters();
+    }
+
 }
