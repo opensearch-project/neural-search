@@ -14,6 +14,7 @@ import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.MAX_TOK
 import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.MODEL_ID_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.NAME;
 import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.QUERY_TEXT_FIELD;
+import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.QUERY_TOKENS_FIELD;
 
 import java.io.IOException;
 import java.util.List;
@@ -23,6 +24,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.lucene.document.FeatureField;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
@@ -93,6 +95,32 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(FIELD_NAME, sparseEncodingQueryBuilder.fieldName());
         assertEquals(QUERY_TEXT, sparseEncodingQueryBuilder.queryText());
         assertEquals(MODEL_ID, sparseEncodingQueryBuilder.modelId());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuiltWithQueryTokens_thenBuildSuccessfully() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_tokens": {
+                    "token_a": float_score_a,
+                    "token_b": float_score_b
+              }
+          }
+        */
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TOKENS_FIELD.getPreferredName(), QUERY_TOKENS_SUPPLIER.get())
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = NeuralSparseQueryBuilder.fromXContent(contentParser);
+
+        assertEquals(FIELD_NAME, sparseEncodingQueryBuilder.fieldName());
+        assertEquals(QUERY_TOKENS_SUPPLIER.get(), sparseEncodingQueryBuilder.queryTokensSupplier().get());
     }
 
     @SneakyThrows
@@ -276,13 +304,56 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         expectThrows(IOException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser));
     }
 
+    @SneakyThrows
+    public void testFromXContent_whenBuildWithEmptyQuery_thenFail() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": ""
+              }
+          }
+        */
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), StringUtils.EMPTY)
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        expectThrows(IllegalArgumentException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuildWithEmptyModelId_thenFail() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "model_id": ""
+              }
+          }
+        */
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(MODEL_ID_FIELD.getPreferredName(), StringUtils.EMPTY)
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        expectThrows(IllegalArgumentException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser));
+    }
+
     @SuppressWarnings("unchecked")
     @SneakyThrows
     public void testToXContent() {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
             .modelId(MODEL_ID)
             .queryText(QUERY_TEXT)
-            .maxTokenScore(MAX_TOKEN_SCORE);
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryTokensSupplier(QUERY_TOKENS_SUPPLIER);
 
         XContentBuilder builder = XContentFactory.jsonBuilder();
         builder = sparseEncodingQueryBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
@@ -308,15 +379,27 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(MODEL_ID, secondInnerMap.get(MODEL_ID_FIELD.getPreferredName()));
         assertEquals(QUERY_TEXT, secondInnerMap.get(QUERY_TEXT_FIELD.getPreferredName()));
         assertEquals(MAX_TOKEN_SCORE, (Double) secondInnerMap.get(MAX_TOKEN_SCORE_FIELD.getPreferredName()), 0.0);
+        Map<String, Double> parsedQueryTokens = (Map<String, Double>) secondInnerMap.get(QUERY_TOKENS_FIELD.getPreferredName());
+        assertEquals(QUERY_TOKENS_SUPPLIER.get().keySet(), parsedQueryTokens.keySet());
+        for (Map.Entry<String, Float> entry : QUERY_TOKENS_SUPPLIER.get().entrySet()) {
+            assertEquals(entry.getValue(), parsedQueryTokens.get(entry.getKey()).floatValue(), 0);
+        }
+    }
+
+    public void testStreams_whenCurrentVersion_thenSuccess() {
+        setUpClusterService(Version.CURRENT);
+        testStreams();
+        testStreamsWithQueryTokensOnly();
     }
 
     public void testStreams_whenMinVersionIsBeforeDefaultModelId_thenSuccess() {
         setUpClusterService(Version.V_2_12_0);
         testStreams();
+        testStreamsWithQueryTokensOnly();
     }
 
     @SneakyThrows
-    public void testStreams() {
+    private void testStreams() {
         NeuralSparseQueryBuilder original = new NeuralSparseQueryBuilder();
         original.fieldName(FIELD_NAME);
         original.queryText(QUERY_TEXT);
@@ -353,6 +436,26 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         );
 
         copy = new NeuralSparseQueryBuilder(filterStreamInput);
+        assertEquals(original, copy);
+    }
+
+    @SneakyThrows
+    private void testStreamsWithQueryTokensOnly() {
+        NeuralSparseQueryBuilder original = new NeuralSparseQueryBuilder();
+        original.fieldName(FIELD_NAME);
+        original.queryTokensSupplier(QUERY_TOKENS_SUPPLIER);
+
+        BytesStreamOutput streamOutput = new BytesStreamOutput();
+        original.writeTo(streamOutput);
+
+        FilterStreamInput filterStreamInput = new NamedWriteableAwareStreamInput(
+            streamOutput.bytes().streamInput(),
+            new NamedWriteableRegistry(
+                List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, MatchAllQueryBuilder.NAME, MatchAllQueryBuilder::new))
+            )
+        );
+
+        NeuralSparseQueryBuilder copy = new NeuralSparseQueryBuilder(filterStreamInput);
         assertEquals(original, copy);
     }
 
@@ -459,6 +562,18 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .queryName(queryName1)
             .queryTokensSupplier(() -> queryTokens2);
 
+        // Identical to sparseEncodingQueryBuilder_baseline except null query text
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder_nullQueryText = new NeuralSparseQueryBuilder().fieldName(fieldName1)
+            .modelId(modelId1)
+            .boost(boost1)
+            .queryName(queryName1);
+
+        // Identical to sparseEncodingQueryBuilder_baseline except null model id
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder_nullModelId = new NeuralSparseQueryBuilder().fieldName(fieldName1)
+            .queryText(queryText1)
+            .boost(boost1)
+            .queryName(queryName1);
+
         assertEquals(sparseEncodingQueryBuilder_baseline, sparseEncodingQueryBuilder_baseline);
         assertEquals(sparseEncodingQueryBuilder_baseline.hashCode(), sparseEncodingQueryBuilder_baseline.hashCode());
 
@@ -491,6 +606,12 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
 
         assertNotEquals(sparseEncodingQueryBuilder_nonNullQueryTokens, sparseEncodingQueryBuilder_diffQueryTokens);
         assertNotEquals(sparseEncodingQueryBuilder_nonNullQueryTokens.hashCode(), sparseEncodingQueryBuilder_diffQueryTokens.hashCode());
+
+        assertNotEquals(sparseEncodingQueryBuilder_baseline, sparseEncodingQueryBuilder_nullQueryText);
+        assertNotEquals(sparseEncodingQueryBuilder_baseline.hashCode(), sparseEncodingQueryBuilder_nullQueryText.hashCode());
+
+        assertNotEquals(sparseEncodingQueryBuilder_baseline, sparseEncodingQueryBuilder_nullModelId);
+        assertNotEquals(sparseEncodingQueryBuilder_baseline.hashCode(), sparseEncodingQueryBuilder_nullModelId.hashCode());
     }
 
     @SneakyThrows
