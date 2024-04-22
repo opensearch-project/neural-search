@@ -9,7 +9,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import lombok.SneakyThrows;
-import org.junit.Before;
+import org.junit.BeforeClass;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.MatchNoneQueryBuilder;
@@ -33,8 +33,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
     private static final String INTEGER_FIELD_1_STOCK = "stock";
     private static final String TEXT_FIELD_1_NAME = "name";
     private static final String KEYWORD_FIELD_2_CATEGORY = "category";
-    private static final String TEXT_FIELD_VALUE_1_DUNES = "Dunes part 2";
-    private static final String TEXT_FIELD_VALUE_2_DUNES = "Dunes part 1";
+    private static final String TEXT_FIELD_VALUE_1_DUNES = "Dunes part 1";
+    private static final String TEXT_FIELD_VALUE_2_DUNES = "Dunes part 2";
     private static final String TEXT_FIELD_VALUE_3_MI_1 = "Mission Impossible 1";
     private static final String TEXT_FIELD_VALUE_4_MI_2 = "Mission Impossible 2";
     private static final String TEXT_FIELD_VALUE_5_TERMINAL = "The Terminal";
@@ -56,16 +56,14 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
     private static final int LTE_OF_RANGE_IN_POST_FILTER_QUERY = 400;
     private static final int GTE_OF_RANGE_IN_POST_FILTER_QUERY = 230;
 
-    // @Before is a workaround to save extra update cluster settings call to the cluster.
-    // @BeforeClass throws RuntimeException with initializationError
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();
-        if (setUpIsDone) {
-            return;
-        }
-        updateClusterSettings();
-        setUpIsDone = true;
+    @BeforeClass
+    @SneakyThrows
+    public static void setUpCluster() {
+        // we need new instance because we're calling non-static methods from static method.
+        // main purpose is to minimize network calls, initialization is only needed once
+        HybridQueryPostFilterIT instance = new HybridQueryPostFilterIT();
+        instance.initClient();
+        instance.updateClusterSettings();
     }
 
     @SneakyThrows
@@ -601,7 +599,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
                 List.of(),
                 List.of(),
                 Collections.singletonList(TEXT_FIELD_1_NAME),
-                Collections.singletonList(TEXT_FIELD_VALUE_1_DUNES),
+                Collections.singletonList(TEXT_FIELD_VALUE_2_DUNES),
                 List.of(),
                 List.of(),
                 List.of(INTEGER_FIELD_1_STOCK),
@@ -618,7 +616,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
                 List.of(),
                 List.of(),
                 Collections.singletonList(TEXT_FIELD_1_NAME),
-                Collections.singletonList(TEXT_FIELD_VALUE_2_DUNES),
+                Collections.singletonList(TEXT_FIELD_VALUE_1_DUNES),
                 List.of(),
                 List.of(),
                 List.of(INTEGER_FIELD_1_STOCK),
