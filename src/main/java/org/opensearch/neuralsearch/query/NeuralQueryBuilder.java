@@ -120,6 +120,11 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         } else {
             this.modelId = in.readString();
         }
+        if (isClusterOnOrAfterMinReqVersionForRadialSearch()) {
+            this.k = in.readOptionalInt();
+        } else {
+            this.k = in.readVInt();
+        }
         this.k = in.readVInt();
         this.filter = in.readOptionalNamedWriteable(QueryBuilder.class);
         if (isClusterOnOrAfterMinReqVersionForRadialSearch()) {
@@ -138,7 +143,11 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         } else {
             out.writeString(this.modelId);
         }
-        out.writeVInt(this.k);
+        if (isClusterOnOrAfterMinReqVersionForRadialSearch()) {
+            out.writeOptionalInt(this.k);
+        } else {
+            out.writeVInt(this.k);
+        }
         out.writeOptionalNamedWriteable(this.filter);
         if (isClusterOnOrAfterMinReqVersionForRadialSearch()) {
             out.writeOptionalFloat(this.maxDistance);
@@ -219,8 +228,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             requireValue(neuralQueryBuilder.modelId(), "Model ID must be provided for neural query");
         }
 
-        long queryCount = validateKNNQueryType(neuralQueryBuilder);
-        if (queryCount == 0) {
+        boolean queryTypeIsProvided = validateKNNQueryType(neuralQueryBuilder);
+        if (queryTypeIsProvided == false) {
             neuralQueryBuilder.k(DEFAULT_K);
         }
 
@@ -359,7 +368,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_RADIAL_SEARCH);
     }
 
-    private static int validateKNNQueryType(NeuralQueryBuilder neuralQueryBuilder) {
+    private static boolean validateKNNQueryType(NeuralQueryBuilder neuralQueryBuilder) {
         int queryCount = 0;
         if (neuralQueryBuilder.k() != null) {
             queryCount++;
@@ -373,6 +382,6 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         if (queryCount > 1) {
             throw new IllegalArgumentException("Only one of k, max_distance, or min_score can be provided");
         }
-        return queryCount;
+        return queryCount == 1;
     }
 }

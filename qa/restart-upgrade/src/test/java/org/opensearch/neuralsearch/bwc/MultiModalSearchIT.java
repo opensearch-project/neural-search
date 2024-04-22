@@ -50,10 +50,10 @@ public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
         }
     }
 
-    private void validateTestIndex(final String modelId) throws Exception {
+    private void validateTestIndex(final String modelId) {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(2, docCount);
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
+        NeuralQueryBuilder neuralQueryBuilderWithKQuery = new NeuralQueryBuilder(
             "passage_embedding",
             TEXT,
             TEST_IMAGE_TEXT,
@@ -64,8 +64,35 @@ public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
             null,
             null
         );
-        Map<String, Object> response = search(getIndexNameForTest(), neuralQueryBuilder, 1);
-        assertNotNull(response);
-    }
+        Map<String, Object> responseWithKQuery = search(getIndexNameForTest(), neuralQueryBuilderWithKQuery, 1);
+        assertNotNull(responseWithKQuery);
 
+        NeuralQueryBuilder neuralQueryBuilderWithMinScoreQuery = new NeuralQueryBuilder(
+            "passage_embedding",
+            TEXT,
+            TEST_IMAGE_TEXT,
+            modelId,
+            null,
+            null,
+            0.01f,
+            null,
+            null
+        );
+        Map<String, Object> responseWithMinScoreQuery = search(getIndexNameForTest(), neuralQueryBuilderWithMinScoreQuery, 1);
+        assertNotNull(responseWithMinScoreQuery);
+
+        NeuralQueryBuilder neuralQueryBuilderWithMaxDistanceQuery = new NeuralQueryBuilder(
+            "passage_embedding",
+            TEXT,
+            TEST_IMAGE_TEXT,
+            modelId,
+            null,
+            10000f,
+            null,
+            null,
+            null
+        );
+        Map<String, Object> responseWithMaxDistanceQuery = search(getIndexNameForTest(), neuralQueryBuilderWithMaxDistanceQuery, 1);
+        assertNotNull(responseWithMaxDistanceQuery);
+    }
 }

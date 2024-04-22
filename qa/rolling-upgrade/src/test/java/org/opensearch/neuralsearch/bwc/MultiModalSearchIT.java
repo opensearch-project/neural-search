@@ -76,7 +76,7 @@ public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
         loadModel(modelId);
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
+        NeuralQueryBuilder neuralQueryBuilderWithKQuery = new NeuralQueryBuilder(
             "passage_embedding",
             text,
             imageText,
@@ -87,7 +87,35 @@ public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
             null,
             null
         );
-        Map<String, Object> response = search(getIndexNameForTest(), neuralQueryBuilder, 1);
-        assertNotNull(response);
+        Map<String, Object> responseWithKQuery = search(getIndexNameForTest(), neuralQueryBuilderWithKQuery, 1);
+        assertNotNull(responseWithKQuery);
+
+        NeuralQueryBuilder neuralQueryBuilderWithMinScoreQuery = new NeuralQueryBuilder(
+            "passage_embedding",
+            text,
+            imageText,
+            modelId,
+            null,
+            null,
+            0.01f,
+            null,
+            null
+        );
+        Map<String, Object> responseWithMinScore = search(getIndexNameForTest(), neuralQueryBuilderWithMinScoreQuery, 1);
+        assertNotNull(responseWithMinScore);
+
+        NeuralQueryBuilder neuralQueryBuilderWithMaxDistanceQuery = new NeuralQueryBuilder(
+            "passage_embedding",
+            text,
+            imageText,
+            modelId,
+            null,
+            10000f,
+            null,
+            null,
+            null
+        );
+        Map<String, Object> responseWithMaxScore = search(getIndexNameForTest(), neuralQueryBuilderWithMaxDistanceQuery, 1);
+        assertNotNull(responseWithMaxScore);
     }
 }
