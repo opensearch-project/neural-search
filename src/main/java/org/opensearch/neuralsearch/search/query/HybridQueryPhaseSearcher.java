@@ -25,7 +25,7 @@ import org.opensearch.search.query.QueryPhaseSearcherWrapper;
 
 import lombok.extern.log4j.Log4j2;
 
-import static org.opensearch.neuralsearch.search.util.NeuralSparseTwoPhaseUtil.addSecondPhaseRescoreContextFromValidNeuralSparseQuery;
+import static org.opensearch.neuralsearch.search.util.NeuralSparseTwoPhaseUtil.addRescoreContextFromNeuralSparseSparseQuery;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.hasAliasFilter;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.hasNestedFieldOrNestedDocs;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQuery;
@@ -45,7 +45,7 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
         final boolean hasFilterCollector,
         final boolean hasTimeout
     ) throws IOException {
-        addSecondPhaseRescoreContextFromValidNeuralSparseQuery(query, searchContext);
+        addRescoreContextFromNeuralSparseSparseQuery(query, searchContext);
         if (!isHybridQuery(query, searchContext)) {
             validateQuery(searchContext, query);
             return super.searchWith(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);

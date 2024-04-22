@@ -77,7 +77,7 @@ public class NeuralSparseTwoPhaseUtil {
      * @param query The whole query include neuralSparseQuery to executed.
      * @param searchContext The searchContext with this query.
      */
-    public static void addSecondPhaseRescoreContextFromValidNeuralSparseQuery(final Query query, SearchContext searchContext) {
+    public static void addRescoreContextFromNeuralSparseSparseQuery(final Query query, SearchContext searchContext) {
         Map<Query, Float> query2weight = new HashMap<>();
         float windowSizeExpansion = populateQueryWeightsMapAndGetWindowSizeExpansion(query, query2weight, 1.0f, 1.0f);
         Query twoPhaseQuery;
