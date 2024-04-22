@@ -48,7 +48,6 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
     private static final String KEYWORD_FIELD_CATEGORY_2_ACTION = "Action";
     private static final String KEYWORD_FIELD_CATEGORY_3_SCI_FI = "Sci-fi";
     private static final String STOCK_AVG_AGGREGATION_NAME = "avg_stock_size";
-    private static boolean setUpIsDone = false;
     private static final int SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER = 1;
     private static final int SHARDS_COUNT_IN_MULTI_NODE_CLUSTER = 3;
     private static final int LTE_OF_RANGE_IN_HYBRID_QUERY = 400;
@@ -118,9 +117,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
         }
     }
 
-    @SneakyThrows
-    private void testPostFilterRangeQuery(String indexName) {
-        /*{
+    /*{
             "query": {
             "hybrid":{
                 "queries":[
@@ -156,7 +153,9 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
                 }
             }
         }
-        }*/
+    }*/
+    @SneakyThrows
+    private void testPostFilterRangeQuery(String indexName) {
         HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
             "mission",
             "part",
@@ -180,82 +179,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
         assertHybridQueryResults(searchResponseAsMap, 1, 0, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
     }
 
-    @SneakyThrows
-    private void testPostFilterBoolQuery(String indexName) {
-        // Case 1
-        /*{
-            "query": {
-            "hybrid":{
-                "queries":[
-                {
-                    "match":{
-                    "name": "mission"
-                }
-                },
-                {
-                    "term":{
-                    "name":{
-                        "value":"part"
-                    }
-                }
-                },
-                {
-                    "range": {
-                    "stock": {
-                        "gte": 200,
-                                "lte": 400
-                    }
-                }
-                }
-          ]
-            }
-
-        },
-            "post_filter":{
-            "bool":{
-                "should":[
-                {
-                    "range": {
-                    "stock": {
-                        "gte": 230,
-                                "lte": 400
-                    }
-                }
-                },
-                {
-                    "match":{
-                    "name":"impossible"
-                }
-                }
-
-           ]
-            }
-        }
-        }*/
-        HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
-            "mission",
-            "part",
-            LTE_OF_RANGE_IN_HYBRID_QUERY,
-            GTE_OF_RANGE_IN_HYBRID_QUERY
-        );
-        QueryBuilder postFilterQuery = createQueryBuilderWithBoolShouldQuery(
-            "impossible",
-            LTE_OF_RANGE_IN_POST_FILTER_QUERY,
-            GTE_OF_RANGE_IN_POST_FILTER_QUERY
-        );
-
-        Map<String, Object> searchResponseAsMap = search(
-            indexName,
-            hybridQueryBuilder,
-            null,
-            10,
-            Map.of("search_pipeline", SEARCH_PIPELINE),
-            null,
-            postFilterQuery
-        );
-        assertHybridQueryResults(searchResponseAsMap, 2, 1, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
-        // Case 2
-        /*{
+    /*{
             "query": {
             "hybrid":{
                 "queries":[
@@ -308,7 +232,35 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
            ]
             }
         }
-        }*/
+    }*/
+    @SneakyThrows
+    private void testPostFilterBoolQuery(String indexName) {
+        // Case 1 A Query with a combination of hybrid query (Match Query, Term Query, Range Query) and a post filter query (Range and a
+        // Match Query).
+        HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
+            "mission",
+            "part",
+            LTE_OF_RANGE_IN_HYBRID_QUERY,
+            GTE_OF_RANGE_IN_HYBRID_QUERY
+        );
+        QueryBuilder postFilterQuery = createQueryBuilderWithBoolShouldQuery(
+            "impossible",
+            LTE_OF_RANGE_IN_POST_FILTER_QUERY,
+            GTE_OF_RANGE_IN_POST_FILTER_QUERY
+        );
+
+        Map<String, Object> searchResponseAsMap = search(
+            indexName,
+            hybridQueryBuilder,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            postFilterQuery
+        );
+        assertHybridQueryResults(searchResponseAsMap, 2, 1, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
+        // Case 2 A Query with a combination of hybrid query (Match Query, Term Query, Range Query), aggregation (Average stock price
+        // `avg_stock_price`) and a post filter query (Range Query and a Match Query).
         AggregationBuilder aggsBuilder = createAvgAggregation();
         searchResponseAsMap = search(
             indexName,
@@ -325,56 +277,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
 
         Map<String, Object> aggValue = getAggregationValues(aggregations, STOCK_AVG_AGGREGATION_NAME);
         assertEquals(1, aggValue.size());
-        // Case 3
-        /*{
-            "query": {
-            "hybrid":{
-                "queries":[
-                {
-                    "match":{
-                    "name": "mission"
-                }
-                },
-                {
-                    "term":{
-                    "name":{
-                        "value":"part"
-                    }
-                }
-                },
-                {
-                    "range": {
-                    "stock": {
-                        "gte": 200,
-                                "lte": 400
-                    }
-                }
-                }
-          ]
-            }
-
-        },
-            "post_filter":{
-            "bool":{
-                "must":[
-                {
-                    "range": {
-                    "stock": {
-                        "gte": 230,
-                                "lte": 400
-                    }
-                }
-                },
-                {
-                    "match":{
-                    "name":"terminal"
-                }
-                }
-
-           ]
-            }
-        }
-        }*/
+        // Case 3 A Query with a combination of hybrid query (Match Query, Term Query, Range Query) and a post filter query (Bool Query with
+        // a must clause(Range Query and a Match Query)).
         postFilterQuery = createQueryBuilderWithBoolMustQuery(
             "terminal",
             LTE_OF_RANGE_IN_POST_FILTER_QUERY,
@@ -390,49 +294,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             postFilterQuery
         );
         assertHybridQueryResults(searchResponseAsMap, 0, 0, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
-        // Case 4
-        /*{
-            "query": {
-            "hybrid":{
-                "queries":[
-                {
-                    "match":{
-                    "name": "hero"
-                }
-                },
-                {
-                    "range": {
-                    "stock": {
-                        "gte": 1000,
-                                "lte": 5000
-                    }
-                }
-                }
-          ]
-            }
-
-        },
-            "post_filter":{
-            "bool":{
-                "should":[
-                {
-                    "range": {
-                    "stock": {
-                        "gte": 230,
-                                "lte": 400
-                    }
-                }
-                },
-                {
-                    "match":{
-                    "name":"impossible"
-                }
-                }
-
-           ]
-            }
-        }
-        }*/
+        // Case 4 A Query with a combination of hybrid query (Match Query, Range Query) and a post filter query (Bool Query with a should
+        // clause(Range Query and a Match Query)).
         hybridQueryBuilder = createHybridQueryBuilderScenarioWithMatchAndRangeQuery("hero", 5000, 1000);
         postFilterQuery = createQueryBuilderWithBoolShouldQuery(
             "impossible",
@@ -451,9 +314,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
         assertHybridQueryResults(searchResponseAsMap, 0, 0, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
     }
 
-    @SneakyThrows
-    private void testPostFilterMatchAllAndMatchNoneQueries(String indexName) {
-        /*{
+    /*{
             "query": {
             "hybrid": {
                 "queries": [
@@ -483,7 +344,11 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             "post_filter": {
             "match_all": {}
         }
-        }*/
+    }*/
+    @SneakyThrows
+    private void testPostFilterMatchAllAndMatchNoneQueries(String indexName) {
+        // CASE 1 A Query with a combination of hybrid query (Match Query, Term Query, Range Query) and a post filter query (Match ALL
+        // Query).
         HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
             "mission",
             "part",
@@ -503,37 +368,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
         );
         assertHybridQueryResults(searchResponseAsMap, 4, 3, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
 
-        /*{
-            "query": {
-            "hybrid": {
-                "queries": [
-                {
-                    "match": {
-                    "name": "mission"
-                }
-                },
-                {
-                    "term": {
-                    "name": {
-                        "value": "part"
-                    }
-                }
-                },
-                {
-                    "range": {
-                    "stock": {
-                        "gte": 200,
-                                "lte": 400
-                    }
-                }
-                }
-            ]
-            }
-        },
-            "post_filter": {
-            "match_none": {}
-        }
-        }*/
+        // CASE 2 A Query with a combination of hybrid query (Match Query, Term Query, Range Query) and a post filter query (Match NONE
+        // Query).
         postFilterQuery = createPostFilterQueryBuilderWithMatchAllOrNoneQuery(false);
         searchResponseAsMap = search(
             indexName,
