@@ -95,7 +95,7 @@ public class NeuralSparseTwoPhaseUtil {
                 NeuralSparseTwoPhaseParameters.MAX_WINDOW_SIZE,
                 MAX_RESCORE_WINDOW_SETTING.get(searchContext.getQueryShardContext().getIndexSettings().getSettings())
             )) {
-            throw new IllegalArgumentException(String.format("Two phase final windowSize out of score with value %d.", curWindowSize));
+            throw new IllegalArgumentException("Two phase final windowSize out of score with value " + curWindowSize + ".");
         }
         QueryRescorer.QueryRescoreContext rescoreContext = new QueryRescorer.QueryRescoreContext(curWindowSize);
         rescoreContext.setQuery(twoPhaseQuery);
