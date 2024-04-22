@@ -4,7 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor;
 
-import static org.opensearch.neuralsearch.TestUtils.DELTA_FOR_SCORE_ASSERTION;
+import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 
 import java.util.List;
 

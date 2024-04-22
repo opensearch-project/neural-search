@@ -7,9 +7,9 @@ package org.opensearch.neuralsearch.bwc;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
-import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
-import static org.opensearch.neuralsearch.TestUtils.TEXT_IMAGE_EMBEDDING_PROCESSOR;
-import static org.opensearch.neuralsearch.TestUtils.getModelId;
+import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
+import static org.opensearch.neuralsearch.util.TestUtils.TEXT_IMAGE_EMBEDDING_PROCESSOR;
+import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
