@@ -30,7 +30,6 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import org.apache.lucene.search.BooleanQuery;
 import org.apache.commons.lang.StringUtils;
 import org.apache.lucene.document.FeatureField;
 import org.apache.lucene.search.BooleanClause;
@@ -522,7 +521,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         }
 
         Map<String, Object> secondInnerMap = (Map<String, Object>) secondInner;
-        assertEquals(5, secondInnerMap.size());
+        assertEquals(6, secondInnerMap.size());
 
         assertEquals(MODEL_ID, secondInnerMap.get(MODEL_ID_FIELD.getPreferredName()));
         assertEquals(QUERY_TEXT, secondInnerMap.get(QUERY_TEXT_FIELD.getPreferredName()));
@@ -557,8 +556,11 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     @SneakyThrows
     public void testToXContentWithNullableField() {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
-            .modelId(MODEL_ID)
-            .queryText(QUERY_TEXT);
+            .modelId(null)
+            .queryText(null)
+            .maxTokenScore(null)
+            .queryTokensSupplier(null)
+            .neuralSparseTwoPhaseParameters(null);
 
         XContentBuilder builder = XContentFactory.jsonBuilder();
         builder = sparseEncodingQueryBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
@@ -580,10 +582,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         }
 
         Map<String, Object> secondInnerMap = (Map<String, Object>) secondInner;
-        assertEquals(3, secondInnerMap.size());
-
-        assertEquals(MODEL_ID, secondInnerMap.get(MODEL_ID_FIELD.getPreferredName()));
-        assertEquals(QUERY_TEXT, secondInnerMap.get(QUERY_TEXT_FIELD.getPreferredName()));
+        assertEquals(1, secondInnerMap.size());
     }
 
     public void testStreams_whenCurrentVersion_thenSuccess() {
@@ -979,6 +978,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(lowScoreTokenQuery.clauses().size(), 5);
     }
 
+    @SneakyThrows
     public void testDoToQuery_successfulDoToQuery() {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
             .maxTokenScore(MAX_TOKEN_SCORE)

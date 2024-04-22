@@ -19,7 +19,8 @@ import org.apache.lucene.search.Weight;
 
 /**
  * Implementation of Query interface for type NeuralSparseQuery when TwoPhaseNeuralSparse Enabled.
- * Initialized, it currentQuery include all tokenQuery. After
+ * Initialized, it currentQuery include all tokenQuery. After call setCurrentQueryToHighScoreTokenQuery,
+ * it will perform highScoreTokenQuery.
  */
 @AllArgsConstructor
 @Getter
@@ -57,8 +58,6 @@ public final class NeuralSparseQuery extends Query {
     public void visit(QueryVisitor queryVisitor) {
         QueryVisitor v = queryVisitor.getSubVisitor(BooleanClause.Occur.SHOULD, this);
         currentQuery.visit(v);
-        highScoreTokenQuery.visit(v);
-        lowScoreTokenQuery.visit(v);
     }
 
     @Override
@@ -86,6 +85,10 @@ public final class NeuralSparseQuery extends Query {
         return currentQuery.createWeight(searcher, scoreMode, boost);
     }
 
+    /**
+     * Before call this function, the currentQuery of this object is allTokenQuery.
+     * After call this function, the currentQuery of this object change to highScoreTokenQuery.
+     */
     public void setCurrentQueryToHighScoreTokenQuery() {
         this.currentQuery = highScoreTokenQuery;
     }

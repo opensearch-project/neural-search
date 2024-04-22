@@ -142,6 +142,7 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
     }
 
     /**
+    <<<<<<< HEAD
      * Tests basic query with boost:
      * {
      *     "query": {
@@ -183,6 +184,8 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
     }
 
     /**
+    =======
+    >>>>>>> origin
      * Tests rescore query:
      * {
      *     "query" : {
@@ -286,11 +289,8 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
      *                      "model_id": "dcsdcasd"
      *                    }
      *                 },
-     *                "neural_sparse": {
-     *                  "field2": {
-     *                      "query_text": "Hello world a b",
-     *                      "model_id": "dcsdcasd"
-     *                    }
+     *                "match": {
+     *                  "field2": "Hello world a b",
      *                 }
      *             ]
      *         }

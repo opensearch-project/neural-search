@@ -177,7 +177,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
      *      "query_tokens": {
      *          "token_a": float,
      *          "token_b": float,
-     *          ...
+     *          ...,
      *       }
      *  }
      *
