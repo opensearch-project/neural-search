@@ -34,6 +34,9 @@ public final class NeuralSearchSettings {
         Setting.Property.NodeScope
     );
 
+    /**
+     * Use this setting to manage if a neuralSparseQuery build a two-phase query of not.
+     */
     public static final Setting<Boolean> NEURAL_SPARSE_TWO_PHASE_DEFAULT_ENABLED = Setting.boolSetting(
         "plugins.neural_search.neural_sparse.two_phase.default_enabled",
         true,
@@ -41,6 +44,9 @@ public final class NeuralSearchSettings {
         Setting.Property.Dynamic
     );
 
+    /**
+     * Control the number of TopDocs rescored by the second phase of NeuralSparseQuery.
+     */
     public static final Setting<Float> NEURAL_SPARSE_TWO_PHASE_DEFAULT_WINDOW_SIZE_EXPANSION = Setting.floatSetting(
         "plugins.neural_search.neural_sparse.two_phase.default_window_size_expansion",
         5f,
@@ -49,6 +55,9 @@ public final class NeuralSearchSettings {
         Setting.Property.Dynamic
     );
 
+    /**
+     * Control the token score threshold to splitting the NeuralSparseQuery.
+     */
     public static final Setting<Float> NEURAL_SPARSE_TWO_PHASE_DEFAULT_PRUNING_RATIO = Setting.floatSetting(
         "plugins.neural_search.neural_sparse.two_phase.default_pruning_ratio",
         0.4f,
@@ -58,7 +67,10 @@ public final class NeuralSearchSettings {
         Setting.Property.Dynamic
     );
 
-    // the default value is consistent with core settings MAX_RESCORE_WINDOW_SETTING
+    /**
+     * Control the max rescore windows size of the second phase of NeuralSparseQuery.
+     * The default value is consistent with core settings MAX_RESCORE_WINDOW_SETTING.
+     */
     public static final Setting<Integer> NEURAL_SPARSE_TWO_PHASE_MAX_WINDOW_SIZE = Setting.intSetting(
         "plugins.neural_search.neural_sparse.two_phase.max_window_size",
         10000,

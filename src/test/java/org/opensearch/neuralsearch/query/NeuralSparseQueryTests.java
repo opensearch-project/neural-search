@@ -91,7 +91,7 @@ public class NeuralSparseQueryTests extends OpenSearchQueryTestCase {
     public void testExtractLowScoreToken_thenCurrentChanged() {
         NeuralSparseQuery neuralSparseQuery = new NeuralSparseQuery(currentQuery, highScoreTokenQuery, lowScoreTokenQuery, 5.0f);
         assertSame(neuralSparseQuery.getCurrentQuery(), currentQuery);
-        neuralSparseQuery.extractLowScoreToken();
+        neuralSparseQuery.setCurrentQueryToHighScoreTokenQuery();
         assertSame(neuralSparseQuery.getCurrentQuery(), highScoreTokenQuery);
     }
 

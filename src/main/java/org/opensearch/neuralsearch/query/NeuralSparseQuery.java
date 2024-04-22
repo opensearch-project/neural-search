@@ -18,8 +18,8 @@ import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Weight;
 
 /**
- * Implementation of Query interface for type "hybrid". It allows execution of multiple sub-queries and collect individual
- * scores for each sub-query.
+ * Implementation of Query interface for type NeuralSparseQuery when TwoPhaseNeuralSparse Enabled.
+ * Initialized, it currentQuery include all tokenQuery. After 
  */
 @AllArgsConstructor
 @Getter
@@ -86,7 +86,7 @@ public final class NeuralSparseQuery extends Query {
         return currentQuery.createWeight(searcher, scoreMode, boost);
     }
 
-    public void extractLowScoreToken() {
+    public void setCurrentQueryToHighScoreTokenQuery() {
         this.currentQuery = highScoreTokenQuery;
     }
 }

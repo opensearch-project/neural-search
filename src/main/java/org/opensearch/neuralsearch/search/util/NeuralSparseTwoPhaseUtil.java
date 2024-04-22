@@ -22,6 +22,10 @@ import static java.lang.Float.max;
 import static java.lang.Integer.min;
 import static org.opensearch.index.IndexSettings.MAX_RESCORE_WINDOW_SETTING;
 
+/**
+ * Util class for do two phase preprocess for the NeuralSparseQuery.
+ * Include adding the second phase query to searchContext and set the currentQuery to highScoreTokenQuery.
+ */
 public class NeuralSparseTwoPhaseUtil {
 
     private static float populateQueryWeightsMapAndGetWindowSizeExpansion(
@@ -48,7 +52,7 @@ public class NeuralSparseTwoPhaseUtil {
             }
         } else if (query instanceof NeuralSparseQuery) {
             query2Weight.put(((NeuralSparseQuery) query).getLowScoreTokenQuery(), weight);
-            ((NeuralSparseQuery) query).extractLowScoreToken();
+            ((NeuralSparseQuery) query).setCurrentQueryToHighScoreTokenQuery();
             windoSizeExpansion = max(windoSizeExpansion, ((NeuralSparseQuery) query).getRescoreWindowSizeExpansion());
         }
         // ToDo Support for other compound query.
@@ -68,7 +72,12 @@ public class NeuralSparseTwoPhaseUtil {
         return builder.build();
     }
 
-    public static void addTwoPhaseNeuralSparseQuery(final Query query, SearchContext searchContext) {
+    /**
+     *
+     * @param query The whole query include neuralSparseQuery to executed.
+     * @param searchContext The searchContext with this query.
+     */
+    public static void addSecondPhaseRescoreContextFromValidNeuralSparseQuery(final Query query, SearchContext searchContext) {
         Map<Query, Float> query2weight = new HashMap<>();
         float windowSizeExpansion = populateQueryWeightsMapAndGetWindowSizeExpansion(query, query2weight, 1.0f, 1.0f);
         Query twoPhaseQuery;
