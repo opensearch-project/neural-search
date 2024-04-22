@@ -192,10 +192,14 @@ public class NeuralSparseTwoPhaseUtilTests extends OpenSearchTestCase {
 
         NeuralSparseQuery query = new NeuralSparseQuery(new MatchAllDocsQuery(), new MatchAllDocsQuery(), new MatchAllDocsQuery(), 5000f);
         NeuralSparseQuery finalQuery1 = query;
-        expectThrows(IllegalArgumentException.class, () -> { addSecondPhaseRescoreContextFromValidNeuralSparseQuery(finalQuery1, mockSearchContext); });
+        expectThrows(IllegalArgumentException.class, () -> {
+            addSecondPhaseRescoreContextFromValidNeuralSparseQuery(finalQuery1, mockSearchContext);
+        });
         query = new NeuralSparseQuery(new MatchAllDocsQuery(), new MatchAllDocsQuery(), new MatchAllDocsQuery(), Float.MAX_VALUE);
         NeuralSparseQuery finalQuery = query;
-        expectThrows(IllegalArgumentException.class, () -> { addSecondPhaseRescoreContextFromValidNeuralSparseQuery(finalQuery, mockSearchContext); });
+        expectThrows(IllegalArgumentException.class, () -> {
+            addSecondPhaseRescoreContextFromValidNeuralSparseQuery(finalQuery, mockSearchContext);
+        });
     }
 
     @SneakyThrows

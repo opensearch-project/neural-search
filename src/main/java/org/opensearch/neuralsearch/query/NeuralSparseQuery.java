@@ -19,7 +19,7 @@ import org.apache.lucene.search.Weight;
 
 /**
  * Implementation of Query interface for type NeuralSparseQuery when TwoPhaseNeuralSparse Enabled.
- * Initialized, it currentQuery include all tokenQuery. After 
+ * Initialized, it currentQuery include all tokenQuery. After
  */
 @AllArgsConstructor
 @Getter
