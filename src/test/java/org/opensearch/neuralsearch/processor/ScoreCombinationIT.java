@@ -6,11 +6,11 @@ package org.opensearch.neuralsearch.processor;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
-import static org.opensearch.neuralsearch.TestUtils.TEST_DIMENSION;
-import static org.opensearch.neuralsearch.TestUtils.TEST_SPACE_TYPE;
-import static org.opensearch.neuralsearch.TestUtils.assertHybridSearchResults;
-import static org.opensearch.neuralsearch.TestUtils.assertWeightedScores;
-import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
+import static org.opensearch.neuralsearch.util.TestUtils.TEST_DIMENSION;
+import static org.opensearch.neuralsearch.util.TestUtils.TEST_SPACE_TYPE;
+import static org.opensearch.neuralsearch.util.TestUtils.assertHybridSearchResults;
+import static org.opensearch.neuralsearch.util.TestUtils.assertWeightedScores;
+import static org.opensearch.neuralsearch.util.TestUtils.createRandomVector;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -24,9 +24,9 @@ import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
-import static org.opensearch.neuralsearch.TestUtils.DEFAULT_NORMALIZATION_METHOD;
-import static org.opensearch.neuralsearch.TestUtils.DEFAULT_COMBINATION_METHOD;
-import static org.opensearch.neuralsearch.TestUtils.PARAM_NAME_WEIGHTS;
+import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
+import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
+import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
 import com.google.common.primitives.Floats;
 
 import lombok.SneakyThrows;

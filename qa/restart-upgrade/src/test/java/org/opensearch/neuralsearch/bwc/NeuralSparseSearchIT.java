@@ -10,10 +10,10 @@ import java.util.List;
 import java.util.Map;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
-import org.opensearch.neuralsearch.TestUtils;
-import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
-import static org.opensearch.neuralsearch.TestUtils.SPARSE_ENCODING_PROCESSOR;
-import static org.opensearch.neuralsearch.TestUtils.objectToFloat;
+import org.opensearch.neuralsearch.util.TestUtils;
+import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
+import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESSOR;
+import static org.opensearch.neuralsearch.util.TestUtils.objectToFloat;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 
 public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {

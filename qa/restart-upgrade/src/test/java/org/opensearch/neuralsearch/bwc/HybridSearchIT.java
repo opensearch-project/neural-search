@@ -11,12 +11,12 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import org.opensearch.index.query.MatchQueryBuilder;
-import static org.opensearch.neuralsearch.TestUtils.getModelId;
-import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
-import static org.opensearch.neuralsearch.TestUtils.PARAM_NAME_WEIGHTS;
-import static org.opensearch.neuralsearch.TestUtils.TEXT_EMBEDDING_PROCESSOR;
-import static org.opensearch.neuralsearch.TestUtils.DEFAULT_NORMALIZATION_METHOD;
-import static org.opensearch.neuralsearch.TestUtils.DEFAULT_COMBINATION_METHOD;
+import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
+import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
+import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
+import static org.opensearch.neuralsearch.util.TestUtils.TEXT_EMBEDDING_PROCESSOR;
+import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
+import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 

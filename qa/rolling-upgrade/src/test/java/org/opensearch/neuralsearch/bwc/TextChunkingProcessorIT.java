@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.opensearch.index.query.MatchAllQueryBuilder;
-import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
+import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 
 public class TextChunkingProcessorIT extends AbstractRollingUpgradeTestCase {
 

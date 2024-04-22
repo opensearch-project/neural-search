@@ -4,11 +4,11 @@
  */
 package org.opensearch.neuralsearch.query;
 
-import static org.opensearch.neuralsearch.TestUtils.DELTA_FOR_SCORE_ASSERTION;
-import static org.opensearch.neuralsearch.TestUtils.TEST_DIMENSION;
-import static org.opensearch.neuralsearch.TestUtils.TEST_SPACE_TYPE;
-import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
-import static org.opensearch.neuralsearch.TestUtils.objectToFloat;
+import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
+import static org.opensearch.neuralsearch.util.TestUtils.TEST_DIMENSION;
+import static org.opensearch.neuralsearch.util.TestUtils.TEST_SPACE_TYPE;
+import static org.opensearch.neuralsearch.util.TestUtils.createRandomVector;
+import static org.opensearch.neuralsearch.util.TestUtils.objectToFloat;
 
 import java.util.Collections;
 import java.util.List;

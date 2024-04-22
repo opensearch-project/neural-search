@@ -18,7 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static org.opensearch.neuralsearch.TestUtils.DELTA_FOR_SCORE_ASSERTION;
+import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getAggregationValue;
 import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getAggregationValues;
 import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getAggregations;
