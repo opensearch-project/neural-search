@@ -47,7 +47,7 @@ import lombok.experimental.Accessors;
 import lombok.extern.log4j.Log4j2;
 
 /**
- * SparseEncodingQueryBuilder is responsible for handling "neural_sparse" query types. It uses an ML SPARSE_ENCODING model
+ * SparseEncodingQueryBuilder is responsible for handling "neural_sparse" query types. It uses an ML NEURAL_SPARSE model
  * or SPARSE_TOKENIZE model to produce a Map with String keys and Float values for input text. Then it will be transformed
  * to Lucene FeatureQuery wrapped by Lucene BooleanQuery.
  */
@@ -66,10 +66,16 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     static final ParseField QUERY_TOKENS_FIELD = new ParseField("query_tokens");
     @VisibleForTesting
     static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
+    // We use max_token_score field to help WAND scorer prune query clause in lucene 9.7. But in lucene 9.8 the inner
+    // logics change, this field is not needed any more.
+    @VisibleForTesting
+    @Deprecated
+    static final ParseField MAX_TOKEN_SCORE_FIELD = new ParseField("max_token_score").withAllDeprecated();
     private static MLCommonsClientAccessor ML_CLIENT;
     private String fieldName;
     private String queryText;
     private String modelId;
+    private Float maxTokenScore;
     private Supplier<Map<String, Float>> queryTokensSupplier;
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
 
@@ -92,6 +98,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         } else {
             this.modelId = in.readString();
         }
+        this.maxTokenScore = in.readOptionalFloat();
         if (in.readBoolean()) {
             Map<String, Float> queryTokens = in.readMap(StreamInput::readString, StreamInput::readFloat);
             this.queryTokensSupplier = () -> queryTokens;
@@ -117,6 +124,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         } else {
             out.writeString(StringUtils.defaultString(this.modelId, StringUtils.EMPTY));
         }
+        out.writeOptionalFloat(maxTokenScore);
         if (!Objects.isNull(this.queryTokensSupplier) && !Objects.isNull(this.queryTokensSupplier.get())) {
             out.writeBoolean(true);
             out.writeMap(this.queryTokensSupplier.get(), StreamOutput::writeString, StreamOutput::writeFloat);
@@ -135,6 +143,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (Objects.nonNull(modelId)) {
             xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
         }
+        if (Objects.nonNull(maxTokenScore)) xContentBuilder.field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), maxTokenScore);
         if (Objects.nonNull(queryTokensSupplier) && Objects.nonNull(queryTokensSupplier.get())) {
             xContentBuilder.field(QUERY_TOKENS_FIELD.getPreferredName(), queryTokensSupplier.get());
         }
@@ -147,7 +156,8 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
      * The expected parsing form looks like:
      *  "SAMPLE_FIELD": {
      *    "query_text": "string",
-     *    "model_id": "string"
+     *    "model_id": "string",
+     *    "max_token_score": float (optional)
      *  }
      *
      *  or
@@ -239,6 +249,8 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
                     sparseEncodingQueryBuilder.queryText(parser.text());
                 } else if (MODEL_ID_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     sparseEncodingQueryBuilder.modelId(parser.text());
+                } else if (MAX_TOKEN_SCORE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    sparseEncodingQueryBuilder.maxTokenScore(parser.floatValue());
                 } else {
                     throw new ParsingException(
                         parser.getTokenLocation(),
@@ -280,6 +292,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         return new NeuralSparseQueryBuilder().fieldName(fieldName)
             .queryText(queryText)
             .modelId(modelId)
+            .maxTokenScore(maxTokenScore)
             .queryTokensSupplier(queryTokensSetOnce::get);
     }
 
@@ -334,12 +347,13 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     protected boolean doEquals(NeuralSparseQueryBuilder obj) {
         if (this == obj) return true;
         if (Objects.isNull(obj) || getClass() != obj.getClass()) return false;
-        if (Objects.isNull(queryTokensSupplier) && !Objects.isNull(obj.queryTokensSupplier)) return false;
-        if (!Objects.isNull(queryTokensSupplier) && Objects.isNull(obj.queryTokensSupplier)) return false;
+        if (Objects.isNull(queryTokensSupplier) && Objects.nonNull(obj.queryTokensSupplier)) return false;
+        if (Objects.nonNull(queryTokensSupplier) && Objects.isNull(obj.queryTokensSupplier)) return false;
         EqualsBuilder equalsBuilder = new EqualsBuilder().append(fieldName, obj.fieldName)
             .append(queryText, obj.queryText)
-            .append(modelId, obj.modelId);
-        if (!Objects.isNull(queryTokensSupplier)) {
+            .append(modelId, obj.modelId)
+            .append(maxTokenScore, obj.maxTokenScore);
+        if (Objects.nonNull(queryTokensSupplier)) {
             equalsBuilder.append(queryTokensSupplier.get(), obj.queryTokensSupplier.get());
         }
         return equalsBuilder.isEquals();
@@ -347,8 +361,8 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
 
     @Override
     protected int doHashCode() {
-        HashCodeBuilder builder = new HashCodeBuilder().append(fieldName).append(queryText).append(modelId);
-        if (!Objects.isNull(queryTokensSupplier)) {
+        HashCodeBuilder builder = new HashCodeBuilder().append(fieldName).append(queryText).append(modelId).append(maxTokenScore);
+        if (queryTokensSupplier != null) {
             builder.append(queryTokensSupplier.get());
         }
         return builder.toHashCode();
