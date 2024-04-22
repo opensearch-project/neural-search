@@ -125,7 +125,6 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         } else {
             this.k = in.readVInt();
         }
-        this.k = in.readVInt();
         this.filter = in.readOptionalNamedWriteable(QueryBuilder.class);
         if (isClusterOnOrAfterMinReqVersionForRadialSearch()) {
             this.maxDistance = in.readOptionalFloat();
