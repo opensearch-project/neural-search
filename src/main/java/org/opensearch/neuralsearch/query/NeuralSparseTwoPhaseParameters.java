@@ -28,6 +28,11 @@ import java.io.IOException;
 import java.util.Locale;
 import java.util.Objects;
 
+/**
+ * Represents the parameters for neural_sparse two-phase process.
+ * This class encapsulates settings related to window size expansion, pruning ratio, and whether the two-phase search is enabled.
+ * It includes mechanisms to update settings from the cluster dynamically.
+ */
 @Getter
 @Setter
 @Accessors(chain = true, fluent = true)
@@ -52,6 +57,12 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
     private Float pruning_ratio;
     private Boolean enabled;
 
+    /**
+     * Initialize when start a cluster.
+     *
+     * @param clusterService The opensearch clusterService.
+     * @param settings       The env settings to initialize.
+     */
     public static void initialize(ClusterService clusterService, Settings settings) {
         DEFAULT_ENABLED = NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_ENABLED.get(settings);
         DEFAULT_WINDOW_SIZE_EXPANSION = NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_WINDOW_SIZE_EXPANSION.get(settings);
@@ -98,6 +109,13 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
         out.writeBoolean(enabled);
     }
 
+    /**
+     * Builds the content of this object into an XContentBuilder, typically for JSON serialization.
+     *
+     * @param builder The builder to fill.
+     * @return the given XContentBuilder with object content added.
+     * @throws IOException if building the content fails.
+     */
     public XContentBuilder doXContent(XContentBuilder builder) throws IOException {
         builder.startObject(NAME.getPreferredName());
         builder.field(WINDOW_SIZE_EXPANSION.getPreferredName(), window_size_expansion);
@@ -107,6 +125,13 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
         return builder;
     }
 
+    /**
+     * Parses a NeuralSparseTwoPhaseParameters object from XContent (typically JSON).
+     *
+     * @param parser the XContentParser to extract data from.
+     * @return a new instance of NeuralSparseTwoPhaseParameters initialized from the parser.
+     * @throws IOException if parsing fails.
+     */
     public static NeuralSparseTwoPhaseParameters parseFromXContent(XContentParser parser) throws IOException {
         XContentParser.Token token;
         String currentFieldName = "";
@@ -157,6 +182,12 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
         return builder.toHashCode();
     }
 
+    /**
+     * Checks if the two-phase search feature is enabled based on the given parameters.
+     *
+     * @param neuralSparseTwoPhaseParameters The parameters to check.
+     * @return true if enabled, false otherwise.
+     */
     public static boolean isEnabled(NeuralSparseTwoPhaseParameters neuralSparseTwoPhaseParameters) {
         if (Objects.isNull(neuralSparseTwoPhaseParameters)) {
             return false;
@@ -164,6 +195,11 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
         return neuralSparseTwoPhaseParameters.enabled();
     }
 
+    /**
+     * A flag to determine if this feature are support.
+     *
+     * @return True if cluster are on support, false if it doesn't.
+     */
     public static boolean isClusterOnOrAfterMinReqVersionForTwoPhaseSearchSupport() {
         return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_TWO_PHASE_SEARCH);
     }

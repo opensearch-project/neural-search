@@ -32,6 +32,11 @@ public final class NeuralSparseQuery extends Query {
     private final Query lowScoreTokenQuery;
     private final Float rescoreWindowSizeExpansion;
 
+    /**
+     *
+     * @param field
+     * @return
+     */
     @Override
     public String toString(String field) {
         return "NeuralSparseQuery("
@@ -80,6 +85,14 @@ public final class NeuralSparseQuery extends Query {
         return h;
     }
 
+    /**
+     *
+     * @param searcher The searcher that execute the neural_sparse query.
+     * @param scoreMode How the produced scorers will be consumed.
+     * @param boost The boost that is propagated by the parent queries.
+     * @return The weight of currentQuery.
+     * @throws IOException If creteWeight failed.
+     */
     @Override
     public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
         return currentQuery.createWeight(searcher, scoreMode, boost);

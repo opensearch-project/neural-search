@@ -45,7 +45,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.opensearch.neuralsearch.search.util.NeuralSparseTwoPhaseUtil.addRescoreContextFromNeuralSparseSparseQuery;
+import static org.opensearch.neuralsearch.search.util.NeuralSparseTwoPhaseUtil.addRescoreContextFromNeuralSparseQuery;
 
 public class NeuralSparseTwoPhaseUtilTests extends OpenSearchTestCase {
 
@@ -98,22 +98,22 @@ public class NeuralSparseTwoPhaseUtilTests extends OpenSearchTestCase {
     @SneakyThrows
     public void testAddTwoPhaseNeuralSparseQuery_whenQuery2WeightEmpty_thenNoRescoreAdded() {
         Query query = mock(Query.class);
-        addRescoreContextFromNeuralSparseSparseQuery(query, mockSearchContext);
+        addRescoreContextFromNeuralSparseQuery(query, mockSearchContext);
         verify(mockSearchContext, never()).addRescore(any());
     }
 
     @SneakyThrows
     public void testAddTwoPhaseNeuralSparseQuery_whenUnSupportedQuery_thenNoRescoreAdded() {
         FunctionScoreQuery functionScoreQuery = new FunctionScoreQuery(normalNeuralSparseQuery, mock(DoubleValuesSource.class));
-        addRescoreContextFromNeuralSparseSparseQuery(functionScoreQuery, mockSearchContext);
+        addRescoreContextFromNeuralSparseQuery(functionScoreQuery, mockSearchContext);
         DisjunctionMaxQuery disjunctionMaxQuery = new DisjunctionMaxQuery(Collections.emptyList(), 1.0f);
-        addRescoreContextFromNeuralSparseSparseQuery(disjunctionMaxQuery, mockSearchContext);
+        addRescoreContextFromNeuralSparseQuery(disjunctionMaxQuery, mockSearchContext);
         List<Query> subQueries = new ArrayList<>();
         List<Query> filterQueries = new ArrayList<>();
         subQueries.add(normalNeuralSparseQuery);
         filterQueries.add(new MatchAllDocsQuery());
         HybridQuery hybridQuery = new HybridQuery(subQueries, filterQueries);
-        addRescoreContextFromNeuralSparseSparseQuery(hybridQuery, mockSearchContext);
+        addRescoreContextFromNeuralSparseQuery(hybridQuery, mockSearchContext);
         assertEquals(normalNeuralSparseQuery.getCurrentQuery(), currentQuery);
         verify(mockSearchContext, never()).addRescore(any());
     }
@@ -121,7 +121,7 @@ public class NeuralSparseTwoPhaseUtilTests extends OpenSearchTestCase {
     @SneakyThrows
     public void testAddTwoPhaseNeuralSparseQuery_whenSingleEntryInQuery2Weight_thenRescoreAdded() {
         NeuralSparseQuery neuralSparseQuery = new NeuralSparseQuery(mock(Query.class), mock(Query.class), mock(Query.class), 5.0f);
-        addRescoreContextFromNeuralSparseSparseQuery(neuralSparseQuery, mockSearchContext);
+        addRescoreContextFromNeuralSparseQuery(neuralSparseQuery, mockSearchContext);
         verify(mockSearchContext).addRescore(any(QueryRescorer.QueryRescoreContext.class));
     }
 
@@ -135,7 +135,7 @@ public class NeuralSparseTwoPhaseUtilTests extends OpenSearchTestCase {
         queryBuilder.add(boostQuery1, BooleanClause.Occur.SHOULD);
         queryBuilder.add(boostQuery2, BooleanClause.Occur.SHOULD);
         BooleanQuery booleanQuery = queryBuilder.build();
-        addRescoreContextFromNeuralSparseSparseQuery(booleanQuery, mockSearchContext);
+        addRescoreContextFromNeuralSparseQuery(booleanQuery, mockSearchContext);
         verify(mockSearchContext).addRescore(any(QueryRescorer.QueryRescoreContext.class));
     }
 
@@ -155,7 +155,7 @@ public class NeuralSparseTwoPhaseUtilTests extends OpenSearchTestCase {
         queryBuilder.add(boostQuery3, BooleanClause.Occur.FILTER);
         queryBuilder.add(boostQuery4, BooleanClause.Occur.MUST_NOT);
         BooleanQuery booleanQuery = queryBuilder.build();
-        addRescoreContextFromNeuralSparseSparseQuery(booleanQuery, mockSearchContext);
+        addRescoreContextFromNeuralSparseQuery(booleanQuery, mockSearchContext);
         ArgumentCaptor<RescoreContext> rtxCaptor = ArgumentCaptor.forClass(RescoreContext.class);
         verify(mockSearchContext).addRescore(rtxCaptor.capture());
         QueryRescorer.QueryRescoreContext context = (QueryRescorer.QueryRescoreContext) rtxCaptor.getValue();
@@ -179,7 +179,7 @@ public class NeuralSparseTwoPhaseUtilTests extends OpenSearchTestCase {
     @SneakyThrows
     public void testWindowSize_whenNormalConditions_thenWindowSizeIsAsSet() {
         NeuralSparseQuery query = normalNeuralSparseQuery;
-        addRescoreContextFromNeuralSparseSparseQuery(query, mockSearchContext);
+        addRescoreContextFromNeuralSparseQuery(query, mockSearchContext);
         ArgumentCaptor<QueryRescorer.QueryRescoreContext> rescoreContextArgumentCaptor = ArgumentCaptor.forClass(
             QueryRescorer.QueryRescoreContext.class
         );
@@ -192,14 +192,16 @@ public class NeuralSparseTwoPhaseUtilTests extends OpenSearchTestCase {
 
         NeuralSparseQuery query = new NeuralSparseQuery(new MatchAllDocsQuery(), new MatchAllDocsQuery(), new MatchAllDocsQuery(), 5000f);
         NeuralSparseQuery finalQuery1 = query;
-        expectThrows(IllegalArgumentException.class, () -> {
-            addRescoreContextFromNeuralSparseSparseQuery(finalQuery1, mockSearchContext);
-        });
+        expectThrows(
+            IllegalArgumentException.class,
+            () -> { addRescoreContextFromNeuralSparseQuery(finalQuery1, mockSearchContext); }
+        );
         query = new NeuralSparseQuery(new MatchAllDocsQuery(), new MatchAllDocsQuery(), new MatchAllDocsQuery(), Float.MAX_VALUE);
         NeuralSparseQuery finalQuery = query;
-        expectThrows(IllegalArgumentException.class, () -> {
-            addRescoreContextFromNeuralSparseSparseQuery(finalQuery, mockSearchContext);
-        });
+        expectThrows(
+            IllegalArgumentException.class,
+            () -> { addRescoreContextFromNeuralSparseQuery(finalQuery, mockSearchContext); }
+        );
     }
 
     @SneakyThrows
@@ -211,7 +213,7 @@ public class NeuralSparseTwoPhaseUtilTests extends OpenSearchTestCase {
         List<RescoreContext> rescoreContextList = Arrays.asList(mockContext1, mockContext2);
         when(mockSearchContext.rescore()).thenReturn(rescoreContextList);
         NeuralSparseQuery query = normalNeuralSparseQuery;
-        addRescoreContextFromNeuralSparseSparseQuery(query, mockSearchContext);
+        addRescoreContextFromNeuralSparseQuery(query, mockSearchContext);
         ArgumentCaptor<RescoreContext> rtxCaptor = ArgumentCaptor.forClass(RescoreContext.class);
         verify(mockSearchContext).addRescore(rtxCaptor.capture());
         QueryRescorer.QueryRescoreContext context = (QueryRescorer.QueryRescoreContext) rtxCaptor.getValue();
@@ -222,7 +224,7 @@ public class NeuralSparseTwoPhaseUtilTests extends OpenSearchTestCase {
     public void testEmptyRescoreListWeight_whenRescoreListEmpty_thenDefaultWeightUsed() {
         when(mockSearchContext.rescore()).thenReturn(Collections.emptyList());
         NeuralSparseQuery query = normalNeuralSparseQuery;
-        addRescoreContextFromNeuralSparseSparseQuery(query, mockSearchContext);
+        addRescoreContextFromNeuralSparseQuery(query, mockSearchContext);
         ArgumentCaptor<RescoreContext> rtxCaptor = ArgumentCaptor.forClass(RescoreContext.class);
         verify(mockSearchContext).addRescore(rtxCaptor.capture());
         QueryRescorer.QueryRescoreContext context = (QueryRescorer.QueryRescoreContext) rtxCaptor.getValue();

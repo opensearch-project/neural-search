@@ -27,6 +27,35 @@ import static org.opensearch.index.IndexSettings.MAX_RESCORE_WINDOW_SETTING;
  * Include adding the second phase query to searchContext and set the currentQuery to highScoreTokenQuery.
  */
 public class NeuralSparseTwoPhaseUtil {
+    /**
+     * @param query         The whole query include neuralSparseQuery to executed.
+     * @param searchContext The searchContext with this query.
+     */
+    public static void addRescoreContextFromNeuralSparseQuery(final Query query, SearchContext searchContext) {
+        Map<Query, Float> query2weight = new HashMap<>();
+        float windowSizeExpansion = populateQueryWeightsMapAndGetWindowSizeExpansion(query, query2weight, 1.0f, 1.0f);
+        Query twoPhaseQuery;
+        if (query2weight.isEmpty()) {
+            return;
+        } else if (query2weight.size() == 1) {
+            Map.Entry<Query, Float> entry = query2weight.entrySet().stream().findFirst().get();
+            twoPhaseQuery = new BoostQuery(entry.getKey(), entry.getValue());
+        } else {
+            twoPhaseQuery = getNestedTwoPhaseQuery(query2weight);
+        }
+        int curWindowSize = (int) (searchContext.size() * windowSizeExpansion);
+        if (curWindowSize < 0
+            || curWindowSize > min(
+                NeuralSparseTwoPhaseParameters.MAX_WINDOW_SIZE,
+                MAX_RESCORE_WINDOW_SETTING.get(searchContext.getQueryShardContext().getIndexSettings().getSettings())
+            )) {
+            throw new IllegalArgumentException("Two phase final windowSize out of score with value " + curWindowSize + ".");
+        }
+        QueryRescorer.QueryRescoreContext rescoreContext = new QueryRescorer.QueryRescoreContext(curWindowSize);
+        rescoreContext.setQuery(twoPhaseQuery);
+        rescoreContext.setRescoreQueryWeight(getOriginQueryWeightAfterRescore(searchContext.rescore()));
+        searchContext.addRescore(rescoreContext);
+    }
 
     private static float populateQueryWeightsMapAndGetWindowSizeExpansion(
         final Query query,
@@ -72,34 +101,4 @@ public class NeuralSparseTwoPhaseUtil {
         return builder.build();
     }
 
-    /**
-     *
-     * @param query The whole query include neuralSparseQuery to executed.
-     * @param searchContext The searchContext with this query.
-     */
-    public static void addRescoreContextFromNeuralSparseSparseQuery(final Query query, SearchContext searchContext) {
-        Map<Query, Float> query2weight = new HashMap<>();
-        float windowSizeExpansion = populateQueryWeightsMapAndGetWindowSizeExpansion(query, query2weight, 1.0f, 1.0f);
-        Query twoPhaseQuery;
-        if (query2weight.isEmpty()) {
-            return;
-        } else if (query2weight.size() == 1) {
-            Map.Entry<Query, Float> entry = query2weight.entrySet().stream().findFirst().get();
-            twoPhaseQuery = new BoostQuery(entry.getKey(), entry.getValue());
-        } else {
-            twoPhaseQuery = getNestedTwoPhaseQuery(query2weight);
-        }
-        int curWindowSize = (int) (searchContext.size() * windowSizeExpansion);
-        if (curWindowSize < 0
-            || curWindowSize > min(
-                NeuralSparseTwoPhaseParameters.MAX_WINDOW_SIZE,
-                MAX_RESCORE_WINDOW_SETTING.get(searchContext.getQueryShardContext().getIndexSettings().getSettings())
-            )) {
-            throw new IllegalArgumentException("Two phase final windowSize out of score with value " + curWindowSize + ".");
-        }
-        QueryRescorer.QueryRescoreContext rescoreContext = new QueryRescorer.QueryRescoreContext(curWindowSize);
-        rescoreContext.setQuery(twoPhaseQuery);
-        rescoreContext.setRescoreQueryWeight(getOriginQueryWeightAfterRescore(searchContext.rescore()));
-        searchContext.addRescore(rescoreContext);
-    }
 }

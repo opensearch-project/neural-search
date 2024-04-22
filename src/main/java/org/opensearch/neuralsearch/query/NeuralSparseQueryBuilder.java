@@ -452,7 +452,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    public BooleanQuery buildFeatureFieldQueryFromTokens(Map<String, Float> tokens, String fieldName) {
+    private BooleanQuery buildFeatureFieldQueryFromTokens(Map<String, Float> tokens, String fieldName) {
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
         for (Map.Entry<String, Float> entry : tokens.entrySet()) {
             builder.add(FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()), BooleanClause.Occur.SHOULD);

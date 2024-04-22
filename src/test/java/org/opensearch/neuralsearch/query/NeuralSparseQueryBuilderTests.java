@@ -926,20 +926,6 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testBuildFeatureFieldQueryFormTokens() {
-        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
-            .queryText(QUERY_TEXT)
-            .modelId(MODEL_ID)
-            .queryTokensSupplier(QUERY_TOKENS_SUPPLIER);
-        BooleanQuery booleanQuery = sparseEncodingQueryBuilder.buildFeatureFieldQueryFromTokens(
-            sparseEncodingQueryBuilder.queryTokensSupplier().get(),
-            FIELD_NAME
-        );
-        assertNotNull(booleanQuery);
-        assertSame(booleanQuery.clauses().size(), 2);
-    }
-
-    @SneakyThrows
     public void testTokenDividedByScores_whenDefaultSettings() {
         Map<String, Float> map = new HashMap<>();
         for (int i = 1; i < 11; i++) {
