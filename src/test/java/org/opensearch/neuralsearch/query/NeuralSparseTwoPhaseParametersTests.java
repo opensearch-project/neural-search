@@ -35,7 +35,7 @@ import java.util.stream.Stream;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-import static org.opensearch.neuralsearch.TestUtils.xContentBuilderToMap;
+import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 
 public class NeuralSparseTwoPhaseParametersTests extends OpenSearchTestCase {
     public static int TEST_MAX_WINDOW_SIZE = 100;

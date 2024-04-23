@@ -27,25 +27,21 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.IntStream;
 
-import static org.opensearch.neuralsearch.TestUtils.DELTA_FOR_SCORE_ASSERTION;
-import static org.opensearch.neuralsearch.TestUtils.RELATION_EQUAL_TO;
+import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getAggregationBuckets;
 import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getAggregationValue;
 import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getAggregationValues;
 import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getAggregations;
 import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getNestedHits;
-import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getTotalHits;
+import static org.opensearch.neuralsearch.util.TestUtils.assertHitResultsFromQuery;
 
 /**
  * Integration tests for base scenarios when aggregations are combined with hybrid query
  */
 public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
-    private static final String TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS =
-        "test-neural-aggs-pipeline-multi-doc-index-multiple-shards";
-    private static final String TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD = "test-neural-aggs-multi-doc-index-single-shard";
+    private static final String TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS = "test-hybrid-aggs-multi-doc-index-multiple-shards";
+    private static final String TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD = "test-hybrid-aggs-multi-doc-index-single-shard";
     private static final String TEST_QUERY_TEXT3 = "hello";
     private static final String TEST_QUERY_TEXT4 = "everyone";
     private static final String TEST_QUERY_TEXT5 = "welcome";
@@ -53,7 +49,7 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
     private static final String TEST_DOC_TEXT2 = "Hi to this place";
     private static final String TEST_DOC_TEXT3 = "We would like to welcome everyone";
     private static final String TEST_TEXT_FIELD_NAME_1 = "test-text-field-1";
-    private static final String SEARCH_PIPELINE = "phase-results-hybrid-pipeline";
+    private static final String SEARCH_PIPELINE = "phase-results-hybrid-aggregation-pipeline";
     private static final String TEST_DOC_TEXT4 = "Hello, I'm glad to you see you pal";
     private static final String TEST_DOC_TEXT5 = "People keep telling me orange but I still prefer pink";
     private static final String TEST_DOC_TEXT6 = "She traveled because it cost the same as therapy and was a lot more enjoyable";
@@ -784,29 +780,6 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
 
         assertHitResultsFromQuery(expectedHits, searchResponseAsMap);
         return searchResponseAsMap;
-    }
-
-    private void assertHitResultsFromQuery(int expected, Map<String, Object> searchResponseAsMap) {
-        assertEquals(expected, getHitCount(searchResponseAsMap));
-
-        List<Map<String, Object>> hits1NestedList = getNestedHits(searchResponseAsMap);
-        List<String> ids = new ArrayList<>();
-        List<Double> scores = new ArrayList<>();
-        for (Map<String, Object> oneHit : hits1NestedList) {
-            ids.add((String) oneHit.get("_id"));
-            scores.add((Double) oneHit.get("_score"));
-        }
-
-        // verify that scores are in desc order
-        assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
-        // verify that all ids are unique
-        assertEquals(Set.copyOf(ids).size(), ids.size());
-
-        Map<String, Object> total = getTotalHits(searchResponseAsMap);
-        assertNotNull(total.get("value"));
-        assertEquals(expected, total.get("value"));
-        assertNotNull(total.get("relation"));
-        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
 
     private HybridQueryBuilder createHybridQueryBuilder(boolean isComplex) {

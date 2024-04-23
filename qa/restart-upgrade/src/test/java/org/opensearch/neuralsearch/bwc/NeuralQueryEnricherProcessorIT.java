@@ -4,12 +4,12 @@
  */
 package org.opensearch.neuralsearch.bwc;
 
-import static org.opensearch.neuralsearch.TestUtils.NODES_BWC_CLUSTER;
-import static org.opensearch.neuralsearch.TestUtils.SPARSE_ENCODING_PROCESSOR;
-import static org.opensearch.neuralsearch.TestUtils.TEXT_EMBEDDING_PROCESSOR;
+import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
+import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESSOR;
+import static org.opensearch.neuralsearch.util.TestUtils.TEXT_EMBEDDING_PROCESSOR;
 
 import org.opensearch.common.settings.Settings;
-import org.opensearch.neuralsearch.TestUtils;
+import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 

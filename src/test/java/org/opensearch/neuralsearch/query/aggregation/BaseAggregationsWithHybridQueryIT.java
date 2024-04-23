@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.IntStream;
 
-import static org.opensearch.neuralsearch.TestUtils.RELATION_EQUAL_TO;
+import static org.opensearch.neuralsearch.util.TestUtils.RELATION_EQUAL_TO;
 import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getNestedHits;
 import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getTotalHits;
 

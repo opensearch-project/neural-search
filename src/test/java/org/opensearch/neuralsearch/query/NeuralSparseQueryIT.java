@@ -4,15 +4,6 @@
  */
 package org.opensearch.neuralsearch.query;
 
-import org.opensearch.index.query.ConstantScoreQueryBuilder;
-import org.opensearch.index.query.DisMaxQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.functionscore.FunctionScoreQueryBuilder;
-import org.opensearch.neuralsearch.BaseNeuralSearchIT;
-
-import static org.opensearch.neuralsearch.TestUtils.createRandomTokenWeightMap;
-import static org.opensearch.neuralsearch.TestUtils.objectToFloat;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,9 +11,18 @@ import java.util.Map;
 import org.junit.Before;
 import org.opensearch.client.ResponseException;
 import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.ConstantScoreQueryBuilder;
+import org.opensearch.index.query.DisMaxQueryBuilder;
+import org.opensearch.index.query.functionscore.FunctionScoreQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
-import org.opensearch.neuralsearch.TestUtils;
+import org.opensearch.index.query.QueryBuilder;
+
+import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.util.TestUtils;
+
+import static org.opensearch.neuralsearch.util.TestUtils.createRandomTokenWeightMap;
+import static org.opensearch.neuralsearch.util.TestUtils.objectToFloat;
 
 import lombok.SneakyThrows;
 
