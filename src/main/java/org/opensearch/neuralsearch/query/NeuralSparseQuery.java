@@ -10,7 +10,6 @@ import java.util.Objects;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
-import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.QueryVisitor;
@@ -34,8 +33,8 @@ public final class NeuralSparseQuery extends Query {
 
     /**
      *
-     * @param field
-     * @return
+     * @param field The field of this query.
+     * @return String of NeuralSparseQuery object.
      */
     @Override
     public String toString(String field) {
@@ -53,16 +52,23 @@ public final class NeuralSparseQuery extends Query {
         Query rewrittenCurrentQuery = currentQuery.rewrite(indexSearcher);
         Query rewrittenFirstStepQuery = highScoreTokenQuery.rewrite(indexSearcher);
         Query rewrittenSecondPhaseQuery = lowScoreTokenQuery.rewrite(indexSearcher);
-        if (rewrittenFirstStepQuery == highScoreTokenQuery && rewrittenSecondPhaseQuery == lowScoreTokenQuery) {
+        if (rewrittenCurrentQuery == currentQuery
+            && rewrittenFirstStepQuery == highScoreTokenQuery
+            && rewrittenSecondPhaseQuery == lowScoreTokenQuery) {
             return this;
         }
         return new NeuralSparseQuery(rewrittenCurrentQuery, rewrittenFirstStepQuery, rewrittenSecondPhaseQuery, rescoreWindowSizeExpansion);
     }
 
+    /**
+     * This interface is let the lucene to visit this query.
+     * Briefly, the query to be performed always be a subset of current query.
+     * So in this function use currentQuery.visit().
+     * @param queryVisitor a QueryVisitor to be called by each query in the tree
+     */
     @Override
     public void visit(QueryVisitor queryVisitor) {
-        QueryVisitor v = queryVisitor.getSubVisitor(BooleanClause.Occur.SHOULD, this);
-        currentQuery.visit(v);
+        currentQuery.visit(queryVisitor);
     }
 
     @Override
@@ -86,7 +92,7 @@ public final class NeuralSparseQuery extends Query {
     }
 
     /**
-     *
+     * This function is always performed after setCurrentQueryToHighScoreTokenQuery. And determine which query's weight to score docs.
      * @param searcher The searcher that execute the neural_sparse query.
      * @param scoreMode How the produced scorers will be consumed.
      * @param boost The boost that is propagated by the parent queries.
@@ -99,8 +105,8 @@ public final class NeuralSparseQuery extends Query {
     }
 
     /**
-     * Before call this function, the currentQuery of this object is allTokenQuery.
-     * After call this function, the currentQuery of this object change to highScoreTokenQuery.
+     * Before call this function, the currentQuery of this object is a BooleanQuery include all tokens FeatureFiledQuery.
+     * After call this function, the currentQuery of this object change to a BooleanQuery include high score tokens FeatureFiledQuery.
      */
     public void setCurrentQueryToHighScoreTokenQuery() {
         this.currentQuery = highScoreTokenQuery;
