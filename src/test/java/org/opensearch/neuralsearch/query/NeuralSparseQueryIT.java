@@ -142,7 +142,6 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
     }
 
     /**
-    <<<<<<< HEAD
      * Tests basic query with boost:
      * {
      *     "query": {
@@ -184,8 +183,6 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
     }
 
     /**
-    =======
-    >>>>>>> origin
      * Tests rescore query:
      * {
      *     "query" : {

@@ -189,7 +189,7 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
      * @return true if enabled, false otherwise.
      */
     public static boolean isEnabled(NeuralSparseTwoPhaseParameters neuralSparseTwoPhaseParameters) {
-        if (Objects.isNull(neuralSparseTwoPhaseParameters)) {
+        if (!isClusterOnOrAfterMinReqVersionForTwoPhaseSearchSupport() || Objects.isNull(neuralSparseTwoPhaseParameters)) {
             return false;
         }
         return neuralSparseTwoPhaseParameters.enabled();
