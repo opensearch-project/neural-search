@@ -14,6 +14,8 @@ import static org.opensearch.index.query.AbstractQueryBuilder.NAME_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.FILTER_FIELD;
 import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.K_FIELD;
+import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MAX_DISTANCE_FIELD;
+import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MIN_SCORE_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MODEL_ID_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.NAME;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_IMAGE_FIELD;
@@ -64,7 +66,9 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
     private static final String QUERY_TEXT = "Hello world!";
     private static final String IMAGE_TEXT = "base641234567890";
     private static final String MODEL_ID = "mfgfgdsfgfdgsde";
-    private static final int K = 10;
+    private static final Integer K = 10;
+    private static final Float MAX_DISTANCE = 1.0f;
+    private static final Float MIN_SCORE = 0.985f;
     private static final float BOOST = 1.8f;
     private static final String QUERY_NAME = "queryName";
     private static final Supplier<float[]> TEST_VECTOR_SUPPLIER = () -> new float[10];
@@ -645,7 +649,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         assertTrue(queryBuilder instanceof KNNQueryBuilder);
         KNNQueryBuilder knnQueryBuilder = (KNNQueryBuilder) queryBuilder;
         assertEquals(neuralQueryBuilder.fieldName(), knnQueryBuilder.fieldName());
-        assertEquals(neuralQueryBuilder.k(), knnQueryBuilder.getK());
+        assertEquals((int) neuralQueryBuilder.k(), knnQueryBuilder.getK());
         assertArrayEquals(TEST_VECTOR_SUPPLIER.get(), (float[]) knnQueryBuilder.vector(), 0.0f);
     }
 
@@ -675,6 +679,104 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
             () -> neuralQueryBuilder.doToQuery(queryShardContext)
         );
         assertEquals("Query cannot be created by NeuralQueryBuilder directly", exception.getMessage());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuiltWithDefaults_whenBuiltWithMaxDistance_thenBuildSuccessfully() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": "string",
+                "query_image": "string",
+                "model_id": "string",
+                "max_distance": float
+              }
+          }
+        */
+        setUpClusterService(Version.V_2_14_0);
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .field(MAX_DISTANCE_FIELD.getPreferredName(), MAX_DISTANCE)
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.fromXContent(contentParser);
+
+        assertEquals(FIELD_NAME, neuralQueryBuilder.fieldName());
+        assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
+        assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
+        assertEquals(MAX_DISTANCE, neuralQueryBuilder.maxDistance());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuiltWithDefaults_whenBuiltWithMinScore_thenBuildSuccessfully() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": "string",
+                "query_image": "string",
+                "model_id": "string",
+                "min_score": float
+              }
+          }
+        */
+        setUpClusterService(Version.V_2_14_0);
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .field(MIN_SCORE_FIELD.getPreferredName(), MIN_SCORE)
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.fromXContent(contentParser);
+
+        assertEquals(FIELD_NAME, neuralQueryBuilder.fieldName());
+        assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
+        assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
+        assertEquals(MIN_SCORE, neuralQueryBuilder.minScore());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuiltWithDefaults_whenBuiltWithMinScoreAndK_thenFail() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": "string",
+                "query_image": "string",
+                "model_id": "string",
+                "min_score": float,
+                "k": int
+              }
+          }
+        */
+        setUpClusterService(Version.V_2_14_0);
+        XContentBuilder xContentBuilder = null;
+        try {
+            xContentBuilder = XContentFactory.jsonBuilder()
+                .startObject()
+                .startObject(FIELD_NAME)
+                .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+                .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+                .field(MIN_SCORE_FIELD.getPreferredName(), MIN_SCORE)
+                .field(K_FIELD.getPreferredName(), K)
+                .endObject()
+                .endObject();
+        } catch (IOException e) {
+            fail("Failed to create XContentBuilder");
+        }
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        expectThrows(IllegalArgumentException.class, () -> NeuralQueryBuilder.fromXContent(contentParser));
     }
 
     private void setUpClusterService(Version version) {
