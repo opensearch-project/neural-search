@@ -34,6 +34,7 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.lucene.document.FeatureField;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.Query;
 import org.junit.Before;
 import org.opensearch.Version;
 import org.opensearch.client.Client;
@@ -80,6 +81,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     private Settings settings;
     private ClusterSettings clusterSettings;
     private ClusterService clusterService;
+    private QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
 
     @Before
     public void setUpNeuralSparseTwoPhaseParameters() {
@@ -97,6 +99,10 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         clusterService = mock(ClusterService.class);
         when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
         NeuralSparseTwoPhaseParameters.initialize(clusterService, settings);
+        // initialize mockQueryShardContext
+        MappedFieldType mappedFieldType = mock(MappedFieldType.class);
+        when(mappedFieldType.typeName()).thenReturn("rank_features");
+        when(mockQueryShardContext.fieldMapper(anyString())).thenReturn(mappedFieldType);
     }
 
     @Before
@@ -241,7 +247,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
                       "window_size_expansion": 0.4,
                       "pruning_ratio": 0.4,
                       "enabled": true
-                  }
+                 }
               }
           }
         */
@@ -489,6 +495,36 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         XContentParser contentParser = createParser(xContentBuilder);
         contentParser.nextToken();
         expectThrows(IllegalArgumentException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuiltWithEmptyTwoPhaseParams_thenThrowException() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": "string",
+                "model_id": "string",
+                "two_phase_settings":{
+                      "window_size_expansion": 5,
+                      "pruning_ratio": 0.4,
+                      "enabled": false
+                  }
+              }
+          }
+        */
+        NeuralSparseTwoPhaseParameters parameters = new NeuralSparseTwoPhaseParameters().enabled(null)
+            .pruning_ratio(null)
+            .window_size_expansion(null);
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID);
+        parameters.doXContent(xContentBuilder);
+        xContentBuilder.endObject().endObject();
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        expectThrows(ParsingException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser));
     }
 
     @SuppressWarnings("unchecked")
@@ -937,15 +973,10 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .neuralSparseTwoPhaseParameters(NeuralSparseTwoPhaseParameters.getDefaultSettings())
             .modelId(MODEL_ID)
             .queryTokensSupplier(tokenSupplier);
-        QueryShardContext context = mock(QueryShardContext.class);
-        MappedFieldType mappedFieldType = mock(MappedFieldType.class);
-        when(mappedFieldType.typeName()).thenReturn("rank_features");
-        when(context.fieldMapper(anyString())).thenReturn(mappedFieldType);
-        NeuralSparseQuery neuralSparseQuery = (NeuralSparseQuery) sparseEncodingQueryBuilder.doToQuery(context);
+
+        NeuralSparseQuery neuralSparseQuery = (NeuralSparseQuery) sparseEncodingQueryBuilder.doToQuery(mockQueryShardContext);
         BooleanQuery highScoreTokenQuery = (BooleanQuery) neuralSparseQuery.getHighScoreTokenQuery();
         BooleanQuery lowScoreTokenQuery = (BooleanQuery) neuralSparseQuery.getLowScoreTokenQuery();
-        assertNotNull(highScoreTokenQuery.clauses());
-        assertNotNull(lowScoreTokenQuery.clauses());
         assertEquals(highScoreTokenQuery.clauses().size(), 7);
         assertEquals(lowScoreTokenQuery.clauses().size(), 3);
         sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName("rank_features")
@@ -955,13 +986,54 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             )
             .modelId(MODEL_ID)
             .queryTokensSupplier(tokenSupplier);
-        neuralSparseQuery = (NeuralSparseQuery) sparseEncodingQueryBuilder.doToQuery(context);
+        neuralSparseQuery = (NeuralSparseQuery) sparseEncodingQueryBuilder.doToQuery(mockQueryShardContext);
         highScoreTokenQuery = (BooleanQuery) neuralSparseQuery.getHighScoreTokenQuery();
         lowScoreTokenQuery = (BooleanQuery) neuralSparseQuery.getLowScoreTokenQuery();
-        assertNotNull(highScoreTokenQuery.clauses());
-        assertNotNull(lowScoreTokenQuery.clauses());
         assertEquals(highScoreTokenQuery.clauses().size(), 5);
         assertEquals(lowScoreTokenQuery.clauses().size(), 5);
+    }
+
+    @SneakyThrows
+    public void testDoToQuery_whenTwoPhaseParaDisabled_thenDegradeSuccess() {
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensSupplier(QUERY_TOKENS_SUPPLIER)
+            .neuralSparseTwoPhaseParameters(
+                new NeuralSparseTwoPhaseParameters().enabled(false).pruning_ratio(0.4f).window_size_expansion(6.0f)
+            );
+        Query query = sparseEncodingQueryBuilder.doToQuery(mockQueryShardContext);
+        assertTrue(query instanceof BooleanQuery);
+        List<BooleanClause> booleanClauseList = ((BooleanQuery) query).clauses();
+        assertEquals(2, ((BooleanQuery) query).clauses().size());
+        BooleanClause firstClause = booleanClauseList.get(0);
+        BooleanClause secondClause = booleanClauseList.get(1);
+
+        Query firstFeatureQuery = firstClause.getQuery();
+        assertEquals(firstFeatureQuery, FeatureField.newLinearQuery(FIELD_NAME, "world", 2.f));
+        Query secondFeatureQuery = secondClause.getQuery();
+        assertEquals(secondFeatureQuery, FeatureField.newLinearQuery(FIELD_NAME, "hello", 1.f));
+    }
+
+    @SneakyThrows
+    public void testDoToQuery_whenTwoPhaseParaEmpty_thenDegradeSuccess() {
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensSupplier(QUERY_TOKENS_SUPPLIER);
+        Query query = sparseEncodingQueryBuilder.doToQuery(mockQueryShardContext);
+        assertTrue(query instanceof BooleanQuery);
+        List<BooleanClause> booleanClauseList = ((BooleanQuery) query).clauses();
+        assertEquals(2, ((BooleanQuery) query).clauses().size());
+        BooleanClause firstClause = booleanClauseList.get(0);
+        BooleanClause secondClause = booleanClauseList.get(1);
+
+        Query firstFeatureQuery = firstClause.getQuery();
+        assertEquals(firstFeatureQuery, FeatureField.newLinearQuery(FIELD_NAME, "world", 2.f));
+        Query secondFeatureQuery = secondClause.getQuery();
+        assertEquals(secondFeatureQuery, FeatureField.newLinearQuery(FIELD_NAME, "hello", 1.f));
     }
 
     @SneakyThrows
@@ -971,15 +1043,11 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .queryText(QUERY_TEXT)
             .modelId(MODEL_ID)
             .queryTokensSupplier(QUERY_TOKENS_SUPPLIER);
-        QueryShardContext mockedQueryShardContext = mock(QueryShardContext.class);
-        MappedFieldType mockedMappedFieldType = mock(MappedFieldType.class);
-        doAnswer(invocation -> "rank_features").when(mockedMappedFieldType).typeName();
-        doAnswer(invocation -> mockedMappedFieldType).when(mockedQueryShardContext).fieldMapper(any());
 
         BooleanQuery.Builder targetQueryBuilder = new BooleanQuery.Builder();
         targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "hello", 1.f), BooleanClause.Occur.SHOULD);
         targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "world", 2.f), BooleanClause.Occur.SHOULD);
 
-        assertEquals(sparseEncodingQueryBuilder.doToQuery(mockedQueryShardContext), targetQueryBuilder.build());
+        assertEquals(sparseEncodingQueryBuilder.doToQuery(mockQueryShardContext), targetQueryBuilder.build());
     }
 }

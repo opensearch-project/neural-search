@@ -19,8 +19,6 @@ import java.util.List;
 import java.util.Map;
 
 import static java.lang.Float.max;
-import static java.lang.Integer.min;
-import static org.opensearch.index.IndexSettings.MAX_RESCORE_WINDOW_SETTING;
 
 /**
  * Util class for do two phase preprocess for the NeuralSparseQuery.
@@ -44,12 +42,16 @@ public class NeuralSparseTwoPhaseUtil {
             twoPhaseQuery = getNestedTwoPhaseQuery(query2weight);
         }
         int curWindowSize = (int) (searchContext.size() * windowSizeExpansion);
-        if (curWindowSize < 0
-            || curWindowSize > min(
-                NeuralSparseTwoPhaseParameters.MAX_WINDOW_SIZE,
-                MAX_RESCORE_WINDOW_SETTING.get(searchContext.getQueryShardContext().getIndexSettings().getSettings())
-            )) {
-            throw new IllegalArgumentException("Two phase final windowSize out of score with value " + curWindowSize + ".");
+        if (curWindowSize < 0 || curWindowSize > NeuralSparseTwoPhaseParameters.MAX_WINDOW_SIZE) {
+            throw new IllegalArgumentException(
+                "Two phase final windowSize "
+                    + curWindowSize
+                    + " out of score with limit "
+                    + NeuralSparseTwoPhaseParameters.MAX_WINDOW_SIZE
+                    + "."
+                    + "You can change the value of cluster setting "
+                    + "[plugins.neural_search.neural_sparse.two_phase.max_window_size] to a integer at least 50."
+            );
         }
         QueryRescorer.QueryRescoreContext rescoreContext = new QueryRescorer.QueryRescoreContext(curWindowSize);
         rescoreContext.setQuery(twoPhaseQuery);

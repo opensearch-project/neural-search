@@ -345,13 +345,15 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         }
         // in the last step we make sure neuralSparseTwoPhaseParameters is not null
         float ratio = neuralSparseTwoPhaseParameters.pruning_ratio();
-        Query allTokenQuery = buildFeatureFieldQueryFromTokens(getAllTokens(), fieldName);
+        Map<String, Float> highScoreTokens = getHighScoreTokens(ratio);
         Map<String, Float> lowScoreTokens = getLowScoreTokens(ratio);
+        Map<String, Float> allTokens = getAllTokens();
+        Query allTokenQuery = buildFeatureFieldQueryFromTokens(allTokens, fieldName);
         // if all token are valid score that we don't need the two-phase optimize, return allTokenQuery.
         if (lowScoreTokens.isEmpty()) {
             return allTokenQuery;
         }
-        Query highScoreTokenQuery = buildFeatureFieldQueryFromTokens(getHighScoreTokens(ratio), fieldName);
+        Query highScoreTokenQuery = buildFeatureFieldQueryFromTokens(highScoreTokens, fieldName);
         Query lowScoreTokenQuery = buildFeatureFieldQueryFromTokens(lowScoreTokens, fieldName);
         return new NeuralSparseQuery(
             allTokenQuery,
