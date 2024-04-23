@@ -74,7 +74,7 @@ public final class NeuralSearchSettings {
     public static final Setting<Integer> NEURAL_SPARSE_TWO_PHASE_MAX_WINDOW_SIZE = Setting.intSetting(
         "plugins.neural_search.neural_sparse.two_phase.max_window_size",
         10000,
-        0,
+        50,
         Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );

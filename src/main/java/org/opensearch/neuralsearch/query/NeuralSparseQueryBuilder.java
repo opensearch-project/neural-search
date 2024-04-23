@@ -249,7 +249,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
-                    "[%s] %s field value must be in range (0,1]",
+                    "[%s] %s field value must be in range [0,1]",
                     NeuralSparseTwoPhaseParameters.NAME.getPreferredName(),
                     NeuralSparseTwoPhaseParameters.PRUNING_RATIO.getPreferredName()
                 )
@@ -266,7 +266,6 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
                 )
             );
         }
-
         return sparseEncodingQueryBuilder;
     }
 
@@ -346,10 +345,18 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         }
         // in the last step we make sure neuralSparseTwoPhaseParameters is not null
         float ratio = neuralSparseTwoPhaseParameters.pruning_ratio();
+        Query allTokenQuery = buildFeatureFieldQueryFromTokens(getAllTokens(), fieldName);
+        Map<String,Float> lowScoreTokens = getLowScoreTokens(ratio);
+        // if all token are valid score that we don't need the two-phase optimize, return allTokenQuery.
+        if (lowScoreTokens.isEmpty()) {
+            return allTokenQuery;
+        }
+        Query highScoreTokenQuery = buildFeatureFieldQueryFromTokens(getHighScoreTokens(ratio), fieldName);
+        Query lowScoreTokenQuery = buildFeatureFieldQueryFromTokens(lowScoreTokens, fieldName);
         return new NeuralSparseQuery(
-            buildFeatureFieldQueryFromTokens(getAllTokens(), fieldName),
-            buildFeatureFieldQueryFromTokens(getHighScoreTokens(ratio), fieldName),
-            buildFeatureFieldQueryFromTokens(getLowScoreTokens(ratio), fieldName),
+            allTokenQuery,
+            highScoreTokenQuery,
+            lowScoreTokenQuery,
             neuralSparseTwoPhaseParameters.window_size_expansion()
         );
     }
