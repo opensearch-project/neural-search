@@ -4,11 +4,9 @@
  */
 package org.opensearch.neuralsearch.bwc;
 
-import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.Optional;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
