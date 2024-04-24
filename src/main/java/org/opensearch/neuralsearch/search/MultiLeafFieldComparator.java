@@ -2,7 +2,6 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch.search;
 
 import java.io.IOException;
@@ -22,10 +21,8 @@ final class MultiLeafFieldComparator implements LeafFieldComparator {
     MultiLeafFieldComparator(LeafFieldComparator[] comparators, int[] reverseMul) {
         if (comparators.length != reverseMul.length) {
             throw new IllegalArgumentException(
-                    "Must have the same number of comparators and reverseMul, got "
-                            + comparators.length
-                            + " and "
-                            + reverseMul.length);
+                "Must have the same number of comparators and reverseMul, got " + comparators.length + " and " + reverseMul.length
+            );
         }
         this.comparators = comparators;
         this.reverseMul = reverseMul;

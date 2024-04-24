@@ -15,6 +15,7 @@ import java.util.stream.Collectors;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
+import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
@@ -46,11 +47,12 @@ public class NormalizationProcessorWorkflow {
      * @param combinationTechnique technique for score combination
      */
     public void execute(
-        final List<QuerySearchResult> querySearchResults,
-        final Optional<FetchSearchResult> fetchSearchResultOptional,
-        final ScoreNormalizationTechnique normalizationTechnique,
-        final ScoreCombinationTechnique combinationTechnique
-    ) {
+            final List<QuerySearchResult> querySearchResults,
+            final Optional<FetchSearchResult> fetchSearchResultOptional,
+            final ScoreNormalizationTechnique normalizationTechnique,
+            final ScoreCombinationTechnique combinationTechnique,
+            final SearchPhaseContext searchPhaseContext
+            ) {
         // save original state
         List<Integer> unprocessedDocIds = unprocessedDocIds(querySearchResults);
 
@@ -68,7 +70,7 @@ public class NormalizationProcessorWorkflow {
 
         // post-process data
         log.debug("Post-process query results after score normalization and combination");
-        updateOriginalQueryResults(querySearchResults, queryTopDocs);
+        updateOriginalQueryResults(querySearchResults, queryTopDocs,searchPhaseContext);
         updateOriginalFetchResults(querySearchResults, fetchSearchResultOptional, unprocessedDocIds);
     }
 
@@ -96,7 +98,7 @@ public class NormalizationProcessorWorkflow {
         return queryTopDocs;
     }
 
-    private void updateOriginalQueryResults(final List<QuerySearchResult> querySearchResults, final List<CompoundTopDocs> queryTopDocs) {
+    private void updateOriginalQueryResults(final List<QuerySearchResult> querySearchResults, final List<CompoundTopDocs> queryTopDocs, final SearchPhaseContext searchPhaseContext) {
         if (querySearchResults.size() != queryTopDocs.size()) {
             throw new IllegalStateException(
                 String.format(
@@ -112,6 +114,9 @@ public class NormalizationProcessorWorkflow {
             CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
             float maxScore = updatedTopDocs.getTotalHits().value > 0 ? updatedTopDocs.getScoreDocs().get(0).score : 0.0f;
 
+            if (searchPhaseContext.getRequest().source().sorts()!=null){
+
+            }
             // create final version of top docs with all updated values
             TopDocs topDocs = new TopDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new ScoreDoc[0]));
 
