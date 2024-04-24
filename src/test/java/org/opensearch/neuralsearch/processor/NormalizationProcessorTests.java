@@ -39,7 +39,7 @@ import org.opensearch.common.util.concurrent.OpenSearchThreadPoolExecutor;
 import org.opensearch.core.common.breaker.CircuitBreaker;
 import org.opensearch.core.common.breaker.NoopCircuitBreaker;
 import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.neuralsearch.TestUtils;
+import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;

@@ -9,7 +9,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.opensearch.index.query.AbstractQueryBuilder.BOOST_FIELD;
 import static org.opensearch.index.query.AbstractQueryBuilder.NAME_FIELD;
-import static org.opensearch.neuralsearch.TestUtils.xContentBuilderToMap;
+import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.MAX_TOKEN_SCORE_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.MODEL_ID_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.NAME;

@@ -4,9 +4,9 @@
  */
 package org.opensearch.neuralsearch.processor;
 
-import static org.opensearch.neuralsearch.TestUtils.TEST_DIMENSION;
-import static org.opensearch.neuralsearch.TestUtils.TEST_SPACE_TYPE;
-import static org.opensearch.neuralsearch.TestUtils.createRandomVector;
+import static org.opensearch.neuralsearch.util.TestUtils.TEST_DIMENSION;
+import static org.opensearch.neuralsearch.util.TestUtils.TEST_SPACE_TYPE;
+import static org.opensearch.neuralsearch.util.TestUtils.createRandomVector;
 
 import java.util.Collections;
 import java.util.List;
