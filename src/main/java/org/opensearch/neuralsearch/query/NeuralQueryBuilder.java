@@ -75,6 +75,12 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     @VisibleForTesting
     static final ParseField K_FIELD = new ParseField("k");
 
+    @VisibleForTesting
+    static final ParseField MAX_DISTANCE_FIELD = new ParseField("max_distance");
+
+    @VisibleForTesting
+    static final ParseField MIN_SCORE_FIELD = new ParseField("min_score");
+
     private static final int DEFAULT_K = 10;
 
     private static MLCommonsClientAccessor ML_CLIENT;
@@ -87,13 +93,16 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     private String queryText;
     private String queryImage;
     private String modelId;
-    private int k = DEFAULT_K;
+    private Integer k = null;
+    private Float maxDistance = null;
+    private Float minScore = null;
     @VisibleForTesting
     @Getter(AccessLevel.PACKAGE)
     @Setter(AccessLevel.PACKAGE)
     private Supplier<float[]> vectorSupplier;
     private QueryBuilder filter;
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_11_0;
+    private static final Version MINIMAL_SUPPORTED_VERSION_RADIAL_SEARCH = Version.V_2_14_0;
 
     /**
      * Constructor from stream input
@@ -111,8 +120,16 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         } else {
             this.modelId = in.readString();
         }
-        this.k = in.readVInt();
+        if (isClusterOnOrAfterMinReqVersionForRadialSearch()) {
+            this.k = in.readOptionalInt();
+        } else {
+            this.k = in.readVInt();
+        }
         this.filter = in.readOptionalNamedWriteable(QueryBuilder.class);
+        if (isClusterOnOrAfterMinReqVersionForRadialSearch()) {
+            this.maxDistance = in.readOptionalFloat();
+            this.minScore = in.readOptionalFloat();
+        }
     }
 
     @Override
@@ -125,8 +142,16 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         } else {
             out.writeString(this.modelId);
         }
-        out.writeVInt(this.k);
+        if (isClusterOnOrAfterMinReqVersionForRadialSearch()) {
+            out.writeOptionalInt(this.k);
+        } else {
+            out.writeVInt(this.k);
+        }
         out.writeOptionalNamedWriteable(this.filter);
+        if (isClusterOnOrAfterMinReqVersionForRadialSearch()) {
+            out.writeOptionalFloat(this.maxDistance);
+            out.writeOptionalFloat(this.minScore);
+        }
     }
 
     @Override
@@ -137,9 +162,17 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         if (Objects.nonNull(modelId)) {
             xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
         }
-        xContentBuilder.field(K_FIELD.getPreferredName(), k);
+        if (Objects.nonNull(k)) {
+            xContentBuilder.field(K_FIELD.getPreferredName(), k);
+        }
         if (Objects.nonNull(filter)) {
             xContentBuilder.field(FILTER_FIELD.getPreferredName(), filter);
+        }
+        if (Objects.nonNull(maxDistance)) {
+            xContentBuilder.field(MAX_DISTANCE_FIELD.getPreferredName(), maxDistance);
+        }
+        if (Objects.nonNull(minScore)) {
+            xContentBuilder.field(MIN_SCORE_FIELD.getPreferredName(), minScore);
         }
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
@@ -193,6 +226,12 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         if (!isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
             requireValue(neuralQueryBuilder.modelId(), "Model ID must be provided for neural query");
         }
+
+        boolean queryTypeIsProvided = validateKNNQueryType(neuralQueryBuilder);
+        if (queryTypeIsProvided == false) {
+            neuralQueryBuilder.k(DEFAULT_K);
+        }
+
         return neuralQueryBuilder;
     }
 
@@ -215,6 +254,10 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                     neuralQueryBuilder.queryName(parser.text());
                 } else if (BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     neuralQueryBuilder.boost(parser.floatValue());
+                } else if (MAX_DISTANCE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    neuralQueryBuilder.maxDistance(parser.floatValue());
+                } else if (MIN_SCORE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    neuralQueryBuilder.minScore(parser.floatValue());
                 } else {
                     throw new ParsingException(
                         parser.getTokenLocation(),
@@ -246,7 +289,18 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         // create a new builder. Once the supplier's value gets set, we return a KNNQueryBuilder. Otherwise, we just
         // return the current unmodified query builder.
         if (vectorSupplier() != null) {
-            return vectorSupplier().get() == null ? this : new KNNQueryBuilder(fieldName(), vectorSupplier.get(), k(), filter());
+            if (vectorSupplier().get() == null) {
+                return this;
+            }
+            KNNQueryBuilder knnQueryBuilder = new KNNQueryBuilder(fieldName(), vectorSupplier.get()).filter(filter());
+            if (maxDistance != null) {
+                knnQueryBuilder.maxDistance(maxDistance);
+            } else if (minScore != null) {
+                knnQueryBuilder.minScore(minScore);
+            } else {
+                knnQueryBuilder.k(k);
+            }
+            return knnQueryBuilder;
         }
 
         SetOnce<float[]> vectorSetOnce = new SetOnce<>();
@@ -263,7 +317,17 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 actionListener.onResponse(null);
             }, actionListener::onFailure)))
         );
-        return new NeuralQueryBuilder(fieldName(), queryText(), queryImage(), modelId(), k(), vectorSetOnce::get, filter());
+        return new NeuralQueryBuilder(
+            fieldName(),
+            queryText(),
+            queryImage(),
+            modelId(),
+            k(),
+            maxDistance(),
+            minScore(),
+            vectorSetOnce::get,
+            filter()
+        );
     }
 
     @Override
@@ -297,5 +361,26 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
 
     private static boolean isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport() {
         return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID);
+    }
+
+    private static boolean isClusterOnOrAfterMinReqVersionForRadialSearch() {
+        return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_RADIAL_SEARCH);
+    }
+
+    private static boolean validateKNNQueryType(NeuralQueryBuilder neuralQueryBuilder) {
+        int queryCount = 0;
+        if (neuralQueryBuilder.k() != null) {
+            queryCount++;
+        }
+        if (neuralQueryBuilder.maxDistance() != null) {
+            queryCount++;
+        }
+        if (neuralQueryBuilder.minScore() != null) {
+            queryCount++;
+        }
+        if (queryCount > 1) {
+            throw new IllegalArgumentException("Only one of k, max_distance, or min_score can be provided");
+        }
+        return queryCount == 1;
     }
 }

@@ -224,7 +224,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
 
             HybridQueryBuilder hybridQueryBuilderDefaultNorm = new HybridQueryBuilder();
             hybridQueryBuilderDefaultNorm.add(
-                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null)
+                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null, null, null)
             );
             hybridQueryBuilderDefaultNorm.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
@@ -248,7 +248,9 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             );
 
             HybridQueryBuilder hybridQueryBuilderL2Norm = new HybridQueryBuilder();
-            hybridQueryBuilderL2Norm.add(new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null));
+            hybridQueryBuilderL2Norm.add(
+                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null, null, null)
+            );
             hybridQueryBuilderL2Norm.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
             Map<String, Object> searchResponseAsMapL2Norm = search(
@@ -297,7 +299,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
 
             HybridQueryBuilder hybridQueryBuilderDefaultNorm = new HybridQueryBuilder();
             hybridQueryBuilderDefaultNorm.add(
-                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null)
+                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null, null, null)
             );
             hybridQueryBuilderDefaultNorm.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
@@ -321,7 +323,9 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             );
 
             HybridQueryBuilder hybridQueryBuilderL2Norm = new HybridQueryBuilder();
-            hybridQueryBuilderL2Norm.add(new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null));
+            hybridQueryBuilderL2Norm.add(
+                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null, null, null)
+            );
             hybridQueryBuilderL2Norm.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
             Map<String, Object> searchResponseAsMapL2Norm = search(
