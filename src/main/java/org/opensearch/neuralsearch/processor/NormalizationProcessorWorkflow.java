@@ -15,6 +15,10 @@ import java.util.stream.Collectors;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.TopFieldDocs;
+import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.SortField;
+import org.apache.lucene.search.SortedNumericSortField;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
@@ -27,6 +31,8 @@ import org.opensearch.search.query.QuerySearchResult;
 
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.search.sort.SortBuilder;
+import org.opensearch.search.sort.SortedWiderNumericSortField;
 
 /**
  * Class abstracts steps required for score normalization and combination, this includes pre-processing of incoming data
@@ -112,11 +118,24 @@ public class NormalizationProcessorWorkflow {
             CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
             float maxScore = updatedTopDocs.getTotalHits().value > 0 ? updatedTopDocs.getScoreDocs().get(0).score : 0.0f;
 
-            // create final version of top docs with all updated values
-            TopDocs topDocs = new TopDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new ScoreDoc[0]));
-
-            TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(topDocs, maxScore);
-            querySearchResult.topDocs(updatedTopDocsAndMaxScore, null);
+            List<SortBuilder<?>> sorts = querySearchResult.getShardSearchRequest().source().sorts();
+            TopDocs topDocs;
+            if (sorts != null || sorts.isEmpty()) {
+                // create final version of top docs with all updated values
+                topDocs = new TopDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new ScoreDoc[0]));
+                TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(topDocs, maxScore);
+                querySearchResult.topDocs(updatedTopDocsAndMaxScore, null);
+            } else {
+                final TopFieldDocs[] topFieldDocs = new TopFieldDocs[querySearchResult.size()];
+                int i = 0;
+                for (TopDocs topDocs1 : updatedTopDocs.getTopDocs()) {
+                    topFieldDocs[i++] = (TopFieldDocs) topDocs1;
+                }
+                Sort sort = createSort(topFieldDocs);
+                topDocs = TopDocs.merge(sort, 0, updatedTopDocs.getTopDocs().size(), topFieldDocs);
+                TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(topDocs, maxScore);
+                querySearchResult.topDocs(updatedTopDocsAndMaxScore, querySearchResult.sortValueFormats());
+            }
         }
     }
 
@@ -205,5 +224,37 @@ public class NormalizationProcessorWorkflow {
                 .map(scoreDoc -> scoreDoc.doc)
                 .collect(Collectors.toList());
         return docIds;
+    }
+
+    private static Sort createSort(TopFieldDocs[] topFieldDocs) {
+        final SortField[] firstTopDocFields = topFieldDocs[0].fields;
+        final SortField[] newFields = new SortField[firstTopDocFields.length];
+
+        for (int i = 0; i < firstTopDocFields.length; i++) {
+            final SortField delegate = firstTopDocFields[i];
+            final SortField.Type type = delegate instanceof SortedNumericSortField
+                ? ((SortedNumericSortField) delegate).getNumericType()
+                : delegate.getType();
+
+            if (SortedWiderNumericSortField.isTypeSupported(type) && isSortWideningRequired(topFieldDocs, i)) {
+                newFields[i] = new SortedWiderNumericSortField(delegate.getField(), type, delegate.getReverse());
+            } else {
+                newFields[i] = firstTopDocFields[i];
+            }
+        }
+        return new Sort(newFields);
+    }
+
+    /**
+     * It will compare respective SortField between shards to see if any shard results have different
+     * field mapping type, accordingly it will decide to widen the sort fields.
+     */
+    private static boolean isSortWideningRequired(TopFieldDocs[] topFieldDocs, int sortFieldindex) {
+        for (int i = 0; i < topFieldDocs.length - 1; i++) {
+            if (!topFieldDocs[i].fields[sortFieldindex].equals(topFieldDocs[i + 1].fields[sortFieldindex])) {
+                return true;
+            }
+        }
+        return false;
     }
 }
