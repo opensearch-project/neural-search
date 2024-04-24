@@ -138,4 +138,11 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
         updateClusterSettings("plugins.ml_commons.native_memory_threshold", 100);
         updateClusterSettings("plugins.ml_commons.allow_registering_model_via_url", true);
     }
+
+    protected void createPipelineForTextChunkingProcessor(String pipelineName) throws Exception {
+        String requestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/PipelineForTextChunkingProcessorConfiguration.json").toURI())
+        );
+        createPipelineProcessor(requestBody, pipelineName, "");
+    }
 }
