@@ -20,7 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 2.x](https://github.com/opensearch-project/neural-search/compare/2.13...2.x)
 ### Features
 - Support k-NN radial search parameters in neural search([#697](https://github.com/opensearch-project/neural-search/pull/697))
-- Enhance neural_sparse query's latency performance with two-phase rescore query([#695](https://github.com/opensearch-project/neural-search/pull/695/files)).
+- Enhance neural_sparse query's latency performance with two-phase rescore query([#695](https://github.com/opensearch-project/neural-search/pull/695)).
 ### Enhancements
 - BWC tests for text chunking processor ([#661](https://github.com/opensearch-project/neural-search/pull/661))
 - Allowing execution of hybrid query on index alias with filters ([#670](https://github.com/opensearch-project/neural-search/pull/670))

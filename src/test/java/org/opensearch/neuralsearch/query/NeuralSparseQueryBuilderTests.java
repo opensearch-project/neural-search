@@ -70,8 +70,6 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
 
     private static final String FIELD_NAME = "testField";
     private static final String QUERY_TEXT = "Hello world!";
-    private static final String QUERY_TEXT_LONG_VERSION =
-        "The ID of the sparse encoding model or tokenizer model that will be used to generate vector embeddings from the query text. The model must be deployed in OpenSearch before it can be used in sparse neural search. For more information, see Using custom models within OpenSearch and Neural sparse search.";
     private static final String MODEL_ID = "mfgfgdsfgfdgsde";
     private static final float BOOST = 1.8f;
     private static final String QUERY_NAME = "queryName";
@@ -505,9 +503,9 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
                 "query_text": "string",
                 "model_id": "string",
                 "two_phase_settings":{
-                      "window_size_expansion": 5,
-                      "pruning_ratio": 0.4,
-                      "enabled": false
+                      "window_size_expansion": null,
+                      "pruning_ratio": null,
+                      "enabled": null
                   }
               }
           }
@@ -996,30 +994,26 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     @SneakyThrows
     public void testDoToQuery_whenTwoPhaseParaDisabled_thenDegradeSuccess() {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
-            .maxTokenScore(MAX_TOKEN_SCORE)
             .queryText(QUERY_TEXT)
             .modelId(MODEL_ID)
             .queryTokensSupplier(QUERY_TOKENS_SUPPLIER)
             .neuralSparseTwoPhaseParameters(
-                new NeuralSparseTwoPhaseParameters().enabled(false).pruning_ratio(0.4f).window_size_expansion(6.0f)
+                new NeuralSparseTwoPhaseParameters().enabled(false).pruning_ratio(0.7f).window_size_expansion(6.0f)
             );
         Query query = sparseEncodingQueryBuilder.doToQuery(mockQueryShardContext);
         assertTrue(query instanceof BooleanQuery);
         List<BooleanClause> booleanClauseList = ((BooleanQuery) query).clauses();
         assertEquals(2, ((BooleanQuery) query).clauses().size());
-        BooleanClause firstClause = booleanClauseList.get(0);
-        BooleanClause secondClause = booleanClauseList.get(1);
-
-        Query firstFeatureQuery = firstClause.getQuery();
-        assertEquals(firstFeatureQuery, FeatureField.newLinearQuery(FIELD_NAME, "world", 2.f));
-        Query secondFeatureQuery = secondClause.getQuery();
-        assertEquals(secondFeatureQuery, FeatureField.newLinearQuery(FIELD_NAME, "hello", 1.f));
+        List<Query> actualQueries = booleanClauseList.stream().map(BooleanClause::getQuery).collect(Collectors.toList());
+        Query expectedQuery1 = FeatureField.newLinearQuery(FIELD_NAME, "world", 2.f);
+        Query expectedQuery2 = FeatureField.newLinearQuery(FIELD_NAME, "hello", 1.f);
+        assertTrue("Expected query for 'world' not found", actualQueries.contains(expectedQuery1));
+        assertTrue("Expected query for 'hello' not found", actualQueries.contains(expectedQuery2));
     }
 
     @SneakyThrows
     public void testDoToQuery_whenTwoPhaseParaEmpty_thenDegradeSuccess() {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
-            .maxTokenScore(MAX_TOKEN_SCORE)
             .queryText(QUERY_TEXT)
             .modelId(MODEL_ID)
             .queryTokensSupplier(QUERY_TOKENS_SUPPLIER);
@@ -1034,6 +1028,29 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(firstFeatureQuery, FeatureField.newLinearQuery(FIELD_NAME, "world", 2.f));
         Query secondFeatureQuery = secondClause.getQuery();
         assertEquals(secondFeatureQuery, FeatureField.newLinearQuery(FIELD_NAME, "hello", 1.f));
+    }
+
+    @SneakyThrows
+    public void testDoToQuery_whenTwoPhaseEnabled_thenBuildCorrectQuery() {
+        Map<String, Float> map = new HashMap<>();
+        for (int i = 1; i < 3; i++) {
+            map.put(String.valueOf(i), (float) i);
+        }
+        final Supplier<Map<String, Float>> tokenSupplier = () -> map;
+        // token with score [1.0,2.0] will build degrade to allTokenQuery
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensSupplier(tokenSupplier)
+            .neuralSparseTwoPhaseParameters(NeuralSparseTwoPhaseParameters.getDefaultSettings());
+        Query allTokenQuery = sparseEncodingQueryBuilder.doToQuery(mockQueryShardContext);
+        assertTrue(allTokenQuery instanceof BooleanQuery);
+        assertEquals(((BooleanQuery) allTokenQuery).clauses().size(), 2);
+        map.put("Temp", 9.f);
+        // token with score [1.0,2.0,9.0] will build a NeuralSparseQuery whose lowTokenQuery including [1.0,2.0]
+        Query query = sparseEncodingQueryBuilder.doToQuery(mockQueryShardContext);
+        assertTrue(query instanceof NeuralSparseQuery);
+        assertEquals(((NeuralSparseQuery) query).getLowScoreTokenQuery(), allTokenQuery);
     }
 
     @SneakyThrows

@@ -340,25 +340,23 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     protected Query doToQuery(QueryShardContext context) throws IOException {
         final MappedFieldType ft = context.fieldMapper(fieldName);
         validateFieldType(ft);
+        Map<String, Float> allTokens = getAllTokens();
+        Query allTokenQuery = buildFeatureFieldQueryFromTokens(allTokens, fieldName);
         if (!NeuralSparseTwoPhaseParameters.isEnabled(neuralSparseTwoPhaseParameters)) {
-            return buildFeatureFieldQueryFromTokens(getAllTokens(), fieldName);
+            return allTokenQuery;
         }
         // in the last step we make sure neuralSparseTwoPhaseParameters is not null
         float ratio = neuralSparseTwoPhaseParameters.pruning_ratio();
-        Map<String, Float> highScoreTokens = getHighScoreTokens(ratio);
-        Map<String, Float> lowScoreTokens = getLowScoreTokens(ratio);
-        Map<String, Float> allTokens = getAllTokens();
-        Query allTokenQuery = buildFeatureFieldQueryFromTokens(allTokens, fieldName);
+        Map<String, Float> highScoreTokens = getHighScoreTokens(allTokens, ratio);
+        Map<String, Float> lowScoreTokens = getLowScoreTokens(allTokens, ratio);
         // if all token are valid score that we don't need the two-phase optimize, return allTokenQuery.
         if (lowScoreTokens.isEmpty()) {
             return allTokenQuery;
         }
-        Query highScoreTokenQuery = buildFeatureFieldQueryFromTokens(highScoreTokens, fieldName);
-        Query lowScoreTokenQuery = buildFeatureFieldQueryFromTokens(lowScoreTokens, fieldName);
         return new NeuralSparseQuery(
             allTokenQuery,
-            highScoreTokenQuery,
-            lowScoreTokenQuery,
+            buildFeatureFieldQueryFromTokens(highScoreTokens, fieldName),
+            buildFeatureFieldQueryFromTokens(lowScoreTokens, fieldName),
             neuralSparseTwoPhaseParameters.window_size_expansion()
         );
     }
@@ -439,17 +437,15 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         return queryTokens;
     }
 
-    private Map<String, Float> getHighScoreTokens(float ratio) {
-        return getFilteredScoreTokens(true, ratio);
+    private Map<String, Float> getHighScoreTokens(Map<String, Float> queryTokens, float ratio) {
+        return getFilteredScoreTokens(queryTokens, true, ratio);
     }
 
-    private Map<String, Float> getLowScoreTokens(float ratio) {
-        return getFilteredScoreTokens(false, ratio);
+    private Map<String, Float> getLowScoreTokens(Map<String, Float> queryTokens, float ratio) {
+        return getFilteredScoreTokens(queryTokens, false, ratio);
     }
 
-    private Map<String, Float> getFilteredScoreTokens(boolean aboveThreshold, float ratio) {
-        Map<String, Float> queryTokens = queryTokensSupplier.get();
-        validateQueryTokens(queryTokens);
+    private Map<String, Float> getFilteredScoreTokens(Map<String, Float> queryTokens, boolean aboveThreshold, float ratio) {
         float max = queryTokens.values().stream().max(Float::compare).orElse(0f);
         float threshold = ratio * max;
         if (max == 0) {
