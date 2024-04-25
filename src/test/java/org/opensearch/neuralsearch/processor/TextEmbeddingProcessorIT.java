@@ -34,7 +34,9 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
     public void testTextEmbeddingProcessor() throws Exception {
         String modelId = null;
         try {
-            modelId = uploadTextEmbeddingModel();
+            modelId = uploadTextEmbeddingModel(
+                Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()))
+            );
             loadModel(modelId);
             createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
             createTextEmbeddingIndex();
@@ -45,8 +47,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         }
     }
 
-    private String uploadTextEmbeddingModel() throws Exception {
-        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
+    private String uploadTextEmbeddingModel(String requestBody) throws Exception {
         return registerModelGroupAndUploadModel(requestBody);
     }
 
@@ -56,6 +57,22 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
             Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
             PIPELINE_NAME
         );
+    }
+
+    public void testAsymmetricTextEmbeddingProcessor() throws Exception {
+        String modelId = null;
+        try {
+            modelId = uploadTextEmbeddingModel(
+                Files.readString(Path.of(classLoader.getResource("processor/UploadAsymmetricModelRequestBody.json").toURI()))
+            );
+            loadModel(modelId);
+            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
+            createTextEmbeddingIndex();
+            ingestDocument();
+            assertEquals(1, getDocCount(INDEX_NAME));
+        } finally {
+            wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
+        }
     }
 
     private void ingestDocument() throws Exception {

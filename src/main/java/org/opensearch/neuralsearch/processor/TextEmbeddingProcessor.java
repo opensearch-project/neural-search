@@ -11,6 +11,8 @@ import java.util.function.BiConsumer;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.IngestDocument;
+import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
+import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters.EmbeddingContentType;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
 import lombok.extern.log4j.Log4j2;
@@ -43,9 +45,14 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
         List<String> inferenceList,
         BiConsumer<IngestDocument, Exception> handler
     ) {
-        mlCommonsClientAccessor.inferenceSentences(this.modelId, inferenceList, ActionListener.wrap(vectors -> {
-            setVectorFieldsToDocument(ingestDocument, ProcessMap, vectors);
-            handler.accept(ingestDocument, null);
-        }, e -> { handler.accept(null, e); }));
+        mlCommonsClientAccessor.inferenceSentences(
+            this.modelId,
+            inferenceList,
+            AsymmetricTextEmbeddingParameters.builder().embeddingContentType(EmbeddingContentType.PASSAGE).build(),
+            ActionListener.wrap(vectors -> {
+                setVectorFieldsToDocument(ingestDocument, ProcessMap, vectors);
+                handler.accept(ingestDocument, null);
+            }, e -> { handler.accept(null, e); })
+        );
     }
 }
