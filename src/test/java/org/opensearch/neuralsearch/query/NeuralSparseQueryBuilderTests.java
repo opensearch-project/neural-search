@@ -1021,13 +1021,11 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         assertTrue(query instanceof BooleanQuery);
         List<BooleanClause> booleanClauseList = ((BooleanQuery) query).clauses();
         assertEquals(2, ((BooleanQuery) query).clauses().size());
-        BooleanClause firstClause = booleanClauseList.get(0);
-        BooleanClause secondClause = booleanClauseList.get(1);
-
-        Query firstFeatureQuery = firstClause.getQuery();
-        assertEquals(firstFeatureQuery, FeatureField.newLinearQuery(FIELD_NAME, "world", 2.f));
-        Query secondFeatureQuery = secondClause.getQuery();
-        assertEquals(secondFeatureQuery, FeatureField.newLinearQuery(FIELD_NAME, "hello", 1.f));
+        List<Query> actualQueries = booleanClauseList.stream().map(BooleanClause::getQuery).collect(Collectors.toList());
+        Query expectedQuery1 = FeatureField.newLinearQuery(FIELD_NAME, "world", 2.f);
+        Query expectedQuery2 = FeatureField.newLinearQuery(FIELD_NAME, "hello", 1.f);
+        assertTrue("Expected query for 'world' not found", actualQueries.contains(expectedQuery1));
+        assertTrue("Expected query for 'hello' not found", actualQueries.contains(expectedQuery2));
     }
 
     @SneakyThrows

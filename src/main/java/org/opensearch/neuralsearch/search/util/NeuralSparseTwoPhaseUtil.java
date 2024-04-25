@@ -16,6 +16,7 @@ import org.opensearch.search.rescore.RescoreContext;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static java.lang.Float.max;
@@ -50,6 +51,7 @@ public class NeuralSparseTwoPhaseUtil {
         if (curWindowSize < 0 || curWindowSize > NeuralSparseTwoPhaseParameters.MAX_WINDOW_SIZE) {
             throw new IllegalArgumentException(
                 String.format(
+                    Locale.ROOT,
                     "Two phase final windowSize %d out of score with limit %d. "
                         + "You can change the value of cluster setting [plugins.neural_search.neural_sparse.two_phase.max_window_size] "
                         + "to a integer at least 50.",

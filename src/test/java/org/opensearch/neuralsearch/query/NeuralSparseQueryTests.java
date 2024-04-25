@@ -43,7 +43,7 @@ public class NeuralSparseQueryTests extends OpenSearchQueryTestCase {
             + currentQuery.toString()
             + ','
             + highScoreTokenQuery.toString()
-            + ", "
+            + ","
             + lowScoreTokenQuery.toString()
             + ")";
         assertEquals(expectedString, neuralSparseQuery.toString());

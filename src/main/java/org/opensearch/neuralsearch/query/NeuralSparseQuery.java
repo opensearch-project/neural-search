@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
+import java.util.Locale;
 import java.util.Objects;
 
 import lombok.AllArgsConstructor;
@@ -39,6 +40,7 @@ public final class NeuralSparseQuery extends Query {
     @Override
     public String toString(String field) {
         return String.format(
+            Locale.ROOT,
             "NeuralSparseQuery(%s,%s,%s)",
             currentQuery.toString(field),
             highScoreTokenQuery.toString(field),
