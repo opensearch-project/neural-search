@@ -51,8 +51,7 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
     static final ParseField PRUNING_RATIO = new ParseField("pruning_ratio");
     @VisibleForTesting
     static final ParseField ENABLED = new ParseField("enabled");
-    private static final Version MINIMAL_SUPPORTED_VERSION_TWO_PHASE_SEARCH = Version.V_2_14_0;
-
+    private static final Version MINIMAL_SUPPORTED_VERSION_TWO_PHASE_SEARCH = Version.CURRENT;
     private Float window_size_expansion;
     private Float pruning_ratio;
     private Boolean enabled;
@@ -82,6 +81,7 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
             );
         clusterService.getClusterSettings()
             .addSettingsUpdateConsumer(NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_MAX_WINDOW_SIZE, it -> MAX_WINDOW_SIZE = it);
+
     }
 
     public static NeuralSparseTwoPhaseParameters getDefaultSettings() {

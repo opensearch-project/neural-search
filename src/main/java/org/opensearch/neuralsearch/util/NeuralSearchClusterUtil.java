@@ -47,5 +47,5 @@ public class NeuralSearchClusterUtil {
     public Version getClusterMinVersion() {
         return this.clusterService.state().getNodes().getMinNodeVersion();
     }
-
+    
 }

@@ -36,14 +36,14 @@ public class NeuralSparseTwoPhaseUtil {
      */
     public static void addRescoreContextFromNeuralSparseQuery(final Query query, final SearchContext searchContext) {
         Map<NeuralSparseQuery, Float> neuralSparseQuery2Weight = new HashMap<>();
-        // Store all neuralSparse query and it's global weight in neuralSparseQuery2Weight, and get the max windowSizeExpansion of them..
+        // Store all neuralSparse query with global weight in neuralSparseQuery2Weight, and get the max windowSizeExpansion of them.
         float windowSizeExpansion = populateQueryWeightsMapAndGetWindowSizeExpansion(query, neuralSparseQuery2Weight, 1.0f, 1.0f);
         Query twoPhaseQuery = getNestedTwoPhaseQueryFromNeuralSparseQuerySet(neuralSparseQuery2Weight);
         if (twoPhaseQuery == null) return;
         // Set the valid neural_sparse query's current query to it's highScoreTokenQuery.
         neuralSparseQuery2Weight.keySet().forEach(NeuralSparseQuery::setCurrentQueryToHighScoreTokenQuery);
         // Add two phase to searchContext's rescore list.
-        addTwoPhaseQuery2RescoreContext(searchContext, windowSizeExpansion, twoPhaseQuery);
+        addTwoPhaseQueryRescoreContext(searchContext, windowSizeExpansion, twoPhaseQuery);
     }
 
     private static float populateQueryWeightsMapAndGetWindowSizeExpansion(
@@ -83,7 +83,7 @@ public class NeuralSparseTwoPhaseUtil {
             .reduce(1.0f, (a, b) -> a * b);
     }
 
-    private static void addTwoPhaseQuery2RescoreContext(
+    private static void addTwoPhaseQueryRescoreContext(
         final SearchContext searchContext,
         final float windowSizeExpansion,
         Query twoPhaseQuery
