@@ -12,6 +12,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.Collector;
@@ -107,18 +108,22 @@ public abstract class HybridSortedTopDocCollector implements Collector {
     int docBase;
     private final HitsThresholdChecker hitsThresholdChecker;
     private TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
-    private static int[] totalHits;
+
+    @Setter
+    @Getter
+    private int[] totalHits;
     // private final int numHits;
     @Getter
-    private static PriorityQueue<ScoreDoc>[] compoundScores;
+    @Setter
+    private PriorityQueue<ScoreDoc>[] compoundScores;
     // the current local minimum competitive score already propagated to the underlying scorer
     float minCompetitiveScore;
     final Sort sort;
 
     public HybridSortedTopDocCollector(
-        int numHits,
+        // int numHits,
         HitsThresholdChecker hitsThresholdChecker,
-        FieldValueHitQueue<FieldValueHitQueue.Entry> queue,
+        // FieldValueHitQueue<FieldValueHitQueue.Entry> queue,
         Sort sort
     ) {
         this.hitsThresholdChecker = hitsThresholdChecker;
@@ -135,6 +140,10 @@ public abstract class HybridSortedTopDocCollector implements Collector {
         final Sort sort;
         final FieldValueHitQueue<FieldValueHitQueue.Entry> queue;
         final int numHits;
+        private int[] totalHits;
+        // private final int numHits;
+        @Getter
+        private PriorityQueue<ScoreDoc>[] compoundScores;
 
         public SimpleFieldCollector(
             int numHits,
@@ -142,7 +151,12 @@ public abstract class HybridSortedTopDocCollector implements Collector {
             FieldValueHitQueue<FieldValueHitQueue.Entry> queue,
             Sort sort
         ) {
-            super(numHits, hitsThresholdChecker, queue, sort);
+            super(
+                // numHits,
+                hitsThresholdChecker,
+                // queue,
+                sort
+            );
             this.sort = sort;
             this.queue = queue;
             this.numHits = numHits;
@@ -181,6 +195,8 @@ public abstract class HybridSortedTopDocCollector implements Collector {
                         topDoc.score = score;
                         pq.updateTop();
                     }
+                    setCompoundScores(compoundScores);
+                    setTotalHits(totalHits);
                 }
             };
         }
