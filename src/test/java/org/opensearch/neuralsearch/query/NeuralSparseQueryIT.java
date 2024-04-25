@@ -47,9 +47,18 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_TEXT_FIELD_NAME_1 = "test-text-field";
     private static final String TEST_NEURAL_SPARSE_FIELD_NAME_NESTED = "nested.neural_sparse.field";
     private static final List<String> TEST_TOKENS = List.of("hello", "world", "a", "b", "c");
-
+    private static final List<String> TWO_PHASE_TEST_TOKEN = List.of("hello", "world");
     private static final Float DELTA = 1e-5f;
     private final Map<String, Float> testRankFeaturesDoc = TestUtils.createRandomTokenWeightMap(TEST_TOKENS);
+    private static final Map<String, Float> testFixedQueryTokens = new HashMap<>();
+    private static final Supplier<Map<String, Float>> testFixedQueryTokenSupplier = () -> testFixedQueryTokens;
+    static {
+        testFixedQueryTokens.put("hello", 5.0f);
+        testFixedQueryTokens.put("world", 4.0f);
+        testFixedQueryTokens.put("a", 3.0f);
+        testFixedQueryTokens.put("b", 2.0f);
+        testFixedQueryTokens.put("c", 1.0f);
+    }
 
     @Before
     public void setUp() throws Exception {
@@ -304,18 +313,17 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testBooleanQuery_withMultipleSparseEncodingQueries_whenTwoPhaseEnabled() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_MULTI_NEURAL_SPARSE_FIELD_INDEX_NAME);
-            modelId = prepareSparseEncodingModel();
             BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
+            Map<String, Float> randomTokenWeight = createRandomTokenWeightMap(TWO_PHASE_TEST_TOKEN);
+            Supplier<Map<String, Float>> randomTokenWeightSupplier = () -> randomTokenWeight;
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder1 = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
-                .queryText(TEST_QUERY_TEXT)
-                .modelId(modelId)
+                .queryTokensSupplier(randomTokenWeightSupplier)
                 .neuralSparseTwoPhaseParameters(getCustomTwoPhaseParameter(true, 2.0f, 0.4f));
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder2 = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_2)
                 .queryText(TEST_QUERY_TEXT)
-                .modelId(modelId)
+                .queryTokensSupplier(randomTokenWeightSupplier)
                 .neuralSparseTwoPhaseParameters(getCustomTwoPhaseParameter(true, 2.0f, 0.4f));
 
             boolQueryBuilder.should(sparseEncodingQueryBuilder1).should(sparseEncodingQueryBuilder2);
@@ -324,10 +332,10 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
             Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
 
             assertEquals("1", firstInnerHit.get("_id"));
-            float expectedScore = 2 * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
+            float expectedScore = 2 * computeExpectedScore(testRankFeaturesDoc, randomTokenWeightSupplier.get());
             assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
         } finally {
-            wipeOfTestResources(TEST_MULTI_NEURAL_SPARSE_FIELD_INDEX_NAME, null, modelId, null);
+            wipeOfTestResources(TEST_MULTI_NEURAL_SPARSE_FIELD_INDEX_NAME, null, null, null);
         }
     }
 
@@ -489,35 +497,31 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testBasicQueryUsingQueryText_whenTwoPhaseEnabled_thenGetExpectedScore() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-            modelId = prepareSparseEncodingModel();
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
                 .queryText(TEST_QUERY_TEXT)
-                .modelId(modelId)
+                .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(2.0f)
                 .neuralSparseTwoPhaseParameters(getCustomTwoPhaseParameter(true, 2.0f, 0.4f));
             Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, sparseEncodingQueryBuilder, 1);
             Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
 
             assertEquals("1", firstInnerHit.get("_id"));
-            float expectedScore = 2 * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
+            float expectedScore = 2 * computeExpectedScore(testRankFeaturesDoc, testFixedQueryTokens);
             assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
         } finally {
-            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
+            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, null, null);
         }
     }
 
     @SneakyThrows
     public void testBasicQueryUsingQueryText_whenTwoPhaseEnabledAndDisabled_thenGetSameScore() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-            modelId = prepareSparseEncodingModel();
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
                 .queryText(TEST_QUERY_TEXT)
-                .modelId(modelId)
+                .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(2.0f);
             Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, sparseEncodingQueryBuilder, 1);
             Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
@@ -526,7 +530,7 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
 
             sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
                 .queryText(TEST_QUERY_TEXT)
-                .modelId(modelId)
+                .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(2.0f)
                 .neuralSparseTwoPhaseParameters(
                     new NeuralSparseTwoPhaseParameters().enabled(true).pruning_ratio(0.3f).window_size_expansion(6.0f)
@@ -537,7 +541,7 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
             float scoreWithTwoPhase = objectToFloat(firstInnerHit.get("_score"));
             assertEquals(scoreWithTwoPhase, scoreWithoutTwoPhase, DELTA);
         } finally {
-            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
+            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, null, null);
         }
     }
 
@@ -550,14 +554,12 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testBasicQueryUsingQueryText_whenTwoPhaseParameterOverEdge_thenFail() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-            modelId = prepareSparseEncodingModel();
             // windows_size_expansion over edge [0.f
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
                 .queryText(TEST_QUERY_TEXT)
-                .modelId(modelId)
+                .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(2.0f)
                 .neuralSparseTwoPhaseParameters(NeuralSparseTwoPhaseParameters.getDefaultSettings().window_size_expansion(-0.001f));
             NeuralSparseQueryBuilder finalSparseEncodingQueryBuilder = sparseEncodingQueryBuilder;
@@ -565,7 +567,7 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
             // pruning_ratio over edge [0.f
             sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
                 .queryText(TEST_QUERY_TEXT)
-                .modelId(modelId)
+                .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(2.0f)
                 .neuralSparseTwoPhaseParameters(NeuralSparseTwoPhaseParameters.getDefaultSettings().pruning_ratio(-0.001f));
             NeuralSparseQueryBuilder finalSparseEncodingQueryBuilder1 = sparseEncodingQueryBuilder;
@@ -573,13 +575,13 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
             // pruning_ratio over edge 1.f]
             sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
                 .queryText(TEST_QUERY_TEXT)
-                .modelId(modelId)
+                .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(2.0f)
                 .neuralSparseTwoPhaseParameters(NeuralSparseTwoPhaseParameters.getDefaultSettings().pruning_ratio(1.001f));
             NeuralSparseQueryBuilder finalSparseEncodingQueryBuilder2 = sparseEncodingQueryBuilder;
             expectThrows(ResponseException.class, () -> search(TEST_BASIC_INDEX_NAME, finalSparseEncodingQueryBuilder2, 1));
         } finally {
-            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
+            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, null, null);
         }
     }
 
@@ -614,23 +616,21 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testNeuralSparseQueryAsRescoreQuery_whenTwoPhase_thenGetExpectedScore() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-            modelId = prepareSparseEncodingModel();
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
                 .queryText(TEST_QUERY_TEXT)
-                .modelId(modelId)
+                .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(2.0f)
                 .neuralSparseTwoPhaseParameters(getCustomTwoPhaseParameter(true, 4.0f, 0.5f));
             QueryBuilder queryBuilder = new MatchAllQueryBuilder();
             Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, queryBuilder, sparseEncodingQueryBuilder, 1);
             Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
             assertEquals("1", firstInnerHit.get("_id"));
-            float expectedScore = 2 * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
+            float expectedScore = 2 * computeExpectedScore(testRankFeaturesDoc, testFixedQueryTokens);
             assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
         } finally {
-            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
+            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, null, null);
         }
     }
 
@@ -673,14 +673,12 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testMultiNeuralSparseQuery_whenTwoPhase_thenGetExpectedScore() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-            modelId = prepareSparseEncodingModel();
             BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
                 .queryText(TEST_QUERY_TEXT)
-                .modelId(modelId)
+                .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(2.0f)
                 .neuralSparseTwoPhaseParameters(getCustomTwoPhaseParameter(true, 4.0f, 0.2f));
             boolQueryBuilder.should(sparseEncodingQueryBuilder);
@@ -688,10 +686,10 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
             Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, boolQueryBuilder, 1);
             Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
             assertEquals("1", firstInnerHit.get("_id"));
-            float expectedScore = 4 * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
+            float expectedScore = 4 * computeExpectedScore(testRankFeaturesDoc, testFixedQueryTokens);
             assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
         } finally {
-            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
+            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, null, null);
         }
     }
 
@@ -730,14 +728,12 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testMultiNeuralSparseQuery_whenTwoPhaseAndFilter_thenGetExpectedScore() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-            modelId = prepareSparseEncodingModel();
             BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
                 .queryText(TEST_QUERY_TEXT)
-                .modelId(modelId)
+                .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(2.0f)
                 .neuralSparseTwoPhaseParameters(getCustomTwoPhaseParameter(true, 5.0f, 0.8f));
             boolQueryBuilder.should(sparseEncodingQueryBuilder);
@@ -745,10 +741,10 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
             Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, boolQueryBuilder, 1);
             Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
             assertEquals("1", firstInnerHit.get("_id"));
-            float expectedScore = 2 * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
+            float expectedScore = 2 * computeExpectedScore(testRankFeaturesDoc, testFixedQueryTokens);
             assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
         } finally {
-            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
+            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, null, null);
         }
     }
 
@@ -833,13 +829,11 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testNeuralSParseQuery_whenTwoPhaseAndNestedInConstantScoreQuery_thenSuccess() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-            modelId = prepareSparseEncodingModel();
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
                 .queryText(TEST_QUERY_TEXT)
-                .modelId(modelId)
+                .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(1.0f)
                 .neuralSparseTwoPhaseParameters(getCustomTwoPhaseParameter(true, 5.0f, 0.6f));
             ConstantScoreQueryBuilder constantScoreQueryBuilder = new ConstantScoreQueryBuilder(sparseEncodingQueryBuilder);
@@ -848,7 +842,7 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
             assertEquals("1", firstInnerHit.get("_id"));
             assertEquals(1.0f, objectToFloat(firstInnerHit.get("_score")), DELTA);
         } finally {
-            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
+            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, null, null);
         }
     }
 
@@ -876,13 +870,11 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testNeuralSParseQuery_whenTwoPhaseAndNestedInDisjunctionMaxQuery_thenSuccess() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-            modelId = prepareSparseEncodingModel();
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
                 .queryText(TEST_QUERY_TEXT)
-                .modelId(modelId)
+                .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(5.0f)
                 .neuralSparseTwoPhaseParameters(getCustomTwoPhaseParameter(true, 5.0f, 0.6f));
             DisMaxQueryBuilder disMaxQueryBuilder = new DisMaxQueryBuilder();
@@ -891,10 +883,10 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
             Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, disMaxQueryBuilder, 1);
             Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
             assertEquals("1", firstInnerHit.get("_id"));
-            float expectedScore = 5f * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
+            float expectedScore = 5f * computeExpectedScore(testRankFeaturesDoc, testFixedQueryTokens);
             assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
         } finally {
-            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
+            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, null, null);
         }
     }
 
@@ -917,13 +909,11 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testNeuralSParseQuery_whenTwoPhaseAndNestedInFunctionScoreQuery_thenSuccess() {
-        String modelId = null;
         try {
             initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
-            modelId = prepareSparseEncodingModel();
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
                 .queryText(TEST_QUERY_TEXT)
-                .modelId(modelId)
+                .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(5.0f)
                 .neuralSparseTwoPhaseParameters(getCustomTwoPhaseParameter(true, 5.0f, 0.6f));
             FunctionScoreQueryBuilder functionScoreQueryBuilder = new FunctionScoreQueryBuilder(sparseEncodingQueryBuilder);
@@ -931,10 +921,10 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
             Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, functionScoreQueryBuilder, 1);
             Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
             assertEquals("1", firstInnerHit.get("_id"));
-            float expectedScore = 10f * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
+            float expectedScore = 10f * computeExpectedScore(testRankFeaturesDoc, testFixedQueryTokens);
             assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
         } finally {
-            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, null);
+            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, null, null);
         }
     }
 

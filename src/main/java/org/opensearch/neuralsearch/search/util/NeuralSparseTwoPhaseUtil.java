@@ -26,17 +26,22 @@ import static java.lang.Float.max;
  */
 public class NeuralSparseTwoPhaseUtil {
     /**
+     * This function determine any neuralSparseQuery from query, extract lowScoreTokenQuery from each of them,
+     * And as that, the neuralSparseQuery be extracted 's currentQuery will be changed from allScoreTokenQuery to highScoreTokenQuery.
+     * Then build a QueryRescoreContext of these extra lowScoreTokenQuery and add the built QueryRescoreContext to the searchContext.
+     * Finally, the score of TopDocs will be sum of highScoreTokenQuery and lowScoreTokenQuery, which equals to allTokenQuery.
      * @param query         The whole query include neuralSparseQuery to executed.
      * @param searchContext The searchContext with this query.
      */
-    public static void addRescoreContextFromNeuralSparseQuery(final Query query, SearchContext searchContext) {
+    public static void addRescoreContextFromNeuralSparseQuery(final Query query, final SearchContext searchContext) {
         Map<Query, Float> query2weight = new HashMap<>();
         float windowSizeExpansion = populateQueryWeightsMapAndGetWindowSizeExpansion(query, query2weight, 1.0f, 1.0f);
         Query twoPhaseQuery;
         if (query2weight.isEmpty()) {
             return;
-        } else if (query2weight.size() == 1) {
-            Map.Entry<Query, Float> entry = query2weight.entrySet().stream().findFirst().get();
+        }
+        if (query2weight.size() == 1) {
+            Map.Entry<Query, Float> entry = query2weight.entrySet().iterator().next();
             twoPhaseQuery = new BoostQuery(entry.getKey(), entry.getValue());
         } else {
             twoPhaseQuery = getNestedTwoPhaseQuery(query2weight);
@@ -44,13 +49,13 @@ public class NeuralSparseTwoPhaseUtil {
         int curWindowSize = (int) (searchContext.size() * windowSizeExpansion);
         if (curWindowSize < 0 || curWindowSize > NeuralSparseTwoPhaseParameters.MAX_WINDOW_SIZE) {
             throw new IllegalArgumentException(
-                "Two phase final windowSize "
-                    + curWindowSize
-                    + " out of score with limit "
-                    + NeuralSparseTwoPhaseParameters.MAX_WINDOW_SIZE
-                    + "."
-                    + "You can change the value of cluster setting "
-                    + "[plugins.neural_search.neural_sparse.two_phase.max_window_size] to a integer at least 50."
+                String.format(
+                    "Two phase final windowSize %d out of score with limit %d. "
+                        + "You can change the value of cluster setting [plugins.neural_search.neural_sparse.two_phase.max_window_size] "
+                        + "to a integer at least 50.",
+                    curWindowSize,
+                    NeuralSparseTwoPhaseParameters.MAX_WINDOW_SIZE
+                )
             );
         }
         QueryRescorer.QueryRescoreContext rescoreContext = new QueryRescorer.QueryRescoreContext(curWindowSize);

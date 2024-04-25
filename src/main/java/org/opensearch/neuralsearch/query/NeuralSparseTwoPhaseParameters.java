@@ -63,7 +63,7 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
      * @param clusterService The opensearch clusterService.
      * @param settings       The env settings to initialize.
      */
-    public static void initialize(ClusterService clusterService, Settings settings) {
+    public static void initialize(final ClusterService clusterService, final Settings settings) {
         DEFAULT_ENABLED = NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_ENABLED.get(settings);
         DEFAULT_WINDOW_SIZE_EXPANSION = NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_WINDOW_SIZE_EXPANSION.get(settings);
         DEFAULT_PRUNING_RATIO = NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_PRUNING_RATIO.get(settings);
@@ -96,14 +96,14 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
      * @param in StreamInput to initialize object from
      * @throws IOException thrown if unable to read from input stream
      */
-    public NeuralSparseTwoPhaseParameters(StreamInput in) throws IOException {
+    public NeuralSparseTwoPhaseParameters(final StreamInput in) throws IOException {
         window_size_expansion = in.readFloat();
         pruning_ratio = in.readFloat();
         enabled = in.readBoolean();
     }
 
     @Override
-    public void writeTo(StreamOutput out) throws IOException {
+    public void writeTo(final StreamOutput out) throws IOException {
         out.writeFloat(window_size_expansion);
         out.writeFloat(pruning_ratio);
         out.writeBoolean(enabled);
@@ -116,7 +116,7 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
      * @return the given XContentBuilder with object content added.
      * @throws IOException if building the content fails.
      */
-    public XContentBuilder doXContent(XContentBuilder builder) throws IOException {
+    public XContentBuilder doXContent(final XContentBuilder builder) throws IOException {
         builder.startObject(NAME.getPreferredName());
         builder.field(WINDOW_SIZE_EXPANSION.getPreferredName(), window_size_expansion);
         builder.field(PRUNING_RATIO.getPreferredName(), pruning_ratio);
@@ -132,7 +132,7 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
      * @return a new instance of NeuralSparseTwoPhaseParameters initialized from the parser.
      * @throws IOException if parsing fails.
      */
-    public static NeuralSparseTwoPhaseParameters parseFromXContent(XContentParser parser) throws IOException {
+    public static NeuralSparseTwoPhaseParameters parseFromXContent(final XContentParser parser) throws IOException {
         XContentParser.Token token;
         String currentFieldName = "";
         NeuralSparseTwoPhaseParameters neuralSparseTwoPhaseParameters = NeuralSparseTwoPhaseParameters.getDefaultSettings();
@@ -177,7 +177,8 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
             && Objects.equals(pruning_ratio, other.pruning_ratio);
     }
 
-    public int hashcode() {
+    @Override
+    public int hashCode() {
         HashCodeBuilder builder = new HashCodeBuilder().append(enabled).append(window_size_expansion).append(pruning_ratio);
         return builder.toHashCode();
     }
@@ -188,7 +189,7 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
      * @param neuralSparseTwoPhaseParameters The parameters to check.
      * @return true if enabled, false otherwise.
      */
-    public static boolean isEnabled(NeuralSparseTwoPhaseParameters neuralSparseTwoPhaseParameters) {
+    public static boolean isEnabled(final NeuralSparseTwoPhaseParameters neuralSparseTwoPhaseParameters) {
         if (!isClusterOnOrAfterMinReqVersionForTwoPhaseSearchSupport() || Objects.isNull(neuralSparseTwoPhaseParameters)) {
             return false;
         }

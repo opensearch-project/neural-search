@@ -412,12 +412,13 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
 
     @Override
     protected int doHashCode() {
-        HashCodeBuilder builder = new HashCodeBuilder().append(fieldName).append(queryText).append(modelId).append(maxTokenScore);
+        HashCodeBuilder builder = new HashCodeBuilder().append(fieldName)
+            .append(queryText)
+            .append(modelId)
+            .append(maxTokenScore)
+            .append(neuralSparseTwoPhaseParameters);
         if (queryTokensSupplier != null) {
             builder.append(queryTokensSupplier.get());
-        }
-        if (Objects.nonNull(neuralSparseTwoPhaseParameters)) {
-            builder.append(neuralSparseTwoPhaseParameters.hashcode());
         }
         return builder.toHashCode();
     }
@@ -455,6 +456,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .stream()
             .filter(entry -> (aboveThreshold == (entry.getValue() >= threshold)))
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        // This call will generate a filter from queryTokens.
+        // When aboveThreshold is true, will filter out all key-value pairs whose value >= threshold to a return map.
+        // When aboveThreshold is false, will filter out all key-value pairs whose value <= threshold to a return map.
     }
 
     private BooleanQuery buildFeatureFieldQueryFromTokens(Map<String, Float> tokens, String fieldName) {

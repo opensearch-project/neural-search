@@ -38,14 +38,12 @@ public final class NeuralSparseQuery extends Query {
      */
     @Override
     public String toString(String field) {
-        return "NeuralSparseQuery("
-            + currentQuery.toString(field)
-            + ","
-            + highScoreTokenQuery.toString(field)
-            + ", "
-            + lowScoreTokenQuery.toString(field)
-            + ")";
-
+        return String.format(
+            "NeuralSparseQuery(%s,%s,%s)",
+            currentQuery.toString(field),
+            highScoreTokenQuery.toString(field),
+            lowScoreTokenQuery.toString(field)
+        );
     }
 
     public Query rewrite(IndexSearcher indexSearcher) throws IOException {
