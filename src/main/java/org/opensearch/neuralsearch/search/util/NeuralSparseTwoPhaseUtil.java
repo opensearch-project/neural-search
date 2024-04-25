@@ -35,18 +35,59 @@ public class NeuralSparseTwoPhaseUtil {
      * @param searchContext The searchContext with this query.
      */
     public static void addRescoreContextFromNeuralSparseQuery(final Query query, final SearchContext searchContext) {
-        Map<Query, Float> query2weight = new HashMap<>();
-        float windowSizeExpansion = populateQueryWeightsMapAndGetWindowSizeExpansion(query, query2weight, 1.0f, 1.0f);
-        Query twoPhaseQuery;
-        if (query2weight.isEmpty()) {
-            return;
+        Map<NeuralSparseQuery, Float> neuralSparseQuery2Weight = new HashMap<>();
+        // Store all neuralSparse query and it's global weight in neuralSparseQuery2Weight, and get the max windowSizeExpansion of them..
+        float windowSizeExpansion = populateQueryWeightsMapAndGetWindowSizeExpansion(query, neuralSparseQuery2Weight, 1.0f, 1.0f);
+        Query twoPhaseQuery = getNestedTwoPhaseQueryFromNeuralSparseQuerySet(neuralSparseQuery2Weight);
+        if (twoPhaseQuery == null) return;
+        // Set the valid neural_sparse query's current query to it's highScoreTokenQuery.
+        neuralSparseQuery2Weight.keySet().forEach(NeuralSparseQuery::setCurrentQueryToHighScoreTokenQuery);
+        // Add two phase to searchContext's rescore list.
+        addTwoPhaseQuery2RescoreContext(searchContext, windowSizeExpansion, twoPhaseQuery);
+    }
+
+    private static float populateQueryWeightsMapAndGetWindowSizeExpansion(
+        final Query query,
+        Map<NeuralSparseQuery, Float> query2weight,
+        float weight,
+        float windoSizeExpansion
+    ) {
+        if (query instanceof BoostQuery) {
+            BoostQuery boostQuery = (BoostQuery) query;
+            weight *= boostQuery.getBoost();
+            windoSizeExpansion = max(
+                windoSizeExpansion,
+                populateQueryWeightsMapAndGetWindowSizeExpansion(boostQuery.getQuery(), query2weight, weight, windoSizeExpansion)
+            );
+        } else if (query instanceof BooleanQuery) {
+            for (BooleanClause clause : (BooleanQuery) query) {
+                if (clause.isScoring()) {
+                    windoSizeExpansion = max(
+                        windoSizeExpansion,
+                        populateQueryWeightsMapAndGetWindowSizeExpansion(clause.getQuery(), query2weight, weight, windoSizeExpansion)
+                    );
+                }
+            }
+        } else if (query instanceof NeuralSparseQuery) {
+            query2weight.put(((NeuralSparseQuery) query), weight);
+            windoSizeExpansion = max(windoSizeExpansion, ((NeuralSparseQuery) query).getRescoreWindowSizeExpansion());
         }
-        if (query2weight.size() == 1) {
-            Map.Entry<Query, Float> entry = query2weight.entrySet().iterator().next();
-            twoPhaseQuery = new BoostQuery(entry.getKey(), entry.getValue());
-        } else {
-            twoPhaseQuery = getNestedTwoPhaseQuery(query2weight);
-        }
+        // ToDo Support for other compound query.
+        return windoSizeExpansion;
+    }
+
+    private static float getOriginQueryWeightAfterRescore(final List<RescoreContext> rescoreContextList) {
+        return rescoreContextList.stream()
+            .filter(ctx -> ctx instanceof QueryRescorer.QueryRescoreContext)
+            .map(ctx -> ((QueryRescorer.QueryRescoreContext) ctx).queryWeight())
+            .reduce(1.0f, (a, b) -> a * b);
+    }
+
+    private static void addTwoPhaseQuery2RescoreContext(
+        final SearchContext searchContext,
+        final float windowSizeExpansion,
+        Query twoPhaseQuery
+    ) {
         int curWindowSize = (int) (searchContext.size() * windowSizeExpansion);
         if (curWindowSize < 0 || curWindowSize > NeuralSparseTwoPhaseParameters.MAX_WINDOW_SIZE) {
             throw new IllegalArgumentException(
@@ -66,47 +107,15 @@ public class NeuralSparseTwoPhaseUtil {
         searchContext.addRescore(rescoreContext);
     }
 
-    private static float populateQueryWeightsMapAndGetWindowSizeExpansion(
-        final Query query,
-        Map<Query, Float> query2Weight,
-        float weight,
-        float windoSizeExpansion
-    ) {
-        if (query instanceof BoostQuery) {
-            BoostQuery boostQuery = (BoostQuery) query;
-            weight *= boostQuery.getBoost();
-            windoSizeExpansion = max(
-                windoSizeExpansion,
-                populateQueryWeightsMapAndGetWindowSizeExpansion(boostQuery.getQuery(), query2Weight, weight, windoSizeExpansion)
-            );
-        } else if (query instanceof BooleanQuery) {
-            for (BooleanClause clause : (BooleanQuery) query) {
-                if (clause.isScoring()) {
-                    windoSizeExpansion = max(
-                        windoSizeExpansion,
-                        populateQueryWeightsMapAndGetWindowSizeExpansion(clause.getQuery(), query2Weight, weight, windoSizeExpansion)
-                    );
-                }
-            }
-        } else if (query instanceof NeuralSparseQuery) {
-            query2Weight.put(((NeuralSparseQuery) query).getLowScoreTokenQuery(), weight);
-            ((NeuralSparseQuery) query).setCurrentQueryToHighScoreTokenQuery();
-            windoSizeExpansion = max(windoSizeExpansion, ((NeuralSparseQuery) query).getRescoreWindowSizeExpansion());
-        }
-        // ToDo Support for other compound query.
-        return windoSizeExpansion;
-    }
-
-    private static float getOriginQueryWeightAfterRescore(List<RescoreContext> rescoreContextList) {
-        return rescoreContextList.stream()
-            .filter(ctx -> ctx instanceof QueryRescorer.QueryRescoreContext)
-            .map(ctx -> ((QueryRescorer.QueryRescoreContext) ctx).queryWeight())
-            .reduce(1.0f, (a, b) -> a * b);
-    }
-
-    private static Query getNestedTwoPhaseQuery(Map<Query, Float> query2weight) {
+    private static Query getNestedTwoPhaseQueryFromNeuralSparseQuerySet(final Map<NeuralSparseQuery, Float> originNeuralSparse2weight) {
+        if (originNeuralSparse2weight.isEmpty()) return null;
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
-        query2weight.forEach((query, weight) -> { builder.add(new BoostQuery(query, weight), BooleanClause.Occur.SHOULD); });
+        originNeuralSparse2weight.forEach(
+            (neuralSparseQuery, weight) -> builder.add(
+                new BoostQuery(neuralSparseQuery.getLowScoreTokenQuery(), weight),
+                BooleanClause.Occur.SHOULD
+            )
+        );
         return builder.build();
     }
 

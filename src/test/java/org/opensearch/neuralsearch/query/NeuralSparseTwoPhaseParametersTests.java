@@ -7,6 +7,8 @@ package org.opensearch.neuralsearch.query;
 import lombok.SneakyThrows;
 import org.junit.Before;
 import org.opensearch.Version;
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.cluster.node.DiscoveryNodes;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.common.settings.ClusterSettings;
@@ -45,8 +47,8 @@ public class NeuralSparseTwoPhaseParametersTests extends OpenSearchTestCase {
     public static NeuralSparseTwoPhaseParameters TWO_PHASE_PARAMETERS = new NeuralSparseTwoPhaseParameters().enabled(TEST_ENABLED)
         .pruning_ratio(TEST_PRUNING_RATIO)
         .window_size_expansion(TEST_WINDOW_SIZE_EXPANSION);
-
     private ClusterSettings clusterSettings;
+    DiscoveryNodes mockDiscoveryNodes = mock(DiscoveryNodes.class);
 
     @Before
     public void setUpNeuralSparseTwoPhaseParameters() {
@@ -60,10 +62,19 @@ public class NeuralSparseTwoPhaseParametersTests extends OpenSearchTestCase {
                 NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_MAX_WINDOW_SIZE
             )
         ).collect(Collectors.toSet());
+
         clusterSettings = new ClusterSettings(settings, settingsSet);
-        ClusterService clusterService = mock(ClusterService.class);
-        when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
-        NeuralSparseTwoPhaseParameters.initialize(clusterService, settings);
+
+        ClusterService mockClusterService = mock(ClusterService.class);
+        ClusterState mockClusterState = mock(ClusterState.class);
+
+        when(mockClusterService.state()).thenReturn(mockClusterState);
+        when(mockClusterState.getNodes()).thenReturn(mockDiscoveryNodes);
+        when(mockDiscoveryNodes.getMinNodeVersion()).thenReturn(Version.CURRENT);
+        when(mockClusterService.getClusterSettings()).thenReturn(clusterSettings);
+
+        NeuralSearchClusterUtil.instance().initialize(mockClusterService);
+        NeuralSparseTwoPhaseParameters.initialize(mockClusterService, settings);
     }
 
     public void testDefaultValue() {
@@ -252,6 +263,7 @@ public class NeuralSparseTwoPhaseParametersTests extends OpenSearchTestCase {
         assertEquals(NeuralSparseTwoPhaseParameters.DEFAULT_ENABLED, inner.get(NeuralSparseTwoPhaseParameters.ENABLED.getPreferredName()));
     }
 
+    @SneakyThrows
     public void testEquals() {
         NeuralSparseTwoPhaseParameters param = NeuralSparseTwoPhaseParameters.getDefaultSettings();
         NeuralSparseTwoPhaseParameters paramSame = NeuralSparseTwoPhaseParameters.getDefaultSettings();
@@ -267,6 +279,7 @@ public class NeuralSparseTwoPhaseParametersTests extends OpenSearchTestCase {
         assertNotEquals(paramDiffEnabled, param);
     }
 
+    @SneakyThrows
     public void testIsEnabled() {
         NeuralSparseTwoPhaseParameters enabled = new NeuralSparseTwoPhaseParameters().enabled(true);
         NeuralSparseTwoPhaseParameters disabled = new NeuralSparseTwoPhaseParameters().enabled(false);
@@ -275,6 +288,7 @@ public class NeuralSparseTwoPhaseParametersTests extends OpenSearchTestCase {
         assertFalse(NeuralSparseTwoPhaseParameters.isEnabled(null));
     }
 
+    @SneakyThrows
     public void testIsClusterOnOrAfterMinReqVersionForTwoPhaseSearchSupport() {
         ClusterService clusterServiceBefore = NeuralSearchClusterTestUtils.mockClusterService(Version.V_2_13_0);
         NeuralSearchClusterUtil.instance().initialize(clusterServiceBefore);
