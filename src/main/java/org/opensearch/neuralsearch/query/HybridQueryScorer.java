@@ -9,8 +9,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
+import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.search.DisiPriorityQueue;
 import org.apache.lucene.search.DisiWrapper;
 import org.apache.lucene.search.DisjunctionDISIApproximation;
@@ -29,6 +31,7 @@ import org.opensearch.neuralsearch.search.HybridDisiWrapper;
  * order of doc id, this class fills up array of scores per sub-query for each doc id. Order in array of scores
  * corresponds to order of sub-queries in an input Hybrid query.
  */
+@Log4j2
 public final class HybridQueryScorer extends Scorer {
 
     // score for each of sub-query in this hybrid query
@@ -187,6 +190,17 @@ public final class HybridQueryScorer extends Scorer {
      */
     public float[] hybridScores() throws IOException {
         float[] scores = new float[subScores.length];
+        if (subScorersPQ.topList() instanceof HybridDisiWrapper == false) {
+            log.error(
+                String.format(
+                    Locale.ROOT,
+                    "Unexpected type of DISI wrapper, expected [%s] but found [%s]",
+                    HybridDisiWrapper.class.getSimpleName(),
+                    subScorersPQ.topList().getClass().getSimpleName()
+                )
+            );
+            throw new IllegalStateException();
+        }
         HybridDisiWrapper topList = (HybridDisiWrapper) subScorersPQ.topList();
         for (HybridDisiWrapper disiWrapper = topList; disiWrapper != null; disiWrapper = (HybridDisiWrapper) disiWrapper.next) {
             // check if this doc has match in the subQuery. If not, add score as 0.0 and continue
