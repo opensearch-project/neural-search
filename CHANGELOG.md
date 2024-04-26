@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased 2.x](https://github.com/opensearch-project/neural-search/compare/2.18...2.x)
 ### Features
+- Add support for asymmetric embedding models ([#710](https://github.com/opensearch-project/neural-search/pull/710))
 ### Enhancements
 ### Bug Fixes
 ### Infrastructure
