@@ -245,7 +245,7 @@ public class MLCommonsClientAccessor {
         @Nullable final MLAlgoParams mlAlgoParams,
         @NonNull final ActionListener<List<Float>> listener
     ) {
-        retryableInferenceSentencesWithSingleVectorResult(TARGET_RESPONSE_FILTERS, modelId, inputObjects, null, 0, listener);
+        retryableInferenceSentencesWithSingleVectorResult(TARGET_RESPONSE_FILTERS, modelId, inputObjects, mlAlgoParams, 0, listener);
     }
 
     /**
