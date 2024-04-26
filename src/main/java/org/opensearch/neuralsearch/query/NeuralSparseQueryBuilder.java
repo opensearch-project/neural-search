@@ -106,7 +106,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             Map<String, Float> queryTokens = in.readMap(StreamInput::readString, StreamInput::readFloat);
             this.queryTokensSupplier = () -> queryTokens;
         }
-        if (NeuralSparseTwoPhaseParameters.isClusterOnOrAfterMinReqVersionForTwoPhaseSearchSupport()) {
+        if (NeuralSparseTwoPhaseParameters.isClusterOnSameVersionForTwoPhaseSearchSupport()) {
             this.neuralSparseTwoPhaseParameters = in.readOptionalWriteable(NeuralSparseTwoPhaseParameters::new);
         }
         // to be backward compatible with previous version, we need to use writeString/readString API instead of optionalString API
@@ -137,7 +137,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         } else {
             out.writeBoolean(false);
         }
-        if (NeuralSparseTwoPhaseParameters.isClusterOnOrAfterMinReqVersionForTwoPhaseSearchSupport()) {
+        if (NeuralSparseTwoPhaseParameters.isClusterOnSameVersionForTwoPhaseSearchSupport()) {
             out.writeOptionalWriteable(this.neuralSparseTwoPhaseParameters);
         }
     }
@@ -315,7 +315,6 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (null != queryTokensSupplier) {
             return this;
         }
-
         validateForRewrite(queryText, modelId);
         SetOnce<Map<String, Float>> queryTokensSetOnce = new SetOnce<>();
         queryRewriteContext.registerAsyncAction(

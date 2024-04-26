@@ -6,9 +6,10 @@ package org.opensearch.neuralsearch.query;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doAnswer;
 import static org.opensearch.index.query.AbstractQueryBuilder.BOOST_FIELD;
 import static org.opensearch.index.query.AbstractQueryBuilder.NAME_FIELD;
 import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
@@ -94,9 +95,13 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             )
         ).collect(Collectors.toSet());
         clusterSettings = new ClusterSettings(settings, settingsSet);
-        clusterService = mock(ClusterService.class);
+        clusterService = mock(ClusterService.class, RETURNS_DEEP_STUBS);
         when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
+        when(clusterService.state().getNodes().getMinNodeVersion()).thenReturn(Version.CURRENT);
+        when(clusterService.state().getNodes().getMaxNodeVersion()).thenReturn(Version.CURRENT);
         NeuralSparseTwoPhaseParameters.initialize(clusterService, settings);
+
+        NeuralSearchClusterUtil.instance().initialize(clusterService);
         // initialize mockQueryShardContext
         MappedFieldType mappedFieldType = mock(MappedFieldType.class);
         when(mappedFieldType.typeName()).thenReturn("rank_features");
@@ -714,7 +719,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         );
 
         NeuralSparseQueryBuilder copy = new NeuralSparseQueryBuilder(filterStreamInput);
-        if (NeuralSparseTwoPhaseParameters.isClusterOnOrAfterMinReqVersionForTwoPhaseSearchSupport()) {
+        if (NeuralSparseTwoPhaseParameters.isClusterOnSameVersionForTwoPhaseSearchSupport()) {
             assertEquals(original, copy);
         } else {
             assertNull(copy.neuralSparseTwoPhaseParameters());

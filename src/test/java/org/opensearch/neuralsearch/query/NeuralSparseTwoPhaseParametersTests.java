@@ -71,6 +71,8 @@ public class NeuralSparseTwoPhaseParametersTests extends OpenSearchTestCase {
         when(mockClusterService.state()).thenReturn(mockClusterState);
         when(mockClusterState.getNodes()).thenReturn(mockDiscoveryNodes);
         when(mockDiscoveryNodes.getMinNodeVersion()).thenReturn(Version.CURRENT);
+        when(mockDiscoveryNodes.getMaxNodeVersion()).thenReturn(Version.CURRENT);
+
         when(mockClusterService.getClusterSettings()).thenReturn(clusterSettings);
 
         NeuralSearchClusterUtil.instance().initialize(mockClusterService);
@@ -290,12 +292,12 @@ public class NeuralSparseTwoPhaseParametersTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testIsClusterOnOrAfterMinReqVersionForTwoPhaseSearchSupport() {
-        ClusterService clusterServiceBefore = NeuralSearchClusterTestUtils.mockClusterService(Version.V_2_13_0);
+        ClusterService clusterServiceBefore = NeuralSearchClusterTestUtils.mockClusterService(Version.V_2_13_0, Version.CURRENT);
         NeuralSearchClusterUtil.instance().initialize(clusterServiceBefore);
-        assertFalse(NeuralSparseTwoPhaseParameters.isClusterOnOrAfterMinReqVersionForTwoPhaseSearchSupport());
-        ClusterService clusterServiceCurrent = NeuralSearchClusterTestUtils.mockClusterService(Version.CURRENT);
+        assertFalse(NeuralSparseTwoPhaseParameters.isClusterOnSameVersionForTwoPhaseSearchSupport());
+        ClusterService clusterServiceCurrent = NeuralSearchClusterTestUtils.mockClusterService(Version.CURRENT, Version.CURRENT);
         NeuralSearchClusterUtil.instance().initialize(clusterServiceCurrent);
-        assertTrue(NeuralSparseTwoPhaseParameters.isClusterOnOrAfterMinReqVersionForTwoPhaseSearchSupport());
+        assertTrue(NeuralSparseTwoPhaseParameters.isClusterOnSameVersionForTwoPhaseSearchSupport());
     }
 
     @SneakyThrows

@@ -47,5 +47,13 @@ public class NeuralSearchClusterUtil {
     public Version getClusterMinVersion() {
         return this.clusterService.state().getNodes().getMinNodeVersion();
     }
-    
+
+    /**
+     * Return maximal OpenSearch version based on all nodes currently discoverable in the cluster
+     * @return maximal installed OpenSearch version, default to Version.CURRENT which is typically the latest version
+     */
+    public Version getClusterMaxVersion() {
+        return this.clusterService.state().getNodes().getMaxNodeVersion();
+    }
+
 }

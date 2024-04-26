@@ -89,7 +89,7 @@ public class NeuralSparseTwoPhaseUtil {
         Query twoPhaseQuery
     ) {
         int curWindowSize = (int) (searchContext.size() * windowSizeExpansion);
-        if (curWindowSize < 0 || curWindowSize > NeuralSparseTwoPhaseParameters.MAX_WINDOW_SIZE) {
+        if (curWindowSize < 0 || curWindowSize > NeuralSparseTwoPhaseParameters.MAX_WINDOW_SIZE()) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
@@ -97,7 +97,7 @@ public class NeuralSparseTwoPhaseUtil {
                         + "You can change the value of cluster setting [plugins.neural_search.neural_sparse.two_phase.max_window_size] "
                         + "to a integer at least 50.",
                     curWindowSize,
-                    NeuralSparseTwoPhaseParameters.MAX_WINDOW_SIZE
+                    NeuralSparseTwoPhaseParameters.MAX_WINDOW_SIZE()
                 )
             );
         }

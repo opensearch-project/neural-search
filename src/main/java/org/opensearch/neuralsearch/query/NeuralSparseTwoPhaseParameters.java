@@ -39,10 +39,11 @@ import java.util.Objects;
 @NoArgsConstructor
 @AllArgsConstructor
 public class NeuralSparseTwoPhaseParameters implements Writeable {
-    public static volatile Float DEFAULT_WINDOW_SIZE_EXPANSION;
-    public static volatile Float DEFAULT_PRUNING_RATIO;
-    public static volatile Boolean DEFAULT_ENABLED;
-    public static volatile Integer MAX_WINDOW_SIZE;
+    static volatile Float DEFAULT_WINDOW_SIZE_EXPANSION;
+    static volatile Float DEFAULT_PRUNING_RATIO;
+    static volatile Boolean DEFAULT_ENABLED;
+    @Getter
+    static volatile Integer MAX_WINDOW_SIZE;
     @VisibleForTesting
     static final ParseField NAME = new ParseField("two_phase_settings");
     @VisibleForTesting
@@ -190,7 +191,7 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
      * @return true if enabled, false otherwise.
      */
     public static boolean isEnabled(final NeuralSparseTwoPhaseParameters neuralSparseTwoPhaseParameters) {
-        if (!isClusterOnOrAfterMinReqVersionForTwoPhaseSearchSupport() || Objects.isNull(neuralSparseTwoPhaseParameters)) {
+        if (!isClusterOnSameVersionForTwoPhaseSearchSupport() || Objects.isNull(neuralSparseTwoPhaseParameters)) {
             return false;
         }
         return neuralSparseTwoPhaseParameters.enabled();
@@ -201,7 +202,8 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
      *
      * @return True if cluster are on support, false if it doesn't.
      */
-    public static boolean isClusterOnOrAfterMinReqVersionForTwoPhaseSearchSupport() {
-        return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_TWO_PHASE_SEARCH);
+    public static boolean isClusterOnSameVersionForTwoPhaseSearchSupport() {
+        NeuralSearchClusterUtil neuralSearchClusterUtil = NeuralSearchClusterUtil.instance();
+        return neuralSearchClusterUtil.getClusterMinVersion() == neuralSearchClusterUtil.getClusterMaxVersion();
     }
 }
