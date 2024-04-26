@@ -14,7 +14,7 @@ import org.apache.lucene.search.Scorer;
 @Getter
 public class HybridDisiWrapper extends DisiWrapper {
     // index of disi wrapper sub-query object when its part of the hybrid query
-    int subQueryIndex = -1;
+    private final int subQueryIndex;
 
     public HybridDisiWrapper(Scorer scorer, int subQueryIndex) {
         super(scorer);

@@ -190,7 +190,8 @@ public final class HybridQueryScorer extends Scorer {
      */
     public float[] hybridScores() throws IOException {
         float[] scores = new float[subScores.length];
-        if (subScorersPQ.topList() instanceof HybridDisiWrapper == false) {
+        DisiWrapper topList = subScorersPQ.topList();
+        if (topList instanceof HybridDisiWrapper == false) {
             log.error(
                 String.format(
                     Locale.ROOT,
@@ -199,10 +200,12 @@ public final class HybridQueryScorer extends Scorer {
                     subScorersPQ.topList().getClass().getSimpleName()
                 )
             );
-            throw new IllegalStateException();
+            throw new IllegalStateException(
+                "Unable to collect scores for one of the sub-queries, encountered an unexpected type of score iterator."
+            );
         }
-        HybridDisiWrapper topList = (HybridDisiWrapper) subScorersPQ.topList();
-        for (HybridDisiWrapper disiWrapper = topList; disiWrapper != null; disiWrapper = (HybridDisiWrapper) disiWrapper.next) {
+        for (HybridDisiWrapper disiWrapper = (HybridDisiWrapper) topList; disiWrapper != null; disiWrapper =
+            (HybridDisiWrapper) disiWrapper.next) {
             // check if this doc has match in the subQuery. If not, add score as 0.0 and continue
             Scorer scorer = disiWrapper.scorer;
             if (scorer.docID() == DocIdSetIterator.NO_MORE_DOCS) {
