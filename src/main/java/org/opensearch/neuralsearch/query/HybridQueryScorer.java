@@ -8,18 +8,13 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 
-import com.google.common.primitives.Ints;
 import org.apache.lucene.search.DisiPriorityQueue;
 import org.apache.lucene.search.DisiWrapper;
 import org.apache.lucene.search.DisjunctionDISIApproximation;
 import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.TwoPhaseIterator;
@@ -27,6 +22,7 @@ import org.apache.lucene.search.Weight;
 
 import lombok.Getter;
 import org.apache.lucene.util.PriorityQueue;
+import org.opensearch.neuralsearch.search.HybridDisiWrapper;
 
 /**
  * Class abstracts functionality of Scorer for hybrid query. When iterating over documents in increasing
@@ -43,8 +39,6 @@ public final class HybridQueryScorer extends Scorer {
 
     private final float[] subScores;
 
-    private final Map<Query, int[]> queryToIndex;
-
     private final DocIdSetIterator approximation;
     private final HybridScoreBlockBoundaryPropagator disjunctionBlockPropagator;
     private final TwoPhase twoPhase;
@@ -57,7 +51,6 @@ public final class HybridQueryScorer extends Scorer {
         super(weight);
         this.subScorers = Collections.unmodifiableList(subScorers);
         subScores = new float[subScorers.size()];
-        this.queryToIndex = mapQueryToIndex();
         this.subScorersPQ = initializeSubScorersPQ();
         boolean needsScores = scoreMode != ScoreMode.COMPLETE_NO_SCORES;
 
@@ -194,70 +187,30 @@ public final class HybridQueryScorer extends Scorer {
      */
     public float[] hybridScores() throws IOException {
         float[] scores = new float[subScores.length];
-        DisiWrapper topList = subScorersPQ.topList();
-        for (DisiWrapper disiWrapper = topList; disiWrapper != null; disiWrapper = disiWrapper.next) {
+        HybridDisiWrapper topList = (HybridDisiWrapper) subScorersPQ.topList();
+        for (HybridDisiWrapper disiWrapper = topList; disiWrapper != null; disiWrapper = (HybridDisiWrapper) disiWrapper.next) {
             // check if this doc has match in the subQuery. If not, add score as 0.0 and continue
             Scorer scorer = disiWrapper.scorer;
             if (scorer.docID() == DocIdSetIterator.NO_MORE_DOCS) {
                 continue;
             }
-            Query query = scorer.getWeight().getQuery();
-            int[] indexes = queryToIndex.get(query);
-            // we need to find the index of first sub-query that hasn't been set yet. Such score will have initial value of "0.0"
-            int index = -1;
-            for (int idx : indexes) {
-                if (Float.compare(scores[idx], 0.0f) == 0) {
-                    index = idx;
-                    break;
-                }
-            }
-            if (index == -1) {
-                throw new IllegalStateException(
-                    String.format(
-                        Locale.ROOT,
-                        "cannot set score for one of hybrid search subquery [%s] and document [%d]",
-                        query.toString(),
-                        scorer.docID()
-                    )
-                );
-            }
-            scores[index] = scorer.score();
+            scores[disiWrapper.getSubQueryIndex()] = scorer.score();
         }
         return scores;
     }
 
-    private Map<Query, int[]> mapQueryToIndex() {
-        // we need list as number of identical queries is unknown
-        Map<Query, List<Integer>> queryToListOfIndexes = new HashMap<>();
-        int idx = 0;
-        for (Scorer scorer : subScorers) {
-            if (scorer == null) {
-                idx++;
-                continue;
-            }
-            Query query = scorer.getWeight().getQuery();
-            queryToListOfIndexes.putIfAbsent(query, new ArrayList<>());
-            queryToListOfIndexes.get(query).add(idx);
-            idx++;
-        }
-        // convert to the int array for better performance
-        Map<Query, int[]> queryToIndex = new HashMap<>();
-        queryToListOfIndexes.forEach((key, value) -> queryToIndex.put(key, Ints.toArray(value)));
-        return queryToIndex;
-    }
-
     private DisiPriorityQueue initializeSubScorersPQ() {
-        Objects.requireNonNull(queryToIndex, "should not be null");
         Objects.requireNonNull(subScorers, "should not be null");
         // we need to count this way in order to include all identical sub-queries
-        int numOfSubQueries = queryToIndex.values().stream().map(array -> array.length).reduce(0, Integer::sum);
+        int numOfSubQueries = subScorers.size();
         DisiPriorityQueue subScorersPQ = new DisiPriorityQueue(numOfSubQueries);
-        for (Scorer scorer : subScorers) {
+        for (int idx = 0; idx < subScorers.size(); idx++) {
+            Scorer scorer = subScorers.get(idx);
             if (scorer == null) {
                 continue;
             }
-            final DisiWrapper w = new DisiWrapper(scorer);
-            subScorersPQ.add(w);
+            final HybridDisiWrapper disiWrapper = new HybridDisiWrapper(scorer, idx);
+            subScorersPQ.add(disiWrapper);
         }
         return subScorersPQ;
     }
