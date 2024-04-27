@@ -152,8 +152,11 @@ public final class TextChunkingProcessor extends AbstractProcessor {
             return IndexSettings.MAX_TOKEN_COUNT_SETTING.get(environment.settings());
         }
         // if the index is specified in the metadata, read maxTokenCount from the index setting
-        IndexSettings indexSettings = new IndexSettings(indexMetadata, indexMetadata.getSettings());
-        return indexSettings.getMaxTokenCount();
+        String maxTokenCountString = indexMetadata.getSettings().get("index.analyze.max_token_count");
+        if (Objects.isNull(maxTokenCountString)) {
+            return IndexSettings.MAX_TOKEN_COUNT_SETTING.get(environment.settings());
+        }
+        return Integer.parseInt(maxTokenCountString);
     }
 
     /**
