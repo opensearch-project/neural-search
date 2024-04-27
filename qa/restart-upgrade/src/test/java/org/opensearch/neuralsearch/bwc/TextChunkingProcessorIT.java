@@ -28,7 +28,7 @@ public class TextChunkingProcessorIT extends AbstractRestartUpgradeRestTestCase 
         "standard tokenizer in OpenSearch."
     );
 
-    // Test rolling-upgrade text chunking processor
+    // Test restart-upgrade text chunking processor
     // Create Text Chunking Processor, Ingestion Pipeline and add document
     // Validate process, pipeline and document count in restart-upgrade scenario
     public void testTextChunkingProcessor_E2EFlow() throws Exception {
