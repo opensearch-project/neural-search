@@ -15,11 +15,9 @@ import java.util.Objects;
 import org.apache.commons.lang3.StringUtils;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.env.Environment;
-import org.opensearch.index.IndexService;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.index.mapper.MapperService;
-import org.opensearch.indices.IndicesService;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
@@ -52,7 +50,6 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     private Chunker chunker;
     private final Map<String, Object> fieldMap;
     private final ClusterService clusterService;
-    private final IndicesService indicesService;
     private final AnalysisRegistry analysisRegistry;
     private final Environment environment;
 
@@ -63,14 +60,12 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         final Map<String, Object> algorithmMap,
         final Environment environment,
         final ClusterService clusterService,
-        final IndicesService indicesService,
         final AnalysisRegistry analysisRegistry
     ) {
         super(tag, description);
         this.fieldMap = fieldMap;
         this.environment = environment;
         this.clusterService = clusterService;
-        this.indicesService = indicesService;
         this.analysisRegistry = analysisRegistry;
         parseAlgorithmMap(algorithmMap);
     }
@@ -157,8 +152,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
             return IndexSettings.MAX_TOKEN_COUNT_SETTING.get(environment.settings());
         }
         // if the index is specified in the metadata, read maxTokenCount from the index setting
-        IndexService indexService = indicesService.indexServiceSafe(indexMetadata.getIndex());
-        return indexService.getIndexSettings().getMaxTokenCount();
+        return Integer.parseInt(indexMetadata.getSettings().get("index.analyze.max_token_count"));
     }
 
     /**
