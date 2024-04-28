@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Objects;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.math.NumberUtils;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.env.Environment;
 import org.opensearch.cluster.service.ClusterService;
@@ -146,18 +147,19 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     }
 
     private int getMaxTokenCount(final Map<String, Object> sourceAndMetadataMap) {
+        int defaultMaxTokenCount = IndexSettings.MAX_TOKEN_COUNT_SETTING.get(environment.settings());
         String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
         IndexMetadata indexMetadata = clusterService.state().metadata().index(indexName);
         if (Objects.isNull(indexMetadata)) {
-            return IndexSettings.MAX_TOKEN_COUNT_SETTING.get(environment.settings());
+            return defaultMaxTokenCount;
         }
         // if the index is specified in the metadata, read maxTokenCount from the index setting
         String maxTokenCountString = indexMetadata.getSettings().get("index.analyze.max_token_count");
         // if maxTokenCount is not specified in the index, return the default setting
         if (Objects.isNull(maxTokenCountString)) {
-            return IndexSettings.MAX_TOKEN_COUNT_SETTING.get(environment.settings());
+            return defaultMaxTokenCount;
         }
-        return Integer.parseInt(maxTokenCountString);
+        return NumberUtils.toInt(maxTokenCountString, defaultMaxTokenCount);
     }
 
     /**
