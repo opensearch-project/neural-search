@@ -12,7 +12,6 @@ import lombok.Setter;
 import lombok.experimental.Accessors;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.opensearch.Version;
-import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.common.ParsingException;
@@ -39,11 +38,6 @@ import java.util.Objects;
 @NoArgsConstructor
 @AllArgsConstructor
 public class NeuralSparseTwoPhaseParameters implements Writeable {
-    static volatile Float DEFAULT_WINDOW_SIZE_EXPANSION;
-    static volatile Float DEFAULT_PRUNING_RATIO;
-    static volatile Boolean DEFAULT_ENABLED;
-    @Getter
-    static volatile Integer MAX_WINDOW_SIZE;
     @VisibleForTesting
     static final ParseField NAME = new ParseField("two_phase_settings");
     @VisibleForTesting
@@ -58,37 +52,14 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
     private Boolean enabled;
 
     /**
-     * Initialize when start a cluster.
+     * Constructor from index's setting
      *
-     * @param clusterService The opensearch clusterService.
-     * @param settings       The env settings to initialize.
+     * @param settings setting of index
      */
-    public static void initialize(final ClusterService clusterService, final Settings settings) {
-        DEFAULT_ENABLED = NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_ENABLED.get(settings);
-        DEFAULT_WINDOW_SIZE_EXPANSION = NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_WINDOW_SIZE_EXPANSION.get(settings);
-        DEFAULT_PRUNING_RATIO = NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_PRUNING_RATIO.get(settings);
-        MAX_WINDOW_SIZE = NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_MAX_WINDOW_SIZE.get(settings);
-        clusterService.getClusterSettings()
-            .addSettingsUpdateConsumer(NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_ENABLED, it -> DEFAULT_ENABLED = it);
-        clusterService.getClusterSettings()
-            .addSettingsUpdateConsumer(
-                NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_WINDOW_SIZE_EXPANSION,
-                it -> DEFAULT_WINDOW_SIZE_EXPANSION = it
-            );
-        clusterService.getClusterSettings()
-            .addSettingsUpdateConsumer(
-                NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_PRUNING_RATIO,
-                it -> DEFAULT_PRUNING_RATIO = it
-            );
-        clusterService.getClusterSettings()
-            .addSettingsUpdateConsumer(NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_MAX_WINDOW_SIZE, it -> MAX_WINDOW_SIZE = it);
-
-    }
-
-    public static NeuralSparseTwoPhaseParameters getDefaultSettings() {
-        return new NeuralSparseTwoPhaseParameters().window_size_expansion(DEFAULT_WINDOW_SIZE_EXPANSION)
-            .pruning_ratio(DEFAULT_PRUNING_RATIO)
-            .enabled(DEFAULT_ENABLED);
+    public NeuralSparseTwoPhaseParameters(final Settings settings) {
+        this.enabled(NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_ENABLED.get(settings));
+        this.pruning_ratio(NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_PRUNING_RATIO.get(settings));
+        this.window_size_expansion(NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_WINDOW_SIZE_EXPANSION.get(settings));
     }
 
     /**
@@ -98,32 +69,30 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
      * @throws IOException thrown if unable to read from input stream
      */
     public NeuralSparseTwoPhaseParameters(final StreamInput in) throws IOException {
-        window_size_expansion = in.readFloat();
-        pruning_ratio = in.readFloat();
-        enabled = in.readBoolean();
+        window_size_expansion = in.readOptionalFloat();
+        pruning_ratio = in.readOptionalFloat();
+        enabled = in.readOptionalBoolean();
     }
 
     @Override
     public void writeTo(final StreamOutput out) throws IOException {
-        out.writeFloat(window_size_expansion);
-        out.writeFloat(pruning_ratio);
-        out.writeBoolean(enabled);
+        out.writeOptionalFloat(window_size_expansion);
+        out.writeOptionalFloat(pruning_ratio);
+        out.writeOptionalBoolean(enabled);
     }
 
     /**
      * Builds the content of this object into an XContentBuilder, typically for JSON serialization.
      *
      * @param builder The builder to fill.
-     * @return the given XContentBuilder with object content added.
      * @throws IOException if building the content fails.
      */
-    public XContentBuilder doXContent(final XContentBuilder builder) throws IOException {
+    public void doXContent(final XContentBuilder builder) throws IOException {
         builder.startObject(NAME.getPreferredName());
         builder.field(WINDOW_SIZE_EXPANSION.getPreferredName(), window_size_expansion);
         builder.field(PRUNING_RATIO.getPreferredName(), pruning_ratio);
         builder.field(ENABLED.getPreferredName(), enabled);
         builder.endObject();
-        return builder;
     }
 
     /**
@@ -136,17 +105,20 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
     public static NeuralSparseTwoPhaseParameters parseFromXContent(final XContentParser parser) throws IOException {
         XContentParser.Token token;
         String currentFieldName = "";
-        NeuralSparseTwoPhaseParameters neuralSparseTwoPhaseParameters = NeuralSparseTwoPhaseParameters.getDefaultSettings();
+        NeuralSparseTwoPhaseParameters neuralSparseTwoPhaseParameters = new NeuralSparseTwoPhaseParameters();
         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
             if (token == XContentParser.Token.FIELD_NAME) {
                 currentFieldName = parser.currentName();
             } else if (token.isValue()) {
                 if (WINDOW_SIZE_EXPANSION.match(currentFieldName, parser.getDeprecationHandler())) {
-                    neuralSparseTwoPhaseParameters.window_size_expansion(parser.floatValue());
+                    Float windowSizeExpansion = parser.floatValue();
+                    neuralSparseTwoPhaseParameters.window_size_expansion(windowSizeExpansion);
                 } else if (PRUNING_RATIO.match(currentFieldName, parser.getDeprecationHandler())) {
-                    neuralSparseTwoPhaseParameters.pruning_ratio(parser.floatValue());
+                    Float pruningRatio = parser.floatValue();
+                    neuralSparseTwoPhaseParameters.pruning_ratio(pruningRatio);
                 } else if (ENABLED.match(currentFieldName, parser.getDeprecationHandler())) {
-                    neuralSparseTwoPhaseParameters.enabled(parser.booleanValue());
+                    Boolean enabled = parser.booleanValue();
+                    neuralSparseTwoPhaseParameters.enabled(enabled);
                 } else {
                     throw new ParsingException(
                         parser.getTokenLocation(),
@@ -205,5 +177,35 @@ public class NeuralSparseTwoPhaseParameters implements Writeable {
     public static boolean isClusterOnSameVersionForTwoPhaseSearchSupport() {
         NeuralSearchClusterUtil neuralSearchClusterUtil = NeuralSearchClusterUtil.instance();
         return neuralSearchClusterUtil.getClusterMinVersion() == neuralSearchClusterUtil.getClusterMaxVersion();
+    }
+
+    /**
+     * Check if neuralSparseTwoPhaseParameters's value are valid.
+     * @param neuralSparseTwoPhaseParameters the parameter to check
+     */
+    public static void checkValidValueOfTwoPhaseParameter(NeuralSparseTwoPhaseParameters neuralSparseTwoPhaseParameters) {
+        if (neuralSparseTwoPhaseParameters == null) return;
+
+        if (neuralSparseTwoPhaseParameters.pruning_ratio() < 0 || neuralSparseTwoPhaseParameters.pruning_ratio() > 1) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "[%s] %s field value must be in range [0,1]",
+                    NeuralSparseTwoPhaseParameters.NAME.getPreferredName(),
+                    NeuralSparseTwoPhaseParameters.PRUNING_RATIO.getPreferredName()
+                )
+            );
+        }
+
+        if (neuralSparseTwoPhaseParameters.window_size_expansion() < 1) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "[%s] %s field value can not be smaller than 1",
+                    NeuralSparseTwoPhaseParameters.NAME.getPreferredName(),
+                    NeuralSparseTwoPhaseParameters.WINDOW_SIZE_EXPANSION.getPreferredName()
+                )
+            );
+        }
     }
 }

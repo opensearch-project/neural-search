@@ -9,7 +9,7 @@ import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.BoostQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.neuralsearch.query.NeuralSparseQuery;
-import org.opensearch.neuralsearch.query.NeuralSparseTwoPhaseParameters;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.rescore.QueryRescorer;
 import org.opensearch.search.rescore.RescoreContext;
@@ -89,7 +89,10 @@ public class NeuralSparseTwoPhaseUtil {
         Query twoPhaseQuery
     ) {
         int curWindowSize = (int) (searchContext.size() * windowSizeExpansion);
-        if (curWindowSize < 0 || curWindowSize > NeuralSparseTwoPhaseParameters.MAX_WINDOW_SIZE()) {
+        final int maxWindowSize = NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_MAX_WINDOW_SIZE.get(
+            searchContext.getQueryShardContext().getIndexSettings().getSettings()
+        );
+        if (curWindowSize < 0 || curWindowSize > maxWindowSize) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
@@ -97,7 +100,7 @@ public class NeuralSparseTwoPhaseUtil {
                         + "You can change the value of cluster setting [plugins.neural_search.neural_sparse.two_phase.max_window_size] "
                         + "to a integer at least 50.",
                     curWindowSize,
-                    NeuralSparseTwoPhaseParameters.MAX_WINDOW_SIZE()
+                    maxWindowSize
                 )
             );
         }

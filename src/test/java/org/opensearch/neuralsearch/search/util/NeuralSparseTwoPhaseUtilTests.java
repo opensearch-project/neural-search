@@ -14,15 +14,13 @@ import org.apache.lucene.search.DoubleValuesSource;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
 import org.junit.Before;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;
+import org.opensearch.Version;
+import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.index.IndexSettings;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.neuralsearch.query.NeuralSparseQuery;
-import org.opensearch.neuralsearch.query.NeuralSparseTwoPhaseParameters;
-import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.rescore.QueryRescorer;
 import org.opensearch.search.rescore.RescoreContext;
@@ -33,11 +31,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -46,7 +42,11 @@ import static org.opensearch.neuralsearch.search.util.NeuralSparseTwoPhaseUtil.a
 
 public class NeuralSparseTwoPhaseUtilTests extends OpenSearchTestCase {
 
-    private final SearchContext mockSearchContext = mock(SearchContext.class);
+    private static final String TWO_PHASE_ENABLED_SETTING_KEY = "index.neural_sparse.two_phase.default_enabled";
+    private static final String TWO_PHASE_WINDOW_SIZE_EXPANSION_SETTING_KEY = "index.neural_sparse.two_phase.default_window_size_expansion";
+    private static final String TWO_PHASE_PRUNE_RATIO_SETTING_KEY = "index.neural_sparse.two_phase.default_pruning_ratio";
+    private static final String TWO_PHASE_MAX_WINDOW_SIZE_KEY = "index.neural_sparse.two_phase.max_window_size";
+    private final SearchContext mockSearchContext = mock(SearchContext.class, RETURNS_DEEP_STUBS);
 
     private final QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
     private NeuralSparseQuery normalNeuralSparseQuery;
@@ -54,15 +54,33 @@ public class NeuralSparseTwoPhaseUtilTests extends OpenSearchTestCase {
     private final Query highScoreTokenQuery = mock(Query.class);
     private final Query lowScoreTokenQuery = mock(Query.class);
 
-    private ClusterSettings clusterSettings;
-
     @SneakyThrows
     @Before
     public void testInitialize() {
         normalNeuralSparseQuery = new NeuralSparseQuery(currentQuery, highScoreTokenQuery, lowScoreTokenQuery, 5f);
         when(mockSearchContext.getQueryShardContext()).thenReturn(mockQueryShardContext);
         when(mockSearchContext.size()).thenReturn(10);
-        updateClusterSettingForTwoPhaseUtilTest();
+        when(mockSearchContext.rescore()).thenReturn(Collections.emptyList());
+        when(mockQueryShardContext.getIndexSettings()).thenReturn(getCustomTwoPhaseIndexSettings(true, 5.0f, 0.4f, 10000));
+    }
+
+    private IndexSettings getCustomTwoPhaseIndexSettings(boolean enabled, float expansion, float ratio, int windowSize) {
+        IndexMetadata indexMetadata = IndexMetadata.builder("_index")
+            .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT))
+            .numberOfShards(1)
+            .numberOfReplicas(0)
+            .creationDate(System.currentTimeMillis())
+            .build();
+
+        return new IndexSettings(
+            indexMetadata,
+            Settings.builder()
+                .put(TWO_PHASE_ENABLED_SETTING_KEY, enabled)
+                .put(TWO_PHASE_WINDOW_SIZE_EXPANSION_SETTING_KEY, expansion)
+                .put(TWO_PHASE_PRUNE_RATIO_SETTING_KEY, ratio)
+                .put(TWO_PHASE_MAX_WINDOW_SIZE_KEY, windowSize)
+                .build()
+        );
     }
 
     @SneakyThrows
@@ -197,37 +215,19 @@ public class NeuralSparseTwoPhaseUtilTests extends OpenSearchTestCase {
     @SneakyThrows
     public void testAddRescoreContext_whenOverEdgeWindowSize_thenThrowException() {
         when(mockSearchContext.size()).thenReturn(100);
-        updateMaxWindowSizeClusterSettingForTwoPhaseUtilTest(50);
+        when(mockQueryShardContext.getIndexSettings()).thenReturn(getCustomTwoPhaseIndexSettings(true,10.0f,0.4f,50));
         expectThrows(
             IllegalArgumentException.class,
             ()->addRescoreContextFromNeuralSparseQuery(normalNeuralSparseQuery,mockSearchContext)
         );
         when(mockSearchContext.size()).thenReturn(10);
+        when(mockSearchContext.rescore()).thenReturn(Collections.emptyList());
         addRescoreContextFromNeuralSparseQuery(normalNeuralSparseQuery,mockSearchContext);
         ArgumentCaptor<QueryRescorer.QueryRescoreContext> rescoreContextArgumentCaptor = ArgumentCaptor.forClass(
             QueryRescorer.QueryRescoreContext.class
         );
         verify(mockSearchContext).addRescore(rescoreContextArgumentCaptor.capture());
         assertEquals(50, rescoreContextArgumentCaptor.getValue().getWindowSize());
-        updateClusterSettingForTwoPhaseUtilTest();
     }
 
-    private void updateClusterSettingForTwoPhaseUtilTest() {
-        Settings settings = Settings.builder().build();
-        final Set<Setting<?>> settingsSet = Stream.of(
-            NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_ENABLED,
-            NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_WINDOW_SIZE_EXPANSION,
-            NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_PRUNING_RATIO,
-            NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_MAX_WINDOW_SIZE
-        ).collect(Collectors.toSet());
-        clusterSettings = new ClusterSettings(settings, settingsSet);
-        ClusterService clusterService = mock(ClusterService.class);
-        when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
-        NeuralSparseTwoPhaseParameters.initialize(clusterService, settings);
-    }
-
-    private void updateMaxWindowSizeClusterSettingForTwoPhaseUtilTest(int size) {
-        Settings newSettings = Settings.builder().put("plugins.neural_search.neural_sparse.two_phase.max_window_size", size).build();
-        clusterSettings.applySettings(newSettings);
-    }
 }

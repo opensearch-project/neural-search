@@ -21,7 +21,6 @@ import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
-import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.neuralsearch.util.TestUtils;
 
 import static org.opensearch.neuralsearch.util.TestUtils.createRandomTokenWeightMap;
@@ -31,11 +30,10 @@ import lombok.SneakyThrows;
 
 public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
 
-    private static final String TWO_PHASE_ENABLED_SETTING_KEY = "plugins.neural_search.neural_sparse.two_phase.default_enabled";
-    private static final String TWO_PHASE_WINDOW_SIZE_EXPANSION_SETTING_KEY =
-        "plugins.neural_search.neural_sparse.two_phase.default_window_size_expansion";
-    private static final String TWO_PHASE_PRUNE_RATIO_SETTING_KEY = "plugins.neural_search.neural_sparse.two_phase.default_pruning_ratio";
-    private static final String TWO_PHASE_MAX_WINDOW_SIZE_SETTING_KEY = "plugins.neural_search.neural_sparse.two_phase.max_window_size";
+    private static final String TWO_PHASE_ENABLED_SETTING_KEY = "index.neural_sparse.two_phase.default_enabled";
+    private static final String TWO_PHASE_WINDOW_SIZE_EXPANSION_SETTING_KEY = "index.neural_sparse.two_phase.default_window_size_expansion";
+    private static final String TWO_PHASE_PRUNE_RATIO_SETTING_KEY = "index.neural_sparse.two_phase.default_pruning_ratio";
+    private static final String TWO_PHASE_MAX_WINDOW_SIZE_SETTING_KEY = "index.neural_sparse.two_phase.max_window_size";
     private static final String TEST_BASIC_INDEX_NAME = "test-sparse-basic-index";
     private static final String TEST_TWO_PHASE_BASIC_INDEX_NAME = "test-sparse-basic-index-two-phase";
     private static final String TEST_MULTI_NEURAL_SPARSE_FIELD_INDEX_NAME = "test-sparse-multi-field-index";
@@ -64,20 +62,21 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
     public void setUp() throws Exception {
         super.setUp();
         updateClusterSettings();
-        updateTwoPhaseClusterSettings(true, 5.0f, 0.4f, 10000);
     }
 
     @SneakyThrows
-    private void updateTwoPhaseClusterSettings(boolean enabled, float windowSizeExpansion, float ratio, int maxWindowSize) {
-        updateClusterSettings(TWO_PHASE_ENABLED_SETTING_KEY, enabled);
-        updateClusterSettings(TWO_PHASE_WINDOW_SIZE_EXPANSION_SETTING_KEY, windowSizeExpansion);
-        updateClusterSettings(TWO_PHASE_PRUNE_RATIO_SETTING_KEY, ratio);
-        updateClusterSettings(TWO_PHASE_MAX_WINDOW_SIZE_SETTING_KEY, maxWindowSize);
-        clusterService.getClusterSettings().registerSetting(NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_ENABLED);
-        clusterService.getClusterSettings().registerSetting(NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_WINDOW_SIZE_EXPANSION);
-        clusterService.getClusterSettings().registerSetting(NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_MAX_WINDOW_SIZE);
-        clusterService.getClusterSettings().registerSetting(NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_PRUNING_RATIO);
-        NeuralSparseTwoPhaseParameters.initialize(clusterService, Settings.EMPTY);
+    private NeuralSparseTwoPhaseParameters getCustomTwoPhaseParameter() {
+        return new NeuralSparseTwoPhaseParameters().enabled(true).window_size_expansion(5.0f).pruning_ratio(0.4f);
+    }
+
+    @SneakyThrows
+    private void updateTwoPhaseIndexSettings(String index, boolean enabled, float windowSizeExpansion, float ratio, float maxWindow) {
+        Settings.Builder builder = Settings.builder()
+            .put(TWO_PHASE_ENABLED_SETTING_KEY, enabled)
+            .put(TWO_PHASE_PRUNE_RATIO_SETTING_KEY, ratio)
+            .put(TWO_PHASE_MAX_WINDOW_SIZE_SETTING_KEY, maxWindow)
+            .put(TWO_PHASE_WINDOW_SIZE_EXPANSION_SETTING_KEY, windowSizeExpansion);
+        updateIndexSettings(index, builder);
     }
 
     @SneakyThrows
@@ -547,9 +546,15 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testUpdateTwoPhaseSettings_whenTwoPhasedSettingsOverEdge_thenFail() {
-        expectThrows(ResponseException.class, () -> updateTwoPhaseClusterSettings(true, 50000f, 1.4f, 10000));
-        expectThrows(ResponseException.class, () -> updateTwoPhaseClusterSettings(true, 50000f, -1f, 10000));
-        expectThrows(ResponseException.class, () -> updateTwoPhaseClusterSettings(true, -10f, 1.4f, 10000));
+        try {
+            initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
+            expectThrows(ResponseException.class, () -> updateTwoPhaseIndexSettings(TEST_BASIC_INDEX_NAME, true, 50000f, 1.4f, 10000));
+            expectThrows(ResponseException.class, () -> updateTwoPhaseIndexSettings(TEST_BASIC_INDEX_NAME, true, 50000f, -1f, 10000));
+            expectThrows(ResponseException.class, () -> updateTwoPhaseIndexSettings(TEST_BASIC_INDEX_NAME, true, -10f, 1.4f, 10000));
+        } finally {
+            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, null, null);
+        }
+
     }
 
     @SneakyThrows
@@ -561,7 +566,7 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
                 .queryText(TEST_QUERY_TEXT)
                 .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(2.0f)
-                .neuralSparseTwoPhaseParameters(NeuralSparseTwoPhaseParameters.getDefaultSettings().window_size_expansion(-0.001f));
+                .neuralSparseTwoPhaseParameters(getCustomTwoPhaseParameter().window_size_expansion(-0.001f));
             NeuralSparseQueryBuilder finalSparseEncodingQueryBuilder = sparseEncodingQueryBuilder;
             expectThrows(ResponseException.class, () -> search(TEST_BASIC_INDEX_NAME, finalSparseEncodingQueryBuilder, 1));
             // pruning_ratio over edge [0.f
@@ -569,7 +574,7 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
                 .queryText(TEST_QUERY_TEXT)
                 .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(2.0f)
-                .neuralSparseTwoPhaseParameters(NeuralSparseTwoPhaseParameters.getDefaultSettings().pruning_ratio(-0.001f));
+                .neuralSparseTwoPhaseParameters(getCustomTwoPhaseParameter().pruning_ratio(-0.001f));
             NeuralSparseQueryBuilder finalSparseEncodingQueryBuilder1 = sparseEncodingQueryBuilder;
             expectThrows(ResponseException.class, () -> search(TEST_BASIC_INDEX_NAME, finalSparseEncodingQueryBuilder1, 1));
             // pruning_ratio over edge 1.f]
@@ -577,7 +582,7 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
                 .queryText(TEST_QUERY_TEXT)
                 .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(2.0f)
-                .neuralSparseTwoPhaseParameters(NeuralSparseTwoPhaseParameters.getDefaultSettings().pruning_ratio(1.001f));
+                .neuralSparseTwoPhaseParameters(getCustomTwoPhaseParameter().pruning_ratio(1.001f));
             NeuralSparseQueryBuilder finalSparseEncodingQueryBuilder2 = sparseEncodingQueryBuilder;
             expectThrows(ResponseException.class, () -> search(TEST_BASIC_INDEX_NAME, finalSparseEncodingQueryBuilder2, 1));
         } finally {

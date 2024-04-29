@@ -23,6 +23,7 @@ import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.Version;
 import org.opensearch.common.SetOnce;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.ParsingException;
@@ -30,12 +31,14 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.IndexSettings;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.query.AbstractQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 
@@ -47,6 +50,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.log4j.Log4j2;
+
+import static org.opensearch.neuralsearch.query.NeuralSparseTwoPhaseParameters.checkValidValueOfTwoPhaseParameter;
 
 /**
  * SparseEncodingQueryBuilder is responsible for handling "neural_sparse" query types. It uses an ML NEURAL_SPARSE model
@@ -244,36 +249,13 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             throw new IllegalArgumentException(String.format(Locale.ROOT, "%s field can not be empty", MODEL_ID_FIELD.getPreferredName()));
         }
 
-        if (sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters.pruning_ratio() < 0
-            || sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters.pruning_ratio() > 1) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "[%s] %s field value must be in range [0,1]",
-                    NeuralSparseTwoPhaseParameters.NAME.getPreferredName(),
-                    NeuralSparseTwoPhaseParameters.PRUNING_RATIO.getPreferredName()
-                )
-            );
-        }
-
-        if (sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters.window_size_expansion() < 1) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "[%s] %s field value can not be smaller than 1",
-                    NeuralSparseTwoPhaseParameters.NAME.getPreferredName(),
-                    NeuralSparseTwoPhaseParameters.WINDOW_SIZE_EXPANSION.getPreferredName()
-                )
-            );
-        }
+        checkValidValueOfTwoPhaseParameter(sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters);
         return sparseEncodingQueryBuilder;
     }
 
     private static void parseQueryParams(XContentParser parser, NeuralSparseQueryBuilder sparseEncodingQueryBuilder) throws IOException {
         XContentParser.Token token;
         String currentFieldName = "";
-        // set default 2-phase settings
-        sparseEncodingQueryBuilder.neuralSparseTwoPhaseParameters(NeuralSparseTwoPhaseParameters.getDefaultSettings());
         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
             if (token == XContentParser.Token.FIELD_NAME) {
                 currentFieldName = parser.currentName();
@@ -306,10 +288,12 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
                 );
             }
         }
+
     }
 
     @Override
     protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
+
         // We need to inference the sentence to get the queryTokens. The logic is similar to NeuralQueryBuilder
         // If the inference is finished, then rewrite to self and call doToQuery, otherwise, continue doRewrite
         if (null != queryTokensSupplier) {
@@ -336,7 +320,10 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     }
 
     @Override
-    protected Query doToQuery(QueryShardContext context) throws IOException {
+    protected Query doToQuery(QueryShardContext context) {
+        if (NeuralSparseTwoPhaseParameters.isClusterOnSameVersionForTwoPhaseSearchSupport()) completeTwoPhasePara(
+            context.getIndexSettings()
+        );
         final MappedFieldType ft = context.fieldMapper(fieldName);
         validateFieldType(ft);
         Map<String, Float> allTokens = getAllTokens();
@@ -467,4 +454,21 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         }
         return builder.build();
     }
+
+    private void completeTwoPhasePara(IndexSettings indexSettings) {
+        Settings settings = indexSettings.getSettings();
+        if (neuralSparseTwoPhaseParameters == null) neuralSparseTwoPhaseParameters = new NeuralSparseTwoPhaseParameters(settings);
+        else {
+            if (neuralSparseTwoPhaseParameters.enabled() == null) neuralSparseTwoPhaseParameters.enabled(
+                NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_ENABLED.get(settings)
+            );
+            if (neuralSparseTwoPhaseParameters.window_size_expansion() == null) neuralSparseTwoPhaseParameters.window_size_expansion(
+                NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_WINDOW_SIZE_EXPANSION.get(settings)
+            );
+            if (neuralSparseTwoPhaseParameters.pruning_ratio() == null) neuralSparseTwoPhaseParameters.pruning_ratio(
+                NeuralSearchSettings.NEURAL_SPARSE_TWO_PHASE_DEFAULT_PRUNING_RATIO.get(settings)
+            );
+        }
+    }
+
 }
