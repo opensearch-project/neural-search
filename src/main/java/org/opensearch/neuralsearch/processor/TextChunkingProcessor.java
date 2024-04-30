@@ -246,11 +246,17 @@ public final class TextChunkingProcessor extends AbstractProcessor {
                     List<Object> sourceObjectList = (List<Object>) sourceObject;
                     for (Object source : sourceObjectList) {
                         if (source instanceof Map) {
-                            stringTobeChunkedCount += getStringTobeChunkedCountFromMap((Map<String, Object>) source, (Map<String, Object>) targetKey);
+                            stringTobeChunkedCount += getStringTobeChunkedCountFromMap(
+                                (Map<String, Object>) source,
+                                (Map<String, Object>) targetKey
+                            );
                         }
                     }
                 } else if (sourceObject instanceof Map) {
-                    stringTobeChunkedCount += getStringTobeChunkedCountFromMap((Map<String, Object>) sourceObject, (Map<String, Object>) targetKey);
+                    stringTobeChunkedCount += getStringTobeChunkedCountFromMap(
+                        (Map<String, Object>) sourceObject,
+                        (Map<String, Object>) targetKey
+                    );
                 }
             } else {
                 // chunk the object when target key is of leaf type (null, string and list of string)
@@ -268,9 +274,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         if (value instanceof String) {
             return StringUtils.isEmpty((String) value) ? 0 : 1;
         } else if (isListOfString(value)) {
-            return (int) ((List<String>) value).stream()
-                .filter(s -> !StringUtils.isEmpty(s))
-                .count();
+            return (int) ((List<String>) value).stream().filter(s -> !StringUtils.isEmpty(s)).count();
         }
         return 0;
     }

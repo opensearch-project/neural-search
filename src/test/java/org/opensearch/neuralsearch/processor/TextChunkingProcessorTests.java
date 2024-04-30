@@ -297,6 +297,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         documents.add(
             "This is the first document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch."
         );
+        documents.add("");
         documents.add(
             "This is the second document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch."
         );
