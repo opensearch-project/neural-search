@@ -139,7 +139,7 @@ public final class FixedTokenLengthChunker implements Chunker {
             } else {
                 startContentPosition = tokens.get(startTokenIndex).getStartOffset();
             }
-            if (ChunkerUtil.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, stringTobeChunkedCount)) {
+            if (Chunker.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, stringTobeChunkedCount)) {
                 // include all characters till the end if exceeds max chunk limit
                 chunkResult.add(content.substring(startContentPosition));
                 break;

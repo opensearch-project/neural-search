@@ -61,7 +61,7 @@ public final class DelimiterChunker implements Chunker {
         int nextDelimiterPosition = content.indexOf(delimiter);
 
         while (nextDelimiterPosition != -1) {
-            if (ChunkerUtil.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, stringTobeChunkedCount)) {
+            if (Chunker.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, stringTobeChunkedCount)) {
                 break;
             }
             end = nextDelimiterPosition + delimiter.length();
