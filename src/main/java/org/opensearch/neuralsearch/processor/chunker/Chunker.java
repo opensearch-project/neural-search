@@ -14,6 +14,7 @@ import java.util.List;
 public interface Chunker {
 
     String MAX_CHUNK_LIMIT_FIELD = "max_chunk_limit";
+    String CHUNK_STRING_COUNT_FIELD = "chunk_string_count";
     int DEFAULT_MAX_CHUNK_LIMIT = 100;
     int DISABLED_MAX_CHUNK_LIMIT = -1;
 
@@ -33,4 +34,16 @@ public interface Chunker {
      * @return chunked passages
      */
     List<String> chunk(String content, Map<String, Object> runtimeParameters);
+
+    /**
+     * Checks whether the chunking results would exceed the max chunk limit after adding a passage
+     * If exceeds, then return true
+     *
+     * @param chunkResultSize the size of chunking result
+     * @param runtimeMaxChunkLimit runtime max_chunk_limit, used to check with chunkResultSize
+     * @param chunkStringCount runtime chunk_string_count, used to check with chunkResultSize
+     */
+    static boolean checkRunTimeMaxChunkLimit(int chunkResultSize, int runtimeMaxChunkLimit, int chunkStringCount) {
+        return runtimeMaxChunkLimit != DISABLED_MAX_CHUNK_LIMIT && chunkResultSize + chunkStringCount >= runtimeMaxChunkLimit;
+    }
 }
