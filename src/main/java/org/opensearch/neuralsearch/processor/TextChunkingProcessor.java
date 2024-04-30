@@ -172,7 +172,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         int maxTokenCount = getMaxTokenCount(sourceAndMetadataMap);
         runtimeParameters.put(FixedTokenLengthChunker.MAX_TOKEN_COUNT_FIELD, maxTokenCount);
         runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, maxChunkLimit);
-        chunkMapType(sourceAndMetadataMap, fieldMap, runtimeParameters, 0);
+        chunkMapType(sourceAndMetadataMap, fieldMap, runtimeParameters);
         return ingestDocument;
     }
 
@@ -229,14 +229,21 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         }
     }
 
+    /*
+    private int getStringTobeChunkedCount(
+        Map<String, Object> sourceAndMetadataMap,
+        final Map<String, Object> fieldMap
+    ) {
+
+    }
+    */
+
     @SuppressWarnings("unchecked")
-    private int chunkMapType(
+    private void chunkMapType(
         Map<String, Object> sourceAndMetadataMap,
         final Map<String, Object> fieldMap,
-        final Map<String, Object> runtimeParameters,
-        final int chunkCount
+        final Map<String, Object> runtimeParameters
     ) {
-        int updatedChunkCount = chunkCount;
         for (Map.Entry<String, Object> fieldMapEntry : fieldMap.entrySet()) {
             String originalKey = fieldMapEntry.getKey();
             Object targetKey = fieldMapEntry.getValue();
@@ -247,21 +254,11 @@ public final class TextChunkingProcessor extends AbstractProcessor {
                     List<Object> sourceObjectList = (List<Object>) sourceObject;
                     for (Object source : sourceObjectList) {
                         if (source instanceof Map) {
-                            updatedChunkCount = chunkMapType(
-                                (Map<String, Object>) source,
-                                (Map<String, Object>) targetKey,
-                                runtimeParameters,
-                                updatedChunkCount
-                            );
+                            chunkMapType((Map<String, Object>) source, (Map<String, Object>) targetKey, runtimeParameters);
                         }
                     }
                 } else if (sourceObject instanceof Map) {
-                    updatedChunkCount = chunkMapType(
-                        (Map<String, Object>) sourceObject,
-                        (Map<String, Object>) targetKey,
-                        runtimeParameters,
-                        updatedChunkCount
-                    );
+                    chunkMapType((Map<String, Object>) sourceObject, (Map<String, Object>) targetKey, runtimeParameters);
                 }
             } else {
                 // chunk the object when target key is of leaf type (null, string and list of string)
@@ -270,7 +267,6 @@ public final class TextChunkingProcessor extends AbstractProcessor {
                 sourceAndMetadataMap.put(String.valueOf(targetKey), chunkedResult);
             }
         }
-        return updatedChunkCount;
     }
 
     /**

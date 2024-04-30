@@ -424,8 +424,9 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         assert document.getSourceAndMetadata().containsKey(OUTPUT_FIELD);
         Object passages = document.getSourceAndMetadata().get(OUTPUT_FIELD);
         assert (passages instanceof List<?>);
-        List<String> expectedPassages = new ArrayList<>();
-        expectedPassages.add("This is an example document to be chunked. The document ");
+        List<String> expectedPassages = List.of(
+            "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch."
+        );
         assertEquals(expectedPassages, passages);
     }
 
@@ -443,7 +444,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by ");
         expectedPassages.add("standard tokenizer in OpenSearch.");
         expectedPassages.add("This is the second document to be chunked. The document ");
-        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by ");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.");
         assertEquals(expectedPassages, passages);
     }
 
