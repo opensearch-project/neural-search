@@ -31,7 +31,7 @@ import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.MAX_CHUNK_LIMIT_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.DEFAULT_MAX_CHUNK_LIMIT;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.DISABLED_MAX_CHUNK_LIMIT;
-import static org.opensearch.neuralsearch.processor.chunker.Chunker.STRING_TOBE_CHUNKED_FIELD;
+import static org.opensearch.neuralsearch.processor.chunker.Chunker.CHUNK_STRING_COUNT_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseIntegerParameter;
 
 /**
@@ -172,10 +172,10 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         // fixed token length algorithm needs runtime parameter max_token_count for tokenization
         Map<String, Object> runtimeParameters = new HashMap<>();
         int maxTokenCount = getMaxTokenCount(sourceAndMetadataMap);
-        int stringTobeChunkedCount = getStringTobeChunkedCountFromMap(sourceAndMetadataMap, fieldMap);
+        int chunkStringCount = getChunkStringCountFromMap(sourceAndMetadataMap, fieldMap);
         runtimeParameters.put(FixedTokenLengthChunker.MAX_TOKEN_COUNT_FIELD, maxTokenCount);
         runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, maxChunkLimit);
-        runtimeParameters.put(STRING_TOBE_CHUNKED_FIELD, stringTobeChunkedCount);
+        runtimeParameters.put(CHUNK_STRING_COUNT_FIELD, chunkStringCount);
         chunkMapType(sourceAndMetadataMap, fieldMap, runtimeParameters);
         return ingestDocument;
     }
@@ -234,8 +234,8 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     }
 
     @SuppressWarnings("unchecked")
-    private int getStringTobeChunkedCountFromMap(Map<String, Object> sourceAndMetadataMap, final Map<String, Object> fieldMap) {
-        int stringTobeChunkedCount = 0;
+    private int getChunkStringCountFromMap(Map<String, Object> sourceAndMetadataMap, final Map<String, Object> fieldMap) {
+        int chunkStringCount = 0;
         for (Map.Entry<String, Object> fieldMapEntry : fieldMap.entrySet()) {
             String originalKey = fieldMapEntry.getKey();
             Object targetKey = fieldMapEntry.getValue();
@@ -246,14 +246,14 @@ public final class TextChunkingProcessor extends AbstractProcessor {
                     List<Object> sourceObjectList = (List<Object>) sourceObject;
                     for (Object source : sourceObjectList) {
                         if (source instanceof Map) {
-                            stringTobeChunkedCount += getStringTobeChunkedCountFromMap(
+                            chunkStringCount += getChunkStringCountFromMap(
                                 (Map<String, Object>) source,
                                 (Map<String, Object>) targetKey
                             );
                         }
                     }
                 } else if (sourceObject instanceof Map) {
-                    stringTobeChunkedCount += getStringTobeChunkedCountFromMap(
+                    chunkStringCount += getChunkStringCountFromMap(
                         (Map<String, Object>) sourceObject,
                         (Map<String, Object>) targetKey
                     );
@@ -261,14 +261,14 @@ public final class TextChunkingProcessor extends AbstractProcessor {
             } else {
                 // chunk the object when target key is of leaf type (null, string and list of string)
                 Object chunkObject = sourceAndMetadataMap.get(originalKey);
-                stringTobeChunkedCount += getStringTobeChunkedCountFromLeafType(chunkObject);
+                chunkStringCount += getChunkStringCountFromLeafType(chunkObject);
             }
         }
-        return stringTobeChunkedCount;
+        return chunkStringCount;
     }
 
     @SuppressWarnings("unchecked")
-    private int getStringTobeChunkedCountFromLeafType(final Object value) {
+    private int getChunkStringCountFromLeafType(final Object value) {
         // leaf type means null, String or List<String>
         // the result should be an empty list when the input is null
         if (value instanceof String) {
@@ -319,9 +319,9 @@ public final class TextChunkingProcessor extends AbstractProcessor {
             return List.of();
         }
         List<String> contentResult = chunker.chunk(content, runTimeParameters);
-        // update string_tobe_chunked_count for each string
-        int stringTobeChunkedCount = parseIntegerParameter(runTimeParameters, STRING_TOBE_CHUNKED_FIELD, 1);
-        runTimeParameters.put(STRING_TOBE_CHUNKED_FIELD, stringTobeChunkedCount - 1);
+        // update chunk_string_count for each string
+        int chunkStringCount = parseIntegerParameter(runTimeParameters, CHUNK_STRING_COUNT_FIELD, 1);
+        runTimeParameters.put(CHUNK_STRING_COUNT_FIELD, chunkStringCount - 1);
         // update runtime max_chunk_limit if not disabled
         int runtimeMaxChunkLimit = parseIntegerParameter(runTimeParameters, MAX_CHUNK_LIMIT_FIELD, maxChunkLimit);
         if (runtimeMaxChunkLimit != DISABLED_MAX_CHUNK_LIMIT) {

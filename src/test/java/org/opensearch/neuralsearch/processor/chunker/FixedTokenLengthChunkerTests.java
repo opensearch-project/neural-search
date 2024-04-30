@@ -24,7 +24,7 @@ import java.util.Map;
 import static java.util.Collections.singletonList;
 import static java.util.Collections.singletonMap;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.MAX_CHUNK_LIMIT_FIELD;
-import static org.opensearch.neuralsearch.processor.chunker.Chunker.STRING_TOBE_CHUNKED_FIELD;
+import static org.opensearch.neuralsearch.processor.chunker.Chunker.CHUNK_STRING_COUNT_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.ALGORITHM_NAME;
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.TOKEN_LIMIT_FIELD;
@@ -292,7 +292,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
     }
 
     public void testChunk_whenExceedRuntimeMaxChunkLimit_withOneStringTobeChunked_thenLastPassageGetConcatenated() {
-        int maxChunkLimit = 3, runtimeMaxChunkLimit = 2, stringTobeChunkedCount = 1;
+        int maxChunkLimit = 3, runtimeMaxChunkLimit = 2, chunkStringCount = 1;
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(TOKEN_LIMIT_FIELD, 10);
         parameters.put(TOKENIZER_FIELD, "standard");
@@ -301,7 +301,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         Map<String, Object> runtimeParameters = new HashMap<>();
         runtimeParameters.put(MAX_TOKEN_COUNT_FIELD, 10000);
         runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit);
-        runtimeParameters.put(STRING_TOBE_CHUNKED_FIELD, stringTobeChunkedCount);
+        runtimeParameters.put(CHUNK_STRING_COUNT_FIELD, chunkStringCount);
         String content =
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
         List<String> passages = fixedTokenLengthChunker.chunk(content, runtimeParameters);

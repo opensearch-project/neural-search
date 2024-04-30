@@ -117,13 +117,13 @@ public final class FixedTokenLengthChunker implements Chunker {
      * @param runtimeParameters a map for runtime parameters, containing the following runtime parameters:
      * 1. max_token_count the max token limit for the tokenizer
      * 2. max_chunk_limit field level max chunk limit
-     * 3. string_tobe_chunked_count number of non-empty strings (including itself) which need to be chunked later
+     * 3. chunk_string_count number of non-empty strings (including itself) which need to be chunked later
      */
     @Override
     public List<String> chunk(final String content, final Map<String, Object> runtimeParameters) {
         int maxTokenCount = parsePositiveIntegerParameter(runtimeParameters, MAX_TOKEN_COUNT_FIELD, DEFAULT_MAX_TOKEN_COUNT);
         int runtimeMaxChunkLimit = parseIntegerParameter(runtimeParameters, MAX_CHUNK_LIMIT_FIELD, this.maxChunkLimit);
-        int stringTobeChunkedCount = parseIntegerParameter(runtimeParameters, STRING_TOBE_CHUNKED_FIELD, 1);
+        int chunkStringCount = parseIntegerParameter(runtimeParameters, CHUNK_STRING_COUNT_FIELD, 1);
 
         List<AnalyzeToken> tokens = tokenize(content, tokenizer, maxTokenCount);
         List<String> chunkResult = new ArrayList<>();
@@ -139,7 +139,7 @@ public final class FixedTokenLengthChunker implements Chunker {
             } else {
                 startContentPosition = tokens.get(startTokenIndex).getStartOffset();
             }
-            if (Chunker.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, stringTobeChunkedCount)) {
+            if (Chunker.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, chunkStringCount)) {
                 // include all characters till the end if exceeds max chunk limit
                 chunkResult.add(content.substring(startContentPosition));
                 break;

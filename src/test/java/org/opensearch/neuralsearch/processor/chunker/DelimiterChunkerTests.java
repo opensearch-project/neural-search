@@ -13,7 +13,7 @@ import org.junit.Assert;
 import org.opensearch.test.OpenSearchTestCase;
 
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.MAX_CHUNK_LIMIT_FIELD;
-import static org.opensearch.neuralsearch.processor.chunker.Chunker.STRING_TOBE_CHUNKED_FIELD;
+import static org.opensearch.neuralsearch.processor.chunker.Chunker.CHUNK_STRING_COUNT_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.DelimiterChunker.DELIMITER_FIELD;
 
 public class DelimiterChunkerTests extends OpenSearchTestCase {
@@ -112,10 +112,10 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
         int maxChunkLimit = 3;
         DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n\n", MAX_CHUNK_LIMIT_FIELD, maxChunkLimit));
         String content = "\n\na\n\n\n";
-        int runtimeMaxChunkLimit = 2, stringTobeChunkedCount = 2;
+        int runtimeMaxChunkLimit = 2, chunkStringCount = 2;
         List<String> passages = chunker.chunk(
             content,
-            Map.of(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit, STRING_TOBE_CHUNKED_FIELD, stringTobeChunkedCount)
+            Map.of(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit, CHUNK_STRING_COUNT_FIELD, chunkStringCount)
         );
         List<String> expectedPassages = List.of("\n\na\n\n\n");
         assertEquals(expectedPassages, passages);
