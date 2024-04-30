@@ -1,6 +1,6 @@
 {
   "settings":{
-    "default_pipeline": "pipeline-sparse-encoding"
+    "default_pipeline": "%s"
   },
   "mappings": {
     "properties": {
