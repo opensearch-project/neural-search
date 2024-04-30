@@ -14,7 +14,7 @@ public class ChunkerUtil {
     private ChunkerUtil() {} // no instance of this util class
 
     /**
-     * Checks whether the chunking results would exceed the max chunk limit.
+     * Checks whether the chunking results would exceed the max chunk limit after adding a passage
      * If exceeds, then return true
      *
      * @param chunkResultSize the size of chunking result
@@ -22,6 +22,6 @@ public class ChunkerUtil {
      * @param stringTobeChunkedCount runtime string_tobe_chunked_count, used to check with chunkResultSize
      */
     public static boolean checkRunTimeMaxChunkLimit(int chunkResultSize, int runtimeMaxChunkLimit, int stringTobeChunkedCount) {
-        return runtimeMaxChunkLimit != DISABLED_MAX_CHUNK_LIMIT && chunkResultSize + stringTobeChunkedCount >= runtimeMaxChunkLimit;
+        return runtimeMaxChunkLimit != DISABLED_MAX_CHUNK_LIMIT && chunkResultSize + stringTobeChunkedCount + 1 >= runtimeMaxChunkLimit;
     }
 }

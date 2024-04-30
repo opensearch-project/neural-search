@@ -234,7 +234,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         assertEquals(expectedPassages, passages);
     }
 
-    public void testChunk_whenExceedMaxChunkLimit_thenResultGetTruncated() {
+    public void testChunk_whenExceedMaxChunkLimit_thenLastPassageGetConcatenated() {
         int maxChunkLimit = 2;
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(TOKEN_LIMIT_FIELD, 10);
@@ -248,7 +248,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         List<String> passages = fixedTokenLengthChunker.chunk(content, runtimeParameters);
         List<String> expectedPassages = new ArrayList<>();
         expectedPassages.add("This is an example document to be chunked. The document ");
-        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by ");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.");
         assertEquals(expectedPassages, passages);
     }
 
@@ -271,7 +271,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         assertEquals(expectedPassages, passages);
     }
 
-    public void testChunk_whenExceedRuntimeMaxChunkLimit_thenResultGetTruncated() {
+    public void testChunk_whenExceedRuntimeMaxChunkLimit_thenLastPassageGetConcatenated() {
         int maxChunkLimit = 3, runtimeMaxChunkLimit = 2;
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(TOKEN_LIMIT_FIELD, 10);
@@ -286,7 +286,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         List<String> passages = fixedTokenLengthChunker.chunk(content, runtimeParameters);
         List<String> expectedPassages = new ArrayList<>();
         expectedPassages.add("This is an example document to be chunked. The document ");
-        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by ");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.");
         assertEquals(expectedPassages, passages);
     }
 }
