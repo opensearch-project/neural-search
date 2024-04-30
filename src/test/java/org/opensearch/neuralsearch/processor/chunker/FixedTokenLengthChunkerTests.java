@@ -305,9 +305,9 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         String content =
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
         List<String> passages = fixedTokenLengthChunker.chunk(content, runtimeParameters);
-        List<String> expectedPassages = new ArrayList<>();
-        expectedPassages.add(
-            "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch."
+        List<String> expectedPassages = List.of(
+            "This is an example document to be chunked. The document ",
+            "contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch."
         );
         assertEquals(expectedPassages, passages);
     }
