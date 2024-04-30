@@ -131,7 +131,9 @@ public final class FixedTokenLengthChunker implements Chunker {
         int overlapTokenNumber = (int) Math.floor(tokenLimit * overlapRate);
 
         while (startTokenIndex < tokens.size()) {
-            ChunkerUtil.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, maxChunkLimit);
+            if (ChunkerUtil.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit)) {
+                break;
+            }
             if (startTokenIndex == 0) {
                 // include all characters till the start if no previous passage
                 startContentPosition = 0;

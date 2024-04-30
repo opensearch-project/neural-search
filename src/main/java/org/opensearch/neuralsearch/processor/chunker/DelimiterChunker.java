@@ -59,15 +59,16 @@ public final class DelimiterChunker implements Chunker {
         int nextDelimiterPosition = content.indexOf(delimiter);
 
         while (nextDelimiterPosition != -1) {
-            ChunkerUtil.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, maxChunkLimit);
+            if (ChunkerUtil.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit)) {
+                break;
+            }
             end = nextDelimiterPosition + delimiter.length();
             chunkResult.add(content.substring(start, end));
             start = end;
             nextDelimiterPosition = content.indexOf(delimiter, start);
         }
 
-        if (start < content.length()) {
-            ChunkerUtil.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, maxChunkLimit);
+        if (start < content.length() && !ChunkerUtil.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit)) {
             chunkResult.add(content.substring(start));
         }
 

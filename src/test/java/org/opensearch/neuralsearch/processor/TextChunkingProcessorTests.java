@@ -416,51 +416,54 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testExecute_withFixedTokenLength_andSourceDataStringExceedMaxChunkLimit_thenFail() {
+    public void testExecute_withFixedTokenLength_andSourceDataStringExceedMaxChunkLimit_thenResultGetTruncated() {
         int maxChunkLimit = 1;
         TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkLimit(createStringFieldMap(), maxChunkLimit);
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
-        IllegalArgumentException illegalArgumentException = assertThrows(
-            IllegalArgumentException.class,
-            () -> processor.execute(ingestDocument)
-        );
-        assert (illegalArgumentException.getMessage()
-            .contains(
-                String.format(
-                    Locale.ROOT,
-                    "The number of chunks produced by %s processor has exceeded the allowed maximum of [%s].",
-                    TYPE,
-                    maxChunkLimit
-                )
-            ));
+        IngestDocument document = processor.execute(ingestDocument);
+        assert document.getSourceAndMetadata().containsKey(OUTPUT_FIELD);
+        Object passages = document.getSourceAndMetadata().get(OUTPUT_FIELD);
+        assert (passages instanceof List<?>);
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked. The document ");
+        assertEquals(expectedPassages, passages);
     }
 
     @SneakyThrows
-    public void testExecute_withFixedTokenLength_andSourceDataListExceedMaxChunkLimit_thenFail() {
+    public void testExecute_withFixedTokenLength_andSourceDataListExceedMaxChunkLimit_thenResultGetTruncated() {
         int maxChunkLimit = 5;
         TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkLimit(createStringFieldMap(), maxChunkLimit);
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataListStrings());
-        IllegalArgumentException illegalArgumentException = assertThrows(
-            IllegalArgumentException.class,
-            () -> processor.execute(ingestDocument)
-        );
-        assert (illegalArgumentException.getMessage()
-            .contains(
-                String.format(
-                    Locale.ROOT,
-                    "The number of chunks produced by %s processor has exceeded the allowed maximum of [%s].",
-                    TYPE,
-                    maxChunkLimit
-                )
-            ));
+        IngestDocument document = processor.execute(ingestDocument);
+        assert document.getSourceAndMetadata().containsKey(OUTPUT_FIELD);
+        Object passages = document.getSourceAndMetadata().get(OUTPUT_FIELD);
+        assert (passages instanceof List<?>);
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is the first document to be chunked. The document ");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by ");
+        expectedPassages.add("standard tokenizer in OpenSearch.");
+        expectedPassages.add("This is the second document to be chunked. The document ");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by ");
+        assertEquals(expectedPassages, passages);
     }
 
     @SneakyThrows
-    public void testExecute_withFixedTokenLength_andSourceDataListDisabledMaxChunkLimit_thenFail() {
+    public void testExecute_withFixedTokenLength_andSourceDataListDisabledMaxChunkLimit_thenSuccessful() {
         int maxChunkLimit = -1;
         TextChunkingProcessor processor = createFixedTokenLengthInstanceWithMaxChunkLimit(createStringFieldMap(), maxChunkLimit);
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataListStrings());
-        processor.execute(ingestDocument);
+        IngestDocument document = processor.execute(ingestDocument);
+        assert document.getSourceAndMetadata().containsKey(OUTPUT_FIELD);
+        Object passages = document.getSourceAndMetadata().get(OUTPUT_FIELD);
+        assert (passages instanceof List<?>);
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is the first document to be chunked. The document ");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by ");
+        expectedPassages.add("standard tokenizer in OpenSearch.");
+        expectedPassages.add("This is the second document to be chunked. The document ");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by ");
+        expectedPassages.add("standard tokenizer in OpenSearch.");
+        assertEquals(expectedPassages, passages);
     }
 
     @SneakyThrows
