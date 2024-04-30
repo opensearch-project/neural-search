@@ -19,8 +19,9 @@ public class ChunkerUtil {
      *
      * @param chunkResultSize the size of chunking result
      * @param runtimeMaxChunkLimit runtime max_chunk_limit, used to check with chunkResultSize
+     * @param stringTobeChunkedCount runtime string_tobe_chunked_count, used to check with chunkResultSize
      */
-    public static boolean checkRunTimeMaxChunkLimit(int chunkResultSize, int runtimeMaxChunkLimit) {
-        return runtimeMaxChunkLimit != DISABLED_MAX_CHUNK_LIMIT && chunkResultSize >= runtimeMaxChunkLimit;
+    public static boolean checkRunTimeMaxChunkLimit(int chunkResultSize, int runtimeMaxChunkLimit, int stringTobeChunkedCount) {
+        return runtimeMaxChunkLimit != DISABLED_MAX_CHUNK_LIMIT && chunkResultSize + stringTobeChunkedCount >= runtimeMaxChunkLimit;
     }
 }

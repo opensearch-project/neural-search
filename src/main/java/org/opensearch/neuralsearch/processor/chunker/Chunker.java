@@ -14,6 +14,7 @@ import java.util.List;
 public interface Chunker {
 
     String MAX_CHUNK_LIMIT_FIELD = "max_chunk_limit";
+    String STRING_TOBE_CHUNKED_FIELD = "string_tobe_chunked_count";
     int DEFAULT_MAX_CHUNK_LIMIT = 100;
     int DISABLED_MAX_CHUNK_LIMIT = -1;
 
