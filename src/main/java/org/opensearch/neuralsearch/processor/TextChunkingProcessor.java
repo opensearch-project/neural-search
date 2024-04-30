@@ -246,17 +246,11 @@ public final class TextChunkingProcessor extends AbstractProcessor {
                     List<Object> sourceObjectList = (List<Object>) sourceObject;
                     for (Object source : sourceObjectList) {
                         if (source instanceof Map) {
-                            chunkStringCount += getChunkStringCountFromMap(
-                                (Map<String, Object>) source,
-                                (Map<String, Object>) targetKey
-                            );
+                            chunkStringCount += getChunkStringCountFromMap((Map<String, Object>) source, (Map<String, Object>) targetKey);
                         }
                     }
                 } else if (sourceObject instanceof Map) {
-                    chunkStringCount += getChunkStringCountFromMap(
-                        (Map<String, Object>) sourceObject,
-                        (Map<String, Object>) targetKey
-                    );
+                    chunkStringCount += getChunkStringCountFromMap((Map<String, Object>) sourceObject, (Map<String, Object>) targetKey);
                 }
             } else {
                 // chunk the object when target key is of leaf type (null, string and list of string)
