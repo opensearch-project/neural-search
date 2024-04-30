@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor.chunker;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -11,7 +12,6 @@ import java.util.Map;
 import org.junit.Assert;
 import org.opensearch.test.OpenSearchTestCase;
 
-import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.TYPE;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.MAX_CHUNK_LIMIT_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.DelimiterChunker.DELIMITER_FIELD;
 
@@ -76,23 +76,15 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
         assertEquals(List.of("\n\n", "a\n\n", "\n"), chunkResult);
     }
 
-    public void testChunk_whenExceedMaxChunkLimit_thenFail() {
+    public void testChunk_whenExceedMaxChunkLimit_thenResultGetTruncated() {
         int maxChunkLimit = 2;
         DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n\n", MAX_CHUNK_LIMIT_FIELD, maxChunkLimit));
         String content = "\n\na\n\n\n";
-        IllegalArgumentException illegalArgumentException = assertThrows(
-            IllegalArgumentException.class,
-            () -> chunker.chunk(content, Map.of())
-        );
-        assert (illegalArgumentException.getMessage()
-            .contains(
-                String.format(
-                    Locale.ROOT,
-                    "The number of chunks produced by %s processor has exceeded the allowed maximum of [%s].",
-                    TYPE,
-                    maxChunkLimit
-                )
-            ));
+        List<String> passages = chunker.chunk(content, Map.of());
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("\n\n");
+        expectedPassages.add("a\n\n");
+        assertEquals(expectedPassages, passages);
     }
 
     public void testChunk_whenWithinMaxChunkLimit_thenSucceed() {
@@ -103,23 +95,15 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
         assertEquals(List.of("\n\n", "a\n\n", "\n"), chunkResult);
     }
 
-    public void testChunk_whenExceedRuntimeMaxChunkLimit_thenFail() {
+    public void testChunk_whenExceedRuntimeMaxChunkLimit_thenResultGetTruncated() {
         int maxChunkLimit = 3;
         DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n\n", MAX_CHUNK_LIMIT_FIELD, maxChunkLimit));
         String content = "\n\na\n\n\n";
         int runtimeMaxChunkLimit = 2;
-        IllegalArgumentException illegalArgumentException = assertThrows(
-            IllegalArgumentException.class,
-            () -> chunker.chunk(content, Map.of(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit))
-        );
-        assert (illegalArgumentException.getMessage()
-            .contains(
-                String.format(
-                    Locale.ROOT,
-                    "The number of chunks produced by %s processor has exceeded the allowed maximum of [%s].",
-                    TYPE,
-                    maxChunkLimit
-                )
-            ));
+        List<String> passages = chunker.chunk(content, Map.of(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit));
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("\n\n");
+        expectedPassages.add("a\n\n");
+        assertEquals(expectedPassages, passages);
     }
 }
