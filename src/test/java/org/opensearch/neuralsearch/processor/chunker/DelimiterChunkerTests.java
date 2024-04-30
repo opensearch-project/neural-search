@@ -13,6 +13,7 @@ import org.junit.Assert;
 import org.opensearch.test.OpenSearchTestCase;
 
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.MAX_CHUNK_LIMIT_FIELD;
+import static org.opensearch.neuralsearch.processor.chunker.Chunker.STRING_TOBE_CHUNKED_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.DelimiterChunker.DELIMITER_FIELD;
 
 public class DelimiterChunkerTests extends OpenSearchTestCase {
@@ -104,6 +105,19 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
         List<String> expectedPassages = new ArrayList<>();
         expectedPassages.add("\n\n");
         expectedPassages.add("a\n\n\n");
+        assertEquals(expectedPassages, passages);
+    }
+
+    public void testChunk_whenExceedRuntimeMaxChunkLimit_withTwoStringsTobeChunked_thenLastPassageGetConcatenated() {
+        int maxChunkLimit = 3;
+        DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n\n", MAX_CHUNK_LIMIT_FIELD, maxChunkLimit));
+        String content = "\n\na\n\n\n";
+        int runtimeMaxChunkLimit = 2, stringTobeChunkedCount = 2;
+        List<String> passages = chunker.chunk(
+            content,
+            Map.of(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit, STRING_TOBE_CHUNKED_FIELD, stringTobeChunkedCount)
+        );
+        List<String> expectedPassages = List.of("\n\na\n\n\n");
         assertEquals(expectedPassages, passages);
     }
 }
