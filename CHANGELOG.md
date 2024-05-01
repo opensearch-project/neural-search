@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Removed map of subquery to subquery index in favor of storing index as part of disi wrapper to improve hybrid query latencies by 20% ([#711](https://github.com/opensearch-project/neural-search/pull/711))
 ### Bug Fixes
 - Add support for request_cache flag in hybrid query ([#663](https://github.com/opensearch-project/neural-search/pull/663))
+- Avoid change max_chunk_limit exceed exception in text chunking processor ([#717](https://github.com/opensearch-project/neural-search/pull/717))
 ### Infrastructure
 ### Documentation
 ### Maintenance

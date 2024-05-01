@@ -49,25 +49,29 @@ public final class DelimiterChunker implements Chunker {
      * @param content input string
      * @param runtimeParameters a map for runtime parameters, containing the following runtime parameters:
      * 1. max_chunk_limit field level max chunk limit
+     * 2. chunk_string_count number of non-empty strings (including itself) which need to be chunked later
      */
     @Override
     public List<String> chunk(final String content, final Map<String, Object> runtimeParameters) {
         int runtimeMaxChunkLimit = parseIntegerParameter(runtimeParameters, MAX_CHUNK_LIMIT_FIELD, maxChunkLimit);
+        int chunkStringCount = parseIntegerParameter(runtimeParameters, CHUNK_STRING_COUNT_FIELD, 1);
 
         List<String> chunkResult = new ArrayList<>();
         int start = 0, end;
         int nextDelimiterPosition = content.indexOf(delimiter);
 
         while (nextDelimiterPosition != -1) {
-            ChunkerUtil.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, maxChunkLimit);
+            if (Chunker.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, chunkStringCount)) {
+                break;
+            }
             end = nextDelimiterPosition + delimiter.length();
             chunkResult.add(content.substring(start, end));
             start = end;
             nextDelimiterPosition = content.indexOf(delimiter, start);
         }
 
+        // add the rest content into the chunk result
         if (start < content.length()) {
-            ChunkerUtil.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, maxChunkLimit);
             chunkResult.add(content.substring(start));
         }
 

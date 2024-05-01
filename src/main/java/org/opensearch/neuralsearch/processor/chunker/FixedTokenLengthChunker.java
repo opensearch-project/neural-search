@@ -117,11 +117,13 @@ public final class FixedTokenLengthChunker implements Chunker {
      * @param runtimeParameters a map for runtime parameters, containing the following runtime parameters:
      * 1. max_token_count the max token limit for the tokenizer
      * 2. max_chunk_limit field level max chunk limit
+     * 3. chunk_string_count number of non-empty strings (including itself) which need to be chunked later
      */
     @Override
     public List<String> chunk(final String content, final Map<String, Object> runtimeParameters) {
         int maxTokenCount = parsePositiveIntegerParameter(runtimeParameters, MAX_TOKEN_COUNT_FIELD, DEFAULT_MAX_TOKEN_COUNT);
         int runtimeMaxChunkLimit = parseIntegerParameter(runtimeParameters, MAX_CHUNK_LIMIT_FIELD, this.maxChunkLimit);
+        int chunkStringCount = parseIntegerParameter(runtimeParameters, CHUNK_STRING_COUNT_FIELD, 1);
 
         List<AnalyzeToken> tokens = tokenize(content, tokenizer, maxTokenCount);
         List<String> chunkResult = new ArrayList<>();
@@ -131,12 +133,16 @@ public final class FixedTokenLengthChunker implements Chunker {
         int overlapTokenNumber = (int) Math.floor(tokenLimit * overlapRate);
 
         while (startTokenIndex < tokens.size()) {
-            ChunkerUtil.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, maxChunkLimit);
             if (startTokenIndex == 0) {
                 // include all characters till the start if no previous passage
                 startContentPosition = 0;
             } else {
                 startContentPosition = tokens.get(startTokenIndex).getStartOffset();
+            }
+            if (Chunker.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, chunkStringCount)) {
+                // include all characters till the end if exceeds max chunk limit
+                chunkResult.add(content.substring(startContentPosition));
+                break;
             }
             if (startTokenIndex + tokenLimit >= tokens.size()) {
                 // include all characters till the end if no next passage
