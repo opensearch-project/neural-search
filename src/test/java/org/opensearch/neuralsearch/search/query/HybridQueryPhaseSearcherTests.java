@@ -16,12 +16,14 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.opensearch.index.mapper.SeqNoFieldMapper.PRIMARY_TERM_NAME;
+import static org.opensearch.index.remote.RemoteStoreEnums.PathType.HASHED_PREFIX;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryStartStopElement;
 
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -43,8 +45,10 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.tests.analysis.MockAnalyzer;
+import org.opensearch.Version;
 import org.opensearch.action.OriginalIndices;
 import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.common.UUIDs;
 import org.opensearch.common.lucene.search.Queries;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.common.settings.Settings;
@@ -59,6 +63,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.index.remote.RemoteStoreEnums;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
@@ -459,10 +464,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
         when(searchContext.mapperService()).thenReturn(mapperService);
         when(searchContext.getQueryShardContext()).thenReturn(mockQueryShardContext);
-        IndexMetadata indexMetadata = mock(IndexMetadata.class);
-        when(indexMetadata.getIndex()).thenReturn(new Index(TEST_INDEX, INDEX_UUID.toString()));
-        when(indexMetadata.getSettings()).thenReturn(Settings.EMPTY);
-        when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
+        IndexMetadata indexMetadata = getIndexMetadata();
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
         IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
         when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
@@ -567,10 +569,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
         when(searchContext.mapperService()).thenReturn(mapperService);
         when(searchContext.getQueryShardContext()).thenReturn(mockQueryShardContext);
-        IndexMetadata indexMetadata = mock(IndexMetadata.class);
-        when(indexMetadata.getIndex()).thenReturn(new Index(TEST_INDEX, INDEX_UUID.toString()));
-        when(indexMetadata.getSettings()).thenReturn(Settings.EMPTY);
-        when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
+        IndexMetadata indexMetadata = getIndexMetadata();
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
         IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
         when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
@@ -635,10 +634,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
         when(mockQueryShardContext.getMapperService()).thenReturn(mapperService);
         when(mockQueryShardContext.simpleMatchToIndexNames(anyString())).thenReturn(Set.of(TEXT_FIELD_NAME));
-        IndexMetadata indexMetadata = mock(IndexMetadata.class);
-        when(indexMetadata.getIndex()).thenReturn(new Index(TEST_INDEX, INDEX_UUID.toString()));
-        when(indexMetadata.getSettings()).thenReturn(Settings.EMPTY);
-        when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
+        IndexMetadata indexMetadata = getIndexMetadata();
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
         IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
         when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
@@ -778,10 +774,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
         when(searchContext.mapperService()).thenReturn(mapperService);
         when(searchContext.getQueryShardContext()).thenReturn(mockQueryShardContext);
-        IndexMetadata indexMetadata = mock(IndexMetadata.class);
-        when(indexMetadata.getIndex()).thenReturn(new Index(TEST_INDEX, INDEX_UUID.toString()));
-        when(indexMetadata.getSettings()).thenReturn(Settings.EMPTY);
-        when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
+        IndexMetadata indexMetadata = getIndexMetadata();
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
         IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
         when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
@@ -1025,5 +1018,24 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         doc.add(new Field(fieldName, fieldValue, ft));
         doc.add(new NumericDocValuesField(PRIMARY_TERM_NAME, 0));
         return doc;
+    }
+
+    private static IndexMetadata getIndexMetadata() {
+        Map<String, String> remoteCustomData = Map.of(
+            RemoteStoreEnums.PathType.NAME,
+            HASHED_PREFIX.name(),
+            RemoteStoreEnums.PathHashAlgorithm.NAME,
+            RemoteStoreEnums.PathHashAlgorithm.FNV_1A_BASE64.name()
+        );
+        Settings idxSettings = Settings.builder()
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID())
+            .build();
+        IndexMetadata indexMetadata = new IndexMetadata.Builder("test").settings(idxSettings)
+            .numberOfShards(1)
+            .numberOfReplicas(0)
+            .putCustom(IndexMetadata.REMOTE_STORE_CUSTOM_KEY, remoteCustomData)
+            .build();
+        return indexMetadata;
     }
 }
