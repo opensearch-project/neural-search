@@ -31,7 +31,6 @@ import org.opensearch.env.TestEnvironment;
 import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.index.analysis.TokenizerFactory;
 import org.opensearch.index.mapper.IndexFieldMapper;
-import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.analysis.AnalysisModule;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.Processor;
@@ -84,11 +83,10 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         when(environment.settings()).thenReturn(settings);
         ClusterState clusterState = mock(ClusterState.class);
         ClusterService clusterService = mock(ClusterService.class);
-        IndicesService indicesService = mock(IndicesService.class);
         when(metadata.index(anyString())).thenReturn(null);
         when(clusterState.metadata()).thenReturn(metadata);
         when(clusterService.state()).thenReturn(clusterState);
-        textChunkingProcessorFactory = new TextChunkingProcessorFactory(environment, clusterService, indicesService, getAnalysisRegistry());
+        textChunkingProcessorFactory = new TextChunkingProcessorFactory(environment, clusterService, getAnalysisRegistry());
     }
 
     private Map<String, Object> createFixedTokenLengthParameters() {
