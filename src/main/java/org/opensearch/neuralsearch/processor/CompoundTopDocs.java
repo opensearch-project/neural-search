@@ -4,6 +4,11 @@
  */
 package org.opensearch.neuralsearch.processor;
 
+import org.apache.lucene.search.FieldDoc;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.TotalHits;
+import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.TopFieldDocs;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryDelimiterElement;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryStartStopElement;
 
@@ -12,10 +17,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
-
-import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.search.TotalHits;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -45,7 +46,15 @@ public class CompoundTopDocs {
 
     private void initialize(TotalHits totalHits, List<TopDocs> topDocs) {
         this.totalHits = totalHits;
-        this.topDocs = topDocs;
+        if (topDocs.size() > 0) {
+            if (topDocs.get(0) != null && topDocs.get(0) instanceof TopFieldDocs) {
+                this.topDocs = topDocs.stream().map(topDoc -> (TopFieldDocs) topDoc).collect(Collectors.toList());
+            } else {
+                this.topDocs = topDocs;
+            }
+        } else {
+            this.topDocs = topDocs;
+        }
         scoreDocs = cloneLargestScoreDocs(topDocs);
     }
 
@@ -74,33 +83,78 @@ public class CompoundTopDocs {
      *  0, 9549511920.4881596047
      */
     public CompoundTopDocs(final TopDocs topDocs) {
-        ScoreDoc[] scoreDocs = topDocs.scoreDocs;
-        if (Objects.isNull(scoreDocs) || scoreDocs.length < 2) {
-            initialize(topDocs.totalHits, new ArrayList<>());
-            return;
-        }
-        // skipping first two elements, it's a start-stop element and delimiter for first series
-        List<TopDocs> topDocsList = new ArrayList<>();
-        List<ScoreDoc> scoreDocList = new ArrayList<>();
-        for (int index = 2; index < scoreDocs.length; index++) {
-            // getting first element of score's series
-            ScoreDoc scoreDoc = scoreDocs[index];
-            if (isHybridQueryDelimiterElement(scoreDoc) || isHybridQueryStartStopElement(scoreDoc)) {
-                ScoreDoc[] subQueryScores = scoreDocList.toArray(new ScoreDoc[0]);
-                TotalHits totalHits = new TotalHits(subQueryScores.length, TotalHits.Relation.EQUAL_TO);
-                TopDocs subQueryTopDocs = new TopDocs(totalHits, subQueryScores);
-                topDocsList.add(subQueryTopDocs);
-                scoreDocList.clear();
-            } else {
-                scoreDocList.add(scoreDoc);
+        if (topDocs instanceof TopFieldDocs) {
+            FieldDoc[] scoreDocs = Arrays.copyOf(topDocs.scoreDocs, topDocs.scoreDocs.length, FieldDoc[].class);
+            if (Objects.isNull(scoreDocs) || scoreDocs.length < 2) {
+                initialize(topDocs.totalHits, new ArrayList<>());
+                return;
             }
+            // skipping first two elements, it's a start-stop element and delimiter for first series
+            List<TopDocs> topDocsList = new ArrayList<>();
+            List<FieldDoc> scoreDocList = new ArrayList<>();
+            for (int index = 2; index < scoreDocs.length; index++) {
+                // getting first element of score's series
+                FieldDoc scoreDoc = scoreDocs[index];
+                if (isHybridQueryDelimiterElement(scoreDoc) || isHybridQueryStartStopElement(scoreDoc)) {
+                    ScoreDoc[] subQueryScores = scoreDocList.toArray(new ScoreDoc[0]);
+                    TotalHits totalHits = new TotalHits(subQueryScores.length, TotalHits.Relation.EQUAL_TO);
+                    // TopDocs subQueryTopDocs = new TopDocs(totalHits, subQueryScores);
+                    TopDocs subQueryTopDocs = new TopFieldDocs(totalHits, subQueryScores, ((TopFieldDocs) topDocs).fields);
+                    topDocsList.add(subQueryTopDocs);
+                    scoreDocList.clear();
+                } else {
+                    scoreDocList.add(scoreDoc);
+                }
+            }
+            initialize(topDocs.totalHits, topDocsList);
+        } else {
+            ScoreDoc[] scoreDocs = topDocs.scoreDocs;
+            if (Objects.isNull(scoreDocs) || scoreDocs.length < 2) {
+                initialize(topDocs.totalHits, new ArrayList<>());
+                return;
+            }
+            // skipping first two elements, it's a start-stop element and delimiter for first series
+            List<TopDocs> topDocsList = new ArrayList<>();
+            List<ScoreDoc> scoreDocList = new ArrayList<>();
+            for (int index = 2; index < scoreDocs.length; index++) {
+                // getting first element of score's series
+                ScoreDoc scoreDoc = scoreDocs[index];
+                if (isHybridQueryDelimiterElement(scoreDoc) || isHybridQueryStartStopElement(scoreDoc)) {
+                    ScoreDoc[] subQueryScores = scoreDocList.toArray(new ScoreDoc[0]);
+                    TotalHits totalHits = new TotalHits(subQueryScores.length, TotalHits.Relation.EQUAL_TO);
+                    TopDocs subQueryTopDocs = new TopDocs(totalHits, subQueryScores);
+                    topDocsList.add(subQueryTopDocs);
+                    scoreDocList.clear();
+                } else {
+                    scoreDocList.add(scoreDoc);
+                }
+            }
+            initialize(topDocs.totalHits, topDocsList);
         }
-        initialize(topDocs.totalHits, topDocsList);
     }
 
     private List<ScoreDoc> cloneLargestScoreDocs(final List<TopDocs> docs) {
         if (docs == null) {
             return null;
+        }
+
+        TopDocs doc1 = docs.stream().filter(Objects::nonNull).findFirst().orElse(null);
+        if (doc1 instanceof TopFieldDocs) {
+            FieldDoc[] maxScoreDocs = new FieldDoc[0];
+            int maxLength = -1;
+            for (TopDocs topDoc : docs) {
+                if (topDoc == null || topDoc.scoreDocs == null) {
+                    continue;
+                }
+                if (topDoc.scoreDocs.length > maxLength) {
+                    maxLength = topDoc.scoreDocs.length;
+                    maxScoreDocs = Arrays.copyOf(topDoc.scoreDocs, topDoc.scoreDocs.length, FieldDoc[].class);
+                }
+            }
+            // do deep copy
+            return Arrays.stream(maxScoreDocs)
+                .map(doc -> new FieldDoc(doc.doc, doc.score, doc.fields, doc.shardIndex))
+                .collect(Collectors.toList());
         }
         ScoreDoc[] maxScoreDocs = new ScoreDoc[0];
         int maxLength = -1;
