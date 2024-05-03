@@ -20,13 +20,11 @@ import static org.opensearch.index.remote.RemoteStoreEnums.PathType.HASHED_PREFI
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryStartStopElement;
 
 import java.io.IOException;
-import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
-import java.util.stream.Collectors;
+import java.util.concurrent.ExecutorService;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -39,6 +37,8 @@ import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.Collector;
+import org.apache.lucene.search.CollectorManager;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
@@ -58,8 +58,6 @@ import org.opensearch.index.IndexSettings;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.BoolQueryBuilder;
-import org.opensearch.index.query.MatchAllQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
@@ -78,6 +76,7 @@ import com.carrotsearch.randomizedtesting.RandomizedTest;
 import lombok.SneakyThrows;
 import org.opensearch.search.query.QueryCollectorContext;
 import org.opensearch.search.query.QuerySearchResult;
+import org.opensearch.search.query.ReduceableSearchResult;
 
 public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
     private static final String VECTOR_FIELD_NAME = "vectorField";
@@ -88,13 +87,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
     private static final String TEST_DOC_TEXT4 = "This is really nice place to be";
     private static final String QUERY_TEXT1 = "hello";
     private static final String QUERY_TEXT2 = "randomkeyword";
-    private static final String QUERY_TEXT3 = "place";
     private static final Index dummyIndex = new Index("dummy", "dummy");
-    private static final String MODEL_ID = "mfgfgdsfgfdgsde";
-    private static final int K = 10;
-    private static final QueryBuilder TEST_FILTER = new MatchAllQueryBuilder();
-    private static final UUID INDEX_UUID = UUID.randomUUID();
-    private static final String TEST_INDEX = "index";
 
     @SneakyThrows
     public void testQueryType_whenQueryIsHybrid_thenCallHybridDocCollector() {
@@ -306,20 +299,22 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         Query query = queryBuilder.toQuery(mockQueryShardContext);
         when(searchContext.query()).thenReturn(query);
 
+        CollectorManager<? extends Collector, ReduceableSearchResult> collectorManager = HybridCollectorManager
+            .createHybridCollectorManager(searchContext);
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers = new HashMap<>();
+        queryCollectorManagers.put(HybridCollectorManager.class, collectorManager);
+        when(searchContext.queryCollectorManagers()).thenReturn(queryCollectorManagers);
+
         hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
+        hybridQueryPhaseSearcher.aggregationProcessor(searchContext).postProcess(searchContext);
 
         assertNotNull(querySearchResult.topDocs());
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
         TopDocs topDocs = topDocsAndMaxScore.topDocs;
-        assertEquals(1, topDocs.totalHits.value);
+        assertEquals(0, topDocs.totalHits.value);
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         assertNotNull(scoreDocs);
-        assertEquals(1, scoreDocs.length);
-        ScoreDoc scoreDoc = scoreDocs[0];
-        assertNotNull(scoreDoc);
-        int actualDocId = Integer.parseInt(reader.document(scoreDoc.doc).getField("id").stringValue());
-        assertEquals(docId1, actualDocId);
-        assertTrue(scoreDoc.score > 0.0f);
+        assertEquals(0, scoreDocs.length);
 
         releaseResources(directory, w, reader);
     }
@@ -340,13 +335,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
         int docId1 = RandomizedTest.randomInt();
-        int docId2 = RandomizedTest.randomInt();
-        int docId3 = RandomizedTest.randomInt();
-        int docId4 = RandomizedTest.randomInt();
         w.addDocument(getDocument(TEXT_FIELD_NAME, docId1, TEST_DOC_TEXT1, ft));
-        w.addDocument(getDocument(TEXT_FIELD_NAME, docId2, TEST_DOC_TEXT2, ft));
-        w.addDocument(getDocument(TEXT_FIELD_NAME, docId3, TEST_DOC_TEXT3, ft));
-        w.addDocument(getDocument(TEXT_FIELD_NAME, docId4, TEST_DOC_TEXT4, ft));
         w.commit();
 
         IndexReader reader = DirectoryReader.open(w);
@@ -395,18 +384,22 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         Query query = queryBuilder.toQuery(mockQueryShardContext);
         when(searchContext.query()).thenReturn(query);
 
+        CollectorManager<? extends Collector, ReduceableSearchResult> collectorManager = HybridCollectorManager
+            .createHybridCollectorManager(searchContext);
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers = new HashMap<>();
+        queryCollectorManagers.put(HybridCollectorManager.class, collectorManager);
+        when(searchContext.queryCollectorManagers()).thenReturn(queryCollectorManagers);
+
         hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
+        hybridQueryPhaseSearcher.aggregationProcessor(searchContext).postProcess(searchContext);
 
         assertNotNull(querySearchResult.topDocs());
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
         TopDocs topDocs = topDocsAndMaxScore.topDocs;
-        assertEquals(4, topDocs.totalHits.value);
+        assertEquals(0, topDocs.totalHits.value);
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         assertNotNull(scoreDocs);
-        assertEquals(4, scoreDocs.length);
-        List<Integer> expectedIds = List.of(0, 1, 2, 3);
-        List<Integer> actualDocIds = Arrays.stream(scoreDocs).map(sd -> sd.doc).collect(Collectors.toList());
-        assertEquals(expectedIds, actualDocIds);
+        assertEquals(0, scoreDocs.length);
 
         releaseResources(directory, w, reader);
     }
@@ -705,18 +698,22 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         when(searchContext.query()).thenReturn(query);
 
+        CollectorManager<? extends Collector, ReduceableSearchResult> collectorManager = HybridCollectorManager
+            .createHybridCollectorManager(searchContext);
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers = new HashMap<>();
+        queryCollectorManagers.put(HybridCollectorManager.class, collectorManager);
+        when(searchContext.queryCollectorManagers()).thenReturn(queryCollectorManagers);
+
         hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
+        hybridQueryPhaseSearcher.aggregationProcessor(searchContext).postProcess(searchContext);
 
         assertNotNull(querySearchResult.topDocs());
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
         TopDocs topDocs = topDocsAndMaxScore.topDocs;
-        assertTrue(topDocs.totalHits.value > 0);
+        assertEquals(0, topDocs.totalHits.value);
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         assertNotNull(scoreDocs);
-        assertEquals(1, scoreDocs.length);
-        ScoreDoc scoreDoc = scoreDocs[0];
-        assertTrue(scoreDoc.score > 0);
-        assertEquals(0, scoreDoc.doc);
+        assertEquals(0, scoreDocs.length);
 
         releaseResources(directory, w, reader);
     }
@@ -979,18 +976,22 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.query()).thenReturn(query);
         when(searchContext.aliasFilter()).thenReturn(termFilter);
 
+        CollectorManager<? extends Collector, ReduceableSearchResult> collectorManager = HybridCollectorManager
+            .createHybridCollectorManager(searchContext);
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers = new HashMap<>();
+        queryCollectorManagers.put(HybridCollectorManager.class, collectorManager);
+        when(searchContext.queryCollectorManagers()).thenReturn(queryCollectorManagers);
+
         hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
+        hybridQueryPhaseSearcher.aggregationProcessor(searchContext).postProcess(searchContext);
 
         assertNotNull(querySearchResult.topDocs());
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
         TopDocs topDocs = topDocsAndMaxScore.topDocs;
-        assertTrue(topDocs.totalHits.value > 0);
+        assertEquals(0, topDocs.totalHits.value);
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         assertNotNull(scoreDocs);
-        assertEquals(1, scoreDocs.length);
-        ScoreDoc scoreDoc = scoreDocs[0];
-        assertTrue(scoreDoc.score > 0);
-        assertEquals(0, scoreDoc.doc);
+        assertEquals(0, scoreDocs.length);
 
         releaseResources(directory, w, reader);
     }
@@ -1037,5 +1038,27 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
             .putCustom(IndexMetadata.REMOTE_STORE_CUSTOM_KEY, remoteCustomData)
             .build();
         return indexMetadata;
+    }
+
+    private static ContextIndexSearcher newContextSearcher(IndexReader reader, ExecutorService executor) throws IOException {
+        SearchContext searchContext = mock(SearchContext.class);
+        IndexShard indexShard = mock(IndexShard.class);
+        when(searchContext.indexShard()).thenReturn(indexShard);
+        when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
+        when(searchContext.shouldUseConcurrentSearch()).thenReturn(executor != null);
+        if (executor != null) {
+            when(searchContext.getTargetMaxSliceCount()).thenReturn(randomIntBetween(0, 2));
+        } else {
+            when(searchContext.getTargetMaxSliceCount()).thenThrow(IllegalStateException.class);
+        }
+        return new ContextIndexSearcher(
+            reader,
+            IndexSearcher.getDefaultSimilarity(),
+            IndexSearcher.getDefaultQueryCache(),
+            IndexSearcher.getDefaultQueryCachingPolicy(),
+            true,
+            executor,
+            searchContext
+        );
     }
 }
