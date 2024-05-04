@@ -1039,26 +1039,4 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
             .build();
         return indexMetadata;
     }
-
-    private static ContextIndexSearcher newContextSearcher(IndexReader reader, ExecutorService executor) throws IOException {
-        SearchContext searchContext = mock(SearchContext.class);
-        IndexShard indexShard = mock(IndexShard.class);
-        when(searchContext.indexShard()).thenReturn(indexShard);
-        when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
-        when(searchContext.shouldUseConcurrentSearch()).thenReturn(executor != null);
-        if (executor != null) {
-            when(searchContext.getTargetMaxSliceCount()).thenReturn(randomIntBetween(0, 2));
-        } else {
-            when(searchContext.getTargetMaxSliceCount()).thenThrow(IllegalStateException.class);
-        }
-        return new ContextIndexSearcher(
-            reader,
-            IndexSearcher.getDefaultSimilarity(),
-            IndexSearcher.getDefaultQueryCache(),
-            IndexSearcher.getDefaultQueryCachingPolicy(),
-            true,
-            executor,
-            searchContext
-        );
-    }
 }
