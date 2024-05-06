@@ -33,10 +33,9 @@ public final class FixedTokenLengthChunker implements Chunker {
     public static final String MAX_TOKEN_COUNT_FIELD = "max_token_count";
     public static final String TOKENIZER_FIELD = "tokenizer";
 
-    // default values for each parameter
+    // default values for each non-runtime parameter
     private static final int DEFAULT_TOKEN_LIMIT = 384;
     private static final double DEFAULT_OVERLAP_RATE = 0.0;
-    private static final int DEFAULT_MAX_TOKEN_COUNT = 10000;
     private static final String DEFAULT_TOKENIZER = "standard";
 
     // parameter restrictions
@@ -54,7 +53,6 @@ public final class FixedTokenLengthChunker implements Chunker {
 
     // parameter value
     private int tokenLimit;
-    private int maxChunkLimit;
     private String tokenizer;
     private double overlapRate;
     private final AnalysisRegistry analysisRegistry;
@@ -84,7 +82,6 @@ public final class FixedTokenLengthChunker implements Chunker {
         this.tokenLimit = parsePositiveIntegerParameter(parameters, TOKEN_LIMIT_FIELD, DEFAULT_TOKEN_LIMIT);
         this.overlapRate = parseDoubleParameter(parameters, OVERLAP_RATE_FIELD, DEFAULT_OVERLAP_RATE);
         this.tokenizer = parseStringParameter(parameters, TOKENIZER_FIELD, DEFAULT_TOKENIZER);
-        this.maxChunkLimit = parseIntegerParameter(parameters, MAX_CHUNK_LIMIT_FIELD, DEFAULT_MAX_CHUNK_LIMIT);
         if (overlapRate < OVERLAP_RATE_LOWER_BOUND || overlapRate > OVERLAP_RATE_UPPER_BOUND) {
             throw new IllegalArgumentException(
                 String.format(
@@ -121,9 +118,9 @@ public final class FixedTokenLengthChunker implements Chunker {
      */
     @Override
     public List<String> chunk(final String content, final Map<String, Object> runtimeParameters) {
-        int maxTokenCount = parsePositiveIntegerParameter(runtimeParameters, MAX_TOKEN_COUNT_FIELD, DEFAULT_MAX_TOKEN_COUNT);
-        int runtimeMaxChunkLimit = parseIntegerParameter(runtimeParameters, MAX_CHUNK_LIMIT_FIELD, this.maxChunkLimit);
-        int chunkStringCount = parseIntegerParameter(runtimeParameters, CHUNK_STRING_COUNT_FIELD, 1);
+        int maxTokenCount = parsePositiveIntegerParameter(runtimeParameters, MAX_TOKEN_COUNT_FIELD, null);
+        int runtimeMaxChunkLimit = parseIntegerParameter(runtimeParameters, MAX_CHUNK_LIMIT_FIELD, null);
+        int chunkStringCount = parseIntegerParameter(runtimeParameters, CHUNK_STRING_COUNT_FIELD, null);
 
         List<AnalyzeToken> tokens = tokenize(content, tokenizer, maxTokenCount);
         List<String> chunkResult = new ArrayList<>();

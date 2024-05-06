@@ -40,13 +40,39 @@ public final class ChunkerParameterParser {
     }
 
     /**
-     * Parse integer type parameter.
-     * Throw IllegalArgumentException if parameter is not an integer.
+     * Parse integer type parameter without default value
+     * Throw IllegalArgumentException if parameter is missing or is not an integer.
      */
-    public static int parseIntegerParameter(final Map<String, Object> parameters, final String fieldName, final int defaultValue) {
+    public static int parseIntegerParameter(final Map<String, Object> parameters, final String fieldName) {
         if (!parameters.containsKey(fieldName)) {
-            // all integer parameters are optional
-            return defaultValue;
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "Parameter [%s] is missing", fieldName)
+            );
+        }
+        String fieldValueString = parameters.get(fieldName).toString();
+        try {
+            return NumberUtils.createInteger(fieldValueString);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "Parameter [%s] must be of %s type", fieldName, Integer.class.getName())
+            );
+        }
+    }
+
+    /**
+     * Parse integer type parameter.
+     * Throw IllegalArgumentException if both parameter and default value is missing or parameter is not an integer.
+     */
+    public static int parseIntegerParameter(final Map<String, Object> parameters, final String fieldName, final Integer defaultValue) {
+        if (!parameters.containsKey(fieldName)) {
+            // return the default value when parameter is not existing
+            if (defaultValue == null) {
+                throw new IllegalArgumentException(
+                    String.format(Locale.ROOT, "Parameter [%s] is missing", fieldName)
+                );
+            } else {
+                return defaultValue;
+            }
         }
         String fieldValueString = parameters.get(fieldName).toString();
         try {
@@ -60,9 +86,9 @@ public final class ChunkerParameterParser {
 
     /**
      * Parse integer type parameter with positive value.
-     * Throw IllegalArgumentException if parameter is not a positive integer.
+     * Throw IllegalArgumentException if both parameter and default value is missing or parameter is not a positive integer.
      */
-    public static int parsePositiveIntegerParameter(final Map<String, Object> parameters, final String fieldName, final int defaultValue) {
+    public static int parsePositiveIntegerParameter(final Map<String, Object> parameters, final String fieldName, final Integer defaultValue) {
         int fieldValueInt = parseIntegerParameter(parameters, fieldName, defaultValue);
         if (fieldValueInt <= 0) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "Parameter [%s] must be positive.", fieldName));
