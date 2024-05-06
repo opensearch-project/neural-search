@@ -17,7 +17,7 @@ Compatible with OpenSearch 2.14.0
 * Fix typo for sparse encoding processor factory([#578](https://github.com/opensearch-project/neural-search/pull/578))
 * Add non-null check for queryBuilder in NeuralQueryEnricherProcessor ([#615](https://github.com/opensearch-project/neural-search/pull/615))
 * Add max_token_score field placeholder in NeuralSparseQueryBuilder to fix the rolling-upgrade from 2.x nodes bwc tests. ([#696](https://github.com/opensearch-project/neural-search/pull/696))
-* - Fix multi node "no such index" error in text chunking processor ([#713](https://github.com/opensearch-project/neural-search/pull/713))
+* Fix multi node "no such index" error in text chunking processor. ([#713](https://github.com/opensearch-project/neural-search/pull/713))
 ### Infrastructure
 * Adding integration tests for scenario of hybrid query with aggregations ([#632](https://github.com/opensearch-project/neural-search/pull/632))
 ### Maintenance
