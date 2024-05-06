@@ -18,7 +18,7 @@ import static org.opensearch.neuralsearch.processor.chunker.DelimiterChunker.DEL
 
 public class DelimiterChunkerTests extends OpenSearchTestCase {
 
-    private final Map<String, Object> runTimeParameters = Map.of(MAX_CHUNK_LIMIT_FIELD, 100, CHUNK_STRING_COUNT_FIELD, 1);
+    private final Map<String, Object> runtimeParameters = Map.of(MAX_CHUNK_LIMIT_FIELD, 100, CHUNK_STRING_COUNT_FIELD, 1);
 
     public void testCreate_withDelimiterFieldInvalidType_thenFail() {
         Exception exception = assertThrows(
@@ -39,7 +39,7 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
     public void testChunk_withNewlineDelimiter_thenSucceed() {
         DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n"));
         String content = "a\nb\nc\nd";
-        List<String> chunkResult = chunker.chunk(content, runTimeParameters);
+        List<String> chunkResult = chunker.chunk(content, runtimeParameters);
         assertEquals(List.of("a\n", "b\n", "c\n", "d"), chunkResult);
     }
 
@@ -47,35 +47,35 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
         // default delimiter is \n\n
         DelimiterChunker chunker = new DelimiterChunker(Map.of());
         String content = "a.b\n\nc.d";
-        List<String> chunkResult = chunker.chunk(content, runTimeParameters);
+        List<String> chunkResult = chunker.chunk(content, runtimeParameters);
         assertEquals(List.of("a.b\n\n", "c.d"), chunkResult);
     }
 
     public void testChunk_withOnlyDelimiterContent_thenSucceed() {
         DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n"));
         String content = "\n";
-        List<String> chunkResult = chunker.chunk(content, runTimeParameters);
+        List<String> chunkResult = chunker.chunk(content, runtimeParameters);
         assertEquals(List.of("\n"), chunkResult);
     }
 
     public void testChunk_WithAllDelimiterContent_thenSucceed() {
         DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n"));
         String content = "\n\n\n";
-        List<String> chunkResult = chunker.chunk(content, runTimeParameters);
+        List<String> chunkResult = chunker.chunk(content, runtimeParameters);
         assertEquals(List.of("\n", "\n", "\n"), chunkResult);
     }
 
     public void testChunk_WithPeriodDelimiters_thenSucceed() {
         DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "."));
         String content = "a.b.cc.d.";
-        List<String> chunkResult = chunker.chunk(content, runTimeParameters);
+        List<String> chunkResult = chunker.chunk(content, runtimeParameters);
         assertEquals(List.of("a.", "b.", "cc.", "d."), chunkResult);
     }
 
     public void testChunk_withDoubleNewlineDelimiter_thenSucceed() {
         DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n\n"));
         String content = "\n\na\n\n\n";
-        List<String> chunkResult = chunker.chunk(content, runTimeParameters);
+        List<String> chunkResult = chunker.chunk(content, runtimeParameters);
         assertEquals(List.of("\n\n", "a\n\n", "\n"), chunkResult);
     }
 
