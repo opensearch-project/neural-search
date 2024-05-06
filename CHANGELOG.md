@@ -15,7 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 2.x](https://github.com/opensearch-project/neural-search/compare/2.14...2.x)
 ### Features
 ### Enhancements
-- Optimize parameter parsing in text chunking processor
+- Optimize parameter parsing in text chunking processor ([#733](https://github.com/opensearch-project/neural-search/pull/733))
 ### Bug Fixes
 - Fix multi node "no such index" error in text chunking processor ([#713](https://github.com/opensearch-project/neural-search/pull/713))
 ### Infrastructure
