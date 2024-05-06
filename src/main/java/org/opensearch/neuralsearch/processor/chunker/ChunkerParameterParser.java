@@ -45,9 +45,7 @@ public final class ChunkerParameterParser {
      */
     public static int parseIntegerParameter(final Map<String, Object> parameters, final String fieldName) {
         if (!parameters.containsKey(fieldName)) {
-            throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "Parameter [%s] is missing", fieldName)
-            );
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "Parameter [%s] is missing", fieldName));
         }
         String fieldValueString = parameters.get(fieldName).toString();
         try {
@@ -67,9 +65,7 @@ public final class ChunkerParameterParser {
         if (!parameters.containsKey(fieldName)) {
             // return the default value when parameter is not existing
             if (defaultValue == null) {
-                throw new IllegalArgumentException(
-                    String.format(Locale.ROOT, "Parameter [%s] is missing", fieldName)
-                );
+                throw new IllegalArgumentException(String.format(Locale.ROOT, "Parameter [%s] is missing", fieldName));
             } else {
                 return defaultValue;
             }
@@ -88,7 +84,11 @@ public final class ChunkerParameterParser {
      * Parse integer type parameter with positive value.
      * Throw IllegalArgumentException if both parameter and default value is missing or parameter is not a positive integer.
      */
-    public static int parsePositiveIntegerParameter(final Map<String, Object> parameters, final String fieldName, final Integer defaultValue) {
+    public static int parsePositiveIntegerParameter(
+        final Map<String, Object> parameters,
+        final String fieldName,
+        final Integer defaultValue
+    ) {
         int fieldValueInt = parseIntegerParameter(parameters, fieldName, defaultValue);
         if (fieldValueInt <= 0) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "Parameter [%s] must be positive.", fieldName));
