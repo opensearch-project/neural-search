@@ -24,9 +24,11 @@ import java.util.HashMap;
 import java.util.List;
 
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.stream.IntStream;
 
 import org.junit.Before;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -34,17 +36,17 @@ import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.IngestDocument;
+import org.opensearch.ingest.IngestDocumentWrapper;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.factory.SparseEncodingProcessorFactory;
-import org.opensearch.test.OpenSearchTestCase;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
 import lombok.SneakyThrows;
 
-public class SparseEncodingProcessorTests extends OpenSearchTestCase {
+public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
     @Mock
     private MLCommonsClientAccessor mlCommonsClientAccessor;
 
@@ -168,6 +170,28 @@ public class SparseEncodingProcessorTests extends OpenSearchTestCase {
         processor.execute(ingestDocument, handler);
         verify(handler).accept(any(IngestDocument.class), isNull());
 
+    }
+
+    public void test_batchExecute_successful() {
+        final int docCount = 5;
+        List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
+        SparseEncodingProcessor processor = createInstance();
+        List<Map<String, ?>> dataAsMapList = createMockMapResult(10);
+        doAnswer(invocation -> {
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            listener.onResponse(dataAsMapList);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(anyString(), anyList(), isA(ActionListener.class));
+
+        Consumer resultHandler = mock(Consumer.class);
+        processor.batchExecute(ingestDocumentWrappers, resultHandler);
+        ArgumentCaptor<List<IngestDocumentWrapper>> resultCallback = ArgumentCaptor.forClass(List.class);
+        verify(resultHandler).accept(resultCallback.capture());
+        assertEquals(docCount, resultCallback.getValue().size());
+        for (int i = 0; i < docCount; ++i) {
+            assertEquals(ingestDocumentWrappers.get(i).getIngestDocument(), resultCallback.getValue().get(i).getIngestDocument());
+            assertNull(resultCallback.getValue().get(i).getException());
+        }
     }
 
     private List<Map<String, ?>> createMockMapResult(int number) {
