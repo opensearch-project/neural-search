@@ -22,10 +22,9 @@ import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.util.PriorityQueue;
-import org.opensearch.neuralsearch.query.HybridQueryScorer;
 
-import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.query.HybridQueryScorer;
 
 /**
  * Collects the TopDocs after executing hybrid query. Uses HybridQueryTopDocs as DTO to handle each sub query results
@@ -38,7 +37,6 @@ public class HybridTopScoreDocCollector implements Collector {
     private TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
     private int[] totalHits;
     private final int numOfHits;
-    @Getter
     private PriorityQueue<ScoreDoc>[] compoundScores;
 
     public HybridTopScoreDocCollector(int numHits, HitsThresholdChecker hitsThresholdChecker) {
@@ -96,12 +94,13 @@ public class HybridTopScoreDocCollector implements Collector {
                 if (Objects.isNull(compoundQueryScorer)) {
                     throw new IllegalArgumentException("scorers are null for all sub-queries in hybrid query");
                 }
+
                 float[] subScoresByQuery = compoundQueryScorer.hybridScores();
                 // iterate over results for each query
                 if (compoundScores == null) {
                     compoundScores = new PriorityQueue[subScoresByQuery.length];
                     for (int i = 0; i < subScoresByQuery.length; i++) {
-                        compoundScores[i] = new HitQueue(numOfHits, true);
+                        compoundScores[i] = new HitQueue(numOfHits, false);
                     }
                     totalHits = new int[subScoresByQuery.length];
                 }
@@ -113,10 +112,10 @@ public class HybridTopScoreDocCollector implements Collector {
                     }
                     totalHits[i]++;
                     PriorityQueue<ScoreDoc> pq = compoundScores[i];
-                    ScoreDoc topDoc = pq.top();
-                    topDoc.doc = doc + docBase;
-                    topDoc.score = score;
-                    pq.updateTop();
+                    ScoreDoc topDoc = new ScoreDoc(doc + docBase, score);
+                    // this way we're inserting into heap and do nothing else unless we reach the capacity
+                    // after that we pull out the lowest score element on each insert
+                    pq.insertWithOverflow(topDoc);
                 }
             }
         };
