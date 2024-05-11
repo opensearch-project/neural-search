@@ -10,15 +10,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
-import org.apache.commons.lang3.tuple.MutablePair;
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.document.FeatureField;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
@@ -52,7 +49,7 @@ import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.log4j.Log4j2;
 
-import static org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor.splitSetOnce;
+import static org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor.getSplitSetOnceByScoreThreshold;
 
 /**
  * SparseEncodingQueryBuilder is responsible for handling "neural_sparse" query types. It uses an ML NEURAL_SPARSE model
@@ -125,14 +122,13 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     }
 
     public NeuralSparseQueryBuilder copyForTwoPhase() {
-        future = CompletableFuture.supplyAsync(() -> null);
         NeuralSparseQueryBuilder copy = new NeuralSparseQueryBuilder().fieldName(this.fieldName)
             .queryText(this.queryText)
             .modelId(this.modelId)
             .maxTokenScore(this.maxTokenScore)
-            .queryTokensSupplier(null)
+            .queryTokensSupplier(new SetOnce<Map<String, Float>>()::get)
             .twoPhaseFlag(true)
-            .future(future);
+            .boost(boost);
         this.twoPhaseNeuralSparseQueryBuilder = copy;
         return copy;
     }
@@ -293,44 +289,20 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         }
     }
 
-    CompletableFuture<Void> future;
-
     @Override
-    protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
-        return twoPhaseFlag ? twoPhaseDoRewrite(queryRewriteContext) : originDoRewrite(queryRewriteContext);
-    }
-
-    private QueryBuilder originDoRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
+    protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) {
         if (queryTokensSupplier != null) return this;
         validateForRewrite(queryText, modelId);
         SetOnce<Map<String, Float>> queryTokensSetOnce = new SetOnce<>();
         queryRewriteContext.registerAsyncAction(getModelInferenceAsync(queryTokensSetOnce));
-        log.info("modeled is {}", modelId);
         return new NeuralSparseQueryBuilder().fieldName(fieldName)
             .queryText(queryText)
+            .boost(boost)
             .modelId(modelId)
             .maxTokenScore(maxTokenScore)
             .queryTokensSupplier(queryTokensSetOnce::get)
             .twoPhaseNeuralSparseQueryBuilder(twoPhaseNeuralSparseQueryBuilder)
-            .future(future)
             .twoPhaseFlag(twoPhaseFlag);
-    }
-
-    private QueryBuilder twoPhaseDoRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
-        if (queryTokensSupplier != null) return this;
-        SetOnce<Map<String, Float>> queryTokensSetOnce = new SetOnce<>();
-        queryTokensSupplier = queryTokensSetOnce::get;
-        // new ThreadPool()
-        queryRewriteContext.registerAsyncAction((client, actionListener) -> {
-            future.whenComplete((result, throwable) -> {
-                if (throwable != null) {
-                    actionListener.onFailure((Exception) throwable);
-                } else {
-                    actionListener.onResponse(null);
-                }
-            });
-        });
-        return this;
     }
 
     private BiConsumer<Client, ActionListener<?>> getModelInferenceAsync(SetOnce<Map<String, Float>> setOnce) {
@@ -338,15 +310,13 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             modelId(),
             List.of(queryText),
             ActionListener.wrap(mapResultList -> {
-                Map<String, Float> s = TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList).get(0);
-                if (twoPhaseNeuralSparseQueryBuilder != null) setOnce.set(splitSetOnce(s).get(true).get());
-                else {
-                    setOnce.set(s);
-                    this.queryTokensSupplier(setOnce::get);
-                }
+                Map<String, Float> queryTokens = TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList).get(0);
                 if (twoPhaseNeuralSparseQueryBuilder != null) {
-                    twoPhaseNeuralSparseQueryBuilder.queryTokensSupplier(splitSetOnce(s).get(false)::get);
-                    future.complete(null);
+                    Map<Boolean, SetOnce<Map<String, Float>>> splitSetOnce = getSplitSetOnceByScoreThreshold(queryTokens);
+                    setOnce.set(splitSetOnce.get(true).get());
+                    twoPhaseNeuralSparseQueryBuilder.queryTokensSupplier(splitSetOnce.get(false)::get);
+                } else {
+                    setOnce.set(queryTokens);
                 }
                 actionListener.onResponse(null);
             }, actionListener::onFailure)
@@ -358,8 +328,10 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         final MappedFieldType ft = context.fieldMapper(fieldName);
         validateFieldType(ft);
         Map<String, Float> queryTokens = queryTokensSupplier.get();
-        if (twoPhaseFlag && queryTokens == null) return new MatchNoDocsQuery();
-        validateQueryTokens(queryTokens);
+        if (null == queryTokens) {
+            if (twoPhaseFlag) return new MatchNoDocsQuery();
+            throw new IllegalArgumentException("Query tokens cannot be null.");
+        }
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
         for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
             builder.add(FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()), BooleanClause.Occur.SHOULD);
@@ -383,19 +355,6 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     private static void validateFieldType(MappedFieldType fieldType) {
         if (null == fieldType || !fieldType.typeName().equals("rank_features")) {
             throw new IllegalArgumentException("[" + NAME + "] query only works on [rank_features] fields");
-        }
-    }
-
-    private static void validateQueryTokens(Map<String, Float> queryTokens) {
-        if (null == queryTokens) {
-            throw new IllegalArgumentException("Query tokens cannot be null.");
-        }
-        for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
-            if (entry.getValue() <= 0) {
-                throw new IllegalArgumentException(
-                    "Feature weight must be larger than 0, feature [" + entry.getValue() + "] has negative weight."
-                );
-            }
         }
     }
 
@@ -427,26 +386,6 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     @Override
     public String getWriteableName() {
         return NAME;
-    }
-
-    private Pair<Map<String, Float>, Map<String, Float>> calculateThresholdAndSplit(Map<String, Float> map, float ratio) {
-        float maxValue = map.values().stream().max(Float::compareTo).orElse(0f);
-
-        float threshold = maxValue * ratio;
-
-        Map<String, Float> aboveThreshold = new HashMap<>(map.size());
-        Map<String, Float> belowThreshold = new HashMap<>(map.size());
-
-        for (Map.Entry<String, Float> entry : map.entrySet()) {
-            String key = entry.getKey();
-            float value = entry.getValue();
-            if (value >= threshold) {
-                aboveThreshold.put(key, value);
-            } else {
-                belowThreshold.put(key, value);
-            }
-        }
-        return new MutablePair<>(aboveThreshold, belowThreshold);
     }
 
     private static boolean isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport() {
