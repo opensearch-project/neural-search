@@ -82,8 +82,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     private String modelId;
     private Float maxTokenScore;
     private Supplier<Map<String, Float>> queryTokensSupplier;
-    private boolean twoPhaseFlag = false;
-    private float twoPhasePruneRatio = 0.4F;
+    // A parameter that can detect if twoPhase are enabled, when twoPhasePruneRatio equals -1f, it means it two-phase rescoreQueryBuilder's
+    // subQueryBuilder.
+    private float twoPhasePruneRatio = 0F;
     private NeuralSparseQueryBuilder twoPhaseNeuralSparseQueryBuilder = null;
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
 
@@ -121,13 +122,14 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         }
     }
 
-    public NeuralSparseQueryBuilder copyForTwoPhase() {
+    public NeuralSparseQueryBuilder copyForTwoPhase(float ratio) {
+        this.twoPhasePruneRatio(ratio);
         NeuralSparseQueryBuilder copy = new NeuralSparseQueryBuilder().fieldName(this.fieldName)
             .queryText(this.queryText)
             .modelId(this.modelId)
             .maxTokenScore(this.maxTokenScore)
             .queryTokensSupplier(new SetOnce<Map<String, Float>>()::get)
-            .twoPhaseFlag(true)
+            .twoPhasePruneRatio(-1f)
             .boost(boost);
         this.twoPhaseNeuralSparseQueryBuilder = copy;
         return copy;
@@ -301,8 +303,8 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .modelId(modelId)
             .maxTokenScore(maxTokenScore)
             .queryTokensSupplier(queryTokensSetOnce::get)
-            .twoPhaseNeuralSparseQueryBuilder(twoPhaseNeuralSparseQueryBuilder)
-            .twoPhaseFlag(twoPhaseFlag);
+            .twoPhasePruneRatio(twoPhasePruneRatio)
+            .twoPhaseNeuralSparseQueryBuilder(twoPhaseNeuralSparseQueryBuilder);
     }
 
     private BiConsumer<Client, ActionListener<?>> getModelInferenceAsync(SetOnce<Map<String, Float>> setOnce) {
@@ -312,7 +314,10 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             ActionListener.wrap(mapResultList -> {
                 Map<String, Float> queryTokens = TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList).get(0);
                 if (twoPhaseNeuralSparseQueryBuilder != null) {
-                    Map<Boolean, SetOnce<Map<String, Float>>> splitSetOnce = getSplitSetOnceByScoreThreshold(queryTokens);
+                    Map<Boolean, SetOnce<Map<String, Float>>> splitSetOnce = getSplitSetOnceByScoreThreshold(
+                        queryTokens,
+                        twoPhasePruneRatio
+                    );
                     setOnce.set(splitSetOnce.get(true).get());
                     twoPhaseNeuralSparseQueryBuilder.queryTokensSupplier(splitSetOnce.get(false)::get);
                 } else {
@@ -329,13 +334,13 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         validateFieldType(ft);
         Map<String, Float> queryTokens = queryTokensSupplier.get();
         if (null == queryTokens) {
-            if (twoPhaseFlag) return new MatchNoDocsQuery();
+            if (twoPhasePruneRatio == -1f) return new MatchNoDocsQuery();
             throw new IllegalArgumentException("Query tokens cannot be null.");
         }
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
-        for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
+        for (Map.Entry<String, Float> entry : queryTokens.entrySet())
             builder.add(FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()), BooleanClause.Occur.SHOULD);
-        }
+
         return builder.build();
     }
 
@@ -364,21 +369,37 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (Objects.isNull(obj) || getClass() != obj.getClass()) return false;
         if (Objects.isNull(queryTokensSupplier) && Objects.nonNull(obj.queryTokensSupplier)) return false;
         if (Objects.nonNull(queryTokensSupplier) && Objects.isNull(obj.queryTokensSupplier)) return false;
+        if (Objects.nonNull(twoPhaseNeuralSparseQueryBuilder) && Objects.isNull(obj.twoPhaseNeuralSparseQueryBuilder)) return false;
+        if (Objects.isNull(twoPhaseNeuralSparseQueryBuilder) && Objects.nonNull(obj.twoPhaseNeuralSparseQueryBuilder)) return false;
+
         EqualsBuilder equalsBuilder = new EqualsBuilder().append(fieldName, obj.fieldName)
             .append(queryText, obj.queryText)
             .append(modelId, obj.modelId)
-            .append(maxTokenScore, obj.maxTokenScore);
+            .append(maxTokenScore, obj.maxTokenScore)
+            .append(twoPhasePruneRatio, obj.twoPhasePruneRatio)
+            .append(boost, obj.boost);
         if (Objects.nonNull(queryTokensSupplier)) {
             equalsBuilder.append(queryTokensSupplier.get(), obj.queryTokensSupplier.get());
+        }
+        if (Objects.nonNull(twoPhaseNeuralSparseQueryBuilder)) {
+            equalsBuilder.append(twoPhaseNeuralSparseQueryBuilder, obj.twoPhaseNeuralSparseQueryBuilder);
         }
         return equalsBuilder.isEquals();
     }
 
     @Override
     protected int doHashCode() {
-        HashCodeBuilder builder = new HashCodeBuilder().append(fieldName).append(queryText).append(modelId).append(maxTokenScore);
+        HashCodeBuilder builder = new HashCodeBuilder().append(fieldName)
+            .append(queryText)
+            .append(modelId)
+            .append(maxTokenScore)
+            .append(boost)
+            .append(twoPhasePruneRatio);
         if (queryTokensSupplier != null) {
             builder.append(queryTokensSupplier.get());
+        }
+        if (twoPhaseNeuralSparseQueryBuilder != null) {
+            builder.append(twoPhaseNeuralSparseQueryBuilder);
         }
         return builder.toHashCode();
     }

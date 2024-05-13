@@ -6,14 +6,13 @@ package org.opensearch.neuralsearch.processor;
 
 import lombok.Getter;
 import lombok.Setter;
-import org.apache.lucene.search.BooleanClause;
 import org.opensearch.common.SetOnce;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryBuilderVisitor;
 import org.opensearch.ingest.ConfigurationUtils;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.pipeline.AbstractProcessor;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
@@ -25,20 +24,24 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * A SearchRequestProcessor to generate two-phase NeuralSparseQueryBuilder,
+ * and add it to the Rescore of a searchRequest.
+ */
 @Setter
 @Getter
 public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements SearchRequestProcessor {
 
-    public static String TYPE = "neural_sparse_two_phase_processor";
-    boolean enable;
-    float ratio;
-    float window_expansion;
-    int max_window_size;
-    static final String PARAMETER_KEY = "two_phase_parameter";
-    static final String RATIO_KEY = "prune_ratio";
-    static final String ENABLE_KEY = "enabled";
-    static final String EXPANSION_KEY = "expansion";
-    static final String MAX_WINDOW_SIZE_KEY = "max_window_size";
+    public static final String TYPE = "neural_sparse_two_phase_processor";
+    private boolean enabled;
+    private float ratio;
+    private float window_expansion;
+    private int max_window_size;
+    private static final  String PARAMETER_KEY = "two_phase_parameter";
+    private static final  String RATIO_KEY = "prune_ratio";
+    private static final  String ENABLE_KEY = "enabled";
+    private static final  String EXPANSION_KEY = "expansion_rate";
+    private static final  String MAX_WINDOW_SIZE_KEY = "max_window_size";
 
     protected NeuralSparseTwoPhaseProcessor(
         String tag,
@@ -50,7 +53,7 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
         int max_window_size
     ) {
         super(tag, description, ignoreFailure);
-        this.enable = enabled;
+        this.enabled = enabled;
         if (ratio < 0f || ratio > 1f) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "The prune ratio must be within [0, 1]. Received: %f", ratio));
         }
@@ -69,17 +72,32 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
         this.max_window_size = max_window_size;
     }
 
+    /**
+     * Process the search request of neural_sparse_two_phase_processor
+     * @param request the search request (which may have been modified by an earlier processor)
+     * @return request the search request that add the two-phase rescore query of neural sparse query.
+     */
     @Override
     public SearchRequest processRequest(SearchRequest request) throws Exception {
-        if (!enable) return request;
+        if (!enabled) return request;
         QueryBuilder queryBuilder = request.source().query();
         Map<NeuralSparseQueryBuilder, Float> queryBuilderMap = new HashMap<>();
-        QueryBuilderVisitor queryBuilderVisitor = new TwoPhaseQueryBuilderVisitor(queryBuilderMap, 1.0f);
-        queryBuilder.visit(queryBuilderVisitor);
-        BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
-        queryBuilderMap.forEach((key, value) -> boolQueryBuilder.should(((QueryBuilder) key).boost(value)));
+        processQueryBuilder(queryBuilder, queryBuilderMap, 1.0f);
+        BoolQueryBuilder boolQueryBuilder = getBoolQueryBuilderFromNeuralSparseQueryBuilderMap(queryBuilderMap);
+        boolQueryBuilder.boost(getOriginQueryWeightAfterRescore(request.source()));
         RescorerBuilder<QueryRescorerBuilder> rescorerBuilder = new QueryRescorerBuilder(boolQueryBuilder);
-        rescorerBuilder.windowSize((int) (request.source().size() == -1 ? 10 : request.source().size() * window_expansion));
+        int windowSize = (int) ((request.source().size() == -1 ? 10 : request.source().size()) * window_expansion);
+        if (windowSize > max_window_size || windowSize < 0) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "The two-phase window size of neural_sparse_two_phase_processor should be [0,%d], but get the value of %d",
+                    max_window_size,
+                    windowSize
+                )
+            );
+        }
+        rescorerBuilder.windowSize(windowSize);
         request.source().addRescorer(rescorerBuilder);
         return request;
     }
@@ -89,11 +107,17 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
         return TYPE;
     }
 
-    public static Map<Boolean, SetOnce<Map<String, Float>>> getSplitSetOnceByScoreThreshold(Map<String, Float> queryTokens) {
+    /**
+     * Based on ratio, split a Map into two map by the value.
+     * @param queryTokens the queryTokens map, key is the token String, value is the score.
+     * @param ratio The ratio that control how tokens map be split.
+     * @return A map has two element, {[True, token map whose value above threshold],[False, token map whose value below threshold]}
+     */
+    public static Map<Boolean, SetOnce<Map<String, Float>>> getSplitSetOnceByScoreThreshold(Map<String, Float> queryTokens, float ratio) {
         float max = 0f;
         for (Float value : queryTokens.values())
             max = value > max ? value : max;
-        float threshold = max * 0.4f;
+        float threshold = max * ratio;
         Map<Boolean, Map<String, Float>> queryTokensByScore = queryTokens.entrySet()
             .stream()
             .collect(
@@ -135,35 +159,55 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
             return new NeuralSparseTwoPhaseProcessor(tag, description, ignoreFailure, enabled, ratio, window_expansion, max_window_size);
 
         }
-
     }
 
-    @Setter
-    static private class TwoPhaseQueryBuilderVisitor implements QueryBuilderVisitor {
-        @Setter
-        float boost;
-        float subBoost;
-        Map<NeuralSparseQueryBuilder, Float> queryBuilderMap;
-
-        public TwoPhaseQueryBuilderVisitor(Map<NeuralSparseQueryBuilder, Float> queryBuilderMap, float boost) {
-            this.queryBuilderMap = queryBuilderMap;
-            this.boost = boost;
-            this.subBoost = boost;
-        }
-
-        @Override
-        public void accept(QueryBuilder qb) {
-            if (qb instanceof NeuralSparseQueryBuilder) {
-                this.queryBuilderMap.put(((NeuralSparseQueryBuilder) qb).copyForTwoPhase(), boost * qb.boost());
-            } else {
-                subBoost *= qb.boost();
-            }
-        }
-
-        @Override
-        public QueryBuilderVisitor getChildVisitor(BooleanClause.Occur occur) {
-            if (occur.equals(BooleanClause.Occur.SHOULD)) return new TwoPhaseQueryBuilderVisitor(queryBuilderMap, subBoost);
-            return NO_OP_VISITOR;
+    private void processQueryBuilder(
+        QueryBuilder queryBuilder,
+        Map<NeuralSparseQueryBuilder, Float> neuralSparseQueryBuilderFloatMap,
+        float baseBoost
+    ) {
+        if (queryBuilder instanceof BoolQueryBuilder) {
+            processQueryBuilder((BoolQueryBuilder) queryBuilder, neuralSparseQueryBuilderFloatMap, baseBoost);
+        } else if (queryBuilder instanceof NeuralSparseQueryBuilder) {
+            processQueryBuilder((NeuralSparseQueryBuilder) queryBuilder, neuralSparseQueryBuilderFloatMap, baseBoost);
         }
     }
+
+    private void processQueryBuilder(
+        BoolQueryBuilder queryBuilder,
+        Map<NeuralSparseQueryBuilder, Float> neuralSparseQueryBuilderFloatMap,
+        float baseBoost
+    ) {
+        baseBoost *= queryBuilder.boost();
+        for (QueryBuilder subShouldQueryBuilder : queryBuilder.should()) {
+            processQueryBuilder(subShouldQueryBuilder, neuralSparseQueryBuilderFloatMap, baseBoost);
+        }
+    }
+
+    private void processQueryBuilder(
+        NeuralSparseQueryBuilder queryBuilder,
+        Map<NeuralSparseQueryBuilder, Float> neuralSparseQueryBuilderFloatMap,
+        float baseBoost
+    ) {
+        float finalBaseBoost = baseBoost * queryBuilder.boost();
+        neuralSparseQueryBuilderFloatMap.put(queryBuilder.copyForTwoPhase(ratio), finalBaseBoost);
+    }
+
+    private BoolQueryBuilder getBoolQueryBuilderFromNeuralSparseQueryBuilderMap(Map<NeuralSparseQueryBuilder, Float> queryBuilderFloatMap) {
+        BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
+        queryBuilderFloatMap.forEach((neuralSparseQueryBuilder, boost) -> {
+            final float finalBoost = neuralSparseQueryBuilder.boost() * boost;
+            boolQueryBuilder.should(neuralSparseQueryBuilder.boost(finalBoost));
+        });
+        return boolQueryBuilder;
+    }
+
+    private static float getOriginQueryWeightAfterRescore(SearchSourceBuilder searchSourceBuilder) {
+        if (searchSourceBuilder.rescores() == null) return 1.0f;
+        return searchSourceBuilder.rescores()
+            .stream()
+            .map(rescorerBuilder -> ((QueryRescorerBuilder) rescorerBuilder).getQueryWeight())
+            .reduce(1.0f, (a, b) -> a * b);
+    }
+
 }
