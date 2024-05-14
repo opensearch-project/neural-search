@@ -18,6 +18,7 @@ import org.opensearch.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Setting;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.FeatureFlags;
 import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
@@ -25,6 +26,7 @@ import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
 import org.opensearch.ingest.Processor;
 import org.opensearch.ml.client.MachineLearningNodeClient;
+import org.opensearch.neuralsearch.executors.HybridQueryExecutor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
@@ -62,6 +64,7 @@ import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 import org.opensearch.search.query.QueryPhaseSearcher;
+import org.opensearch.threadpool.ExecutorBuilder;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.watcher.ResourceWatcherService;
 
@@ -94,6 +97,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         NeuralSearchClusterUtil.instance().initialize(clusterService);
         NeuralQueryBuilder.initialize(clientAccessor);
         NeuralSparseQueryBuilder.initialize(clientAccessor);
+        HybridQueryExecutor.initialize(threadPool);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
         return List.of(clientAccessor);
     }
@@ -105,6 +109,11 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
             new QuerySpec<>(HybridQueryBuilder.NAME, HybridQueryBuilder::new, HybridQueryBuilder::fromXContent),
             new QuerySpec<>(NeuralSparseQueryBuilder.NAME, NeuralSparseQueryBuilder::new, NeuralSparseQueryBuilder::fromXContent)
         );
+    }
+
+    @Override
+    public List<ExecutorBuilder<?>> getExecutorBuilders(Settings settings) {
+        return List.of(HybridQueryExecutor.getExecutorBuilder(settings));
     }
 
     @Override
