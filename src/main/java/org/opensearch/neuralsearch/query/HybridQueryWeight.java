@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,8 @@ import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.ScorerSupplier;
 import org.apache.lucene.search.Weight;
+import org.opensearch.neuralsearch.executors.HybridQueryExecutor;
+import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollector;
 
 import static org.opensearch.neuralsearch.query.HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES;
 
@@ -70,16 +73,31 @@ public final class HybridQueryWeight extends Weight {
 
     @Override
     public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
-        List<ScorerSupplier> scorerSuppliers = new ArrayList<>();
-        for (Weight w : weights) {
-            ScorerSupplier ss = w.scorerSupplier(context);
-            scorerSuppliers.add(ss);
+        HybridQueryScoreSupplierCollectorManager manager = new HybridQueryScoreSupplierCollectorManager(context);
+        List<Callable<Void>> scoreSupplierTasks = new ArrayList<>();
+        List<HybridQueryExecutorCollector<LeafReaderContext, ScorerSupplier>> collectors = new ArrayList<>();
+        for (Weight weight : weights) {
+            HybridQueryExecutorCollector<LeafReaderContext, ScorerSupplier> collector = manager.newCollector();
+            collectors.add(collector);
+            scoreSupplierTasks.add(() -> addScoreSupplier(weight, collector));
         }
-
+        HybridQueryExecutor.getExecutor().invokeAll(scoreSupplierTasks);
+        final List<ScorerSupplier> scorerSuppliers = manager.merge(collectors);
         if (scorerSuppliers.isEmpty()) {
             return null;
         }
         return new HybridScorerSupplier(scorerSuppliers, this, scoreMode);
+    }
+
+    private Void addScoreSupplier(Weight weight, HybridQueryExecutorCollector<LeafReaderContext, ScorerSupplier> collector) {
+        collector.collect(leafReaderContext -> {
+            try {
+                return weight.scorerSupplier(leafReaderContext);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
+        return null;
     }
 
     /**
