@@ -82,7 +82,7 @@ public final class HybridQueryWeight extends Weight {
             scoreSupplierTasks.add(() -> addScoreSupplier(weight, collector));
         }
         HybridQueryExecutor.getExecutor().invokeAll(scoreSupplierTasks);
-        final List<ScorerSupplier> scorerSuppliers = manager.merge(collectors);
+        final List<ScorerSupplier> scorerSuppliers = manager.mergeScoreSuppliers(collectors);
         if (scorerSuppliers.isEmpty()) {
             return null;
         }

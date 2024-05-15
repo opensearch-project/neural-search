@@ -26,8 +26,7 @@ public class HybridQueryScoreSupplierCollectorManager
         return HybridQueryExecutorCollector.newCollector(context);
     }
 
-    @Override
-    public List<ScorerSupplier> merge(List<HybridQueryExecutorCollector<LeafReaderContext, ScorerSupplier>> collectors) {
+    public List<ScorerSupplier> mergeScoreSuppliers(List<HybridQueryExecutorCollector<LeafReaderContext, ScorerSupplier>> collectors) {
         List<ScorerSupplier> scorerSuppliers = new ArrayList<>();
         for (HybridQueryExecutorCollector<?, ScorerSupplier> collector : collectors) {
             scorerSuppliers.add(collector.getResult());
