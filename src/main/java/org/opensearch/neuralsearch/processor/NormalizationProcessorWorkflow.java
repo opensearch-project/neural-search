@@ -127,6 +127,10 @@ public class NormalizationProcessorWorkflow {
                 .map(topFieldDocs -> topFieldDocs.fields)
                 .findFirst()
                 .orElse(null);
+
+            // for (int i = 0; i < sortFields.length; i++) {
+            // sortFields[i] = new SortField(sortFields[i].getField(), SortField.Type.SCORE, sortFields[i].getReverse());
+            // }
         }
 
         for (int index = 0; index < querySearchResults.size(); index++) {
