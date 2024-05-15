@@ -473,6 +473,27 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         }
     }
 
+    public void test_batchExecute_exception() {
+        final int docCount = 5;
+        List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
+        TextEmbeddingProcessor processor = createInstance();
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            listener.onFailure(new RuntimeException());
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+
+        Consumer resultHandler = mock(Consumer.class);
+        processor.batchExecute(ingestDocumentWrappers, resultHandler);
+        ArgumentCaptor<List<IngestDocumentWrapper>> resultCallback = ArgumentCaptor.forClass(List.class);
+        verify(resultHandler).accept(resultCallback.capture());
+        assertEquals(docCount, resultCallback.getValue().size());
+        for (int i = 0; i < docCount; ++i) {
+            assertEquals(ingestDocumentWrappers.get(i).getIngestDocument(), resultCallback.getValue().get(i).getIngestDocument());
+            assertNotNull(resultCallback.getValue().get(i).getException());
+        }
+    }
+
     @SneakyThrows
     private TextEmbeddingProcessor createInstanceWithNestedMapConfiguration(Map<String, Object> fieldMap) {
         Map<String, Processor.Factory> registry = new HashMap<>();

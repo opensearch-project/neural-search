@@ -52,10 +52,6 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
 
     @Override
     public void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException) {
-        mlCommonsClientAccessor.inferenceSentences(
-            this.modelId,
-            inferenceList,
-            ActionListener.wrap(vectors -> { handler.accept(vectors); }, exception -> onException.accept(exception))
-        );
+        mlCommonsClientAccessor.inferenceSentences(this.modelId, inferenceList, ActionListener.wrap(handler::accept, onException));
     }
 }

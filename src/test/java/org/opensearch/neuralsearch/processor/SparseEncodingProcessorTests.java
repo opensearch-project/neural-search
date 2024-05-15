@@ -194,6 +194,27 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         }
     }
 
+    public void test_batchExecute_exception() {
+        final int docCount = 5;
+        List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
+        SparseEncodingProcessor processor = createInstance();
+        doAnswer(invocation -> {
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            listener.onFailure(new RuntimeException());
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(anyString(), anyList(), isA(ActionListener.class));
+
+        Consumer resultHandler = mock(Consumer.class);
+        processor.batchExecute(ingestDocumentWrappers, resultHandler);
+        ArgumentCaptor<List<IngestDocumentWrapper>> resultCallback = ArgumentCaptor.forClass(List.class);
+        verify(resultHandler).accept(resultCallback.capture());
+        assertEquals(docCount, resultCallback.getValue().size());
+        for (int i = 0; i < docCount; ++i) {
+            assertEquals(ingestDocumentWrappers.get(i).getIngestDocument(), resultCallback.getValue().get(i).getIngestDocument());
+            assertNotNull(resultCallback.getValue().get(i).getException());
+        }
+    }
+
     private List<Map<String, ?>> createMockMapResult(int number) {
         List<Map<String, Float>> mockSparseEncodingResult = new ArrayList<>();
         IntStream.range(0, number).forEachOrdered(x -> mockSparseEncodingResult.add(ImmutableMap.of("hello", 1.0f)));
