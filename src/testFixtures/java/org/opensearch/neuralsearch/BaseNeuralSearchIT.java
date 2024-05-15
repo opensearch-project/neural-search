@@ -310,6 +310,36 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertEquals("true", node.get("acknowledged").toString());
     }
 
+    protected void createNeuralSparseTwoPhaseSearchProcessor(final String pipelineName) throws Exception {
+        createNeuralSparseTwoPhaseSearchProcessor(pipelineName, 0.4f, 5.0f, 10000);
+    }
+
+    protected void createNeuralSparseTwoPhaseSearchProcessor(
+        final String pipelineName,
+        float pruneRatio,
+        float expansionRate,
+        int maxWindowSize
+    ) throws Exception {
+        String jsonTemplate = Files.readString(
+            Path.of(Objects.requireNonNull(classLoader.getResource("processor/NeuralSparseTwoPhaseProcessorConfiguration.json")).toURI())
+        );
+        String customizedJson = String.format(Locale.ROOT, jsonTemplate, pruneRatio, expansionRate, maxWindowSize);
+        Response pipelineCreateResponse = makeRequest(
+            client(),
+            "PUT",
+            "/_search/pipeline/" + pipelineName,
+            null,
+            toHttpEntity(customizedJson),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+        Map<String, Object> node = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(pipelineCreateResponse.getEntity()),
+            false
+        );
+        assertEquals("true", node.get("acknowledged").toString());
+    }
+
     protected void createSearchRequestProcessor(final String modelId, final String pipelineName) throws Exception {
         Response pipelineCreateResponse = makeRequest(
             client(),
