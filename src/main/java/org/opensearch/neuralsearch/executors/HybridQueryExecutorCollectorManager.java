@@ -4,6 +4,9 @@
  */
 package org.opensearch.neuralsearch.executors;
 
+/**
+ * {@link HybridQueryExecutorCollectorManager} is responsible for creating new {@link HybridQueryExecutorCollector} instances
+ */
 public interface HybridQueryExecutorCollectorManager<C extends HybridQueryExecutorCollector, R> {
     C newCollector();
 }
