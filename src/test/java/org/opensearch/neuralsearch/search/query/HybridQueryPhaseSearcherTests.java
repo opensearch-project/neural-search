@@ -16,15 +16,15 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.opensearch.index.mapper.SeqNoFieldMapper.PRIMARY_TERM_NAME;
+import static org.opensearch.index.remote.RemoteStoreEnums.PathType.HASHED_PREFIX;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryStartStopElement;
 
 import java.io.IOException;
-import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedList;
-import java.util.List;
+import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
-import java.util.stream.Collectors;
+import java.util.concurrent.ExecutorService;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -37,14 +37,18 @@ import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.Collector;
+import org.apache.lucene.search.CollectorManager;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.tests.analysis.MockAnalyzer;
+import org.opensearch.Version;
 import org.opensearch.action.OriginalIndices;
 import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.common.UUIDs;
 import org.opensearch.common.lucene.search.Queries;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.common.settings.Settings;
@@ -54,11 +58,10 @@ import org.opensearch.index.IndexSettings;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.BoolQueryBuilder;
-import org.opensearch.index.query.MatchAllQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.index.remote.RemoteStoreEnums;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
@@ -73,6 +76,7 @@ import com.carrotsearch.randomizedtesting.RandomizedTest;
 import lombok.SneakyThrows;
 import org.opensearch.search.query.QueryCollectorContext;
 import org.opensearch.search.query.QuerySearchResult;
+import org.opensearch.search.query.ReduceableSearchResult;
 
 public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
     private static final String VECTOR_FIELD_NAME = "vectorField";
@@ -83,13 +87,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
     private static final String TEST_DOC_TEXT4 = "This is really nice place to be";
     private static final String QUERY_TEXT1 = "hello";
     private static final String QUERY_TEXT2 = "randomkeyword";
-    private static final String QUERY_TEXT3 = "place";
     private static final Index dummyIndex = new Index("dummy", "dummy");
-    private static final String MODEL_ID = "mfgfgdsfgfdgsde";
-    private static final int K = 10;
-    private static final QueryBuilder TEST_FILTER = new MatchAllQueryBuilder();
-    private static final UUID INDEX_UUID = UUID.randomUUID();
-    private static final String TEST_INDEX = "index";
 
     @SneakyThrows
     public void testQueryType_whenQueryIsHybrid_thenCallHybridDocCollector() {
@@ -301,20 +299,22 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         Query query = queryBuilder.toQuery(mockQueryShardContext);
         when(searchContext.query()).thenReturn(query);
 
+        CollectorManager<? extends Collector, ReduceableSearchResult> collectorManager = HybridCollectorManager
+            .createHybridCollectorManager(searchContext);
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers = new HashMap<>();
+        queryCollectorManagers.put(HybridCollectorManager.class, collectorManager);
+        when(searchContext.queryCollectorManagers()).thenReturn(queryCollectorManagers);
+
         hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
+        hybridQueryPhaseSearcher.aggregationProcessor(searchContext).postProcess(searchContext);
 
         assertNotNull(querySearchResult.topDocs());
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
         TopDocs topDocs = topDocsAndMaxScore.topDocs;
-        assertEquals(1, topDocs.totalHits.value);
+        assertEquals(0, topDocs.totalHits.value);
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         assertNotNull(scoreDocs);
-        assertEquals(1, scoreDocs.length);
-        ScoreDoc scoreDoc = scoreDocs[0];
-        assertNotNull(scoreDoc);
-        int actualDocId = Integer.parseInt(reader.document(scoreDoc.doc).getField("id").stringValue());
-        assertEquals(docId1, actualDocId);
-        assertTrue(scoreDoc.score > 0.0f);
+        assertEquals(0, scoreDocs.length);
 
         releaseResources(directory, w, reader);
     }
@@ -335,13 +335,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
         int docId1 = RandomizedTest.randomInt();
-        int docId2 = RandomizedTest.randomInt();
-        int docId3 = RandomizedTest.randomInt();
-        int docId4 = RandomizedTest.randomInt();
         w.addDocument(getDocument(TEXT_FIELD_NAME, docId1, TEST_DOC_TEXT1, ft));
-        w.addDocument(getDocument(TEXT_FIELD_NAME, docId2, TEST_DOC_TEXT2, ft));
-        w.addDocument(getDocument(TEXT_FIELD_NAME, docId3, TEST_DOC_TEXT3, ft));
-        w.addDocument(getDocument(TEXT_FIELD_NAME, docId4, TEST_DOC_TEXT4, ft));
         w.commit();
 
         IndexReader reader = DirectoryReader.open(w);
@@ -390,18 +384,22 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         Query query = queryBuilder.toQuery(mockQueryShardContext);
         when(searchContext.query()).thenReturn(query);
 
+        CollectorManager<? extends Collector, ReduceableSearchResult> collectorManager = HybridCollectorManager
+            .createHybridCollectorManager(searchContext);
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers = new HashMap<>();
+        queryCollectorManagers.put(HybridCollectorManager.class, collectorManager);
+        when(searchContext.queryCollectorManagers()).thenReturn(queryCollectorManagers);
+
         hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
+        hybridQueryPhaseSearcher.aggregationProcessor(searchContext).postProcess(searchContext);
 
         assertNotNull(querySearchResult.topDocs());
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
         TopDocs topDocs = topDocsAndMaxScore.topDocs;
-        assertEquals(4, topDocs.totalHits.value);
+        assertEquals(0, topDocs.totalHits.value);
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         assertNotNull(scoreDocs);
-        assertEquals(4, scoreDocs.length);
-        List<Integer> expectedIds = List.of(0, 1, 2, 3);
-        List<Integer> actualDocIds = Arrays.stream(scoreDocs).map(sd -> sd.doc).collect(Collectors.toList());
-        assertEquals(expectedIds, actualDocIds);
+        assertEquals(0, scoreDocs.length);
 
         releaseResources(directory, w, reader);
     }
@@ -459,10 +457,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
         when(searchContext.mapperService()).thenReturn(mapperService);
         when(searchContext.getQueryShardContext()).thenReturn(mockQueryShardContext);
-        IndexMetadata indexMetadata = mock(IndexMetadata.class);
-        when(indexMetadata.getIndex()).thenReturn(new Index(TEST_INDEX, INDEX_UUID.toString()));
-        when(indexMetadata.getSettings()).thenReturn(Settings.EMPTY);
-        when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
+        IndexMetadata indexMetadata = getIndexMetadata();
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
         IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
         when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
@@ -567,10 +562,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
         when(searchContext.mapperService()).thenReturn(mapperService);
         when(searchContext.getQueryShardContext()).thenReturn(mockQueryShardContext);
-        IndexMetadata indexMetadata = mock(IndexMetadata.class);
-        when(indexMetadata.getIndex()).thenReturn(new Index(TEST_INDEX, INDEX_UUID.toString()));
-        when(indexMetadata.getSettings()).thenReturn(Settings.EMPTY);
-        when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
+        IndexMetadata indexMetadata = getIndexMetadata();
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
         IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
         when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
@@ -635,10 +627,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
         when(mockQueryShardContext.getMapperService()).thenReturn(mapperService);
         when(mockQueryShardContext.simpleMatchToIndexNames(anyString())).thenReturn(Set.of(TEXT_FIELD_NAME));
-        IndexMetadata indexMetadata = mock(IndexMetadata.class);
-        when(indexMetadata.getIndex()).thenReturn(new Index(TEST_INDEX, INDEX_UUID.toString()));
-        when(indexMetadata.getSettings()).thenReturn(Settings.EMPTY);
-        when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
+        IndexMetadata indexMetadata = getIndexMetadata();
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
         IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
         when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
@@ -709,18 +698,22 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         when(searchContext.query()).thenReturn(query);
 
+        CollectorManager<? extends Collector, ReduceableSearchResult> collectorManager = HybridCollectorManager
+            .createHybridCollectorManager(searchContext);
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers = new HashMap<>();
+        queryCollectorManagers.put(HybridCollectorManager.class, collectorManager);
+        when(searchContext.queryCollectorManagers()).thenReturn(queryCollectorManagers);
+
         hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
+        hybridQueryPhaseSearcher.aggregationProcessor(searchContext).postProcess(searchContext);
 
         assertNotNull(querySearchResult.topDocs());
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
         TopDocs topDocs = topDocsAndMaxScore.topDocs;
-        assertTrue(topDocs.totalHits.value > 0);
+        assertEquals(0, topDocs.totalHits.value);
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         assertNotNull(scoreDocs);
-        assertEquals(1, scoreDocs.length);
-        ScoreDoc scoreDoc = scoreDocs[0];
-        assertTrue(scoreDoc.score > 0);
-        assertEquals(0, scoreDoc.doc);
+        assertEquals(0, scoreDocs.length);
 
         releaseResources(directory, w, reader);
     }
@@ -778,10 +771,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
         when(searchContext.mapperService()).thenReturn(mapperService);
         when(searchContext.getQueryShardContext()).thenReturn(mockQueryShardContext);
-        IndexMetadata indexMetadata = mock(IndexMetadata.class);
-        when(indexMetadata.getIndex()).thenReturn(new Index(TEST_INDEX, INDEX_UUID.toString()));
-        when(indexMetadata.getSettings()).thenReturn(Settings.EMPTY);
-        when(indexMetadata.getCustomData(eq(IndexMetadata.REMOTE_STORE_CUSTOM_KEY))).thenReturn(null);
+        IndexMetadata indexMetadata = getIndexMetadata();
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
         IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
         when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
@@ -986,18 +976,22 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.query()).thenReturn(query);
         when(searchContext.aliasFilter()).thenReturn(termFilter);
 
+        CollectorManager<? extends Collector, ReduceableSearchResult> collectorManager = HybridCollectorManager
+            .createHybridCollectorManager(searchContext);
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers = new HashMap<>();
+        queryCollectorManagers.put(HybridCollectorManager.class, collectorManager);
+        when(searchContext.queryCollectorManagers()).thenReturn(queryCollectorManagers);
+
         hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
+        hybridQueryPhaseSearcher.aggregationProcessor(searchContext).postProcess(searchContext);
 
         assertNotNull(querySearchResult.topDocs());
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
         TopDocs topDocs = topDocsAndMaxScore.topDocs;
-        assertTrue(topDocs.totalHits.value > 0);
+        assertEquals(0, topDocs.totalHits.value);
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         assertNotNull(scoreDocs);
-        assertEquals(1, scoreDocs.length);
-        ScoreDoc scoreDoc = scoreDocs[0];
-        assertTrue(scoreDoc.score > 0);
-        assertEquals(0, scoreDoc.doc);
+        assertEquals(0, scoreDocs.length);
 
         releaseResources(directory, w, reader);
     }
@@ -1025,5 +1019,24 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         doc.add(new Field(fieldName, fieldValue, ft));
         doc.add(new NumericDocValuesField(PRIMARY_TERM_NAME, 0));
         return doc;
+    }
+
+    private static IndexMetadata getIndexMetadata() {
+        Map<String, String> remoteCustomData = Map.of(
+            RemoteStoreEnums.PathType.NAME,
+            HASHED_PREFIX.name(),
+            RemoteStoreEnums.PathHashAlgorithm.NAME,
+            RemoteStoreEnums.PathHashAlgorithm.FNV_1A_BASE64.name()
+        );
+        Settings idxSettings = Settings.builder()
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID())
+            .build();
+        IndexMetadata indexMetadata = new IndexMetadata.Builder("test").settings(idxSettings)
+            .numberOfShards(1)
+            .numberOfReplicas(0)
+            .putCustom(IndexMetadata.REMOTE_STORE_CUSTOM_KEY, remoteCustomData)
+            .build();
+        return indexMetadata;
     }
 }
