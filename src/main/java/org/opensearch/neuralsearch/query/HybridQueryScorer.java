@@ -15,14 +15,19 @@ import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.TwoPhaseIterator;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.util.PriorityQueue;
+import org.opensearch.neuralsearch.executors.HybridQueryExecutor;
+import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollector;
 import org.opensearch.neuralsearch.search.HybridDisiWrapper;
 
 import java.io.IOException;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Callable;
 
 /**
  * Class abstracts functionality of Scorer for hybrid query. When iterating over documents in increasing
@@ -183,16 +188,35 @@ public final class HybridQueryScorer extends Scorer {
     public float[] hybridScores() throws IOException {
         float[] scores = new float[numSubqueries];
         DisiWrapper topList = subScorersPQ.topList();
+        HybridQueryScoresCollectionManager manager = new HybridQueryScoresCollectionManager();
+        List<Callable<Void>> scoreTasks = new ArrayList<>();
+        List<HybridQueryExecutorCollector<?, Map.Entry<Integer, Float>>> collectors = new ArrayList<>();
         for (HybridDisiWrapper disiWrapper = (HybridDisiWrapper) topList; disiWrapper != null; disiWrapper =
             (HybridDisiWrapper) disiWrapper.next) {
             // check if this doc has match in the subQuery. If not, add score as 0.0 and continue
-            Scorer scorer = disiWrapper.scorer;
+            final Scorer scorer = disiWrapper.scorer;
             if (scorer.docID() == DocIdSetIterator.NO_MORE_DOCS) {
                 continue;
             }
-            scores[disiWrapper.getSubQueryIndex()] = scorer.score();
+            HybridQueryExecutorCollector<?, Map.Entry<Integer, Float>> collector = manager.newCollector();
+            collectors.add(collector);
+            final Integer index = disiWrapper.getSubQueryIndex();
+            scoreTasks.add(() -> score(scorer, index, collector));
         }
+        HybridQueryExecutor.getExecutor().invokeAll(scoreTasks);
+        manager.updateScores(collectors, scores);
         return scores;
+    }
+
+    private Void score(Scorer scorer, Integer index, HybridQueryExecutorCollector<?, Map.Entry<Integer, Float>> collector) {
+        collector.collect(unUsed -> {
+            try {
+                return new AbstractMap.SimpleEntry(index, scorer.score());
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
+        return null;
     }
 
     private DisiPriorityQueue initializeSubScorersPQ() {

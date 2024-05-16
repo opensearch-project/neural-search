@@ -49,7 +49,7 @@ public class HybridQueryExecutor {
      * @return the executor service
      */
     public static TaskExecutor getExecutor() {
-        return taskExecutor;
+        return taskExecutor != null ? taskExecutor : new TaskExecutor(Runnable::run);
     }
 
     @VisibleForTesting

@@ -11,8 +11,8 @@ import org.apache.lucene.search.ScorerSupplier;
 import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollector;
 import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollectorManager;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 public class HybridQueryScoreSupplierCollectorManager
@@ -27,10 +27,9 @@ public class HybridQueryScoreSupplierCollectorManager
     }
 
     public List<ScorerSupplier> mergeScoreSuppliers(List<HybridQueryExecutorCollector<LeafReaderContext, ScorerSupplier>> collectors) {
-        List<ScorerSupplier> scorerSuppliers = new ArrayList<>();
-        for (HybridQueryExecutorCollector<?, ScorerSupplier> collector : collectors) {
-            scorerSuppliers.add(collector.getResult());
-        }
+        List<ScorerSupplier> scorerSuppliers = collectors.stream()
+            .map(HybridQueryExecutorCollector::getResult)
+            .collect(Collectors.toList());
         return scorerSuppliers;
     }
 }
