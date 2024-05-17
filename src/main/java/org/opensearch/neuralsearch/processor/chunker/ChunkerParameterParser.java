@@ -40,24 +40,6 @@ public final class ChunkerParameterParser {
     }
 
     /**
-     * Parse integer type parameter without default value
-     * Throw IllegalArgumentException if parameter is missing or is not an integer.
-     */
-    public static int parseIntegerParameter(final Map<String, Object> parameters, final String fieldName) {
-        if (!parameters.containsKey(fieldName)) {
-            throw new IllegalArgumentException(String.format(Locale.ROOT, "Parameter [%s] is missing", fieldName));
-        }
-        String fieldValueString = parameters.get(fieldName).toString();
-        try {
-            return NumberUtils.createInteger(fieldValueString);
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "Parameter [%s] must be of %s type", fieldName, Integer.class.getName())
-            );
-        }
-    }
-
-    /**
      * Parse integer type parameter.
      * Throw IllegalArgumentException if both parameter and default value is missing or parameter is not an integer.
      */
