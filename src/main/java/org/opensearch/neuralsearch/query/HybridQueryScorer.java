@@ -198,7 +198,7 @@ public final class HybridQueryScorer extends Scorer {
             if (scorer.docID() == DocIdSetIterator.NO_MORE_DOCS) {
                 continue;
             }
-            HybridQueryExecutorCollector<?, Map.Entry<Integer, Float>> collector = manager.newCollector();
+            final HybridQueryExecutorCollector<?, Map.Entry<Integer, Float>> collector = manager.newCollector();
             collectors.add(collector);
             final Integer index = disiWrapper.getSubQueryIndex();
             scoreTasks.add(() -> score(scorer, index, collector));

@@ -4,10 +4,10 @@
  */
 package org.opensearch.neuralsearch.executors;
 
-import com.google.common.annotations.VisibleForTesting;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
+import lombok.experimental.PackagePrivate;
 import org.apache.lucene.search.TaskExecutor;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.concurrent.OpenSearchExecutors;
@@ -16,10 +16,20 @@ import org.opensearch.threadpool.FixedExecutorBuilder;
 import org.opensearch.threadpool.ThreadPool;
 
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
-public class HybridQueryExecutor {
+public final class HybridQueryExecutor {
     private static final String HYBRID_QUERY_EXEC_THREAD_POOL_NAME = "_plugin_neural_search_hybrid_query_executor";
     private static final Integer HYBRID_QUERY_EXEC_THREAD_POOL_QUEUE_SIZE = 1000;
     private static TaskExecutor taskExecutor;
+
+    /**
+     * Will allocate twice the default allocated processor. To avoid 0, we will return 2 as minimum
+     * processor count
+     */
+    private static int allocateTwiceDefaultProcessors(final Settings settings) {
+        final int allocatedProcessors = OpenSearchExecutors.allocatedProcessors(settings);
+        int processorCount = Math.max(2 * allocatedProcessors, 2);
+        return Math.min(processorCount, HYBRID_QUERY_EXEC_THREAD_POOL_QUEUE_SIZE);
+    }
 
     /**
      * Provide fixed executor builder to use for hybrid query executors
@@ -27,7 +37,8 @@ public class HybridQueryExecutor {
      * @return the executor builder for hybrid query's custom thread pool.
      */
     public static ExecutorBuilder getExecutorBuilder(final Settings settings) {
-        final int allocatedProcessors = OpenSearchExecutors.allocatedProcessors(settings);
+
+        int allocatedProcessors = allocateTwiceDefaultProcessors(settings);
         return new FixedExecutorBuilder(
             settings,
             HYBRID_QUERY_EXEC_THREAD_POOL_NAME,
@@ -43,8 +54,10 @@ public class HybridQueryExecutor {
      */
     public static void initialize(@NonNull ThreadPool threadPool) {
         if (threadPool == null) {
-            throw new IllegalArgumentException("Argument thread-pool to Hybrid Query Executor cannot be null." +
-                "This is required to build executor to run actions in parallel");
+            throw new IllegalArgumentException(
+                "Argument thread-pool to Hybrid Query Executor cannot be null."
+                    + "This is required to build executor to run actions in parallel"
+            );
         }
         taskExecutor = new TaskExecutor(threadPool.executor(HYBRID_QUERY_EXEC_THREAD_POOL_NAME));
     }
@@ -57,7 +70,7 @@ public class HybridQueryExecutor {
         return taskExecutor != null ? taskExecutor : new TaskExecutor(Runnable::run);
     }
 
-    @VisibleForTesting
+    @PackagePrivate
     public static String getThreadPoolName() {
         return HYBRID_QUERY_EXEC_THREAD_POOL_NAME;
     }

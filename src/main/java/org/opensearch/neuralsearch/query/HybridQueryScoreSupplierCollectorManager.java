@@ -13,7 +13,6 @@ import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollectorManager
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * HybridQueryScoreSupplierCollectorManager is responsible for creating {@link HybridQueryExecutorCollector} instances.
@@ -21,7 +20,7 @@ import java.util.stream.Collectors;
  * given weight.
  */
 @RequiredArgsConstructor
-public class HybridQueryScoreSupplierCollectorManager
+public final class HybridQueryScoreSupplierCollectorManager
     implements
         HybridQueryExecutorCollectorManager<HybridQueryExecutorCollector<LeafReaderContext, ScorerSupplier>> {
 

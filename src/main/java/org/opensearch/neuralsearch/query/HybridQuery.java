@@ -111,11 +111,11 @@ public final class HybridQuery extends Query implements Iterable<Query> {
             return new MatchNoDocsQuery("empty HybridQuery");
         }
 
-        HybridQueryRewriteCollectorManager manager = new HybridQueryRewriteCollectorManager(indexSearcher);
-        List<Callable<Void>> queryRewriteTasks = new ArrayList<>();
-        List<HybridQueryExecutorCollector<IndexSearcher, Map.Entry<Query, Boolean>>> collectors = new ArrayList<>();
+        final HybridQueryRewriteCollectorManager manager = new HybridQueryRewriteCollectorManager(indexSearcher);
+        final List<Callable<Void>> queryRewriteTasks = new ArrayList<>();
+        final List<HybridQueryExecutorCollector<IndexSearcher, Map.Entry<Query, Boolean>>> collectors = new ArrayList<>();
         for (Query subQuery : subQueries) {
-            HybridQueryExecutorCollector<IndexSearcher, Map.Entry<Query, Boolean>> collector = manager.newCollector();
+            final HybridQueryExecutorCollector<IndexSearcher, Map.Entry<Query, Boolean>> collector = manager.newCollector();
             collectors.add(collector);
             queryRewriteTasks.add(() -> rewriteQuery(subQuery, collector));
         }

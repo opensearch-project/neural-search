@@ -14,7 +14,7 @@ import java.util.function.Function;
  * Query phase to parallelize sub query's action to improve latency
  */
 @RequiredArgsConstructor(staticName = "newCollector")
-public class HybridQueryExecutorCollector<I, R> {
+public final class HybridQueryExecutorCollector<I, R> {
 
     private final I param;
     @Getter

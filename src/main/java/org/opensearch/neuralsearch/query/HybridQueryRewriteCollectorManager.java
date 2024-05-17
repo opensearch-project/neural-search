@@ -14,7 +14,6 @@ import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollectorManager
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * {@link HybridQueryRewriteCollectorManager} is responsible for creating {@link HybridQueryExecutorCollector}
@@ -22,9 +21,7 @@ import java.util.stream.Collectors;
  * {@link Query} using {@link IndexSearcher}
  */
 @RequiredArgsConstructor
-public class HybridQueryRewriteCollectorManager
-    implements
-        HybridQueryExecutorCollectorManager<HybridQueryExecutorCollector> {
+public final class HybridQueryRewriteCollectorManager implements HybridQueryExecutorCollectorManager<HybridQueryExecutorCollector> {
 
     private @NonNull IndexSearcher searcher;
 
