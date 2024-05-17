@@ -19,7 +19,7 @@ import java.util.Map;
 @NoArgsConstructor
 public class HybridQueryScoresCollectionManager
     implements
-        HybridQueryExecutorCollectorManager<HybridQueryExecutorCollector<?, Map.Entry<Integer, Float>>, Float> {
+        HybridQueryExecutorCollectorManager<HybridQueryExecutorCollector<?, Map.Entry<Integer, Float>>> {
 
     /**
      * Returns new {@link HybridQueryExecutorCollector} instance to facilitate parallel execution

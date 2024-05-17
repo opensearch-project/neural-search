@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class HybridQueryRewriteCollectorManager
     implements
-        HybridQueryExecutorCollectorManager<HybridQueryExecutorCollector, Map.Entry<Query, Boolean>> {
+        HybridQueryExecutorCollectorManager<HybridQueryExecutorCollector> {
 
     private @NonNull IndexSearcher searcher;
 
