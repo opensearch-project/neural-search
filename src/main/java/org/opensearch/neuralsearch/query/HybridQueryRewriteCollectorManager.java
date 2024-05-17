@@ -11,6 +11,7 @@ import org.apache.lucene.search.Query;
 import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollector;
 import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollectorManager;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -42,7 +43,12 @@ public class HybridQueryRewriteCollectorManager
      * @return
      */
     public List<Query> getRewriteQueries(List<HybridQueryExecutorCollector<IndexSearcher, Map.Entry<Query, Boolean>>> collectors) {
-        return collectors.stream().map(collector -> collector.getResult().getKey()).collect(Collectors.toList());
+        List<Query> rewrittenQueries = new ArrayList<>();
+        for (HybridQueryExecutorCollector<IndexSearcher, Map.Entry<Query, Boolean>> collector : collectors) {
+            Query key = collector.getResult().getKey();
+            rewrittenQueries.add(key);
+        }
+        return rewrittenQueries;
     }
 
     /**
@@ -52,7 +58,12 @@ public class HybridQueryRewriteCollectorManager
      */
     public Boolean anyQueryRewrite(List<HybridQueryExecutorCollector<IndexSearcher, Map.Entry<Query, Boolean>>> collectors) {
         // return true if at least one query is rewritten
-        return collectors.stream().anyMatch(collector -> collector.getResult().getValue());
+        for (HybridQueryExecutorCollector<IndexSearcher, Map.Entry<Query, Boolean>> collector : collectors) {
+            if (collector.getResult().getValue()) {
+                return true;
+            }
+        }
+        return false;
     }
 
 }
