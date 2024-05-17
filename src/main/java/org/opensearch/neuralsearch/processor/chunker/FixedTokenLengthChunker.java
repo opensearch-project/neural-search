@@ -14,10 +14,10 @@ import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
 import org.opensearch.action.admin.indices.analyze.AnalyzeAction.AnalyzeToken;
 import static org.opensearch.action.admin.indices.analyze.TransportAnalyzeAction.analyze;
-import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseStringParameter;
-import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseDoubleParameter;
-import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseIntegerParameter;
-import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parsePositiveIntegerParameter;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseInteger;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseStringWithDefault;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseDoubleWithDefault;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parsePositiveIntegerWithDefault;
 
 /**
  * The implementation {@link Chunker} for fixed token length algorithm.
@@ -79,9 +79,9 @@ public final class FixedTokenLengthChunker implements Chunker {
      */
     @Override
     public void parseParameters(Map<String, Object> parameters) {
-        this.tokenLimit = parsePositiveIntegerParameter(parameters, TOKEN_LIMIT_FIELD, DEFAULT_TOKEN_LIMIT);
-        this.overlapRate = parseDoubleParameter(parameters, OVERLAP_RATE_FIELD, DEFAULT_OVERLAP_RATE);
-        this.tokenizer = parseStringParameter(parameters, TOKENIZER_FIELD, DEFAULT_TOKENIZER);
+        this.tokenLimit = parsePositiveIntegerWithDefault(parameters, TOKEN_LIMIT_FIELD, DEFAULT_TOKEN_LIMIT);
+        this.overlapRate = parseDoubleWithDefault(parameters, OVERLAP_RATE_FIELD, DEFAULT_OVERLAP_RATE);
+        this.tokenizer = parseStringWithDefault(parameters, TOKENIZER_FIELD, DEFAULT_TOKENIZER);
         if (overlapRate < OVERLAP_RATE_LOWER_BOUND || overlapRate > OVERLAP_RATE_UPPER_BOUND) {
             throw new IllegalArgumentException(
                 String.format(
@@ -118,9 +118,9 @@ public final class FixedTokenLengthChunker implements Chunker {
      */
     @Override
     public List<String> chunk(final String content, final Map<String, Object> runtimeParameters) {
-        int maxTokenCount = parsePositiveIntegerParameter(runtimeParameters, MAX_TOKEN_COUNT_FIELD, null);
-        int runtimeMaxChunkLimit = parseIntegerParameter(runtimeParameters, MAX_CHUNK_LIMIT_FIELD, null);
-        int chunkStringCount = parseIntegerParameter(runtimeParameters, CHUNK_STRING_COUNT_FIELD, null);
+        int maxTokenCount = parseInteger(runtimeParameters, MAX_TOKEN_COUNT_FIELD);
+        int runtimeMaxChunkLimit = parseInteger(runtimeParameters, MAX_CHUNK_LIMIT_FIELD);
+        int chunkStringCount = parseInteger(runtimeParameters, CHUNK_STRING_COUNT_FIELD);
 
         List<AnalyzeToken> tokens = tokenize(content, tokenizer, maxTokenCount);
         List<String> chunkResult = new ArrayList<>();

@@ -8,8 +8,8 @@ import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
 
-import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseIntegerParameter;
-import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseStringParameter;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseInteger;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseStringWithDefault;
 
 /**
  * The implementation {@link Chunker} for delimiter algorithm
@@ -38,7 +38,7 @@ public final class DelimiterChunker implements Chunker {
      */
     @Override
     public void parseParameters(Map<String, Object> parameters) {
-        this.delimiter = parseStringParameter(parameters, DELIMITER_FIELD, DEFAULT_DELIMITER);
+        this.delimiter = parseStringWithDefault(parameters, DELIMITER_FIELD, DEFAULT_DELIMITER);
     }
 
     /**
@@ -51,8 +51,8 @@ public final class DelimiterChunker implements Chunker {
      */
     @Override
     public List<String> chunk(final String content, final Map<String, Object> runtimeParameters) {
-        int runtimeMaxChunkLimit = parseIntegerParameter(runtimeParameters, MAX_CHUNK_LIMIT_FIELD, null);
-        int chunkStringCount = parseIntegerParameter(runtimeParameters, CHUNK_STRING_COUNT_FIELD, null);
+        int runtimeMaxChunkLimit = parseInteger(runtimeParameters, MAX_CHUNK_LIMIT_FIELD);
+        int chunkStringCount = parseInteger(runtimeParameters, CHUNK_STRING_COUNT_FIELD);
 
         List<String> chunkResult = new ArrayList<>();
         int start = 0, end;
