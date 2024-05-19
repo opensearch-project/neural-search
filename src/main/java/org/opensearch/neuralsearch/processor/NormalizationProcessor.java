@@ -56,6 +56,12 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
             log.debug("Query results are not compatible with normalization processor");
             return;
         }
+
+        // boolean isPagingEnabled = false;
+        // Object[] searchAfter = searchPhaseContext.getRequest().source().searchAfter();
+        // if (searchAfter != null) {
+        // isPagingEnabled = true;
+        // }
         List<QuerySearchResult> querySearchResults = getQueryPhaseSearchResults(searchPhaseResult);
         Optional<FetchSearchResult> fetchSearchResult = getFetchSearchResults(searchPhaseResult);
         normalizationWorkflow.execute(querySearchResults, fetchSearchResult, normalizationTechnique, combinationTechnique);

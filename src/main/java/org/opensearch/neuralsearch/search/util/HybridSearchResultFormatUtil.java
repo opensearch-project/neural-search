@@ -8,6 +8,9 @@ import java.util.Objects;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.FieldDoc;
+import org.apache.lucene.search.SortField;
+import org.apache.lucene.search.SortedNumericSortField;
+import org.apache.lucene.util.BytesRef;
 
 /**
  * Utility class for handling format of Hybrid Search query results
@@ -17,6 +20,7 @@ public class HybridSearchResultFormatUtil {
     // and OpenSearch convention is that scores are positive numbers
     public static final Float MAGIC_NUMBER_START_STOP = -9549511920.4881596047f;
     public static final Float MAGIC_NUMBER_DELIMITER = -4422440593.9791198149f;
+    public static final Float MAX_SCORE_WHEN_NO_HITS_FOUND = 0.0f;
 
     /**
      * Create ScoreDoc object that is a start/stop element in case of hybrid search query results
@@ -67,21 +71,36 @@ public class HybridSearchResultFormatUtil {
         return new FieldDoc(docId, MAGIC_NUMBER_DELIMITER, fields);
     }
 
-    /**
-     * Checking if passed scoreDocs object is a start/stop element in the list of hybrid query result scores
-     * @param fieldDoc
-     * @return true if it is a start/stop element
-     */
-    public static boolean isFieldDocHybridQueryStartStopElement(final FieldDoc fieldDoc) {
-        return Objects.nonNull(fieldDoc) && fieldDoc.doc >= 0 && Float.compare(fieldDoc.score, MAGIC_NUMBER_START_STOP) == 0;
-    }
+    public static Object[] createSortFieldsForDelimiterResults(final Object[] fields) {
+        Object SORT_FIELDS_FOR_DELIMITER_RESULTS;
+        final Object[] sortFields = new Object[fields.length];
+        for (int i = 0; i < fields.length; i++) {
+            SortField sortField = (SortField) fields[i];
+            SortField.Type type = sortField.getType();
+            if (sortField instanceof SortedNumericSortField) {
+                type = ((SortedNumericSortField) sortField).getNumericType();
+            }
+            switch (type) {
+                case DOC:
+                case INT:
+                    SORT_FIELDS_FOR_DELIMITER_RESULTS = 1;
+                    break;
+                case LONG:
+                    SORT_FIELDS_FOR_DELIMITER_RESULTS = 1L;
+                    break;
+                case SCORE:
+                case FLOAT:
+                    SORT_FIELDS_FOR_DELIMITER_RESULTS = 1.0f;
+                    break;
+                case DOUBLE:
+                    SORT_FIELDS_FOR_DELIMITER_RESULTS = 1.0;
+                    break;
+                default:
+                    SORT_FIELDS_FOR_DELIMITER_RESULTS = new BytesRef();
+            }
 
-    /**
-     * Checking if passed scoreDocs object is a delimiter element in the list of hybrid query result scores
-     * @param fieldDoc
-     * @return true if it is a delimiter element
-     */
-    public static boolean isFieldDocHybridQueryDelimiterElement(final FieldDoc fieldDoc) {
-        return Objects.nonNull(fieldDoc) && fieldDoc.doc >= 0 && Float.compare(fieldDoc.score, MAGIC_NUMBER_DELIMITER) == 0;
+            sortFields[i] = SORT_FIELDS_FOR_DELIMITER_RESULTS;
+        }
+        return sortFields;
     }
 }

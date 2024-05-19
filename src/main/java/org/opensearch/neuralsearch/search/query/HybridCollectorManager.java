@@ -21,7 +21,7 @@ import org.opensearch.common.Nullable;
 import org.opensearch.common.lucene.search.FilteredCollector;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
-import org.opensearch.neuralsearch.search.HybridSortedTopDocCollector;
+import org.opensearch.neuralsearch.search.HybridTopDocSortCollector;
 import org.opensearch.neuralsearch.search.HybridTopScoreDocCollector;
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.internal.ContextIndexSearcher;
@@ -45,6 +45,7 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createFieldDocStartStopElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createFieldDocDelimiterElementForHybridSearchResults;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createSortFieldsForDelimiterResults;
 
 /**
  * Collector manager based on HybridTopScoreDocCollector that allows users to parallelize counting the number of hits.
@@ -116,12 +117,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         Collector hybridcollector;
         if (sortAndFormats != null) {
             if (after == null) {
-                hybridcollector = new HybridSortedTopDocCollector.SimpleFieldCollector(
-                    numHits,
-                    hitsThresholdChecker,
-                    sortAndFormats.sort,
-                    null
-                );
+                hybridcollector = new HybridTopDocSortCollector.SimpleFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort);
             } else {
                 if (after.fields == null) {
                     throw new IllegalArgumentException("after.fields wasn't set; you must pass fillFields=true for the previous search");
@@ -133,11 +129,10 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                     );
                 }
 
-                hybridcollector = new HybridSortedTopDocCollector.PagingFieldCollector(
+                hybridcollector = new HybridTopDocSortCollector.PagingFieldCollector(
                     numHits,
                     hitsThresholdChecker,
                     sortAndFormats.sort,
-                    null,
                     after
                 );
             }
@@ -162,7 +157,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     @Override
     public ReduceableSearchResult reduce(Collection<Collector> collectors) {
         final List<HybridTopScoreDocCollector> hybridTopScoreDocCollectors = new ArrayList<>();
-        final List<HybridSortedTopDocCollector> hybridSortedTopDocCollectors = new ArrayList<>();
+        final List<HybridTopDocSortCollector> hybridSortedTopDocCollectors = new ArrayList<>();
         // check if collector for hybrid query scores is part of this search context. It can be wrapped into MultiCollectorWrapper
         // in case multiple collector managers are registered. We use hybrid scores collector to format scores into
         // format specific for hybrid search query: start, sub-query-delimiter, scores, stop
@@ -171,30 +166,30 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 for (final Collector sub : (((MultiCollectorWrapper) collector).getCollectors())) {
                     if (sub instanceof HybridTopScoreDocCollector) {
                         hybridTopScoreDocCollectors.add((HybridTopScoreDocCollector) sub);
-                    } else if (sub instanceof HybridSortedTopDocCollector.SimpleFieldCollector) {
-                        hybridSortedTopDocCollectors.add((HybridSortedTopDocCollector.SimpleFieldCollector) sub);
-                    } else if (sub instanceof HybridSortedTopDocCollector.PagingFieldCollector) {
-                        hybridSortedTopDocCollectors.add((HybridSortedTopDocCollector.PagingFieldCollector) sub);
+                    } else if (sub instanceof HybridTopDocSortCollector.SimpleFieldCollector) {
+                        hybridSortedTopDocCollectors.add((HybridTopDocSortCollector.SimpleFieldCollector) sub);
+                    } else if (sub instanceof HybridTopDocSortCollector.PagingFieldCollector) {
+                        hybridSortedTopDocCollectors.add((HybridTopDocSortCollector.PagingFieldCollector) sub);
                     }
                 }
             } else if (collector instanceof HybridTopScoreDocCollector) {
                 hybridTopScoreDocCollectors.add((HybridTopScoreDocCollector) collector);
-            } else if (collector instanceof HybridSortedTopDocCollector.SimpleFieldCollector) {
-                hybridSortedTopDocCollectors.add((HybridSortedTopDocCollector.SimpleFieldCollector) collector);
-            } else if (collector instanceof HybridSortedTopDocCollector.PagingFieldCollector) {
-                hybridSortedTopDocCollectors.add((HybridSortedTopDocCollector.PagingFieldCollector) collector);
+            } else if (collector instanceof HybridTopDocSortCollector.SimpleFieldCollector) {
+                hybridSortedTopDocCollectors.add((HybridTopDocSortCollector.SimpleFieldCollector) collector);
+            } else if (collector instanceof HybridTopDocSortCollector.PagingFieldCollector) {
+                hybridSortedTopDocCollectors.add((HybridTopDocSortCollector.PagingFieldCollector) collector);
             } else if (collector instanceof FilteredCollector
                 && ((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector) {
                     hybridTopScoreDocCollectors.add((HybridTopScoreDocCollector) ((FilteredCollector) collector).getCollector());
                 } else if (collector instanceof FilteredCollector
-                    && ((FilteredCollector) collector).getCollector() instanceof HybridSortedTopDocCollector.SimpleFieldCollector) {
+                    && ((FilteredCollector) collector).getCollector() instanceof HybridTopDocSortCollector.SimpleFieldCollector) {
                         hybridSortedTopDocCollectors.add(
-                            (HybridSortedTopDocCollector.SimpleFieldCollector) ((FilteredCollector) collector).getCollector()
+                            (HybridTopDocSortCollector.SimpleFieldCollector) ((FilteredCollector) collector).getCollector()
                         );
                     } else if (collector instanceof FilteredCollector
-                        && ((FilteredCollector) collector).getCollector() instanceof HybridSortedTopDocCollector.PagingFieldCollector) {
+                        && ((FilteredCollector) collector).getCollector() instanceof HybridTopDocSortCollector.PagingFieldCollector) {
                             hybridSortedTopDocCollectors.add(
-                                (HybridSortedTopDocCollector.PagingFieldCollector) ((FilteredCollector) collector).getCollector()
+                                (HybridTopDocSortCollector.PagingFieldCollector) ((FilteredCollector) collector).getCollector()
                             );
                         }
         }
@@ -211,23 +206,26 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         }
 
         if (!hybridSortedTopDocCollectors.isEmpty()) {
-            HybridSortedTopDocCollector hybridSortedTopScoreDocCollector = hybridSortedTopDocCollectors.stream()
+            HybridTopDocSortCollector hybridSortedTopScoreDocCollector = hybridSortedTopDocCollectors.stream()
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("cannot collect results of hybrid search query"));
 
-            HybridSortedTopDocCollector.SimpleFieldCollector simpleFieldCollector;
-            HybridSortedTopDocCollector.PagingFieldCollector pagingFieldCollector;
+            HybridTopDocSortCollector.SimpleFieldCollector simpleFieldCollector = null;
+            HybridTopDocSortCollector.PagingFieldCollector pagingFieldCollector = null;
             List<TopFieldDocs> topFieldDocs;
-            if (hybridSortedTopScoreDocCollector instanceof HybridSortedTopDocCollector.SimpleFieldCollector) {
-                simpleFieldCollector = (HybridSortedTopDocCollector.SimpleFieldCollector) hybridSortedTopScoreDocCollector;
+            long maxTotalHits;
+            if (hybridSortedTopScoreDocCollector instanceof HybridTopDocSortCollector.SimpleFieldCollector) {
+                simpleFieldCollector = (HybridTopDocSortCollector.SimpleFieldCollector) hybridSortedTopScoreDocCollector;
                 topFieldDocs = simpleFieldCollector.topDocs();
+                maxTotalHits = simpleFieldCollector.getTotalHits();
             } else {
-                pagingFieldCollector = (HybridSortedTopDocCollector.PagingFieldCollector) hybridSortedTopScoreDocCollector;
+                pagingFieldCollector = (HybridTopDocSortCollector.PagingFieldCollector) hybridSortedTopScoreDocCollector;
                 topFieldDocs = pagingFieldCollector.topDocs();
+                maxTotalHits = pagingFieldCollector.getTotalHits();
             }
 
             TopDocs newTopDocs = getNewTopFieldDocs(
-                getTopFieldTotalHits(this.trackTotalHitsUpTo, topFieldDocs, isSingleShard),
+                getTopFieldTotalHits(this.trackTotalHitsUpTo, topFieldDocs, isSingleShard, maxTotalHits),
                 topFieldDocs,
                 sortAndFormats.sort.getSort()
             );
@@ -343,42 +341,34 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             // ...
             // doc_id | magic_number_1
 
-            final Object[] dummySortObjects = new Object[sortFields.length];
-            Arrays.fill(dummySortObjects, 1.0);
-
+            final Object[] sortFieldsForDelimiterResults = createSortFieldsForDelimiterResults(sortFields);
             List<FieldDoc> result = new ArrayList<>();
-            // result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, new Object[] { 1 }));
-            result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, dummySortObjects));
+            result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, sortFieldsForDelimiterResults));
             for (TopFieldDocs topFieldDoc : topFieldDocs) {
                 if (Objects.isNull(topFieldDoc) || Objects.isNull(topFieldDoc.scoreDocs)) {
-                    result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, dummySortObjects));
+                    result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, sortFieldsForDelimiterResults));
                     continue;
                 }
-                FieldDoc fieldScoreDocs[] = new FieldDoc[topFieldDoc.scoreDocs.length];
-                int i = 0;
+
+                List<FieldDoc> fieldDocsPerQuery = new ArrayList<>();
                 for (ScoreDoc scoreDoc : topFieldDoc.scoreDocs) {
-                    if (scoreDoc instanceof FieldDoc) {
-                        fieldScoreDocs[i] = (FieldDoc) scoreDoc;
-                    }
-                    i++;
+                    fieldDocsPerQuery.add((FieldDoc) scoreDoc);
                 }
-                if (fieldScoreDocs.length > 0) {
-                    if (fieldScoreDocs[0] != null && fieldScoreDocs[0].fields != null) {
-                        result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, fieldScoreDocs[0].fields));
-                    }
-                } else {
-                    result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, dummySortObjects));
-                }
-                // result.addAll(Arrays.asList(topFieldDoc.scoreDocs));
-                result.addAll(Arrays.asList(fieldScoreDocs));
+                result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, sortFieldsForDelimiterResults));
+                result.addAll(fieldDocsPerQuery);
             }
-            result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, dummySortObjects));
+            result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, sortFieldsForDelimiterResults));
             fieldDocs = result.stream().map(doc -> new FieldDoc(doc.doc, doc.score, doc.fields, doc.shardIndex)).toArray(FieldDoc[]::new);
         }
         return new TopFieldDocs(totalHits, fieldDocs, sortFields);
     }
 
-    private TotalHits getTopFieldTotalHits(int trackTotalHitsUpTo, final List<TopFieldDocs> topFieldDocs, final boolean isSingleShard) {
+    private TotalHits getTopFieldTotalHits(
+        int trackTotalHitsUpTo,
+        final List<TopFieldDocs> topFieldDocs,
+        final boolean isSingleShard,
+        long maxTotalHits
+    ) {
         final TotalHits.Relation relation = trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED
             ? TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO
             : TotalHits.Relation.EQUAL_TO;
@@ -386,16 +376,20 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             return new TotalHits(0, relation);
         }
 
-        List<ScoreDoc[]> scoreDocs = topFieldDocs.stream()
-            .map(topdDoc -> topdDoc.scoreDocs)
-            .filter(Objects::nonNull)
-            .collect(Collectors.toList());
-        Set<Integer> uniqueDocIds = new HashSet<>();
-        for (ScoreDoc[] scoreDocsArray : scoreDocs) {
-            uniqueDocIds.addAll(Arrays.stream(scoreDocsArray).map(scoreDoc -> scoreDoc.doc).collect(Collectors.toList()));
-        }
-        long maxTotalHits = uniqueDocIds.size();
-
+        // long maxTotalHits=maxHits;
+        // if (simpleFieldCollector != null) {
+        // maxTotalHits = simpleFieldCollector.getTotalHits();
+        // } else {
+        // List<ScoreDoc[]> scoreDocs = topFieldDocs.stream()
+        // .map(topDoc -> topDoc.scoreDocs)
+        // .filter(Objects::nonNull)
+        // .collect(Collectors.toList());
+        // Set<Integer> uniqueDocIds = new HashSet<>();
+        // for (ScoreDoc[] scoreDocsArray : scoreDocs) {
+        // uniqueDocIds.addAll(Arrays.stream(scoreDocsArray).map(scoreDoc -> scoreDoc.doc).collect(Collectors.toList()));
+        // }
+        // maxTotalHits = uniqueDocIds.size();
+        // }
         return new TotalHits(maxTotalHits, relation);
     }
 

@@ -46,12 +46,8 @@ public class CompoundTopDocs {
 
     private void initialize(TotalHits totalHits, List<TopDocs> topDocs) {
         this.totalHits = totalHits;
-        if (topDocs.size() > 0) {
-            if (topDocs.get(0) != null && topDocs.get(0) instanceof TopFieldDocs) {
-                this.topDocs = topDocs.stream().map(topDoc -> (TopFieldDocs) topDoc).collect(Collectors.toList());
-            } else {
-                this.topDocs = topDocs;
-            }
+        if (!topDocs.isEmpty() && topDocs.get(0) instanceof TopFieldDocs) {
+            this.topDocs = topDocs.stream().map(topDoc -> (TopFieldDocs) topDoc).collect(Collectors.toList());
         } else {
             this.topDocs = topDocs;
         }
@@ -83,54 +79,61 @@ public class CompoundTopDocs {
      *  0, 9549511920.4881596047
      */
     public CompoundTopDocs(final TopDocs topDocs) {
+        boolean isSortApplied = false;
         if (topDocs instanceof TopFieldDocs) {
-            FieldDoc[] scoreDocs = Arrays.copyOf(topDocs.scoreDocs, topDocs.scoreDocs.length, FieldDoc[].class);
-            if (Objects.isNull(scoreDocs) || scoreDocs.length < 2) {
-                initialize(topDocs.totalHits, new ArrayList<>());
-                return;
-            }
-            // skipping first two elements, it's a start-stop element and delimiter for first series
-            List<TopDocs> topDocsList = new ArrayList<>();
-            List<FieldDoc> scoreDocList = new ArrayList<>();
-            for (int index = 2; index < scoreDocs.length; index++) {
-                // getting first element of score's series
-                FieldDoc scoreDoc = scoreDocs[index];
-                if (isHybridQueryDelimiterElement(scoreDoc) || isHybridQueryStartStopElement(scoreDoc)) {
-                    ScoreDoc[] subQueryScores = scoreDocList.toArray(new ScoreDoc[0]);
-                    TotalHits totalHits = new TotalHits(subQueryScores.length, TotalHits.Relation.EQUAL_TO);
-                    // TopDocs subQueryTopDocs = new TopDocs(totalHits, subQueryScores);
-                    TopDocs subQueryTopDocs = new TopFieldDocs(totalHits, subQueryScores, ((TopFieldDocs) topDocs).fields);
-                    topDocsList.add(subQueryTopDocs);
-                    scoreDocList.clear();
-                } else {
-                    scoreDocList.add(scoreDoc);
-                }
-            }
-            initialize(topDocs.totalHits, topDocsList);
-        } else {
-            ScoreDoc[] scoreDocs = topDocs.scoreDocs;
-            if (Objects.isNull(scoreDocs) || scoreDocs.length < 2) {
-                initialize(topDocs.totalHits, new ArrayList<>());
-                return;
-            }
-            // skipping first two elements, it's a start-stop element and delimiter for first series
-            List<TopDocs> topDocsList = new ArrayList<>();
-            List<ScoreDoc> scoreDocList = new ArrayList<>();
-            for (int index = 2; index < scoreDocs.length; index++) {
-                // getting first element of score's series
-                ScoreDoc scoreDoc = scoreDocs[index];
-                if (isHybridQueryDelimiterElement(scoreDoc) || isHybridQueryStartStopElement(scoreDoc)) {
-                    ScoreDoc[] subQueryScores = scoreDocList.toArray(new ScoreDoc[0]);
-                    TotalHits totalHits = new TotalHits(subQueryScores.length, TotalHits.Relation.EQUAL_TO);
-                    TopDocs subQueryTopDocs = new TopDocs(totalHits, subQueryScores);
-                    topDocsList.add(subQueryTopDocs);
-                    scoreDocList.clear();
-                } else {
-                    scoreDocList.add(scoreDoc);
-                }
-            }
-            initialize(topDocs.totalHits, topDocsList);
+            isSortApplied = true;
+            // FieldDoc[] scoreDocs = Arrays.copyOf(topDocs.scoreDocs, topDocs.scoreDocs.length, FieldDoc[].class);
+            // if (Objects.isNull(scoreDocs) || scoreDocs.length < 2) {
+            // initialize(topDocs.totalHits, new ArrayList<>());
+            // return;
+            // }
+            // // skipping first two elements, it's a start-stop element and delimiter for first series
+            // List<TopDocs> topDocsList = new ArrayList<>();
+            // List<FieldDoc> fieldDocList = new ArrayList<>();
+            // for (int index = 2; index < scoreDocs.length; index++) {
+            // // getting first element of score's series
+            // FieldDoc fieldDoc = scoreDocs[index];
+            // if (isFieldDocHybridQueryDelimiterElement(fieldDoc) || isFieldDocHybridQueryStartStopElement(fieldDoc)) {
+            // ScoreDoc[] subQueryScores = fieldDocList.toArray(new ScoreDoc[0]);
+            // TotalHits totalHits = new TotalHits(subQueryScores.length, TotalHits.Relation.EQUAL_TO);
+            // // TopDocs subQueryTopDocs = new TopDocs(totalHits, subQueryScores);
+            // TopDocs subQueryTopDocs = new TopFieldDocs(totalHits, subQueryScores, ((TopFieldDocs) topDocs).fields);
+            // topDocsList.add(subQueryTopDocs);
+            // fieldDocList.clear();
+            // } else {
+            // fieldDocList.add(fieldDoc);
+            // }
+            // }
+            // initialize(topDocs.totalHits, topDocsList);
         }
+        ScoreDoc[] scoreDocs = topDocs.scoreDocs;
+        if (Objects.isNull(scoreDocs) || scoreDocs.length < 2) {
+            initialize(topDocs.totalHits, new ArrayList<>());
+            return;
+        }
+        // skipping first two elements, it's a start-stop element and delimiter for first series
+        List<TopDocs> topDocsList = new ArrayList<>();
+        List<ScoreDoc> scoreDocList = new ArrayList<>();
+        for (int index = 2; index < scoreDocs.length; index++) {
+            // getting first element of score's series
+            ScoreDoc scoreDoc = scoreDocs[index];
+            if (isHybridQueryDelimiterElement(scoreDoc) || isHybridQueryStartStopElement(scoreDoc)) {
+                ScoreDoc[] subQueryScores = scoreDocList.toArray(new ScoreDoc[0]);
+                TotalHits totalHits = new TotalHits(subQueryScores.length, TotalHits.Relation.EQUAL_TO);
+                TopDocs subQueryTopDocs;
+                if (isSortApplied) {
+                    subQueryTopDocs = new TopFieldDocs(totalHits, subQueryScores, ((TopFieldDocs) topDocs).fields);
+                } else {
+                    subQueryTopDocs = new TopDocs(totalHits, subQueryScores);
+                }
+                topDocsList.add(subQueryTopDocs);
+                scoreDocList.clear();
+            } else {
+                scoreDocList.add(scoreDoc);
+            }
+        }
+        initialize(topDocs.totalHits, topDocsList);
+        // }
     }
 
     private List<ScoreDoc> cloneLargestScoreDocs(final List<TopDocs> docs) {
