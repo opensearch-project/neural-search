@@ -20,7 +20,6 @@ public final class ChunkerParameterParser {
 
     /**
      * Parse String type parameter.
-     * Return default value if the parameter is missing.
      * Throw IllegalArgumentException if parameter is not a string or an empty string.
      */
     public static String parseString(final Map<String, Object> parameters, final String fieldName) {
@@ -38,6 +37,7 @@ public final class ChunkerParameterParser {
 
     /**
      * Parse String type parameter.
+     * Return default value if the parameter is missing.
      * Throw IllegalArgumentException if parameter is not a string or an empty string.
      */
     public static String parseStringWithDefault(final Map<String, Object> parameters, final String fieldName, final String defaultValue) {
