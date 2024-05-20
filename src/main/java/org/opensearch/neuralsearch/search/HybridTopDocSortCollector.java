@@ -306,7 +306,7 @@ public abstract class HybridTopDocSortCollector implements Collector {
         final int numHits;
         // @Getter
         // private FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores;
-        Boolean searchSortPartOfIndexSort = null;
+        // Boolean searchSortPartOfIndexSort = null;
 
         public SimpleFieldCollector(int numHits, HitsThresholdChecker hitsThresholdChecker, Sort sort) {
             super(numHits, hitsThresholdChecker);
@@ -402,7 +402,7 @@ public abstract class HybridTopDocSortCollector implements Collector {
         final int numHits;
         // @Getter
         // private FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores;
-        Boolean searchSortPartOfIndexSort = null;
+        // Boolean searchSortPartOfIndexSort = null;
         final FieldDoc after;
 
         public PagingFieldCollector(int numHits, HitsThresholdChecker hitsThresholdChecker, Sort sort, @Nullable FieldDoc after) {
