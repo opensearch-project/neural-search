@@ -19,6 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Optimize parameter parsing in text chunking processor ([#733](https://github.com/opensearch-project/neural-search/pull/733))
 - Use lazy initialization for priority queue of hits and scores to improve latencies by 20% ([#746](https://github.com/opensearch-project/neural-search/pull/746))
 ### Bug Fixes
+- Fix multi node "no such index" error in text chunking processor ([#713](https://github.com/opensearch-project/neural-search/pull/713))
+- Fix BWC test failure in 2.13.0 in text chunking processor ([#752](https://github.com/opensearch-project/neural-search/pull/752))
 ### Infrastructure
 ### Documentation
 ### Maintenance
