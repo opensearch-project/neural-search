@@ -125,6 +125,12 @@ public abstract class InferenceProcessor extends AbstractProcessor {
         }
     }
 
+    /**
+     * This is the function which does actual inference work for batchExecute interface.
+     * @param inferenceList a list of String for inference.
+     * @param handler a callback handler to handle inference results which is a list of objects.
+     * @param onException an exception callback to handle exception.
+     */
     abstract void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException);
 
     @Override
@@ -157,6 +163,8 @@ public abstract class InferenceProcessor extends AbstractProcessor {
             handler.accept(ingestDocumentWrappers);
         }, exception -> {
             for (IngestDocumentWrapper ingestDocumentWrapper : ingestDocumentWrappers) {
+                // The IngestDocumentWrapper might already run into exception and not sent for inference. So here we only
+                // set exception to IngestDocumentWrapper which doesn't have exception before.
                 if (ingestDocumentWrapper.getException() == null) {
                     ingestDocumentWrapper.update(ingestDocumentWrapper.getIngestDocument(), exception);
                 }
