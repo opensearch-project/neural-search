@@ -4,9 +4,14 @@
  */
 package org.opensearch.neuralsearch.processor;
 
+import lombok.SneakyThrows;
 import org.opensearch.action.search.SearchRequest;
+import org.opensearch.common.SetOnce;
+import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.search.builder.SearchSourceBuilder;
+import org.opensearch.search.rescore.QueryRescorerBuilder;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.Collections;
@@ -68,6 +73,36 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         assertNotNull(searchRequest.source().rescores());
     }
 
+    public void testProcessRequest_whenTwoPhaseEnabledAndNestedBoolean_thenSuccess() throws Exception {
+        NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
+        NeuralSparseQueryBuilder neuralQueryBuilder = new NeuralSparseQueryBuilder();
+        BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
+        boolQueryBuilder.should(neuralQueryBuilder);
+        SearchRequest searchRequest = new SearchRequest();
+        searchRequest.source(new SearchSourceBuilder().query(boolQueryBuilder));
+        NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 4.0f, 10000);
+        processor.processRequest(searchRequest);
+        BoolQueryBuilder queryBuilder = (BoolQueryBuilder) searchRequest.source().query();
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = (NeuralSparseQueryBuilder) queryBuilder.should().get(0);
+        assertEquals(neuralSparseQueryBuilder.twoPhasePruneRatio(), 0.5f, 1e-3);
+        assertNotNull(searchRequest.source().rescores());
+    }
+
+    public void testProcessRequestWithRescorer_whenTwoPhaseEnabled_thenSuccess() throws Exception {
+        NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
+        NeuralSparseQueryBuilder neuralQueryBuilder = new NeuralSparseQueryBuilder();
+        SearchRequest searchRequest = new SearchRequest();
+        searchRequest.source(new SearchSourceBuilder().query(neuralQueryBuilder));
+        QueryRescorerBuilder queryRescorerBuilder = new QueryRescorerBuilder(new MatchAllQueryBuilder());
+        queryRescorerBuilder.setRescoreQueryWeight(0f);
+        searchRequest.source().addRescorer(queryRescorerBuilder);
+        NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 4.0f, 10000);
+        processor.processRequest(searchRequest);
+        NeuralSparseQueryBuilder queryBuilder = (NeuralSparseQueryBuilder) searchRequest.source().query();
+        assertEquals(queryBuilder.twoPhasePruneRatio(), 0.5f, 1e-3);
+        assertNotNull(searchRequest.source().rescores());
+    }
+
     public void testProcessRequest_whenTwoPhaseDisabled_thenSuccess() throws Exception {
         NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
         NeuralSparseQueryBuilder neuralQueryBuilder = new NeuralSparseQueryBuilder();
@@ -78,6 +113,39 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         NeuralSparseQueryBuilder queryBuilder = (NeuralSparseQueryBuilder) searchRequest.source().query();
         assertEquals(queryBuilder.twoPhasePruneRatio(), 0f, 1e-3);
         assertNull(searchRequest.source().rescores());
+    }
+
+    @SneakyThrows
+    public void testProcessRequest_whenTwoPhaseEnabledAndOutOfWindowSize_thenThrowException() {
+        NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
+        NeuralSparseQueryBuilder neuralQueryBuilder = new NeuralSparseQueryBuilder();
+        SearchRequest searchRequest = new SearchRequest();
+        searchRequest.source(new SearchSourceBuilder().query(neuralQueryBuilder));
+        QueryRescorerBuilder queryRescorerBuilder = new QueryRescorerBuilder(new MatchAllQueryBuilder());
+        queryRescorerBuilder.setRescoreQueryWeight(0f);
+        searchRequest.source().addRescorer(queryRescorerBuilder);
+        NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 400.0f, 100);
+        expectThrows(IllegalArgumentException.class, () -> processor.processRequest(searchRequest));
+    }
+
+    @SneakyThrows
+    public void testGetSplitSetOnceByScoreThreshold() {
+        Map<String, Float> queryTokens = new HashMap<>();
+        for (int i = 0; i < 10; i++) {
+            queryTokens.put(String.valueOf(i), (float) i);
+        }
+        Map<Boolean, SetOnce<Map<String, Float>>> splitSetOnce = NeuralSparseTwoPhaseProcessor.getSplitSetOnceByScoreThreshold(
+            queryTokens,
+            0.4f
+        );
+        assertNotNull(splitSetOnce);
+        SetOnce<Map<String, Float>> upSet = splitSetOnce.get(true);
+        SetOnce<Map<String, Float>> downSet = splitSetOnce.get(false);
+        assertNotNull(upSet);
+        assertEquals(6, upSet.get().size());
+        assertNotNull(downSet);
+        assertEquals(4, downSet.get().size());
+        assertNotNull(splitSetOnce.get(false));
     }
 
     public void testType() throws Exception {

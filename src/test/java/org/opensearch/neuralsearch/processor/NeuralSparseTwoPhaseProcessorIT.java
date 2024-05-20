@@ -459,7 +459,6 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
         }
     }
 
-
     @SneakyThrows
     protected void initializeIndexIfNotExist(String indexName) {
         if (TEST_BASIC_INDEX_NAME.equals(indexName) && !indexExists(indexName)) {
