@@ -30,7 +30,8 @@ import static org.opensearch.neuralsearch.processor.chunker.Chunker.MAX_CHUNK_LI
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.DEFAULT_MAX_CHUNK_LIMIT;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.DISABLED_MAX_CHUNK_LIMIT;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.CHUNK_STRING_COUNT_FIELD;
-import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseIntegerParameter;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseInteger;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseIntegerWithDefault;
 
 /**
  * This processor is used for text chunking.
@@ -115,8 +116,8 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         }
         Map<String, Object> chunkerParameters = (Map<String, Object>) algorithmValue;
         // parse processor level max chunk limit
-        this.maxChunkLimit = parseIntegerParameter(chunkerParameters, MAX_CHUNK_LIMIT_FIELD, DEFAULT_MAX_CHUNK_LIMIT);
-        if (maxChunkLimit < 0 && maxChunkLimit != DISABLED_MAX_CHUNK_LIMIT) {
+        this.maxChunkLimit = parseIntegerWithDefault(chunkerParameters, MAX_CHUNK_LIMIT_FIELD, DEFAULT_MAX_CHUNK_LIMIT);
+        if (maxChunkLimit <= 0 && maxChunkLimit != DISABLED_MAX_CHUNK_LIMIT) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
@@ -309,10 +310,10 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         }
         List<String> contentResult = chunker.chunk(content, runTimeParameters);
         // update chunk_string_count for each string
-        int chunkStringCount = parseIntegerParameter(runTimeParameters, CHUNK_STRING_COUNT_FIELD, 1);
+        int chunkStringCount = parseInteger(runTimeParameters, CHUNK_STRING_COUNT_FIELD);
         runTimeParameters.put(CHUNK_STRING_COUNT_FIELD, chunkStringCount - 1);
         // update runtime max_chunk_limit if not disabled
-        int runtimeMaxChunkLimit = parseIntegerParameter(runTimeParameters, MAX_CHUNK_LIMIT_FIELD, maxChunkLimit);
+        int runtimeMaxChunkLimit = parseInteger(runTimeParameters, MAX_CHUNK_LIMIT_FIELD);
         if (runtimeMaxChunkLimit != DISABLED_MAX_CHUNK_LIMIT) {
             runTimeParameters.put(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit - contentResult.size());
         }
