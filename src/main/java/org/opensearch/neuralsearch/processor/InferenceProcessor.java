@@ -6,6 +6,8 @@ package org.opensearch.neuralsearch.processor;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +21,7 @@ import java.util.stream.IntStream;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
+import org.opensearch.common.collect.Tuple;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.env.Environment;
 import org.opensearch.index.mapper.MapperService;
@@ -146,8 +149,12 @@ public abstract class InferenceProcessor extends AbstractProcessor {
             handler.accept(ingestDocumentWrappers);
             return;
         }
+        Tuple<List<String>, Map<Integer, Integer>> sortedResult = sortByLengthAndReturnOriginalOrder(inferenceList);
+        inferenceList = sortedResult.v1();
+        Map<Integer, Integer> originalOrder = sortedResult.v2();
         doBatchExecute(inferenceList, results -> {
             int startIndex = 0;
+            results = restoreToOriginalOrder(results, originalOrder);
             for (DataForInference dataForInference : dataForInferences) {
                 if (dataForInference.getIngestDocumentWrapper().getException() != null || dataForInference.getInferenceList().isEmpty()) {
                     continue;
@@ -171,6 +178,31 @@ public abstract class InferenceProcessor extends AbstractProcessor {
             }
             handler.accept(ingestDocumentWrappers);
         });
+    }
+
+    private Tuple<List<String>, Map<Integer, Integer>> sortByLengthAndReturnOriginalOrder(List<String> inferenceList) {
+        List<Tuple<Integer, String>> docsWithIndex = new ArrayList<>();
+        for (int i = 0; i < inferenceList.size(); ++i) {
+            docsWithIndex.add(Tuple.tuple(i, inferenceList.get(i)));
+        }
+        docsWithIndex.sort(Comparator.comparingInt(t -> t.v2().length()));
+        List<String> sortedInferenceList = docsWithIndex.stream().map(Tuple::v2).collect(Collectors.toList());
+        Map<Integer, Integer> originalOrderMap = new HashMap<>();
+        for (int i = 0; i < docsWithIndex.size(); ++i) {
+            originalOrderMap.put(i, docsWithIndex.get(i).v1());
+        }
+        return Tuple.tuple(sortedInferenceList, originalOrderMap);
+    }
+
+    private List<?> restoreToOriginalOrder(List<?> results, Map<Integer, Integer> originalOrder) {
+        List<Object> sortedResults = new ArrayList<>();
+        sortedResults.addAll(results);
+        for (int i = 0; i < results.size(); ++i) {
+            if (!originalOrder.containsKey(i)) continue;
+            int oldIndex = originalOrder.get(i);
+            sortedResults.set(oldIndex, results.get(i));
+        }
+        return sortedResults;
     }
 
     private List<String> constructInferenceTexts(List<DataForInference> dataForInferences) {

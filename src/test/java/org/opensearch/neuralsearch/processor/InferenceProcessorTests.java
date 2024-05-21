@@ -119,6 +119,38 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
         assertEquals(4, inferenceTextCaptor.getValue().size());
     }
 
+    public void test_batchExecute_sort() {
+        final int docCount = 2;
+        List<List<Float>> inferenceResults = createMockVectorWithLength(100);
+        TestInferenceProcessor processor = new TestInferenceProcessor(inferenceResults, null);
+        List<IngestDocumentWrapper> wrapperList = createIngestDocumentWrappers(docCount);
+        wrapperList.get(0).getIngestDocument().setFieldValue("key1", Arrays.asList("aaaaa", "bbb"));
+        wrapperList.get(1).getIngestDocument().setFieldValue("key1", Arrays.asList("cc", "ddd"));
+        Consumer resultHandler = mock(Consumer.class);
+        processor.batchExecute(wrapperList, resultHandler);
+        ArgumentCaptor<List<IngestDocumentWrapper>> captor = ArgumentCaptor.forClass(List.class);
+        verify(resultHandler).accept(captor.capture());
+        assertEquals(docCount, captor.getValue().size());
+        for (int i = 0; i < docCount; ++i) {
+            assertNull(captor.getValue().get(i).getException());
+            assertEquals(wrapperList.get(i).getIngestDocument(), captor.getValue().get(i).getIngestDocument());
+        }
+        ArgumentCaptor<List<String>> inferenceTextCaptor = ArgumentCaptor.forClass(List.class);
+        verify(clientAccessor).inferenceSentences(anyString(), inferenceTextCaptor.capture(), any());
+        assertEquals(4, inferenceTextCaptor.getValue().size());
+        assertEquals(Arrays.asList("cc", "bbb", "ddd", "aaaaa"), inferenceTextCaptor.getValue());
+
+        List<?> doc1Embeddings = (List) (captor.getValue().get(0).getIngestDocument().getFieldValue("embedding_key1", List.class));
+        List<?> doc2Embeddings = (List) (captor.getValue().get(1).getIngestDocument().getFieldValue("embedding_key1", List.class));
+        assertEquals(2, doc1Embeddings.size());
+        assertEquals(2, doc2Embeddings.size());
+        // inferenceResults are results for sorted-by-length array ("cc", "bbb", "ddd", "aaaaa")
+        assertEquals(inferenceResults.get(3), ((Map) doc1Embeddings.get(0)).get("map_key"));
+        assertEquals(inferenceResults.get(1), ((Map) doc1Embeddings.get(1)).get("map_key"));
+        assertEquals(inferenceResults.get(0), ((Map) doc2Embeddings.get(0)).get("map_key"));
+        assertEquals(inferenceResults.get(2), ((Map) doc2Embeddings.get(1)).get("map_key"));
+    }
+
     public void test_doBatchExecute_exception() {
         final int docCount = 2;
         List<List<Float>> inferenceResults = createMockVectorWithLength(6);
