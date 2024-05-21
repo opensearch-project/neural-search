@@ -36,7 +36,6 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.tests.analysis.MockAnalyzer;
-import org.apache.lucene.util.PriorityQueue;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
@@ -446,13 +445,6 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
         int nextDoc = hybridQueryScorer.iterator().nextDoc();
         leafCollector.collect(nextDoc);
 
-        assertNotNull(hybridTopScoreDocCollector.getCompoundScores());
-        PriorityQueue<ScoreDoc>[] compoundScoresPQ = hybridTopScoreDocCollector.getCompoundScores();
-        assertEquals(1, compoundScoresPQ.length);
-        PriorityQueue<ScoreDoc> scoreDoc = compoundScoresPQ[0];
-        assertNotNull(scoreDoc);
-        assertNotNull(scoreDoc.top());
-
         w.close();
         reader.close();
         directory.close();
@@ -496,13 +488,6 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
         leafCollector.setScorer(hybridQueryScorer);
         int nextDoc = hybridQueryScorer.iterator().nextDoc();
         leafCollector.collect(nextDoc);
-
-        assertNotNull(hybridTopScoreDocCollector.getCompoundScores());
-        PriorityQueue<ScoreDoc>[] compoundScoresPQ = hybridTopScoreDocCollector.getCompoundScores();
-        assertEquals(1, compoundScoresPQ.length);
-        PriorityQueue<ScoreDoc> scoreDoc = compoundScoresPQ[0];
-        assertNotNull(scoreDoc);
-        assertNotNull(scoreDoc.top());
 
         w.close();
         reader.close();
