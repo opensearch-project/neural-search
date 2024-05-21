@@ -13,6 +13,7 @@ import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollectorManager
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * HybridQueryScoreSupplierCollectorManager is responsible for creating {@link HybridQueryExecutorCollector} instances.
@@ -37,16 +38,21 @@ public final class HybridQueryScoreSupplierCollectorManager
     }
 
     /**
-     * mergeScoreSuppliers will build list of scoreSupplier from given collections.
+     * mergeScoreSuppliers will build list of scoreSupplier from given list of collectors.
      * This method should be called after HybridQueryExecutorCollector's collect method is called.
+     * If collectors didn't have any result, null will be added to list.
      * @param collectors List of collectors which is used to perform collection in parallel
      * @return list of {@link ScorerSupplier}
      */
     public List<ScorerSupplier> mergeScoreSuppliers(List<HybridQueryExecutorCollector<LeafReaderContext, ScorerSupplier>> collectors) {
         List<ScorerSupplier> scorerSuppliers = new ArrayList<>();
         for (HybridQueryExecutorCollector<LeafReaderContext, ScorerSupplier> collector : collectors) {
-            ScorerSupplier result = collector.getResult();
-            scorerSuppliers.add(result);
+            Optional<ScorerSupplier> result = collector.getResult();
+            if (result.isPresent()) {
+                scorerSuppliers.add(result.get());
+            } else {
+                scorerSuppliers.add(null);
+            }
         }
         return scorerSuppliers;
     }

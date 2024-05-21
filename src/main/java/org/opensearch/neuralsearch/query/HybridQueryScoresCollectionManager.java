@@ -10,6 +10,7 @@ import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollectorManager
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * {@link HybridQueryScoresCollectionManager} is responsible for creating {@link HybridQueryExecutorCollector} instances.
@@ -39,7 +40,10 @@ public final class HybridQueryScoresCollectionManager
      */
     public void updateScores(final List<HybridQueryExecutorCollector<?, Map.Entry<Integer, Float>>> collectors, final float[] scores) {
         for (HybridQueryExecutorCollector<?, Map.Entry<Integer, Float>> collector : collectors) {
-            scores[collector.getResult().getKey()] = collector.getResult().getValue();
+            final Optional<Map.Entry<Integer, Float>> result = collector.getResult();
+            if (result.isPresent()) {
+                scores[result.get().getKey()] = result.get().getValue();
+            }
         }
     }
 }

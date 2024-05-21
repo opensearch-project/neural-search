@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.executors;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
+import java.util.Optional;
 import java.util.function.Function;
 
 /**
@@ -18,9 +19,9 @@ public final class HybridQueryExecutorCollector<I, R> {
 
     private final I param;
     @Getter
-    private R result = null;
+    private Optional<R> result = Optional.empty();
 
     public void collect(Function<I, R> action) {
-        result = action.apply(param);
+        result = Optional.ofNullable(action.apply(param));
     }
 }
