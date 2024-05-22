@@ -65,7 +65,7 @@ public final class HybridQueryRewriteCollectorManager implements HybridQueryExec
      *                   collect step.
      * @return at least one query is rewritten by any of the collectors
      */
-    public Boolean anyQueryRewrite(List<HybridQueryExecutorCollector<IndexSearcher, Map.Entry<Query, Boolean>>> collectors) {
+    public boolean anyQueryRewrite(List<HybridQueryExecutorCollector<IndexSearcher, Map.Entry<Query, Boolean>>> collectors) {
         // return true if at least one query is rewritten
         for (HybridQueryExecutorCollector<IndexSearcher, Map.Entry<Query, Boolean>> collector : collectors) {
             final Optional<Map.Entry<Query, Boolean>> result = collector.getResult();

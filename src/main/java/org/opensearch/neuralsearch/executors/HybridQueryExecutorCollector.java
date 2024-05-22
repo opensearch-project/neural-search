@@ -18,6 +18,8 @@ import java.util.function.Function;
 public final class HybridQueryExecutorCollector<I, R> {
 
     private final I param;
+
+    // getResult should only be called after collector's collect method is invoked.
     @Getter
     private Optional<R> result = Optional.empty();
 

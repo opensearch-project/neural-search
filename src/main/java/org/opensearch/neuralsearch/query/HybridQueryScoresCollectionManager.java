@@ -4,12 +4,12 @@
  */
 package org.opensearch.neuralsearch.query;
 
+import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollector;
 import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollectorManager;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -20,7 +20,7 @@ import java.util.Optional;
 @NoArgsConstructor
 public final class HybridQueryScoresCollectionManager
     implements
-        HybridQueryExecutorCollectorManager<HybridQueryExecutorCollector<?, Map.Entry<Integer, Float>>> {
+        HybridQueryExecutorCollectorManager<HybridQueryExecutorCollector<?, HybridQueryScoresCollectionManager.ScoreWrapperFromCollector>> {
 
     /**
      * Returns new {@link HybridQueryExecutorCollector} instance to facilitate parallel execution
@@ -28,7 +28,7 @@ public final class HybridQueryScoresCollectionManager
      * @return HybridQueryExecutorCollector instance
      */
     @Override
-    public HybridQueryExecutorCollector<?, Map.Entry<Integer, Float>> newCollector() {
+    public HybridQueryExecutorCollector<?, HybridQueryScoresCollectionManager.ScoreWrapperFromCollector> newCollector() {
         return HybridQueryExecutorCollector.newCollector(null);
     }
 
@@ -39,12 +39,18 @@ public final class HybridQueryScoresCollectionManager
      * @param collectors List of scorers where we want to calculate score.
      * @param scores Float array to combine scores from available scores
      */
-    public void updateScores(final List<HybridQueryExecutorCollector<?, Map.Entry<Integer, Float>>> collectors, final float[] scores) {
-        for (HybridQueryExecutorCollector<?, Map.Entry<Integer, Float>> collector : collectors) {
-            final Optional<Map.Entry<Integer, Float>> result = collector.getResult();
+    public void updateScores(final List<HybridQueryExecutorCollector<?, ScoreWrapperFromCollector>> collectors, final float[] scores) {
+        for (HybridQueryExecutorCollector<?, ScoreWrapperFromCollector> collector : collectors) {
+            final Optional<ScoreWrapperFromCollector> result = collector.getResult();
             if (result.isPresent()) {
-                scores[result.get().getKey()] = result.get().getValue();
+                scores[result.get().getIndex()] = result.get().getScore();
             }
         }
+    }
+
+    @Data(staticConstructor = "of")
+    static class ScoreWrapperFromCollector {
+        private final int index;
+        private final float score;
     }
 }
