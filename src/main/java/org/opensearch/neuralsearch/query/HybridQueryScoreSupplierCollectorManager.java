@@ -41,6 +41,7 @@ public final class HybridQueryScoreSupplierCollectorManager
      * mergeScoreSuppliers will build list of scoreSupplier from given list of collectors.
      * This method should be called after HybridQueryExecutorCollector's collect method is called.
      * If collectors didn't have any result, null will be added to list.
+     * This method must be called after collection is finished on all provided collectors.
      * @param collectors List of collectors which is used to perform collection in parallel
      * @return list of {@link ScorerSupplier}
      */

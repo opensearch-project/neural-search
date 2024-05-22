@@ -38,6 +38,7 @@ public final class HybridQueryRewriteCollectorManager implements HybridQueryExec
     /**
      * Returns list of {@link Query} that were rewritten by collectors. If collector doesn't
      * have any result, null will be inserted to the result.
+     * This method must be called after collection is finished on all provided collectors.
      * @param collectors list of collectors
      * @return list of {@link Query} that was rewritten by corresponding collector from input.
      */
@@ -58,7 +59,8 @@ public final class HybridQueryRewriteCollectorManager implements HybridQueryExec
     /**
      * Returns true if any of the {@link Query} from collector were actually rewritten.
      * If any of the given collector doesn't have result, it will be ignored as if that
-     * instance did not exist.
+     * instance did not exist. This method must be called after collection is finished
+     * on all provided collectors.
      * @param collectors List of collectors to check any of their query was rewritten during
      *                   collect step.
      * @return at least one query is rewritten by any of the collectors

@@ -35,6 +35,7 @@ public final class HybridQueryScoresCollectionManager
     /**
      * Update scores from collectors that was previously collected from scorer.
      * Collector will provide score and index of scorer to map it back to score array.
+     * This method must be called after collection is finished on all provided collectors.
      * @param collectors List of scorers where we want to calculate score.
      * @param scores Float array to combine scores from available scores
      */
