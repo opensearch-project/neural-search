@@ -5,12 +5,10 @@
 package org.opensearch.neuralsearch.processor.combination;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.apache.lucene.search.ScoreDoc;
@@ -80,16 +78,13 @@ public class ScoreCombiner {
         final CompoundTopDocs compoundQueryTopDocs,
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
         final List<Integer> sortedScores,
-        final int maxHits
+        final long maxHits
     ) {
-        ScoreDoc[] finalScoreDocs = new ScoreDoc[maxHits];
-
         int shardId = compoundQueryTopDocs.getScoreDocs().get(0).shardIndex;
-        for (int j = 0; j < maxHits && j < sortedScores.size(); j++) {
-            int docId = sortedScores.get(j);
-            finalScoreDocs[j] = new ScoreDoc(docId, combinedNormalizedScoresByDocId.get(docId), shardId);
-        }
-        return Arrays.stream(finalScoreDocs).collect(Collectors.toList());
+        return sortedScores.stream()
+            .limit(maxHits)
+            .map(docId -> new ScoreDoc(docId, combinedNormalizedScoresByDocId.get(docId), shardId))
+            .collect(Collectors.toList());
     }
 
     public Map<Integer, float[]> getNormalizedScoresPerDocument(final List<TopDocs> topDocsPerSubQuery) {
