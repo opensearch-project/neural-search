@@ -12,6 +12,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import lombok.Getter;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.HitQueue;
@@ -35,7 +36,9 @@ public class HybridTopScoreDocCollector implements Collector {
     private int docBase;
     private final HitsThresholdChecker hitsThresholdChecker;
     private TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
-    private int[] totalHits;
+    @Getter
+    private int totalHits;
+    private int[] collectedHits;
     private final int numOfHits;
     private PriorityQueue<ScoreDoc>[] compoundScores;
 
@@ -94,7 +97,7 @@ public class HybridTopScoreDocCollector implements Collector {
                 if (Objects.isNull(compoundQueryScorer)) {
                     throw new IllegalArgumentException("scorers are null for all sub-queries in hybrid query");
                 }
-
+                totalHits++;
                 float[] subScoresByQuery = compoundQueryScorer.hybridScores();
                 // iterate over results for each query
                 if (compoundScores == null) {
@@ -102,7 +105,7 @@ public class HybridTopScoreDocCollector implements Collector {
                     for (int i = 0; i < subScoresByQuery.length; i++) {
                         compoundScores[i] = new HitQueue(numOfHits, false);
                     }
-                    totalHits = new int[subScoresByQuery.length];
+                    collectedHits = new int[subScoresByQuery.length];
                 }
                 for (int i = 0; i < subScoresByQuery.length; i++) {
                     float score = subScoresByQuery[i];
@@ -110,7 +113,7 @@ public class HybridTopScoreDocCollector implements Collector {
                     if (score == 0) {
                         continue;
                     }
-                    totalHits[i]++;
+                    collectedHits[i]++;
                     PriorityQueue<ScoreDoc> pq = compoundScores[i];
                     ScoreDoc currentDoc = new ScoreDoc(doc + docBase, score);
                     // this way we're inserting into heap and do nothing else unless we reach the capacity
@@ -135,7 +138,7 @@ public class HybridTopScoreDocCollector implements Collector {
             return new ArrayList<>();
         }
         final List<TopDocs> topDocs = IntStream.range(0, compoundScores.length)
-            .mapToObj(i -> topDocsPerQuery(0, Math.min(totalHits[i], compoundScores[i].size()), compoundScores[i], totalHits[i]))
+            .mapToObj(i -> topDocsPerQuery(0, Math.min(collectedHits[i], compoundScores[i].size()), compoundScores[i], collectedHits[i]))
             .collect(Collectors.toList());
         return topDocs;
     }

@@ -123,8 +123,8 @@ public class ScoreCombiner {
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
         final List<Integer> sortedScores
     ) {
-        // - count max number of hits among sub-queries
-        int maxHits = getMaxHits(topDocsPerSubQuery);
+        // - max number of hits will the same which are passed from QueryPhase
+        long maxHits = compoundQueryTopDocs.getTotalHits().value;
         // - update query search results with normalized scores
         compoundQueryTopDocs.setScoreDocs(
             getCombinedScoreDocs(compoundQueryTopDocs, combinedNormalizedScoresByDocId, sortedScores, maxHits)
@@ -132,21 +132,7 @@ public class ScoreCombiner {
         compoundQueryTopDocs.setTotalHits(getTotalHits(topDocsPerSubQuery, maxHits));
     }
 
-    /**
-     * Get max hits as number of unique doc ids from results of all sub-queries
-     * @param topDocsPerSubQuery list of topDocs objects for one shard
-     * @return number of unique doc ids
-     */
-    protected int getMaxHits(final List<TopDocs> topDocsPerSubQuery) {
-        Set<Integer> docIds = topDocsPerSubQuery.stream()
-            .filter(topDocs -> Objects.nonNull(topDocs.scoreDocs))
-            .flatMap(topDocs -> Arrays.stream(topDocs.scoreDocs))
-            .map(scoreDoc -> scoreDoc.doc)
-            .collect(Collectors.toSet());
-        return docIds.size();
-    }
-
-    private TotalHits getTotalHits(final List<TopDocs> topDocsPerSubQuery, int maxHits) {
+    private TotalHits getTotalHits(final List<TopDocs> topDocsPerSubQuery, final long maxHits) {
         TotalHits.Relation totalHits = TotalHits.Relation.EQUAL_TO;
         if (topDocsPerSubQuery.stream().anyMatch(topDocs -> topDocs.totalHits.relation == TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO)) {
             totalHits = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;
