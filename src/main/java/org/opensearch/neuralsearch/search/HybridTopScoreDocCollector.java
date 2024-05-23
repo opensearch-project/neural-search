@@ -38,7 +38,7 @@ public class HybridTopScoreDocCollector implements Collector {
     private TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
     @Getter
     private int totalHits;
-    private int[] collectedHits;
+    private int[] collectedHitsPerSubQuery;
     private final int numOfHits;
     private PriorityQueue<ScoreDoc>[] compoundScores;
 
@@ -104,7 +104,7 @@ public class HybridTopScoreDocCollector implements Collector {
                     for (int i = 0; i < subScoresByQuery.length; i++) {
                         compoundScores[i] = new HitQueue(numOfHits, false);
                     }
-                    collectedHits = new int[subScoresByQuery.length];
+                    collectedHitsPerSubQuery = new int[subScoresByQuery.length];
                 }
                 // Increment total hit count which represents unique doc found on the shard
                 totalHits++;
@@ -114,7 +114,7 @@ public class HybridTopScoreDocCollector implements Collector {
                     if (score == 0) {
                         continue;
                     }
-                    collectedHits[i]++;
+                    collectedHitsPerSubQuery[i]++;
                     PriorityQueue<ScoreDoc> pq = compoundScores[i];
                     ScoreDoc currentDoc = new ScoreDoc(doc + docBase, score);
                     // this way we're inserting into heap and do nothing else unless we reach the capacity
@@ -139,7 +139,14 @@ public class HybridTopScoreDocCollector implements Collector {
             return new ArrayList<>();
         }
         final List<TopDocs> topDocs = IntStream.range(0, compoundScores.length)
-            .mapToObj(i -> topDocsPerQuery(0, Math.min(collectedHits[i], compoundScores[i].size()), compoundScores[i], collectedHits[i]))
+            .mapToObj(
+                i -> topDocsPerQuery(
+                    0,
+                    Math.min(collectedHitsPerSubQuery[i], compoundScores[i].size()),
+                    compoundScores[i],
+                    collectedHitsPerSubQuery[i]
+                )
+            )
             .collect(Collectors.toList());
         return topDocs;
     }
