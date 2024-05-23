@@ -499,7 +499,7 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
-    public void testTotalHitsCalculation_whenTotalHitsCollectedAtTopLevelInCollector_thenSuccessful() {
+    public void testTotalHitsCountValidation_whenTotalHitsCollectedAtTopLevelInCollector_thenSuccessful() {
         final Directory directory = newDirectory();
         final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
