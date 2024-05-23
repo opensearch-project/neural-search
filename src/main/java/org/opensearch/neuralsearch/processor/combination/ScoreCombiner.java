@@ -80,11 +80,13 @@ public class ScoreCombiner {
         final List<Integer> sortedScores,
         final long maxHits
     ) {
+        List<ScoreDoc> scoreDocs = new ArrayList<>();
         int shardId = compoundQueryTopDocs.getScoreDocs().get(0).shardIndex;
-        return sortedScores.stream()
-            .limit(maxHits)
-            .map(docId -> new ScoreDoc(docId, combinedNormalizedScoresByDocId.get(docId), shardId))
-            .collect(Collectors.toList());
+        for (int j = 0; j < maxHits && j < sortedScores.size(); j++) {
+            int docId = sortedScores.get(j);
+            scoreDocs.add(new ScoreDoc(docId, combinedNormalizedScoresByDocId.get(docId), shardId));
+        }
+        return scoreDocs;
     }
 
     public Map<Integer, float[]> getNormalizedScoresPerDocument(final List<TopDocs> topDocsPerSubQuery) {

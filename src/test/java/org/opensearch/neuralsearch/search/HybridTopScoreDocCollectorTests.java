@@ -4,6 +4,16 @@
  */
 package org.opensearch.neuralsearch.search;
 
+import org.apache.lucene.search.DocIdSetIterator;
+import org.apache.lucene.search.LeafCollector;
+import org.apache.lucene.search.MatchAllDocsQuery;
+import org.apache.lucene.search.MatchNoDocsQuery;
+import org.apache.lucene.search.Scorable;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.ScoreMode;
+import org.apache.lucene.search.Scorer;
+import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.Weight;
 import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -13,6 +23,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -24,16 +37,6 @@ import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.LeafCollector;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Scorable;
-import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.Scorer;
-import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.search.Weight;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.tests.analysis.MockAnalyzer;
 import org.opensearch.index.mapper.TextFieldMapper;
@@ -50,6 +53,7 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
     private static final String TEST_QUERY_TEXT = "greeting";
     private static final String TEST_QUERY_TEXT2 = "salute";
     private static final int NUM_DOCS = 4;
+    private static final int NUM_HITS = 1;
     private static final int TOTAL_HITS_UP_TO = 1000;
 
     private static final int DOC_ID_1 = RandomUtils.nextInt(0, 100_000);
@@ -489,6 +493,72 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
         int nextDoc = hybridQueryScorer.iterator().nextDoc();
         leafCollector.collect(nextDoc);
 
+        w.close();
+        reader.close();
+        directory.close();
+    }
+
+    @SneakyThrows
+    public void testTotalHitsCalculation_whenTotalHitsCollectedAtTopLevelInCollector_thenSuccessful() {
+        final Directory directory = newDirectory();
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
+        ft.setOmitNorms(random().nextBoolean());
+        ft.freeze();
+
+        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_1, FIELD_1_VALUE, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_2, FIELD_2_VALUE, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_3, FIELD_3_VALUE, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_4, FIELD_4_VALUE, ft));
+        w.commit();
+
+        DirectoryReader reader = DirectoryReader.open(w);
+
+        LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
+
+        HybridTopScoreDocCollector hybridTopScoreDocCollector = new HybridTopScoreDocCollector(
+            NUM_HITS,
+            new HitsThresholdChecker(Integer.MAX_VALUE)
+        );
+        LeafCollector leafCollector = hybridTopScoreDocCollector.getLeafCollector(leafReaderContext);
+        assertNotNull(leafCollector);
+
+        Weight weight = mock(Weight.class);
+        int[] docIdsForQuery1 = new int[] { DOC_ID_1, DOC_ID_2 };
+        Arrays.sort(docIdsForQuery1);
+        int[] docIdsForQuery2 = new int[] { DOC_ID_3, DOC_ID_4 };
+        Arrays.sort(docIdsForQuery2);
+        final List<Float> scores = Stream.generate(() -> random().nextFloat()).limit(NUM_DOCS).collect(Collectors.toList());
+        HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(
+            weight,
+            Arrays.asList(
+                scorer(docIdsForQuery1, scores, fakeWeight(new MatchAllDocsQuery())),
+                scorer(docIdsForQuery2, scores, fakeWeight(new MatchAllDocsQuery()))
+            )
+        );
+
+        leafCollector.setScorer(hybridQueryScorer);
+        DocIdSetIterator iterator = hybridQueryScorer.iterator();
+        int nextDoc = iterator.nextDoc();
+        while (nextDoc != NO_MORE_DOCS) {
+            leafCollector.collect(nextDoc);
+            nextDoc = iterator.nextDoc();
+        }
+
+        List<TopDocs> topDocs = hybridTopScoreDocCollector.topDocs();
+        long totalHits = hybridTopScoreDocCollector.getTotalHits();
+        List<ScoreDoc[]> scoreDocs = topDocs.stream()
+            .map(topdDoc -> topdDoc.scoreDocs)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toList());
+        Set<Integer> uniqueDocIds = new HashSet<>();
+        for (ScoreDoc[] scoreDocsArray : scoreDocs) {
+            uniqueDocIds.addAll(Arrays.stream(scoreDocsArray).map(scoreDoc -> scoreDoc.doc).collect(Collectors.toList()));
+        }
+        long maxTotalHits = uniqueDocIds.size();
+        assertNotEquals(maxTotalHits, totalHits);
+        assertEquals(4, totalHits);
         w.close();
         reader.close();
         directory.close();

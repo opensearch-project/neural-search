@@ -97,7 +97,6 @@ public class HybridTopScoreDocCollector implements Collector {
                 if (Objects.isNull(compoundQueryScorer)) {
                     throw new IllegalArgumentException("scorers are null for all sub-queries in hybrid query");
                 }
-                totalHits++;
                 float[] subScoresByQuery = compoundQueryScorer.hybridScores();
                 // iterate over results for each query
                 if (compoundScores == null) {
@@ -107,6 +106,8 @@ public class HybridTopScoreDocCollector implements Collector {
                     }
                     collectedHits = new int[subScoresByQuery.length];
                 }
+                // Increment total hit count which represents unique doc found on the shard
+                totalHits++;
                 for (int i = 0; i < subScoresByQuery.length; i++) {
                     float score = subScoresByQuery[i];
                     // if score is 0.0 there is no hits for that sub-query
