@@ -9,8 +9,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import lombok.Getter;
 import org.apache.lucene.index.LeafReaderContext;
@@ -138,16 +136,17 @@ public class HybridTopScoreDocCollector implements Collector {
         if (compoundScores == null) {
             return new ArrayList<>();
         }
-        final List<TopDocs> topDocs = IntStream.range(0, compoundScores.length)
-            .mapToObj(
-                i -> topDocsPerQuery(
+        final List<TopDocs> topDocs = new ArrayList<>();
+        for (int i = 0; i < compoundScores.length; i++) {
+            topDocs.add(
+                topDocsPerQuery(
                     0,
                     Math.min(collectedHitsPerSubQuery[i], compoundScores[i].size()),
                     compoundScores[i],
                     collectedHitsPerSubQuery[i]
                 )
-            )
-            .collect(Collectors.toList());
+            );
+        }
         return topDocs;
     }
 
