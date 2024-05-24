@@ -25,6 +25,9 @@ import org.opensearch.threadpool.ThreadPool;
 public final class HybridQueryExecutor {
     private static final String HYBRID_QUERY_EXEC_THREAD_POOL_NAME = "_plugin_neural_search_hybrid_query_executor";
     private static final Integer HYBRID_QUERY_EXEC_THREAD_POOL_QUEUE_SIZE = 1000;
+    private static final Integer MAX_THREAD_SIZE = 1000;
+    private static final Integer MIN_THREAD_SIZE = 2;
+    private static final Integer PROCESSOR_COUNT_MULTIPLIER = 2;
     private static TaskExecutor taskExecutor;
 
     /**
@@ -34,11 +37,11 @@ public final class HybridQueryExecutor {
      */
     public static ExecutorBuilder getExecutorBuilder(final Settings settings) {
 
-        int allocatedProcessors = allocateTwiceDefaultProcessors(settings);
+        int numberOfThreads = getFixedNumberOfThreadSize(settings);
         return new FixedExecutorBuilder(
             settings,
             HYBRID_QUERY_EXEC_THREAD_POOL_NAME,
-            allocatedProcessors,
+            numberOfThreads,
             HYBRID_QUERY_EXEC_THREAD_POOL_QUEUE_SIZE,
             HYBRID_QUERY_EXEC_THREAD_POOL_NAME
         );
@@ -72,12 +75,13 @@ public final class HybridQueryExecutor {
     }
 
     /**
-     * Will allocate twice the default allocated processor. To avoid 0, we will return 2 as minimum
-     * processor count
+     * Will use thread size as twice the default allocated processor. We selected twice allocated processor
+     * since hybrid query action is expected to be short-lived . This will balance throughput and latency
+     * To avoid out of range, we will return 2 as minimum processor count and 1000 as maximum thread size
      */
-    private static int allocateTwiceDefaultProcessors(final Settings settings) {
+    private static int getFixedNumberOfThreadSize(final Settings settings) {
         final int allocatedProcessors = OpenSearchExecutors.allocatedProcessors(settings);
-        int processorCount = Math.max(2 * allocatedProcessors, 2);
-        return Math.min(processorCount, Integer.MAX_VALUE);
+        int threadSize = Math.max(PROCESSOR_COUNT_MULTIPLIER * allocatedProcessors, MIN_THREAD_SIZE);
+        return Math.min(threadSize, MAX_THREAD_SIZE);
     }
 }

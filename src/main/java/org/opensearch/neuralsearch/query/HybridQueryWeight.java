@@ -71,6 +71,11 @@ public final class HybridQueryWeight extends Weight {
         return MatchesUtils.fromSubMatches(mis);
     }
 
+    /**
+     * Returns {@link HybridScorerSupplier} which contains list of {@link ScorerSupplier} from its
+     * sub queries. Here, add score supplier from individual sub query is parallelized and finally
+     * {@link HybridScorerSupplier} is created with list of {@link ScorerSupplier}
+     */
     @Override
     public ScorerSupplier scorerSupplier(LeafReaderContext context) throws IOException {
         HybridQueryScoreSupplierCollectorManager manager = new HybridQueryScoreSupplierCollectorManager(context);

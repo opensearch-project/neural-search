@@ -122,11 +122,11 @@ public final class HybridQuery extends Query implements Iterable<Query> {
 
         HybridQueryExecutor.getExecutor().invokeAll(queryRewriteTasks);
 
-        final boolean anyQueryRewrite = manager.anyQueryRewrite(collectors);
-        if (anyQueryRewrite == false) {
+        final boolean isAnyQueryRewritten = manager.anyQueryRewrite(collectors);
+        if (isAnyQueryRewritten == false) {
             return super.rewrite(indexSearcher);
         }
-        final List<Query> rewrittenSubQueries = manager.getRewriteQueries(collectors);
+        final List<Query> rewrittenSubQueries = manager.getQueriesAfterRewrite(collectors);
         return new HybridQuery(rewrittenSubQueries);
     }
 

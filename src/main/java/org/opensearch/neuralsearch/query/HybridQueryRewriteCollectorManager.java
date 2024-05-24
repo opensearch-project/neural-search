@@ -42,7 +42,7 @@ public final class HybridQueryRewriteCollectorManager implements HybridQueryExec
      * @param collectors list of collectors
      * @return list of {@link Query} that was rewritten by corresponding collector from input.
      */
-    public List<Query> getRewriteQueries(List<HybridQueryExecutorCollector<IndexSearcher, Map.Entry<Query, Boolean>>> collectors) {
+    public List<Query> getQueriesAfterRewrite(List<HybridQueryExecutorCollector<IndexSearcher, Map.Entry<Query, Boolean>>> collectors) {
         List<Query> rewrittenQueries = new ArrayList<>();
         for (HybridQueryExecutorCollector<IndexSearcher, Map.Entry<Query, Boolean>> collector : collectors) {
             if (collector.getResult().isPresent()) {
