@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.processor;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -156,7 +157,8 @@ public abstract class InferenceProcessor extends AbstractProcessor {
             int startIndex = 0;
             results = restoreToOriginalOrder(results, originalOrder);
             for (DataForInference dataForInference : dataForInferences) {
-                if (dataForInference.getIngestDocumentWrapper().getException() != null || dataForInference.getInferenceList().isEmpty()) {
+                if (dataForInference.getIngestDocumentWrapper().getException() != null
+                    || CollectionUtils.isEmpty(dataForInference.getInferenceList())) {
                     continue;
                 }
                 List<?> inferenceResults = results.subList(startIndex, startIndex + dataForInference.getInferenceList().size());
@@ -195,8 +197,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
     }
 
     private List<?> restoreToOriginalOrder(List<?> results, Map<Integer, Integer> originalOrder) {
-        List<Object> sortedResults = new ArrayList<>();
-        sortedResults.addAll(results);
+        List<Object> sortedResults = Arrays.asList(results.toArray());
         for (int i = 0; i < results.size(); ++i) {
             if (!originalOrder.containsKey(i)) continue;
             int oldIndex = originalOrder.get(i);
@@ -208,7 +209,8 @@ public abstract class InferenceProcessor extends AbstractProcessor {
     private List<String> constructInferenceTexts(List<DataForInference> dataForInferences) {
         List<String> inferenceTexts = new ArrayList<>();
         for (DataForInference dataForInference : dataForInferences) {
-            if (dataForInference.getIngestDocumentWrapper().getException() != null) {
+            if (dataForInference.getIngestDocumentWrapper().getException() != null
+                || CollectionUtils.isEmpty(dataForInference.getInferenceList())) {
                 continue;
             }
             inferenceTexts.addAll(dataForInference.getInferenceList());
