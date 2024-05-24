@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.executors;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Synchronized;
 
 import java.util.Optional;
 import java.util.function.Function;
@@ -20,9 +21,10 @@ public final class HybridQueryExecutorCollector<I, R> {
     private final I param;
 
     // getResult should only be called after collector's collect method is invoked.
-    @Getter
+    @Getter(onMethod_={@Synchronized})
     private Optional<R> result = Optional.empty();
 
+    @Synchronized
     public void collect(Function<I, R> action) {
         result = Optional.ofNullable(action.apply(param));
     }
