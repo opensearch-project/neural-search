@@ -9,9 +9,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
+import lombok.Getter;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.HitQueue;
@@ -35,7 +34,9 @@ public class HybridTopScoreDocCollector implements Collector {
     private int docBase;
     private final HitsThresholdChecker hitsThresholdChecker;
     private TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
-    private int[] totalHits;
+    @Getter
+    private int totalHits;
+    private int[] collectedHitsPerSubQuery;
     private final int numOfHits;
     private PriorityQueue<ScoreDoc>[] compoundScores;
 
@@ -94,7 +95,6 @@ public class HybridTopScoreDocCollector implements Collector {
                 if (Objects.isNull(compoundQueryScorer)) {
                     throw new IllegalArgumentException("scorers are null for all sub-queries in hybrid query");
                 }
-
                 float[] subScoresByQuery = compoundQueryScorer.hybridScores();
                 // iterate over results for each query
                 if (compoundScores == null) {
@@ -102,15 +102,17 @@ public class HybridTopScoreDocCollector implements Collector {
                     for (int i = 0; i < subScoresByQuery.length; i++) {
                         compoundScores[i] = new HitQueue(numOfHits, false);
                     }
-                    totalHits = new int[subScoresByQuery.length];
+                    collectedHitsPerSubQuery = new int[subScoresByQuery.length];
                 }
+                // Increment total hit count which represents unique doc found on the shard
+                totalHits++;
                 for (int i = 0; i < subScoresByQuery.length; i++) {
                     float score = subScoresByQuery[i];
                     // if score is 0.0 there is no hits for that sub-query
                     if (score == 0) {
                         continue;
                     }
-                    totalHits[i]++;
+                    collectedHitsPerSubQuery[i]++;
                     PriorityQueue<ScoreDoc> pq = compoundScores[i];
                     ScoreDoc currentDoc = new ScoreDoc(doc + docBase, score);
                     // this way we're inserting into heap and do nothing else unless we reach the capacity
@@ -134,9 +136,17 @@ public class HybridTopScoreDocCollector implements Collector {
         if (compoundScores == null) {
             return new ArrayList<>();
         }
-        final List<TopDocs> topDocs = IntStream.range(0, compoundScores.length)
-            .mapToObj(i -> topDocsPerQuery(0, Math.min(totalHits[i], compoundScores[i].size()), compoundScores[i], totalHits[i]))
-            .collect(Collectors.toList());
+        final List<TopDocs> topDocs = new ArrayList<>();
+        for (int i = 0; i < compoundScores.length; i++) {
+            topDocs.add(
+                topDocsPerQuery(
+                    0,
+                    Math.min(collectedHitsPerSubQuery[i], compoundScores[i].size()),
+                    compoundScores[i],
+                    collectedHitsPerSubQuery[i]
+                )
+            );
+        }
         return topDocs;
     }
 

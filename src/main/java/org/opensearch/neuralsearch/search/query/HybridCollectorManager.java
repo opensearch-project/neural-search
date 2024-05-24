@@ -31,11 +31,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createDelimiterElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
@@ -145,7 +142,10 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("cannot collect results of hybrid search query"));
             List<TopDocs> topDocs = hybridTopScoreDocCollector.topDocs();
-            TopDocs newTopDocs = getNewTopDocs(getTotalHits(this.trackTotalHitsUpTo, topDocs, isSingleShard), topDocs);
+            TopDocs newTopDocs = getNewTopDocs(
+                getTotalHits(this.trackTotalHitsUpTo, topDocs, isSingleShard, hybridTopScoreDocCollector.getTotalHits()),
+                topDocs
+            );
             float maxScore = getMaxScore(topDocs);
             TopDocsAndMaxScore topDocsAndMaxScore = new TopDocsAndMaxScore(newTopDocs, maxScore);
             return (QuerySearchResult result) -> { result.topDocs(topDocsAndMaxScore, getSortValueFormats(sortAndFormats)); };
@@ -196,23 +196,18 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         return new TopDocs(totalHits, scoreDocs);
     }
 
-    private TotalHits getTotalHits(int trackTotalHitsUpTo, final List<TopDocs> topDocs, final boolean isSingleShard) {
+    private TotalHits getTotalHits(
+        int trackTotalHitsUpTo,
+        final List<TopDocs> topDocs,
+        final boolean isSingleShard,
+        final long maxTotalHits
+    ) {
         final TotalHits.Relation relation = trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED
             ? TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO
             : TotalHits.Relation.EQUAL_TO;
         if (topDocs == null || topDocs.isEmpty()) {
             return new TotalHits(0, relation);
         }
-
-        List<ScoreDoc[]> scoreDocs = topDocs.stream()
-            .map(topdDoc -> topdDoc.scoreDocs)
-            .filter(Objects::nonNull)
-            .collect(Collectors.toList());
-        Set<Integer> uniqueDocIds = new HashSet<>();
-        for (ScoreDoc[] scoreDocsArray : scoreDocs) {
-            uniqueDocIds.addAll(Arrays.stream(scoreDocsArray).map(scoreDoc -> scoreDoc.doc).collect(Collectors.toList()));
-        }
-        long maxTotalHits = uniqueDocIds.size();
 
         return new TotalHits(maxTotalHits, relation);
     }
