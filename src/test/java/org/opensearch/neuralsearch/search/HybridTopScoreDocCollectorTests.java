@@ -557,7 +557,6 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
             uniqueDocIds.addAll(Arrays.stream(scoreDocsArray).map(scoreDoc -> scoreDoc.doc).collect(Collectors.toList()));
         }
         long maxTotalHits = uniqueDocIds.size();
-        assertNotEquals(maxTotalHits, totalHits);
         assertEquals(4, totalHits);
         // Total unique docs on the shard will be 2 as per 1 per sub-query
         assertEquals(2, maxTotalHits);
