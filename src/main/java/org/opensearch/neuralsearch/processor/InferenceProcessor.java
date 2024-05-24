@@ -336,7 +336,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
         String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
         ProcessorDocumentUtils.validateMapTypeValue(
-            "field_map",
+            FIELD_MAP_FIELD,
             sourceAndMetadataMap,
             fieldMap,
             1,

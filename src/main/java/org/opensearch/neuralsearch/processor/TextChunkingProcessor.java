@@ -166,7 +166,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
         String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
         ProcessorDocumentUtils.validateMapTypeValue(
-            "field_map",
+            FIELD_MAP_FIELD,
             sourceAndMetadataMap,
             fieldMap,
             1,
