@@ -559,6 +559,8 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
         long maxTotalHits = uniqueDocIds.size();
         assertNotEquals(maxTotalHits, totalHits);
         assertEquals(4, totalHits);
+        // Total unique docs on the shard will be 2 as per 1 per sub-query
+        assertEquals(2, maxTotalHits);
         w.close();
         reader.close();
         directory.close();

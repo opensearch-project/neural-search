@@ -120,7 +120,7 @@ public class ScoreCombiner {
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
         final List<Integer> sortedScores
     ) {
-        // - max number of hits will the same which are passed from QueryPhase
+        // - max number of hits will be the same which are passed from QueryPhase
         long maxHits = compoundQueryTopDocs.getTotalHits().value;
         // - update query search results with normalized scores
         compoundQueryTopDocs.setScoreDocs(
