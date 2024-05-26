@@ -29,8 +29,8 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
         NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory);
         assertEquals(0.3f, processor.getRatio(), 1e-3);
-        assertEquals(4.0f, processor.getWindow_expansion(), 1e-3);
-        assertEquals(10000, processor.getMax_window_size());
+        assertEquals(4.0f, processor.getWindowExpansion(), 1e-3);
+        assertEquals(10000, processor.getMaxWindowSize());
 
         NeuralSparseTwoPhaseProcessor defaultProcessor = factory.create(
             Collections.emptyMap(),
@@ -41,8 +41,8 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
             null
         );
         assertEquals(0.4f, defaultProcessor.getRatio(), 1e-3);
-        assertEquals(5.0f, defaultProcessor.getWindow_expansion(), 1e-3);
-        assertEquals(10000, defaultProcessor.getMax_window_size());
+        assertEquals(5.0f, defaultProcessor.getWindowExpansion(), 1e-3);
+        assertEquals(10000, defaultProcessor.getMaxWindowSize());
     }
 
     public void testFactory_whenRatioOutOfRange_thenThrowException() {
@@ -134,18 +134,18 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         for (int i = 0; i < 10; i++) {
             queryTokens.put(String.valueOf(i), (float) i);
         }
-        Map<Boolean, SetOnce<Map<String, Float>>> splitSetOnce = NeuralSparseTwoPhaseProcessor.getSplitSetOnceByScoreThreshold(
+        Map<String, SetOnce<Map<String, Float>>> splitSetOnce = NeuralSparseTwoPhaseProcessor.splitQueryTokensByRatioedMaxScoreAsThreshold(
             queryTokens,
             0.4f
         );
         assertNotNull(splitSetOnce);
-        SetOnce<Map<String, Float>> upSet = splitSetOnce.get(true);
-        SetOnce<Map<String, Float>> downSet = splitSetOnce.get(false);
+        SetOnce<Map<String, Float>> upSet = splitSetOnce.get("UP_THRESHOLD");
+        SetOnce<Map<String, Float>> downSet = splitSetOnce.get("DOWN_THRESHOLD");
         assertNotNull(upSet);
         assertEquals(6, upSet.get().size());
         assertNotNull(downSet);
         assertEquals(4, downSet.get().size());
-        assertNotNull(splitSetOnce.get(false));
+        assertNotNull(splitSetOnce.get("DOWN_THRESHOLD"));
     }
 
     public void testType() throws Exception {

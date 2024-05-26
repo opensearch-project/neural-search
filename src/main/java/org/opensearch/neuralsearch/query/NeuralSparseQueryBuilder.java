@@ -48,7 +48,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 
-import static org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor.getSplitSetOnceByScoreThreshold;
+import static org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor.DOWN_THRESHOLD;
+import static org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor.UP_THRESHOLD;
+import static org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor.splitQueryTokensByRatioedMaxScoreAsThreshold;
 
 /**
  * SparseEncodingQueryBuilder is responsible for handling "neural_sparse" query types. It uses an ML NEURAL_SPARSE model
@@ -79,11 +81,12 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     private String queryText;
     private String modelId;
     private Float maxTokenScore;
+    private Map<String, Float> twoPhaseSharedQueryToken;
     private Supplier<Map<String, Float>> queryTokensSupplier;
     // A parameter that can detect if twoPhase are enabled, when twoPhasePruneRatio equals -1f, it means it two-phase rescoreQueryBuilder's
     // subQueryBuilder.
     private float twoPhasePruneRatio = 0F;
-    private Supplier<Map<String, Float>> twoPhaseQueryTokensSupplier;
+
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
 
     public static void initialize(MLCommonsClientAccessor mlClient) {
@@ -134,11 +137,13 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .twoPhasePruneRatio(-1f);
         if (this.queryTokensSupplier != null) {
             Map<String, Float> tokens = queryTokensSupplier.get();
-            Map<Boolean, SetOnce<Map<String, Float>>> splitTokens = getSplitSetOnceByScoreThreshold(tokens, ratio);
-            this.queryTokensSupplier(splitTokens.get(true)::get);
-            copy.queryTokensSupplier(splitTokens.get(false)::get);
-        } else copy.queryTokensSupplier(new SetOnce<Map<String, Float>>()::get);
-        this.twoPhaseQueryTokensSupplier = copy.twoPhaseQueryTokensSupplier();
+            Map<String, SetOnce<Map<String, Float>>> splitTokens = splitQueryTokensByRatioedMaxScoreAsThreshold(tokens, ratio);
+            this.queryTokensSupplier(splitTokens.get(UP_THRESHOLD)::get);
+            copy.queryTokensSupplier(splitTokens.get(DOWN_THRESHOLD)::get);
+        } else {
+            this.twoPhaseSharedQueryToken = new HashMap<>();
+            copy.queryTokensSupplier(() -> this.twoPhaseSharedQueryToken);
+        }
         return copy;
     }
 
@@ -313,8 +318,8 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .modelId(modelId)
             .maxTokenScore(maxTokenScore)
             .queryTokensSupplier(queryTokensSetOnce::get)
-            .twoPhasePruneRatio(twoPhasePruneRatio)
-            .twoPhaseQueryTokensSupplier(twoPhaseQueryTokensSupplier);
+            .twoPhaseSharedQueryToken(twoPhaseSharedQueryToken)
+            .twoPhasePruneRatio(twoPhasePruneRatio);
     }
 
     private BiConsumer<Client, ActionListener<?>> getModelInferenceAsync(SetOnce<Map<String, Float>> setOnce) {
@@ -323,13 +328,13 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             List.of(queryText),
             ActionListener.wrap(mapResultList -> {
                 Map<String, Float> queryTokens = TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList).get(0);
-                if (twoPhaseQueryTokensSupplier != null) {
-                    Map<Boolean, SetOnce<Map<String, Float>>> splitSetOnce = getSplitSetOnceByScoreThreshold(
+                if (twoPhaseSharedQueryToken != null) {
+                    Map<String, SetOnce<Map<String, Float>>> splitSetOnce = splitQueryTokensByRatioedMaxScoreAsThreshold(
                         queryTokens,
                         twoPhasePruneRatio
                     );
-                    setOnce.set(splitSetOnce.get(true).get());
-                    twoPhaseQueryTokensSupplier = splitSetOnce.get(false)::get;
+                    setOnce.set(splitSetOnce.get(UP_THRESHOLD).get());
+                    twoPhaseSharedQueryToken.putAll(splitSetOnce.get(DOWN_THRESHOLD).get());
                 } else {
                     setOnce.set(queryTokens);
                 }
@@ -381,8 +386,8 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (Objects.isNull(obj) || getClass() != obj.getClass()) return false;
         if (Objects.isNull(queryTokensSupplier) && Objects.nonNull(obj.queryTokensSupplier)) return false;
         if (Objects.nonNull(queryTokensSupplier) && Objects.isNull(obj.queryTokensSupplier)) return false;
-        if (Objects.nonNull(twoPhaseQueryTokensSupplier) && Objects.isNull(obj.twoPhaseQueryTokensSupplier)) return false;
-        if (Objects.isNull(twoPhaseQueryTokensSupplier) && Objects.nonNull(obj.twoPhaseQueryTokensSupplier)) return false;
+        if (Objects.nonNull(twoPhaseSharedQueryToken) && Objects.isNull(obj.twoPhaseSharedQueryToken)) return false;
+        if (Objects.isNull(twoPhaseSharedQueryToken) && Objects.nonNull(obj.twoPhaseSharedQueryToken)) return false;
 
         EqualsBuilder equalsBuilder = new EqualsBuilder().append(fieldName, obj.fieldName)
             .append(queryText, obj.queryText)
@@ -392,8 +397,8 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (Objects.nonNull(queryTokensSupplier)) {
             equalsBuilder.append(queryTokensSupplier.get(), obj.queryTokensSupplier.get());
         }
-        if (Objects.nonNull(twoPhaseQueryTokensSupplier)) {
-            equalsBuilder.append(twoPhaseQueryTokensSupplier, obj.twoPhaseQueryTokensSupplier);
+        if (Objects.nonNull(twoPhaseSharedQueryToken)) {
+            equalsBuilder.append(twoPhaseSharedQueryToken, obj.twoPhaseSharedQueryToken);
         }
         return equalsBuilder.isEquals();
     }
@@ -408,8 +413,8 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (queryTokensSupplier != null) {
             builder.append(queryTokensSupplier.get());
         }
-        if (twoPhaseQueryTokensSupplier != null) {
-            builder.append(twoPhaseQueryTokensSupplier);
+        if (twoPhaseSharedQueryToken != null) {
+            builder.append(twoPhaseSharedQueryToken);
         }
         return builder.toHashCode();
     }
