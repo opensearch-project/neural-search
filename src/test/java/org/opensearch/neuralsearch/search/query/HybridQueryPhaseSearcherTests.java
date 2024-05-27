@@ -24,7 +24,6 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
@@ -1026,7 +1025,9 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
             RemoteStoreEnums.PathType.NAME,
             HASHED_PREFIX.name(),
             RemoteStoreEnums.PathHashAlgorithm.NAME,
-            RemoteStoreEnums.PathHashAlgorithm.FNV_1A_BASE64.name()
+            RemoteStoreEnums.PathHashAlgorithm.FNV_1A_BASE64.name(),
+            IndexMetadata.TRANSLOG_METADATA_KEY,
+            "false"
         );
         Settings idxSettings = Settings.builder()
             .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
