@@ -8,8 +8,8 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 import lombok.Getter;
 import lombok.Setter;
-import org.opensearch.common.SetOnce;
 import org.opensearch.action.search.SearchRequest;
+import org.opensearch.common.collect.Tuple;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.ingest.ConfigurationUtils;
@@ -21,6 +21,7 @@ import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.rescore.QueryRescorerBuilder;
 import org.opensearch.search.rescore.RescorerBuilder;
 
+import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -35,8 +36,6 @@ import java.util.stream.Collectors;
 public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements SearchRequestProcessor {
 
     public static final String TYPE = "neural_sparse_two_phase_processor";
-    public static final String UP_THRESHOLD = "UP_THRESHOLD";
-    public static final String DOWN_THRESHOLD = "DOWN_THRESHOLD";
     private boolean enabled;
     private float ratio;
     private float windowExpansion;
@@ -93,7 +92,7 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
      * @return request the search request that add the two-phase rescore query of neural sparse query.
      */
     @Override
-    public SearchRequest processRequest(final SearchRequest request) throws Exception {
+    public SearchRequest processRequest(final SearchRequest request) {
         if (!enabled || ratio == 0f) {
             return request;
         }
@@ -120,11 +119,12 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
 
     /**
      * Based on ratio, split a Map into two map by the value.
-     * @param queryTokens the queryTokens map, key is the token String, value is the score.
+     *
+     * @param queryTokens    the queryTokens map, key is the token String, value is the score.
      * @param thresholdRatio The ratio that control how tokens map be split.
      * @return A map has two element, {[True, token map whose value above threshold],[False, token map whose value below threshold]}
      */
-    public static Map<String, SetOnce<Map<String, Float>>> splitQueryTokensByRatioedMaxScoreAsThreshold(
+    public static Tuple<Map<String, Float>, Map<String, Float>> splitQueryTokensByRatioedMaxScoreAsThreshold(
         final Map<String, Float> queryTokens,
         final float thresholdRatio
     ) {
@@ -141,43 +141,15 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
                 Collectors.partitioningBy(entry -> entry.getValue() >= threshold, Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
             );
 
-        SetOnce<Map<String, Float>> highScoreTokensSetOnce = new SetOnce<>(queryTokensByScore.get(Boolean.TRUE));
-        SetOnce<Map<String, Float>> lowScoreTokensSetOnce = new SetOnce<>(queryTokensByScore.get(Boolean.FALSE));
-        if (Objects.isNull(highScoreTokensSetOnce.get())) {
-            throw new IllegalArgumentException("Query tokens cannot be null.");
+        Map<String, Float> highScoreTokens = queryTokensByScore.get(Boolean.TRUE);
+        Map<String, Float> lowScoreTokens = queryTokensByScore.get(Boolean.FALSE);
+        if (Objects.isNull(highScoreTokens) || highScoreTokens.isEmpty()) {
+            throw new IllegalArgumentException("Query tokens cannot be null or empty.");
         }
-        return Map.of(UP_THRESHOLD, highScoreTokensSetOnce, DOWN_THRESHOLD, lowScoreTokensSetOnce);
-    }
-
-    /**
-     * Factory to create NeuralSparseTwoPhaseProcessor, provide default parameter,
-     *
-     */
-    public static class Factory implements Processor.Factory<SearchRequestProcessor> {
-        @Override
-        public NeuralSparseTwoPhaseProcessor create(
-            Map<String, Processor.Factory<SearchRequestProcessor>> processorFactories,
-            String tag,
-            String description,
-            boolean ignoreFailure,
-            Map<String, Object> config,
-            PipelineContext pipelineContext
-        ) throws IllegalArgumentException {
-
-            boolean enabled = ConfigurationUtils.readBooleanProperty(TYPE, tag, config, ENABLE_KEY, DEFAULT_ENABLED);
-            Map<String, Object> twoPhaseConfigMap = ConfigurationUtils.readOptionalMap(TYPE, tag, config, PARAMETER_KEY);
-
-            float ratio = DEFAULT_RATIO;
-            float window_expansion = DEFAULT_WINDOW_EXPANSION;
-            int max_window_size = DEFAULT_MAX_WINDOW_SIZE;
-            if (Objects.nonNull(twoPhaseConfigMap)) {
-                ratio = ((Number) twoPhaseConfigMap.getOrDefault(RATIO_KEY, ratio)).floatValue();
-                window_expansion = ((Number) twoPhaseConfigMap.getOrDefault(EXPANSION_KEY, window_expansion)).floatValue();
-                max_window_size = ((Number) twoPhaseConfigMap.getOrDefault(MAX_WINDOW_SIZE_KEY, max_window_size)).intValue();
-            }
-
-            return new NeuralSparseTwoPhaseProcessor(tag, description, ignoreFailure, enabled, ratio, window_expansion, max_window_size);
+        if (Objects.isNull(lowScoreTokens)) {
+            lowScoreTokens = Collections.emptyMap();
         }
+        return Tuple.tuple(highScoreTokens, lowScoreTokens);
     }
 
     private QueryBuilder getNestedQueryBuilderFromNeuralSparseQueryBuilderMap(
@@ -243,4 +215,36 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
         twoPhaseRescorer.windowSize(windowSize);
         return twoPhaseRescorer;
     }
+
+    /**
+     * Factory to create NeuralSparseTwoPhaseProcessor, provide default parameter,
+     *
+     */
+    public static class Factory implements Processor.Factory<SearchRequestProcessor> {
+        @Override
+        public NeuralSparseTwoPhaseProcessor create(
+            Map<String, Processor.Factory<SearchRequestProcessor>> processorFactories,
+            String tag,
+            String description,
+            boolean ignoreFailure,
+            Map<String, Object> config,
+            PipelineContext pipelineContext
+        ) throws IllegalArgumentException {
+
+            boolean enabled = ConfigurationUtils.readBooleanProperty(TYPE, tag, config, ENABLE_KEY, DEFAULT_ENABLED);
+            Map<String, Object> twoPhaseConfigMap = ConfigurationUtils.readOptionalMap(TYPE, tag, config, PARAMETER_KEY);
+
+            float ratio = DEFAULT_RATIO;
+            float window_expansion = DEFAULT_WINDOW_EXPANSION;
+            int max_window_size = DEFAULT_MAX_WINDOW_SIZE;
+            if (Objects.nonNull(twoPhaseConfigMap)) {
+                ratio = ((Number) twoPhaseConfigMap.getOrDefault(RATIO_KEY, ratio)).floatValue();
+                window_expansion = ((Number) twoPhaseConfigMap.getOrDefault(EXPANSION_KEY, window_expansion)).floatValue();
+                max_window_size = ((Number) twoPhaseConfigMap.getOrDefault(MAX_WINDOW_SIZE_KEY, max_window_size)).intValue();
+            }
+
+            return new NeuralSparseTwoPhaseProcessor(tag, description, ignoreFailure, enabled, ratio, window_expansion, max_window_size);
+        }
+    }
+
 }

@@ -6,7 +6,7 @@ package org.opensearch.neuralsearch.processor;
 
 import lombok.SneakyThrows;
 import org.opensearch.action.search.SearchRequest;
-import org.opensearch.common.SetOnce;
+import org.opensearch.common.collect.Tuple;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
@@ -138,7 +138,6 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 400.0f, 100);
         SearchRequest returnRequest = processor.processRequest(searchRequest);
         assertNull(returnRequest.source().rescores());
-        expectThrows(IllegalArgumentException.class, () -> processor.processRequest(searchRequest));
     }
 
     @SneakyThrows
@@ -147,18 +146,15 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         for (int i = 0; i < 10; i++) {
             queryTokens.put(String.valueOf(i), (float) i);
         }
-        Map<String, SetOnce<Map<String, Float>>> splitSetOnce = NeuralSparseTwoPhaseProcessor.splitQueryTokensByRatioedMaxScoreAsThreshold(
-            queryTokens,
-            0.4f
-        );
-        assertNotNull(splitSetOnce);
-        SetOnce<Map<String, Float>> upSet = splitSetOnce.get("UP_THRESHOLD");
-        SetOnce<Map<String, Float>> downSet = splitSetOnce.get("DOWN_THRESHOLD");
+        Tuple<Map<String, Float>, Map<String, Float>> splitQueryTokens = NeuralSparseTwoPhaseProcessor
+            .splitQueryTokensByRatioedMaxScoreAsThreshold(queryTokens, 0.4f);
+        assertNotNull(splitQueryTokens);
+        Map<String, Float> upSet = splitQueryTokens.v1();
+        Map<String, Float> downSet = splitQueryTokens.v2();
         assertNotNull(upSet);
-        assertEquals(6, upSet.get().size());
+        assertEquals(6, upSet.size());
         assertNotNull(downSet);
-        assertEquals(4, downSet.get().size());
-        assertNotNull(splitSetOnce.get("DOWN_THRESHOLD"));
+        assertEquals(4, downSet.size());
     }
 
     @SneakyThrows
