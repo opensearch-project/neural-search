@@ -129,6 +129,19 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
+    public void testProcessRequest_whenTwoPhaseEnabledAndWithOutNeuralSparseQuery_thenReturnRequest() {
+        NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
+        BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
+        boolQueryBuilder.should(new MatchAllQueryBuilder());
+        SearchRequest searchRequest = new SearchRequest();
+        searchRequest.source(new SearchSourceBuilder().query(boolQueryBuilder));
+        NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 400.0f, 100);
+        SearchRequest returnRequest = processor.processRequest(searchRequest);
+        assertNull(returnRequest.source().rescores());
+        expectThrows(IllegalArgumentException.class, () -> processor.processRequest(searchRequest));
+    }
+
+    @SneakyThrows
     public void testGetSplitSetOnceByScoreThreshold() {
         Map<String, Float> queryTokens = new HashMap<>();
         for (int i = 0; i < 10; i++) {
@@ -146,6 +159,15 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         assertNotNull(downSet);
         assertEquals(4, downSet.get().size());
         assertNotNull(splitSetOnce.get("DOWN_THRESHOLD"));
+    }
+
+    @SneakyThrows
+    public void testGetSplitSetOnceByScoreThreshold_whenHighScoreTokenIsNull_thenThrowException() {
+        Map<String, Float> queryTokens = new HashMap<>();
+        expectThrows(
+            IllegalArgumentException.class,
+            () -> NeuralSparseTwoPhaseProcessor.splitQueryTokensByRatioedMaxScoreAsThreshold(queryTokens, 0.4f)
+        );
     }
 
     public void testType() throws Exception {

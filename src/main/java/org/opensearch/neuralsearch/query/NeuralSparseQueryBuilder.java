@@ -135,7 +135,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .modelId(this.modelId)
             .maxTokenScore(this.maxTokenScore)
             .twoPhasePruneRatio(-1f);
-        if (this.queryTokensSupplier != null) {
+        if (Objects.nonNull(this.queryTokensSupplier)) {
             Map<String, Float> tokens = queryTokensSupplier.get();
             Map<String, SetOnce<Map<String, Float>>> splitTokens = splitQueryTokensByRatioedMaxScoreAsThreshold(tokens, ratio);
             this.queryTokensSupplier(splitTokens.get(UP_THRESHOLD)::get);
@@ -328,7 +328,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             List.of(queryText),
             ActionListener.wrap(mapResultList -> {
                 Map<String, Float> queryTokens = TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList).get(0);
-                if (twoPhaseSharedQueryToken != null) {
+                if (Objects.nonNull(twoPhaseSharedQueryToken)) {
                     Map<String, SetOnce<Map<String, Float>>> splitSetOnce = splitQueryTokensByRatioedMaxScoreAsThreshold(
                         queryTokens,
                         twoPhasePruneRatio
