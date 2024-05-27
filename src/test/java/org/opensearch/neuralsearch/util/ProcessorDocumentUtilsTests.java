@@ -60,7 +60,6 @@ public class ProcessorDocumentUtilsTests extends OpenSearchQueryTestCase {
                     "field_map",
                     source,
                     fieldMap,
-                    1,
                     "test_index",
                     clusterService,
                     environment,

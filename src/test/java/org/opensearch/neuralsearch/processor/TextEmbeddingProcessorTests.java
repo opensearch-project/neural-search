@@ -538,8 +538,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
     public void test_batchExecute_exception() {
         final int docCount = 5;
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
-        Map<String, Object> config = createPlainStringConfiguration();
-        TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig();
         doAnswer(invocation -> {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
             listener.onFailure(new RuntimeException());
