@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.processor;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
@@ -48,5 +49,14 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
             setVectorFieldsToDocument(ingestDocument, ProcessMap, TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps));
             handler.accept(ingestDocument, null);
         }, e -> { handler.accept(null, e); }));
+    }
+
+    @Override
+    public void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException) {
+        mlCommonsClientAccessor.inferenceSentencesWithMapResult(
+            this.modelId,
+            inferenceList,
+            ActionListener.wrap(resultMaps -> handler.accept(TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps)), onException)
+        );
     }
 }
