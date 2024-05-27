@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Optimize parameter parsing in text chunking processor ([#733](https://github.com/opensearch-project/neural-search/pull/733))
 - Use lazy initialization for priority queue of hits and scores to improve latencies by 20% ([#746](https://github.com/opensearch-project/neural-search/pull/746))
 ### Bug Fixes
+- Total hit count fix in Hybrid Query ([756](https://github.com/opensearch-project/neural-search/pull/756))
 ### Infrastructure
 ### Documentation
 ### Maintenance

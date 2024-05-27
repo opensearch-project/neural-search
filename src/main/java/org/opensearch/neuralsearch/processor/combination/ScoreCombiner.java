@@ -5,12 +5,10 @@
 package org.opensearch.neuralsearch.processor.combination;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.apache.lucene.search.ScoreDoc;
@@ -80,16 +78,15 @@ public class ScoreCombiner {
         final CompoundTopDocs compoundQueryTopDocs,
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
         final List<Integer> sortedScores,
-        final int maxHits
+        final long maxHits
     ) {
-        ScoreDoc[] finalScoreDocs = new ScoreDoc[maxHits];
-
+        List<ScoreDoc> scoreDocs = new ArrayList<>();
         int shardId = compoundQueryTopDocs.getScoreDocs().get(0).shardIndex;
         for (int j = 0; j < maxHits && j < sortedScores.size(); j++) {
             int docId = sortedScores.get(j);
-            finalScoreDocs[j] = new ScoreDoc(docId, combinedNormalizedScoresByDocId.get(docId), shardId);
+            scoreDocs.add(new ScoreDoc(docId, combinedNormalizedScoresByDocId.get(docId), shardId));
         }
-        return Arrays.stream(finalScoreDocs).collect(Collectors.toList());
+        return scoreDocs;
     }
 
     public Map<Integer, float[]> getNormalizedScoresPerDocument(final List<TopDocs> topDocsPerSubQuery) {
@@ -123,8 +120,8 @@ public class ScoreCombiner {
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
         final List<Integer> sortedScores
     ) {
-        // - count max number of hits among sub-queries
-        int maxHits = getMaxHits(topDocsPerSubQuery);
+        // - max number of hits will be the same which are passed from QueryPhase
+        long maxHits = compoundQueryTopDocs.getTotalHits().value;
         // - update query search results with normalized scores
         compoundQueryTopDocs.setScoreDocs(
             getCombinedScoreDocs(compoundQueryTopDocs, combinedNormalizedScoresByDocId, sortedScores, maxHits)
@@ -132,21 +129,7 @@ public class ScoreCombiner {
         compoundQueryTopDocs.setTotalHits(getTotalHits(topDocsPerSubQuery, maxHits));
     }
 
-    /**
-     * Get max hits as number of unique doc ids from results of all sub-queries
-     * @param topDocsPerSubQuery list of topDocs objects for one shard
-     * @return number of unique doc ids
-     */
-    protected int getMaxHits(final List<TopDocs> topDocsPerSubQuery) {
-        Set<Integer> docIds = topDocsPerSubQuery.stream()
-            .filter(topDocs -> Objects.nonNull(topDocs.scoreDocs))
-            .flatMap(topDocs -> Arrays.stream(topDocs.scoreDocs))
-            .map(scoreDoc -> scoreDoc.doc)
-            .collect(Collectors.toSet());
-        return docIds.size();
-    }
-
-    private TotalHits getTotalHits(final List<TopDocs> topDocsPerSubQuery, int maxHits) {
+    private TotalHits getTotalHits(final List<TopDocs> topDocsPerSubQuery, final long maxHits) {
         TotalHits.Relation totalHits = TotalHits.Relation.EQUAL_TO;
         if (topDocsPerSubQuery.stream().anyMatch(topDocs -> topDocs.totalHits.relation == TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO)) {
             totalHits = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;
