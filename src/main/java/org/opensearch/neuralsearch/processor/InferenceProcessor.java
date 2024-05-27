@@ -5,20 +5,30 @@
 package org.opensearch.neuralsearch.processor;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
+import org.opensearch.common.collect.Tuple;
+import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.env.Environment;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
+import org.opensearch.ingest.IngestDocumentWrapper;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -117,6 +127,121 @@ public abstract class InferenceProcessor extends AbstractProcessor {
         } catch (Exception e) {
             handler.accept(null, e);
         }
+    }
+
+    /**
+     * This is the function which does actual inference work for batchExecute interface.
+     * @param inferenceList a list of String for inference.
+     * @param handler a callback handler to handle inference results which is a list of objects.
+     * @param onException an exception callback to handle exception.
+     */
+    abstract void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException);
+
+    @Override
+    public void batchExecute(List<IngestDocumentWrapper> ingestDocumentWrappers, Consumer<List<IngestDocumentWrapper>> handler) {
+        if (CollectionUtils.isEmpty(ingestDocumentWrappers)) {
+            handler.accept(Collections.emptyList());
+            return;
+        }
+
+        List<DataForInference> dataForInferences = getDataForInference(ingestDocumentWrappers);
+        List<String> inferenceList = constructInferenceTexts(dataForInferences);
+        if (inferenceList.isEmpty()) {
+            handler.accept(ingestDocumentWrappers);
+            return;
+        }
+        Tuple<List<String>, Map<Integer, Integer>> sortedResult = sortByLengthAndReturnOriginalOrder(inferenceList);
+        inferenceList = sortedResult.v1();
+        Map<Integer, Integer> originalOrder = sortedResult.v2();
+        doBatchExecute(inferenceList, results -> {
+            int startIndex = 0;
+            results = restoreToOriginalOrder(results, originalOrder);
+            for (DataForInference dataForInference : dataForInferences) {
+                if (dataForInference.getIngestDocumentWrapper().getException() != null
+                    || CollectionUtils.isEmpty(dataForInference.getInferenceList())) {
+                    continue;
+                }
+                List<?> inferenceResults = results.subList(startIndex, startIndex + dataForInference.getInferenceList().size());
+                startIndex += dataForInference.getInferenceList().size();
+                setVectorFieldsToDocument(
+                    dataForInference.getIngestDocumentWrapper().getIngestDocument(),
+                    dataForInference.getProcessMap(),
+                    inferenceResults
+                );
+            }
+            handler.accept(ingestDocumentWrappers);
+        }, exception -> {
+            for (IngestDocumentWrapper ingestDocumentWrapper : ingestDocumentWrappers) {
+                // The IngestDocumentWrapper might already run into exception and not sent for inference. So here we only
+                // set exception to IngestDocumentWrapper which doesn't have exception before.
+                if (ingestDocumentWrapper.getException() == null) {
+                    ingestDocumentWrapper.update(ingestDocumentWrapper.getIngestDocument(), exception);
+                }
+            }
+            handler.accept(ingestDocumentWrappers);
+        });
+    }
+
+    private Tuple<List<String>, Map<Integer, Integer>> sortByLengthAndReturnOriginalOrder(List<String> inferenceList) {
+        List<Tuple<Integer, String>> docsWithIndex = new ArrayList<>();
+        for (int i = 0; i < inferenceList.size(); ++i) {
+            docsWithIndex.add(Tuple.tuple(i, inferenceList.get(i)));
+        }
+        docsWithIndex.sort(Comparator.comparingInt(t -> t.v2().length()));
+        List<String> sortedInferenceList = docsWithIndex.stream().map(Tuple::v2).collect(Collectors.toList());
+        Map<Integer, Integer> originalOrderMap = new HashMap<>();
+        for (int i = 0; i < docsWithIndex.size(); ++i) {
+            originalOrderMap.put(i, docsWithIndex.get(i).v1());
+        }
+        return Tuple.tuple(sortedInferenceList, originalOrderMap);
+    }
+
+    private List<?> restoreToOriginalOrder(List<?> results, Map<Integer, Integer> originalOrder) {
+        List<Object> sortedResults = Arrays.asList(results.toArray());
+        for (int i = 0; i < results.size(); ++i) {
+            if (!originalOrder.containsKey(i)) continue;
+            int oldIndex = originalOrder.get(i);
+            sortedResults.set(oldIndex, results.get(i));
+        }
+        return sortedResults;
+    }
+
+    private List<String> constructInferenceTexts(List<DataForInference> dataForInferences) {
+        List<String> inferenceTexts = new ArrayList<>();
+        for (DataForInference dataForInference : dataForInferences) {
+            if (dataForInference.getIngestDocumentWrapper().getException() != null
+                || CollectionUtils.isEmpty(dataForInference.getInferenceList())) {
+                continue;
+            }
+            inferenceTexts.addAll(dataForInference.getInferenceList());
+        }
+        return inferenceTexts;
+    }
+
+    private List<DataForInference> getDataForInference(List<IngestDocumentWrapper> ingestDocumentWrappers) {
+        List<DataForInference> dataForInferences = new ArrayList<>();
+        for (IngestDocumentWrapper ingestDocumentWrapper : ingestDocumentWrappers) {
+            Map<String, Object> processMap = null;
+            List<String> inferenceList = null;
+            try {
+                validateEmbeddingFieldsValue(ingestDocumentWrapper.getIngestDocument());
+                processMap = buildMapWithProcessorKeyAndOriginalValue(ingestDocumentWrapper.getIngestDocument());
+                inferenceList = createInferenceList(processMap);
+            } catch (Exception e) {
+                ingestDocumentWrapper.update(ingestDocumentWrapper.getIngestDocument(), e);
+            } finally {
+                dataForInferences.add(new DataForInference(ingestDocumentWrapper, processMap, inferenceList));
+            }
+        }
+        return dataForInferences;
+    }
+
+    @Getter
+    @AllArgsConstructor
+    private static class DataForInference {
+        private final IngestDocumentWrapper ingestDocumentWrapper;
+        private final Map<String, Object> processMap;
+        private final List<String> inferenceList;
     }
 
     @SuppressWarnings({ "unchecked" })
