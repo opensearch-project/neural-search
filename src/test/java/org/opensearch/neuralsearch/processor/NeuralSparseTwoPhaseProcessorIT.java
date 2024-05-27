@@ -496,6 +496,7 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
             modelId = prepareSparseEncodingModel();
             BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
+                .queryText(TEST_QUERY_TEXT)
                 .modelId(modelId)
                 .boost(3.0f);
             boolQueryBuilder.should(sparseEncodingQueryBuilder);
@@ -503,7 +504,7 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
             Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, boolQueryBuilder, 1);
             Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
             assertEquals("1", firstInnerHit.get("_id"));
-            float expectedScore = 6 * computeExpectedScore(testRankFeaturesDoc, testFixedQueryTokens);
+            float expectedScore = 6 * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
             assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
         } finally {
             wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, modelId, search_pipeline);

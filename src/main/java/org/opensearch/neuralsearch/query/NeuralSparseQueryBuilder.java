@@ -306,6 +306,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
 
     @Override
     protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) {
+        // We need to inference the sentence to get the queryTokens. The logic is similar to NeuralQueryBuilder
+        // If two-phase is enabled( twoPhaseSharedQueryToken is not null ), will split the queryTokens into high score tokens
+        // and low score tokens, and assign them to queryTokensSupplier and twoPhaseSharedQueryToken.
         if (Objects.nonNull(queryTokensSupplier)) {
             return this;
         }

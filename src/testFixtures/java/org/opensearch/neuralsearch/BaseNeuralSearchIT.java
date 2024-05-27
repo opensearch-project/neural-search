@@ -434,6 +434,21 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     /**
+     * Get one doc by its id
+     * @param indexName index name
+     * @param id doc id
+     * @return map of the doc data
+     */
+    @SneakyThrows
+    protected Map<String, Object> getDocById(final String indexName, final String id) {
+        Request request = new Request("GET", "/" + indexName + "/_doc/" + id);
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        String responseBody = EntityUtils.toString(response.getEntity());
+        return createParser(XContentType.JSON.xContent(), responseBody).map();
+    }
+
+    /**
      * Execute a search request initialized from a neural query builder
      *
      * @param index Index to search against
