@@ -30,14 +30,25 @@ public class ProcessorDocumentUtils {
      * @param  sourceKey    the key of the source map being validated, the first level is always the "field_map" key.
      * @param  sourceValue  the source map being validated, the first level is always the sourceAndMetadataMap.
      * @param  fieldMap     the configuration map for validation, the first level is always the value of "field_map" in the processor configuration.
-     * @param  depth        the current depth of recursion
      * @param  clusterService cluster service passed from OpenSearch core.
      * @param  environment   environment passed from OpenSearch core.
      * @param  indexName     the maximum allowed depth for recursion
      * @param  allowEmpty   flag to allow empty values in map type validation.
      */
-    @SuppressWarnings({ "rawtypes", "unchecked" })
     public static void validateMapTypeValue(
+        final String sourceKey,
+        final Map<String, Object> sourceValue,
+        final Object fieldMap,
+        final String indexName,
+        final ClusterService clusterService,
+        final Environment environment,
+        final boolean allowEmpty
+    ) {
+        validateMapTypeValue(sourceKey, sourceValue, fieldMap, 1, indexName, clusterService, environment, allowEmpty);
+    }
+
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+    private static void validateMapTypeValue(
         final String sourceKey,
         final Map<String, Object> sourceValue,
         final Object fieldMap,

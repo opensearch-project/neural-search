@@ -169,7 +169,6 @@ public final class TextChunkingProcessor extends AbstractProcessor {
             FIELD_MAP_FIELD,
             sourceAndMetadataMap,
             fieldMap,
-            1,
             indexName,
             clusterService,
             environment,
