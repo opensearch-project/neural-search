@@ -117,7 +117,7 @@ public class HybridTopScoreDocCollector implements Collector {
                     collectedHitsPerSubQuery[i]++;
                     PriorityQueue<ScoreDoc> pq = compoundScores[i];
                     ScoreDoc currentDoc = new ScoreDoc(doc + docBase, score);
-                    maxScore = Math.max(score, maxScore);
+                    maxScore = Math.max(currentDoc.score, maxScore);
                     // this way we're inserting into heap and do nothing else unless we reach the capacity
                     // after that we pull out the lowest score element on each insert
                     pq.insertWithOverflow(currentDoc);
