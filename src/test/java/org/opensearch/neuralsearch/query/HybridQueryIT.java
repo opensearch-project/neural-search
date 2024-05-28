@@ -207,7 +207,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    public void testMaxScoreCalculation_whenResultSizeIsLessThenDefaultSize_thenSuccessful() {
+    public void testMaxScoreCalculation_whenMaxScoreIsTrackedAtCollectorLevel_thenSuccessful() {
         initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
         TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
         TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
@@ -222,8 +222,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
             hybridQueryBuilderNeuralThenTerm,
             null,
-            1,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            10,
+            null
         );
 
         Optional<Float> maxScore = getMaxScore(searchResponseAsMap);
