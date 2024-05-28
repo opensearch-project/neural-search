@@ -158,8 +158,7 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
         queryBuilderFloatMap.asMap().forEach((neuralSparseQueryBuilder, boosts) -> {
             float reduceBoost = boosts.stream().reduce(0.0f, Float::sum);
-            final float finalBoost = neuralSparseQueryBuilder.boost() * reduceBoost;
-            boolQueryBuilder.should(neuralSparseQueryBuilder.boost(finalBoost));
+            boolQueryBuilder.should(neuralSparseQueryBuilder.boost(reduceBoost));
         });
         return boolQueryBuilder;
     }
