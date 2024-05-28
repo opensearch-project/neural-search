@@ -79,10 +79,16 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     private String queryText;
     private String modelId;
     private Float maxTokenScore;
-    private Map<String, Float> twoPhaseSharedQueryToken;
     private Supplier<Map<String, Float>> queryTokensSupplier;
-    // A parameter that can detect if twoPhase are enabled, when twoPhasePruneRatio equals -1f, it means it two-phase rescoreQueryBuilder's
-    // subQueryBuilder.
+    // A filed that for neural_sparse_two_phase_processor, if twoPhaseSharedQueryToken is not null,
+    // it means it's origin NeuralSparseQueryBuilder and should split the low score tokens form itself then put it into
+    // twoPhaseSharedQueryToken.
+    private Map<String, Float> twoPhaseSharedQueryToken;
+    // A parameter with a default value 0F,
+    // 1. If the query request are using neural_sparse_two_phase_processor and be collected,
+    // It's value will be the ratio of processor.
+    // 2. If it's the sub query only build for two-phase, the value will be set to -1 * ratio of processor.
+    // Then in the DoToQuery, we can use this to determine which type are this queryBuilder.
     private float twoPhasePruneRatio = 0F;
 
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
@@ -133,7 +139,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .queryText(this.queryText)
             .modelId(this.modelId)
             .maxTokenScore(this.maxTokenScore)
-            .twoPhasePruneRatio(-1f);
+            .twoPhasePruneRatio(-1f * ratio);
         if (Objects.nonNull(this.queryTokensSupplier)) {
             Map<String, Float> tokens = queryTokensSupplier.get();
             // Splitting tokens based on a threshold value: tokens greater than the threshold are stored in v1,
@@ -307,8 +313,10 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     @Override
     protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) {
         // We need to inference the sentence to get the queryTokens. The logic is similar to NeuralQueryBuilder
-        // If two-phase is enabled( twoPhaseSharedQueryToken is not null ), will split the queryTokens into high score tokens
-        // and low score tokens, and assign them to queryTokensSupplier and twoPhaseSharedQueryToken.
+        // If the inference is finished, then rewrite to self and call doToQuery, otherwise, continue doRewrite
+        // QueryTokensSupplier means 2 case now,
+        //  1. It's the queryBuilder built for two-phase, doesn't need any rewrite.
+        //  2. It's registerAsyncAction has been registered successful.
         if (Objects.nonNull(queryTokensSupplier)) {
             return this;
         }
@@ -325,6 +333,11 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     }
 
     private BiConsumer<Client, ActionListener<?>> getModelInferenceAsync(SetOnce<Map<String, Float>> setOnce) {
+        // When Two-phase shared query tokens is null,
+        // it set queryTokensSupplier to the inference result which has all query tokens with score.
+        // When Two-phase shared query tokens exist,
+        // it splits the tokens using a threshold defined by a ratio of the maximum score of tokens, updating the token set
+        // accordingly.
         return ((client, actionListener) -> ML_CLIENT.inferenceSentencesWithMapResult(
             modelId(),
             List.of(queryText),
@@ -336,7 +349,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
                         twoPhasePruneRatio
                     );
                     setOnce.set(splitQueryTokens.v1());
-                    twoPhaseSharedQueryToken = (splitQueryTokens.v2());
+                    twoPhaseSharedQueryToken = splitQueryTokens.v2();
                 } else {
                     setOnce.set(queryTokens);
                 }
@@ -381,21 +394,27 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
 
     @Override
     protected boolean doEquals(NeuralSparseQueryBuilder obj) {
-        if (this == obj) return true;
-        if (Objects.isNull(obj) || getClass() != obj.getClass()) return false;
-        if (Objects.isNull(queryTokensSupplier) && Objects.nonNull(obj.queryTokensSupplier)) return false;
-        if (Objects.nonNull(queryTokensSupplier) && Objects.isNull(obj.queryTokensSupplier)) return false;
+        if (this == obj) {
+            return true;
+        }
+        if (Objects.isNull(obj) || getClass() != obj.getClass()) {
+            return false;
+        }
+        if (Objects.isNull(queryTokensSupplier) && Objects.nonNull(obj.queryTokensSupplier)) {
+            return false;
+        }
+        if (Objects.nonNull(queryTokensSupplier) && Objects.isNull(obj.queryTokensSupplier)) {
+            return false;
+        }
 
         EqualsBuilder equalsBuilder = new EqualsBuilder().append(fieldName, obj.fieldName)
             .append(queryText, obj.queryText)
             .append(modelId, obj.modelId)
             .append(maxTokenScore, obj.maxTokenScore)
-            .append(twoPhasePruneRatio, obj.twoPhasePruneRatio);
+            .append(twoPhasePruneRatio, obj.twoPhasePruneRatio)
+            .append(twoPhaseSharedQueryToken, obj.twoPhaseSharedQueryToken);
         if (Objects.nonNull(queryTokensSupplier)) {
             equalsBuilder.append(queryTokensSupplier.get(), obj.queryTokensSupplier.get());
-        }
-        if (Objects.nonNull(twoPhaseSharedQueryToken)) {
-            equalsBuilder.append(twoPhaseSharedQueryToken, obj.twoPhaseSharedQueryToken);
         }
         return equalsBuilder.isEquals();
     }

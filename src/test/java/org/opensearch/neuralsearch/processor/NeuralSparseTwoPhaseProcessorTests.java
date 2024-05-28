@@ -158,8 +158,8 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testGetSplitSetOnceByScoreThreshold_whenHighScoreTokenIsNull_thenThrowException() {
-        Map<String, Float> queryTokens = new HashMap<>();
+    public void testGetSplitSetOnceByScoreThreshold_whenNullQueryToken_thenThrowException() {
+        Map<String, Float> queryTokens = null;
         expectThrows(
             IllegalArgumentException.class,
             () -> NeuralSparseTwoPhaseProcessor.splitQueryTokensByRatioedMaxScoreAsThreshold(queryTokens, 0.4f)

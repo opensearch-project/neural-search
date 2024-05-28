@@ -122,13 +122,15 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
      *
      * @param queryTokens    the queryTokens map, key is the token String, value is the score.
      * @param thresholdRatio The ratio that control how tokens map be split.
-     * @return A map has two element, {[True, token map whose value above threshold],[False, token map whose value below threshold]}
+     * @return A tuple has two element, { token map whose value above threshold, token map whose value below threshold }
      */
     public static Tuple<Map<String, Float>, Map<String, Float>> splitQueryTokensByRatioedMaxScoreAsThreshold(
         final Map<String, Float> queryTokens,
         final float thresholdRatio
     ) {
-
+        if (Objects.isNull(queryTokens)) {
+            throw new IllegalArgumentException("Query tokens cannot be null or empty.");
+        }
         float max = 0f;
         for (Float value : queryTokens.values()) {
             max = Math.max(value, max);
@@ -143,8 +145,8 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
 
         Map<String, Float> highScoreTokens = queryTokensByScore.get(Boolean.TRUE);
         Map<String, Float> lowScoreTokens = queryTokensByScore.get(Boolean.FALSE);
-        if (Objects.isNull(highScoreTokens) || highScoreTokens.isEmpty()) {
-            throw new IllegalArgumentException("Query tokens cannot be null or empty.");
+        if (Objects.isNull(highScoreTokens)) {
+            highScoreTokens = Collections.emptyMap();
         }
         if (Objects.isNull(lowScoreTokens)) {
             lowScoreTokens = Collections.emptyMap();
