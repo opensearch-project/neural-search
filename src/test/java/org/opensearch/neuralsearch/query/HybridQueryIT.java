@@ -226,14 +226,14 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             null
         );
 
-        Optional<Float> maxScore = getMaxScore(searchResponseAsMap);
+        double maxScore = getMaxScore(searchResponseAsMap).get();
         List<Map<String, Object>> hits = getNestedHits(searchResponseAsMap);
-        float maxScoreExpected = 0.0f;
+        double maxScoreExpected = 0.0;
         for (Map<String, Object> hit : hits) {
-            float score = (float) hit.get("_score");
+            double score = (double) hit.get("_score");
             maxScoreExpected = Math.max(score, maxScoreExpected);
         }
-        assertEquals(maxScoreExpected, maxScore);
+        assertEquals(maxScoreExpected, maxScore, 0.0000001);
     }
 
     /**
