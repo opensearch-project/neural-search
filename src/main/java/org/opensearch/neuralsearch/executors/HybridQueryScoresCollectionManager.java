@@ -2,12 +2,10 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.query;
+package org.opensearch.neuralsearch.executors;
 
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollector;
-import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollectorManager;
 
 import java.util.List;
 import java.util.Optional;
@@ -28,7 +26,7 @@ public final class HybridQueryScoresCollectionManager
      * @return HybridQueryExecutorCollector instance
      */
     @Override
-    public HybridQueryExecutorCollector<?, HybridQueryScoresCollectionManager.ScoreWrapperFromCollector> newCollector() {
+    public HybridQueryExecutorCollector<?, ScoreWrapperFromCollector> newCollector() {
         return HybridQueryExecutorCollector.newCollector(null);
     }
 

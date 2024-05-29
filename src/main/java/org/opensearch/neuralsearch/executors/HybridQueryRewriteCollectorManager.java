@@ -2,14 +2,12 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.query;
+package org.opensearch.neuralsearch.executors;
 
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
-import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollector;
-import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollectorManager;
 
 import java.util.ArrayList;
 import java.util.List;

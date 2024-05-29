@@ -25,6 +25,7 @@ import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Weight;
 import org.opensearch.neuralsearch.executors.HybridQueryExecutor;
 import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollector;
+import org.opensearch.neuralsearch.executors.HybridQueryRewriteCollectorManager;
 
 /**
  * Implementation of Query interface for type "hybrid". It allows execution of multiple sub-queries and collect individual
