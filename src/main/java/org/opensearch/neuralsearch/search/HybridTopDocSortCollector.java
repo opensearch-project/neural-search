@@ -304,9 +304,6 @@ public abstract class HybridTopDocSortCollector implements Collector {
     public static class SimpleFieldCollector extends HybridTopDocSortCollector {
         final Sort sort;
         final int numHits;
-        // @Getter
-        // private FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores;
-        // Boolean searchSortPartOfIndexSort = null;
 
         public SimpleFieldCollector(int numHits, HitsThresholdChecker hitsThresholdChecker, Sort sort) {
             super(numHits, hitsThresholdChecker);
@@ -333,9 +330,7 @@ public abstract class HybridTopDocSortCollector implements Collector {
                         if (score == 0) {
                             continue;
                         }
-
                         collectedHits[i]++;
-
                         if (queueFull[i]) {
                             if (thresholdCheck(doc, i)) {
                                 return;
@@ -346,48 +341,7 @@ public abstract class HybridTopDocSortCollector implements Collector {
                         }
 
                     }
-
                 }
-
-                // private void initializePriorityQueuesWithComparators(LeafReaderContext context, int length) throws IOException {
-                // if (compoundScores == null) {
-                // compoundScores = new FieldValueHitQueue[length];
-                // comparators = new LeafFieldComparator[length];
-                // queueFull = new boolean[length];
-                // collectedHits = new int[length];
-                // for (int i = 0; i < length; i++) {
-                // initializeLeafFieldComparators(context, i);
-                // }
-                // }
-                // }
-                //
-                // private void initializeLeafFieldComparators(LeafReaderContext context, int i) throws IOException {
-                // compoundScores[i] = FieldValueHitQueue.create(sort.getSort(), numHits);
-                // firstComparator = compoundScores[i].getComparators()[0];
-                // if (searchSortPartOfIndexSort == null) {
-                // Sort indexSort = context.reader().getMetaData().getSort();
-                // searchSortPartOfIndexSort = canEarlyTerminate(sort, indexSort);
-                // if (searchSortPartOfIndexSort) {
-                // firstComparator.disableSkipping();
-                // }
-                // }
-                //
-                // // Optimize the sort
-                // if (compoundScores[i].getComparators().length == 1) {
-                // firstComparator.setSingleSort();
-                // }
-                //
-                // LeafFieldComparator[] leafComparators = compoundScores[i].getComparators(context);
-                // int[] reverseMuls = compoundScores[i].getReverseMul();
-                // if (leafComparators.length == 1) {
-                // reverseMul = reverseMuls[0];
-                // comparators[i] = leafComparators[0];
-                // } else {
-                // reverseMul = 1;
-                // comparators[i] = new MultiLeafFieldComparator(leafComparators, reverseMuls);
-                // }
-                // comparators[i].setScorer(compoundQueryScorer);
-                // }
             };
         }
 
@@ -400,9 +354,6 @@ public abstract class HybridTopDocSortCollector implements Collector {
 
         final Sort sort;
         final int numHits;
-        // @Getter
-        // private FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores;
-        // Boolean searchSortPartOfIndexSort = null;
         final FieldDoc after;
 
         public PagingFieldCollector(int numHits, HitsThresholdChecker hitsThresholdChecker, Sort sort, @Nullable FieldDoc after) {
@@ -463,59 +414,6 @@ public abstract class HybridTopDocSortCollector implements Collector {
                     }
                     return false;
                 }
-
-                // private void initializePriorityQueuesWithComparators(LeafReaderContext context, int length) throws IOException {
-                // if (compoundScores == null) {
-                // compoundScores = new FieldValueHitQueue[length];
-                // comparators = new LeafFieldComparator[length];
-                // queueFull = new boolean[length];
-                // collectedHits = new int[length];
-                // for (int i = 0; i < length; i++) {
-                // initializeLeafFieldComparators(context, i);
-                // }
-                // }
-                // }
-                //
-                // private void initializeLeafFieldComparators(LeafReaderContext context, int subQueryNumber) throws IOException {
-                // compoundScores[subQueryNumber] = FieldValueHitQueue.create(sort.getSort(), numHits);
-                // // FieldComparator<?>[] comparators = compoundScores[i].getComparators();
-                // firstComparator = compoundScores[subQueryNumber].getComparators()[0];
-                // // as all segments are sorted in the same way, enough to check only the 1st segment for
-                // // indexSort
-                // if (searchSortPartOfIndexSort == null) {
-                // Sort indexSort = context.reader().getMetaData().getSort();
-                // searchSortPartOfIndexSort = canEarlyTerminate(sort, indexSort);
-                // if (searchSortPartOfIndexSort) {
-                // firstComparator.disableSkipping();
-                // }
-                // }
-                //
-                // // Optimize the sort
-                // if (compoundScores[subQueryNumber].getComparators().length == 1) {
-                // firstComparator.setSingleSort();
-                // }
-                //
-                // LeafFieldComparator[] leafFieldComparators = compoundScores[subQueryNumber].getComparators(context);
-                // int[] reverseMuls = compoundScores[subQueryNumber].getReverseMul();
-                // if (leafFieldComparators.length == 1) {
-                // reverseMul = reverseMuls[0];
-                // comparators[subQueryNumber] = leafFieldComparators[0];
-                // } else {
-                // reverseMul = 1;
-                // comparators[subQueryNumber] = new MultiLeafFieldComparator(leafFieldComparators, reverseMuls);
-                // }
-                // comparators[subQueryNumber].setScorer(compoundQueryScorer);
-                // setAfterFieldValueInFieldCompartor(subQueryNumber);
-                // }
-                //
-                // private void setAfterFieldValueInFieldCompartor(int subQueryNumber) {
-                // FieldComparator<?>[] fieldComparators = compoundScores[subQueryNumber].getComparators();
-                // for (int k = 0; k < fieldComparators.length; k++) {
-                // @SuppressWarnings("unchecked")
-                // FieldComparator<Object> fieldComparator = (FieldComparator<Object>) fieldComparators[k];
-                // fieldComparator.setTopValue(after.fields[k]);
-                // }
-                // }
             };
         }
 
