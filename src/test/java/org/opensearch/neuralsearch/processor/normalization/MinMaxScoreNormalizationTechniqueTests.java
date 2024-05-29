@@ -28,7 +28,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
                         new TotalHits(2, TotalHits.Relation.EQUAL_TO),
                         new ScoreDoc[] { new ScoreDoc(2, 0.5f), new ScoreDoc(4, 0.2f) }
                     )
-                )
+                ),
+                false
             )
         );
         normalizationTechnique.normalize(compoundTopDocs);
@@ -40,7 +41,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
                     new TotalHits(2, TotalHits.Relation.EQUAL_TO),
                     new ScoreDoc[] { new ScoreDoc(2, 1.0f), new ScoreDoc(4, 0.001f) }
                 )
-            )
+            ),
+            false
         );
         assertNotNull(compoundTopDocs);
         assertEquals(1, compoundTopDocs.size());
@@ -66,7 +68,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
                         new TotalHits(3, TotalHits.Relation.EQUAL_TO),
                         new ScoreDoc[] { new ScoreDoc(3, 0.9f), new ScoreDoc(4, 0.7f), new ScoreDoc(2, 0.1f) }
                     )
-                )
+                ),
+                false
             )
         );
         normalizationTechnique.normalize(compoundTopDocs);
@@ -83,7 +86,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
                     new TotalHits(3, TotalHits.Relation.EQUAL_TO),
                     new ScoreDoc[] { new ScoreDoc(3, 1.0f), new ScoreDoc(4, 0.75f), new ScoreDoc(2, 0.001f) }
                 )
-            )
+            ),
+            false
         );
         assertNotNull(compoundTopDocs);
         assertEquals(1, compoundTopDocs.size());
@@ -108,7 +112,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
                         new TotalHits(3, TotalHits.Relation.EQUAL_TO),
                         new ScoreDoc[] { new ScoreDoc(3, 0.9f), new ScoreDoc(4, 0.7f), new ScoreDoc(2, 0.1f) }
                     )
-                )
+                ),
+                false
             ),
             new CompoundTopDocs(
                 new TotalHits(2, TotalHits.Relation.EQUAL_TO),
@@ -118,7 +123,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
                         new TotalHits(2, TotalHits.Relation.EQUAL_TO),
                         new ScoreDoc[] { new ScoreDoc(7, 2.9f), new ScoreDoc(9, 0.7f) }
                     )
-                )
+                ),
+                false
             )
         );
         normalizationTechnique.normalize(compoundTopDocs);
@@ -135,7 +141,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
                     new TotalHits(3, TotalHits.Relation.EQUAL_TO),
                     new ScoreDoc[] { new ScoreDoc(3, 1.0f), new ScoreDoc(4, 0.75f), new ScoreDoc(2, 0.001f) }
                 )
-            )
+            ),
+            false
         );
 
         CompoundTopDocs expectedCompoundDocsShard2 = new CompoundTopDocs(
@@ -146,7 +153,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
                     new TotalHits(2, TotalHits.Relation.EQUAL_TO),
                     new ScoreDoc[] { new ScoreDoc(7, 1.0f), new ScoreDoc(9, 0.001f) }
                 )
-            )
+            ),
+            false
         );
 
         assertNotNull(compoundTopDocs);

@@ -9,7 +9,6 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TopFieldDocs;
-import org.opensearch.core.common.util.CollectionUtils;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryDelimiterElement;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryStartStopElement;
 
@@ -41,18 +40,14 @@ public class CompoundTopDocs {
     @Setter
     private List<ScoreDoc> scoreDocs;
 
-    public CompoundTopDocs(final TotalHits totalHits, final List<TopDocs> topDocs) {
-        initialize(totalHits, topDocs);
+    public CompoundTopDocs(final TotalHits totalHits, final List<TopDocs> topDocs, final boolean isSortEnabled) {
+        initialize(totalHits, topDocs, isSortEnabled);
     }
 
-    private void initialize(TotalHits totalHits, List<TopDocs> topDocs) {
+    private void initialize(TotalHits totalHits, List<TopDocs> topDocs, boolean isSortEnabled) {
         this.totalHits = totalHits;
-        if (!CollectionUtils.isEmpty(topDocs) && topDocs.get(0) instanceof TopFieldDocs) {
-            this.topDocs = topDocs.stream().map(topDoc -> (TopFieldDocs) topDoc).collect(Collectors.toList());
-        } else {
-            this.topDocs = topDocs;
-        }
-        scoreDocs = cloneLargestScoreDocs(topDocs);
+        this.topDocs = topDocs;
+        scoreDocs = cloneLargestScoreDocs(topDocs, isSortEnabled);
     }
 
     /**
@@ -80,13 +75,13 @@ public class CompoundTopDocs {
      *  0, 9549511920.4881596047
      */
     public CompoundTopDocs(final TopDocs topDocs) {
-        boolean isSortApplied = false;
+        boolean isSortEnabled = false;
         if (topDocs instanceof TopFieldDocs) {
-            isSortApplied = true;
+            isSortEnabled = true;
         }
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         if (Objects.isNull(scoreDocs) || scoreDocs.length < 2) {
-            initialize(topDocs.totalHits, new ArrayList<>());
+            initialize(topDocs.totalHits, new ArrayList<>(), isSortEnabled);
             return;
         }
         // skipping first two elements, it's a start-stop element and delimiter for first series
@@ -99,7 +94,7 @@ public class CompoundTopDocs {
                 ScoreDoc[] subQueryScores = scoreDocList.toArray(new ScoreDoc[0]);
                 TotalHits totalHits = new TotalHits(subQueryScores.length, TotalHits.Relation.EQUAL_TO);
                 TopDocs subQueryTopDocs;
-                if (isSortApplied) {
+                if (isSortEnabled) {
                     subQueryTopDocs = new TopFieldDocs(totalHits, subQueryScores, ((TopFieldDocs) topDocs).fields);
                 } else {
                     subQueryTopDocs = new TopDocs(totalHits, subQueryScores);
@@ -110,31 +105,12 @@ public class CompoundTopDocs {
                 scoreDocList.add(scoreDoc);
             }
         }
-        initialize(topDocs.totalHits, topDocsList);
+        initialize(topDocs.totalHits, topDocsList, isSortEnabled);
     }
 
-    private List<ScoreDoc> cloneLargestScoreDocs(final List<TopDocs> docs) {
+    private List<ScoreDoc> cloneLargestScoreDocs(final List<TopDocs> docs, boolean isSortEnabled) {
         if (docs == null) {
             return null;
-        }
-
-        TopDocs doc1 = docs.stream().filter(Objects::nonNull).findFirst().orElse(null);
-        if (doc1 instanceof TopFieldDocs) {
-            FieldDoc[] maxScoreDocs = new FieldDoc[0];
-            int maxLength = -1;
-            for (TopDocs topDoc : docs) {
-                if (topDoc == null || topDoc.scoreDocs == null) {
-                    continue;
-                }
-                if (topDoc.scoreDocs.length > maxLength) {
-                    maxLength = topDoc.scoreDocs.length;
-                    maxScoreDocs = Arrays.copyOf(topDoc.scoreDocs, topDoc.scoreDocs.length, FieldDoc[].class);
-                }
-            }
-            // do deep copy
-            return Arrays.stream(maxScoreDocs)
-                .map(doc -> new FieldDoc(doc.doc, doc.score, doc.fields, doc.shardIndex))
-                .collect(Collectors.toList());
         }
         ScoreDoc[] maxScoreDocs = new ScoreDoc[0];
         int maxLength = -1;
@@ -148,6 +124,13 @@ public class CompoundTopDocs {
             }
         }
         // do deep copy
-        return Arrays.stream(maxScoreDocs).map(doc -> new ScoreDoc(doc.doc, doc.score, doc.shardIndex)).collect(Collectors.toList());
+        return Arrays.stream(maxScoreDocs).map(doc -> {
+            if (isSortEnabled) {
+                FieldDoc fieldDoc = (FieldDoc) doc;
+                return new FieldDoc(fieldDoc.doc, fieldDoc.score, fieldDoc.fields, fieldDoc.shardIndex);
+            } else {
+                return new ScoreDoc(doc.doc, doc.score, doc.shardIndex);
+            }
+        }).collect(Collectors.toList());
     }
 }
