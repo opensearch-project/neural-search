@@ -46,12 +46,14 @@ public abstract class HybridTopDocSortCollector implements Collector {
     FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores;
     boolean queueFull[];
     @Getter
-    protected int totalHits;
-    protected int[] collectedHits;
+    private int totalHits;
+    @Getter
+    float maxScore = 0.0f;
+    int[] collectedHits;
     @Getter
     @Setter
     private TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
-    Boolean searchSortPartOfIndexSort = null;
+    private Boolean searchSortPartOfIndexSort = null;
 
     private static final TopFieldDocs EMPTY_TOPDOCS = new TopFieldDocs(
         new TotalHits(0, TotalHits.Relation.EQUAL_TO),
@@ -193,8 +195,7 @@ public abstract class HybridTopDocSortCollector implements Collector {
         private void initializeLeafFieldComparators(LeafReaderContext context, int subQueryNumber) throws IOException {
             compoundScores[subQueryNumber] = FieldValueHitQueue.create(sort.getSort(), numHits);
             firstComparator = compoundScores[subQueryNumber].getComparators()[0];
-            // as all segments are sorted in the same way, enough to check only the 1st segment for
-            // indexSort
+            // as all segments are sorted in the same way, enough to check only the 1st segment for indexSort
             if (searchSortPartOfIndexSort == null) {
                 Sort indexSort = context.reader().getMetaData().getSort();
                 searchSortPartOfIndexSort = canEarlyTerminate(sort, indexSort);
@@ -246,14 +247,7 @@ public abstract class HybridTopDocSortCollector implements Collector {
             }
         }
 
-        void collectHit(
-            // LeafFieldComparator comparators[],
-            int doc,
-            int hitsCollected,
-            // FieldValueHitQueue<FieldValueHitQueue.Entry> compoundScore,
-            int subQueryNumber,
-            float score
-        ) throws IOException {
+        void collectHit(int doc, int hitsCollected, int subQueryNumber, float score) throws IOException {
             // Startup transient: queue hasn't gathered numHits yet
             int slot = hitsCollected - 1;
             // Copy hit into queue
@@ -264,24 +258,14 @@ public abstract class HybridTopDocSortCollector implements Collector {
             }
         }
 
-        void collectCompetitiveHit(
-            // LeafFieldComparator comparators[],
-            int doc,
-            // FieldValueHitQueue<FieldValueHitQueue.Entry> compoundScore,
-            int subQueryNumber
-        ) throws IOException {
+        void collectCompetitiveHit(int doc, int subQueryNumber) throws IOException {
             // This hit is competitive - replace bottom element in queue & adjustTop
             comparators[subQueryNumber].copy(bottom.slot, doc);
             updateBottom(doc, compoundScores[subQueryNumber]);
             comparators[subQueryNumber].setBottom(bottom.slot);
         }
 
-        boolean thresholdCheck(
-            // LeafFieldComparator comparators[],
-            int doc,
-            int subQueryNumber
-        // int reverseMul
-        ) throws IOException {
+        boolean thresholdCheck(int doc, int subQueryNumber) throws IOException {
             if (collectedAllCompetitiveHits || reverseMul * comparators[subQueryNumber].compareBottom(doc) <= 0) {
                 // since docs are visited in doc Id order, if compare is 0, it means
                 // this document is larger than anything else in the queue, and
@@ -322,8 +306,8 @@ public abstract class HybridTopDocSortCollector implements Collector {
                         throw new IllegalArgumentException("scorers are null for all sub-queries in hybrid query");
                     }
                     float[] subScoresByQuery = compoundQueryScorer.hybridScores();
-                    incrementTotalHitCount();
                     initializePriorityQueuesWithComparators(context, subScoresByQuery.length);
+                    incrementTotalHitCount();
                     for (int i = 0; i < subScoresByQuery.length; i++) {
                         float score = subScoresByQuery[i];
                         // if score is 0.0 there is no hits for that sub-query
@@ -338,6 +322,7 @@ public abstract class HybridTopDocSortCollector implements Collector {
                             collectCompetitiveHit(doc, i);
                         } else {
                             collectHit(doc, collectedHits[i], i, score);
+                            maxScore = Math.max(score, maxScore);
                         }
 
                     }
@@ -374,8 +359,8 @@ public abstract class HybridTopDocSortCollector implements Collector {
                         throw new IllegalArgumentException("scorers are null for all sub-queries in hybrid query");
                     }
                     float[] subScoresByQuery = compoundQueryScorer.hybridScores();
-                    incrementTotalHitCount();
                     initializePriorityQueuesWithComparators(context, subScoresByQuery.length);
+                    incrementTotalHitCount();
                     for (int i = 0; i < subScoresByQuery.length; i++) {
                         float score = subScoresByQuery[i];
                         // if score is 0.0 there is no hits for that sub-query
@@ -400,6 +385,7 @@ public abstract class HybridTopDocSortCollector implements Collector {
                         } else {
                             collectedHits[i]++;
                             collectHit(doc, collectedHits[i], i, score);
+                            maxScore = Math.max(score, maxScore);
                         }
 
                     }

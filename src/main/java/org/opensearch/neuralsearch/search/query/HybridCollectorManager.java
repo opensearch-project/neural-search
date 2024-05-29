@@ -35,11 +35,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createDelimiterElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
@@ -77,6 +74,9 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         boolean isSingleShard = searchContext.numberOfShards() == 1;
         int numDocs = Math.min(searchContext.from() + searchContext.size(), totalNumDocs);
         int trackTotalHitsUpTo = searchContext.trackTotalHitsUpTo();
+        if (searchContext.sort() != null) {
+            validateSortCriteria(searchContext, searchContext.trackScores());
+        }
 
         Weight filteringWeight = null;
         // Check for post filter to create weight for filter query and later use that weight in the search workflow
@@ -199,9 +199,11 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("cannot collect results of hybrid search query"));
             List<TopDocs> topDocs = hybridTopScoreDocCollector.topDocs();
-            TopDocs newTopDocs = getNewTopDocs(getTotalHits(this.trackTotalHitsUpTo, topDocs, isSingleShard), topDocs);
-            float maxScore = getMaxScore(topDocs);
-            TopDocsAndMaxScore topDocsAndMaxScore = new TopDocsAndMaxScore(newTopDocs, maxScore);
+            TopDocs newTopDocs = getNewTopDocs(
+                getTotalHits(this.trackTotalHitsUpTo, topDocs, isSingleShard, hybridTopScoreDocCollector.getTotalHits()),
+                topDocs
+            );
+            TopDocsAndMaxScore topDocsAndMaxScore = new TopDocsAndMaxScore(newTopDocs, hybridTopScoreDocCollector.getMaxScore());
             return (QuerySearchResult result) -> { result.topDocs(topDocsAndMaxScore, getSortValueFormats(sortAndFormats)); };
         }
 
@@ -210,31 +212,63 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("cannot collect results of hybrid search query"));
 
-            HybridTopDocSortCollector.SimpleFieldCollector simpleFieldCollector = null;
-            HybridTopDocSortCollector.PagingFieldCollector pagingFieldCollector = null;
+            HybridTopDocSortCollector.SimpleFieldCollector simpleFieldCollector;
+            HybridTopDocSortCollector.PagingFieldCollector pagingFieldCollector;
             List<TopFieldDocs> topFieldDocs;
             long maxTotalHits;
+            float maxScore;
             if (hybridSortedTopScoreDocCollector instanceof HybridTopDocSortCollector.SimpleFieldCollector) {
                 simpleFieldCollector = (HybridTopDocSortCollector.SimpleFieldCollector) hybridSortedTopScoreDocCollector;
                 topFieldDocs = simpleFieldCollector.topDocs();
                 maxTotalHits = simpleFieldCollector.getTotalHits();
+                maxScore = simpleFieldCollector.getMaxScore();
             } else {
                 pagingFieldCollector = (HybridTopDocSortCollector.PagingFieldCollector) hybridSortedTopScoreDocCollector;
                 topFieldDocs = pagingFieldCollector.topDocs();
                 maxTotalHits = pagingFieldCollector.getTotalHits();
+                maxScore = pagingFieldCollector.getMaxScore();
             }
 
             TopDocs newTopDocs = getNewTopFieldDocs(
-                getTopFieldTotalHits(this.trackTotalHitsUpTo, topFieldDocs, isSingleShard, maxTotalHits),
+                getTotalHits(this.trackTotalHitsUpTo, topFieldDocs, isSingleShard, maxTotalHits),
                 topFieldDocs,
                 sortAndFormats.sort.getSort()
             );
-            float maxScore = getTopFieldMaxScore(topFieldDocs);
             TopDocsAndMaxScore topDocsAndMaxScore = new TopDocsAndMaxScore(newTopDocs, maxScore);
             return (QuerySearchResult result) -> { result.topDocs(topDocsAndMaxScore, getSortValueFormats(sortAndFormats)); };
         }
 
         throw new IllegalStateException("cannot collect results of hybrid search query, there are no proper score collectors");
+    }
+
+    private static void validateSortCriteria(SearchContext searchContext, boolean trackScores) {
+        SortField[] sortFields = searchContext.sort().sort.getSort();
+        boolean isSortByField = false;
+        boolean isSortByScore = false;
+        for (SortField sortField : sortFields) {
+            SortField.Type type = sortField.getType();
+            if (type.equals(SortField.Type.SCORE)) {
+                isSortByScore = true;
+            } else {
+                isSortByField = true;
+            }
+            if (isSortByScore && isSortByField) {
+                break;
+            }
+        }
+        if (isSortByScore && isSortByField) {
+            throw new IllegalArgumentException(
+                "_score sort criteria cannot be applied with any other criteria. Please select one sort criteria out of them."
+            );
+        }
+        if (trackScores && isSortByField) {
+            throw new IllegalArgumentException(
+                "Hybrid search results are sorted by any field, docId or _id, track_scores must be set to true."
+            );
+        }
+        if (trackScores && isSortByScore) {
+            throw new IllegalArgumentException("Hybrid search results are by default sorted by _score, track_scores must be set to false.");
+        }
     }
 
     private TopDocs getNewTopDocs(final TotalHits totalHits, final List<TopDocs> topDocs) {
@@ -280,7 +314,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         return new TopDocs(totalHits, scoreDocs);
     }
 
-    private TotalHits getTotalHits(int trackTotalHitsUpTo, final List<TopDocs> topDocs, final boolean isSingleShard) {
+    private TotalHits getTotalHits(int trackTotalHitsUpTo, final List<?> topDocs, final boolean isSingleShard, final long maxTotalHits) {
         final TotalHits.Relation relation = trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED
             ? TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO
             : TotalHits.Relation.EQUAL_TO;
@@ -288,29 +322,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             return new TotalHits(0, relation);
         }
 
-        List<ScoreDoc[]> scoreDocs = topDocs.stream()
-            .map(topdDoc -> topdDoc.scoreDocs)
-            .filter(Objects::nonNull)
-            .collect(Collectors.toList());
-        Set<Integer> uniqueDocIds = new HashSet<>();
-        for (ScoreDoc[] scoreDocsArray : scoreDocs) {
-            uniqueDocIds.addAll(Arrays.stream(scoreDocsArray).map(scoreDoc -> scoreDoc.doc).collect(Collectors.toList()));
-        }
-        long maxTotalHits = uniqueDocIds.size();
-
         return new TotalHits(maxTotalHits, relation);
-    }
-
-    private float getMaxScore(final List<TopDocs> topDocs) {
-        if (topDocs.isEmpty()) {
-            return 0.0f;
-        } else {
-            return topDocs.stream()
-                .map(docs -> docs.scoreDocs.length == 0 ? new ScoreDoc(-1, 0.0f) : docs.scoreDocs[0])
-                .map(scoreDoc -> scoreDoc.score)
-                .max(Float::compare)
-                .get();
-        }
     }
 
     private TopDocs getNewTopFieldDocs(final TotalHits totalHits, final List<TopFieldDocs> topFieldDocs, final SortField sortFields[]) {
@@ -361,48 +373,6 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             fieldDocs = result.stream().map(doc -> new FieldDoc(doc.doc, doc.score, doc.fields, doc.shardIndex)).toArray(FieldDoc[]::new);
         }
         return new TopFieldDocs(totalHits, fieldDocs, sortFields);
-    }
-
-    private TotalHits getTopFieldTotalHits(
-        int trackTotalHitsUpTo,
-        final List<TopFieldDocs> topFieldDocs,
-        final boolean isSingleShard,
-        long maxTotalHits
-    ) {
-        final TotalHits.Relation relation = trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED
-            ? TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO
-            : TotalHits.Relation.EQUAL_TO;
-        if (topFieldDocs == null || topFieldDocs.isEmpty()) {
-            return new TotalHits(0, relation);
-        }
-
-        // long maxTotalHits=maxHits;
-        // if (simpleFieldCollector != null) {
-        // maxTotalHits = simpleFieldCollector.getTotalHits();
-        // } else {
-        // List<ScoreDoc[]> scoreDocs = topFieldDocs.stream()
-        // .map(topDoc -> topDoc.scoreDocs)
-        // .filter(Objects::nonNull)
-        // .collect(Collectors.toList());
-        // Set<Integer> uniqueDocIds = new HashSet<>();
-        // for (ScoreDoc[] scoreDocsArray : scoreDocs) {
-        // uniqueDocIds.addAll(Arrays.stream(scoreDocsArray).map(scoreDoc -> scoreDoc.doc).collect(Collectors.toList()));
-        // }
-        // maxTotalHits = uniqueDocIds.size();
-        // }
-        return new TotalHits(maxTotalHits, relation);
-    }
-
-    private float getTopFieldMaxScore(final List<TopFieldDocs> topFieldDocs) {
-        if (topFieldDocs.isEmpty()) {
-            return 0.0f;
-        } else {
-            return topFieldDocs.stream()
-                .map(docs -> docs.scoreDocs.length == 0 ? new ScoreDoc(-1, 0.0f) : docs.scoreDocs[0])
-                .map(scoreDoc -> scoreDoc.score)
-                .max(Float::compare)
-                .get();
-        }
     }
 
     private DocValueFormat[] getSortValueFormats(final SortAndFormats sortAndFormats) {
