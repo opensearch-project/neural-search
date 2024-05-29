@@ -255,34 +255,6 @@ public class ScoreCombiner {
         return new TotalHits(maxHits, totalHits);
     }
 
-    // private static Sort createSort(TopFieldDocs[] topFieldDocs) {
-    // final SortField[] firstTopDocFields = topFieldDocs[0].fields;
-    // final SortField[] newFields = new SortField[firstTopDocFields.length];
-    //
-    // for (int i = 0; i < firstTopDocFields.length; i++) {
-    // final SortField delegate = firstTopDocFields[i];
-    // final SortField.Type type = delegate instanceof SortedNumericSortField
-    // ? ((SortedNumericSortField) delegate).getNumericType()
-    // : delegate.getType();
-    //
-    // if (SortedWiderNumericSortField.isTypeSupported(type) && isSortWideningRequired(topFieldDocs, i)) {
-    // newFields[i] = new SortedWiderNumericSortField(delegate.getField(), type, delegate.getReverse());
-    // } else {
-    // newFields[i] = firstTopDocFields[i];
-    // }
-    // }
-    // return new Sort(newFields);
-    // }
-    //
-    // private static boolean isSortWideningRequired(TopFieldDocs[] topFieldDocs, int sortFieldindex) {
-    // for (int i = 0; i < topFieldDocs.length - 1; i++) {
-    // if (!topFieldDocs[i].fields[sortFieldindex].equals(topFieldDocs[i + 1].fields[sortFieldindex])) {
-    // return true;
-    // }
-    // }
-    // return false;
-    // }
-
     private Comparator<ScoreDoc> getTieBreaker() {
         final Comparator<ScoreDoc> Sorting_TIE_BREAKER = (o1, o2) -> {
             int scoreComparison = Double.compare(o1.score, o2.score);

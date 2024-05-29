@@ -9,6 +9,7 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TopFieldDocs;
+import org.opensearch.core.common.util.CollectionUtils;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryDelimiterElement;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryStartStopElement;
 
@@ -46,7 +47,7 @@ public class CompoundTopDocs {
 
     private void initialize(TotalHits totalHits, List<TopDocs> topDocs) {
         this.totalHits = totalHits;
-        if (!topDocs.isEmpty() && topDocs.get(0) instanceof TopFieldDocs) {
+        if (!CollectionUtils.isEmpty(topDocs) && topDocs.get(0) instanceof TopFieldDocs) {
             this.topDocs = topDocs.stream().map(topDoc -> (TopFieldDocs) topDoc).collect(Collectors.toList());
         } else {
             this.topDocs = topDocs;
