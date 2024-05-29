@@ -12,15 +12,15 @@ public interface ModelInferenceQueryBuilder {
     /**
      * Get the model id used by ml-commons model inference. Return null if the model id is absent.
      */
-    String modelId();
+    public String modelId();
 
     /**
      * Set a new model id for the query builder.
      */
-    ModelInferenceQueryBuilder modelId(String modelId);
+    public ModelInferenceQueryBuilder modelId(String modelId);
 
     /**
      * Get the field name for search.
      */
-    String fieldName();
+    public String fieldName();
 }

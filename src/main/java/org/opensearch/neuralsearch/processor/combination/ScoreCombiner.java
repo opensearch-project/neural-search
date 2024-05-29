@@ -52,7 +52,7 @@ public class ScoreCombiner {
         final boolean isSortingEnabled,
         final Sort sort
     ) {
-        boolean isSortByScore = isSortByScore(sort.getSort());
+        final boolean isSortByScore = isSortByScore(sort);
         // iterate over results from each shard. Every CompoundTopDocs object has results from
         // multiple sub queries, doc ids may repeat for each sub query results
         queryTopDocs.forEach(
@@ -77,16 +77,6 @@ public class ScoreCombiner {
             return;
         }
         List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
-        // if (!isSortingEnabled){
-        // Optional<TopDocs> optionalTopDoc = topDocsPerSubQuery.stream()
-        // .filter(Objects::nonNull)
-        // .filter(topDocs -> topDocs.scoreDocs.length > 0)
-        // .findFirst();
-        //
-        // if (optionalTopDoc.isPresent() && optionalTopDoc.get().scoreDocs[0] instanceof FieldDoc) {
-        // isSortingEnabled = true;
-        // }
-        // }
 
         // - create map of normalized scores results returned from the single shard
         Map<Integer, float[]> normalizedScoresPerDoc = getNormalizedScoresPerDocument(topDocsPerSubQuery);
@@ -99,14 +89,11 @@ public class ScoreCombiner {
 
         Map<Integer, Object[]> docIdSortFieldMap = null;
         List<TopFieldDocs> topFieldDocs = null;
-        // Sort sort = null;
         if (isSortingEnabled) {
             topFieldDocs = topDocsPerSubQuery.stream()
                 .filter(topDocs -> topDocs.scoreDocs.length != 0)
                 .map(topDocs -> (TopFieldDocs) topDocs)
                 .collect(Collectors.toList());
-            // sort = createSort(topFieldDocs.toArray(new TopFieldDocs[0]));
-            // boolean isSortByScore = isSortByScore(sortFields);
             docIdSortFieldMap = getDocIdFieldMap(compoundQueryTopDocs, isSortByScore, combinedNormalizedScoresByDocId);
         }
 
@@ -125,10 +112,12 @@ public class ScoreCombiner {
         );
     }
 
-    private boolean isSortByScore(SortField[] sortFields) {
-        for (SortField sortField : sortFields) {
-            if (sortField.getType().equals(SortField.Type.SCORE)) {
-                return true;
+    private boolean isSortByScore(Sort sort) {
+        if (sort != null) {
+            for (SortField sortField : sort.getSort()) {
+                if (sortField.getType().equals(SortField.Type.SCORE)) {
+                    return true;
+                }
             }
         }
         return false;

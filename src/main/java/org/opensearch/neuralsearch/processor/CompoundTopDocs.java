@@ -82,29 +82,6 @@ public class CompoundTopDocs {
         boolean isSortApplied = false;
         if (topDocs instanceof TopFieldDocs) {
             isSortApplied = true;
-            // FieldDoc[] scoreDocs = Arrays.copyOf(topDocs.scoreDocs, topDocs.scoreDocs.length, FieldDoc[].class);
-            // if (Objects.isNull(scoreDocs) || scoreDocs.length < 2) {
-            // initialize(topDocs.totalHits, new ArrayList<>());
-            // return;
-            // }
-            // // skipping first two elements, it's a start-stop element and delimiter for first series
-            // List<TopDocs> topDocsList = new ArrayList<>();
-            // List<FieldDoc> fieldDocList = new ArrayList<>();
-            // for (int index = 2; index < scoreDocs.length; index++) {
-            // // getting first element of score's series
-            // FieldDoc fieldDoc = scoreDocs[index];
-            // if (isFieldDocHybridQueryDelimiterElement(fieldDoc) || isFieldDocHybridQueryStartStopElement(fieldDoc)) {
-            // ScoreDoc[] subQueryScores = fieldDocList.toArray(new ScoreDoc[0]);
-            // TotalHits totalHits = new TotalHits(subQueryScores.length, TotalHits.Relation.EQUAL_TO);
-            // // TopDocs subQueryTopDocs = new TopDocs(totalHits, subQueryScores);
-            // TopDocs subQueryTopDocs = new TopFieldDocs(totalHits, subQueryScores, ((TopFieldDocs) topDocs).fields);
-            // topDocsList.add(subQueryTopDocs);
-            // fieldDocList.clear();
-            // } else {
-            // fieldDocList.add(fieldDoc);
-            // }
-            // }
-            // initialize(topDocs.totalHits, topDocsList);
         }
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         if (Objects.isNull(scoreDocs) || scoreDocs.length < 2) {
@@ -133,7 +110,6 @@ public class CompoundTopDocs {
             }
         }
         initialize(topDocs.totalHits, topDocsList);
-        // }
     }
 
     private List<ScoreDoc> cloneLargestScoreDocs(final List<TopDocs> docs) {
