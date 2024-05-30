@@ -34,8 +34,12 @@ import org.apache.lucene.util.PriorityQueue;
 import org.opensearch.neuralsearch.query.HybridQueryScorer;
 import org.opensearch.common.Nullable;
 
+/*
+ Collects the TopFieldDocs after executing hybrid query. Uses HybridQueryTopDocs as DTO to handle each sub query results.
+ The individual query results are sorted as per the sort criteria sent in the search request.
+ */
 @Log4j2
-public abstract class HybridTopDocSortCollector implements Collector {
+public abstract class HybridTopFieldDocSortCollector implements Collector {
     final int numHits;
     final HitsThresholdChecker hitsThresholdChecker;
     int docBase;
@@ -66,11 +70,12 @@ public abstract class HybridTopDocSortCollector implements Collector {
     // internal versions. If someone will define a constructor with any other
     // visibility, then anyone will be able to extend the class, which is not what
     // we want.
-    private HybridTopDocSortCollector(final int numHits, final HitsThresholdChecker hitsThresholdChecker) {
+    private HybridTopFieldDocSortCollector(final int numHits, final HitsThresholdChecker hitsThresholdChecker) {
         this.numHits = numHits;
         this.hitsThresholdChecker = hitsThresholdChecker;
     }
 
+    // Add the entry in the Priority queue
     void add(int slot, int doc, FieldValueHitQueue<FieldValueHitQueue.Entry> compoundScore, int i, float score) {
         FieldValueHitQueue.Entry bottomEntry = new FieldValueHitQueue.Entry(slot, docBase + doc);
         bottomEntry.score = score;
@@ -83,7 +88,6 @@ public abstract class HybridTopDocSortCollector implements Collector {
     }
 
     void updateBottom(int doc, FieldValueHitQueue<FieldValueHitQueue.Entry> compoundScore) {
-        // bottom.score is already set to Float.NaN in add().
         bottom.doc = docBase + doc;
         bottom = compoundScore.updateTop();
     }
@@ -285,7 +289,7 @@ public abstract class HybridTopDocSortCollector implements Collector {
 
     }
 
-    public static class SimpleFieldCollector extends HybridTopDocSortCollector {
+    public static class SimpleFieldCollector extends HybridTopFieldDocSortCollector {
         final Sort sort;
         final int numHits;
 
@@ -315,6 +319,7 @@ public abstract class HybridTopDocSortCollector implements Collector {
                             continue;
                         }
                         collectedHits[i]++;
+                        maxScore = Math.max(score, maxScore);
                         if (queueFull[i]) {
                             if (thresholdCheck(doc, i)) {
                                 return;
@@ -322,7 +327,6 @@ public abstract class HybridTopDocSortCollector implements Collector {
                             collectCompetitiveHit(doc, i);
                         } else {
                             collectHit(doc, collectedHits[i], i, score);
-                            maxScore = Math.max(score, maxScore);
                         }
 
                     }
@@ -335,7 +339,7 @@ public abstract class HybridTopDocSortCollector implements Collector {
         }
     }
 
-    public static class PagingFieldCollector extends HybridTopDocSortCollector {
+    public static class PagingFieldCollector extends HybridTopFieldDocSortCollector {
 
         final Sort sort;
         final int numHits;
@@ -379,13 +383,12 @@ public abstract class HybridTopDocSortCollector implements Collector {
                         if (resultsFoundOnPreviousPage) {
                             return;
                         }
-
+                        maxScore = Math.max(score, maxScore);
                         if (queueFull[i]) {
                             collectCompetitiveHit(doc, i);
                         } else {
                             collectedHits[i]++;
                             collectHit(doc, collectedHits[i], i, score);
-                            maxScore = Math.max(score, maxScore);
                         }
 
                     }

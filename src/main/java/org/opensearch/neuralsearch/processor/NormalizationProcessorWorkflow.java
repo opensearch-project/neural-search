@@ -127,7 +127,6 @@ public class NormalizationProcessorWorkflow {
                 )
             );
         }
-
         for (int index = 0; index < querySearchResults.size(); index++) {
             QuerySearchResult querySearchResult = querySearchResults.get(index);
             CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
