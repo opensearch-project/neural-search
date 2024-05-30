@@ -17,7 +17,8 @@ import org.apache.lucene.search.Weight;
 import org.apache.lucene.util.PriorityQueue;
 import org.opensearch.neuralsearch.executors.HybridQueryExecutor;
 import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollector;
-import org.opensearch.neuralsearch.query.HybridQueryScoresCollectionManager.ScoreWrapperFromCollector;
+import org.opensearch.neuralsearch.executors.HybridQueryScoresCollectionManager;
+import org.opensearch.neuralsearch.executors.HybridQueryScoresCollectionManager.ScoreWrapperFromCollector;
 import org.opensearch.neuralsearch.search.HybridDisiWrapper;
 
 import java.io.IOException;

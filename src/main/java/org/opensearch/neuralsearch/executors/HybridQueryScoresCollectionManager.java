@@ -47,7 +47,7 @@ public final class HybridQueryScoresCollectionManager
     }
 
     @Data(staticConstructor = "of")
-    static class ScoreWrapperFromCollector {
+    public static class ScoreWrapperFromCollector {
         private final int index;
         private final float score;
     }

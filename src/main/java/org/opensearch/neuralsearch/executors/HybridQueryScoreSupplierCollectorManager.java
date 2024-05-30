@@ -8,8 +8,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.ScorerSupplier;
-import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollector;
-import org.opensearch.neuralsearch.executors.HybridQueryExecutorCollectorManager;
 
 import java.util.ArrayList;
 import java.util.List;
