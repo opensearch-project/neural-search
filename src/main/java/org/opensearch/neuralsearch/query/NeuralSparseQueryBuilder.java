@@ -184,7 +184,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (Objects.nonNull(modelId)) {
             xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
         }
-        if (Objects.nonNull(maxTokenScore)) xContentBuilder.field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), maxTokenScore);
+        if (Objects.nonNull(maxTokenScore)) {
+            xContentBuilder.field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), maxTokenScore);
+        }
         if (Objects.nonNull(queryTokensSupplier) && Objects.nonNull(queryTokensSupplier.get())) {
             xContentBuilder.field(QUERY_TOKENS_FIELD.getPreferredName(), queryTokensSupplier.get());
         }
@@ -315,8 +317,8 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         // We need to inference the sentence to get the queryTokens. The logic is similar to NeuralQueryBuilder
         // If the inference is finished, then rewrite to self and call doToQuery, otherwise, continue doRewrite
         // QueryTokensSupplier means 2 case now,
-        //  1. It's the queryBuilder built for two-phase, doesn't need any rewrite.
-        //  2. It's registerAsyncAction has been registered successful.
+        // 1. It's the queryBuilder built for two-phase, doesn't need any rewrite.
+        // 2. It's registerAsyncAction has been registered successful.
         if (Objects.nonNull(queryTokensSupplier)) {
             return this;
         }
@@ -387,7 +389,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     }
 
     private static void validateFieldType(MappedFieldType fieldType) {
-        if (null == fieldType || !fieldType.typeName().equals("rank_features")) {
+        if (Objects.isNull(fieldType) || !fieldType.typeName().equals("rank_features")) {
             throw new IllegalArgumentException("[" + NAME + "] query only works on [rank_features] fields");
         }
     }
@@ -425,12 +427,10 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .append(queryText)
             .append(modelId)
             .append(maxTokenScore)
-            .append(twoPhasePruneRatio);
-        if (queryTokensSupplier != null) {
+            .append(twoPhasePruneRatio)
+            .append(twoPhaseSharedQueryToken);
+        if (Objects.nonNull(queryTokensSupplier)) {
             builder.append(queryTokensSupplier.get());
-        }
-        if (twoPhaseSharedQueryToken != null) {
-            builder.append(twoPhaseSharedQueryToken);
         }
         return builder.toHashCode();
     }
