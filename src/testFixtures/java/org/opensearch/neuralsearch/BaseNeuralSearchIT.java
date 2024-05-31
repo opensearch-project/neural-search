@@ -691,6 +691,36 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertEquals(request.getEndpoint() + ": failed", RestStatus.CREATED, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
     }
 
+    protected void addDocsThroughBulk(
+        final String index,
+        final String textField,
+        final String pipeline,
+        final List<Map<String, String>> docs,
+        final int batchSize
+    ) throws IOException, ParseException {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < docs.size(); ++i) {
+            String doc = String.format(
+                Locale.ROOT,
+                "{ \"index\": { \"_index\": \"%s\", \"_id\": \"%s\" } },\n" + "{ \"%s\": \"%s\"}",
+                index,
+                docs.get(i).get("id"),
+                textField,
+                docs.get(i).get("text")
+            );
+            builder.append(doc);
+            builder.append("\n");
+        }
+        Request request = new Request(
+            "POST",
+            String.format(Locale.ROOT, "/_bulk?refresh=true&pipeline=%s&batch_size=%d", pipeline, batchSize)
+        );
+        request.setJsonEntity(builder.toString());
+
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+    }
+
     /**
      * Parse the first returned hit from a search response as a map
      *
@@ -1253,6 +1283,19 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         if (indexName != null) {
             deleteIndex(indexName);
         }
+    }
+
+    protected void validateDocCountAndEmbedding(String indexName, int expectedDocCount, String docId, final String embeddingField) {
+        int count = getDocCount(indexName);
+        assertEquals(expectedDocCount, count);
+        Map<String, Object> document = getDocById(indexName, docId);
+        Object documentSource = document.get("_source");
+        assertTrue(documentSource instanceof Map);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> documentSourceMap = (Map<String, Object>) documentSource;
+        assertTrue(documentSourceMap.containsKey(embeddingField));
+        Object ingestOutputs = documentSourceMap.get(embeddingField);
+        assertTrue(ingestOutputs instanceof Map);
     }
 
     /**
