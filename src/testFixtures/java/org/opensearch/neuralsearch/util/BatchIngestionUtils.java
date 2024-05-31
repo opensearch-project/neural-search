@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * A help class to build docs for bulk request which is used by batch ingestion tests.
+ * A helper class to build docs for bulk request which is used by batch ingestion tests.
  */
 public class BatchIngestionUtils {
     private static final List<String> TEXTS = Arrays.asList(

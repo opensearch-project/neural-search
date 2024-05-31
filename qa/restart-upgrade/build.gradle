@@ -90,7 +90,7 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
         }
     }
 
-    // Excluding the k-NN radial search tests and batch ingestion tests because we introduce this feature in 2.14
+    // Excluding the k-NN radial search tests and batch ingestion tests because we introduce these features in 2.14
     if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10") || ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12") || ext.neural_search_bwc_version.startsWith("2.13")){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.KnnRadialSearchIT.*"
@@ -147,7 +147,7 @@ task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
         }
     }
 
-    // Excluding the k-NN radial search tests and batch ingestion tests because we introduce this feature in 2.14
+    // Excluding the k-NN radial search tests and batch ingestion tests because we introduce these features in 2.14
     if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10") || ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12") || ext.neural_search_bwc_version.startsWith("2.13")){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.KnnRadialSearchIT.*"
