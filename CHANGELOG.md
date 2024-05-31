@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Bug Fixes
 - Total hit count fix in Hybrid Query ([756](https://github.com/opensearch-project/neural-search/pull/756))
 ### Infrastructure
+- Add BWC for batch ingestion ([#769](https://github.com/opensearch-project/neural-search/pull/769))
 ### Documentation
 ### Maintenance
 ### Refactoring
