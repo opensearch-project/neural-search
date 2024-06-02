@@ -236,15 +236,15 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
             Map<String, Object> twoPhaseConfigMap = ConfigurationUtils.readOptionalMap(TYPE, tag, config, PARAMETER_KEY);
 
             float ratio = DEFAULT_RATIO;
-            float window_expansion = DEFAULT_WINDOW_EXPANSION;
-            int max_window_size = DEFAULT_MAX_WINDOW_SIZE;
+            float windowExpansion = DEFAULT_WINDOW_EXPANSION;
+            int maxWindowSize = DEFAULT_MAX_WINDOW_SIZE;
             if (Objects.nonNull(twoPhaseConfigMap)) {
                 ratio = ((Number) twoPhaseConfigMap.getOrDefault(RATIO_KEY, ratio)).floatValue();
-                window_expansion = ((Number) twoPhaseConfigMap.getOrDefault(EXPANSION_KEY, window_expansion)).floatValue();
-                max_window_size = ((Number) twoPhaseConfigMap.getOrDefault(MAX_WINDOW_SIZE_KEY, max_window_size)).intValue();
+                windowExpansion = ((Number) twoPhaseConfigMap.getOrDefault(EXPANSION_KEY, windowExpansion)).floatValue();
+                maxWindowSize = ((Number) twoPhaseConfigMap.getOrDefault(MAX_WINDOW_SIZE_KEY, maxWindowSize)).intValue();
             }
 
-            return new NeuralSparseTwoPhaseProcessor(tag, description, ignoreFailure, enabled, ratio, window_expansion, max_window_size);
+            return new NeuralSparseTwoPhaseProcessor(tag, description, ignoreFailure, enabled, ratio, windowExpansion, maxWindowSize);
         }
     }
 

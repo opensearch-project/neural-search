@@ -80,7 +80,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     private String modelId;
     private Float maxTokenScore;
     private Supplier<Map<String, Float>> queryTokensSupplier;
-    // A filed that for neural_sparse_two_phase_processor, if twoPhaseSharedQueryToken is not null,
+    // A field that for neural_sparse_two_phase_processor, if twoPhaseSharedQueryToken is not null,
     // it means it's origin NeuralSparseQueryBuilder and should split the low score tokens form itself then put it into
     // twoPhaseSharedQueryToken.
     private Map<String, Float> twoPhaseSharedQueryToken;
