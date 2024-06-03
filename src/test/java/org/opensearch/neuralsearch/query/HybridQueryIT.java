@@ -88,11 +88,6 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     @Override
-    public boolean isUpdateClusterSettings() {
-        return false;
-    }
-
-    @Override
     protected boolean preserveClusterUponCompletion() {
         return true;
     }
