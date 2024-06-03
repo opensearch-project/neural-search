@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.ArrayList;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.StringUtils;
@@ -1285,17 +1286,25 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         }
     }
 
-    protected void validateDocCountAndEmbedding(String indexName, int expectedDocCount, String docId, final String embeddingField) {
+    protected Object validateDocCountAndDocInfo(
+        String indexName,
+        int expectedDocCount,
+        Supplier<Map<String, Object>> documentSupplier,
+        final String field,
+        final Class<?> valueType
+    ) {
         int count = getDocCount(indexName);
         assertEquals(expectedDocCount, count);
-        Map<String, Object> document = getDocById(indexName, docId);
+        Map<String, Object> document = documentSupplier.get();
+        assertNotNull(document);
         Object documentSource = document.get("_source");
         assertTrue(documentSource instanceof Map);
         @SuppressWarnings("unchecked")
         Map<String, Object> documentSourceMap = (Map<String, Object>) documentSource;
-        assertTrue(documentSourceMap.containsKey(embeddingField));
-        Object ingestOutputs = documentSourceMap.get(embeddingField);
-        assertTrue(ingestOutputs instanceof Map);
+        assertTrue(documentSourceMap.containsKey(field));
+        Object outputs = documentSourceMap.get(field);
+        assertTrue(valueType.isAssignableFrom(outputs.getClass()));
+        return outputs;
     }
 
     /**

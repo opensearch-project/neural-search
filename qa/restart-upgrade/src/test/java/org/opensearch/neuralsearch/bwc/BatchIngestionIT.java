@@ -35,7 +35,7 @@ public class BatchIngestionIT extends AbstractRestartUpgradeRestTestCase {
             );
             List<Map<String, String>> docs = prepareDocsForBulk(0, 5);
             addDocsThroughBulk(indexName, TEXT_FIELD_NAME, PIPELINE_NAME, docs, batchSize);
-            validateDocCountAndEmbedding(indexName, 5, "4", EMBEDDING_FIELD_NAME);
+            validateDocCountAndDocInfo(indexName, 5, () -> getDocById(indexName, "4"), EMBEDDING_FIELD_NAME, Map.class);
         } else {
             String modelId = null;
             modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
@@ -43,7 +43,7 @@ public class BatchIngestionIT extends AbstractRestartUpgradeRestTestCase {
             try {
                 List<Map<String, String>> docs = prepareDocsForBulk(5, 5);
                 addDocsThroughBulk(indexName, TEXT_FIELD_NAME, PIPELINE_NAME, docs, batchSize);
-                validateDocCountAndEmbedding(indexName, 10, "9", EMBEDDING_FIELD_NAME);
+                validateDocCountAndDocInfo(indexName, 10, () -> getDocById(indexName, "9"), EMBEDDING_FIELD_NAME, Map.class);
             } finally {
                 wipeOfTestResources(indexName, PIPELINE_NAME, modelId, null);
             }

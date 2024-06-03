@@ -56,20 +56,21 @@ public class TextChunkingProcessorIT extends AbstractRestartUpgradeRestTestCase 
         createIndexWithConfiguration(indexName, indexSetting, PIPELINE_NAME);
     }
 
-    private void validateTestIndex(String indexName, String fieldName, int documentCount, Object expected) {
-        int docCount = getDocCount(indexName);
-        assertEquals(documentCount, docCount);
+    private Map<String, Object> getFirstDocumentInQuery(String indexName, int resultSize) {
         MatchAllQueryBuilder query = new MatchAllQueryBuilder();
-        Map<String, Object> searchResults = search(indexName, query, 10);
+        Map<String, Object> searchResults = search(indexName, query, resultSize);
         assertNotNull(searchResults);
-        Map<String, Object> document = getFirstInnerHit(searchResults);
-        assertNotNull(document);
-        Object documentSource = document.get("_source");
-        assert (documentSource instanceof Map);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> documentSourceMap = (Map<String, Object>) documentSource;
-        assert (documentSourceMap).containsKey(fieldName);
-        Object ingestOutputs = documentSourceMap.get(fieldName);
-        assertEquals(expected, ingestOutputs);
+        return getFirstInnerHit(searchResults);
+    }
+
+    private void validateTestIndex(String indexName, String fieldName, int documentCount, Object expected) {
+        Object outputs = validateDocCountAndDocInfo(
+            indexName,
+            documentCount,
+            () -> getFirstDocumentInQuery(indexName, 10),
+            fieldName,
+            List.class
+        );
+        assertEquals(expected, outputs);
     }
 }
