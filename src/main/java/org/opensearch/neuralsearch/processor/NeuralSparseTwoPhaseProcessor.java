@@ -188,6 +188,19 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
         } else if (queryBuilder instanceof NeuralSparseQueryBuilder) {
             NeuralSparseQueryBuilder neuralSparseQueryBuilder = (NeuralSparseQueryBuilder) queryBuilder;
             float updatedBoost = baseBoost * neuralSparseQueryBuilder.boost();
+            /*
+             * We obtain a copied modifiedQueryBuilder from the valid origin NeuralSparseQueryBuilder. After this,
+             * when the original NeuralSparseQueryBuilder starts to rewrite, it will only retain the tokens that
+             * have higher scores (controlled by the maxScore * ratio). The tokens with lower scores will be
+             * passed to the modifiedQueryBuilder's queryTokenSupplier.
+             *
+             * By doing this, we reduce the score computation time for the original NeuralSparseQueryBuilder,
+             * and use the modifiedQueryBuilder to make a score increment on TopDocs.
+             *
+             * When 2-phase is enabled:
+             *     - Docs besides TopDocs: Score = HighScoreToken's score
+             *     - Final TopDocs: Score = HighScoreToken's score + LowScoreToken's score
+             */
             NeuralSparseQueryBuilder modifiedQueryBuilder = neuralSparseQueryBuilder.getCopyNeuralSparseQueryBuilderForTwoPhase(ratio);
             result.put(modifiedQueryBuilder, updatedBoost);
         }
