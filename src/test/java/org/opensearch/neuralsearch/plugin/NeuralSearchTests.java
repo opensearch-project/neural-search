@@ -29,6 +29,8 @@ import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.query.QueryPhaseSearcher;
+import org.opensearch.threadpool.ExecutorBuilder;
+import org.opensearch.threadpool.FixedExecutorBuilder;
 
 public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
@@ -103,4 +105,18 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         assertNotNull(processors);
         assertNotNull(processors.get(NeuralQueryEnricherProcessor.TYPE));
     }
+
+    public void testExecutionBuilders() {
+        NeuralSearch plugin = new NeuralSearch();
+        Settings settings = Settings.builder().build();
+        Environment environment = mock(Environment.class);
+        when(environment.settings()).thenReturn(settings);
+        final List<ExecutorBuilder<?>> executorBuilders = plugin.getExecutorBuilders(settings);
+
+        assertNotNull(executorBuilders);
+        assertFalse(executorBuilders.isEmpty());
+        assertEquals("Unexpected number of executor builders are registered", 1, executorBuilders.size());
+        assertTrue(executorBuilders.get(0) instanceof FixedExecutorBuilder);
+    }
+
 }
