@@ -17,6 +17,7 @@ import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.QUERY_T
 import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.QUERY_TOKENS_FIELD;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -685,4 +686,19 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
 
         assertEquals(sparseEncodingQueryBuilder.doToQuery(mockedQueryShardContext), targetQueryBuilder.build());
     }
+
+    @SneakyThrows
+    public void testDoToQuery_whenEmptyQueryToken_thenThrowException() {
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensSupplier(() -> Collections.emptyMap());
+        QueryShardContext mockedQueryShardContext = mock(QueryShardContext.class);
+        MappedFieldType mockedMappedFieldType = mock(MappedFieldType.class);
+        doAnswer(invocation -> "rank_features").when(mockedMappedFieldType).typeName();
+        doAnswer(invocation -> mockedMappedFieldType).when(mockedQueryShardContext).fieldMapper(any());
+        expectThrows(IllegalArgumentException.class, () -> sparseEncodingQueryBuilder.doToQuery(mock(QueryShardContext.class)));
+    }
+
 }
