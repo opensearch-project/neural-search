@@ -15,6 +15,7 @@ import org.opensearch.index.mapper.MapperService;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -58,7 +59,9 @@ public class ProcessorDocumentUtils {
         final Environment environment,
         final boolean allowEmpty
     ) {
-        if (sourceValue == null) return; // allow map type value to be null.
+        if (Objects.isNull(sourceValue)) { // allow map type value to be null.
+            return;
+        }
         validateDepth(sourceKey, depth, indexName, clusterService, environment);
         if (!(fieldMap instanceof Map)) { // source value is map type means configuration has to be map type
             throw new IllegalArgumentException(
@@ -98,9 +101,9 @@ public class ProcessorDocumentUtils {
                         allowEmpty
                     );
                 } else if (!(nextSourceValue instanceof String)) {
-                    throw new IllegalArgumentException("map type field [" + key + "] is neither string nor nested type, cannot process it");
+                    throw new IllegalArgumentException(String.format(Locale.getDefault(), "map type field [%s] is neither string nor nested type, cannot process it", key));
                 } else if (!allowEmpty && StringUtils.isBlank((String) nextSourceValue)) {
-                    throw new IllegalArgumentException("map type field [" + key + "] has empty string value, cannot process it");
+                    throw new IllegalArgumentException(String.format(Locale.getDefault(), "map type field [%s] has empty string value, cannot process it", key));
                 }
             }
         });
@@ -118,13 +121,15 @@ public class ProcessorDocumentUtils {
         final boolean allowEmpty
     ) {
         validateDepth(sourceKey, depth, indexName, clusterService, environment);
-        if (CollectionUtils.isEmpty(sourceValue)) return;
+        if (CollectionUtils.isEmpty(sourceValue)) {
+            return;
+        }
         for (Object element : sourceValue) {
-            if (element == null) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has null, cannot process it");
+            if (Objects.isNull(element)) {
+                throw new IllegalArgumentException(String.format(Locale.getDefault(), "list type field [%s] has null, cannot process it", sourceKey));
             }
             if (element instanceof List) { // nested list case.
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] is nested list type, cannot process it");
+                throw new IllegalArgumentException(String.format(Locale.getDefault(), "list type field [%s] is nested list type, cannot process it", sourceKey));
             } else if (element instanceof Map) {
                 validateMapTypeValue(
                     sourceKey,
@@ -137,9 +142,9 @@ public class ProcessorDocumentUtils {
                     allowEmpty
                 );
             } else if (!(element instanceof String)) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has non string value, cannot process it");
+                throw new IllegalArgumentException(String.format(Locale.getDefault(), "list type field [%s] has non string value, cannot process it", sourceKey));
             } else if (!allowEmpty && StringUtils.isBlank(element.toString())) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has empty string, cannot process it");
+                throw new IllegalArgumentException(String.format(Locale.getDefault(), "list type field [%s] has empty string, cannot process it", sourceKey));
             }
         }
     }
@@ -156,7 +161,7 @@ public class ProcessorDocumentUtils {
             .orElse(environment.settings());
         long maxDepth = MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(settings);
         if (depth > maxDepth) {
-            throw new IllegalArgumentException("map type field [" + sourceKey + "] reaches max depth limit, cannot process it");
+            throw new IllegalArgumentException(String.format(Locale.getDefault(), "map type field [%s] reaches max depth limit, cannot process it", sourceKey));
         }
     }
 }
