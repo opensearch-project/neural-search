@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Bug Fixes
 - Total hit count fix in Hybrid Query ([756](https://github.com/opensearch-project/neural-search/pull/756))
 ### Infrastructure
+- Disable memory circuit breaker for integ tests ([#770](https://github.com/opensearch-project/neural-search/pull/770))
 ### Documentation
 ### Maintenance
 ### Refactoring
