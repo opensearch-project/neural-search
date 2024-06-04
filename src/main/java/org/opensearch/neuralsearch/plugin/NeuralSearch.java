@@ -27,6 +27,7 @@ import org.opensearch.ingest.Processor;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
+import org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
@@ -157,7 +158,12 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     public Map<String, org.opensearch.search.pipeline.Processor.Factory<SearchRequestProcessor>> getRequestProcessors(
         Parameters parameters
     ) {
-        return Map.of(NeuralQueryEnricherProcessor.TYPE, new NeuralQueryEnricherProcessor.Factory());
+        return Map.of(
+            NeuralQueryEnricherProcessor.TYPE,
+            new NeuralQueryEnricherProcessor.Factory(),
+            NeuralSparseTwoPhaseProcessor.TYPE,
+            new NeuralSparseTwoPhaseProcessor.Factory()
+        );
     }
 
     @Override
