@@ -12,6 +12,7 @@ import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.FIELD
 
 import java.util.Map;
 
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
@@ -26,10 +27,12 @@ import lombok.extern.log4j.Log4j2;
 public class SparseEncodingProcessorFactory implements Processor.Factory {
     private final MLCommonsClientAccessor clientAccessor;
     private final Environment environment;
+    private final ClusterService clusterService;
 
-    public SparseEncodingProcessorFactory(MLCommonsClientAccessor clientAccessor, Environment environment) {
+    public SparseEncodingProcessorFactory(MLCommonsClientAccessor clientAccessor, Environment environment, ClusterService clusterService) {
         this.clientAccessor = clientAccessor;
         this.environment = environment;
+        this.clusterService = clusterService;
     }
 
     @Override
@@ -42,6 +45,6 @@ public class SparseEncodingProcessorFactory implements Processor.Factory {
         String modelId = readStringProperty(TYPE, processorTag, config, MODEL_ID_FIELD);
         Map<String, Object> fieldMap = readMap(TYPE, processorTag, config, FIELD_MAP_FIELD);
 
-        return new SparseEncodingProcessor(processorTag, description, modelId, fieldMap, clientAccessor, environment);
+        return new SparseEncodingProcessor(processorTag, description, modelId, fieldMap, clientAccessor, environment, clusterService);
     }
 }
