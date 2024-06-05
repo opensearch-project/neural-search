@@ -36,14 +36,14 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
                 );
                 List<Map<String, String>> docs = prepareDataForBulkIngestion(0, 5);
                 bulkAddDocuments(indexName, TEXT_FIELD_NAME, SPARSE_PIPELINE, docs, 2);
-                validateDocCountAndDocInfo(indexName, 5, () -> getDocById(indexName, "4"), EMBEDDING_FIELD_NAME, Map.class);
+                validateDocCountAndInfo(indexName, 5, () -> getDocById(indexName, "4"), EMBEDDING_FIELD_NAME, Map.class);
                 break;
             case MIXED:
                 sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_PIPELINE), SPARSE_ENCODING_PROCESSOR);
                 loadModel(sparseModelId);
                 List<Map<String, String>> docsForMixed = prepareDataForBulkIngestion(5, 5);
                 bulkAddDocuments(indexName, TEXT_FIELD_NAME, SPARSE_PIPELINE, docsForMixed, 3);
-                validateDocCountAndDocInfo(indexName, 10, () -> getDocById(indexName, "9"), EMBEDDING_FIELD_NAME, Map.class);
+                validateDocCountAndInfo(indexName, 10, () -> getDocById(indexName, "9"), EMBEDDING_FIELD_NAME, Map.class);
                 break;
             case UPGRADED:
                 try {
@@ -51,7 +51,7 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
                     loadModel(sparseModelId);
                     List<Map<String, String>> docsForUpgraded = prepareDataForBulkIngestion(10, 5);
                     bulkAddDocuments(indexName, TEXT_FIELD_NAME, SPARSE_PIPELINE, docsForUpgraded, 2);
-                    validateDocCountAndDocInfo(indexName, 15, () -> getDocById(indexName, "14"), EMBEDDING_FIELD_NAME, Map.class);
+                    validateDocCountAndInfo(indexName, 15, () -> getDocById(indexName, "14"), EMBEDDING_FIELD_NAME, Map.class);
                 } finally {
                     wipeOfTestResources(indexName, SPARSE_PIPELINE, sparseModelId, null);
                 }

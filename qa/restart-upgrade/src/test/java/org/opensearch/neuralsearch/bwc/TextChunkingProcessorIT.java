@@ -64,7 +64,7 @@ public class TextChunkingProcessorIT extends AbstractRestartUpgradeRestTestCase 
     }
 
     private void validateTestIndex(String indexName, String fieldName, int documentCount, Object expected) {
-        Object outputs = validateDocCountAndDocInfo(
+        Object outputs = validateDocCountAndInfo(
             indexName,
             documentCount,
             () -> getFirstDocumentInQuery(indexName, 10),

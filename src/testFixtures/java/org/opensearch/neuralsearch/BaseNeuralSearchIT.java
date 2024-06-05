@@ -1286,7 +1286,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         }
     }
 
-    protected Object validateDocCountAndDocInfo(
+    protected Object validateDocCountAndInfo(
         String indexName,
         int expectedDocCount,
         Supplier<Map<String, Object>> documentSupplier,
