@@ -692,7 +692,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertEquals(request.getEndpoint() + ": failed", RestStatus.CREATED, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
     }
 
-    protected void addDocsThroughBulk(
+    protected void bulkAddDocuments(
         final String index,
         final String textField,
         final String pipeline,
