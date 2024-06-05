@@ -15,7 +15,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -24,8 +23,9 @@ import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.core.common.util.CollectionUtils;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
-import org.opensearch.index.mapper.MapperService;
+import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.IngestDocumentWrapper;
@@ -35,6 +35,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.util.ProcessorDocumentUtils;
 
 /**
  * The abstract class for text processing use cases. Users provide a field name map and a model id.
@@ -60,6 +61,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
     protected final MLCommonsClientAccessor mlCommonsClientAccessor;
 
     private final Environment environment;
+    private final ClusterService clusterService;
 
     public InferenceProcessor(
         String tag,
@@ -69,18 +71,19 @@ public abstract class InferenceProcessor extends AbstractProcessor {
         String modelId,
         Map<String, Object> fieldMap,
         MLCommonsClientAccessor clientAccessor,
-        Environment environment
+        Environment environment,
+        ClusterService clusterService
     ) {
         super(tag, description);
         this.type = type;
         if (StringUtils.isBlank(modelId)) throw new IllegalArgumentException("model_id is null or empty, cannot process it");
         validateEmbeddingConfiguration(fieldMap);
-
         this.listTypeNestedMapKey = listTypeNestedMapKey;
         this.modelId = modelId;
         this.fieldMap = fieldMap;
         this.mlCommonsClientAccessor = clientAccessor;
         this.environment = environment;
+        this.clusterService = clusterService;
     }
 
     private void validateEmbeddingConfiguration(Map<String, Object> fieldMap) {
@@ -117,12 +120,12 @@ public abstract class InferenceProcessor extends AbstractProcessor {
     public void execute(IngestDocument ingestDocument, BiConsumer<IngestDocument, Exception> handler) {
         try {
             validateEmbeddingFieldsValue(ingestDocument);
-            Map<String, Object> ProcessMap = buildMapWithProcessorKeyAndOriginalValue(ingestDocument);
-            List<String> inferenceList = createInferenceList(ProcessMap);
+            Map<String, Object> processMap = buildMapWithTargetKeyAndOriginalValue(ingestDocument);
+            List<String> inferenceList = createInferenceList(processMap);
             if (inferenceList.size() == 0) {
                 handler.accept(ingestDocument, null);
             } else {
-                doExecute(ingestDocument, ProcessMap, inferenceList, handler);
+                doExecute(ingestDocument, processMap, inferenceList, handler);
             }
         } catch (Exception e) {
             handler.accept(null, e);
@@ -225,7 +228,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
             List<String> inferenceList = null;
             try {
                 validateEmbeddingFieldsValue(ingestDocumentWrapper.getIngestDocument());
-                processMap = buildMapWithProcessorKeyAndOriginalValue(ingestDocumentWrapper.getIngestDocument());
+                processMap = buildMapWithTargetKeyAndOriginalValue(ingestDocumentWrapper.getIngestDocument());
                 inferenceList = createInferenceList(processMap);
             } catch (Exception e) {
                 ingestDocumentWrapper.update(ingestDocumentWrapper.getIngestDocument(), e);
@@ -273,7 +276,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
     }
 
     @VisibleForTesting
-    Map<String, Object> buildMapWithProcessorKeyAndOriginalValue(IngestDocument ingestDocument) {
+    Map<String, Object> buildMapWithTargetKeyAndOriginalValue(IngestDocument ingestDocument) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
         Map<String, Object> mapWithProcessorKeys = new LinkedHashMap<>();
         for (Map.Entry<String, Object> fieldMapEntry : fieldMap.entrySet()) {
@@ -331,54 +334,16 @@ public abstract class InferenceProcessor extends AbstractProcessor {
 
     private void validateEmbeddingFieldsValue(IngestDocument ingestDocument) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
-        for (Map.Entry<String, Object> embeddingFieldsEntry : fieldMap.entrySet()) {
-            Object sourceValue = sourceAndMetadataMap.get(embeddingFieldsEntry.getKey());
-            if (sourceValue != null) {
-                String sourceKey = embeddingFieldsEntry.getKey();
-                Class<?> sourceValueClass = sourceValue.getClass();
-                if (List.class.isAssignableFrom(sourceValueClass) || Map.class.isAssignableFrom(sourceValueClass)) {
-                    validateNestedTypeValue(sourceKey, sourceValue, () -> 1);
-                } else if (!String.class.isAssignableFrom(sourceValueClass)) {
-                    throw new IllegalArgumentException("field [" + sourceKey + "] is neither string nor nested type, cannot process it");
-                } else if (StringUtils.isBlank(sourceValue.toString())) {
-                    throw new IllegalArgumentException("field [" + sourceKey + "] has empty string value, cannot process it");
-                }
-            }
-        }
-    }
-
-    @SuppressWarnings({ "rawtypes", "unchecked" })
-    private void validateNestedTypeValue(String sourceKey, Object sourceValue, Supplier<Integer> maxDepthSupplier) {
-        int maxDepth = maxDepthSupplier.get();
-        if (maxDepth > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())) {
-            throw new IllegalArgumentException("map type field [" + sourceKey + "] reached max depth limit, cannot process it");
-        } else if ((List.class.isAssignableFrom(sourceValue.getClass()))) {
-            validateListTypeValue(sourceKey, sourceValue, maxDepthSupplier);
-        } else if (Map.class.isAssignableFrom(sourceValue.getClass())) {
-            ((Map) sourceValue).values()
-                .stream()
-                .filter(Objects::nonNull)
-                .forEach(x -> validateNestedTypeValue(sourceKey, x, () -> maxDepth + 1));
-        } else if (!String.class.isAssignableFrom(sourceValue.getClass())) {
-            throw new IllegalArgumentException("map type field [" + sourceKey + "] has non-string type, cannot process it");
-        } else if (StringUtils.isBlank(sourceValue.toString())) {
-            throw new IllegalArgumentException("map type field [" + sourceKey + "] has empty string, cannot process it");
-        }
-    }
-
-    @SuppressWarnings({ "rawtypes" })
-    private void validateListTypeValue(String sourceKey, Object sourceValue, Supplier<Integer> maxDepthSupplier) {
-        for (Object value : (List) sourceValue) {
-            if (value instanceof Map) {
-                validateNestedTypeValue(sourceKey, value, () -> maxDepthSupplier.get() + 1);
-            } else if (value == null) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has null, cannot process it");
-            } else if (!(value instanceof String)) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has non string value, cannot process it");
-            } else if (StringUtils.isBlank(value.toString())) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has empty string, cannot process it");
-            }
-        }
+        String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
+        ProcessorDocumentUtils.validateMapTypeValue(
+            FIELD_MAP_FIELD,
+            sourceAndMetadataMap,
+            fieldMap,
+            indexName,
+            clusterService,
+            environment,
+            false
+        );
     }
 
     protected void setVectorFieldsToDocument(IngestDocument ingestDocument, Map<String, Object> processorMap, List<?> results) {
