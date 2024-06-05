@@ -146,8 +146,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 getTotalHits(this.trackTotalHitsUpTo, topDocs, isSingleShard, hybridTopScoreDocCollector.getTotalHits()),
                 topDocs
             );
-            float maxScore = getMaxScore(topDocs);
-            TopDocsAndMaxScore topDocsAndMaxScore = new TopDocsAndMaxScore(newTopDocs, maxScore);
+            TopDocsAndMaxScore topDocsAndMaxScore = new TopDocsAndMaxScore(newTopDocs, hybridTopScoreDocCollector.getMaxScore());
             return (QuerySearchResult result) -> { result.topDocs(topDocsAndMaxScore, getSortValueFormats(sortAndFormats)); };
         }
         throw new IllegalStateException("cannot collect results of hybrid search query, there are no proper score collectors");
@@ -210,18 +209,6 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         }
 
         return new TotalHits(maxTotalHits, relation);
-    }
-
-    private float getMaxScore(final List<TopDocs> topDocs) {
-        if (topDocs.isEmpty()) {
-            return 0.0f;
-        } else {
-            return topDocs.stream()
-                .map(docs -> docs.scoreDocs.length == 0 ? new ScoreDoc(-1, 0.0f) : docs.scoreDocs[0])
-                .map(scoreDoc -> scoreDoc.score)
-                .max(Float::compare)
-                .get();
-        }
     }
 
     private DocValueFormat[] getSortValueFormats(final SortAndFormats sortAndFormats) {

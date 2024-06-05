@@ -13,7 +13,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 
 import static java.util.Collections.singletonList;
@@ -80,7 +79,11 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     public void setup() {
         Metadata metadata = mock(Metadata.class);
         Environment environment = mock(Environment.class);
-        Settings settings = Settings.builder().put("index.mapping.depth.limit", 20).build();
+        Settings settings = Settings.builder()
+            .put("index.mapping.depth.limit", 20)
+            .put("index.analyze.max_token_count", 10000)
+            .put("index.number_of_shards", 1)
+            .build();
         when(environment.settings()).thenReturn(settings);
         ClusterState clusterState = mock(ClusterState.class);
         ClusterService clusterService = mock(ClusterService.class);
@@ -357,13 +360,11 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
 
     private Map<String, Object> createMaxDepthLimitExceedMap(int maxDepth) {
         if (maxDepth > 21) {
-            return null;
+            return Map.of(INPUT_FIELD, "mapped");
         }
         Map<String, Object> resultMap = new HashMap<>();
         Map<String, Object> innerMap = createMaxDepthLimitExceedMap(maxDepth + 1);
-        if (Objects.nonNull(innerMap)) {
-            resultMap.put(INPUT_FIELD, innerMap);
-        }
+        resultMap.put(INPUT_FIELD, innerMap);
         return resultMap;
     }
 
@@ -597,7 +598,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             () -> processor.execute(ingestDocument)
         );
         assertEquals(
-            String.format(Locale.ROOT, "field [%s] is neither string nor nested type, cannot process it", INPUT_FIELD),
+            String.format(Locale.ROOT, "map type field [%s] is neither string nor nested type, cannot process it", INPUT_FIELD),
             illegalArgumentException.getMessage()
         );
     }
@@ -630,7 +631,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             () -> processor.execute(ingestDocument)
         );
         assertEquals(
-            String.format(Locale.ROOT, "list type field [%s] has non-string value, cannot process it", INPUT_FIELD),
+            String.format(Locale.ROOT, "list type field [%s] has non string value, cannot process it", INPUT_FIELD),
             illegalArgumentException.getMessage()
         );
     }
@@ -855,16 +856,16 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testExecute_withFixedTokenLength_andMaxDepthLimitExceedFieldMap_thenFail() {
-        TextChunkingProcessor processor = createFixedTokenLengthInstance(createNestedFieldMapSingleField());
-        IngestDocument ingestDocument = createIngestDocumentWithNestedSourceData(createMaxDepthLimitExceedMap(0));
+        Map<String, Object> map = createMaxDepthLimitExceedMap(0);
+        Map<String, Object> config = new HashMap<>();
+        config.put(INPUT_NESTED_FIELD_KEY, map.get("body"));
+        TextChunkingProcessor processor = createFixedTokenLengthInstance(config);
+        IngestDocument ingestDocument = createIngestDocumentWithNestedSourceData(map);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
             () -> processor.execute(ingestDocument)
         );
-        assertEquals(
-            String.format(Locale.ROOT, "map type field [%s] reached max depth limit, cannot process it", INPUT_NESTED_FIELD_KEY),
-            illegalArgumentException.getMessage()
-        );
+        assertEquals("map type field [body] reaches max depth limit, cannot process it", illegalArgumentException.getMessage());
     }
 
     @SneakyThrows
@@ -876,7 +877,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             () -> processor.execute(ingestDocument)
         );
         assertEquals(
-            String.format(Locale.ROOT, "map type field [%s] has non-string type, cannot process it", INPUT_NESTED_FIELD_KEY),
+            "[body] configuration doesn't match actual value type, configuration type is: java.lang.String, actual value type is: java.util.ImmutableCollections$Map1",
             illegalArgumentException.getMessage()
         );
     }
@@ -906,15 +907,18 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testExecute_withFixedTokenLength_andSourceDataListWithHybridType_thenSucceed() {
+    public void testExecute_withFixedTokenLength_andSourceDataListWithHybridType_thenFail() {
         TextChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
         List<Object> sourceDataList = createSourceDataListWithHybridType();
         IngestDocument ingestDocument = createIngestDocumentWithSourceData(sourceDataList);
-        IngestDocument document = processor.execute(ingestDocument);
-        assert document.getSourceAndMetadata().containsKey(INPUT_FIELD);
-        Object listResult = document.getSourceAndMetadata().get(OUTPUT_FIELD);
-        assert (listResult instanceof List);
-        assertEquals(((List<?>) listResult).size(), 0);
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> processor.execute(ingestDocument)
+        );
+        assertEquals(
+            "[body] configuration doesn't match actual value type, configuration type is: java.lang.String, actual value type is: com.google.common.collect.RegularImmutableMap",
+            illegalArgumentException.getMessage()
+        );
     }
 
     @SneakyThrows
