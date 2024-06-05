@@ -66,7 +66,7 @@ public class ProcessorDocumentUtils {
         if (!(fieldMap instanceof Map)) { // source value is map type means configuration has to be map type
             throw new IllegalArgumentException(
                 String.format(
-                    Locale.getDefault(),
+                    Locale.ROOT,
                     "[%s] configuration doesn't match actual value type, configuration type is: %s, actual value type is: %s",
                     sourceKey,
                     fieldMap.getClass().getName(),
@@ -101,9 +101,9 @@ public class ProcessorDocumentUtils {
                         allowEmpty
                     );
                 } else if (!(nextSourceValue instanceof String)) {
-                    throw new IllegalArgumentException(String.format(Locale.getDefault(), "map type field [%s] is neither string nor nested type, cannot process it", key));
+                    throw new IllegalArgumentException(String.format(Locale.ROOT, "map type field [%s] is neither string nor nested type, cannot process it", key));
                 } else if (!allowEmpty && StringUtils.isBlank((String) nextSourceValue)) {
-                    throw new IllegalArgumentException(String.format(Locale.getDefault(), "map type field [%s] has empty string value, cannot process it", key));
+                    throw new IllegalArgumentException(String.format(Locale.ROOT, "map type field [%s] has empty string value, cannot process it", key));
                 }
             }
         });
@@ -126,10 +126,10 @@ public class ProcessorDocumentUtils {
         }
         for (Object element : sourceValue) {
             if (Objects.isNull(element)) {
-                throw new IllegalArgumentException(String.format(Locale.getDefault(), "list type field [%s] has null, cannot process it", sourceKey));
+                throw new IllegalArgumentException(String.format(Locale.ROOT, "list type field [%s] has null, cannot process it", sourceKey));
             }
             if (element instanceof List) { // nested list case.
-                throw new IllegalArgumentException(String.format(Locale.getDefault(), "list type field [%s] is nested list type, cannot process it", sourceKey));
+                throw new IllegalArgumentException(String.format(Locale.ROOT, "list type field [%s] is nested list type, cannot process it", sourceKey));
             } else if (element instanceof Map) {
                 validateMapTypeValue(
                     sourceKey,
@@ -142,9 +142,9 @@ public class ProcessorDocumentUtils {
                     allowEmpty
                 );
             } else if (!(element instanceof String)) {
-                throw new IllegalArgumentException(String.format(Locale.getDefault(), "list type field [%s] has non string value, cannot process it", sourceKey));
+                throw new IllegalArgumentException(String.format(Locale.ROOT, "list type field [%s] has non string value, cannot process it", sourceKey));
             } else if (!allowEmpty && StringUtils.isBlank(element.toString())) {
-                throw new IllegalArgumentException(String.format(Locale.getDefault(), "list type field [%s] has empty string, cannot process it", sourceKey));
+                throw new IllegalArgumentException(String.format(Locale.ROOT, "list type field [%s] has empty string, cannot process it", sourceKey));
             }
         }
     }
@@ -161,7 +161,7 @@ public class ProcessorDocumentUtils {
             .orElse(environment.settings());
         long maxDepth = MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(settings);
         if (depth > maxDepth) {
-            throw new IllegalArgumentException(String.format(Locale.getDefault(), "map type field [%s] reaches max depth limit, cannot process it", sourceKey));
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "map type field [%s] reaches max depth limit, cannot process it", sourceKey));
         }
     }
 }
