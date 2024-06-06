@@ -2,7 +2,6 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch.bwc;
 
 import org.opensearch.common.settings.Settings;
@@ -38,9 +37,12 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRestartUpgradeRestT
             );
             addDocument(getIndexNameForTest(), "0", TEST_TEXT_FIELD, TEXT_1, null, null);
 
-            Object resultWithOut2PhasePipeline= search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits");
+            Object resultWithOut2PhasePipeline = search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits");
             createNeuralSparseTwoPhaseSearchProcessor(NEURAL_SPARSE_TWO_PHASE_SEARCH_PIPELINE_NAME);
-            updateIndexSettings(getIndexNameForTest(), Settings.builder().put("index.search.default_pipeline", NEURAL_SPARSE_TWO_PHASE_SEARCH_PIPELINE_NAME));
+            updateIndexSettings(
+                getIndexNameForTest(),
+                Settings.builder().put("index.search.default_pipeline", NEURAL_SPARSE_TWO_PHASE_SEARCH_PIPELINE_NAME)
+            );
             Object resultWith2PhasePipeline = search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits");
             assertNotNull(resultWith2PhasePipeline);
             assertNotNull(resultWithOut2PhasePipeline);
@@ -52,11 +54,16 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRestartUpgradeRestT
                 neuralSparseQueryBuilder.modelId(modelId);
                 Object resultWith2PhasePipeline = search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits");
                 updateIndexSettings(getIndexNameForTest(), Settings.builder().put("index.search.default_pipeline", "_none"));
-                Object resultWithOut2PhasePipeline= search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits");
+                Object resultWithOut2PhasePipeline = search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits");
                 assertNotNull(resultWith2PhasePipeline);
                 assertNotNull(resultWithOut2PhasePipeline);
             } finally {
-                wipeOfTestResources(getIndexNameForTest(), DENSE_INGEST_PIPELINE_NAME, modelId, NEURAL_SPARSE_TWO_PHASE_SEARCH_PIPELINE_NAME);
+                wipeOfTestResources(
+                    getIndexNameForTest(),
+                    DENSE_INGEST_PIPELINE_NAME,
+                    modelId,
+                    NEURAL_SPARSE_TWO_PHASE_SEARCH_PIPELINE_NAME
+                );
             }
         }
     }

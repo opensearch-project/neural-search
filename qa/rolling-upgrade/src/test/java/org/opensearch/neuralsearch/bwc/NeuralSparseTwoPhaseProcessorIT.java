@@ -2,7 +2,6 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch.bwc;
 
 import org.opensearch.common.settings.Settings;
@@ -16,7 +15,7 @@ import java.util.List;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESSOR;
 
-public class NeuralSparseTwoPhaseProcessorIT extends AbstractRollingUpgradeTestCase{
+public class NeuralSparseTwoPhaseProcessorIT extends AbstractRollingUpgradeTestCase {
     // add prefix to avoid conflicts with other IT class, since don't wipe resources after first round
     private static final String SPARSE_INGEST_PIPELINE_NAME = "nstp-nlp-ingest-pipeline-sparse";
     private static final String SPARSE_SEARCH_TWO_PHASE_PIPELINE_NAME = "nstp-nlp-two-phase-search-pipeline-sparse";
@@ -30,8 +29,7 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRollingUpgradeTestC
     public void testNeuralSparseTwoPhaseProcessorIT_NeuralSparseSearch_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         // will set the model_id after we obtain the id
-        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_ENCODING_FIELD)
-            .queryText(TEXT_1);
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_ENCODING_FIELD).queryText(TEXT_1);
 
         switch (getClusterType()) {
             case OLD:
@@ -65,7 +63,12 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRollingUpgradeTestC
                     neuralSparseQueryBuilder.modelId(sparseModelId);
                     assertNotNull(search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits"));
                 } finally {
-                    wipeOfTestResources(getIndexNameForTest(), SPARSE_INGEST_PIPELINE_NAME, sparseModelId, SPARSE_SEARCH_TWO_PHASE_PIPELINE_NAME);
+                    wipeOfTestResources(
+                        getIndexNameForTest(),
+                        SPARSE_INGEST_PIPELINE_NAME,
+                        sparseModelId,
+                        SPARSE_SEARCH_TWO_PHASE_PIPELINE_NAME
+                    );
                 }
                 break;
             default:
