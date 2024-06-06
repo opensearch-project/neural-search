@@ -90,11 +90,6 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
     }
 
     @Override
-    public boolean isUpdateClusterSettings() {
-        return false;
-    }
-
-    @Override
     protected boolean preserveClusterUponCompletion() {
         return true;
     }

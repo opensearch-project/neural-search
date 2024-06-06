@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.processor;
 
 import com.google.common.collect.ImmutableList;
+import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.IngestDocumentWrapper;
 import org.opensearch.test.OpenSearchTestCase;
@@ -21,6 +22,7 @@ public class InferenceProcessorTestCase extends OpenSearchTestCase {
         for (int i = 0; i < count; ++i) {
             Map<String, Object> sourceAndMetadata = new HashMap<>();
             sourceAndMetadata.put("key1", "value1");
+            sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
             wrapperList.add(new IngestDocumentWrapper(i, new IngestDocument(sourceAndMetadata, new HashMap<>()), null));
         }
         return wrapperList;

@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.processor;
 import org.junit.Before;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockitoAnnotations;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
@@ -24,6 +25,7 @@ import java.util.function.Consumer;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -32,6 +34,8 @@ import static org.mockito.Mockito.when;
 public class InferenceProcessorTests extends InferenceProcessorTestCase {
     private MLCommonsClientAccessor clientAccessor;
     private Environment environment;
+
+    private ClusterService clusterService = mock(ClusterService.class, RETURNS_DEEP_STUBS);
 
     private static final String TAG = "tag";
     private static final String TYPE = "type";
@@ -175,7 +179,7 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
         Exception exception;
 
         public TestInferenceProcessor(List<?> vectors, Exception exception) {
-            super(TAG, DESCRIPTION, TYPE, MAP_KEY, MODEL_ID, FIELD_MAP, clientAccessor, environment);
+            super(TAG, DESCRIPTION, TYPE, MAP_KEY, MODEL_ID, FIELD_MAP, clientAccessor, environment, clusterService);
             this.vectors = vectors;
             this.exception = exception;
         }
