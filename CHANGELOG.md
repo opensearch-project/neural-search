@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fix map type validation issue in multiple pipeline processors ([#661](https://github.com/opensearch-project/neural-search/pull/661))
 ### Infrastructure
 - Disable memory circuit breaker for integ tests ([#770](https://github.com/opensearch-project/neural-search/pull/770))
+- Add BWC test for neural sparse two-phase processor([#777](https://github.com/opensearch-project/neural-search/pull/777))
 ### Documentation
 ### Maintenance
 ### Refactoring
