@@ -313,8 +313,15 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         }
     }
 
+    /**
+     * Extracts the inner hits from the query tree
+     * @param innerHits
+     */
     @Override
     protected void extractInnerHitBuilders(Map<String, InnerHitContextBuilder> innerHits) {
+        if (Objects.isNull(queries)) {
+            return;
+        }
         for (QueryBuilder query : queries) {
             InnerHitContextBuilder.extractInnerHits(query, innerHits);
         }

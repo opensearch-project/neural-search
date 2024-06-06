@@ -17,6 +17,7 @@ import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.K_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MODEL_ID_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TEXT_FIELD;
 
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -42,7 +43,10 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.mapper.TextFieldMapper;
+import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.InnerHitContextBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
+import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
@@ -712,11 +716,26 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertNotNull(hybridQueryBuilder);
     }
 
-    public void testVisit() {
+    public void testVisit_whenMultipleSubqueries_thenSuccessful() {
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(new NeuralQueryBuilder()).add(new NeuralSparseQueryBuilder());
         List<QueryBuilder> visitedQueries = new ArrayList<>();
         hybridQueryBuilder.visit(createTestVisitor(visitedQueries));
         assertEquals(3, visitedQueries.size());
+    }
+
+    public void testInnerHits_whenSingleSubquery_thenSuccessful() {
+        HybridQueryBuilder hybridQueryBuilderNeuralQuery = new HybridQueryBuilder().add(new NeuralQueryBuilder());
+        Map<String, InnerHitContextBuilder> innerHitsBuilderDefault = new HashMap<>();
+        hybridQueryBuilderNeuralQuery.extractInnerHitBuilders(innerHitsBuilderDefault);
+        assertNotNull(innerHitsBuilderDefault);
+    }
+
+    public void testInnerHits_whenMultipleSubqueries_thenSuccessful() {
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(new BoolQueryBuilder())
+            .add(new MatchQueryBuilder(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        Map<String, InnerHitContextBuilder> innerHitsBuilder = new HashMap<>();
+        hybridQueryBuilder.extractInnerHitBuilders(innerHitsBuilder);
+        assertNotNull(innerHitsBuilder);
     }
 
     private Map<String, Object> getInnerMap(Object innerObject, String queryName, String fieldName) {
