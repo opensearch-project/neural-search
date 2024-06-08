@@ -27,6 +27,7 @@ import org.junit.Before;
 import org.opensearch.client.ResponseException;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.xcontent.XContentBuilder;
+
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
@@ -50,6 +51,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD = "test-hybrid-multi-doc-single-shard-index";
     private static final String TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD =
         "test-hybrid-multi-doc-nested-type-single-shard-index";
+    private static final String TEST_MULTI_DOC_INDEX_WITH_JOIN_TYPE_ONE_SHARD =
+        "test-hybrid-multi-doc-join-parent-child-single-shard-index";
     private static final String TEST_INDEX_WITH_KEYWORDS_ONE_SHARD = "test-hybrid-keywords-single-shard-index";
     private static final String TEST_INDEX_WITH_KEYWORDS_THREE_SHARDS = "test-hybrid-keywords-three-shards-index";
     private static final String TEST_QUERY_TEXT = "greetings";
@@ -752,31 +755,15 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertNotNull(hits);
             assertEquals(2, hits.size());
 
-            Map<String, Object> hitOne = hits.get(0);
-            assertEquals(0.5, hitOne.get(SCORE));
-            Map<String, Object> innerHitsOne = (Map<String, Object>) hitOne.get(INNER_HITS);
-            assertNotNull(innerHitsOne);
-            assertTrue(innerHitsOne.containsKey(TEST_NESTED_TYPE_FIELD_NAME_1));
-            Map<String, Object> userInnerHitsOne = (Map<String, Object>) innerHitsOne.get(TEST_NESTED_TYPE_FIELD_NAME_1);
-            assertTrue(userInnerHitsOne.containsKey(HITS));
-            Map<String, Object> userInnerHitHits = (Map<String, Object>) userInnerHitsOne.get(HITS);
-            assertEquals(3, userInnerHitHits.size());
-            assertNull(userInnerHitHits.get(MAX_SCORE));
-            assertEquals(0, ((List<?>) userInnerHitHits.get(HITS)).size());
+            Map<String, Object> userInnerHitEmptyHits = assertInnerHit(hits, 0);
+            assertNull(userInnerHitEmptyHits.get(MAX_SCORE));
+            assertEquals(0, ((List<?>) userInnerHitEmptyHits.get(HITS)).size());
 
-            Map<String, Object> hitTwo = hits.get(1);
-            assertEquals(0.5, hitTwo.get(SCORE));
-            Map<String, Object> innerHitsTwo = (Map<String, Object>) hitTwo.get(INNER_HITS);
-            assertNotNull(innerHitsTwo);
-            assertTrue(innerHitsTwo.containsKey(TEST_NESTED_TYPE_FIELD_NAME_1));
-            Map<String, Object> userInnerHitsTwo = (Map<String, Object>) innerHitsTwo.get(TEST_NESTED_TYPE_FIELD_NAME_1);
-            assertTrue(userInnerHitsTwo.containsKey(HITS));
-            Map<String, Object> userInnerHitHitsTwo = (Map<String, Object>) userInnerHitsTwo.get(HITS);
-            assertEquals(3, userInnerHitHitsTwo.size());
-            assertEquals(0.287f, (double) userInnerHitHitsTwo.get(MAX_SCORE), DELTA_FOR_SCORE_ASSERTION);
-            assertEquals(1, ((List<?>) userInnerHitHitsTwo.get(HITS)).size());
+            Map<String, Object> userInnerHitNonEmptyHits = assertInnerHit(hits, 1);
+            assertEquals(0.287f, (double) userInnerHitNonEmptyHits.get(MAX_SCORE), DELTA_FOR_SCORE_ASSERTION);
+            assertEquals(1, ((List<?>) userInnerHitNonEmptyHits.get(HITS)).size());
 
-            Map<String, Object> userInnerHitDetail = (Map<String, Object>) ((List<?>) userInnerHitHitsTwo.get(HITS)).get(0);
+            Map<String, Object> userInnerHitDetail = (Map<String, Object>) ((List<?>) userInnerHitNonEmptyHits.get(HITS)).get(0);
             assertEquals(0.287f, (double) userInnerHitDetail.get(SCORE), DELTA_FOR_SCORE_ASSERTION);
             assertEquals(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD, userInnerHitDetail.get(INDEX_PRIVATE_FIELD));
             Map<String, Object> nestedUserInnerHitDetail = (Map<String, Object>) userInnerHitDetail.get(NESTED);
@@ -788,10 +775,59 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         }
     }
 
+    /**
+     * We assert for following structure of inner hits
+     *  "inner_hits": {
+     *      "user": {
+     *          "hits": {
+     *              "total": {
+     *                  "value": 1,
+     *                  "relation": "eq"
+     *               },
+     *               "max_score": 1.540445,
+     *               "hits": [
+     *                  {
+     *                      "_index": "index-test",
+     *                      "_id": "Sogqp48BjNYyAI8a4z9u",
+     *                      "_nested": {
+     *                          "field": "user",
+     *                          "offset": 0
+     *                      },
+     *                      "_score": 1.540445,
+     *                      "_source": {
+     *                          "firstname": "john",
+     *                          "age": 1,
+     *                          "lastname": "black"
+     *                       }
+     *                  }
+     *                ]
+     *           }
+     *       }
+     *  }
+     * @param hits high level inner hits collection
+     * @param index index of single element of hits to check on
+     * @return inner collection on inner hit, it can be empty (in case there isn't a hit) or has score and fields on child document
+     */
+    private static Map<String, Object> assertInnerHit(List<Map<String, Object>> hits, int index) {
+        Map<String, Object> hit = hits.get(index);
+        assertEquals(0.5, hit.get(SCORE));
+
+        Map<String, Object> innerHits = (Map<String, Object>) hit.get(INNER_HITS);
+        assertNotNull(innerHits);
+        assertTrue(innerHits.containsKey(TEST_NESTED_TYPE_FIELD_NAME_1));
+
+        Map<String, Object> userInnerHits = (Map<String, Object>) innerHits.get(TEST_NESTED_TYPE_FIELD_NAME_1);
+        assertTrue(userInnerHits.containsKey(HITS));
+
+        Map<String, Object> userInnerHitHits = (Map<String, Object>) userInnerHits.get(HITS);
+        assertEquals(3, userInnerHitHits.size());
+        return userInnerHitHits;
+    }
+
     @SneakyThrows
     public void testInnerHits_whenParentChildDocuments_thenSuccess() {
         try {
-            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
+            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_WITH_JOIN_TYPE_ONE_SHARD);
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
 
             /* We have to construct query manually as query build classes for parent join queries are part of core modules
@@ -841,7 +877,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
 
             Map<String, Object> searchResponseAsMap = search(
                 builder,
-                TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD,
+                TEST_MULTI_DOC_INDEX_WITH_JOIN_TYPE_ONE_SHARD,
                 10,
                 Map.of("search_pipeline", SEARCH_PIPELINE)
             );
@@ -868,7 +904,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             Map<String, Object> hitTwo = hits.get(1);
             assertInnerHitForHasParentQuery(hitTwo);
         } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD, null, null, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_JOIN_TYPE_ONE_SHARD, null, null, SEARCH_PIPELINE);
         }
     }
 
@@ -886,7 +922,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
 
         Map<String, Object> userInnerHitDetail = (Map<String, Object>) ((List<?>) userInnerHitHitsOne.get(HITS)).get(0);
         assertEquals(0.980f, (double) userInnerHitDetail.get(SCORE), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD, userInnerHitDetail.get(INDEX_PRIVATE_FIELD));
+        assertEquals(TEST_MULTI_DOC_INDEX_WITH_JOIN_TYPE_ONE_SHARD, userInnerHitDetail.get(INDEX_PRIVATE_FIELD));
         assertEquals(PARENT_ID_AS_KEYWORD_VALUE, userInnerHitDetail.get(ID_PRIVATE_FIELD));
         Map<String, Object> nestedUserInnerHitSource = (Map<String, Object>) userInnerHitDetail.get(SOURCE_PRIVATE_FIELD);
         assertEquals(2, nestedUserInnerHitSource.size());
@@ -991,7 +1027,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                     Collections.emptyList(),
                     List.of(KEYWORD_FIELD_1),
                     Collections.emptyList(),
-                    List.of(JOIN_FIELD, PARENT_FIELD, CHILD_FIELD),
+                    Collections.emptyList(),
                     1
                 ),
                 ""
@@ -1008,9 +1044,26 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 List.of(TEST_NESTED_TYPE_FIELD_NAME_1),
                 List.of(Map.of(NESTED_FIELD_1, NESTED_FIELD_1_VALUE, NESTED_FIELD_2, NESTED_FIELD_2_VALUE))
             );
+        }
+
+        if (TEST_MULTI_DOC_INDEX_WITH_JOIN_TYPE_ONE_SHARD.equals(indexName)
+            && !indexExists(TEST_MULTI_DOC_INDEX_WITH_JOIN_TYPE_ONE_SHARD)) {
+            createIndexWithConfiguration(
+                indexName,
+                buildIndexConfiguration(
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    List.of(KEYWORD_FIELD_1),
+                    Collections.emptyList(),
+                    List.of(JOIN_FIELD, PARENT_FIELD, CHILD_FIELD),
+                    1
+                ),
+                ""
+            );
             // doc with parent field
             addKnnDoc(
-                TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD,
+                TEST_MULTI_DOC_INDEX_WITH_JOIN_TYPE_ONE_SHARD,
                 PARENT_ID_AS_KEYWORD_VALUE,
                 List.of(),
                 List.of(),
@@ -1028,7 +1081,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 Map.of()
             );
             addKnnDoc(
-                TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD,
+                TEST_MULTI_DOC_INDEX_WITH_JOIN_TYPE_ONE_SHARD,
                 "10",
                 List.of(),
                 List.of(),
@@ -1046,7 +1099,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 Map.of(JOIN_FIELD, Map.of("name", CHILD_FIELD, "parent", PARENT_ID_AS_KEYWORD_VALUE, "routing", "1"))
             );
             addKnnDoc(
-                TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD,
+                TEST_MULTI_DOC_INDEX_WITH_JOIN_TYPE_ONE_SHARD,
                 "11",
                 List.of(),
                 List.of(),
