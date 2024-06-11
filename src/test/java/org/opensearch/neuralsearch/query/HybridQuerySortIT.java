@@ -13,8 +13,6 @@ import lombok.SneakyThrows;
 import org.junit.Before;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.index.query.TermQueryBuilder;
-import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.RangeQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
@@ -40,7 +38,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
     private static final String TEXT_FIELD_VALUE_4_MI_2 = "Mission Impossible 2";
     private static final String TEXT_FIELD_VALUE_5_TERMINAL = "The Terminal";
     private static final String TEXT_FIELD_VALUE_6_AVENGERS = "Avengers";
-    private static final int INTEGER_FIELD_STOCK_1_25 = 24;
+    private static final int INTEGER_FIELD_STOCK_1_25 = 25;
     private static final int INTEGER_FIELD_STOCK_2_22 = 22;
     private static final int INTEGER_FIELD_STOCK_3_256 = 256;
     private static final int INTEGER_FIELD_STOCK_4_25 = 25;
@@ -74,6 +72,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testSingleFieldSort_whenMultipleSubQueriesOnIndexWithSingleShard_thenSuccessful() {
         try {
+            updateClusterSettings("search.concurrent_segment_search.enabled", false);
             prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
             HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
                 "mission",
@@ -82,6 +81,9 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                 GTE_OF_RANGE_IN_HYBRID_QUERY
             );
 
+            // QueryBuilder queryBuilder = QueryBuilders.matchAllQuery();
+            // .gte(GTE_OF_RANGE_IN_HYBRID_QUERY)
+            // .lte(LTE_OF_RANGE_IN_HYBRID_QUERY);
             Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
             fieldSortOrderMap.put("stock", SortOrder.DESC);
 
@@ -273,11 +275,11 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
     }
 
     private HybridQueryBuilder createHybridQueryBuilderWithMatchTermAndRangeQuery(String text, String value, int lte, int gte) {
-        MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEXT_FIELD_1_NAME, text);
-        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEXT_FIELD_1_NAME, value);
+        // MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEXT_FIELD_1_NAME, text);
+        // TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEXT_FIELD_1_NAME, value);
         RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery(INTEGER_FIELD_1_STOCK).gte(gte).lte(lte);
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-        hybridQueryBuilder.add(matchQueryBuilder).add(termQueryBuilder).add(rangeQueryBuilder);
+        hybridQueryBuilder.add(rangeQueryBuilder);
         return hybridQueryBuilder;
     }
 

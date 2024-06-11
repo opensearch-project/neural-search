@@ -626,23 +626,23 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     ) {
         Request request = new Request("POST", "/" + index + "/_doc/" + docId + "?refresh=true");
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
-        // for (int i = 0; i < vectorFieldNames.size(); i++) {
-        // builder.field(vectorFieldNames.get(i), vectors.get(i));
-        // }
+        for (int i = 0; i < vectorFieldNames.size(); i++) {
+            builder.field(vectorFieldNames.get(i), vectors.get(i));
+        }
 
         for (int i = 0; i < textFieldNames.size(); i++) {
             builder.field(textFieldNames.get(i), texts.get(i));
         }
 
-        // for (int i = 0; i < nestedFieldNames.size(); i++) {
-        // builder.field(nestedFieldNames.get(i));
-        // builder.startObject();
-        // Map<String, String> nestedValues = nestedFields.get(i);
-        // for (Map.Entry<String, String> entry : nestedValues.entrySet()) {
-        // builder.field(entry.getKey(), entry.getValue());
-        // }
-        // builder.endObject();
-        // }
+        for (int i = 0; i < nestedFieldNames.size(); i++) {
+            builder.field(nestedFieldNames.get(i));
+            builder.startObject();
+            Map<String, String> nestedValues = nestedFields.get(i);
+            for (Map.Entry<String, String> entry : nestedValues.entrySet()) {
+                builder.field(entry.getKey(), entry.getValue());
+            }
+            builder.endObject();
+        }
 
         for (int i = 0; i < integerFieldNames.size(); i++) {
             builder.field(integerFieldNames.get(i), integerFieldValues.get(i));
@@ -652,9 +652,9 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             builder.field(keywordFieldNames.get(i), keywordFieldValues.get(i));
         }
 
-        // for (int i = 0; i < dateFieldNames.size(); i++) {
-        // builder.field(dateFieldNames.get(i), dateFieldValues.get(i));
-        // }
+        for (int i = 0; i < dateFieldNames.size(); i++) {
+            builder.field(dateFieldNames.get(i), dateFieldValues.get(i));
+        }
         builder.endObject();
 
         request.setJsonEntity(builder.toString());
@@ -845,37 +845,39 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject("settings")
+            .startObject("index")
             .field("number_of_shards", numberOfShards)
             // .field("index.knn", true)
+            .endObject()
             .endObject()
             .startObject("mappings")
             .startObject("properties");
 
-        // for (KNNFieldConfig knnFieldConfig : knnFieldConfigs) {
-        // xContentBuilder.startObject(knnFieldConfig.getName())
-        // .field("type", "knn_vector")
-        // .field("dimension", Integer.toString(knnFieldConfig.getDimension()))
-        // .startObject("method")
-        // .field("engine", "lucene")
-        // .field("space_type", knnFieldConfig.getSpaceType().getValue())
-        // .field("name", "hnsw")
-        // .endObject()
-        // .endObject();
-        // }
+        for (KNNFieldConfig knnFieldConfig : knnFieldConfigs) {
+            xContentBuilder.startObject(knnFieldConfig.getName())
+                .field("type", "knn_vector")
+                .field("dimension", Integer.toString(knnFieldConfig.getDimension()))
+                .startObject("method")
+                .field("engine", "lucene")
+                .field("space_type", knnFieldConfig.getSpaceType().getValue())
+                .field("name", "hnsw")
+                .endObject()
+                .endObject();
+        }
         // treat the list in a manner that first element is always the type name and all others are keywords
-        // if (!nestedFields.isEmpty()) {
-        // String nestedFieldName = nestedFields.get(0);
-        // xContentBuilder.startObject(nestedFieldName).field("type", "nested");
-        // if (nestedFields.size() > 1) {
-        // xContentBuilder.startObject("properties");
-        // for (int i = 1; i < nestedFields.size(); i++) {
-        // String innerNestedTypeField = nestedFields.get(i);
-        // xContentBuilder.startObject(innerNestedTypeField).field("type", "keyword").endObject();
-        // }
-        // xContentBuilder.endObject();
-        // }
-        // xContentBuilder.endObject();
-        // }
+        if (!nestedFields.isEmpty()) {
+            String nestedFieldName = nestedFields.get(0);
+            xContentBuilder.startObject(nestedFieldName).field("type", "nested");
+            if (nestedFields.size() > 1) {
+                xContentBuilder.startObject("properties");
+                for (int i = 1; i < nestedFields.size(); i++) {
+                    String innerNestedTypeField = nestedFields.get(i);
+                    xContentBuilder.startObject(innerNestedTypeField).field("type", "keyword").endObject();
+                }
+                xContentBuilder.endObject();
+            }
+            xContentBuilder.endObject();
+        }
 
         for (String intField : intFields) {
             xContentBuilder.startObject(intField).field("type", "integer").endObject();
@@ -885,9 +887,9 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             xContentBuilder.startObject(keywordField).field("type", "keyword").endObject();
         }
 
-        // for (String dateField : dateFields) {
-        // xContentBuilder.startObject(dateField).field("type", "date").field("format", "MM/dd/yyyy").endObject();
-        // }
+        for (String dateField : dateFields) {
+            xContentBuilder.startObject(dateField).field("type", "date").field("format", "MM/dd/yyyy").endObject();
+        }
 
         for (String textField : textFields) {
             xContentBuilder.startObject(textField).field("type", "text").endObject();
