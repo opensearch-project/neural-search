@@ -522,6 +522,16 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         List<Object> aggs,
         QueryBuilder postFilterBuilder
     ) {
+        XContentBuilder builder = getContentBuilder(queryBuilder, rescorer, aggs, postFilterBuilder);
+        return search(builder, index, resultSize, requestParams);
+    }
+
+    private static XContentBuilder getContentBuilder(
+        QueryBuilder queryBuilder,
+        QueryBuilder rescorer,
+        List<Object> aggs,
+        QueryBuilder postFilterBuilder
+    ) throws IOException {
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
 
         if (queryBuilder != null) {
@@ -547,7 +557,16 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         }
 
         builder.endObject();
+        return builder;
+    }
 
+    @SneakyThrows
+    protected Map<String, Object> search(
+        final XContentBuilder builder,
+        final String index,
+        final int resultSize,
+        final Map<String, String> requestParams
+    ) {
         Request request = new Request("POST", "/" + index + "/_search");
         request.addParameter("size", Integer.toString(resultSize));
         if (requestParams != null && !requestParams.isEmpty()) {
@@ -645,7 +664,45 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final List<String> dateFieldNames,
         final List<String> dateFieldValues
     ) {
-        Request request = new Request("POST", "/" + index + "/_doc/" + docId + "?refresh=true");
+        addKnnDoc(
+            index,
+            docId,
+            vectorFieldNames,
+            vectors,
+            textFieldNames,
+            texts,
+            nestedFieldNames,
+            nestedFields,
+            integerFieldNames,
+            integerFieldValues,
+            keywordFieldNames,
+            keywordFieldValues,
+            dateFieldNames,
+            dateFieldValues,
+            Map.of(),
+            Map.of()
+        );
+    }
+
+    @SneakyThrows
+    protected void addKnnDoc(
+        final String index,
+        final String docId,
+        final List<String> vectorFieldNames,
+        final List<Object[]> vectors,
+        final List<String> textFieldNames,
+        final List<String> texts,
+        final List<String> nestedFieldNames,
+        final List<Map<String, String>> nestedFields,
+        final List<String> integerFieldNames,
+        final List<Integer> integerFieldValues,
+        final List<String> keywordFieldNames,
+        final List<String> keywordFieldValues,
+        final List<String> dateFieldNames,
+        final List<String> dateFieldValues,
+        final Map<String, String> parentFieldValues,
+        final Map<String, Map<String, String>> childFieldValues
+    ) {
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
         for (int i = 0; i < vectorFieldNames.size(); i++) {
             builder.field(vectorFieldNames.get(i), vectors.get(i));
@@ -676,8 +733,36 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         for (int i = 0; i < dateFieldNames.size(); i++) {
             builder.field(dateFieldNames.get(i), dateFieldValues.get(i));
         }
+
+        for (Map.Entry<String, String> entry : parentFieldValues.entrySet()) {
+            builder.field(entry.getKey(), entry.getValue());
+        }
+        Optional<String> routing = Optional.empty();
+        for (Map.Entry<String, Map<String, String>> entry : childFieldValues.entrySet()) {
+            String joinField = entry.getKey();
+            Map<String, String> childValues = entry.getValue();
+            builder.startObject(joinField);
+            builder.field("name", childValues.get("name"));
+            builder.field("parent", childValues.get("parent"));
+            if (childValues.containsKey("routing")) {
+                routing = Optional.ofNullable(childValues.get("routing"));
+            }
+            builder.endObject();
+        }
+
         builder.endObject();
 
+        StringBuilder urlStringBuilder = new StringBuilder();
+        urlStringBuilder.append("/").append(index).append("/_doc/");
+        if (Objects.nonNull(docId)) {
+            urlStringBuilder.append(docId).append("?");
+        } else {
+            urlStringBuilder.append("?");
+        }
+        urlStringBuilder.append("refresh=true");
+        routing.ifPresent(s -> urlStringBuilder.append("&routing=").append(s));
+
+        Request request = new Request("POST", urlStringBuilder.toString());
         request.setJsonEntity(builder.toString());
         Response response = client().performRequest(request);
         assertTrue(
@@ -833,13 +918,14 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     @SneakyThrows
     protected String buildIndexConfiguration(final List<KNNFieldConfig> knnFieldConfigs, final int numberOfShards) {
-        return buildIndexConfiguration(knnFieldConfigs, Collections.emptyList(), numberOfShards);
+        return buildIndexConfiguration(knnFieldConfigs, Collections.emptyList(), Collections.emptyList(), numberOfShards);
     }
 
     @SneakyThrows
     protected String buildIndexConfiguration(
         final List<KNNFieldConfig> knnFieldConfigs,
         final List<String> nestedFields,
+        final List<String> parentChildFields,
         final int numberOfShards
     ) {
         return buildIndexConfiguration(
@@ -847,6 +933,27 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             nestedFields,
             Collections.emptyList(),
             Collections.emptyList(),
+            Collections.emptyList(),
+            parentChildFields,
+            numberOfShards
+        );
+    }
+
+    @SneakyThrows
+    protected String buildIndexConfiguration(
+        final List<KNNFieldConfig> knnFieldConfigs,
+        final List<String> nestedFields,
+        final List<String> intFields,
+        final List<String> keywordFields,
+        final List<String> dateFields,
+        final int numberOfShards
+    ) {
+        return buildIndexConfiguration(
+            knnFieldConfigs,
+            nestedFields,
+            intFields,
+            keywordFields,
+            dateFields,
             Collections.emptyList(),
             numberOfShards
         );
@@ -859,6 +966,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final List<String> intFields,
         final List<String> keywordFields,
         final List<String> dateFields,
+        final List<String> parentChildFields,
         final int numberOfShards
     ) {
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
@@ -894,6 +1002,21 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
                 xContentBuilder.endObject();
             }
             xContentBuilder.endObject();
+        }
+
+        // treat the list in a manner that first element is a field name and next two are parent in child respectively
+        if (!parentChildFields.isEmpty()) {
+            if (parentChildFields.size() % 3 != 0) {
+                throw new IllegalArgumentException("Parent child field mapping must have tuples of three elements");
+            }
+            for (int i = 0; i < parentChildFields.size(); i += 3) {
+                String fieldName = parentChildFields.get(i);
+                xContentBuilder.startObject(fieldName).field("type", "join");
+                String parent = parentChildFields.get(i + 1);
+                String child = parentChildFields.get(i + 2);
+                xContentBuilder.startObject("relations").field(parent, child).endObject();
+                xContentBuilder.endObject();
+            }
         }
 
         for (String intField : intFields) {
