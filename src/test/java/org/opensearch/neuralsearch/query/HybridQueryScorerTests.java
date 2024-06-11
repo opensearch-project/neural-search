@@ -142,7 +142,11 @@ public class HybridQueryScorerTests extends OpenSearchQueryTestCase {
                 int idx = Arrays.binarySearch(docs2, doc);
                 expectedScore += scores2[idx];
             }
-            assertEquals(expectedScore, hybridQueryScorer.score(), 0.001f);
+            float hybridScore = 0.0f;
+            for (float score : hybridQueryScorer.hybridScores()) {
+                hybridScore += score;
+            }
+            assertEquals(expectedScore, hybridScore, 0.001f);
             numOfActualDocs++;
         }
 

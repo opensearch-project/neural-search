@@ -1,0 +1,19 @@
+{
+  "title": "this is a second doc",
+  "description": "the description is not very long",
+  "favor_list": [
+    "favor"
+  ],
+  "favorites": {
+    "game": "golden state",
+    "movie": null
+  },
+  "nested_passages": [
+    {
+      "text": "apple"
+    },
+    {
+      "text": "banana"
+    }
+  ]
+}

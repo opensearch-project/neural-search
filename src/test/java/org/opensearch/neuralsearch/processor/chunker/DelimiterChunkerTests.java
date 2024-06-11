@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor.chunker;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -11,11 +12,13 @@ import java.util.Map;
 import org.junit.Assert;
 import org.opensearch.test.OpenSearchTestCase;
 
-import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.TYPE;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.MAX_CHUNK_LIMIT_FIELD;
+import static org.opensearch.neuralsearch.processor.chunker.Chunker.CHUNK_STRING_COUNT_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.DelimiterChunker.DELIMITER_FIELD;
 
 public class DelimiterChunkerTests extends OpenSearchTestCase {
+
+    private final Map<String, Object> runtimeParameters = Map.of(MAX_CHUNK_LIMIT_FIELD, 100, CHUNK_STRING_COUNT_FIELD, 1);
 
     public void testCreate_withDelimiterFieldInvalidType_thenFail() {
         Exception exception = assertThrows(
@@ -36,7 +39,7 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
     public void testChunk_withNewlineDelimiter_thenSucceed() {
         DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n"));
         String content = "a\nb\nc\nd";
-        List<String> chunkResult = chunker.chunk(content, Map.of());
+        List<String> chunkResult = chunker.chunk(content, runtimeParameters);
         assertEquals(List.of("a\n", "b\n", "c\n", "d"), chunkResult);
     }
 
@@ -44,82 +47,66 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
         // default delimiter is \n\n
         DelimiterChunker chunker = new DelimiterChunker(Map.of());
         String content = "a.b\n\nc.d";
-        List<String> chunkResult = chunker.chunk(content, Map.of());
+        List<String> chunkResult = chunker.chunk(content, runtimeParameters);
         assertEquals(List.of("a.b\n\n", "c.d"), chunkResult);
     }
 
     public void testChunk_withOnlyDelimiterContent_thenSucceed() {
         DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n"));
         String content = "\n";
-        List<String> chunkResult = chunker.chunk(content, Map.of());
+        List<String> chunkResult = chunker.chunk(content, runtimeParameters);
         assertEquals(List.of("\n"), chunkResult);
     }
 
     public void testChunk_WithAllDelimiterContent_thenSucceed() {
         DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n"));
         String content = "\n\n\n";
-        List<String> chunkResult = chunker.chunk(content, Map.of());
+        List<String> chunkResult = chunker.chunk(content, runtimeParameters);
         assertEquals(List.of("\n", "\n", "\n"), chunkResult);
     }
 
     public void testChunk_WithPeriodDelimiters_thenSucceed() {
         DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "."));
         String content = "a.b.cc.d.";
-        List<String> chunkResult = chunker.chunk(content, Map.of());
+        List<String> chunkResult = chunker.chunk(content, runtimeParameters);
         assertEquals(List.of("a.", "b.", "cc.", "d."), chunkResult);
     }
 
     public void testChunk_withDoubleNewlineDelimiter_thenSucceed() {
         DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n\n"));
         String content = "\n\na\n\n\n";
-        List<String> chunkResult = chunker.chunk(content, Map.of());
+        List<String> chunkResult = chunker.chunk(content, runtimeParameters);
         assertEquals(List.of("\n\n", "a\n\n", "\n"), chunkResult);
-    }
-
-    public void testChunk_whenExceedMaxChunkLimit_thenFail() {
-        int maxChunkLimit = 2;
-        DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n\n", MAX_CHUNK_LIMIT_FIELD, maxChunkLimit));
-        String content = "\n\na\n\n\n";
-        IllegalArgumentException illegalArgumentException = assertThrows(
-            IllegalArgumentException.class,
-            () -> chunker.chunk(content, Map.of())
-        );
-        assert (illegalArgumentException.getMessage()
-            .contains(
-                String.format(
-                    Locale.ROOT,
-                    "The number of chunks produced by %s processor has exceeded the allowed maximum of [%s].",
-                    TYPE,
-                    maxChunkLimit
-                )
-            ));
     }
 
     public void testChunk_whenWithinMaxChunkLimit_thenSucceed() {
-        int maxChunkLimit = 3;
-        DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n\n", MAX_CHUNK_LIMIT_FIELD, maxChunkLimit));
+        DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n\n"));
         String content = "\n\na\n\n\n";
-        List<String> chunkResult = chunker.chunk(content, Map.of());
+        int runtimeMaxChunkLimit = 3;
+        List<String> chunkResult = chunker.chunk(content, Map.of(CHUNK_STRING_COUNT_FIELD, 1, MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit));
         assertEquals(List.of("\n\n", "a\n\n", "\n"), chunkResult);
     }
 
-    public void testChunk_whenExceedRuntimeMaxChunkLimit_thenFail() {
-        int maxChunkLimit = 3;
-        DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n\n", MAX_CHUNK_LIMIT_FIELD, maxChunkLimit));
+    public void testChunk_whenExceedMaxChunkLimit_thenLastPassageGetConcatenated() {
+        DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n\n"));
         String content = "\n\na\n\n\n";
         int runtimeMaxChunkLimit = 2;
-        IllegalArgumentException illegalArgumentException = assertThrows(
-            IllegalArgumentException.class,
-            () -> chunker.chunk(content, Map.of(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit))
+        List<String> passages = chunker.chunk(content, Map.of(CHUNK_STRING_COUNT_FIELD, 1, MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit));
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("\n\n");
+        expectedPassages.add("a\n\n\n");
+        assertEquals(expectedPassages, passages);
+    }
+
+    public void testChunk_whenExceedMaxChunkLimit_withTwoStringsTobeChunked_thenLastPassageGetConcatenated() {
+        DelimiterChunker chunker = new DelimiterChunker(Map.of(DELIMITER_FIELD, "\n\n"));
+        String content = "\n\na\n\n\n";
+        int runtimeMaxChunkLimit = 2, chunkStringCount = 2;
+        List<String> passages = chunker.chunk(
+            content,
+            Map.of(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit, CHUNK_STRING_COUNT_FIELD, chunkStringCount)
         );
-        assert (illegalArgumentException.getMessage()
-            .contains(
-                String.format(
-                    Locale.ROOT,
-                    "The number of chunks produced by %s processor has exceeded the allowed maximum of [%s].",
-                    TYPE,
-                    maxChunkLimit
-                )
-            ));
+        List<String> expectedPassages = List.of("\n\na\n\n\n");
+        assertEquals(expectedPassages, passages);
     }
 }

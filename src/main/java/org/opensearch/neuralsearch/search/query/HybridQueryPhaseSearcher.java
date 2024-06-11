@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import com.google.common.annotations.VisibleForTesting;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
@@ -19,8 +21,10 @@ import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.search.aggregations.AggregationProcessor;
 import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.SearchContext;
+import org.opensearch.search.query.ConcurrentQueryPhaseSearcher;
 import org.opensearch.search.query.QueryCollectorContext;
 import org.opensearch.search.query.QueryPhase;
+import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.search.query.QueryPhaseSearcherWrapper;
 
 import lombok.extern.log4j.Log4j2;
@@ -36,6 +40,14 @@ import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQuery;
 @Log4j2
 public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
 
+    private final QueryPhaseSearcher defaultQueryPhaseSearcherWithEmptyCollectorContext;
+    private final QueryPhaseSearcher concurrentQueryPhaseSearcherWithEmptyCollectorContext;
+
+    public HybridQueryPhaseSearcher() {
+        this.defaultQueryPhaseSearcherWithEmptyCollectorContext = new DefaultQueryPhaseSearcherWithEmptyQueryCollectorContext();
+        this.concurrentQueryPhaseSearcherWithEmptyCollectorContext = new ConcurrentQueryPhaseSearcherWithEmptyQueryCollectorContext();
+    }
+
     public boolean searchWith(
         final SearchContext searchContext,
         final ContextIndexSearcher searcher,
@@ -49,8 +61,15 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             return super.searchWith(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);
         } else {
             Query hybridQuery = extractHybridQuery(searchContext, query);
-            return super.searchWith(searchContext, searcher, hybridQuery, collectors, hasFilterCollector, hasTimeout);
+            QueryPhaseSearcher queryPhaseSearcher = getQueryPhaseSearcher(searchContext);
+            return queryPhaseSearcher.searchWith(searchContext, searcher, hybridQuery, collectors, hasFilterCollector, hasTimeout);
         }
+    }
+
+    private QueryPhaseSearcher getQueryPhaseSearcher(final SearchContext searchContext) {
+        return searchContext.shouldUseConcurrentSearch()
+            ? concurrentQueryPhaseSearcherWithEmptyCollectorContext
+            : defaultQueryPhaseSearcherWithEmptyCollectorContext;
     }
 
     private static boolean isWrappedHybridQuery(final Query query) {
@@ -131,5 +150,61 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
     public AggregationProcessor aggregationProcessor(SearchContext searchContext) {
         AggregationProcessor coreAggProcessor = super.aggregationProcessor(searchContext);
         return new HybridAggregationProcessor(coreAggProcessor);
+    }
+
+    /**
+     * Class that inherits ConcurrentQueryPhaseSearcher implementation but calls its search with only
+     * empty query collector context
+     */
+    @NoArgsConstructor(access = AccessLevel.PRIVATE)
+    final class ConcurrentQueryPhaseSearcherWithEmptyQueryCollectorContext extends ConcurrentQueryPhaseSearcher {
+
+        @Override
+        protected boolean searchWithCollector(
+            SearchContext searchContext,
+            ContextIndexSearcher searcher,
+            Query query,
+            LinkedList<QueryCollectorContext> collectors,
+            boolean hasFilterCollector,
+            boolean hasTimeout
+        ) throws IOException {
+            return searchWithCollector(
+                searchContext,
+                searcher,
+                query,
+                collectors,
+                QueryCollectorContext.EMPTY_CONTEXT,
+                hasFilterCollector,
+                hasTimeout
+            );
+        }
+    }
+
+    /**
+     * Class that inherits DefaultQueryPhaseSearcher implementation but calls its search with only
+     * empty query collector context
+     */
+    @NoArgsConstructor(access = AccessLevel.PACKAGE)
+    final class DefaultQueryPhaseSearcherWithEmptyQueryCollectorContext extends QueryPhase.DefaultQueryPhaseSearcher {
+
+        @Override
+        protected boolean searchWithCollector(
+            SearchContext searchContext,
+            ContextIndexSearcher searcher,
+            Query query,
+            LinkedList<QueryCollectorContext> collectors,
+            boolean hasFilterCollector,
+            boolean hasTimeout
+        ) throws IOException {
+            return searchWithCollector(
+                searchContext,
+                searcher,
+                query,
+                collectors,
+                QueryCollectorContext.EMPTY_CONTEXT,
+                hasFilterCollector,
+                hasTimeout
+            );
+        }
     }
 }

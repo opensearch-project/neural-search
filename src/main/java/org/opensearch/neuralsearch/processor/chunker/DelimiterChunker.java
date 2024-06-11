@@ -8,8 +8,8 @@ import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
 
-import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseIntegerParameter;
-import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseStringParameter;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseInteger;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseStringWithDefault;
 
 /**
  * The implementation {@link Chunker} for delimiter algorithm
@@ -23,7 +23,6 @@ public final class DelimiterChunker implements Chunker {
     public static final String DEFAULT_DELIMITER = "\n\n";
 
     private String delimiter;
-    private int maxChunkLimit;
 
     public DelimiterChunker(final Map<String, Object> parameters) {
         parseParameters(parameters);
@@ -39,8 +38,7 @@ public final class DelimiterChunker implements Chunker {
      */
     @Override
     public void parseParameters(Map<String, Object> parameters) {
-        this.delimiter = parseStringParameter(parameters, DELIMITER_FIELD, DEFAULT_DELIMITER);
-        this.maxChunkLimit = parseIntegerParameter(parameters, MAX_CHUNK_LIMIT_FIELD, DEFAULT_MAX_CHUNK_LIMIT);
+        this.delimiter = parseStringWithDefault(parameters, DELIMITER_FIELD, DEFAULT_DELIMITER);
     }
 
     /**
@@ -49,25 +47,29 @@ public final class DelimiterChunker implements Chunker {
      * @param content input string
      * @param runtimeParameters a map for runtime parameters, containing the following runtime parameters:
      * 1. max_chunk_limit field level max chunk limit
+     * 2. chunk_string_count number of non-empty strings (including itself) which need to be chunked later
      */
     @Override
     public List<String> chunk(final String content, final Map<String, Object> runtimeParameters) {
-        int runtimeMaxChunkLimit = parseIntegerParameter(runtimeParameters, MAX_CHUNK_LIMIT_FIELD, maxChunkLimit);
+        int runtimeMaxChunkLimit = parseInteger(runtimeParameters, MAX_CHUNK_LIMIT_FIELD);
+        int chunkStringCount = parseInteger(runtimeParameters, CHUNK_STRING_COUNT_FIELD);
 
         List<String> chunkResult = new ArrayList<>();
         int start = 0, end;
         int nextDelimiterPosition = content.indexOf(delimiter);
 
         while (nextDelimiterPosition != -1) {
-            ChunkerUtil.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, maxChunkLimit);
+            if (Chunker.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, chunkStringCount)) {
+                break;
+            }
             end = nextDelimiterPosition + delimiter.length();
             chunkResult.add(content.substring(start, end));
             start = end;
             nextDelimiterPosition = content.indexOf(delimiter, start);
         }
 
+        // add the rest content into the chunk result
         if (start < content.length()) {
-            ChunkerUtil.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, maxChunkLimit);
             chunkResult.add(content.substring(start));
         }
 

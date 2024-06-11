@@ -182,6 +182,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
 
     public void testExecute_successful() {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         sourceAndMetadata.put("key1", "value1");
         sourceAndMetadata.put("my_text_field", "value2");
         sourceAndMetadata.put("key3", "value3");
@@ -231,6 +232,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
 
     public void testExecute_withListTypeInput_successful() {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         sourceAndMetadata.put("my_text_field", "value1");
         sourceAndMetadata.put("another_text_field", "value2");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
@@ -263,6 +265,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
 
     public void testExecute_MLClientAccessorThrowFail_handlerFailure() {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         sourceAndMetadata.put("my_text_field", "value1");
         sourceAndMetadata.put("key2", "value2");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
@@ -320,6 +323,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
 
     public void testExecute_whenInferencesAreEmpty_thenSuccessful() {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         sourceAndMetadata.put("my_field", "value1");
         sourceAndMetadata.put("another_text_field", "value2");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());

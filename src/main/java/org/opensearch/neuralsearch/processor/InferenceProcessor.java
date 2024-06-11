@@ -5,26 +5,37 @@
 package org.opensearch.neuralsearch.processor;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
-import java.util.function.Supplier;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
+import org.opensearch.common.collect.Tuple;
+import org.opensearch.core.common.util.CollectionUtils;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
-import org.opensearch.index.mapper.MapperService;
+import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
+import org.opensearch.ingest.IngestDocumentWrapper;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.util.ProcessorDocumentUtils;
 
 /**
  * The abstract class for text processing use cases. Users provide a field name map and a model id.
@@ -50,6 +61,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
     protected final MLCommonsClientAccessor mlCommonsClientAccessor;
 
     private final Environment environment;
+    private final ClusterService clusterService;
 
     public InferenceProcessor(
         String tag,
@@ -59,18 +71,19 @@ public abstract class InferenceProcessor extends AbstractProcessor {
         String modelId,
         Map<String, Object> fieldMap,
         MLCommonsClientAccessor clientAccessor,
-        Environment environment
+        Environment environment,
+        ClusterService clusterService
     ) {
         super(tag, description);
         this.type = type;
         if (StringUtils.isBlank(modelId)) throw new IllegalArgumentException("model_id is null or empty, cannot process it");
         validateEmbeddingConfiguration(fieldMap);
-
         this.listTypeNestedMapKey = listTypeNestedMapKey;
         this.modelId = modelId;
         this.fieldMap = fieldMap;
         this.mlCommonsClientAccessor = clientAccessor;
         this.environment = environment;
+        this.clusterService = clusterService;
     }
 
     private void validateEmbeddingConfiguration(Map<String, Object> fieldMap) {
@@ -107,16 +120,131 @@ public abstract class InferenceProcessor extends AbstractProcessor {
     public void execute(IngestDocument ingestDocument, BiConsumer<IngestDocument, Exception> handler) {
         try {
             validateEmbeddingFieldsValue(ingestDocument);
-            Map<String, Object> ProcessMap = buildMapWithProcessorKeyAndOriginalValue(ingestDocument);
-            List<String> inferenceList = createInferenceList(ProcessMap);
+            Map<String, Object> processMap = buildMapWithTargetKeyAndOriginalValue(ingestDocument);
+            List<String> inferenceList = createInferenceList(processMap);
             if (inferenceList.size() == 0) {
                 handler.accept(ingestDocument, null);
             } else {
-                doExecute(ingestDocument, ProcessMap, inferenceList, handler);
+                doExecute(ingestDocument, processMap, inferenceList, handler);
             }
         } catch (Exception e) {
             handler.accept(null, e);
         }
+    }
+
+    /**
+     * This is the function which does actual inference work for batchExecute interface.
+     * @param inferenceList a list of String for inference.
+     * @param handler a callback handler to handle inference results which is a list of objects.
+     * @param onException an exception callback to handle exception.
+     */
+    abstract void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException);
+
+    @Override
+    public void batchExecute(List<IngestDocumentWrapper> ingestDocumentWrappers, Consumer<List<IngestDocumentWrapper>> handler) {
+        if (CollectionUtils.isEmpty(ingestDocumentWrappers)) {
+            handler.accept(Collections.emptyList());
+            return;
+        }
+
+        List<DataForInference> dataForInferences = getDataForInference(ingestDocumentWrappers);
+        List<String> inferenceList = constructInferenceTexts(dataForInferences);
+        if (inferenceList.isEmpty()) {
+            handler.accept(ingestDocumentWrappers);
+            return;
+        }
+        Tuple<List<String>, Map<Integer, Integer>> sortedResult = sortByLengthAndReturnOriginalOrder(inferenceList);
+        inferenceList = sortedResult.v1();
+        Map<Integer, Integer> originalOrder = sortedResult.v2();
+        doBatchExecute(inferenceList, results -> {
+            int startIndex = 0;
+            results = restoreToOriginalOrder(results, originalOrder);
+            for (DataForInference dataForInference : dataForInferences) {
+                if (dataForInference.getIngestDocumentWrapper().getException() != null
+                    || CollectionUtils.isEmpty(dataForInference.getInferenceList())) {
+                    continue;
+                }
+                List<?> inferenceResults = results.subList(startIndex, startIndex + dataForInference.getInferenceList().size());
+                startIndex += dataForInference.getInferenceList().size();
+                setVectorFieldsToDocument(
+                    dataForInference.getIngestDocumentWrapper().getIngestDocument(),
+                    dataForInference.getProcessMap(),
+                    inferenceResults
+                );
+            }
+            handler.accept(ingestDocumentWrappers);
+        }, exception -> {
+            for (IngestDocumentWrapper ingestDocumentWrapper : ingestDocumentWrappers) {
+                // The IngestDocumentWrapper might already run into exception and not sent for inference. So here we only
+                // set exception to IngestDocumentWrapper which doesn't have exception before.
+                if (ingestDocumentWrapper.getException() == null) {
+                    ingestDocumentWrapper.update(ingestDocumentWrapper.getIngestDocument(), exception);
+                }
+            }
+            handler.accept(ingestDocumentWrappers);
+        });
+    }
+
+    private Tuple<List<String>, Map<Integer, Integer>> sortByLengthAndReturnOriginalOrder(List<String> inferenceList) {
+        List<Tuple<Integer, String>> docsWithIndex = new ArrayList<>();
+        for (int i = 0; i < inferenceList.size(); ++i) {
+            docsWithIndex.add(Tuple.tuple(i, inferenceList.get(i)));
+        }
+        docsWithIndex.sort(Comparator.comparingInt(t -> t.v2().length()));
+        List<String> sortedInferenceList = docsWithIndex.stream().map(Tuple::v2).collect(Collectors.toList());
+        Map<Integer, Integer> originalOrderMap = new HashMap<>();
+        for (int i = 0; i < docsWithIndex.size(); ++i) {
+            originalOrderMap.put(i, docsWithIndex.get(i).v1());
+        }
+        return Tuple.tuple(sortedInferenceList, originalOrderMap);
+    }
+
+    private List<?> restoreToOriginalOrder(List<?> results, Map<Integer, Integer> originalOrder) {
+        List<Object> sortedResults = Arrays.asList(results.toArray());
+        for (int i = 0; i < results.size(); ++i) {
+            if (!originalOrder.containsKey(i)) continue;
+            int oldIndex = originalOrder.get(i);
+            sortedResults.set(oldIndex, results.get(i));
+        }
+        return sortedResults;
+    }
+
+    private List<String> constructInferenceTexts(List<DataForInference> dataForInferences) {
+        List<String> inferenceTexts = new ArrayList<>();
+        for (DataForInference dataForInference : dataForInferences) {
+            if (dataForInference.getIngestDocumentWrapper().getException() != null
+                || CollectionUtils.isEmpty(dataForInference.getInferenceList())) {
+                continue;
+            }
+            inferenceTexts.addAll(dataForInference.getInferenceList());
+        }
+        return inferenceTexts;
+    }
+
+    private List<DataForInference> getDataForInference(List<IngestDocumentWrapper> ingestDocumentWrappers) {
+        List<DataForInference> dataForInferences = new ArrayList<>();
+        for (IngestDocumentWrapper ingestDocumentWrapper : ingestDocumentWrappers) {
+            Map<String, Object> processMap = null;
+            List<String> inferenceList = null;
+            try {
+                validateEmbeddingFieldsValue(ingestDocumentWrapper.getIngestDocument());
+                processMap = buildMapWithTargetKeyAndOriginalValue(ingestDocumentWrapper.getIngestDocument());
+                inferenceList = createInferenceList(processMap);
+            } catch (Exception e) {
+                ingestDocumentWrapper.update(ingestDocumentWrapper.getIngestDocument(), e);
+            } finally {
+                dataForInferences.add(new DataForInference(ingestDocumentWrapper, processMap, inferenceList));
+            }
+        }
+        return dataForInferences;
+    }
+
+    @Getter
+    @AllArgsConstructor
+    private static class DataForInference {
+        private final IngestDocumentWrapper ingestDocumentWrapper;
+        private final Map<String, Object> processMap;
+        private final List<String> inferenceList;
     }
 
     @SuppressWarnings({ "unchecked" })
@@ -148,7 +276,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
     }
 
     @VisibleForTesting
-    Map<String, Object> buildMapWithProcessorKeyAndOriginalValue(IngestDocument ingestDocument) {
+    Map<String, Object> buildMapWithTargetKeyAndOriginalValue(IngestDocument ingestDocument) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
         Map<String, Object> mapWithProcessorKeys = new LinkedHashMap<>();
         for (Map.Entry<String, Object> fieldMapEntry : fieldMap.entrySet()) {
@@ -206,54 +334,16 @@ public abstract class InferenceProcessor extends AbstractProcessor {
 
     private void validateEmbeddingFieldsValue(IngestDocument ingestDocument) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
-        for (Map.Entry<String, Object> embeddingFieldsEntry : fieldMap.entrySet()) {
-            Object sourceValue = sourceAndMetadataMap.get(embeddingFieldsEntry.getKey());
-            if (sourceValue != null) {
-                String sourceKey = embeddingFieldsEntry.getKey();
-                Class<?> sourceValueClass = sourceValue.getClass();
-                if (List.class.isAssignableFrom(sourceValueClass) || Map.class.isAssignableFrom(sourceValueClass)) {
-                    validateNestedTypeValue(sourceKey, sourceValue, () -> 1);
-                } else if (!String.class.isAssignableFrom(sourceValueClass)) {
-                    throw new IllegalArgumentException("field [" + sourceKey + "] is neither string nor nested type, cannot process it");
-                } else if (StringUtils.isBlank(sourceValue.toString())) {
-                    throw new IllegalArgumentException("field [" + sourceKey + "] has empty string value, cannot process it");
-                }
-            }
-        }
-    }
-
-    @SuppressWarnings({ "rawtypes", "unchecked" })
-    private void validateNestedTypeValue(String sourceKey, Object sourceValue, Supplier<Integer> maxDepthSupplier) {
-        int maxDepth = maxDepthSupplier.get();
-        if (maxDepth > MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(environment.settings())) {
-            throw new IllegalArgumentException("map type field [" + sourceKey + "] reached max depth limit, cannot process it");
-        } else if ((List.class.isAssignableFrom(sourceValue.getClass()))) {
-            validateListTypeValue(sourceKey, sourceValue, maxDepthSupplier);
-        } else if (Map.class.isAssignableFrom(sourceValue.getClass())) {
-            ((Map) sourceValue).values()
-                .stream()
-                .filter(Objects::nonNull)
-                .forEach(x -> validateNestedTypeValue(sourceKey, x, () -> maxDepth + 1));
-        } else if (!String.class.isAssignableFrom(sourceValue.getClass())) {
-            throw new IllegalArgumentException("map type field [" + sourceKey + "] has non-string type, cannot process it");
-        } else if (StringUtils.isBlank(sourceValue.toString())) {
-            throw new IllegalArgumentException("map type field [" + sourceKey + "] has empty string, cannot process it");
-        }
-    }
-
-    @SuppressWarnings({ "rawtypes" })
-    private void validateListTypeValue(String sourceKey, Object sourceValue, Supplier<Integer> maxDepthSupplier) {
-        for (Object value : (List) sourceValue) {
-            if (value instanceof Map) {
-                validateNestedTypeValue(sourceKey, value, () -> maxDepthSupplier.get() + 1);
-            } else if (value == null) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has null, cannot process it");
-            } else if (!(value instanceof String)) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has non string value, cannot process it");
-            } else if (StringUtils.isBlank(value.toString())) {
-                throw new IllegalArgumentException("list type field [" + sourceKey + "] has empty string, cannot process it");
-            }
-        }
+        String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
+        ProcessorDocumentUtils.validateMapTypeValue(
+            FIELD_MAP_FIELD,
+            sourceAndMetadataMap,
+            fieldMap,
+            indexName,
+            clusterService,
+            environment,
+            false
+        );
     }
 
     protected void setVectorFieldsToDocument(IngestDocument ingestDocument, Map<String, Object> processorMap, List<?> results) {

@@ -23,8 +23,8 @@ import java.util.Locale;
 import java.util.Map;
 import static java.util.Collections.singletonList;
 import static java.util.Collections.singletonMap;
-import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.TYPE;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.MAX_CHUNK_LIMIT_FIELD;
+import static org.opensearch.neuralsearch.processor.chunker.Chunker.CHUNK_STRING_COUNT_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.ALGORITHM_NAME;
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.TOKEN_LIMIT_FIELD;
@@ -35,6 +35,15 @@ import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChun
 public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
 
     private FixedTokenLengthChunker fixedTokenLengthChunker;
+
+    private final Map<String, Object> runtimeParameters = Map.of(
+        MAX_CHUNK_LIMIT_FIELD,
+        100,
+        CHUNK_STRING_COUNT_FIELD,
+        1,
+        MAX_TOKEN_COUNT_FIELD,
+        10000
+    );
 
     @Before
     public void setup() {
@@ -166,7 +175,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
         IllegalStateException illegalStateException = assertThrows(
             IllegalStateException.class,
-            () -> fixedTokenLengthChunker.chunk(content, parameters)
+            () -> fixedTokenLengthChunker.chunk(content, runtimeParameters)
         );
         assert (illegalStateException.getMessage()
             .contains(String.format(Locale.ROOT, "analyzer %s throws exception", lowercaseTokenizer)));
@@ -177,8 +186,6 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         parameters.put(TOKEN_LIMIT_FIELD, 10);
         parameters.put(TOKENIZER_FIELD, "standard");
         FixedTokenLengthChunker fixedTokenLengthChunker = createFixedTokenLengthChunker(parameters);
-        Map<String, Object> runtimeParameters = new HashMap<>();
-        runtimeParameters.put(MAX_TOKEN_COUNT_FIELD, 10000);
         String content = "";
         List<String> passages = fixedTokenLengthChunker.chunk(content, runtimeParameters);
         assert (passages.isEmpty());
@@ -189,8 +196,6 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         parameters.put(TOKEN_LIMIT_FIELD, 10);
         parameters.put(TOKENIZER_FIELD, "standard");
         FixedTokenLengthChunker fixedTokenLengthChunker = createFixedTokenLengthChunker(parameters);
-        Map<String, Object> runtimeParameters = new HashMap<>();
-        runtimeParameters.put(MAX_TOKEN_COUNT_FIELD, 10000);
         String content =
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
         List<String> passages = fixedTokenLengthChunker.chunk(content, runtimeParameters);
@@ -206,8 +211,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         parameters.put(TOKEN_LIMIT_FIELD, 20);
         parameters.put(TOKENIZER_FIELD, "standard");
         FixedTokenLengthChunker fixedTokenLengthChunker = createFixedTokenLengthChunker(parameters);
-        Map<String, Object> runtimeParameters = new HashMap<>();
-        runtimeParameters.put(MAX_TOKEN_COUNT_FIELD, 10000);
+        Map<String, Object> runtimeParameters = new HashMap<>(this.runtimeParameters);
         String content =
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
         List<String> passages = fixedTokenLengthChunker.chunk(content, runtimeParameters);
@@ -226,7 +230,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         FixedTokenLengthChunker fixedTokenLengthChunker = createFixedTokenLengthChunker(parameters);
         String content =
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
-        List<String> passages = fixedTokenLengthChunker.chunk(content, Map.of());
+        List<String> passages = fixedTokenLengthChunker.chunk(content, runtimeParameters);
         List<String> expectedPassages = new ArrayList<>();
         expectedPassages.add("This is an example document to be chunked. The document ");
         expectedPassages.add("to be chunked. The document contains a single paragraph, two ");
@@ -235,41 +239,31 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         assertEquals(expectedPassages, passages);
     }
 
-    public void testChunk_whenExceedMaxChunkLimit_thenFail() {
-        int maxChunkLimit = 2;
+    public void testChunk_whenExceedMaxChunkLimit_thenLastPassageGetConcatenated() {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(TOKEN_LIMIT_FIELD, 10);
         parameters.put(TOKENIZER_FIELD, "standard");
-        parameters.put(MAX_CHUNK_LIMIT_FIELD, maxChunkLimit);
         FixedTokenLengthChunker fixedTokenLengthChunker = createFixedTokenLengthChunker(parameters);
-        Map<String, Object> runtimeParameters = new HashMap<>();
-        runtimeParameters.put(MAX_TOKEN_COUNT_FIELD, 10000);
+        int runtimeMaxChunkLimit = 2;
+        Map<String, Object> runtimeParameters = new HashMap<>(this.runtimeParameters);
+        runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit);
         String content =
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
-        IllegalArgumentException illegalArgumentException = assertThrows(
-            IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.chunk(content, runtimeParameters)
-        );
-        assert (illegalArgumentException.getMessage()
-            .contains(
-                String.format(
-                    Locale.ROOT,
-                    "The number of chunks produced by %s processor has exceeded the allowed maximum of [%s].",
-                    TYPE,
-                    maxChunkLimit
-                )
-            ));
+        List<String> passages = fixedTokenLengthChunker.chunk(content, runtimeParameters);
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked. The document ");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.");
+        assertEquals(expectedPassages, passages);
     }
 
     public void testChunk_whenWithinMaxChunkLimit_thenSucceed() {
-        int maxChunkLimit = 3;
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(TOKEN_LIMIT_FIELD, 10);
         parameters.put(TOKENIZER_FIELD, "standard");
-        parameters.put(MAX_CHUNK_LIMIT_FIELD, maxChunkLimit);
         FixedTokenLengthChunker fixedTokenLengthChunker = createFixedTokenLengthChunker(parameters);
-        Map<String, Object> runtimeParameters = new HashMap<>();
-        runtimeParameters.put(MAX_TOKEN_COUNT_FIELD, 10000);
+        int runtimeMaxChunkLimit = 3;
+        Map<String, Object> runtimeParameters = new HashMap<>(this.runtimeParameters);
+        runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit);
         String content =
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
         List<String> passages = fixedTokenLengthChunker.chunk(content, runtimeParameters);
@@ -280,30 +274,39 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         assertEquals(expectedPassages, passages);
     }
 
-    public void testChunk_whenExceedRuntimeMaxChunkLimit_thenFail() {
-        int maxChunkLimit = 3, runtimeMaxChunkLimit = 2;
+    public void testChunk_whenExceedRuntimeMaxChunkLimit_thenLastPassageGetConcatenated() {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(TOKEN_LIMIT_FIELD, 10);
         parameters.put(TOKENIZER_FIELD, "standard");
-        parameters.put(MAX_CHUNK_LIMIT_FIELD, maxChunkLimit);
         FixedTokenLengthChunker fixedTokenLengthChunker = createFixedTokenLengthChunker(parameters);
-        Map<String, Object> runtimeParameters = new HashMap<>();
-        runtimeParameters.put(MAX_TOKEN_COUNT_FIELD, 10000);
+        int runtimeMaxChunkLimit = 2;
+        Map<String, Object> runtimeParameters = new HashMap<>(this.runtimeParameters);
         runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit);
         String content =
             "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
-        IllegalArgumentException illegalArgumentException = assertThrows(
-            IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.chunk(content, runtimeParameters)
+        List<String> passages = fixedTokenLengthChunker.chunk(content, runtimeParameters);
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked. The document ");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.");
+        assertEquals(expectedPassages, passages);
+    }
+
+    public void testChunk_whenExceedRuntimeMaxChunkLimit_withOneStringTobeChunked_thenLastPassageGetConcatenated() {
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put(TOKEN_LIMIT_FIELD, 10);
+        parameters.put(TOKENIZER_FIELD, "standard");
+        FixedTokenLengthChunker fixedTokenLengthChunker = createFixedTokenLengthChunker(parameters);
+        int runtimeMaxChunkLimit = 2, chunkStringCount = 1;
+        Map<String, Object> runtimeParameters = new HashMap<>(this.runtimeParameters);
+        runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit);
+        runtimeParameters.put(CHUNK_STRING_COUNT_FIELD, chunkStringCount);
+        String content =
+            "This is an example document to be chunked. The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.";
+        List<String> passages = fixedTokenLengthChunker.chunk(content, runtimeParameters);
+        List<String> expectedPassages = List.of(
+            "This is an example document to be chunked. The document ",
+            "contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch."
         );
-        assert (illegalArgumentException.getMessage()
-            .contains(
-                String.format(
-                    Locale.ROOT,
-                    "The number of chunks produced by %s processor has exceeded the allowed maximum of [%s].",
-                    TYPE,
-                    maxChunkLimit
-                )
-            ));
+        assertEquals(expectedPassages, passages);
     }
 }

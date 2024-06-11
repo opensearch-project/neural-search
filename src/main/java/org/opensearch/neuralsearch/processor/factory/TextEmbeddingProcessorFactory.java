@@ -12,6 +12,7 @@ import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.FIELD
 
 import java.util.Map;
 
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
@@ -26,9 +27,16 @@ public class TextEmbeddingProcessorFactory implements Processor.Factory {
 
     private final Environment environment;
 
-    public TextEmbeddingProcessorFactory(final MLCommonsClientAccessor clientAccessor, final Environment environment) {
+    private final ClusterService clusterService;
+
+    public TextEmbeddingProcessorFactory(
+        final MLCommonsClientAccessor clientAccessor,
+        final Environment environment,
+        final ClusterService clusterService
+    ) {
         this.clientAccessor = clientAccessor;
         this.environment = environment;
+        this.clusterService = clusterService;
     }
 
     @Override
@@ -40,6 +48,6 @@ public class TextEmbeddingProcessorFactory implements Processor.Factory {
     ) throws Exception {
         String modelId = readStringProperty(TYPE, processorTag, config, MODEL_ID_FIELD);
         Map<String, Object> filedMap = readMap(TYPE, processorTag, config, FIELD_MAP_FIELD);
-        return new TextEmbeddingProcessor(processorTag, description, modelId, filedMap, clientAccessor, environment);
+        return new TextEmbeddingProcessor(processorTag, description, modelId, filedMap, clientAccessor, environment, clusterService);
     }
 }

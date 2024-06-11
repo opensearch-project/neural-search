@@ -1,0 +1,161 @@
+{
+  "simpleMapConfiguration": {
+    "field_map": {
+      "body": "body_embedding"
+    },
+    "source": {
+      "body": "This is a test body."
+    }
+  },
+  "doublyMapConfiguration": {
+    "field_map": {
+      "passage": {
+        "body": "body_embedding"
+      }
+    },
+    "source": {
+      "passage": {
+        "body": "This is a test body."
+      }
+    }
+  },
+  "mapWithNestedConfiguration": {
+    "field_map": {
+      "passage": {
+        "bodies": "bodies_embedding"
+      }
+    },
+    "source": {
+      "passage": {
+        "bodies": ["test body 1", "test body 2", "test body 3"]
+      }
+    }
+  },
+  "nestedConfiguration": {
+    "field_map": {
+      "bodies": "bodies_embedding"
+    },
+    "source": {
+      "bodies": ["test body 1", "test body 2", "test body 3"]
+    }
+  },
+  "nestedWithMapConfiguration": {
+    "field_map": {
+      "bodies": {
+        "body": "body_embedding"
+      }
+    },
+    "source": {
+      "bodies": [
+        {
+          "body": "This is a test body.",
+          "seq": 1
+        },
+        {
+          "body": "This is another test body.",
+          "seq": 2
+        }]
+    }
+  },
+  "sourceMapFieldNotMapConfiguration": {
+    "field_map": {
+      "passage": "passage_embedding"
+    },
+    "source": {
+      "passage": {
+        "body": "This is a test body."
+      }
+    },
+    "expectation": {
+      "type": "IllegalArgumentException",
+      "message": "[passage] configuration doesn't match actual value type, configuration type is: java.lang.String, actual value type is: java.util.HashMap"
+    }
+  },
+  "sourceMapTypeHasNonNestedNonStringConfiguration": {
+    "field_map": {
+      "passage": {
+        "body": "body_embedding"
+      }
+    },
+    "source": {
+      "passage": {
+        "body": 12345
+      }
+    },
+    "expectation": {
+      "type": "IllegalArgumentException",
+      "message": "map type field [body] is neither string nor nested type, cannot process it"
+    }
+  },
+  "sourceMapTypeHasEmptyStringConfiguration": {
+    "field_map": {
+      "passage": {
+        "body": "body_embedding"
+      }
+    },
+    "source": {
+      "passage": {
+        "body": ""
+      }
+    },
+    "expectation": {
+      "type": "IllegalArgumentException",
+      "message": "map type field [body] has empty string value, cannot process it"
+    }
+  },
+  "sourceListTypeHasNullConfiguration": {
+    "field_map": {
+      "bodies": "bodies_embedding"
+    },
+    "source": {
+      "bodies": ["This is a test", null, "This is another test"]
+    },
+    "expectation": {
+      "type": "IllegalArgumentException",
+      "message": "list type field [bodies] has null, cannot process it"
+    }
+  },
+  "sourceListTypeHasEmptyConfiguration": {
+    "field_map": {
+      "bodies": "bodies_embedding"
+    },
+    "source": {
+      "bodies": ["This is a test", "", "This is another test"]
+    },
+    "expectation": {
+      "type": "IllegalArgumentException",
+      "message": "list type field [bodies] has empty string, cannot process it"
+    }
+  },
+  "sourceListTypeHasNonStringConfiguration": {
+    "field_map": {
+      "bodies": "bodies_embedding"
+    },
+    "source": {
+      "bodies": ["This is a test", 1, "This is another test"]
+    },
+    "expectation": {
+      "type": "IllegalArgumentException",
+      "message": "list type field [bodies] has non string value, cannot process it"
+    }
+  },
+  "sourceDoublyListTypeConfiguration": {
+    "field_map": {
+      "bodies": "bodies_embedding"
+    },
+    "source": {
+      "bodies": [
+        [
+          "This is a test"
+        ],
+        [
+          "This is another tetst"
+        ]
+      ]
+    },
+    "expectation": {
+      "type": "IllegalArgumentException",
+      "message": "list type field [bodies] is nested list type, cannot process it"
+    }
+  }
+}

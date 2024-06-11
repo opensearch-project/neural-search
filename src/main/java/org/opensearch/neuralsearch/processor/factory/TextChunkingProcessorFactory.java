@@ -9,7 +9,6 @@ import java.util.Map;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
 import org.opensearch.index.analysis.AnalysisRegistry;
-import org.opensearch.indices.IndicesService;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.processor.TextChunkingProcessor;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.TYPE;
@@ -29,19 +28,11 @@ public class TextChunkingProcessorFactory implements Processor.Factory {
 
     private final ClusterService clusterService;
 
-    private final IndicesService indicesService;
-
     private final AnalysisRegistry analysisRegistry;
 
-    public TextChunkingProcessorFactory(
-        Environment environment,
-        ClusterService clusterService,
-        IndicesService indicesService,
-        AnalysisRegistry analysisRegistry
-    ) {
+    public TextChunkingProcessorFactory(Environment environment, ClusterService clusterService, AnalysisRegistry analysisRegistry) {
         this.environment = environment;
         this.clusterService = clusterService;
-        this.indicesService = indicesService;
         this.analysisRegistry = analysisRegistry;
     }
 
@@ -54,15 +45,6 @@ public class TextChunkingProcessorFactory implements Processor.Factory {
     ) throws Exception {
         Map<String, Object> fieldMap = readMap(TYPE, processorTag, config, FIELD_MAP_FIELD);
         Map<String, Object> algorithmMap = readMap(TYPE, processorTag, config, ALGORITHM_FIELD);
-        return new TextChunkingProcessor(
-            processorTag,
-            description,
-            fieldMap,
-            algorithmMap,
-            environment,
-            clusterService,
-            indicesService,
-            analysisRegistry
-        );
+        return new TextChunkingProcessor(processorTag, description, fieldMap, algorithmMap, environment, clusterService, analysisRegistry);
     }
 }

@@ -1,0 +1,2 @@
+{ "index": { "_index": "{{index}}", "_id": "{{id}}" } },
+{{doc}}{{comma}}

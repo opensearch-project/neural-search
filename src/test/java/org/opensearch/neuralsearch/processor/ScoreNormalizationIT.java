@@ -52,11 +52,6 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
         updateClusterSettings();
     }
 
-    @Override
-    public boolean isUpdateClusterSettings() {
-        return false;
-    }
-
     /**
      * Using search pipelines with config for l2 norm:
      * {

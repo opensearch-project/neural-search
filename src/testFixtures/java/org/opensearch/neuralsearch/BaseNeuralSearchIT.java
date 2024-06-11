@@ -310,6 +310,36 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertEquals("true", node.get("acknowledged").toString());
     }
 
+    protected void createNeuralSparseTwoPhaseSearchProcessor(final String pipelineName) throws Exception {
+        createNeuralSparseTwoPhaseSearchProcessor(pipelineName, 0.4f, 5.0f, 10000);
+    }
+
+    protected void createNeuralSparseTwoPhaseSearchProcessor(
+        final String pipelineName,
+        float pruneRatio,
+        float expansionRate,
+        int maxWindowSize
+    ) throws Exception {
+        String jsonTemplate = Files.readString(
+            Path.of(Objects.requireNonNull(classLoader.getResource("processor/NeuralSparseTwoPhaseProcessorConfiguration.json")).toURI())
+        );
+        String customizedJson = String.format(Locale.ROOT, jsonTemplate, pruneRatio, expansionRate, maxWindowSize);
+        Response pipelineCreateResponse = makeRequest(
+            client(),
+            "PUT",
+            "/_search/pipeline/" + pipelineName,
+            null,
+            toHttpEntity(customizedJson),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+        Map<String, Object> node = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(pipelineCreateResponse.getEntity()),
+            false
+        );
+        assertEquals("true", node.get("acknowledged").toString());
+    }
+
     protected void createSearchRequestProcessor(final String modelId, final String pipelineName) throws Exception {
         Response pipelineCreateResponse = makeRequest(
             client(),
@@ -401,6 +431,21 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         String responseBody = EntityUtils.toString(response.getEntity());
         Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), responseBody).map();
         return (Integer) responseMap.get("count");
+    }
+
+    /**
+     * Get one doc by its id
+     * @param indexName index name
+     * @param id doc id
+     * @return map of the doc data
+     */
+    @SneakyThrows
+    protected Map<String, Object> getDocById(final String indexName, final String id) {
+        Request request = new Request("GET", "/" + indexName + "/_doc/" + id);
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        String responseBody = EntityUtils.toString(response.getEntity());
+        return createParser(XContentType.JSON.xContent(), responseBody).map();
     }
 
     /**

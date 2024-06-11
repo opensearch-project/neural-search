@@ -19,7 +19,6 @@ import org.opensearch.env.Environment;
 import org.opensearch.env.TestEnvironment;
 import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.index.analysis.TokenizerFactory;
-import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.analysis.AnalysisModule;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.processor.TextChunkingProcessor;
@@ -62,13 +61,7 @@ public class TextChunkingProcessorFactoryTests extends OpenSearchTestCase {
     public void setup() {
         Environment environment = mock(Environment.class);
         ClusterService clusterService = mock(ClusterService.class);
-        IndicesService indicesService = mock(IndicesService.class);
-        this.textChunkingProcessorFactory = new TextChunkingProcessorFactory(
-            environment,
-            clusterService,
-            indicesService,
-            getAnalysisRegistry()
-        );
+        this.textChunkingProcessorFactory = new TextChunkingProcessorFactory(environment, clusterService, getAnalysisRegistry());
     }
 
     @SneakyThrows
