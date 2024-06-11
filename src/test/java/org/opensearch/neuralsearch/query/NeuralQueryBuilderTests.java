@@ -12,10 +12,10 @@ import static org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS;
 import static org.opensearch.index.query.AbstractQueryBuilder.BOOST_FIELD;
 import static org.opensearch.index.query.AbstractQueryBuilder.NAME_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.FILTER_FIELD;
+import static org.opensearch.knn.index.query.KNNQueryBuilder.MAX_DISTANCE_FIELD;
+import static org.opensearch.knn.index.query.KNNQueryBuilder.MIN_SCORE_FIELD;
 import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.K_FIELD;
-import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MAX_DISTANCE_FIELD;
-import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MIN_SCORE_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MODEL_ID_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.NAME;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_IMAGE_FIELD;
@@ -94,6 +94,41 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
             .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
             .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
             .field(K_FIELD.getPreferredName(), K)
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.fromXContent(contentParser);
+
+        assertEquals(FIELD_NAME, neuralQueryBuilder.fieldName());
+        assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
+        assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
+        assertEquals(K, neuralQueryBuilder.k());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_withMethodParameters_thenBuildSuccessfully() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": "string",
+                "query_image": "string",
+                "model_id": "string",
+                "k": int
+              }
+          }
+        */
+        setUpClusterService(Version.V_2_10_0);
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .field(K_FIELD.getPreferredName(), K)
+            .startObject("method_parameters")
+            .field("ef_search", 1000)
+            .endObject()
             .endObject()
             .endObject();
 
