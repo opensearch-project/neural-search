@@ -1,0 +1,16 @@
+{
+  "request_processors": [
+    {
+      "neural_sparse_two_phase_processor": {
+        "tag": "neural-sparse",
+        "description": "This processor is making two-phase rescorer.",
+        "enabled": true,
+        "two_phase_parameter": {
+          "prune_ratio": %f,
+          "expansion_rate": %f,
+          "max_window_size": %d
+        }
+      }
+    }
+  ]
+}
