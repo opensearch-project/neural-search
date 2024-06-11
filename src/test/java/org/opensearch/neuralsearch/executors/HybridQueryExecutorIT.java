@@ -4,8 +4,8 @@
  */
 package org.opensearch.neuralsearch.executors;
 
-import org.apache.hc.core5.http.ParseException;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.http.ParseException;
+import org.apache.http.util.EntityUtils;
 import org.junit.Assert;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
