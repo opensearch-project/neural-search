@@ -217,7 +217,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     10,
                     Map.of("search_pipeline", SEARCH_PIPELINE),
                     null,
-                    rangeFilterQuery
+                    rangeFilterQuery,
+                    null
                 );
 
                 assertHitResultsFromQuery(1, searchResponseAsMap);
@@ -228,6 +229,7 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     null,
                     10,
                     Map.of("search_pipeline", SEARCH_PIPELINE),
+                    null,
                     null,
                     null
                 );
@@ -240,7 +242,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     10,
                     Map.of("search_pipeline", SEARCH_PIPELINE),
                     null,
-                    rangeFilterQuery
+                    rangeFilterQuery,
+                    null
                 );
                 assertHitResultsFromQuery(2, searchResponseAsMap);
             } else {
@@ -250,6 +253,7 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     null,
                     10,
                     Map.of("search_pipeline", SEARCH_PIPELINE),
+                    null,
                     null,
                     null
                 );
@@ -309,7 +313,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     10,
                     Map.of("search_pipeline", SEARCH_PIPELINE),
                     null,
-                    rangeFilterQuery
+                    rangeFilterQuery,
+                    null
                 );
 
                 assertHitResultsFromQuery(1, searchResponseAsMap);
@@ -320,6 +325,7 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     null,
                     10,
                     Map.of("search_pipeline", SEARCH_PIPELINE),
+                    null,
                     null,
                     null
                 );
@@ -332,7 +338,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     10,
                     Map.of("search_pipeline", SEARCH_PIPELINE),
                     null,
-                    rangeFilterQuery
+                    rangeFilterQuery,
+                    null
                 );
                 assertHitResultsFromQuery(4, searchResponseAsMap);
             } else {
@@ -342,6 +349,7 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     null,
                     10,
                     Map.of("search_pipeline", SEARCH_PIPELINE),
+                    null,
                     null,
                     null
                 );
@@ -514,7 +522,15 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
             && !indexExists(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS)) {
             createIndexWithConfiguration(
                 indexName,
-                buildIndexConfiguration(List.of(), List.of(), List.of(INTEGER_FIELD_1), List.of(KEYWORD_FIELD_1), List.of(DATE_FIELD_1), 3),
+                buildIndexConfiguration(
+                    List.of(),
+                    List.of(),
+                    List.of(INTEGER_FIELD_1),
+                    List.of(KEYWORD_FIELD_1),
+                    List.of(DATE_FIELD_1),
+                    List.of(),
+                    3
+                ),
                 ""
             );
 
@@ -622,7 +638,7 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
         if (!indexExists(indexName)) {
             createIndexWithConfiguration(
                 indexName,
-                buildIndexConfiguration(List.of(), List.of(), List.of(INTEGER_FIELD_1), List.of(KEYWORD_FIELD_1), List.of(), 1),
+                buildIndexConfiguration(List.of(), List.of(), List.of(INTEGER_FIELD_1), List.of(KEYWORD_FIELD_1), List.of(), List.of(), 1),
                 ""
             );
 
