@@ -46,7 +46,9 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
     public void testTextEmbeddingProcessor() throws Exception {
         String modelId = null;
         try {
-            modelId = uploadTextEmbeddingModel();
+            modelId = uploadTextEmbeddingModel(
+                Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()))
+            );
             loadModel(modelId);
             createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
             createTextEmbeddingIndex();
@@ -77,6 +79,26 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         }
     }
 
+    public void testAsymmetricTextEmbeddingProcessor() throws Exception {
+        String modelId = null;
+        try {
+            modelId = uploadTextEmbeddingModel(
+                Files.readString(Path.of(classLoader.getResource("processor/UploadAsymmetricModelRequestBody.json").toURI()))
+            );
+            loadModel(modelId);
+            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
+            createTextEmbeddingIndex();
+            ingestDocument();
+            assertEquals(1, getDocCount(INDEX_NAME));
+        } finally {
+            wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
+        }
+    }
+
+    private String uploadTextEmbeddingModel(String requestBody) throws Exception {
+        return registerModelGroupAndUploadModel(requestBody);
+    }
+
     private String uploadTextEmbeddingModel() throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
         return registerModelGroupAndUploadModel(requestBody);
@@ -103,6 +125,45 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
             endpoint,
             null,
             toHttpEntity(doc),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+        );
+        Map<String, Object> map = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(response.getEntity()),
+            false
+        );
+        assertEquals("created", map.get("result"));
+    }
+
+    private void ingestDocument() throws Exception {
+        String ingestDocument = "{\n"
+            + "  \"title\": \"This is a good day\",\n"
+            + "  \"description\": \"daily logging\",\n"
+            + "  \"favor_list\": [\n"
+            + "    \"test\",\n"
+            + "    \"hello\",\n"
+            + "    \"mock\"\n"
+            + "  ],\n"
+            + "  \"favorites\": {\n"
+            + "    \"game\": \"overwatch\",\n"
+            + "    \"movie\": null\n"
+            + "  },\n"
+            + "  \"nested_passages\": [\n"
+            + "    {\n"
+            + "      \"text\": \"hello\"\n"
+            + "    },\n"
+            + "    {\n"
+            + "      \"text\": \"world\"\n"
+            + "    }\n"
+            + "  ]\n"
+            + "}\n";
+
+        Response response = makeRequest(
+            client(),
+            "POST",
+            INDEX_NAME + "/_doc?refresh",
+            null,
+            toHttpEntity(ingestDocument),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
         );
         Map<String, Object> map = XContentHelper.convertToMap(
