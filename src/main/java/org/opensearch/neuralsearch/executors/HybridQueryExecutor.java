@@ -54,8 +54,7 @@ public final class HybridQueryExecutor {
     public static void initialize(ThreadPool threadPool) {
         if (threadPool == null) {
             throw new IllegalArgumentException(
-                "Argument thread-pool to Hybrid Query Executor cannot be null."
-                    + "This is required to build executor to run actions in parallel"
+                "Argument thread-pool to Hybrid Query Executor cannot be null. This is required to build executor to run actions in parallel"
             );
         }
         taskExecutor = new TaskExecutor(threadPool.executor(HYBRID_QUERY_EXEC_THREAD_POOL_NAME));
