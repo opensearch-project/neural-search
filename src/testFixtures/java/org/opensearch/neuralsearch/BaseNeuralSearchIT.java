@@ -847,6 +847,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             .startObject("settings")
             .startObject("index")
             .field("number_of_shards", numberOfShards)
+            .field("refresh_interval", "30s")
             // .field("index.knn", true)
             .endObject()
             .endObject()
@@ -1156,6 +1157,31 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         builder.endObject();
         request.setJsonEntity(builder.toString());
         client().performRequest(request);
+    }
+
+    protected void addHybridDocument(
+        final String index,
+        final int docId,
+        final String fieldName,
+        final String text,
+        final String intFieldName,
+        final int intFieldValue,
+        final String keywordFieldName,
+        final String keyworFieldValue
+    ) throws IOException {
+        Request request = new Request("PUT", "/" + index + "/_doc/" + docId + "?refresh=true");
+
+        XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
+        builder.field(fieldName, text);
+        builder.field(intFieldName, intFieldValue);
+        builder.field(keywordFieldName, keyworFieldValue);
+        builder.endObject();
+        request.setJsonEntity(builder.toString());
+        Response response = client().performRequest(request);
+        assertTrue(
+            request.getEndpoint() + ": failed",
+            SUCCESS_STATUSES.contains(RestStatus.fromCode(response.getStatusLine().getStatusCode()))
+        );
     }
 
     /**

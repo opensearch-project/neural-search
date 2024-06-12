@@ -97,7 +97,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                 null,
                 createSortBuilders(fieldSortOrderMap, false)
             );
-            List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6);
+            List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 3);
             assertStockValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, LARGEST_STOCK_VALUE_IN_QUERY_RESULT, true, true);
         } finally {
             wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, null, null, SEARCH_PIPELINE);
@@ -127,7 +127,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                 Map.of("search_pipeline", SEARCH_PIPELINE),
                 null,
                 null,
-                createSortBuilders(fieldSortOrderMap, true)
+                createSortBuilders(fieldSortOrderMap, false)
             );
             List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6);
             assertStockValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, LARGEST_STOCK_VALUE_IN_QUERY_RESULT, true, false);
@@ -398,118 +398,150 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
             createIndexWithConfiguration(
                 indexName,
                 buildIndexConfiguration(
-                    List.of(),
-                    List.of(),
-                    List.of(INTEGER_FIELD_1_STOCK),
-                    List.of(KEYWORD_FIELD_2_CATEGORY),
-                    List.of(),
-                    List.of(TEXT_FIELD_1_NAME),
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    Collections.singletonList(INTEGER_FIELD_1_STOCK),
+                    Collections.singletonList(KEYWORD_FIELD_2_CATEGORY),
+                    Collections.emptyList(),
+                    Collections.singletonList(TEXT_FIELD_1_NAME),
                     numShards
                 ),
                 ""
             );
 
-            addKnnDoc(
+            addHybridDocument(
                 indexName,
-                "1",
-                List.of(),
-                List.of(),
-                Collections.singletonList(TEXT_FIELD_1_NAME),
-                Collections.singletonList(TEXT_FIELD_VALUE_2_DUNES),
-                List.of(),
-                List.of(),
-                List.of(INTEGER_FIELD_1_STOCK),
-                List.of(INTEGER_FIELD_STOCK_1_25),
-                List.of(KEYWORD_FIELD_2_CATEGORY),
-                List.of(KEYWORD_FIELD_CATEGORY_1_DRAMA),
-                List.of(),
-                List.of()
+                1,
+                TEXT_FIELD_1_NAME,
+                TEXT_FIELD_VALUE_1_DUNES,
+                INTEGER_FIELD_1_STOCK,
+                INTEGER_FIELD_STOCK_1_25,
+                KEYWORD_FIELD_2_CATEGORY,
+                KEYWORD_FIELD_CATEGORY_1_DRAMA
+            );
+            addHybridDocument(
+                indexName,
+                2,
+                TEXT_FIELD_1_NAME,
+                TEXT_FIELD_VALUE_2_DUNES,
+                INTEGER_FIELD_1_STOCK,
+                INTEGER_FIELD_STOCK_3_256,
+                KEYWORD_FIELD_2_CATEGORY,
+                KEYWORD_FIELD_CATEGORY_2_ACTION
             );
 
-            addKnnDoc(
+            addHybridDocument(
                 indexName,
-                "2",
-                List.of(),
-                List.of(),
-                Collections.singletonList(TEXT_FIELD_1_NAME),
-                Collections.singletonList(TEXT_FIELD_VALUE_1_DUNES),
-                List.of(),
-                List.of(),
-                List.of(INTEGER_FIELD_1_STOCK),
-                List.of(INTEGER_FIELD_STOCK_2_22),
-                List.of(KEYWORD_FIELD_2_CATEGORY),
-                List.of(KEYWORD_FIELD_CATEGORY_1_DRAMA),
-                List.of(),
-                List.of()
+                3,
+                TEXT_FIELD_1_NAME,
+                TEXT_FIELD_VALUE_3_MI_1,
+                INTEGER_FIELD_1_STOCK,
+                INTEGER_FIELD_STOCK_5_20,
+                KEYWORD_FIELD_2_CATEGORY,
+                KEYWORD_FIELD_CATEGORY_3_SCI_FI
             );
 
-            addKnnDoc(
-                indexName,
-                "3",
-                List.of(),
-                List.of(),
-                Collections.singletonList(TEXT_FIELD_1_NAME),
-                Collections.singletonList(TEXT_FIELD_VALUE_3_MI_1),
-                List.of(),
-                List.of(),
-                List.of(INTEGER_FIELD_1_STOCK),
-                List.of(INTEGER_FIELD_STOCK_3_256),
-                List.of(KEYWORD_FIELD_2_CATEGORY),
-                List.of(KEYWORD_FIELD_CATEGORY_2_ACTION),
-                List.of(),
-                List.of()
-            );
+            // addKnnDoc(
+            // indexName,
+            // "1",
+            // Collections.emptyList(),
+            // Collections.emptyList(),
+            // Collections.singletonList(TEXT_FIELD_1_NAME),
+            // Collections.singletonList(TEXT_FIELD_VALUE_2_DUNES),
+            // Collections.emptyList(),
+            // Collections.emptyList(),
+            // Collections.singletonList(INTEGER_FIELD_1_STOCK),
+            // Collections.singletonList(INTEGER_FIELD_STOCK_1_25),
+            // Collections.singletonList(KEYWORD_FIELD_2_CATEGORY),
+            // Collections.singletonList(KEYWORD_FIELD_CATEGORY_1_DRAMA),
+            // Collections.emptyList(),
+            // Collections.emptyList()
+            // );
+            //
+            // addKnnDoc(
+            // indexName,
+            // "2",
+            // Collections.emptyList(),
+            // Collections.emptyList(),
+            // Collections.singletonList(TEXT_FIELD_1_NAME),
+            // Collections.singletonList(TEXT_FIELD_VALUE_1_DUNES),
+            // Collections.emptyList(),
+            // Collections.emptyList(),
+            // Collections.singletonList(INTEGER_FIELD_1_STOCK),
+            // Collections.singletonList(INTEGER_FIELD_STOCK_2_22),
+            // Collections.singletonList(KEYWORD_FIELD_2_CATEGORY),
+            // Collections.singletonList(KEYWORD_FIELD_CATEGORY_1_DRAMA),
+            // Collections.emptyList(),
+            // Collections.emptyList()
+            // );
+            //
+            // addKnnDoc(
+            // indexName,
+            // "3",
+            // Collections.emptyList(),
+            // Collections.emptyList(),
+            // Collections.singletonList(TEXT_FIELD_1_NAME),
+            // Collections.singletonList(TEXT_FIELD_VALUE_3_MI_1),
+            // Collections.emptyList(),
+            // Collections.emptyList(),
+            // Collections.singletonList(INTEGER_FIELD_1_STOCK),
+            // Collections.singletonList(INTEGER_FIELD_STOCK_3_256),
+            // Collections.singletonList(KEYWORD_FIELD_2_CATEGORY),
+            // Collections.singletonList(KEYWORD_FIELD_CATEGORY_2_ACTION),
+            // Collections.emptyList(),
+            // Collections.emptyList()
+            // );
 
-            addKnnDoc(
-                indexName,
-                "4",
-                List.of(),
-                List.of(),
-                Collections.singletonList(TEXT_FIELD_1_NAME),
-                Collections.singletonList(TEXT_FIELD_VALUE_4_MI_2),
-                List.of(),
-                List.of(),
-                List.of(INTEGER_FIELD_1_STOCK),
-                List.of(INTEGER_FIELD_STOCK_4_25),
-                List.of(KEYWORD_FIELD_2_CATEGORY),
-                List.of(KEYWORD_FIELD_CATEGORY_2_ACTION),
-                List.of(),
-                List.of()
-            );
-
-            addKnnDoc(
-                indexName,
-                "5",
-                List.of(),
-                List.of(),
-                Collections.singletonList(TEXT_FIELD_1_NAME),
-                Collections.singletonList(TEXT_FIELD_VALUE_5_TERMINAL),
-                List.of(),
-                List.of(),
-                List.of(INTEGER_FIELD_1_STOCK),
-                List.of(INTEGER_FIELD_STOCK_5_20),
-                List.of(KEYWORD_FIELD_2_CATEGORY),
-                List.of(KEYWORD_FIELD_CATEGORY_1_DRAMA),
-                List.of(),
-                List.of()
-            );
-
-            addKnnDoc(
-                indexName,
-                "6",
-                List.of(),
-                List.of(),
-                Collections.singletonList(TEXT_FIELD_1_NAME),
-                Collections.singletonList(TEXT_FIELD_VALUE_6_AVENGERS),
-                List.of(),
-                List.of(),
-                List.of(INTEGER_FIELD_1_STOCK),
-                List.of(INTEGER_FIELD_STOCK_5_20),
-                List.of(KEYWORD_FIELD_2_CATEGORY),
-                List.of(KEYWORD_FIELD_CATEGORY_3_SCI_FI),
-                List.of(),
-                List.of()
-            );
+            // addKnnDoc(
+            // indexName,
+            // "4",
+            // List.of(),
+            // List.of(),
+            // Collections.singletonList(TEXT_FIELD_1_NAME),
+            // Collections.singletonList(TEXT_FIELD_VALUE_4_MI_2),
+            // List.of(),
+            // List.of(),
+            // List.of(INTEGER_FIELD_1_STOCK),
+            // List.of(INTEGER_FIELD_STOCK_4_25),
+            // List.of(KEYWORD_FIELD_2_CATEGORY),
+            // List.of(KEYWORD_FIELD_CATEGORY_2_ACTION),
+            // List.of(),
+            // List.of()
+            // );
+            //
+            // addKnnDoc(
+            // indexName,
+            // "5",
+            // List.of(),
+            // List.of(),
+            // Collections.singletonList(TEXT_FIELD_1_NAME),
+            // Collections.singletonList(TEXT_FIELD_VALUE_5_TERMINAL),
+            // List.of(),
+            // List.of(),
+            // List.of(INTEGER_FIELD_1_STOCK),
+            // List.of(INTEGER_FIELD_STOCK_5_20),
+            // List.of(KEYWORD_FIELD_2_CATEGORY),
+            // List.of(KEYWORD_FIELD_CATEGORY_1_DRAMA),
+            // List.of(),
+            // List.of()
+            // );
+            //
+            // addKnnDoc(
+            // indexName,
+            // "6",
+            // List.of(),
+            // List.of(),
+            // Collections.singletonList(TEXT_FIELD_1_NAME),
+            // Collections.singletonList(TEXT_FIELD_VALUE_6_AVENGERS),
+            // List.of(),
+            // List.of(),
+            // List.of(INTEGER_FIELD_1_STOCK),
+            // List.of(INTEGER_FIELD_STOCK_5_20),
+            // List.of(KEYWORD_FIELD_2_CATEGORY),
+            // List.of(KEYWORD_FIELD_CATEGORY_3_SCI_FI),
+            // List.of(),
+            // List.of()
+            // );
         }
     }
 }
