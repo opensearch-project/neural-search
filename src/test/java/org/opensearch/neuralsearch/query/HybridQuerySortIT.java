@@ -9,13 +9,13 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.Collections;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import lombok.SneakyThrows;
-import org.junit.Before;
-import org.opensearch.index.query.QueryBuilder;
+import org.junit.BeforeClass;
 import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.index.query.RangeQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getNestedHits;
 import static org.opensearch.neuralsearch.util.TestUtils.assertHitResultsFromQueryWhenSortIsEnabled;
@@ -53,15 +53,14 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
     private static final int SMALLEST_STOCK_VALUE_IN_QUERY_RESULT = 20;
     private static final int LARGEST_STOCK_VALUE_IN_QUERY_RESULT = 400;
 
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();
-        updateClusterSettings();
-    }
-
-    @Override
-    public boolean isUpdateClusterSettings() {
-        return false;
+    @BeforeClass
+    @SneakyThrows
+    public static void setUpCluster() {
+        // we need new instance because we're calling non-static methods from static method.
+        // main purpose is to minimize network calls, initialization is only needed once
+        HybridQueryPostFilterIT instance = new HybridQueryPostFilterIT();
+        instance.initClient();
+        instance.updateClusterSettings();
     }
 
     @Override
@@ -70,142 +69,167 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    public void testSingleFieldSort_whenMultipleSubQueriesOnIndexWithSingleShard_thenSuccessful() {
+    public void testSortOnSingleShard_WhenConcurrentSearchEnabled_thenSuccessful() {
+        try {
+            updateClusterSettings("search.concurrent_segment_search.enabled", true);
+            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
+            testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+            testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, null, null, SEARCH_PIPELINE);
+        }
+    }
+
+    @SneakyThrows
+    public void testSortOnSingleShard_WhenConcurrentSearchDisabled_thenSuccessful() {
         try {
             updateClusterSettings("search.concurrent_segment_search.enabled", false);
             prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
-            HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
-                "mission",
-                "part",
-                LTE_OF_RANGE_IN_HYBRID_QUERY,
-                GTE_OF_RANGE_IN_HYBRID_QUERY
-            );
-
-            // QueryBuilder queryBuilder = QueryBuilders.matchAllQuery();
-            // .gte(GTE_OF_RANGE_IN_HYBRID_QUERY)
-            // .lte(LTE_OF_RANGE_IN_HYBRID_QUERY);
-            Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
-            fieldSortOrderMap.put("stock", SortOrder.DESC);
-
-            Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD,
-                hybridQueryBuilder,
-                null,
-                10,
-                Map.of("search_pipeline", SEARCH_PIPELINE),
-                null,
-                null,
-                createSortBuilders(fieldSortOrderMap, false)
-            );
-            List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 3);
-            assertStockValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, LARGEST_STOCK_VALUE_IN_QUERY_RESULT, true, true);
+            testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+            testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
         } finally {
             wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, null, null, SEARCH_PIPELINE);
         }
     }
 
     @SneakyThrows
-    public void testMultipleFieldSort_whenMultipleSubQueriesOnIndexWithSingleShard_thenSuccessful() {
+    public void testSortOnMultipleShard_WhenConcurrentSearchEnabled_thenSuccessful() {
         try {
-            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
-            HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
-                "mission",
-                "part",
-                LTE_OF_RANGE_IN_HYBRID_QUERY,
-                GTE_OF_RANGE_IN_HYBRID_QUERY
-            );
-
-            Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
-            fieldSortOrderMap.put("stock", SortOrder.DESC);
-            fieldSortOrderMap.put("_doc", SortOrder.ASC);
-
-            Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD,
-                hybridQueryBuilder,
-                null,
-                10,
-                Map.of("search_pipeline", SEARCH_PIPELINE),
-                null,
-                null,
-                createSortBuilders(fieldSortOrderMap, false)
-            );
-            List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6);
-            assertStockValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, LARGEST_STOCK_VALUE_IN_QUERY_RESULT, true, false);
-            assertDocValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.ASC, 0, false, false);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, null, null, SEARCH_PIPELINE);
-        }
-    }
-
-    @SneakyThrows
-    public void testSingleFieldSort_whenMultipleSubQueriesOnIndexWithMultipleShards_thenSuccessful() {
-        try {
+            updateClusterSettings("search.concurrent_segment_search.enabled", true);
             prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
-            QueryBuilder queryBuilder = QueryBuilders.matchAllQuery();
-            // HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
-            // "mission",
-            // "part",
-            // LTE_OF_RANGE_IN_HYBRID_QUERY,
-            // GTE_OF_RANGE_IN_HYBRID_QUERY
-            // );
-
-            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(queryBuilder);
-            Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
-            fieldSortOrderMap.put("stock", SortOrder.DESC);
-
-            Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
-                hybridQueryBuilder,
-                null,
-                10,
-                Map.of("search_pipeline", SEARCH_PIPELINE),
-                null,
-                null,
-                createSortBuilders(fieldSortOrderMap, false)
-            );
-            List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6);
-            assertStockValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, LARGEST_STOCK_VALUE_IN_QUERY_RESULT, true, true);
+            testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+            testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
         } finally {
             wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
         }
     }
 
     @SneakyThrows
-    public void testMultipleFieldSort_whenMultipleSubQueriesOnIndexWithMultipleShards_thenSuccessful() {
+    public void testSortOnMultipleShard_WhenConcurrentSearchDisabled_thenSuccessful() {
         try {
+            updateClusterSettings("search.concurrent_segment_search.enabled", false);
             prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
-            HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
-                "mission",
-                "part",
-                LTE_OF_RANGE_IN_HYBRID_QUERY,
-                GTE_OF_RANGE_IN_HYBRID_QUERY
-            );
-
-            Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
-            fieldSortOrderMap.put("stock", SortOrder.DESC);
-
-            Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
-                hybridQueryBuilder,
-                null,
-                10,
-                Map.of("search_pipeline", SEARCH_PIPELINE),
-                null,
-                null,
-                createSortBuilders(fieldSortOrderMap, false)
-            );
-            List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6);
-            assertStockValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, LARGEST_STOCK_VALUE_IN_QUERY_RESULT, true, false);
-            assertDocValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.ASC, 0, false, false);
+            testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+            testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
         } finally {
             wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
         }
     }
+
+    @SneakyThrows
+    private void testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(String indexName) {
+        HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
+            "mission",
+            "part",
+            LTE_OF_RANGE_IN_HYBRID_QUERY,
+            GTE_OF_RANGE_IN_HYBRID_QUERY
+        );
+
+        Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
+        fieldSortOrderMap.put("stock", SortOrder.DESC);
+
+        Map<String, Object> searchResponseAsMap = search(
+            indexName,
+            hybridQueryBuilder,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            createSortBuilders(fieldSortOrderMap, false)
+        );
+        List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6);
+        assertStockValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, LARGEST_STOCK_VALUE_IN_QUERY_RESULT, true, true);
+    }
+
+    @SneakyThrows
+    private void testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(String indexName) {
+        HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
+            "mission",
+            "part",
+            LTE_OF_RANGE_IN_HYBRID_QUERY,
+            GTE_OF_RANGE_IN_HYBRID_QUERY
+        );
+
+        Map<String, SortOrder> fieldSortOrderMap = new LinkedHashMap<>();
+        fieldSortOrderMap.put("stock", SortOrder.DESC);
+        fieldSortOrderMap.put("_doc", SortOrder.ASC);
+
+        Map<String, Object> searchResponseAsMap = search(
+            indexName,
+            hybridQueryBuilder,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            createSortBuilders(fieldSortOrderMap, false)
+        );
+        List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6);
+        assertStockValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, LARGEST_STOCK_VALUE_IN_QUERY_RESULT, true, false);
+        assertDocValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.ASC, 0, false, false);
+    }
+
+    // @SneakyThrows
+    // public void testSingleFieldSort_whenMultipleSubQueriesOnIndexWithMultipleShards_thenSuccessful() {
+    // HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
+    // "mission",
+    // "part",
+    // LTE_OF_RANGE_IN_HYBRID_QUERY,
+    // GTE_OF_RANGE_IN_HYBRID_QUERY
+    // );
+    //
+    // Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
+    // fieldSortOrderMap.put("stock", SortOrder.DESC);
+    //
+    // Map<String, Object> searchResponseAsMap = search(
+    // TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+    // hybridQueryBuilder,
+    // null,
+    // 10,
+    // Map.of("search_pipeline", SEARCH_PIPELINE),
+    // null,
+    // null,
+    // createSortBuilders(fieldSortOrderMap, false)
+    // );
+    // List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6);
+    // assertStockValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, LARGEST_STOCK_VALUE_IN_QUERY_RESULT, true, true);
+    // }
+    //
+    // @SneakyThrows
+    // public void testMultipleFieldSort_whenMultipleSubQueriesOnIndexWithMultipleShards_thenSuccessful() {
+    // HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
+    // "mission",
+    // "part",
+    // LTE_OF_RANGE_IN_HYBRID_QUERY,
+    // GTE_OF_RANGE_IN_HYBRID_QUERY
+    // );
+    //
+    // Map<String, SortOrder> fieldSortOrderMap = new LinkedHashMap<>();
+    // fieldSortOrderMap.put("stock", SortOrder.DESC);
+    // fieldSortOrderMap.put("_doc", SortOrder.DESC);
+    //
+    // Map<String, Object> searchResponseAsMap = search(
+    // TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+    // hybridQueryBuilder,
+    // null,
+    // 10,
+    // Map.of("search_pipeline", SEARCH_PIPELINE),
+    // null,
+    // null,
+    // createSortBuilders(fieldSortOrderMap, false)
+    // );
+    // List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6);
+    // assertStockValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, LARGEST_STOCK_VALUE_IN_QUERY_RESULT, true, false);
+    // assertDocValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.ASC, 0, false, false);
+    // }
 
     @SneakyThrows
     public void testSingleFieldSort_whenMultipleSubQueriesAndConcurrentSearchEnabled_thenSuccessful() {
         try {
+            updateClusterSettings("search.concurrent_segment_search.enabled", false);
             prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+
         } finally {
 
         }
@@ -275,11 +299,11 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
     }
 
     private HybridQueryBuilder createHybridQueryBuilderWithMatchTermAndRangeQuery(String text, String value, int lte, int gte) {
-        // MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEXT_FIELD_1_NAME, text);
-        // TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEXT_FIELD_1_NAME, value);
+        MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEXT_FIELD_1_NAME, text);
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEXT_FIELD_1_NAME, value);
         RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery(INTEGER_FIELD_1_STOCK).gte(gte).lte(lte);
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-        hybridQueryBuilder.add(rangeQueryBuilder);
+        hybridQueryBuilder.add(matchQueryBuilder).add(termQueryBuilder).add(rangeQueryBuilder);
         return hybridQueryBuilder;
     }
 
@@ -322,7 +346,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
             }
             if (!isSingleFieldSort) {
                 assertNotNull(sorts.get(1));
-                int stockValueInSort = (int) sorts.get(1);
+                int stockValueInSort = (int) sorts.get(0);
                 assertEquals(stock, stockValueInSort);
             }
             baseStockValue = stock;
@@ -371,7 +395,6 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
 
         for (Map<String, Object> oneHit : hitsNestedList) {
             assertNotNull(oneHit.get("_source"));
-            // Map<String, Object> source = (Map<String, Object>) oneHit.get("_source");
             float score = (float) oneHit.get("_score");
             if (sortOrder == SortOrder.DESC) {
                 assertTrue("Stock value is sorted by descending sort order", score <= baseScore);
@@ -403,145 +426,112 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                     Collections.singletonList(INTEGER_FIELD_1_STOCK),
                     Collections.singletonList(KEYWORD_FIELD_2_CATEGORY),
                     Collections.emptyList(),
-                    Collections.singletonList(TEXT_FIELD_1_NAME),
                     numShards
                 ),
                 ""
             );
 
-            addHybridDocument(
+            addKnnDoc(
                 indexName,
-                1,
-                TEXT_FIELD_1_NAME,
-                TEXT_FIELD_VALUE_1_DUNES,
-                INTEGER_FIELD_1_STOCK,
-                INTEGER_FIELD_STOCK_1_25,
-                KEYWORD_FIELD_2_CATEGORY,
-                KEYWORD_FIELD_CATEGORY_1_DRAMA
-            );
-            addHybridDocument(
-                indexName,
-                2,
-                TEXT_FIELD_1_NAME,
-                TEXT_FIELD_VALUE_2_DUNES,
-                INTEGER_FIELD_1_STOCK,
-                INTEGER_FIELD_STOCK_3_256,
-                KEYWORD_FIELD_2_CATEGORY,
-                KEYWORD_FIELD_CATEGORY_2_ACTION
+                "1",
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.singletonList(TEXT_FIELD_1_NAME),
+                Collections.singletonList(TEXT_FIELD_VALUE_2_DUNES),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.singletonList(INTEGER_FIELD_1_STOCK),
+                Collections.singletonList(INTEGER_FIELD_STOCK_1_25),
+                Collections.singletonList(KEYWORD_FIELD_2_CATEGORY),
+                Collections.singletonList(KEYWORD_FIELD_CATEGORY_1_DRAMA),
+                Collections.emptyList(),
+                Collections.emptyList()
             );
 
-            addHybridDocument(
+            addKnnDoc(
                 indexName,
-                3,
-                TEXT_FIELD_1_NAME,
-                TEXT_FIELD_VALUE_3_MI_1,
-                INTEGER_FIELD_1_STOCK,
-                INTEGER_FIELD_STOCK_5_20,
-                KEYWORD_FIELD_2_CATEGORY,
-                KEYWORD_FIELD_CATEGORY_3_SCI_FI
+                "2",
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.singletonList(TEXT_FIELD_1_NAME),
+                Collections.singletonList(TEXT_FIELD_VALUE_1_DUNES),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.singletonList(INTEGER_FIELD_1_STOCK),
+                Collections.singletonList(INTEGER_FIELD_STOCK_2_22),
+                Collections.singletonList(KEYWORD_FIELD_2_CATEGORY),
+                Collections.singletonList(KEYWORD_FIELD_CATEGORY_1_DRAMA),
+                Collections.emptyList(),
+                Collections.emptyList()
             );
 
-            // addKnnDoc(
-            // indexName,
-            // "1",
-            // Collections.emptyList(),
-            // Collections.emptyList(),
-            // Collections.singletonList(TEXT_FIELD_1_NAME),
-            // Collections.singletonList(TEXT_FIELD_VALUE_2_DUNES),
-            // Collections.emptyList(),
-            // Collections.emptyList(),
-            // Collections.singletonList(INTEGER_FIELD_1_STOCK),
-            // Collections.singletonList(INTEGER_FIELD_STOCK_1_25),
-            // Collections.singletonList(KEYWORD_FIELD_2_CATEGORY),
-            // Collections.singletonList(KEYWORD_FIELD_CATEGORY_1_DRAMA),
-            // Collections.emptyList(),
-            // Collections.emptyList()
-            // );
-            //
-            // addKnnDoc(
-            // indexName,
-            // "2",
-            // Collections.emptyList(),
-            // Collections.emptyList(),
-            // Collections.singletonList(TEXT_FIELD_1_NAME),
-            // Collections.singletonList(TEXT_FIELD_VALUE_1_DUNES),
-            // Collections.emptyList(),
-            // Collections.emptyList(),
-            // Collections.singletonList(INTEGER_FIELD_1_STOCK),
-            // Collections.singletonList(INTEGER_FIELD_STOCK_2_22),
-            // Collections.singletonList(KEYWORD_FIELD_2_CATEGORY),
-            // Collections.singletonList(KEYWORD_FIELD_CATEGORY_1_DRAMA),
-            // Collections.emptyList(),
-            // Collections.emptyList()
-            // );
-            //
-            // addKnnDoc(
-            // indexName,
-            // "3",
-            // Collections.emptyList(),
-            // Collections.emptyList(),
-            // Collections.singletonList(TEXT_FIELD_1_NAME),
-            // Collections.singletonList(TEXT_FIELD_VALUE_3_MI_1),
-            // Collections.emptyList(),
-            // Collections.emptyList(),
-            // Collections.singletonList(INTEGER_FIELD_1_STOCK),
-            // Collections.singletonList(INTEGER_FIELD_STOCK_3_256),
-            // Collections.singletonList(KEYWORD_FIELD_2_CATEGORY),
-            // Collections.singletonList(KEYWORD_FIELD_CATEGORY_2_ACTION),
-            // Collections.emptyList(),
-            // Collections.emptyList()
-            // );
+            addKnnDoc(
+                indexName,
+                "3",
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.singletonList(TEXT_FIELD_1_NAME),
+                Collections.singletonList(TEXT_FIELD_VALUE_3_MI_1),
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.singletonList(INTEGER_FIELD_1_STOCK),
+                Collections.singletonList(INTEGER_FIELD_STOCK_3_256),
+                Collections.singletonList(KEYWORD_FIELD_2_CATEGORY),
+                Collections.singletonList(KEYWORD_FIELD_CATEGORY_2_ACTION),
+                Collections.emptyList(),
+                Collections.emptyList()
+            );
 
-            // addKnnDoc(
-            // indexName,
-            // "4",
-            // List.of(),
-            // List.of(),
-            // Collections.singletonList(TEXT_FIELD_1_NAME),
-            // Collections.singletonList(TEXT_FIELD_VALUE_4_MI_2),
-            // List.of(),
-            // List.of(),
-            // List.of(INTEGER_FIELD_1_STOCK),
-            // List.of(INTEGER_FIELD_STOCK_4_25),
-            // List.of(KEYWORD_FIELD_2_CATEGORY),
-            // List.of(KEYWORD_FIELD_CATEGORY_2_ACTION),
-            // List.of(),
-            // List.of()
-            // );
-            //
-            // addKnnDoc(
-            // indexName,
-            // "5",
-            // List.of(),
-            // List.of(),
-            // Collections.singletonList(TEXT_FIELD_1_NAME),
-            // Collections.singletonList(TEXT_FIELD_VALUE_5_TERMINAL),
-            // List.of(),
-            // List.of(),
-            // List.of(INTEGER_FIELD_1_STOCK),
-            // List.of(INTEGER_FIELD_STOCK_5_20),
-            // List.of(KEYWORD_FIELD_2_CATEGORY),
-            // List.of(KEYWORD_FIELD_CATEGORY_1_DRAMA),
-            // List.of(),
-            // List.of()
-            // );
-            //
-            // addKnnDoc(
-            // indexName,
-            // "6",
-            // List.of(),
-            // List.of(),
-            // Collections.singletonList(TEXT_FIELD_1_NAME),
-            // Collections.singletonList(TEXT_FIELD_VALUE_6_AVENGERS),
-            // List.of(),
-            // List.of(),
-            // List.of(INTEGER_FIELD_1_STOCK),
-            // List.of(INTEGER_FIELD_STOCK_5_20),
-            // List.of(KEYWORD_FIELD_2_CATEGORY),
-            // List.of(KEYWORD_FIELD_CATEGORY_3_SCI_FI),
-            // List.of(),
-            // List.of()
-            // );
+            addKnnDoc(
+                indexName,
+                "4",
+                List.of(),
+                List.of(),
+                Collections.singletonList(TEXT_FIELD_1_NAME),
+                Collections.singletonList(TEXT_FIELD_VALUE_4_MI_2),
+                List.of(),
+                List.of(),
+                List.of(INTEGER_FIELD_1_STOCK),
+                List.of(INTEGER_FIELD_STOCK_4_25),
+                List.of(KEYWORD_FIELD_2_CATEGORY),
+                List.of(KEYWORD_FIELD_CATEGORY_2_ACTION),
+                List.of(),
+                List.of()
+            );
+
+            addKnnDoc(
+                indexName,
+                "5",
+                List.of(),
+                List.of(),
+                Collections.singletonList(TEXT_FIELD_1_NAME),
+                Collections.singletonList(TEXT_FIELD_VALUE_5_TERMINAL),
+                List.of(),
+                List.of(),
+                List.of(INTEGER_FIELD_1_STOCK),
+                List.of(INTEGER_FIELD_STOCK_5_20),
+                List.of(KEYWORD_FIELD_2_CATEGORY),
+                List.of(KEYWORD_FIELD_CATEGORY_1_DRAMA),
+                List.of(),
+                List.of()
+            );
+
+            addKnnDoc(
+                indexName,
+                "6",
+                List.of(),
+                List.of(),
+                Collections.singletonList(TEXT_FIELD_1_NAME),
+                Collections.singletonList(TEXT_FIELD_VALUE_6_AVENGERS),
+                List.of(),
+                List.of(),
+                List.of(INTEGER_FIELD_1_STOCK),
+                List.of(INTEGER_FIELD_STOCK_5_20),
+                List.of(KEYWORD_FIELD_2_CATEGORY),
+                List.of(KEYWORD_FIELD_CATEGORY_3_SCI_FI),
+                List.of(),
+                List.of()
+            );
         }
     }
 }

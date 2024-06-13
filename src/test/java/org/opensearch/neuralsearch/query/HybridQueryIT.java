@@ -810,15 +810,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         if (TEST_INDEX_WITH_KEYWORDS_ONE_SHARD.equals(indexName) && !indexExists(TEST_INDEX_WITH_KEYWORDS_ONE_SHARD)) {
             createIndexWithConfiguration(
                 indexName,
-                buildIndexConfiguration(
-                    List.of(),
-                    List.of(),
-                    List.of(INTEGER_FIELD_PRICE),
-                    List.of(KEYWORD_FIELD_1),
-                    List.of(),
-                    List.of(),
-                    1
-                ),
+                buildIndexConfiguration(List.of(), List.of(), List.of(INTEGER_FIELD_PRICE), List.of(KEYWORD_FIELD_1), List.of(), 1),
                 ""
             );
             addDocWithKeywordsAndIntFields(
@@ -867,15 +859,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         if (TEST_INDEX_WITH_KEYWORDS_THREE_SHARDS.equals(indexName) && !indexExists(TEST_INDEX_WITH_KEYWORDS_THREE_SHARDS)) {
             createIndexWithConfiguration(
                 indexName,
-                buildIndexConfiguration(
-                    List.of(),
-                    List.of(),
-                    List.of(INTEGER_FIELD_PRICE),
-                    List.of(KEYWORD_FIELD_1),
-                    List.of(),
-                    List.of(),
-                    3
-                ),
+                buildIndexConfiguration(List.of(), List.of(), List.of(INTEGER_FIELD_PRICE), List.of(KEYWORD_FIELD_1), List.of(), 3),
                 ""
             );
             addDocWithKeywordsAndIntFields(

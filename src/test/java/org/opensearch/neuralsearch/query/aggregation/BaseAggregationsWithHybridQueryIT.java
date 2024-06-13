@@ -115,7 +115,6 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
                     List.of(INTEGER_FIELD_DOCINDEX),
                     List.of(KEYWORD_FIELD_DOCKEYWORD),
                     List.of(DATE_FIELD),
-                    List.of(),
                     3
                 ),
                 ""

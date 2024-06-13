@@ -94,6 +94,7 @@ public class HybridTopScoreDocCollector implements Collector {
 
             @Override
             public void collect(int doc) throws IOException {
+                log.info("Doc Id " + doc);
                 if (Objects.isNull(compoundQueryScorer)) {
                     throw new IllegalArgumentException("scorers are null for all sub-queries in hybrid query");
                 }

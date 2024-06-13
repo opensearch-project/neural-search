@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch;
 
+import java.util.concurrent.TimeUnit;
 import org.opensearch.ml.common.model.MLModelState;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 
@@ -112,7 +113,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return ClusterServiceUtils.createClusterService(threadPool);
     }
 
-    protected void updateClusterSettings() {
+    public void updateClusterSettings() {
         updateClusterSettings("plugins.ml_commons.only_run_on_ml_node", false);
         // default threshold for native circuit breaker is 90, it may be not enough on test runner machine
         updateClusterSettings("plugins.ml_commons.native_memory_threshold", 100);
@@ -286,6 +287,23 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         );
         assertEquals("true", node.get("acknowledged").toString());
         assertEquals(indexName, node.get("index").toString());
+
+        // forceMergeKnnIndex(indexName, 1);
+    }
+
+    protected void forceMergeIndex(String index, int maxSegments) throws Exception {
+        Request request = new Request("POST", "/" + index + "/_refresh");
+
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+
+        request = new Request("POST", "/" + index + "/_forcemerge");
+
+        request.addParameter("max_num_segments", String.valueOf(maxSegments));
+        request.addParameter("flush", "true");
+        response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        TimeUnit.SECONDS.sleep(5); // To make sure force merge is completed
     }
 
     protected void createPipelineProcessor(final String modelId, final String pipelineName, final ProcessorType processorType)
@@ -527,7 +545,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
         builder.endObject();
 
-        Request request = new Request("GET", "/" + index + "/_search");
+        Request request = new Request("GET", "/" + index + "/_search?timeout=1000s");
         request.addParameter("size", Integer.toString(resultSize));
         if (requestParams != null && !requestParams.isEmpty()) {
             requestParams.forEach(request::addParameter);
@@ -827,7 +845,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             Collections.emptyList(),
             Collections.emptyList(),
             Collections.emptyList(),
-            Collections.emptyList(),
             numberOfShards
         );
     }
@@ -839,7 +856,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final List<String> intFields,
         final List<String> keywordFields,
         final List<String> dateFields,
-        final List<String> textFields,
         final int numberOfShards
     ) {
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
@@ -890,10 +906,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
         for (String dateField : dateFields) {
             xContentBuilder.startObject(dateField).field("type", "date").field("format", "MM/dd/yyyy").endObject();
-        }
-
-        for (String textField : textFields) {
-            xContentBuilder.startObject(textField).field("type", "text").endObject();
         }
 
         xContentBuilder.endObject().endObject().endObject();

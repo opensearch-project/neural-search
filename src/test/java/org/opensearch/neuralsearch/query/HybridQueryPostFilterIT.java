@@ -431,7 +431,6 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
                     List.of(INTEGER_FIELD_1_STOCK),
                     List.of(KEYWORD_FIELD_2_CATEGORY),
                     List.of(),
-                    List.of(TEXT_FIELD_1_NAME),
                     numShards
                 ),
                 ""
