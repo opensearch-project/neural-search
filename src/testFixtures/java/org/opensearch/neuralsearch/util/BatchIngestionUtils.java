@@ -28,7 +28,6 @@ public class BatchIngestionUtils {
     );
 
     public static List<Map<String, String>> prepareDataForBulkIngestion(int startId, int count) {
-
         List<Map<String, String>> docs = new ArrayList<>();
         for (int i = startId; i < startId + count; ++i) {
             Map<String, String> params = new HashMap<>();
