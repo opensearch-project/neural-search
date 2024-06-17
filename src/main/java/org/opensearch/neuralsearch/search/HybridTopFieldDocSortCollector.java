@@ -54,7 +54,6 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
     @Getter
     float maxScore = 0.0f;
     int[] collectedHits;
-    int numberOfSubQueries = 0;
     @Getter
     @Setter
     private TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
@@ -189,7 +188,6 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
 
         void initializePriorityQueuesWithComparators(LeafReaderContext context, int length) throws IOException {
             if (compoundScores == null) {
-                numberOfSubQueries = length;
                 compoundScores = new FieldValueHitQueue[length];
                 comparators = new LeafFieldComparator[length];
                 queueFull = new boolean[length];
