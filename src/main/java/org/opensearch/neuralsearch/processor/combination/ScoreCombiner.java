@@ -45,35 +45,22 @@ public class ScoreCombiner {
      *
      * @param queryTopDocs              query results that need to be normalized, mutated by method execution
      * @param scoreCombinationTechnique exact combination method that should be applied
-     * @param isSortingEnabled          if sorting is enabled or not
      * @param sort                      sort criteria
      */
     public void combineScores(
         final List<CompoundTopDocs> queryTopDocs,
         final ScoreCombinationTechnique scoreCombinationTechnique,
-        final boolean isSortingEnabled,
-        final Sort sort
+        Sort sort
     ) {
-        final boolean isSortByScore = checkIfSortOrderByScore(sort);
         // iterate over results from each shard. Every CompoundTopDocs object has results from
         // multiple sub queries, doc ids may repeat for each sub query results
-        queryTopDocs.forEach(
-            compoundQueryTopDocs -> combineShardScores(
-                scoreCombinationTechnique,
-                compoundQueryTopDocs,
-                isSortingEnabled,
-                sort,
-                isSortByScore
-            )
-        );
+        queryTopDocs.forEach(compoundQueryTopDocs -> combineShardScores(scoreCombinationTechnique, compoundQueryTopDocs, sort));
     }
 
     private void combineShardScores(
         final ScoreCombinationTechnique scoreCombinationTechnique,
         final CompoundTopDocs compoundQueryTopDocs,
-        boolean isSortingEnabled,
-        final Sort sort,
-        final boolean isSortByScore
+        final Sort sort
     ) {
         if (Objects.isNull(compoundQueryTopDocs) || compoundQueryTopDocs.getTotalHits().value == 0) {
             return;
@@ -92,7 +79,8 @@ public class ScoreCombiner {
         // If sorting is enabled then create the map of sort field values per docId
         Map<Integer, Object[]> docIdSortFieldMap = null;
         List<TopFieldDocs> topFieldDocs = null;
-        if (isSortingEnabled) {
+        if (sort != null) {
+            final boolean isSortByScore = checkIfSortOrderByScore(sort);
             topFieldDocs = topDocsPerSubQuery.stream()
                 .filter(topDocs -> topDocs.scoreDocs.length != 0)
                 .map(topDocs -> (TopFieldDocs) topDocs)
@@ -102,7 +90,7 @@ public class ScoreCombiner {
 
         // - sort documents by scores and take first "max number" of docs
         // create a collection of doc ids that are sorted by their combined scores
-        List<Integer> sortedDocsIds = getSortedDocIds(combinedNormalizedScoresByDocId, isSortingEnabled, topFieldDocs, sort);
+        List<Integer> sortedDocsIds = getSortedDocIds(combinedNormalizedScoresByDocId, topFieldDocs, sort);
 
         // - update query search results with normalized scores
         updateQueryTopDocsWithCombinedScores(
@@ -111,7 +99,7 @@ public class ScoreCombiner {
             combinedNormalizedScoresByDocId,
             sortedDocsIds,
             docIdSortFieldMap,
-            isSortingEnabled
+            sort != null ? true : false
         );
     }
 
@@ -154,13 +142,12 @@ public class ScoreCombiner {
 
     private List<Integer> getSortedDocIds(
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
-        final boolean isSortingEnabled,
         final List<TopFieldDocs> topFieldDocs,
         final Sort sort
     ) {
         // we're merging docs with normalized and combined scores. we need to have only maxHits results
         List<Integer> sortedDocsIds;
-        if (!isSortingEnabled) {
+        if (sort == null) {
             sortedDocsIds = new ArrayList<>(combinedNormalizedScoresByDocId.keySet());
             sortedDocsIds.sort((a, b) -> Float.compare(combinedNormalizedScoresByDocId.get(b), combinedNormalizedScoresByDocId.get(a)));
         } else {

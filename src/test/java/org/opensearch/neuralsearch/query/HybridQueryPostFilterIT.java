@@ -175,6 +175,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE),
             null,
             postFilterQuery,
+            null,
+            false,
             null
         );
         assertHybridQueryResults(searchResponseAsMap, 1, 0, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
@@ -258,6 +260,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE),
             null,
             postFilterQuery,
+            null,
+            false,
             null
         );
         assertHybridQueryResults(searchResponseAsMap, 2, 1, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
@@ -272,6 +276,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE),
             List.of(aggsBuilder),
             postFilterQuery,
+            null,
+            false,
             null
         );
         assertHybridQueryResults(searchResponseAsMap, 2, 1, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
@@ -295,6 +301,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE),
             null,
             postFilterQuery,
+            null,
+            false,
             null
         );
         assertHybridQueryResults(searchResponseAsMap, 0, 0, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
@@ -314,6 +322,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE),
             null,
             postFilterQuery,
+            null,
+            false,
             null
         );
         assertHybridQueryResults(searchResponseAsMap, 0, 0, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
@@ -370,6 +380,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE),
             null,
             postFilterQuery,
+            null,
+            false,
             null
         );
         assertHybridQueryResults(searchResponseAsMap, 4, 3, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
@@ -385,6 +397,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE),
             null,
             postFilterQuery,
+            null,
+            false,
             null
         );
         assertHybridQueryResults(searchResponseAsMap, 0, 0, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);

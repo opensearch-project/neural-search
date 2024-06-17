@@ -422,6 +422,8 @@ public class MetricAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
                 Map.of("search_pipeline", SEARCH_PIPELINE),
                 List.of(aggsBuilder),
                 rangeFilterQuery,
+                null,
+                false,
                 null
             );
 

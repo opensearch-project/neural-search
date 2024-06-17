@@ -77,24 +77,23 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
     }
 
     // Add the entry in the Priority queue
-    void add(int slot, int doc, FieldValueHitQueue<FieldValueHitQueue.Entry> compoundScore, int i, float score) {
+    private void add(int slot, int doc, FieldValueHitQueue<FieldValueHitQueue.Entry> compoundScore, int subQueryNumber, float score) {
         FieldValueHitQueue.Entry bottomEntry = new FieldValueHitQueue.Entry(slot, docBase + doc);
         bottomEntry.score = score;
         bottom = compoundScore.add(bottomEntry);
-        log.info("bottom entry " + bottom.doc);
         // The queue is full either when totalHits == numHits (in SimpleFieldCollector), in which case
         // slot = totalHits - 1, or when hitsCollected == numHits (in PagingFieldCollector this is hits
         // on the current page) and slot = hitsCollected - 1.
         assert slot < numHits;
-        queueFull[i] = slot == numHits - 1;
+        queueFull[subQueryNumber] = slot == numHits - 1;
     }
 
-    void updateBottom(int doc, FieldValueHitQueue<FieldValueHitQueue.Entry> compoundScore) {
+    private void updateBottom(int doc, FieldValueHitQueue<FieldValueHitQueue.Entry> compoundScore) {
         bottom.doc = docBase + doc;
         bottom = compoundScore.updateTop();
     }
 
-    boolean canEarlyTerminate(Sort searchSort, Sort indexSort) {
+    private boolean canEarlyTerminate(Sort searchSort, Sort indexSort) {
         return canEarlyTerminateOnDocId(searchSort) || canEarlyTerminateOnPrefix(searchSort, indexSort);
     }
 
@@ -142,34 +141,12 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
         @Nullable
         FieldDoc after;
         final Sort sort;
-        boolean isRunOnce;
+        boolean initializePerSegment;
 
         public HybridTopDocSortLeafCollector(Sort sort, @Nullable FieldDoc after) {
             this.sort = sort;
             this.after = after;
-            this.isRunOnce = true;
-
-            // // as all segments are sorted in the same way, enough to check only the 1st segment for indexSort
-            // if (searchSortPartOfIndexSort == null) {
-            // Sort indexSort = context.reader().getMetaData().getSort();
-            // searchSortPartOfIndexSort = canEarlyTerminate(sort, indexSort);
-            // log.info("searchSortPartOfIndexSort " + searchSortPartOfIndexSort);
-            // if (searchSortPartOfIndexSort) {
-            // firstComparator.disableSkipping();
-            // }
-            // }
-            //
-            // for (int subQueryNumber=0;subQueryNumber<numberOfSubQueries;subQueryNumber++){
-            // LeafFieldComparator[] leafFieldComparators = compoundScores[subQueryNumber].getComparators(context);
-            // int[] reverseMuls = compoundScores[subQueryNumber].getReverseMul();
-            // if (leafFieldComparators.length == 1) {
-            // reverseMul = reverseMuls[0];
-            // comparators[subQueryNumber] = leafFieldComparators[0];
-            // } else {
-            // reverseMul = 1;
-            // comparators[subQueryNumber] = new MultiLeafFieldComparator(leafFieldComparators, reverseMuls);
-            // }
-            // }
+            this.initializePerSegment = true;
         }
 
         @Override
@@ -221,43 +198,24 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
                     initializeLeafFieldComparators(context, i);
                 }
             }
-            if (isRunOnce) {
+            if (initializePerSegment) {
                 for (int i = 0; i < length; i++) {
                     initializeComparators(context, i);
                 }
             } else {
-                isRunOnce = false;
+                initializePerSegment = false;
             }
         }
 
         private void initializeLeafFieldComparators(LeafReaderContext context, int subQueryNumber) throws IOException {
             compoundScores[subQueryNumber] = FieldValueHitQueue.create(sort.getSort(), numHits);
             firstComparator = compoundScores[subQueryNumber].getComparators()[0];
-            // // as all segments are sorted in the same way, enough to check only the 1st segment for indexSort
-            // if (searchSortPartOfIndexSort == null) {
-            // Sort indexSort = context.reader().getMetaData().getSort();
-            // searchSortPartOfIndexSort = canEarlyTerminate(sort, indexSort);
-            // log.info("searchSortPartOfIndexSort " + searchSortPartOfIndexSort);
-            // if (searchSortPartOfIndexSort) {
-            // firstComparator.disableSkipping();
-            // }
-            // }
 
             // Optimize the sort
             if (compoundScores[subQueryNumber].getComparators().length == 1) {
                 firstComparator.setSingleSort();
             }
-            //
-            // LeafFieldComparator[] leafFieldComparators = compoundScores[subQueryNumber].getComparators(context);
-            // int[] reverseMuls = compoundScores[subQueryNumber].getReverseMul();
-            // if (leafFieldComparators.length == 1) {
-            // reverseMul = reverseMuls[0];
-            // comparators[subQueryNumber] = leafFieldComparators[0];
-            // } else {
-            // reverseMul = 1;
-            // comparators[subQueryNumber] = new MultiLeafFieldComparator(leafFieldComparators, reverseMuls);
-            // }
-            // comparators[subQueryNumber].setScorer(compoundQueryScorer);
+
             if (after != null) {
                 setAfterFieldValueInFieldCompartor(subQueryNumber);
             }
@@ -364,7 +322,6 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
             return new HybridTopDocSortLeafCollector(sort, null) {
                 @Override
                 public void collect(int doc) throws IOException {
-                    log.info("Doc Id " + doc);
                     if (Objects.isNull(compoundQueryScorer)) {
                         throw new IllegalArgumentException("scorers are null for all sub-queries in hybrid query");
                     }

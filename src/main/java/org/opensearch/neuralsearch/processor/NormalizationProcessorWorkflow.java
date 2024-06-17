@@ -58,8 +58,6 @@ public class NormalizationProcessorWorkflow {
         final ScoreNormalizationTechnique normalizationTechnique,
         final ScoreCombinationTechnique combinationTechnique
     ) {
-        boolean isSortingEnabled = false;
-        SortField[] sortFields = null;
         // save original state
         List<Integer> unprocessedDocIds = unprocessedDocIds(querySearchResults);
 
@@ -73,17 +71,14 @@ public class NormalizationProcessorWorkflow {
 
         // Check if sort is enabled
         Sort sort = evaluateSortCriteria(queryTopDocs);
-        if (sort != null) {
-            isSortingEnabled = true;
-            sortFields = sort.getSort();
-        }
+
         // combine
         log.debug("Do score combination");
-        scoreCombiner.combineScores(queryTopDocs, combinationTechnique, isSortingEnabled, sort);
+        scoreCombiner.combineScores(queryTopDocs, combinationTechnique, sort);
 
         // post-process data
         log.debug("Post-process query results after score normalization and combination");
-        updateOriginalQueryResults(querySearchResults, queryTopDocs, isSortingEnabled, sortFields);
+        updateOriginalQueryResults(querySearchResults, queryTopDocs, sort);
         updateOriginalFetchResults(querySearchResults, fetchSearchResultOptional, unprocessedDocIds);
     }
 
@@ -114,8 +109,7 @@ public class NormalizationProcessorWorkflow {
     private void updateOriginalQueryResults(
         final List<QuerySearchResult> querySearchResults,
         final List<CompoundTopDocs> queryTopDocs,
-        final boolean isSortEnabled,
-        final SortField[] sortFields
+        final Sort sort
     ) {
         if (querySearchResults.size() != queryTopDocs.size()) {
             throw new IllegalStateException(
@@ -133,7 +127,7 @@ public class NormalizationProcessorWorkflow {
             float maxScore = updatedTopDocs.getTotalHits().value > 0 ? updatedTopDocs.getScoreDocs().get(0).score : 0.0f;
 
             TopDocsAndMaxScore updatedTopDocsAndMaxScore;
-            if (!isSortEnabled) {
+            if (sort == null) {
                 // create final version of top docs with all updated values
                 TopDocs topDocs = new TopDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new ScoreDoc[0]));
                 updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(topDocs, maxScore);
@@ -149,7 +143,7 @@ public class NormalizationProcessorWorkflow {
                     maxScore = MAX_SCORE_WHEN_NO_HITS_FOUND;
                 }
 
-                TopFieldDocs topFieldDocs = new TopFieldDocs(updatedTopDocs.getTotalHits(), fieldDocs, sortFields);
+                TopFieldDocs topFieldDocs = new TopFieldDocs(updatedTopDocs.getTotalHits(), fieldDocs, sort.getSort());
                 updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(topFieldDocs, maxScore);
             }
             querySearchResult.topDocs(updatedTopDocsAndMaxScore, querySearchResult.sortValueFormats());

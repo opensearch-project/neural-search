@@ -218,6 +218,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     Map.of("search_pipeline", SEARCH_PIPELINE),
                     null,
                     rangeFilterQuery,
+                    null,
+                    false,
                     null
                 );
 
@@ -231,6 +233,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     Map.of("search_pipeline", SEARCH_PIPELINE),
                     null,
                     null,
+                    null,
+                    false,
                     null
                 );
                 assertHitResultsFromQuery(2, searchResponseAsMap);
@@ -243,6 +247,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     Map.of("search_pipeline", SEARCH_PIPELINE),
                     null,
                     rangeFilterQuery,
+                    null,
+                    false,
                     null
                 );
                 assertHitResultsFromQuery(2, searchResponseAsMap);
@@ -255,6 +261,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     Map.of("search_pipeline", SEARCH_PIPELINE),
                     null,
                     null,
+                    null,
+                    false,
                     null
                 );
                 assertHitResultsFromQuery(3, searchResponseAsMap);
@@ -314,6 +322,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     Map.of("search_pipeline", SEARCH_PIPELINE),
                     null,
                     rangeFilterQuery,
+                    null,
+                    false,
                     null
                 );
 
@@ -327,6 +337,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     Map.of("search_pipeline", SEARCH_PIPELINE),
                     null,
                     null,
+                    null,
+                    false,
                     null
                 );
                 assertHitResultsFromQuery(2, searchResponseAsMap);
@@ -339,6 +351,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     Map.of("search_pipeline", SEARCH_PIPELINE),
                     null,
                     rangeFilterQuery,
+                    null,
+                    false,
                     null
                 );
                 assertHitResultsFromQuery(4, searchResponseAsMap);
@@ -351,6 +365,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     Map.of("search_pipeline", SEARCH_PIPELINE),
                     null,
                     null,
+                    null,
+                    false,
                     null
                 );
                 assertHitResultsFromQuery(3, searchResponseAsMap);
