@@ -60,6 +60,7 @@ public class KnnRadialSearchIT extends AbstractRestartUpgradeRestTestCase {
             null,
             0.01f,
             null,
+            null,
             null
         );
         Map<String, Object> responseWithMinScoreQuery = search(getIndexNameForTest(), neuralQueryBuilderWithMinScoreQuery, 1);
@@ -72,6 +73,7 @@ public class KnnRadialSearchIT extends AbstractRestartUpgradeRestTestCase {
             modelId,
             null,
             100000f,
+            null,
             null,
             null,
             null
