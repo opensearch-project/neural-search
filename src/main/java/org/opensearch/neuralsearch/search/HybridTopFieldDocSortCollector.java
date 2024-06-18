@@ -54,6 +54,7 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
     @Getter
     float maxScore = 0.0f;
     int[] collectedHits;
+    int numberOfSubQueries = 0;
     @Getter
     @Setter
     private TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
@@ -70,7 +71,7 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
     // internal versions. If someone will define a constructor with any other
     // visibility, then anyone will be able to extend the class, which is not what
     // we want.
-    private HybridTopFieldDocSortCollector(final int numHits, final HitsThresholdChecker hitsThresholdChecker) {
+    public HybridTopFieldDocSortCollector(final int numHits, final HitsThresholdChecker hitsThresholdChecker) {
         this.numHits = numHits;
         this.hitsThresholdChecker = hitsThresholdChecker;
     }
@@ -188,6 +189,7 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
 
         void initializePriorityQueuesWithComparators(LeafReaderContext context, int length) throws IOException {
             if (compoundScores == null) {
+                numberOfSubQueries = length;
                 compoundScores = new FieldValueHitQueue[length];
                 comparators = new LeafFieldComparator[length];
                 queueFull = new boolean[length];
@@ -219,11 +221,14 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
             }
         }
 
+        /* This method initializes the comparators per segment
+         */
         private void initializeComparators(LeafReaderContext context, int subQueryNumber) throws IOException {
             // as all segments are sorted in the same way, enough to check only the 1st segment for indexSort
             if (searchSortPartOfIndexSort == null) {
                 Sort indexSort = context.reader().getMetaData().getSort();
                 searchSortPartOfIndexSort = canEarlyTerminate(sort, indexSort);
+                log.info("searchSortPartOfIndexSort " + searchSortPartOfIndexSort);
                 if (searchSortPartOfIndexSort) {
                     firstComparator.disableSkipping();
                 }
@@ -300,128 +305,6 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
             return false;
         }
 
-    }
-
-    public static class SimpleFieldCollector extends HybridTopFieldDocSortCollector {
-        final Sort sort;
-        final int numHits;
-
-        public SimpleFieldCollector(int numHits, HitsThresholdChecker hitsThresholdChecker, Sort sort) {
-            super(numHits, hitsThresholdChecker);
-            this.sort = sort;
-            this.numHits = numHits;
-        }
-
-        @Override
-        public LeafCollector getLeafCollector(LeafReaderContext context) {
-            docBase = context.docBase;
-
-            return new HybridTopDocSortLeafCollector(sort, null) {
-                @Override
-                public void collect(int doc) throws IOException {
-                    if (Objects.isNull(compoundQueryScorer)) {
-                        throw new IllegalArgumentException("scorers are null for all sub-queries in hybrid query");
-                    }
-                    float[] subScoresByQuery = compoundQueryScorer.hybridScores();
-                    initializePriorityQueuesWithComparators(context, subScoresByQuery.length);
-                    incrementTotalHitCount();
-                    for (int i = 0; i < subScoresByQuery.length; i++) {
-                        float score = subScoresByQuery[i];
-                        // if score is 0.0 there is no hits for that sub-query
-                        if (score == 0) {
-                            continue;
-                        }
-                        collectedHits[i]++;
-                        maxScore = Math.max(score, maxScore);
-                        if (queueFull[i]) {
-                            if (thresholdCheck(doc, i)) {
-                                return;
-                            }
-                            collectCompetitiveHit(doc, i);
-                        } else {
-                            collectHit(doc, collectedHits[i], i, score);
-                        }
-
-                    }
-                }
-            };
-        }
-
-        public List<TopFieldDocs> topDocs() {
-            return super.topDocs(compoundScores, sort);
-        }
-    }
-
-    public static class PagingFieldCollector extends HybridTopFieldDocSortCollector {
-
-        final Sort sort;
-        final int numHits;
-        final FieldDoc after;
-
-        public PagingFieldCollector(int numHits, HitsThresholdChecker hitsThresholdChecker, Sort sort, @Nullable FieldDoc after) {
-            super(numHits, hitsThresholdChecker);
-            this.sort = sort;
-            this.numHits = numHits;
-            this.after = after;
-        }
-
-        @Override
-        public LeafCollector getLeafCollector(LeafReaderContext context) {
-            docBase = context.docBase;
-            final int afterDoc = after.doc - docBase;
-            return new HybridTopDocSortLeafCollector(sort, after) {
-                @Override
-                public void collect(int doc) throws IOException {
-                    if (Objects.isNull(compoundQueryScorer)) {
-                        throw new IllegalArgumentException("scorers are null for all sub-queries in hybrid query");
-                    }
-                    float[] subScoresByQuery = compoundQueryScorer.hybridScores();
-                    initializePriorityQueuesWithComparators(context, subScoresByQuery.length);
-                    incrementTotalHitCount();
-                    for (int i = 0; i < subScoresByQuery.length; i++) {
-                        float score = subScoresByQuery[i];
-                        // if score is 0.0 there is no hits for that sub-query
-                        if (score == 0) {
-                            continue;
-                        }
-
-                        if (queueFull[i]) {
-                            if (thresholdCheck(doc, i)) {
-                                return;
-                            }
-                        }
-
-                        // logic for search_after
-                        boolean resultsFoundOnPreviousPage = checkIfSearchAfterResultsAreFound(i, doc);
-                        if (resultsFoundOnPreviousPage) {
-                            return;
-                        }
-                        maxScore = Math.max(score, maxScore);
-                        if (queueFull[i]) {
-                            collectCompetitiveHit(doc, i);
-                        } else {
-                            collectedHits[i]++;
-                            collectHit(doc, collectedHits[i], i, score);
-                        }
-
-                    }
-
-                }
-
-                private boolean checkIfSearchAfterResultsAreFound(int subQueryNumber, int doc) throws IOException {
-                    final int topCmp = reverseMul * comparators[subQueryNumber].compareTop(doc);
-                    if (topCmp > 0 || (topCmp == 0 && doc <= afterDoc)) {
-                        // Already collected on a previous page
-                        return true;
-                    }
-                    return false;
-                }
-            };
-        }
-
-        public List<TopFieldDocs> topDocs() {
-            return super.topDocs(compoundScores, sort);
-        }
     }
 
     @Override
