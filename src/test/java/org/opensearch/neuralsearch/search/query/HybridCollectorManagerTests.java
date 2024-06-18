@@ -37,7 +37,7 @@ import org.opensearch.index.query.ParsedQuery;
 import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.neuralsearch.query.HybridQueryWeight;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
-import org.opensearch.neuralsearch.search.HybridTopScoreDocCollector;
+import org.opensearch.neuralsearch.search.collector.HybridTopScoreDocCollector;
 import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.QuerySearchResult;

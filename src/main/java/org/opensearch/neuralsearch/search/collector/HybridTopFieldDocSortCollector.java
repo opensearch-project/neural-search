@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.search;
+package org.opensearch.neuralsearch.search.collector;
 
 import java.io.IOException;
 import java.util.List;
@@ -33,6 +33,8 @@ import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.util.PriorityQueue;
 import org.opensearch.neuralsearch.query.HybridQueryScorer;
 import org.opensearch.common.Nullable;
+import org.opensearch.neuralsearch.search.HitsThresholdChecker;
+import org.opensearch.neuralsearch.search.MultiLeafFieldComparator;
 
 /*
  Collects the TopFieldDocs after executing hybrid query. Uses HybridQueryTopDocs as DTO to handle each sub query results.
@@ -40,13 +42,34 @@ import org.opensearch.common.Nullable;
  */
 @Log4j2
 public abstract class HybridTopFieldDocSortCollector implements Collector {
+    /*
+      numhits maintain the size of the result to be collected.
+     */
     final int numHits;
+    /*
+      hitsThresholdChecker is used to get score mode and check the threshold for collecting the hits.
+     */
     final HitsThresholdChecker hitsThresholdChecker;
+    /*
+      docBase holds the starting point of doc Iteration in the segment.
+     */
     int docBase;
+    /*
+      comparators collect the value of the field on which sorting criteria is applied and returns the result accordingly.
+     */
     LeafFieldComparator comparators[];
+    /*
+      reverseMul is used to set the direction of the sorting when creating comparators.
+      In threshold check reverseMul is used in comparison logic.
+      It modifies the comparison of either reverse or maintain the natural order depending on its value.
+      This ensures that the compareBottom method adjusts the order based on whether you want ascending or descending sorting.
+     */
     int reverseMul;
     FieldComparator<?> firstComparator;
     FieldValueHitQueue.Entry bottom = null;
+    /*
+      List of Priority Queues to hold entries which has higher score but sorted as per the sorting criteria.
+     */
     FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores;
     boolean queueFull[];
     @Getter
@@ -58,6 +81,9 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
     @Getter
     @Setter
     private TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
+    /*
+       searchSortPartOfIndexSort is used to evaluate whether to perform index sort or not.
+     */
     private Boolean searchSortPartOfIndexSort = null;
 
     private static final TopFieldDocs EMPTY_TOPDOCS = new TopFieldDocs(
@@ -187,6 +213,9 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
             return null;
         }
 
+        /*
+        The method initializes once per search request.
+         */
         void initializePriorityQueuesWithComparators(LeafReaderContext context, int length) throws IOException {
             if (compoundScores == null) {
                 numberOfSubQueries = length;
@@ -255,6 +284,9 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
             }
         }
 
+        /*
+        Increment total hit count and validate if threshold is reached.
+         */
         void incrementTotalHitCount() throws IOException {
             totalHits++;
             hitsThresholdChecker.incrementHitCount();
@@ -269,6 +301,9 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
             }
         }
 
+        /*
+        Collect hit and add the value of the sort field in the comparator.
+         */
         void collectHit(int doc, int hitsCollected, int subQueryNumber, float score) throws IOException {
             // Startup transient: queue hasn't gathered numHits yet
             int slot = hitsCollected - 1;
@@ -280,8 +315,10 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
             }
         }
 
+        /*
+        // This hit is competitive - replace bottom element in queue & adjustTop
+         */
         void collectCompetitiveHit(int doc, int subQueryNumber) throws IOException {
-            // This hit is competitive - replace bottom element in queue & adjustTop
             comparators[subQueryNumber].copy(bottom.slot, doc);
             updateBottom(doc, compoundScores[subQueryNumber]);
             comparators[subQueryNumber].setBottom(bottom.slot);
@@ -312,6 +349,9 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
         return hitsThresholdChecker.scoreMode();
     }
 
+    /*
+      TopFieldDocs per subquery
+     */
     protected TopFieldDocs topDocsPerQuery(
         int start,
         int howMany,
@@ -349,6 +389,9 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
         return new TopFieldDocs(new TotalHits(totalHits, totalHitsRelation), results, sortFields);
     }
 
+    /*
+      Results are converted in the FieldDocs and the value of the field on which the sorting is applied has been added in the FieldDoc.
+     */
     protected void populateResults(ScoreDoc[] results, int howMany, PriorityQueue<FieldValueHitQueue.Entry> pq) {
         FieldValueHitQueue<FieldValueHitQueue.Entry> queue = (FieldValueHitQueue<FieldValueHitQueue.Entry>) pq;
         for (int i = howMany - 1; i >= 0 && pq.size() > 0; i--) {

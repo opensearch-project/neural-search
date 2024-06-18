@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.search;
+package org.opensearch.neuralsearch.search.collector;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -24,6 +24,7 @@ import org.apache.lucene.util.PriorityQueue;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.query.HybridQueryScorer;
+import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
 /**
  * Collects the TopDocs after executing hybrid query. Uses HybridQueryTopDocs as DTO to handle each sub query results

@@ -2,35 +2,42 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.search;
+package org.opensearch.neuralsearch.search.collector;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
 import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.TopFieldDocs;
+import org.opensearch.common.Nullable;
+import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
 /*
-  SimpleFieldCollector collects the sorted results at the shard level for every individual query.
+  PagingFieldCollector collects the sorted results at the shard level for every individual query
+  as per search_after criteria applied in the search request.
   It collects the list of TopFieldDocs.
  */
-public class SimpleFieldCollector extends HybridTopFieldDocSortCollector {
+public class PagingFieldCollector extends HybridTopFieldDocSortCollector {
+
     final Sort sort;
     final int numHits;
+    final FieldDoc after;
 
-    public SimpleFieldCollector(int numHits, HitsThresholdChecker hitsThresholdChecker, Sort sort) {
+    public PagingFieldCollector(int numHits, HitsThresholdChecker hitsThresholdChecker, Sort sort, @Nullable FieldDoc after) {
         super(numHits, hitsThresholdChecker);
         this.sort = sort;
         this.numHits = numHits;
+        this.after = after;
     }
 
     @Override
     public LeafCollector getLeafCollector(LeafReaderContext context) {
         docBase = context.docBase;
-
-        return new HybridTopDocSortLeafCollector(sort, null) {
+        final int afterDoc = after.doc - docBase;
+        return new HybridTopDocSortLeafCollector(sort, after) {
             @Override
             public void collect(int doc) throws IOException {
                 if (Objects.isNull(compoundQueryScorer)) {
@@ -45,18 +52,37 @@ public class SimpleFieldCollector extends HybridTopFieldDocSortCollector {
                     if (score == 0) {
                         continue;
                     }
-                    collectedHits[i]++;
-                    maxScore = Math.max(score, maxScore);
+
                     if (queueFull[i]) {
                         if (thresholdCheck(doc, i)) {
                             return;
                         }
+                    }
+
+                    // logic for search_after
+                    boolean resultsFoundOnPreviousPage = checkIfSearchAfterResultsAreFound(i, doc);
+                    if (resultsFoundOnPreviousPage) {
+                        return;
+                    }
+                    maxScore = Math.max(score, maxScore);
+                    if (queueFull[i]) {
                         collectCompetitiveHit(doc, i);
                     } else {
+                        collectedHits[i]++;
                         collectHit(doc, collectedHits[i], i, score);
                     }
 
                 }
+
+            }
+
+            private boolean checkIfSearchAfterResultsAreFound(int subQueryNumber, int doc) throws IOException {
+                final int topCmp = reverseMul * comparators[subQueryNumber].compareTop(doc);
+                if (topCmp > 0 || (topCmp == 0 && doc <= afterDoc)) {
+                    // Already collected on a previous page
+                    return true;
+                }
+                return false;
             }
         };
     }
