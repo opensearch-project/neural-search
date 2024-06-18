@@ -15,7 +15,7 @@ import org.apache.lucene.search.TopFieldDocs;
 import org.opensearch.common.Nullable;
 
 /*
-  Paging collects the sorted results at the shard level for every individual query
+  PagingFieldCollector collects the sorted results at the shard level for every individual query
   as per search_after criteria applied in the search request.
   It collects the list of TopFieldDocs.
  */
