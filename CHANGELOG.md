@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Enhancements
 ### Bug Fixes
 ### Infrastructure
+- Add backward test cases for neural sparse two phase processor.
 ### Documentation
 ### Maintenance
 ### Refactoring
