@@ -20,7 +20,6 @@ public class HybridSearchResultFormatUtil {
     // and OpenSearch convention is that scores are positive numbers
     public static final Float MAGIC_NUMBER_START_STOP = -9549511920.4881596047f;
     public static final Float MAGIC_NUMBER_DELIMITER = -4422440593.9791198149f;
-    public static final Float MAX_SCORE_WHEN_NO_HITS_FOUND = 0.0f;
 
     /**
      * Create ScoreDoc object that is a start/stop element in case of hybrid search query results

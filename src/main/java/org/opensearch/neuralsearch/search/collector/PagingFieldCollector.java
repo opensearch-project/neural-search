@@ -18,7 +18,7 @@ import org.opensearch.neuralsearch.search.HitsThresholdChecker;
   as per search_after criteria applied in the search request.
   It collects the list of TopFieldDocs.
  */
-public class PagingFieldCollector extends HybridTopFieldDocSortCollector {
+public final class PagingFieldCollector extends HybridTopFieldDocSortCollector {
 
     private final Sort sort;
     private final FieldDoc after;

@@ -15,7 +15,7 @@ import org.opensearch.neuralsearch.search.HitsThresholdChecker;
   SimpleFieldCollector collects the sorted results at the shard level for every individual query.
   It collects the list of TopFieldDocs.
  */
-public class SimpleFieldCollector extends HybridTopFieldDocSortCollector {
+public final class SimpleFieldCollector extends HybridTopFieldDocSortCollector {
     private final Sort sort;
 
     public SimpleFieldCollector(int numHits, HitsThresholdChecker hitsThresholdChecker, Sort sort) {

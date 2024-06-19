@@ -202,7 +202,7 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
         }
 
         /*
-        // This hit is competitive - replace bottom element in queue & adjustTop
+         * This hit is competitive - replace bottom element in queue & adjustTop
          */
         protected void collectCompetitiveHit(int doc, int subQueryNumber) throws IOException {
             // This hit is competitive - replace bottom element in queue & adjustTop
@@ -274,7 +274,6 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
             if (searchSortPartOfIndexSort == null) {
                 Sort indexSort = context.reader().getMetaData().getSort();
                 searchSortPartOfIndexSort = canEarlyTerminate(sort, indexSort);
-                log.info("searchSortPartOfIndexSort " + searchSortPartOfIndexSort);
                 if (searchSortPartOfIndexSort) {
                     firstComparator.disableSkipping();
                 }
