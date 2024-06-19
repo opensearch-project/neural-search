@@ -154,27 +154,18 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 for (final Collector sub : (((MultiCollectorWrapper) collector).getCollectors())) {
                     if (sub instanceof HybridTopScoreDocCollector) {
                         hybridTopScoreDocCollectors.add((HybridTopScoreDocCollector) sub);
-                    } else if (sub instanceof SimpleFieldCollector) {
-                        hybridSortedTopDocCollectors.add((SimpleFieldCollector) sub);
-                    } else if (sub instanceof PagingFieldCollector) {
-                        hybridSortedTopDocCollectors.add((PagingFieldCollector) sub);
+                    } else if (sub instanceof HybridTopFieldDocSortCollector) {
+                        hybridSortedTopDocCollectors.add((HybridTopFieldDocSortCollector) sub);
                     }
                 }
             } else if (collector instanceof HybridTopScoreDocCollector) {
                 hybridTopScoreDocCollectors.add((HybridTopScoreDocCollector) collector);
-            } else if (collector instanceof SimpleFieldCollector) {
-                hybridSortedTopDocCollectors.add((SimpleFieldCollector) collector);
-            } else if (collector instanceof PagingFieldCollector) {
-                hybridSortedTopDocCollectors.add((PagingFieldCollector) collector);
-            } else if (collector instanceof FilteredCollector
-                    && ((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector) {
+            } else if (collector instanceof HybridTopFieldDocSortCollector) {
+                hybridSortedTopDocCollectors.add((HybridTopFieldDocSortCollector) collector);
+            } else if (collector instanceof FilteredCollector && ((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector) {
                 hybridTopScoreDocCollectors.add((HybridTopScoreDocCollector) ((FilteredCollector) collector).getCollector());
-            } else if (collector instanceof FilteredCollector
-                    && ((FilteredCollector) collector).getCollector() instanceof SimpleFieldCollector) {
-                hybridSortedTopDocCollectors.add((SimpleFieldCollector) ((FilteredCollector) collector).getCollector());
-            } else if (collector instanceof FilteredCollector
-                    && ((FilteredCollector) collector).getCollector() instanceof PagingFieldCollector) {
-                hybridSortedTopDocCollectors.add((PagingFieldCollector) ((FilteredCollector) collector).getCollector());
+            } else if (collector instanceof FilteredCollector && ((FilteredCollector) collector).getCollector() instanceof HybridTopFieldDocSortCollector) {
+                hybridSortedTopDocCollectors.add((HybridTopFieldDocSortCollector) ((FilteredCollector) collector).getCollector());
             }
         }
 
