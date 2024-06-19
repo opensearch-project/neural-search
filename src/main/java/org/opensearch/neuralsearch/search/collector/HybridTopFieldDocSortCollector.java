@@ -63,7 +63,6 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
     @Getter
     protected float maxScore = 0.0f;
     protected int[] collectedHits;
-    protected int numberOfSubQueries = 0;
     /*
        searchSortPartOfIndexSort is used to evaluate whether to perform index sort or not.
      */
@@ -130,7 +129,7 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
         }
 
         @Override
-        public void setScorer(Scorable scorer) throws IOException {
+        public void setScorer(final Scorable scorer) throws IOException {
             if (scorer instanceof HybridQueryScorer) {
                 log.debug("passed scorer is of type HybridQueryScorer, saving it for collecting documents and scores");
                 compoundQueryScorer = (HybridQueryScorer) scorer;
@@ -235,19 +234,18 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
         /*
         The method initializes once per search request.
          */
-        protected void initializePriorityQueuesWithComparators(LeafReaderContext context, int length) throws IOException {
+        protected void initializePriorityQueuesWithComparators(LeafReaderContext context, int numberOfSubQueries) throws IOException {
             if (compoundScores == null) {
-                numberOfSubQueries = length;
-                compoundScores = new FieldValueHitQueue[length];
-                comparators = new LeafFieldComparator[length];
-                queueFull = new boolean[length];
-                collectedHits = new int[length];
-                for (int i = 0; i < length; i++) {
+                compoundScores = new FieldValueHitQueue[numberOfSubQueries];
+                comparators = new LeafFieldComparator[numberOfSubQueries];
+                queueFull = new boolean[numberOfSubQueries];
+                collectedHits = new int[numberOfSubQueries];
+                for (int i = 0; i < numberOfSubQueries; i++) {
                     initializeLeafFieldComparators(context, i);
                 }
             }
             if (initializePerSegment) {
-                for (int i = 0; i < length; i++) {
+                for (int i = 0; i < numberOfSubQueries; i++) {
                     initializeComparators(context, i);
                 }
             } else {
