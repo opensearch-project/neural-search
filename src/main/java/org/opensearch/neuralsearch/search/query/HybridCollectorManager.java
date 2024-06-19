@@ -167,15 +167,15 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             } else if (collector instanceof PagingFieldCollector) {
                 hybridSortedTopDocCollectors.add((PagingFieldCollector) collector);
             } else if (collector instanceof FilteredCollector
-                && ((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector) {
-                    hybridTopScoreDocCollectors.add((HybridTopScoreDocCollector) ((FilteredCollector) collector).getCollector());
-                } else if (collector instanceof FilteredCollector
+                    && ((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector) {
+                hybridTopScoreDocCollectors.add((HybridTopScoreDocCollector) ((FilteredCollector) collector).getCollector());
+            } else if (collector instanceof FilteredCollector
                     && ((FilteredCollector) collector).getCollector() instanceof SimpleFieldCollector) {
-                        hybridSortedTopDocCollectors.add((SimpleFieldCollector) ((FilteredCollector) collector).getCollector());
-                    } else if (collector instanceof FilteredCollector
-                        && ((FilteredCollector) collector).getCollector() instanceof PagingFieldCollector) {
-                            hybridSortedTopDocCollectors.add((PagingFieldCollector) ((FilteredCollector) collector).getCollector());
-                        }
+                hybridSortedTopDocCollectors.add((SimpleFieldCollector) ((FilteredCollector) collector).getCollector());
+            } else if (collector instanceof FilteredCollector
+                    && ((FilteredCollector) collector).getCollector() instanceof PagingFieldCollector) {
+                hybridSortedTopDocCollectors.add((PagingFieldCollector) ((FilteredCollector) collector).getCollector());
+            }
         }
 
         if (!hybridTopScoreDocCollectors.isEmpty()) {

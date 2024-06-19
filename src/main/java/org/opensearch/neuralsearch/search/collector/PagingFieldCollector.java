@@ -5,13 +5,11 @@
 package org.opensearch.neuralsearch.search.collector;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.Objects;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.Sort;
-import org.apache.lucene.search.TopFieldDocs;
 import org.opensearch.common.Nullable;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
@@ -22,14 +20,12 @@ import org.opensearch.neuralsearch.search.HitsThresholdChecker;
  */
 public class PagingFieldCollector extends HybridTopFieldDocSortCollector {
 
-    final Sort sort;
-    final int numHits;
-    final FieldDoc after;
+    private final Sort sort;
+    private final FieldDoc after;
 
     public PagingFieldCollector(int numHits, HitsThresholdChecker hitsThresholdChecker, Sort sort, @Nullable FieldDoc after) {
-        super(numHits, hitsThresholdChecker);
+        super(numHits, hitsThresholdChecker, sort);
         this.sort = sort;
-        this.numHits = numHits;
         this.after = after;
     }
 
@@ -85,9 +81,5 @@ public class PagingFieldCollector extends HybridTopFieldDocSortCollector {
                 return false;
             }
         };
-    }
-
-    public List<TopFieldDocs> topDocs() {
-        return super.topDocs(compoundScores, sort);
     }
 }

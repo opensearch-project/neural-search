@@ -5,12 +5,10 @@
 package org.opensearch.neuralsearch.search.collector;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.Objects;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.Sort;
-import org.apache.lucene.search.TopFieldDocs;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
 /*
@@ -18,13 +16,11 @@ import org.opensearch.neuralsearch.search.HitsThresholdChecker;
   It collects the list of TopFieldDocs.
  */
 public class SimpleFieldCollector extends HybridTopFieldDocSortCollector {
-    final Sort sort;
-    final int numHits;
+    private final Sort sort;
 
     public SimpleFieldCollector(int numHits, HitsThresholdChecker hitsThresholdChecker, Sort sort) {
-        super(numHits, hitsThresholdChecker);
+        super(numHits, hitsThresholdChecker, sort);
         this.sort = sort;
-        this.numHits = numHits;
     }
 
     @Override
@@ -46,7 +42,6 @@ public class SimpleFieldCollector extends HybridTopFieldDocSortCollector {
                     if (score == 0) {
                         continue;
                     }
-                    collectedHits[i]++;
                     maxScore = Math.max(score, maxScore);
                     if (queueFull[i]) {
                         if (thresholdCheck(doc, i)) {
@@ -54,15 +49,11 @@ public class SimpleFieldCollector extends HybridTopFieldDocSortCollector {
                         }
                         collectCompetitiveHit(doc, i);
                     } else {
+                        collectedHits[i]++;
                         collectHit(doc, collectedHits[i], i, score);
                     }
-
                 }
             }
         };
-    }
-
-    public List<TopFieldDocs> topDocs() {
-        return super.topDocs(compoundScores, sort);
     }
 }

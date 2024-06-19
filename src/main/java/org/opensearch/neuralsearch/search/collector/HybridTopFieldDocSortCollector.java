@@ -8,10 +8,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
 import java.util.Locale;
-import java.util.Arrays;
 import java.util.ArrayList;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.log4j.Log4j2;
@@ -42,45 +39,31 @@ import org.opensearch.neuralsearch.search.MultiLeafFieldComparator;
  */
 @Log4j2
 public abstract class HybridTopFieldDocSortCollector implements Collector {
-    /*
-      numhits maintain the size of the result to be collected.
-     */
-    final int numHits;
-    /*
-      hitsThresholdChecker is used to get score mode and check the threshold for collecting the hits.
-     */
-    final HitsThresholdChecker hitsThresholdChecker;
-    /*
-      docBase holds the starting point of doc Iteration in the segment.
-     */
-    int docBase;
-    /*
-      comparators collect the value of the field on which sorting criteria is applied and returns the result accordingly.
-     */
-    LeafFieldComparator comparators[];
+    private final int numHits;
+    private final HitsThresholdChecker hitsThresholdChecker;
+    private final Sort sort;
+    private FieldComparator<?> firstComparator;
+    private FieldValueHitQueue.Entry bottom = null;
+    @Getter
+    private int totalHits;
+    protected int docBase;
+    protected LeafFieldComparator comparators[];
+    @Getter
+    @Setter
+    private TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
     /*
       reverseMul is used to set the direction of the sorting when creating comparators.
       In threshold check reverseMul is used in comparison logic.
       It modifies the comparison of either reverse or maintain the natural order depending on its value.
       This ensures that the compareBottom method adjusts the order based on whether you want ascending or descending sorting.
      */
-    int reverseMul;
-    FieldComparator<?> firstComparator;
-    FieldValueHitQueue.Entry bottom = null;
-    /*
-      List of Priority Queues to hold entries which has higher score but sorted as per the sorting criteria.
-     */
-    FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores;
-    boolean queueFull[];
+    protected int reverseMul;
+    protected FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores;
+    protected boolean queueFull[];
     @Getter
-    private int totalHits;
-    @Getter
-    float maxScore = 0.0f;
-    int[] collectedHits;
-    int numberOfSubQueries = 0;
-    @Getter
-    @Setter
-    private TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
+    protected float maxScore = 0.0f;
+    protected int[] collectedHits;
+    protected int numberOfSubQueries = 0;
     /*
        searchSortPartOfIndexSort is used to evaluate whether to perform index sort or not.
      */
@@ -97,77 +80,48 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
     // internal versions. If someone will define a constructor with any other
     // visibility, then anyone will be able to extend the class, which is not what
     // we want.
-    public HybridTopFieldDocSortCollector(final int numHits, final HitsThresholdChecker hitsThresholdChecker) {
+    HybridTopFieldDocSortCollector(final int numHits, final HitsThresholdChecker hitsThresholdChecker, final Sort sort) {
         this.numHits = numHits;
         this.hitsThresholdChecker = hitsThresholdChecker;
+        this.sort = sort;
     }
 
-    // Add the entry in the Priority queue
-    private void add(int slot, int doc, FieldValueHitQueue<FieldValueHitQueue.Entry> compoundScore, int subQueryNumber, float score) {
-        FieldValueHitQueue.Entry bottomEntry = new FieldValueHitQueue.Entry(slot, docBase + doc);
-        bottomEntry.score = score;
-        bottom = compoundScore.add(bottomEntry);
-        // The queue is full either when totalHits == numHits (in SimpleFieldCollector), in which case
-        // slot = totalHits - 1, or when hitsCollected == numHits (in PagingFieldCollector this is hits
-        // on the current page) and slot = hitsCollected - 1.
-        assert slot < numHits;
-        queueFull[subQueryNumber] = slot == numHits - 1;
-    }
-
-    private void updateBottom(int doc, FieldValueHitQueue<FieldValueHitQueue.Entry> compoundScore) {
-        bottom.doc = docBase + doc;
-        bottom = compoundScore.updateTop();
-    }
-
-    private boolean canEarlyTerminate(Sort searchSort, Sort indexSort) {
-        return canEarlyTerminateOnDocId(searchSort) || canEarlyTerminateOnPrefix(searchSort, indexSort);
-    }
-
-    private boolean canEarlyTerminateOnDocId(Sort searchSort) {
-        final SortField[] fields1 = searchSort.getSort();
-        return SortField.FIELD_DOC.equals(fields1[0]);
-    }
-
-    private boolean canEarlyTerminateOnPrefix(Sort searchSort, Sort indexSort) {
-        if (indexSort != null) {
-            final SortField[] fields1 = searchSort.getSort();
-            final SortField[] fields2 = indexSort.getSort();
-            // early termination is possible if fields1 is a prefix of fields2
-            if (fields1.length > fields2.length) {
-                return false;
-            }
-            return Arrays.asList(fields1).equals(Arrays.asList(fields2).subList(0, fields1.length));
-        } else {
-            return false;
-        }
-    }
-
-    public List<TopFieldDocs> topDocs(final FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores, final Sort sort) {
+    /**
+     * HybridCollectorManager fetches the topDocs in the reduce method.
+     * @return List of TopFieldDocs which represents results of Top Docs of individual subquery.
+     */
+    public List<TopFieldDocs> topDocs() {
         if (compoundScores == null) {
             return new ArrayList<>();
         }
-        final List<TopFieldDocs> topFieldDocs = IntStream.range(0, compoundScores.length)
-            .mapToObj(
-                i -> topDocsPerQuery(
+
+        List<TopFieldDocs> topFieldDocs = new ArrayList<>();
+        for (int subQueryNumber = 0; subQueryNumber < compoundScores.length; subQueryNumber++) {
+            topFieldDocs.add(
+                topDocsPerQuery(
                     0,
-                    Math.min(collectedHits[i], compoundScores[i].size()),
-                    compoundScores[i],
-                    collectedHits[i],
+                    Math.min(collectedHits[subQueryNumber], compoundScores[subQueryNumber].size()),
+                    compoundScores[subQueryNumber],
+                    collectedHits[subQueryNumber],
                     sort.getSort()
                 )
-            )
-            .collect(Collectors.toList());
+            );
+        }
         return topFieldDocs;
     }
 
-    public abstract class HybridTopDocSortLeafCollector implements LeafCollector {
-        HybridQueryScorer compoundQueryScorer;
-        boolean collectedAllCompetitiveHits = false;
+    @Override
+    public ScoreMode scoreMode() {
+        return hitsThresholdChecker.scoreMode();
+    }
 
+    protected abstract class HybridTopDocSortLeafCollector implements LeafCollector {
+        protected HybridQueryScorer compoundQueryScorer;
+        private boolean collectedAllCompetitiveHits = false;
         @Nullable
-        FieldDoc after;
-        final Sort sort;
-        boolean initializePerSegment;
+        private FieldDoc after;
+        private final Sort sort;
+        private boolean initializePerSegment;
 
         public HybridTopDocSortLeafCollector(Sort sort, @Nullable FieldDoc after) {
             this.sort = sort;
@@ -214,9 +168,67 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
         }
 
         /*
+        Increment total hit count and validate if threshold is reached.
+         */
+        protected void incrementTotalHitCount() throws IOException {
+            totalHits++;
+            hitsThresholdChecker.incrementHitCount();
+            if (scoreMode().isExhaustive() == false
+                && getTotalHitsRelation() == TotalHits.Relation.EQUAL_TO
+                && hitsThresholdChecker.isThresholdReached()) {
+                // for the first time hitsThreshold is reached, notify all comparators about this
+                for (LeafFieldComparator comparator : comparators) {
+                    comparator.setHitsThresholdReached();
+                }
+                setTotalHitsRelation(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO);
+            }
+        }
+
+        /*
+        Collect hit and add the value of the sort field in the comparator.
+         */
+        protected void collectHit(int doc, int hitsCollected, int subQueryNumber, float score) throws IOException {
+            // Startup transient: queue hasn't gathered numHits yet
+            int slot = hitsCollected - 1;
+            // Copy hit into queue
+            comparators[subQueryNumber].copy(slot, doc);
+            add(slot, doc, compoundScores[subQueryNumber], subQueryNumber, score);
+            if (queueFull[subQueryNumber]) {
+                comparators[subQueryNumber].setBottom(bottom.slot);
+            }
+        }
+
+        /*
+        // This hit is competitive - replace bottom element in queue & adjustTop
+         */
+        protected void collectCompetitiveHit(int doc, int subQueryNumber) throws IOException {
+            comparators[subQueryNumber].copy(bottom.slot, doc);
+            updateBottom(doc, compoundScores[subQueryNumber]);
+            comparators[subQueryNumber].setBottom(bottom.slot);
+        }
+
+        protected boolean thresholdCheck(int doc, int subQueryNumber) throws IOException {
+            if (collectedAllCompetitiveHits || reverseMul * comparators[subQueryNumber].compareBottom(doc) <= 0) {
+                // since docs are visited in doc Id order, if compare is 0, it means
+                // this document is larger than anything else in the queue, and
+                // therefore not competitive.
+                if (searchSortPartOfIndexSort) {
+                    if (hitsThresholdChecker.isThresholdReached()) {
+                        setTotalHitsRelation(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO);
+                        throw new CollectionTerminatedException();
+                    } else {
+                        collectedAllCompetitiveHits = true;
+                    }
+                }
+                return true;
+            }
+            return false;
+        }
+
+        /*
         The method initializes once per search request.
          */
-        void initializePriorityQueuesWithComparators(LeafReaderContext context, int length) throws IOException {
+        protected void initializePriorityQueuesWithComparators(LeafReaderContext context, int length) throws IOException {
             if (compoundScores == null) {
                 numberOfSubQueries = length;
                 compoundScores = new FieldValueHitQueue[length];
@@ -283,76 +295,12 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
                 fieldComparator.setTopValue(after.fields[k]);
             }
         }
-
-        /*
-        Increment total hit count and validate if threshold is reached.
-         */
-        void incrementTotalHitCount() throws IOException {
-            totalHits++;
-            hitsThresholdChecker.incrementHitCount();
-            if (scoreMode().isExhaustive() == false
-                && getTotalHitsRelation() == TotalHits.Relation.EQUAL_TO
-                && hitsThresholdChecker.isThresholdReached()) {
-                // for the first time hitsThreshold is reached, notify all comparators about this
-                for (LeafFieldComparator comparator : comparators) {
-                    comparator.setHitsThresholdReached();
-                }
-                setTotalHitsRelation(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO);
-            }
-        }
-
-        /*
-        Collect hit and add the value of the sort field in the comparator.
-         */
-        void collectHit(int doc, int hitsCollected, int subQueryNumber, float score) throws IOException {
-            // Startup transient: queue hasn't gathered numHits yet
-            int slot = hitsCollected - 1;
-            // Copy hit into queue
-            comparators[subQueryNumber].copy(slot, doc);
-            add(slot, doc, compoundScores[subQueryNumber], subQueryNumber, score);
-            if (queueFull[subQueryNumber]) {
-                comparators[subQueryNumber].setBottom(bottom.slot);
-            }
-        }
-
-        /*
-        // This hit is competitive - replace bottom element in queue & adjustTop
-         */
-        void collectCompetitiveHit(int doc, int subQueryNumber) throws IOException {
-            comparators[subQueryNumber].copy(bottom.slot, doc);
-            updateBottom(doc, compoundScores[subQueryNumber]);
-            comparators[subQueryNumber].setBottom(bottom.slot);
-        }
-
-        boolean thresholdCheck(int doc, int subQueryNumber) throws IOException {
-            if (collectedAllCompetitiveHits || reverseMul * comparators[subQueryNumber].compareBottom(doc) <= 0) {
-                // since docs are visited in doc Id order, if compare is 0, it means
-                // this document is larger than anything else in the queue, and
-                // therefore not competitive.
-                if (searchSortPartOfIndexSort) {
-                    if (hitsThresholdChecker.isThresholdReached()) {
-                        setTotalHitsRelation(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO);
-                        throw new CollectionTerminatedException();
-                    } else {
-                        collectedAllCompetitiveHits = true;
-                    }
-                }
-                return true;
-            }
-            return false;
-        }
-
-    }
-
-    @Override
-    public ScoreMode scoreMode() {
-        return hitsThresholdChecker.scoreMode();
     }
 
     /*
-      TopFieldDocs per subquery
-     */
-    protected TopFieldDocs topDocsPerQuery(
+     TopFieldDocs per subquery
+    */
+    private TopFieldDocs topDocsPerQuery(
         int start,
         int howMany,
         PriorityQueue<FieldValueHitQueue.Entry> pq,
@@ -392,7 +340,7 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
     /*
       Results are converted in the FieldDocs and the value of the field on which the sorting is applied has been added in the FieldDoc.
      */
-    protected void populateResults(ScoreDoc[] results, int howMany, PriorityQueue<FieldValueHitQueue.Entry> pq) {
+    private void populateResults(ScoreDoc[] results, int howMany, PriorityQueue<FieldValueHitQueue.Entry> pq) {
         FieldValueHitQueue<FieldValueHitQueue.Entry> queue = (FieldValueHitQueue<FieldValueHitQueue.Entry>) pq;
         for (int i = howMany - 1; i >= 0 && pq.size() > 0; i--) {
             // adding to array if index is within [0..array_length - 1]
@@ -407,5 +355,50 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
                 results[i] = new FieldDoc(entry.doc, entry.score, fields);
             }
         }
+    }
+
+    // Add the entry in the Priority queue
+    private void add(int slot, int doc, FieldValueHitQueue<FieldValueHitQueue.Entry> compoundScore, int subQueryNumber, float score) {
+        FieldValueHitQueue.Entry bottomEntry = new FieldValueHitQueue.Entry(slot, docBase + doc);
+        bottomEntry.score = score;
+        bottom = compoundScore.add(bottomEntry);
+        // The queue is full either when totalHits == numHits (in SimpleFieldCollector), in which case
+        // slot = totalHits - 1, or when hitsCollected == numHits (in PagingFieldCollector this is hits
+        // on the current page) and slot = hitsCollected - 1.
+        assert slot < numHits;
+        queueFull[subQueryNumber] = slot == numHits - 1;
+    }
+
+    private void updateBottom(int doc, FieldValueHitQueue<FieldValueHitQueue.Entry> compoundScore) {
+        bottom.doc = docBase + doc;
+        bottom = compoundScore.updateTop();
+    }
+
+    private boolean canEarlyTerminate(Sort searchSort, Sort indexSort) {
+        return canEarlyTerminateOnDocId(searchSort) || canEarlyTerminateOnPrefix(searchSort, indexSort);
+    }
+
+    private boolean canEarlyTerminateOnDocId(Sort searchSort) {
+        final SortField[] fields1 = searchSort.getSort();
+        return SortField.FIELD_DOC.equals(fields1[0]);
+    }
+
+    private boolean canEarlyTerminateOnPrefix(Sort searchSort, Sort indexSort) {
+        if (indexSort != null) {
+            final SortField[] fields1 = searchSort.getSort();
+            final SortField[] fields2 = indexSort.getSort();
+            // early termination is possible if fields1 is a prefix of fields2
+            if (fields1.length > fields2.length) {
+                return false;
+            }
+            // Compare fields1 and the corresponding prefix of fields2
+            for (int i = 0; i < fields1.length; i++) {
+                if (!fields1[i].equals(fields2[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
     }
 }
