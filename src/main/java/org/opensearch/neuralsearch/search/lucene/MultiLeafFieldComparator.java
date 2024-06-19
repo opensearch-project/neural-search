@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.search;
+package org.opensearch.neuralsearch.search.lucene;
 
 import java.io.IOException;
 import org.apache.lucene.search.DocIdSetIterator;
@@ -44,14 +44,16 @@ public final class MultiLeafFieldComparator implements LeafFieldComparator {
 
     @Override
     public int compareBottom(int doc) throws IOException {
-        int cmp = firstReverseMul * firstComparator.compareBottom(doc);
-        if (cmp != 0) {
-            return cmp;
+        // Compare the first comparator's result with reverse multiplier
+        int comparison = firstReverseMul * firstComparator.compareBottom(doc);
+        if (comparison != 0) {
+            return comparison;
         }
+        // Loop through remaining comparators and compare
         for (int i = 1; i < comparators.length; ++i) {
-            cmp = reverseMul[i] * comparators[i].compareBottom(doc);
-            if (cmp != 0) {
-                return cmp;
+            comparison = reverseMul[i] * comparators[i].compareBottom(doc);
+            if (comparison != 0) {
+                return comparison;
             }
         }
         return 0;
@@ -59,14 +61,15 @@ public final class MultiLeafFieldComparator implements LeafFieldComparator {
 
     @Override
     public int compareTop(int doc) throws IOException {
-        int cmp = firstReverseMul * firstComparator.compareTop(doc);
-        if (cmp != 0) {
-            return cmp;
+        // Compare the first comparator's result with reverse multiplier
+        int comparison = firstReverseMul * firstComparator.compareTop(doc);
+        if (comparison != 0) {
+            return comparison;
         }
         for (int i = 1; i < comparators.length; ++i) {
-            cmp = reverseMul[i] * comparators[i].compareTop(doc);
-            if (cmp != 0) {
-                return cmp;
+            comparison = reverseMul[i] * comparators[i].compareTop(doc);
+            if (comparison != 0) {
+                return comparison;
             }
         }
         return 0;

@@ -31,7 +31,7 @@ import org.apache.lucene.util.PriorityQueue;
 import org.opensearch.neuralsearch.query.HybridQueryScorer;
 import org.opensearch.common.Nullable;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
-import org.opensearch.neuralsearch.search.MultiLeafFieldComparator;
+import org.opensearch.neuralsearch.search.lucene.MultiLeafFieldComparator;
 
 /*
  Collects the TopFieldDocs after executing hybrid query. Uses HybridQueryTopDocs as DTO to handle each sub query results.
@@ -221,6 +221,7 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
                 if (searchSortPartOfIndexSort) {
                     if (hitsThresholdChecker.isThresholdReached()) {
                         setTotalHitsRelation(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO);
+                        log.info("Terminating collection as hits threshold is reached");
                         throw new CollectionTerminatedException();
                     } else {
                         collectedAllCompetitiveHits = true;

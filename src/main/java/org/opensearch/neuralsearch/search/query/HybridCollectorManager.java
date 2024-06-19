@@ -196,22 +196,9 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("cannot collect results of hybrid search query"));
 
-            SimpleFieldCollector simpleFieldCollector;
-            PagingFieldCollector pagingFieldCollector;
-            List<TopFieldDocs> topFieldDocs;
-            long maxTotalHits;
-            float maxScore;
-            if (hybridSortedTopScoreDocCollector instanceof SimpleFieldCollector) {
-                simpleFieldCollector = (SimpleFieldCollector) hybridSortedTopScoreDocCollector;
-                topFieldDocs = simpleFieldCollector.topDocs();
-                maxTotalHits = simpleFieldCollector.getTotalHits();
-                maxScore = simpleFieldCollector.getMaxScore();
-            } else {
-                pagingFieldCollector = (PagingFieldCollector) hybridSortedTopScoreDocCollector;
-                topFieldDocs = pagingFieldCollector.topDocs();
-                maxTotalHits = pagingFieldCollector.getTotalHits();
-                maxScore = pagingFieldCollector.getMaxScore();
-            }
+            List<TopFieldDocs> topFieldDocs = hybridSortedTopScoreDocCollector.topDocs();
+            long maxTotalHits = hybridSortedTopScoreDocCollector.getTotalHits();
+            float maxScore = hybridSortedTopScoreDocCollector.getMaxScore();
 
             TopDocs newTopDocs = getNewTopFieldDocs(
                 getTotalHits(this.trackTotalHitsUpTo, topFieldDocs, isSingleShard, maxTotalHits),

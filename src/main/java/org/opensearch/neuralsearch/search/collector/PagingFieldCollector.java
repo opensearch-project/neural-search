@@ -13,10 +13,10 @@ import org.apache.lucene.search.Sort;
 import org.opensearch.common.Nullable;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
-/*
-  PagingFieldCollector collects the sorted results at the shard level for every individual query
-  as per search_after criteria applied in the search request.
-  It collects the list of TopFieldDocs.
+/**
+ * PagingFieldCollector collects the sorted results at the shard level for every individual query
+ * as per search_after criteria applied in the search request.
+ * It collects the list of TopFieldDocs.
  */
 public final class PagingFieldCollector extends HybridTopFieldDocSortCollector {
 
