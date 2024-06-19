@@ -191,10 +191,14 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
             // Startup transient: queue hasn't gathered numHits yet
             int slot = hitsCollected - 1;
             // Copy hit into queue
-            comparators[subQueryNumber].copy(slot, doc);
-            add(slot, doc, compoundScores[subQueryNumber], subQueryNumber, score);
-            if (queueFull[subQueryNumber]) {
-                comparators[subQueryNumber].setBottom(bottom.slot);
+            if (numHits > 0) {
+                comparators[subQueryNumber].copy(slot, doc);
+                add(slot, doc, compoundScores[subQueryNumber], subQueryNumber, score);
+                if (queueFull[subQueryNumber]) {
+                    comparators[subQueryNumber].setBottom(bottom.slot);
+                }
+            } else {
+                queueFull[subQueryNumber] = true;
             }
         }
 
@@ -202,9 +206,12 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
         // This hit is competitive - replace bottom element in queue & adjustTop
          */
         protected void collectCompetitiveHit(int doc, int subQueryNumber) throws IOException {
-            comparators[subQueryNumber].copy(bottom.slot, doc);
-            updateBottom(doc, compoundScores[subQueryNumber]);
-            comparators[subQueryNumber].setBottom(bottom.slot);
+            // This hit is competitive - replace bottom element in queue & adjustTop
+            if (numHits > 0) {
+                comparators[subQueryNumber].copy(bottom.slot, doc);
+                updateBottom(doc, compoundScores[subQueryNumber]);
+                comparators[subQueryNumber].setBottom(bottom.slot);
+            }
         }
 
         protected boolean thresholdCheck(int doc, int subQueryNumber) throws IOException {
@@ -325,11 +332,6 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
 
         int size = howMany - start;
         ScoreDoc[] results = new ScoreDoc[size];
-        // pq's pop() returns the 'least' element in the queue, therefore need
-        // to discard the first ones, until we reach the requested range.
-        for (int i = pq.size() - start - size; i > 0; i--) {
-            pq.pop();
-        }
 
         // Get the requested results from pq.
         populateResults(results, size, pq);
