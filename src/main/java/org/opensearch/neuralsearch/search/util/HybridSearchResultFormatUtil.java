@@ -73,12 +73,6 @@ public class HybridSearchResultFormatUtil {
     /**
      * This method is for creating dummy sort object for the field docs having magic number scores which acts as delimiters.
      *  The sort object should be in the same type of the field on which sorting criteria is applied.
-     *  Example: Lets consider there are 2 sort fields on which the sort criteria has to be applied.
-     *  <docId, MAGIC_NUMBER_START_STOP, ShardId, [1,1]>
-     *  <docId, MAGIC_NUMBER_DELIMITER, ShardId, [1,1]>
-     *   `
-     *   `
-     *  <docId, MAGIC_NUMBER_START_STOP, ShardId, [1,1]>  `
      * @param fields contains the information about the object type of the field on which sorting criteria is applied
      * @return
      */
@@ -91,6 +85,12 @@ public class HybridSearchResultFormatUtil {
             if (sortField instanceof SortedNumericSortField) {
                 type = ((SortedNumericSortField) sortField).getNumericType();
             }
+            // Example: Lets consider there are 2 sort fields on which the sort criteria has to be applied.
+            // <docId, MAGIC_NUMBER_START_START, ShardId, [1,1]>
+            // <docId, MAGIC_NUMBER_DELIMITER, ShardId, [1,1]>
+            // ...
+            // <docId, MAGIC_NUMBER_DELIMITER, ShardId, [1,1]>
+            // <docId, MAGIC_NUMBER_START_STOP, ShardId, [1,1]> `
             switch (type) {
                 case DOC:
                 case INT:

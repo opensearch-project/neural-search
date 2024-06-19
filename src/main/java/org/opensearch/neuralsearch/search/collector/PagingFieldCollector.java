@@ -49,13 +49,21 @@ public final class PagingFieldCollector extends HybridTopFieldDocSortCollector {
                         continue;
                     }
 
+                    // if queueFull[i] is true then it indicates
+                    // that we have found the results equal to the size sent in the search request.
                     if (queueFull[i]) {
+                        // If threshold is reached then return. Default value of threshold is 10000.
                         if (thresholdCheck(doc, i)) {
                             return;
                         }
                     }
 
-                    // logic for search_after
+                    // Lets understand the below logic with example
+                    // Consider there are 30 results without applying `search_after`
+                    // and out of 30, 10 are the results user is seeking after applying `search_after`
+                    // Therefore when those 10 results are collected the resultsFoundOnPreviousPage.
+                    // the search_after parameter to retrieve the next page of hits using a set of sort values from the previous page.
+                    // https://opensearch.org/docs/latest/search-plugins/searching-data/paginate/#the-search_after-parameter
                     boolean resultsFoundOnPreviousPage = checkIfSearchAfterResultsAreFound(i, doc);
                     if (resultsFoundOnPreviousPage) {
                         return;
@@ -72,9 +80,17 @@ public final class PagingFieldCollector extends HybridTopFieldDocSortCollector {
 
             }
 
+            /**
+             * It compares reverseMultiplier with the topValue in the comparator to determine
+             * if the document should be included based on its position relative to the previous top value.
+             * @param subQueryNumber
+             * @param doc
+             * @return
+             * @throws IOException
+             */
             private boolean checkIfSearchAfterResultsAreFound(int subQueryNumber, int doc) throws IOException {
-                final int topCmp = reverseMul * comparators[subQueryNumber].compareTop(doc);
-                if (topCmp > 0 || (topCmp == 0 && doc <= afterDoc)) {
+                final int topComparison = reverseMul * comparators[subQueryNumber].compareTop(doc);
+                if (topComparison > 0 || (topComparison == 0 && doc <= afterDoc)) {
                     // Already collected on a previous page
                     return true;
                 }
