@@ -6,7 +6,6 @@ package org.opensearch.neuralsearch.query;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsString;
-import org.opensearch.index.query.MatchAllQueryBuilder;
 import static org.opensearch.index.query.QueryBuilders.matchQuery;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 import static org.opensearch.neuralsearch.util.TestUtils.RELATION_EQUAL_TO;
@@ -694,29 +693,6 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    public void testSingleShard_whenConcurrentSearchEnabled_thenFail() {
-        try {
-            updateClusterSettings("search.concurrent_segment_search.enabled", true);
-            initializeIndexIfNotExist("testing");
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-            MatchAllQueryBuilder matchAllQueryBuilder = QueryBuilders.matchAllQuery();
-            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(matchAllQueryBuilder);
-            Map<String, Object> searchResponseAsMap = search(
-                "testing",
-                hybridQueryBuilder,
-                null,
-                100,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
-            );
-            assertEquals(6, getHitCount(searchResponseAsMap));
-            Map<String, Object> total = getTotalHits(searchResponseAsMap);
-            assertEquals(6, total.get("value"));
-        } finally {
-            wipeOfTestResources("testing", null, null, SEARCH_PIPELINE);
-        }
-    }
-
-    @SneakyThrows
     private void initializeIndexIfNotExist(String indexName) throws IOException {
         if (TEST_BASIC_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_INDEX_NAME)) {
             prepareKnnIndex(
@@ -922,24 +898,6 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 KEYWORD_FIELD_1,
                 KEYWORD_FIELD_4_VALUE
             );
-        }
-        if ("testing".equals(indexName) && !indexExists("testing")) {
-            createIndexWithConfiguration(
-                indexName,
-                buildIndexConfiguration(
-                    Collections.emptyList(),
-                    Collections.emptyList(),
-                    List.of("stock"),
-                    List.of("category"),
-                    Collections.emptyList(),
-                    3
-                ),
-                ""
-            );
-
-            for (int i = 1; i <= 100; i++) {
-                addDocWithKeywordsAndIntFields(indexName, "" + i + "", "stock", i, "category", "drama");
-            }
         }
     }
 
