@@ -248,7 +248,6 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
                 for (int i = 0; i < numberOfSubQueries; i++) {
                     initializeComparators(context, i);
                 }
-            } else {
                 initializePerSegment = false;
             }
         }
