@@ -11,9 +11,9 @@ import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.Sort;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
-/**
- * SimpleFieldCollector collects the sorted results at the shard level for every individual query.
- * It collects the list of TopFieldDocs.
+/*
+  SimpleFieldCollector collects the sorted results at the shard level for every individual query.
+  It collects the list of TopFieldDocs.
  */
 public final class SimpleFieldCollector extends HybridTopFieldDocSortCollector {
     private final Sort sort;
