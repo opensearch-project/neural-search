@@ -120,12 +120,19 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
         @Nullable
         private FieldDoc after;
         private final Sort sort;
-        private boolean initializePerSegment;
+
+        /**
+         1. initializeComparators method needs to be initialized once per shard.
+         2. Also, after initializing for every segment the comparators has to be refreshed.
+        Therefore, to do the above two things lazily we have to use a flag initializeComparatorsPerSegmentwhich is set to true when a leafCollector is initialized per segment.
+        Later, in the collect method when number of sub-queries has been found then initialize the comparators(1) or (2) refresh the comparators and set the flag to false.
+        */
+        private boolean initializeComparatorsPerSegment;
 
         public HybridTopDocSortLeafCollector(Sort sort, @Nullable FieldDoc after) {
             this.sort = sort;
             this.after = after;
-            this.initializePerSegment = true;
+            this.initializeComparatorsPerSegment = true;
         }
 
         @Override
@@ -245,11 +252,11 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
                     initializeLeafFieldComparators(context, i);
                 }
             }
-            if (initializePerSegment) {
+            if (initializeComparatorsPerSegment) {
                 for (int i = 0; i < numberOfSubQueries; i++) {
                     initializeComparators(context, i);
                 }
-                initializePerSegment = false;
+                initializeComparatorsPerSegment = false;
             }
         }
 
