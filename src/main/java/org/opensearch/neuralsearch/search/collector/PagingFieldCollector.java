@@ -19,13 +19,10 @@ import org.opensearch.neuralsearch.search.HitsThresholdChecker;
  * It collects the list of TopFieldDocs.
  */
 public final class PagingFieldCollector extends HybridTopFieldDocSortCollector {
-
-    private final Sort sort;
     private final FieldDoc after;
 
     public PagingFieldCollector(int numHits, HitsThresholdChecker hitsThresholdChecker, Sort sort, @Nullable FieldDoc after) {
         super(numHits, hitsThresholdChecker, sort);
-        this.sort = sort;
         this.after = after;
     }
 
@@ -33,7 +30,7 @@ public final class PagingFieldCollector extends HybridTopFieldDocSortCollector {
     public LeafCollector getLeafCollector(LeafReaderContext context) {
         docBase = context.docBase;
         final int afterDoc = after.doc - docBase;
-        return new HybridTopDocSortLeafCollector(sort, after) {
+        return new HybridTopDocSortLeafCollector(after) {
             @Override
             public void collect(int doc) throws IOException {
                 if (Objects.isNull(compoundQueryScorer)) {

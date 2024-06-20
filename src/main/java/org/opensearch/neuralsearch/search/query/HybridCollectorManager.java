@@ -320,14 +320,16 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 return new TopFieldDocs(totalHits, fieldDocs, sortFields);
             }
             // format scores using following template:
-            // doc_id | magic_number_1
-            // doc_id | magic_number_2
+            // consider the sort is applied for two fields.
+            // consider field1 type is integer and field2 type is float.
+            // doc_id | magic_number_1 | [1,1.0f]
+            // doc_id | magic_number_2 | [1,1.0f]
             // ...
-            // doc_id | magic_number_2
+            // doc_id | magic_number_2 | [1,1.0f]
             // ...
-            // doc_id | magic_number_2
+            // doc_id | magic_number_2 | [1,1.0f]
             // ...
-            // doc_id | magic_number_1
+            // doc_id | magic_number_1 | [1,1.0f]
 
             final Object[] sortFieldsForDelimiterResults = createSortFieldsForDelimiterResults(sortFields);
             List<FieldDoc> result = new ArrayList<>();

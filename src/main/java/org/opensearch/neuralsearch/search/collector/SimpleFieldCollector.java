@@ -16,18 +16,16 @@ import org.opensearch.neuralsearch.search.HitsThresholdChecker;
   It collects the list of TopFieldDocs.
  */
 public final class SimpleFieldCollector extends HybridTopFieldDocSortCollector {
-    private final Sort sort;
 
     public SimpleFieldCollector(int numHits, HitsThresholdChecker hitsThresholdChecker, Sort sort) {
         super(numHits, hitsThresholdChecker, sort);
-        this.sort = sort;
     }
 
     @Override
     public LeafCollector getLeafCollector(LeafReaderContext context) {
         docBase = context.docBase;
 
-        return new HybridTopDocSortLeafCollector(sort, null) {
+        return new HybridTopDocSortLeafCollector(null) {
             @Override
             public void collect(int doc) throws IOException {
                 if (Objects.isNull(compoundQueryScorer)) {
