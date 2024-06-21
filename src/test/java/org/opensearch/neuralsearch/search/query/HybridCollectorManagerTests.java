@@ -20,6 +20,7 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.ScoreMode;
+import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.Query;
@@ -50,6 +51,8 @@ import java.util.Map;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createDelimiterElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.MAGIC_NUMBER_DELIMITER;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.MAGIC_NUMBER_START_STOP;
 
@@ -60,6 +63,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
     private static final String TEST_DOC_TEXT2 = "Hi to this place";
     private static final String TEST_DOC_TEXT3 = "We would like to welcome everyone";
     private static final String QUERY1 = "hello";
+    private static final String QUERY2 = "hi";
     private static final float DELTA_FOR_ASSERTION = 0.001f;
 
     @SneakyThrows
@@ -308,5 +312,460 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         w.close();
         reader.close();
         directory.close();
+    }
+
+    @SneakyThrows
+    public void testReduceWithConcurrentSegmentSearch_whenMultipleCollectorsMatchedDocs_thenSuccessful() {
+        SearchContext searchContext = mock(SearchContext.class);
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+
+        HybridQuery hybridQueryWithTerm = new HybridQuery(
+            List.of(
+                QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1).toQuery(mockQueryShardContext),
+                QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY2).toQuery(mockQueryShardContext)
+            )
+        );
+        when(searchContext.query()).thenReturn(hybridQueryWithTerm);
+        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+        IndexReader indexReader = mock(IndexReader.class);
+        when(indexReader.numDocs()).thenReturn(2);
+        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
+        when(searchContext.searcher()).thenReturn(indexSearcher);
+        when(searchContext.size()).thenReturn(1);
+
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
+        when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
+        when(searchContext.shouldUseConcurrentSearch()).thenReturn(true);
+
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+
+        Directory directory = newDirectory();
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
+        ft.setOmitNorms(random().nextBoolean());
+        ft.freeze();
+
+        int docId1 = RandomizedTest.randomInt();
+        int docId2 = RandomizedTest.randomInt();
+        int docId3 = RandomizedTest.randomInt();
+
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId1, TEST_DOC_TEXT1, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId3, TEST_DOC_TEXT3, ft));
+        w.flush();
+        w.commit();
+
+        SearchContext searchContext2 = mock(SearchContext.class);
+
+        ContextIndexSearcher indexSearcher2 = mock(ContextIndexSearcher.class);
+        IndexReader indexReader2 = mock(IndexReader.class);
+        when(indexReader2.numDocs()).thenReturn(1);
+        when(indexSearcher2.getIndexReader()).thenReturn(indexReader);
+        when(searchContext2.searcher()).thenReturn(indexSearcher2);
+        when(searchContext2.size()).thenReturn(1);
+
+        when(searchContext2.queryCollectorManagers()).thenReturn(new HashMap<>());
+        when(searchContext2.shouldUseConcurrentSearch()).thenReturn(true);
+
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+
+        Directory directory2 = newDirectory();
+        final IndexWriter w2 = new IndexWriter(directory2, newIndexWriterConfig(new MockAnalyzer(random())));
+        FieldType ft2 = new FieldType(TextField.TYPE_NOT_STORED);
+        ft2.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
+        ft2.setOmitNorms(random().nextBoolean());
+        ft2.freeze();
+
+        w2.addDocument(getDocument(TEXT_FIELD_NAME, docId2, TEST_DOC_TEXT2, ft));
+        w2.flush();
+        w2.commit();
+
+        IndexReader reader = DirectoryReader.open(w);
+        IndexSearcher searcher = newSearcher(reader);
+        IndexReader reader2 = DirectoryReader.open(w2);
+        IndexSearcher searcher2 = newSearcher(reader2);
+
+        CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
+        HybridTopScoreDocCollector collector1 = (HybridTopScoreDocCollector) hybridCollectorManager.newCollector();
+        HybridTopScoreDocCollector collector2 = (HybridTopScoreDocCollector) hybridCollectorManager.newCollector();
+
+        Weight weight1 = new HybridQueryWeight(hybridQueryWithTerm, searcher, ScoreMode.TOP_SCORES, BoostingQueryBuilder.DEFAULT_BOOST);
+        Weight weight2 = new HybridQueryWeight(hybridQueryWithTerm, searcher2, ScoreMode.TOP_SCORES, BoostingQueryBuilder.DEFAULT_BOOST);
+        collector1.setWeight(weight1);
+        collector2.setWeight(weight2);
+        LeafReaderContext leafReaderContext = searcher.getIndexReader().leaves().get(0);
+        LeafCollector leafCollector1 = collector1.getLeafCollector(leafReaderContext);
+
+        LeafReaderContext leafReaderContext2 = searcher2.getIndexReader().leaves().get(0);
+        LeafCollector leafCollector2 = collector2.getLeafCollector(leafReaderContext2);
+        BulkScorer scorer = weight1.bulkScorer(leafReaderContext);
+        scorer.score(leafCollector1, leafReaderContext.reader().getLiveDocs());
+        leafCollector1.finish();
+        BulkScorer scorer2 = weight2.bulkScorer(leafReaderContext2);
+        scorer2.score(leafCollector2, leafReaderContext2.reader().getLiveDocs());
+        leafCollector2.finish();
+
+        Object results = hybridCollectorManager.reduce(List.of(collector1, collector2));
+
+        assertNotNull(results);
+        ReduceableSearchResult reduceableSearchResult = ((ReduceableSearchResult) results);
+        QuerySearchResult querySearchResult = new QuerySearchResult();
+        reduceableSearchResult.reduce(querySearchResult);
+        TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
+
+        assertNotNull(topDocsAndMaxScore);
+        assertEquals(2, topDocsAndMaxScore.topDocs.totalHits.value);
+        assertEquals(TotalHits.Relation.EQUAL_TO, topDocsAndMaxScore.topDocs.totalHits.relation);
+        float maxScore = topDocsAndMaxScore.maxScore;
+        assertTrue(maxScore > 0);
+        ScoreDoc[] scoreDocs = topDocsAndMaxScore.topDocs.scoreDocs;
+        assertEquals(6, scoreDocs.length);
+        assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[0].score, DELTA_FOR_ASSERTION);
+        assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[1].score, DELTA_FOR_ASSERTION);
+        assertTrue(scoreDocs[2].score > 0);
+        assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[3].score, DELTA_FOR_ASSERTION);
+        assertTrue(scoreDocs[4].score > 0);
+
+        assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[5].score, DELTA_FOR_ASSERTION);
+        // we have to assert that one of hits is max score because scores are generated for each run and order is not guaranteed
+        assertTrue(Float.compare(scoreDocs[2].score, maxScore) == 0 || Float.compare(scoreDocs[4].score, maxScore) == 0);
+
+        w.close();
+        reader.close();
+        directory.close();
+        w2.close();
+        reader2.close();
+        directory2.close();
+    }
+
+    @SneakyThrows
+    public void testMergeScoreDocs_whenBothTopDocsHasHits_thenSuccessful() {
+        SearchContext searchContext = mock(SearchContext.class);
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+
+        HybridQuery hybridQueryWithTerm = new HybridQuery(
+            List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1).toQuery(mockQueryShardContext))
+        );
+        when(searchContext.query()).thenReturn(hybridQueryWithTerm);
+        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+        IndexReader indexReader = mock(IndexReader.class);
+        when(indexReader.numDocs()).thenReturn(3);
+        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
+        when(searchContext.searcher()).thenReturn(indexSearcher);
+        when(searchContext.size()).thenReturn(1);
+
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
+        when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
+        when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
+
+        HybridCollectorManager hybridCollectorManager = (HybridCollectorManager) HybridCollectorManager.createHybridCollectorManager(
+            searchContext
+        );
+
+        TopDocs topDocsOriginal = new TopDocs(
+            new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+
+            new ScoreDoc[] {
+                createStartStopElementForHybridSearchResults(0),
+                createDelimiterElementForHybridSearchResults(0),
+                new ScoreDoc(0, 0.5f),
+                new ScoreDoc(2, 0.3f),
+                createDelimiterElementForHybridSearchResults(0),
+                createStartStopElementForHybridSearchResults(0) }
+
+        );
+        TopDocsAndMaxScore topDocsAndMaxScoreOriginal = new TopDocsAndMaxScore(topDocsOriginal, 0.5f);
+        TopDocs topDocsNew = new TopDocs(
+            new TotalHits(4, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO),
+
+            new ScoreDoc[] {
+                createStartStopElementForHybridSearchResults(2),
+                createDelimiterElementForHybridSearchResults(2),
+                new ScoreDoc(1, 0.7f),
+                new ScoreDoc(4, 0.3f),
+                new ScoreDoc(5, 0.05f),
+                createDelimiterElementForHybridSearchResults(2),
+                new ScoreDoc(4, 0.6f),
+                createStartStopElementForHybridSearchResults(2) }
+        );
+        TopDocsAndMaxScore topDocsAndMaxScoreNew = new TopDocsAndMaxScore(topDocsNew, 0.7f);
+        TopDocsAndMaxScore mergedTopDocsAndMaxScore = hybridCollectorManager.mergeTopDocsAndMaxScores(
+            topDocsAndMaxScoreOriginal,
+            topDocsAndMaxScoreNew
+        );
+
+        assertNotNull(mergedTopDocsAndMaxScore);
+
+        assertEquals(0.7f, mergedTopDocsAndMaxScore.maxScore, DELTA_FOR_ASSERTION);
+        assertEquals(6, mergedTopDocsAndMaxScore.topDocs.totalHits.value);
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, mergedTopDocsAndMaxScore.topDocs.totalHits.relation);
+        // expected number of rows is 5 from sub-query1 and 1 from sub-query2, plus 2 start-stop elements + 2 delimiters
+        // 5 + 1 + 2 + 2 = 10
+        assertEquals(10, mergedTopDocsAndMaxScore.topDocs.scoreDocs.length);
+        // check format, all elements one by one
+        ScoreDoc[] scoreDocs = mergedTopDocsAndMaxScore.topDocs.scoreDocs;
+        assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[0].score, 0);
+        assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[1].score, 0);
+        assertScoreDoc(scoreDocs[2], 1, 0.7f);
+        assertScoreDoc(scoreDocs[3], 0, 0.5f);
+        assertScoreDoc(scoreDocs[4], 2, 0.3f);
+        assertScoreDoc(scoreDocs[5], 4, 0.3f);
+        assertScoreDoc(scoreDocs[6], 5, 0.05f);
+        assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[7].score, 0);
+        assertScoreDoc(scoreDocs[8], 4, 0.6f);
+        assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[9].score, 0);
+    }
+
+    @SneakyThrows
+    public void testMergeScoreDocs_whenOneTopDocsHasHitsAndOtherIsEmpty_thenSuccessful() {
+        SearchContext searchContext = mock(SearchContext.class);
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+
+        HybridQuery hybridQueryWithTerm = new HybridQuery(
+            List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1).toQuery(mockQueryShardContext))
+        );
+        when(searchContext.query()).thenReturn(hybridQueryWithTerm);
+        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+        IndexReader indexReader = mock(IndexReader.class);
+        when(indexReader.numDocs()).thenReturn(3);
+        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
+        when(searchContext.searcher()).thenReturn(indexSearcher);
+        when(searchContext.size()).thenReturn(1);
+
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
+        when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
+        when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
+
+        HybridCollectorManager hybridCollectorManager = (HybridCollectorManager) HybridCollectorManager.createHybridCollectorManager(
+            searchContext
+        );
+
+        TopDocs topDocsOriginal = new TopDocs(
+            new TotalHits(0, TotalHits.Relation.EQUAL_TO),
+
+            new ScoreDoc[] {
+                createStartStopElementForHybridSearchResults(0),
+                createDelimiterElementForHybridSearchResults(0),
+                createDelimiterElementForHybridSearchResults(0),
+                createStartStopElementForHybridSearchResults(0) }
+
+        );
+        TopDocsAndMaxScore topDocsAndMaxScoreOriginal = new TopDocsAndMaxScore(topDocsOriginal, 0.5f);
+        TopDocs topDocsNew = new TopDocs(
+            new TotalHits(4, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO),
+
+            new ScoreDoc[] {
+                createStartStopElementForHybridSearchResults(2),
+                createDelimiterElementForHybridSearchResults(2),
+                new ScoreDoc(1, 0.7f),
+                new ScoreDoc(4, 0.3f),
+                new ScoreDoc(5, 0.05f),
+                createDelimiterElementForHybridSearchResults(2),
+                new ScoreDoc(4, 0.6f),
+                createStartStopElementForHybridSearchResults(2) }
+        );
+        TopDocsAndMaxScore topDocsAndMaxScoreNew = new TopDocsAndMaxScore(topDocsNew, 0.7f);
+        TopDocsAndMaxScore mergedTopDocsAndMaxScore = hybridCollectorManager.mergeTopDocsAndMaxScores(
+            topDocsAndMaxScoreOriginal,
+            topDocsAndMaxScoreNew
+        );
+
+        assertNotNull(mergedTopDocsAndMaxScore);
+
+        assertEquals(0.7f, mergedTopDocsAndMaxScore.maxScore, DELTA_FOR_ASSERTION);
+        assertEquals(4, mergedTopDocsAndMaxScore.topDocs.totalHits.value);
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, mergedTopDocsAndMaxScore.topDocs.totalHits.relation);
+        // expected number of rows is 3 from sub-query1 and 1 from sub-query2, plus 2 start-stop elements + 2 delimiters
+        // 3 + 1 + 2 + 2 = 8
+        assertEquals(8, mergedTopDocsAndMaxScore.topDocs.scoreDocs.length);
+        // check format, all elements one by one
+        ScoreDoc[] scoreDocs = mergedTopDocsAndMaxScore.topDocs.scoreDocs;
+        assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[0].score, 0);
+        assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[1].score, 0);
+        assertScoreDoc(scoreDocs[2], 1, 0.7f);
+        assertScoreDoc(scoreDocs[3], 4, 0.3f);
+        assertScoreDoc(scoreDocs[4], 5, 0.05f);
+        assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[5].score, 0);
+        assertScoreDoc(scoreDocs[6], 4, 0.6f);
+        assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[7].score, 0);
+    }
+
+    @SneakyThrows
+    public void testMergeScoreDocs_whenBothTopDocsHasNoHits_thenSuccessful() {
+        SearchContext searchContext = mock(SearchContext.class);
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+
+        HybridQuery hybridQueryWithTerm = new HybridQuery(
+            List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1).toQuery(mockQueryShardContext))
+        );
+        when(searchContext.query()).thenReturn(hybridQueryWithTerm);
+        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+        IndexReader indexReader = mock(IndexReader.class);
+        when(indexReader.numDocs()).thenReturn(3);
+        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
+        when(searchContext.searcher()).thenReturn(indexSearcher);
+        when(searchContext.size()).thenReturn(1);
+
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
+        when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
+        when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
+
+        HybridCollectorManager hybridCollectorManager = (HybridCollectorManager) HybridCollectorManager.createHybridCollectorManager(
+            searchContext
+        );
+
+        TopDocs topDocsOriginal = new TopDocs(
+            new TotalHits(0, TotalHits.Relation.EQUAL_TO),
+
+            new ScoreDoc[] {
+                createStartStopElementForHybridSearchResults(0),
+                createDelimiterElementForHybridSearchResults(0),
+                createDelimiterElementForHybridSearchResults(0),
+                createStartStopElementForHybridSearchResults(0) }
+
+        );
+        TopDocsAndMaxScore topDocsAndMaxScoreOriginal = new TopDocsAndMaxScore(topDocsOriginal, 0);
+        TopDocs topDocsNew = new TopDocs(
+            new TotalHits(0, TotalHits.Relation.EQUAL_TO),
+
+            new ScoreDoc[] {
+                createStartStopElementForHybridSearchResults(2),
+                createDelimiterElementForHybridSearchResults(2),
+                createDelimiterElementForHybridSearchResults(2),
+                createStartStopElementForHybridSearchResults(2) }
+        );
+        TopDocsAndMaxScore topDocsAndMaxScoreNew = new TopDocsAndMaxScore(topDocsNew, 0);
+        TopDocsAndMaxScore mergedTopDocsAndMaxScore = hybridCollectorManager.mergeTopDocsAndMaxScores(
+            topDocsAndMaxScoreOriginal,
+            topDocsAndMaxScoreNew
+        );
+
+        assertNotNull(mergedTopDocsAndMaxScore);
+
+        assertEquals(0f, mergedTopDocsAndMaxScore.maxScore, DELTA_FOR_ASSERTION);
+        assertEquals(0, mergedTopDocsAndMaxScore.topDocs.totalHits.value);
+        assertEquals(TotalHits.Relation.EQUAL_TO, mergedTopDocsAndMaxScore.topDocs.totalHits.relation);
+        assertEquals(4, mergedTopDocsAndMaxScore.topDocs.scoreDocs.length);
+        // check format, all elements one by one
+        ScoreDoc[] scoreDocs = mergedTopDocsAndMaxScore.topDocs.scoreDocs;
+        assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[0].score, 0);
+        assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[1].score, 0);
+        assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[2].score, 0);
+        assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[3].score, 0);
+    }
+
+    @SneakyThrows
+    public void testThreeSequentialMerges_whenAllTopDocsHasHits_thenSuccessful() {
+        SearchContext searchContext = mock(SearchContext.class);
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+
+        HybridQuery hybridQueryWithTerm = new HybridQuery(
+            List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1).toQuery(mockQueryShardContext))
+        );
+        when(searchContext.query()).thenReturn(hybridQueryWithTerm);
+        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+        IndexReader indexReader = mock(IndexReader.class);
+        when(indexReader.numDocs()).thenReturn(3);
+        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
+        when(searchContext.searcher()).thenReturn(indexSearcher);
+        when(searchContext.size()).thenReturn(1);
+
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
+        when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
+        when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
+
+        HybridCollectorManager hybridCollectorManager = (HybridCollectorManager) HybridCollectorManager.createHybridCollectorManager(
+            searchContext
+        );
+
+        TopDocs topDocsOriginal = new TopDocs(
+            new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+
+            new ScoreDoc[] {
+                createStartStopElementForHybridSearchResults(0),
+                createDelimiterElementForHybridSearchResults(0),
+                new ScoreDoc(0, 0.5f),
+                new ScoreDoc(2, 0.3f),
+                createDelimiterElementForHybridSearchResults(0),
+                createStartStopElementForHybridSearchResults(0) }
+
+        );
+        TopDocsAndMaxScore topDocsAndMaxScoreOriginal = new TopDocsAndMaxScore(topDocsOriginal, 0.5f);
+        TopDocs topDocsNew = new TopDocs(
+            new TotalHits(4, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO),
+
+            new ScoreDoc[] {
+                createStartStopElementForHybridSearchResults(2),
+                createDelimiterElementForHybridSearchResults(2),
+                new ScoreDoc(1, 0.7f),
+                new ScoreDoc(4, 0.3f),
+                new ScoreDoc(5, 0.05f),
+                createDelimiterElementForHybridSearchResults(2),
+                new ScoreDoc(4, 0.6f),
+                createStartStopElementForHybridSearchResults(2) }
+        );
+        TopDocsAndMaxScore topDocsAndMaxScoreNew = new TopDocsAndMaxScore(topDocsNew, 0.7f);
+        TopDocsAndMaxScore firstMergedTopDocsAndMaxScore = hybridCollectorManager.mergeTopDocsAndMaxScores(
+            topDocsAndMaxScoreOriginal,
+            topDocsAndMaxScoreNew
+        );
+
+        assertNotNull(firstMergedTopDocsAndMaxScore);
+
+        // merge results from collector 3
+        TopDocs topDocsThirdCollector = new TopDocs(
+            new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+
+            new ScoreDoc[] {
+                createStartStopElementForHybridSearchResults(3),
+                createDelimiterElementForHybridSearchResults(3),
+                new ScoreDoc(3, 0.4f),
+                createDelimiterElementForHybridSearchResults(3),
+                new ScoreDoc(7, 0.85f),
+                new ScoreDoc(9, 0.2f),
+                createStartStopElementForHybridSearchResults(3) }
+        );
+        TopDocsAndMaxScore topDocsAndMaxScoreThirdCollector = new TopDocsAndMaxScore(topDocsThirdCollector, 0.85f);
+        TopDocsAndMaxScore finalMergedTopDocsAndMaxScore = hybridCollectorManager.mergeTopDocsAndMaxScores(
+            firstMergedTopDocsAndMaxScore,
+            topDocsAndMaxScoreThirdCollector
+        );
+
+        assertEquals(0.85f, finalMergedTopDocsAndMaxScore.maxScore, DELTA_FOR_ASSERTION);
+        assertEquals(9, finalMergedTopDocsAndMaxScore.topDocs.totalHits.value);
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, finalMergedTopDocsAndMaxScore.topDocs.totalHits.relation);
+        // expected number of rows is 6 from sub-query1 and 3 from sub-query2, plus 2 start-stop elements + 2 delimiters
+        // 6 + 3 + 2 + 2 = 13
+        assertEquals(13, finalMergedTopDocsAndMaxScore.topDocs.scoreDocs.length);
+        // check format, all elements one by one
+        ScoreDoc[] scoreDocs = finalMergedTopDocsAndMaxScore.topDocs.scoreDocs;
+        assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[0].score, 0);
+        assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[1].score, 0);
+        assertScoreDoc(scoreDocs[2], 1, 0.7f);
+        assertScoreDoc(scoreDocs[3], 0, 0.5f);
+        assertScoreDoc(scoreDocs[4], 3, 0.4f);
+        assertScoreDoc(scoreDocs[5], 2, 0.3f);
+        assertScoreDoc(scoreDocs[6], 4, 0.3f);
+        assertScoreDoc(scoreDocs[7], 5, 0.05f);
+        assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[8].score, 0);
+        assertScoreDoc(scoreDocs[9], 7, 0.85f);
+        assertScoreDoc(scoreDocs[10], 4, 0.6f);
+        assertScoreDoc(scoreDocs[11], 9, 0.2f);
+        assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[12].score, 0);
+    }
+
+    private void assertScoreDoc(ScoreDoc scoreDoc, int expectedDocId, float expectedScore) {
+        assertEquals(expectedDocId, scoreDoc.doc);
+        assertEquals(expectedScore, scoreDoc.score, DELTA_FOR_ASSERTION);
     }
 }

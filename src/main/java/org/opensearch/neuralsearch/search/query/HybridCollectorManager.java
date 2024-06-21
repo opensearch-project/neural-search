@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.search.query;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.RequiredArgsConstructor;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.Collector;
@@ -31,11 +32,14 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
+import static org.apache.lucene.search.TotalHits.Relation;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createDelimiterElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryScoreDocElement;
 
 /**
  * Collector manager based on HybridTopScoreDocCollector that allows users to parallelize counting the number of hits.
@@ -44,9 +48,9 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 @RequiredArgsConstructor
 public abstract class HybridCollectorManager implements CollectorManager<Collector, ReduceableSearchResult> {
 
+    private static final int MIN_NUMBER_OF_ELEMENTS_IN_SCORE_DOC = 3;
     private final int numHits;
     private final HitsThresholdChecker hitsThresholdChecker;
-    private final boolean isSingleShard;
     private final int trackTotalHitsUpTo;
     private final SortAndFormats sortAndFormats;
     @Nullable
@@ -62,7 +66,6 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     public static CollectorManager createHybridCollectorManager(final SearchContext searchContext) throws IOException {
         final IndexReader reader = searchContext.searcher().getIndexReader();
         final int totalNumDocs = Math.max(0, reader.numDocs());
-        boolean isSingleShard = searchContext.numberOfShards() == 1;
         int numDocs = Math.min(searchContext.from() + searchContext.size(), totalNumDocs);
         int trackTotalHitsUpTo = searchContext.trackTotalHitsUpTo();
 
@@ -83,7 +86,6 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             ? new HybridCollectorConcurrentSearchManager(
                 numDocs,
                 new HitsThresholdChecker(Math.max(numDocs, searchContext.trackTotalHitsUpTo())),
-                isSingleShard,
                 trackTotalHitsUpTo,
                 searchContext.sort(),
                 filteringWeight
@@ -91,7 +93,6 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             : new HybridCollectorNonConcurrentManager(
                 numDocs,
                 new HitsThresholdChecker(Math.max(numDocs, searchContext.trackTotalHitsUpTo())),
-                isSingleShard,
                 trackTotalHitsUpTo,
                 searchContext.sort(),
                 filteringWeight
@@ -138,16 +139,36 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         }
 
         if (!hybridTopScoreDocCollectors.isEmpty()) {
-            HybridTopScoreDocCollector hybridTopScoreDocCollector = hybridTopScoreDocCollectors.stream()
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException("cannot collect results of hybrid search query"));
-            List<TopDocs> topDocs = hybridTopScoreDocCollector.topDocs();
-            TopDocs newTopDocs = getNewTopDocs(
-                getTotalHits(this.trackTotalHitsUpTo, topDocs, isSingleShard, hybridTopScoreDocCollector.getTotalHits()),
-                topDocs
-            );
-            TopDocsAndMaxScore topDocsAndMaxScore = new TopDocsAndMaxScore(newTopDocs, hybridTopScoreDocCollector.getMaxScore());
-            return (QuerySearchResult result) -> { result.topDocs(topDocsAndMaxScore, getSortValueFormats(sortAndFormats)); };
+            List<ReduceableSearchResult> results = new ArrayList<>();
+            for (HybridTopScoreDocCollector hybridTopScoreDocCollector : hybridTopScoreDocCollectors) {
+                List<TopDocs> topDocs = hybridTopScoreDocCollector.topDocs();
+                TopDocs newTopDocs = getNewTopDocs(
+                    getTotalHits(this.trackTotalHitsUpTo, topDocs, hybridTopScoreDocCollector.getTotalHits()),
+                    topDocs
+                );
+                TopDocsAndMaxScore topDocsAndMaxScore = new TopDocsAndMaxScore(newTopDocs, hybridTopScoreDocCollector.getMaxScore());
+
+                results.add((QuerySearchResult result) -> {
+                    // this is case of first collector, query result object doesn't have any top docs set, so we can
+                    // just set new top docs without merge
+                    if (result.hasConsumedTopDocs()) {
+                        result.topDocs(topDocsAndMaxScore, getSortValueFormats(sortAndFormats));
+                        return;
+                    }
+                    // in this case top docs are already present in result, and we need to merge next result object with what we have.
+                    // if collector doesn't have any hits we can just skip it and save some cycles by not doing merge
+                    if (newTopDocs.totalHits.value == 0) {
+                        return;
+                    }
+                    // we need to do actual merge because query result and current collector both have some score hits
+                    TopDocsAndMaxScore originalTotalDocsAndHits = result.topDocs();
+                    result.topDocs(
+                        mergeTopDocsAndMaxScores(originalTotalDocsAndHits, topDocsAndMaxScore),
+                        getSortValueFormats(sortAndFormats)
+                    );
+                });
+            }
+            return reduceCollectorResults(results);
         }
         throw new IllegalStateException("cannot collect results of hybrid search query, there are no proper score collectors");
     }
@@ -195,15 +216,10 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         return new TopDocs(totalHits, scoreDocs);
     }
 
-    private TotalHits getTotalHits(
-        int trackTotalHitsUpTo,
-        final List<TopDocs> topDocs,
-        final boolean isSingleShard,
-        final long maxTotalHits
-    ) {
-        final TotalHits.Relation relation = trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED
-            ? TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO
-            : TotalHits.Relation.EQUAL_TO;
+    private TotalHits getTotalHits(int trackTotalHitsUpTo, final List<TopDocs> topDocs, final long maxTotalHits) {
+        final Relation relation = trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED
+            ? Relation.GREATER_THAN_OR_EQUAL_TO
+            : Relation.EQUAL_TO;
         if (topDocs == null || topDocs.isEmpty()) {
             return new TotalHits(0, relation);
         }
@@ -213,6 +229,109 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
 
     private DocValueFormat[] getSortValueFormats(final SortAndFormats sortAndFormats) {
         return sortAndFormats == null ? null : sortAndFormats.formats;
+    }
+
+    private ReduceableSearchResult reduceCollectorResults(List<ReduceableSearchResult> results) {
+        return (result) -> {
+            for (ReduceableSearchResult r : results) {
+                r.reduce(result);
+            }
+        };
+    }
+
+    @VisibleForTesting
+    protected TopDocsAndMaxScore mergeTopDocsAndMaxScores(TopDocsAndMaxScore source, TopDocsAndMaxScore newTopDocs) {
+        if (Objects.isNull(newTopDocs) || Objects.isNull(newTopDocs.topDocs) || newTopDocs.topDocs.totalHits.value == 0) {
+            return source;
+        }
+        // we need to merge hits per individual sub-query
+        // format of results in both new and source TopDocs is following
+        // doc_id | magic_number_1
+        // doc_id | magic_number_2
+        // ...
+        // doc_id | magic_number_2
+        // ...
+        // doc_id | magic_number_2
+        // ...
+        // doc_id | magic_number_1
+        ScoreDoc[] sourceScoreDocs = source.topDocs.scoreDocs;
+        ScoreDoc[] newScoreDocs = newTopDocs.topDocs.scoreDocs;
+
+        List<ScoreDoc> mergedScoreDocs = mergedScoreDocs(sourceScoreDocs, newScoreDocs, Comparator.comparing((scoreDoc) -> scoreDoc.score));
+        TotalHits mergedTotalHits = getMergedTotalHits(source, newTopDocs);
+        TopDocsAndMaxScore result = new TopDocsAndMaxScore(
+            new TopDocs(mergedTotalHits, mergedScoreDocs.toArray(new ScoreDoc[0])),
+            Math.max(source.maxScore, newTopDocs.maxScore)
+        );
+        return result;
+    }
+
+    /**
+     * Merge two score docs objects, result ScoreDocs[] object will have all hits per sub-query from both original objects.
+     * Logic is based on assumption that hits of every sub-query are sorted by score.
+     * Method returns new object and doesn't mutate original ScoreDocs arrays.
+     * @param sourceScoreDocs original score docs from query result
+     * @param newScoreDocs new score docs that we need to merge into existing scores
+     * @return merged array of ScoreDocs objects
+     */
+    private List<ScoreDoc> mergedScoreDocs(
+        final ScoreDoc[] sourceScoreDocs,
+        final ScoreDoc[] newScoreDocs,
+        final Comparator<ScoreDoc> scoreDocComparator
+    ) {
+        if (Objects.requireNonNull(sourceScoreDocs).length < MIN_NUMBER_OF_ELEMENTS_IN_SCORE_DOC
+            || Objects.requireNonNull(newScoreDocs).length < MIN_NUMBER_OF_ELEMENTS_IN_SCORE_DOC) {
+            throw new IllegalArgumentException("cannot merge top docs because it does not have enough elements");
+        }
+        // we overshoot and preallocate more than we need - length of both top docs combined.
+        // we will take only portion of the array at the end
+        List<ScoreDoc> mergedScoreDocs = new ArrayList<>(sourceScoreDocs.length + newScoreDocs.length);
+        int sourcePointer = 0;
+        mergedScoreDocs.add(sourceScoreDocs[sourcePointer]);
+        sourcePointer++;
+        // new pointer is set to 1 as we don't care about it start-stop element
+        int newPointer = 1;
+
+        while (sourcePointer < sourceScoreDocs.length - 1 && newPointer < newScoreDocs.length - 1) {
+            // every iteration is for results of one sub-query
+            mergedScoreDocs.add(sourceScoreDocs[sourcePointer]);
+            sourcePointer++;
+            newPointer++;
+            // simplest case when both arrays have results for sub-query
+            while (sourcePointer < sourceScoreDocs.length
+                && isHybridQueryScoreDocElement(sourceScoreDocs[sourcePointer])
+                && newPointer < newScoreDocs.length
+                && isHybridQueryScoreDocElement(newScoreDocs[newPointer])) {
+                if (scoreDocComparator.compare(sourceScoreDocs[sourcePointer], newScoreDocs[newPointer]) >= 0) {
+                    mergedScoreDocs.add(sourceScoreDocs[sourcePointer]);
+                    sourcePointer++;
+                } else {
+                    mergedScoreDocs.add(newScoreDocs[newPointer]);
+                    newPointer++;
+                }
+            }
+            // at least one object got exhausted at this point, now merge all elements from object that's left
+            while (sourcePointer < sourceScoreDocs.length && isHybridQueryScoreDocElement(sourceScoreDocs[sourcePointer])) {
+                mergedScoreDocs.add(sourceScoreDocs[sourcePointer]);
+                sourcePointer++;
+            }
+            while (newPointer < newScoreDocs.length && isHybridQueryScoreDocElement(newScoreDocs[newPointer])) {
+                mergedScoreDocs.add(newScoreDocs[newPointer]);
+                newPointer++;
+            }
+        }
+        mergedScoreDocs.add(sourceScoreDocs[sourceScoreDocs.length - 1]);
+        return mergedScoreDocs;
+    }
+
+    private TotalHits getMergedTotalHits(TopDocsAndMaxScore source, TopDocsAndMaxScore newTopDocs) {
+        // merged value is a lower bound - if both are equal_to than merged will also be equal_to,
+        // otherwise assign greater_than_or_equal
+        Relation mergedHitsRelation = source.topDocs.totalHits.relation == Relation.GREATER_THAN_OR_EQUAL_TO
+            || newTopDocs.topDocs.totalHits.relation == Relation.GREATER_THAN_OR_EQUAL_TO
+                ? Relation.GREATER_THAN_OR_EQUAL_TO
+                : Relation.EQUAL_TO;
+        return new TotalHits(source.topDocs.totalHits.value + newTopDocs.topDocs.totalHits.value, mergedHitsRelation);
     }
 
     /**
@@ -225,12 +344,11 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         public HybridCollectorNonConcurrentManager(
             int numHits,
             HitsThresholdChecker hitsThresholdChecker,
-            boolean isSingleShard,
             int trackTotalHitsUpTo,
             SortAndFormats sortAndFormats,
             Weight filteringWeight
         ) {
-            super(numHits, hitsThresholdChecker, isSingleShard, trackTotalHitsUpTo, sortAndFormats, filteringWeight);
+            super(numHits, hitsThresholdChecker, trackTotalHitsUpTo, sortAndFormats, filteringWeight);
             scoreCollector = Objects.requireNonNull(super.newCollector(), "collector for hybrid query cannot be null");
         }
 
@@ -255,12 +373,11 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         public HybridCollectorConcurrentSearchManager(
             int numHits,
             HitsThresholdChecker hitsThresholdChecker,
-            boolean isSingleShard,
             int trackTotalHitsUpTo,
             SortAndFormats sortAndFormats,
             Weight filteringWeight
         ) {
-            super(numHits, hitsThresholdChecker, isSingleShard, trackTotalHitsUpTo, sortAndFormats, filteringWeight);
+            super(numHits, hitsThresholdChecker, trackTotalHitsUpTo, sortAndFormats, filteringWeight);
         }
     }
 }
