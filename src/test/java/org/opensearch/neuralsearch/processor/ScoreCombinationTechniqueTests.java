@@ -19,7 +19,7 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
 
     public void testEmptyResults_whenEmptyResultsAndDefaultMethod_thenNoProcessing() {
         ScoreCombiner scoreCombiner = new ScoreCombiner();
-        scoreCombiner.combineScores(List.of(), ScoreCombinationFactory.DEFAULT_METHOD);
+        scoreCombiner.combineScores(List.of(), ScoreCombinationFactory.DEFAULT_METHOD, null);
     }
 
     public void testCombination_whenMultipleSubqueriesResultsAndDefaultMethod_thenScoresCombined() {
@@ -37,7 +37,8 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
                         new TotalHits(2, TotalHits.Relation.EQUAL_TO),
                         new ScoreDoc[] { new ScoreDoc(3, 1.0f), new ScoreDoc(5, 0.001f) }
                     )
-                )
+                ),
+                false
             ),
             new CompoundTopDocs(
                 new TotalHits(4, TotalHits.Relation.EQUAL_TO),
@@ -47,18 +48,20 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
                         new TotalHits(4, TotalHits.Relation.EQUAL_TO),
                         new ScoreDoc[] { new ScoreDoc(2, 0.9f), new ScoreDoc(4, 0.6f), new ScoreDoc(7, 0.5f), new ScoreDoc(9, 0.01f) }
                     )
-                )
+                ),
+                false
             ),
             new CompoundTopDocs(
                 new TotalHits(0, TotalHits.Relation.EQUAL_TO),
                 List.of(
                     new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
                     new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0])
-                )
+                ),
+                false
             )
         );
 
-        scoreCombiner.combineScores(queryTopDocs, ScoreCombinationFactory.DEFAULT_METHOD);
+        scoreCombiner.combineScores(queryTopDocs, ScoreCombinationFactory.DEFAULT_METHOD, null);
 
         assertNotNull(queryTopDocs);
         assertEquals(3, queryTopDocs.size());
