@@ -15,6 +15,11 @@ import java.util.stream.Collectors;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.TopFieldDocs;
+import org.apache.lucene.search.SortField;
+import org.apache.lucene.search.FieldDoc;
+import org.apache.lucene.search.SortedNumericSortField;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
@@ -27,6 +32,8 @@ import org.opensearch.search.query.QuerySearchResult;
 
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.MAX_SCORE_WHEN_NO_HITS_FOUND;
+import org.opensearch.search.sort.SortedWiderNumericSortField;
 
 /**
  * Class abstracts steps required for score normalization and combination, this includes pre-processing of incoming data
@@ -62,13 +69,16 @@ public class NormalizationProcessorWorkflow {
         log.debug("Do score normalization");
         scoreNormalizer.normalizeScores(queryTopDocs, normalizationTechnique);
 
+        // Check if sort is enabled
+        Sort sort = evaluateSortCriteria(queryTopDocs);
+
         // combine
         log.debug("Do score combination");
-        scoreCombiner.combineScores(queryTopDocs, combinationTechnique);
+        scoreCombiner.combineScores(queryTopDocs, combinationTechnique, sort);
 
         // post-process data
         log.debug("Post-process query results after score normalization and combination");
-        updateOriginalQueryResults(querySearchResults, queryTopDocs);
+        updateOriginalQueryResults(querySearchResults, queryTopDocs, sort);
         updateOriginalFetchResults(querySearchResults, fetchSearchResultOptional, unprocessedDocIds);
     }
 
@@ -96,7 +106,11 @@ public class NormalizationProcessorWorkflow {
         return queryTopDocs;
     }
 
-    private void updateOriginalQueryResults(final List<QuerySearchResult> querySearchResults, final List<CompoundTopDocs> queryTopDocs) {
+    private void updateOriginalQueryResults(
+        final List<QuerySearchResult> querySearchResults,
+        final List<CompoundTopDocs> queryTopDocs,
+        final Sort sort
+    ) {
         if (querySearchResults.size() != queryTopDocs.size()) {
             throw new IllegalStateException(
                 String.format(
@@ -110,13 +124,31 @@ public class NormalizationProcessorWorkflow {
         for (int index = 0; index < querySearchResults.size(); index++) {
             QuerySearchResult querySearchResult = querySearchResults.get(index);
             CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
-            float maxScore = updatedTopDocs.getTotalHits().value > 0 ? updatedTopDocs.getScoreDocs().get(0).score : 0.0f;
+            float maxScore = 0.0f;
+            if (updatedTopDocs.getTotalHits().value > 0 && !updatedTopDocs.getScoreDocs().isEmpty()) {
+                maxScore = updatedTopDocs.getScoreDocs().get(0).score;
+            }
+            TopDocsAndMaxScore updatedTopDocsAndMaxScore;
+            if (sort == null) {
+                // create final version of top docs with all updated values
+                TopDocs topDocs = new TopDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new ScoreDoc[0]));
+                updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(topDocs, maxScore);
+            } else {
+                final FieldDoc[] fieldDocs = new FieldDoc[updatedTopDocs.getScoreDocs().size()];
+                int i = 0;
+                if (updatedTopDocs.getTotalHits().value > 0) {
+                    for (ScoreDoc scoreDoc : updatedTopDocs.getScoreDocs()) {
+                        maxScore = Math.max(maxScore, scoreDoc.score);
+                        fieldDocs[i++] = (FieldDoc) scoreDoc;
+                    }
+                } else {
+                    maxScore = MAX_SCORE_WHEN_NO_HITS_FOUND;
+                }
 
-            // create final version of top docs with all updated values
-            TopDocs topDocs = new TopDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new ScoreDoc[0]));
-
-            TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(topDocs, maxScore);
-            querySearchResult.topDocs(updatedTopDocsAndMaxScore, null);
+                TopFieldDocs topFieldDocs = new TopFieldDocs(updatedTopDocs.getTotalHits(), fieldDocs, sort.getSort());
+                updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(topFieldDocs, maxScore);
+            }
+            querySearchResult.topDocs(updatedTopDocsAndMaxScore, querySearchResult.sortValueFormats());
         }
     }
 
@@ -205,5 +237,55 @@ public class NormalizationProcessorWorkflow {
                 .map(scoreDoc -> scoreDoc.doc)
                 .collect(Collectors.toList());
         return docIds;
+    }
+
+    private Sort evaluateSortCriteria(List<CompoundTopDocs> queryTopDocs) {
+        for (CompoundTopDocs compoundTopDocs : queryTopDocs) {
+            if (compoundTopDocs != null && compoundTopDocs.getTotalHits().value > 0) {
+                List<TopDocs> topDocs = compoundTopDocs.getTopDocs();
+                Optional<TopDocs> optionalTopDoc = topDocs.stream()
+                    .filter(Objects::nonNull)
+                    .filter(topDoc -> topDoc.scoreDocs.length > 0)
+                    .findFirst();
+
+                if (optionalTopDoc.isPresent()) {
+                    if (optionalTopDoc.get().scoreDocs[0] instanceof FieldDoc) {
+                        return createSort(topDocs.toArray(new TopFieldDocs[0]));
+                    } else {
+                        return null;
+                    }
+
+                }
+            }
+        }
+        return null;
+    }
+
+    private static Sort createSort(TopFieldDocs[] topFieldDocs) {
+        final SortField[] firstTopDocFields = topFieldDocs[0].fields;
+        final SortField[] newFields = new SortField[firstTopDocFields.length];
+
+        for (int i = 0; i < firstTopDocFields.length; i++) {
+            final SortField delegate = firstTopDocFields[i];
+            final SortField.Type type = delegate instanceof SortedNumericSortField
+                ? ((SortedNumericSortField) delegate).getNumericType()
+                : delegate.getType();
+
+            if (SortedWiderNumericSortField.isTypeSupported(type) && isSortWideningRequired(topFieldDocs, i)) {
+                newFields[i] = new SortedWiderNumericSortField(delegate.getField(), type, delegate.getReverse());
+            } else {
+                newFields[i] = firstTopDocFields[i];
+            }
+        }
+        return new Sort(newFields);
+    }
+
+    private static boolean isSortWideningRequired(TopFieldDocs[] topFieldDocs, int sortFieldindex) {
+        for (int i = 0; i < topFieldDocs.length - 1; i++) {
+            if (!topFieldDocs[i].fields[sortFieldindex].equals(topFieldDocs[i + 1].fields[sortFieldindex])) {
+                return true;
+            }
+        }
+        return false;
     }
 }
