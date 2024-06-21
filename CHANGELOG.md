@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Features
 ### Enhancements
 ### Bug Fixes
+- Fix function names and comments in the gradle file for BWC tests ([#795](https://github.com/opensearch-project/neural-search/pull/795/files))
 ### Infrastructure
 ### Documentation
 ### Maintenance
