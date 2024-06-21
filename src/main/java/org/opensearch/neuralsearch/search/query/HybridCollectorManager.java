@@ -119,6 +119,27 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
      */
     @Override
     public ReduceableSearchResult reduce(Collection<Collector> collectors) {
+        final List<HybridTopScoreDocCollector> hybridTopScoreDocCollectors = getHybridScoreDocCollectors(collectors);
+        if (hybridTopScoreDocCollectors.isEmpty()) {
+            throw new IllegalStateException("cannot collect results of hybrid search query, there are no proper score collectors");
+        }
+
+        List<ReduceableSearchResult> results = new ArrayList<>();
+        DocValueFormat[] docValueFormats = getSortValueFormats(sortAndFormats);
+        for (HybridTopScoreDocCollector hybridTopScoreDocCollector : hybridTopScoreDocCollectors) {
+            List<TopDocs> topDocs = hybridTopScoreDocCollector.topDocs();
+            TopDocs newTopDocs = getNewTopDocs(
+                getTotalHits(this.trackTotalHitsUpTo, topDocs, hybridTopScoreDocCollector.getTotalHits()),
+                topDocs
+            );
+            TopDocsAndMaxScore topDocsAndMaxScore = new TopDocsAndMaxScore(newTopDocs, hybridTopScoreDocCollector.getMaxScore());
+
+            results.add((QuerySearchResult result) -> reduceCollectorResults(result, topDocsAndMaxScore, docValueFormats, newTopDocs));
+        }
+        return reduceSearchResults(results);
+    }
+
+    private List<HybridTopScoreDocCollector> getHybridScoreDocCollectors(Collection<Collector> collectors) {
         final List<HybridTopScoreDocCollector> hybridTopScoreDocCollectors = new ArrayList<>();
         // check if collector for hybrid query scores is part of this search context. It can be wrapped into MultiCollectorWrapper
         // in case multiple collector managers are registered. We use hybrid scores collector to format scores into
@@ -137,40 +158,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                     hybridTopScoreDocCollectors.add((HybridTopScoreDocCollector) ((FilteredCollector) collector).getCollector());
                 }
         }
-
-        if (!hybridTopScoreDocCollectors.isEmpty()) {
-            List<ReduceableSearchResult> results = new ArrayList<>();
-            for (HybridTopScoreDocCollector hybridTopScoreDocCollector : hybridTopScoreDocCollectors) {
-                List<TopDocs> topDocs = hybridTopScoreDocCollector.topDocs();
-                TopDocs newTopDocs = getNewTopDocs(
-                    getTotalHits(this.trackTotalHitsUpTo, topDocs, hybridTopScoreDocCollector.getTotalHits()),
-                    topDocs
-                );
-                TopDocsAndMaxScore topDocsAndMaxScore = new TopDocsAndMaxScore(newTopDocs, hybridTopScoreDocCollector.getMaxScore());
-
-                results.add((QuerySearchResult result) -> {
-                    // this is case of first collector, query result object doesn't have any top docs set, so we can
-                    // just set new top docs without merge
-                    if (result.hasConsumedTopDocs()) {
-                        result.topDocs(topDocsAndMaxScore, getSortValueFormats(sortAndFormats));
-                        return;
-                    }
-                    // in this case top docs are already present in result, and we need to merge next result object with what we have.
-                    // if collector doesn't have any hits we can just skip it and save some cycles by not doing merge
-                    if (newTopDocs.totalHits.value == 0) {
-                        return;
-                    }
-                    // we need to do actual merge because query result and current collector both have some score hits
-                    TopDocsAndMaxScore originalTotalDocsAndHits = result.topDocs();
-                    result.topDocs(
-                        mergeTopDocsAndMaxScores(originalTotalDocsAndHits, topDocsAndMaxScore),
-                        getSortValueFormats(sortAndFormats)
-                    );
-                });
-            }
-            return reduceCollectorResults(results);
-        }
-        throw new IllegalStateException("cannot collect results of hybrid search query, there are no proper score collectors");
+        return hybridTopScoreDocCollectors;
     }
 
     private TopDocs getNewTopDocs(final TotalHits totalHits, final List<TopDocs> topDocs) {
@@ -231,9 +219,37 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         return sortAndFormats == null ? null : sortAndFormats.formats;
     }
 
-    private ReduceableSearchResult reduceCollectorResults(List<ReduceableSearchResult> results) {
+    private void reduceCollectorResults(
+        QuerySearchResult result,
+        TopDocsAndMaxScore topDocsAndMaxScore,
+        DocValueFormat[] docValueFormats,
+        TopDocs newTopDocs
+    ) {
+        // this is case of first collector, query result object doesn't have any top docs set, so we can
+        // just set new top docs without merge
+        if (result.hasConsumedTopDocs()) {
+            result.topDocs(topDocsAndMaxScore, docValueFormats);
+            return;
+        }
+        // in this case top docs are already present in result, and we need to merge next result object with what we have.
+        // if collector doesn't have any hits we can just skip it and save some cycles by not doing merge
+        if (newTopDocs.totalHits.value == 0) {
+            return;
+        }
+        // we need to do actual merge because query result and current collector both have some score hits
+        TopDocsAndMaxScore originalTotalDocsAndHits = result.topDocs();
+        result.topDocs(mergeTopDocsAndMaxScores(originalTotalDocsAndHits, topDocsAndMaxScore), docValueFormats);
+    }
+
+    /**
+     * For collection of search results, return a single one that has results from all individual result objects.
+     * @param results collection of search results
+     * @return single search result that represents all results as one object
+     */
+    private ReduceableSearchResult reduceSearchResults(List<ReduceableSearchResult> results) {
         return (result) -> {
             for (ReduceableSearchResult r : results) {
+                // call reduce for results of each single collector, this will update top docs in query result
                 r.reduce(result);
             }
         };
@@ -287,6 +303,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         // we will take only portion of the array at the end
         List<ScoreDoc> mergedScoreDocs = new ArrayList<>(sourceScoreDocs.length + newScoreDocs.length);
         int sourcePointer = 0;
+        // mark beginning of hybrid query results by start element
         mergedScoreDocs.add(sourceScoreDocs[sourcePointer]);
         sourcePointer++;
         // new pointer is set to 1 as we don't care about it start-stop element
@@ -320,6 +337,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 newPointer++;
             }
         }
+        // mark end of hybrid query results by end element
         mergedScoreDocs.add(sourceScoreDocs[sourceScoreDocs.length - 1]);
         return mergedScoreDocs;
     }
