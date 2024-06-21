@@ -184,6 +184,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             return (QuerySearchResult result) -> { result.topDocs(topDocsAndMaxScore, getSortValueFormats(sortAndFormats)); };
         }
 
+        // TODO: Cater the fix for the Bug https://github.com/opensearch-project/neural-search/issues/799
         if (!hybridSortedTopDocCollectors.isEmpty()) {
             HybridTopFieldDocSortCollector hybridSortedTopScoreDocCollector = hybridSortedTopDocCollectors.stream()
                 .findFirst()

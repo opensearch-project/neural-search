@@ -63,9 +63,8 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
     @Getter
     protected float maxScore = 0.0f;
     protected int[] collectedHits;
-    /*
-       searchSortPartOfIndexSort is used to evaluate whether to perform index sort or not.
-     */
+
+    // searchSortPartOfIndexSort is used to evaluate whether to perform index sort or not.
     private Boolean searchSortPartOfIndexSort = null;
 
     private static final TopFieldDocs EMPTY_TOPDOCS = new TopFieldDocs(
