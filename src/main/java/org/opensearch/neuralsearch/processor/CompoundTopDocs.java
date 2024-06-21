@@ -13,10 +13,8 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryStartStopElement;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -123,14 +121,18 @@ public class CompoundTopDocs {
                 maxScoreDocs = topDoc.scoreDocs;
             }
         }
+
         // do deep copy
-        return Arrays.stream(maxScoreDocs).map(doc -> {
+        List<ScoreDoc> scoreDocs = new ArrayList<>();
+        for (int scoreDocIndex = 0; scoreDocIndex < maxScoreDocs.length; scoreDocIndex++) {
             if (isSortEnabled) {
-                FieldDoc fieldDoc = (FieldDoc) doc;
-                return new FieldDoc(fieldDoc.doc, fieldDoc.score, fieldDoc.fields, fieldDoc.shardIndex);
+                FieldDoc fieldDoc = (FieldDoc) maxScoreDocs[scoreDocIndex];
+                scoreDocs.add(new FieldDoc(fieldDoc.doc, fieldDoc.score, fieldDoc.fields, fieldDoc.shardIndex));
             } else {
-                return new ScoreDoc(doc.doc, doc.score, doc.shardIndex);
+                ScoreDoc scoreDoc = maxScoreDocs[scoreDocIndex];
+                scoreDocs.add(new ScoreDoc(scoreDoc.doc, scoreDoc.score, scoreDoc.shardIndex));
             }
-        }).collect(Collectors.toList());
+        }
+        return scoreDocs;
     }
 }

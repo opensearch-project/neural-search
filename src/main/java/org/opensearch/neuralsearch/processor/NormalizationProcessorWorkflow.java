@@ -243,18 +243,18 @@ public class NormalizationProcessorWorkflow {
         for (CompoundTopDocs compoundTopDocs : queryTopDocs) {
             if (compoundTopDocs != null && compoundTopDocs.getTotalHits().value > 0) {
                 List<TopDocs> topDocs = compoundTopDocs.getTopDocs();
-                Optional<TopDocs> optionalTopDoc = topDocs.stream()
-                    .filter(Objects::nonNull)
-                    .filter(topDoc -> topDoc.scoreDocs.length > 0)
-                    .findFirst();
-
-                if (optionalTopDoc.isPresent()) {
-                    if (optionalTopDoc.get().scoreDocs[0] instanceof FieldDoc) {
-                        return createSort(topDocs.toArray(new TopFieldDocs[0]));
-                    } else {
-                        return null;
+                TopDocs foundTopDoc = null;
+                for (TopDocs topDoc : topDocs) {
+                    if (topDoc != null && topDoc.scoreDocs.length > 0) {
+                        foundTopDoc = topDoc;
+                        break;
                     }
+                }
 
+                if (foundTopDoc != null && foundTopDoc.scoreDocs[0] instanceof FieldDoc) {
+                    return createSort(topDocs.toArray(new TopFieldDocs[0]));
+                } else {
+                    return null;
                 }
             }
         }

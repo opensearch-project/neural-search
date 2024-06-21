@@ -81,10 +81,12 @@ public class ScoreCombiner {
         List<TopFieldDocs> topFieldDocs = null;
         if (sort != null) {
             final boolean isSortByScore = checkIfSortOrderByScore(sort);
-            topFieldDocs = topDocsPerSubQuery.stream()
-                .filter(topDocs -> topDocs.scoreDocs.length != 0)
-                .map(topDocs -> (TopFieldDocs) topDocs)
-                .collect(Collectors.toList());
+            topFieldDocs = new ArrayList<>();
+            for (int i = 0; i < topDocsPerSubQuery.size(); i++) {
+                if (topDocsPerSubQuery.get(i).scoreDocs.length != 0) {
+                    topFieldDocs.add((TopFieldDocs) topDocsPerSubQuery.get(i));
+                }
+            }
             docIdSortFieldMap = getDocIdSortFieldsMap(compoundQueryTopDocs, isSortByScore, combinedNormalizedScoresByDocId);
         }
 
@@ -147,10 +149,13 @@ public class ScoreCombiner {
     ) {
         // we're merging docs with normalized and combined scores. we need to have only maxHits results
         List<Integer> sortedDocsIds;
-        if (sort == null) {
+        if (Objects.isNull(sort)) {
             sortedDocsIds = new ArrayList<>(combinedNormalizedScoresByDocId.keySet());
             sortedDocsIds.sort((a, b) -> Float.compare(combinedNormalizedScoresByDocId.get(b), combinedNormalizedScoresByDocId.get(a)));
         } else {
+            if (Objects.isNull(topFieldDocs)) {
+                throw new IllegalArgumentException("topFieldDocs cannot be null when sorting is enabled.");
+            }
             int topN = 0;
             for (TopFieldDocs topFieldDoc : topFieldDocs) {
                 topN += topFieldDoc.scoreDocs.length;
