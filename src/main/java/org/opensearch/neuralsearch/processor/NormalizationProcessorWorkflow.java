@@ -239,6 +239,13 @@ public class NormalizationProcessorWorkflow {
         return docIds;
     }
 
+    /**
+     * This method processes a list of query top documents and retrieved the top documents
+     * that match certain criteria. If a valid top document is found, it creates and returns a sort object based on the first FieldDoc in the scoreDocs array of the top document.
+     * Otherwise, it returns null.
+     * @param queryTopDocs List of query top documents to be evaluated.
+     * @return Sort object based on the first FieldDoc in the scoreDocs array, or null if no valid document is found.
+     */
     private Sort evaluateSortCriteria(List<CompoundTopDocs> queryTopDocs) {
         for (CompoundTopDocs compoundTopDocs : queryTopDocs) {
             if (compoundTopDocs != null && compoundTopDocs.getTotalHits().value > 0) {
@@ -261,6 +268,13 @@ public class NormalizationProcessorWorkflow {
         return null;
     }
 
+    /**
+     * Creates a Sort object based on the provided top field documents.
+     * This method takes an array of top field documents and processes each field to create a corresponding SortField.
+     * The created  SortField objects are then used to create and return a new Sort object.
+     * @param topFieldDocs array of top field documents need to be processed.
+     * @return Sort object created based on provided top field documents.
+     */
     private static Sort createSort(TopFieldDocs[] topFieldDocs) {
         final SortField[] firstTopDocFields = topFieldDocs[0].fields;
         final SortField[] newFields = new SortField[firstTopDocFields.length];
@@ -280,6 +294,15 @@ public class NormalizationProcessorWorkflow {
         return new Sort(newFields);
     }
 
+    /**
+     * Checks if sort widening is required for the provided top field documents.
+     *
+     * This method iterates through the provided topFieldDocs array and checks if any adjacent pairs of sort fields at the specified index are not equal.
+     * If any such pair is found, it returns true, indicating that sort widening is required. Otherwise, it returns false.
+     * @param topFieldDocs array of top field documents to be checked.
+     * @param sortFieldindex index of the sort field to be checked within each top field document.
+     * @return true if sort widening is required, false otherwise.
+     */
     private static boolean isSortWideningRequired(TopFieldDocs[] topFieldDocs, int sortFieldindex) {
         for (int i = 0; i < topFieldDocs.length - 1; i++) {
             if (!topFieldDocs[i].fields[sortFieldindex].equals(topFieldDocs[i + 1].fields[sortFieldindex])) {
