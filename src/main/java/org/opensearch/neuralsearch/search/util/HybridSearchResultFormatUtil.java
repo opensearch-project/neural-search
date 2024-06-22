@@ -77,7 +77,6 @@ public class HybridSearchResultFormatUtil {
      * @return
      */
     public static Object[] createSortFieldsForDelimiterResults(final Object[] fields) {
-        Object SORT_FIELDS_FOR_DELIMITER_RESULTS;
         final Object[] sortFields = new Object[fields.length];
         for (int i = 0; i < fields.length; i++) {
             SortField sortField = (SortField) fields[i];
@@ -91,6 +90,7 @@ public class HybridSearchResultFormatUtil {
             // ...
             // <docId, MAGIC_NUMBER_DELIMITER, ShardId, [1,1]>
             // <docId, MAGIC_NUMBER_START_STOP, ShardId, [1,1]> `
+            Object SORT_FIELDS_FOR_DELIMITER_RESULTS;
             switch (type) {
                 case DOC:
                 case INT:

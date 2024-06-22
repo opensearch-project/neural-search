@@ -116,20 +116,24 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
 
     @Override
     public Collector newCollector() {
-        Collector hybridcollector;
-        if (sortAndFormats != null) {
-            if (after == null) {
-                hybridcollector = new SimpleFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort);
-            } else {
-                validateSearchAfterFieldAndSortFormats();
-                hybridcollector = new PagingFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort, after);
-            }
-        } else {
-            hybridcollector = new HybridTopScoreDocCollector(numHits, hitsThresholdChecker);
+        if (sortAndFormats == null) {
+            // Hybrid Query
+            // Check if filterWeight is present. If it is present then return wrap Hybrid collector object underneath the FilteredCollector
+            // object and return it.
+            Collector hybridcollector = new HybridTopScoreDocCollector(numHits, hitsThresholdChecker);
+            return Objects.nonNull(filterWeight) ? new FilteredCollector(hybridcollector, filterWeight) : hybridcollector;
         }
-        // Check if filterWeight is present. If it is present then return wrap Hybrid collector object underneath the FilteredCollector
+        // Hybrid Query with Sorting Applied
+        Collector hybridSortcollector;
+        if (after == null) {
+            hybridSortcollector = new SimpleFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort);
+        } else {
+            validateSearchAfterFieldAndSortFormats();
+            hybridSortcollector = new PagingFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort, after);
+        }
+        // Check if filterWeight is present. If it is present then return wrap Hybrid Sort collector object underneath the FilteredCollector
         // object and return it.
-        return Objects.nonNull(filterWeight) ? new FilteredCollector(hybridcollector, filterWeight) : hybridcollector;
+        return Objects.nonNull(filterWeight) ? new FilteredCollector(hybridSortcollector, filterWeight) : hybridSortcollector;
     }
 
     /**
@@ -208,30 +212,30 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
 
     private static void validateSortCriteria(SearchContext searchContext, boolean trackScores) {
         SortField[] sortFields = searchContext.sort().sort.getSort();
-        boolean isSortByField = false;
-        boolean isSortByScore = false;
+        boolean hasFieldSort = false;
+        boolean hasScoreSort = false;
         for (SortField sortField : sortFields) {
             SortField.Type type = sortField.getType();
             if (type.equals(SortField.Type.SCORE)) {
-                isSortByScore = true;
+                hasScoreSort = true;
             } else {
-                isSortByField = true;
+                hasFieldSort = true;
             }
-            if (isSortByScore && isSortByField) {
+            if (hasScoreSort && hasFieldSort) {
                 break;
             }
         }
-        if (isSortByScore && isSortByField) {
+        if (hasScoreSort && hasFieldSort) {
             throw new IllegalArgumentException(
                 "_score sort criteria cannot be applied with any other criteria. Please select one sort criteria out of them."
             );
         }
-        if (trackScores && isSortByField) {
+        if (trackScores && hasFieldSort) {
             throw new IllegalArgumentException(
                 "Hybrid search results when sorted by any field, docId or _id, track_scores must be set to false."
             );
         }
-        if (trackScores && isSortByScore) {
+        if (trackScores && hasScoreSort) {
             throw new IllegalArgumentException("Hybrid search results are by default sorted by _score, track_scores must be set to false.");
         }
     }
@@ -303,54 +307,57 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     }
 
     private TopDocs getNewTopFieldDocs(final TotalHits totalHits, final List<TopFieldDocs> topFieldDocs, final SortField sortFields[]) {
-        FieldDoc[] fieldDocs = new FieldDoc[0];
-        if (Objects.nonNull(topFieldDocs)) {
-            // for a single shard case we need to do score processing at coordinator level.
-            // this is workaround for current core behaviour, for single shard fetch phase is executed
-            // right after query phase and processors are called after actual fetch is done
-            // find any valid doc Id, or set it to -1 if there is not a single match
-            int delimiterDocId = topFieldDocs.stream()
-                .filter(Objects::nonNull)
-                .filter(topDoc -> Objects.nonNull(topDoc.scoreDocs))
-                .map(topFieldDoc -> topFieldDoc.scoreDocs)
-                .filter(scoreDoc -> scoreDoc.length > 0)
-                .map(scoreDoc -> scoreDoc[0].doc)
-                .findFirst()
-                .orElse(-1);
-            if (delimiterDocId == -1) {
-                return new TopFieldDocs(totalHits, fieldDocs, sortFields);
-            }
-            // format scores using following template:
-            // consider the sort is applied for two fields.
-            // consider field1 type is integer and field2 type is float.
-            // doc_id | magic_number_1 | [1,1.0f]
-            // doc_id | magic_number_2 | [1,1.0f]
-            // ...
-            // doc_id | magic_number_2 | [1,1.0f]
-            // ...
-            // doc_id | magic_number_2 | [1,1.0f]
-            // ...
-            // doc_id | magic_number_1 | [1,1.0f]
-
-            final Object[] sortFieldsForDelimiterResults = createSortFieldsForDelimiterResults(sortFields);
-            List<FieldDoc> result = new ArrayList<>();
-            result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, sortFieldsForDelimiterResults));
-            for (TopFieldDocs topFieldDoc : topFieldDocs) {
-                if (Objects.isNull(topFieldDoc) || Objects.isNull(topFieldDoc.scoreDocs)) {
-                    result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, sortFieldsForDelimiterResults));
-                    continue;
-                }
-
-                List<FieldDoc> fieldDocsPerQuery = new ArrayList<>();
-                for (ScoreDoc scoreDoc : topFieldDoc.scoreDocs) {
-                    fieldDocsPerQuery.add((FieldDoc) scoreDoc);
-                }
-                result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, sortFieldsForDelimiterResults));
-                result.addAll(fieldDocsPerQuery);
-            }
-            result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, sortFieldsForDelimiterResults));
-            fieldDocs = result.stream().map(doc -> new FieldDoc(doc.doc, doc.score, doc.fields, doc.shardIndex)).toArray(FieldDoc[]::new);
+        if (Objects.isNull(topFieldDocs)) {
+            return new TopFieldDocs(totalHits, new FieldDoc[0], sortFields);
         }
+
+        // for a single shard case we need to do score processing at coordinator level.
+        // this is workaround for current core behaviour, for single shard fetch phase is executed
+        // right after query phase and processors are called after actual fetch is done
+        // find any valid doc Id, or set it to -1 if there is not a single match
+        int delimiterDocId = topFieldDocs.stream()
+            .filter(Objects::nonNull)
+            .filter(topDoc -> Objects.nonNull(topDoc.scoreDocs))
+            .map(topFieldDoc -> topFieldDoc.scoreDocs)
+            .filter(scoreDoc -> scoreDoc.length > 0)
+            .map(scoreDoc -> scoreDoc[0].doc)
+            .findFirst()
+            .orElse(-1);
+        if (delimiterDocId == -1) {
+            return new TopFieldDocs(totalHits, new FieldDoc[0], sortFields);
+        }
+
+        // format scores using following template:
+        // consider the sort is applied for two fields.
+        // consider field1 type is integer and field2 type is float.
+        // doc_id | magic_number_1 | [1,1.0f]
+        // doc_id | magic_number_2 | [1,1.0f]
+        // ...
+        // doc_id | magic_number_2 | [1,1.0f]
+        // ...
+        // doc_id | magic_number_2 | [1,1.0f]
+        // ...
+        // doc_id | magic_number_1 | [1,1.0f]
+        final Object[] sortFieldsForDelimiterResults = createSortFieldsForDelimiterResults(sortFields);
+        List<FieldDoc> result = new ArrayList<>();
+        result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, sortFieldsForDelimiterResults));
+        for (TopFieldDocs topFieldDoc : topFieldDocs) {
+            if (Objects.isNull(topFieldDoc) || Objects.isNull(topFieldDoc.scoreDocs)) {
+                result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, sortFieldsForDelimiterResults));
+                continue;
+            }
+
+            List<FieldDoc> fieldDocsPerQuery = new ArrayList<>();
+            for (ScoreDoc scoreDoc : topFieldDoc.scoreDocs) {
+                fieldDocsPerQuery.add((FieldDoc) scoreDoc);
+            }
+            result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, sortFieldsForDelimiterResults));
+            result.addAll(fieldDocsPerQuery);
+        }
+        result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, sortFieldsForDelimiterResults));
+
+        FieldDoc[] fieldDocs = result.toArray(new FieldDoc[0]);
+
         return new TopFieldDocs(totalHits, fieldDocs, sortFields);
     }
 
