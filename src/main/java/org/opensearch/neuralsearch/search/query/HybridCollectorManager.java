@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch.search.query;
 
-import com.google.common.annotations.VisibleForTesting;
 import lombok.RequiredArgsConstructor;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.Collector;
@@ -20,7 +19,7 @@ import org.opensearch.common.lucene.search.FilteredCollector;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 import org.opensearch.neuralsearch.search.HybridTopScoreDocCollector;
-import org.opensearch.neuralsearch.search.util.ScoreDocsMerger;
+import org.opensearch.neuralsearch.search.util.HybridQueryScoreDocsMerger;
 import org.opensearch.neuralsearch.search.util.TopDocsMerger;
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.internal.ContextIndexSearcher;
@@ -34,7 +33,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
@@ -56,7 +54,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     @Nullable
     private final Weight filterWeight;
     private static final float boost_factor = 1f;
-    private final ScoreDocsMerger<ScoreDoc> scoreDocsMerger = new ScoreDocsMerger<>();
+    private final HybridQueryScoreDocsMerger<ScoreDoc> scoreDocsMerger = new HybridQueryScoreDocsMerger<>();
     private final TopDocsMerger topDocsMerger = new TopDocsMerger(scoreDocsMerger);
 
     /**

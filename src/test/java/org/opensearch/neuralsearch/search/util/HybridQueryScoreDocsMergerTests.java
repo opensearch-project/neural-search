@@ -13,12 +13,12 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.MAGIC_NUMBER_START_STOP;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.MAGIC_NUMBER_DELIMITER;
 
-public class ScoreDocsMergerTests extends OpenSearchQueryTestCase {
+public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
 
     private static final float DELTA_FOR_ASSERTION = 0.001f;
 
     public void testIncorrectInput_whenScoreDocsAreNullOrNotEnoughElements_thenFail() {
-        ScoreDocsMerger<ScoreDoc> scoreDocsMerger = new ScoreDocsMerger<>();
+        HybridQueryScoreDocsMerger<ScoreDoc> scoreDocsMerger = new HybridQueryScoreDocsMerger<>();
 
         ScoreDoc[] scores = new ScoreDoc[] {
             createStartStopElementForHybridSearchResults(2),
@@ -51,7 +51,7 @@ public class ScoreDocsMergerTests extends OpenSearchQueryTestCase {
     }
 
     public void testMergeScoreDocs_whenBothTopDocsHasHits_thenSuccessful() {
-        ScoreDocsMerger<ScoreDoc> scoreDocsMerger = new ScoreDocsMerger<>();
+        HybridQueryScoreDocsMerger<ScoreDoc> scoreDocsMerger = new HybridQueryScoreDocsMerger<>();
 
         ScoreDoc[] scoreDocsOriginal = new ScoreDoc[] {
             createStartStopElementForHybridSearchResults(0),
@@ -90,7 +90,7 @@ public class ScoreDocsMergerTests extends OpenSearchQueryTestCase {
     }
 
     public void testMergeScoreDocs_whenOneTopDocsHasHitsAndOtherIsEmpty_thenSuccessful() {
-        ScoreDocsMerger<ScoreDoc> scoreDocsMerger = new ScoreDocsMerger<>();
+        HybridQueryScoreDocsMerger<ScoreDoc> scoreDocsMerger = new HybridQueryScoreDocsMerger<>();
 
         ScoreDoc[] scoreDocsOriginal = new ScoreDoc[] {
             createStartStopElementForHybridSearchResults(0),
@@ -123,7 +123,7 @@ public class ScoreDocsMergerTests extends OpenSearchQueryTestCase {
     }
 
     public void testMergeScoreDocs_whenBothTopDocsHasNoHits_thenSuccessful() {
-        ScoreDocsMerger<ScoreDoc> scoreDocsMerger = new ScoreDocsMerger<>();
+        HybridQueryScoreDocsMerger<ScoreDoc> scoreDocsMerger = new HybridQueryScoreDocsMerger<>();
 
         ScoreDoc[] scoreDocsOriginal = new ScoreDoc[] {
             createStartStopElementForHybridSearchResults(0),

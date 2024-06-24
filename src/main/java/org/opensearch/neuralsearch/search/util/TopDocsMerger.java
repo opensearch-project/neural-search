@@ -20,7 +20,7 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class TopDocsMerger {
 
-    private final ScoreDocsMerger<ScoreDoc> scoreDocsMerger;
+    private final HybridQueryScoreDocsMerger<ScoreDoc> scoreDocsMerger;
     @VisibleForTesting
     protected static final Comparator<ScoreDoc> SCORE_DOC_BY_SCORE_COMPARATOR = Comparator.comparing((scoreDoc) -> scoreDoc.score);
 

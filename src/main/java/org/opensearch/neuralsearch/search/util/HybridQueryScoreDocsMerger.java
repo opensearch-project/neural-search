@@ -18,12 +18,14 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
  * Merges two ScoreDoc arrays into one
  */
 @NoArgsConstructor
-public class ScoreDocsMerger<T extends ScoreDoc> {
+public class HybridQueryScoreDocsMerger<T extends ScoreDoc> {
 
     private static final int MIN_NUMBER_OF_ELEMENTS_IN_SCORE_DOC = 3;
 
     /**
      * Merge two score docs objects, result ScoreDocs[] object will have all hits per sub-query from both original objects.
+     * Input and output ScoreDocs are in format that is specific to Hybrid Query. This method should not be used for ScoreDocs from
+     * other query types.
      * Logic is based on assumption that hits of every sub-query are sorted by score.
      * Method returns new object and doesn't mutate original ScoreDocs arrays.
      * @param sourceScoreDocs original score docs from query result

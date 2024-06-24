@@ -22,7 +22,7 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testMergeScoreDocs_whenBothTopDocsHasHits_thenSuccessful() {
-        ScoreDocsMerger<ScoreDoc> scoreDocsMerger = new ScoreDocsMerger<>();
+        HybridQueryScoreDocsMerger<ScoreDoc> scoreDocsMerger = new HybridQueryScoreDocsMerger<>();
         TopDocsMerger topDocsMerger = new TopDocsMerger(scoreDocsMerger);
 
         TopDocs topDocsOriginal = new TopDocs(
@@ -78,7 +78,7 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testMergeScoreDocs_whenOneTopDocsHasHitsAndOtherIsEmpty_thenSuccessful() {
-        ScoreDocsMerger<ScoreDoc> scoreDocsMerger = new ScoreDocsMerger<>();
+        HybridQueryScoreDocsMerger<ScoreDoc> scoreDocsMerger = new HybridQueryScoreDocsMerger<>();
         TopDocsMerger topDocsMerger = new TopDocsMerger(scoreDocsMerger);
 
         TopDocs topDocsOriginal = new TopDocs(
@@ -130,7 +130,7 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testMergeScoreDocs_whenBothTopDocsHasNoHits_thenSuccessful() {
-        ScoreDocsMerger<ScoreDoc> scoreDocsMerger = new ScoreDocsMerger<>();
+        HybridQueryScoreDocsMerger<ScoreDoc> scoreDocsMerger = new HybridQueryScoreDocsMerger<>();
         TopDocsMerger topDocsMerger = new TopDocsMerger(scoreDocsMerger);
 
         TopDocs topDocsOriginal = new TopDocs(
@@ -172,7 +172,7 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testThreeSequentialMerges_whenAllTopDocsHasHits_thenSuccessful() {
-        ScoreDocsMerger<ScoreDoc> scoreDocsMerger = new ScoreDocsMerger<>();
+        HybridQueryScoreDocsMerger<ScoreDoc> scoreDocsMerger = new HybridQueryScoreDocsMerger<>();
         TopDocsMerger topDocsMerger = new TopDocsMerger(scoreDocsMerger);
 
         TopDocs topDocsOriginal = new TopDocs(
