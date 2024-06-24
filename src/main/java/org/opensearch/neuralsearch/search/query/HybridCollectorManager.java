@@ -20,6 +20,8 @@ import org.opensearch.common.lucene.search.FilteredCollector;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 import org.opensearch.neuralsearch.search.HybridTopScoreDocCollector;
+import org.opensearch.neuralsearch.search.util.ScoreDocsMerger;
+import org.opensearch.neuralsearch.search.util.TopDocsMerger;
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.SearchContext;
@@ -54,9 +56,8 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     @Nullable
     private final Weight filterWeight;
     private static final float boost_factor = 1f;
-    private final ScoreDocsMerger scoreDocsMerger = new ScoreDocsMerger();
-    @VisibleForTesting
-    protected static final Comparator<ScoreDoc> SCORE_DOC_BY_SCORE_COMPARATOR = Comparator.comparing((scoreDoc) -> scoreDoc.score);
+    private final ScoreDocsMerger<ScoreDoc> scoreDocsMerger = new ScoreDocsMerger<>();
+    private final TopDocsMerger topDocsMerger = new TopDocsMerger(scoreDocsMerger);
 
     /**
      * Create new instance of HybridCollectorManager depending on the concurrent search beeing enabled or disabled.
@@ -239,7 +240,8 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         }
         // we need to do actual merge because query result and current collector both have some score hits
         TopDocsAndMaxScore originalTotalDocsAndHits = result.topDocs();
-        result.topDocs(mergeTopDocsAndMaxScores(originalTotalDocsAndHits, topDocsAndMaxScore), docValueFormats);
+        TopDocsAndMaxScore mergeTopDocsAndMaxScores = topDocsMerger.merge(originalTotalDocsAndHits, topDocsAndMaxScore);
+        result.topDocs(mergeTopDocsAndMaxScores, docValueFormats);
     }
 
     /**
@@ -254,44 +256,6 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 r.reduce(result);
             }
         };
-    }
-
-    @VisibleForTesting
-    protected TopDocsAndMaxScore mergeTopDocsAndMaxScores(TopDocsAndMaxScore source, TopDocsAndMaxScore newTopDocs) {
-        if (Objects.isNull(newTopDocs) || Objects.isNull(newTopDocs.topDocs) || newTopDocs.topDocs.totalHits.value == 0) {
-            return source;
-        }
-        // we need to merge hits per individual sub-query
-        // format of results in both new and source TopDocs is following
-        // doc_id | magic_number_1
-        // doc_id | magic_number_2
-        // ...
-        // doc_id | magic_number_2
-        // ...
-        // doc_id | magic_number_2
-        // ...
-        // doc_id | magic_number_1
-        ScoreDoc[] mergedScoreDocs = scoreDocsMerger.mergedScoreDocs(
-            source.topDocs.scoreDocs,
-            newTopDocs.topDocs.scoreDocs,
-            Comparator.comparing((scoreDoc) -> scoreDoc.score)
-        );
-        TotalHits mergedTotalHits = getMergedTotalHits(source, newTopDocs);
-        TopDocsAndMaxScore result = new TopDocsAndMaxScore(
-            new TopDocs(mergedTotalHits, mergedScoreDocs),
-            Math.max(source.maxScore, newTopDocs.maxScore)
-        );
-        return result;
-    }
-
-    private TotalHits getMergedTotalHits(TopDocsAndMaxScore source, TopDocsAndMaxScore newTopDocs) {
-        // merged value is a lower bound - if both are equal_to than merged will also be equal_to,
-        // otherwise assign greater_than_or_equal
-        Relation mergedHitsRelation = source.topDocs.totalHits.relation == Relation.GREATER_THAN_OR_EQUAL_TO
-            || newTopDocs.topDocs.totalHits.relation == Relation.GREATER_THAN_OR_EQUAL_TO
-                ? Relation.GREATER_THAN_OR_EQUAL_TO
-                : Relation.EQUAL_TO;
-        return new TotalHits(source.topDocs.totalHits.value + newTopDocs.topDocs.totalHits.value, mergedHitsRelation);
     }
 
     /**

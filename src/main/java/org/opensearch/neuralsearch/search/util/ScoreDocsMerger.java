@@ -2,9 +2,8 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.search.query;
+package org.opensearch.neuralsearch.search.util;
 
-import com.google.common.annotations.VisibleForTesting;
 import lombok.NoArgsConstructor;
 import org.apache.lucene.search.ScoreDoc;
 
@@ -16,10 +15,10 @@ import java.util.Objects;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryScoreDocElement;
 
 /**
- * Merges two ScoreDocs arrays into one
+ * Merges two ScoreDoc arrays into one
  */
 @NoArgsConstructor
-public class ScoreDocsMerger {
+public class ScoreDocsMerger<T extends ScoreDoc> {
 
     private static final int MIN_NUMBER_OF_ELEMENTS_IN_SCORE_DOC = 3;
 
@@ -31,19 +30,14 @@ public class ScoreDocsMerger {
      * @param newScoreDocs new score docs that we need to merge into existing scores
      * @return merged array of ScoreDocs objects
      */
-    @VisibleForTesting
-    protected ScoreDoc[] mergedScoreDocs(
-        final ScoreDoc[] sourceScoreDocs,
-        final ScoreDoc[] newScoreDocs,
-        final Comparator<ScoreDoc> scoreDocComparator
-    ) {
+    public T[] merge(final T[] sourceScoreDocs, final T[] newScoreDocs, final Comparator<T> comparator) {
         if (Objects.requireNonNull(sourceScoreDocs, "score docs cannot be null").length < MIN_NUMBER_OF_ELEMENTS_IN_SCORE_DOC
             || Objects.requireNonNull(newScoreDocs, "score docs cannot be null").length < MIN_NUMBER_OF_ELEMENTS_IN_SCORE_DOC) {
             throw new IllegalArgumentException("cannot merge top docs because it does not have enough elements");
         }
         // we overshoot and preallocate more than we need - length of both top docs combined.
         // we will take only portion of the array at the end
-        List<ScoreDoc> mergedScoreDocs = new ArrayList<>(sourceScoreDocs.length + newScoreDocs.length);
+        List<T> mergedScoreDocs = new ArrayList<>(sourceScoreDocs.length + newScoreDocs.length);
         int sourcePointer = 0;
         // mark beginning of hybrid query results by start element
         mergedScoreDocs.add(sourceScoreDocs[sourcePointer]);
@@ -61,7 +55,7 @@ public class ScoreDocsMerger {
                 && isHybridQueryScoreDocElement(sourceScoreDocs[sourcePointer])
                 && newPointer < newScoreDocs.length
                 && isHybridQueryScoreDocElement(newScoreDocs[newPointer])) {
-                if (scoreDocComparator.compare(sourceScoreDocs[sourcePointer], newScoreDocs[newPointer]) >= 0) {
+                if (comparator.compare(sourceScoreDocs[sourcePointer], newScoreDocs[newPointer]) >= 0) {
                     mergedScoreDocs.add(sourceScoreDocs[sourcePointer]);
                     sourcePointer++;
                 } else {
@@ -81,6 +75,6 @@ public class ScoreDocsMerger {
         }
         // mark end of hybrid query results by end element
         mergedScoreDocs.add(sourceScoreDocs[sourceScoreDocs.length - 1]);
-        return mergedScoreDocs.toArray(new ScoreDoc[0]);
+        return mergedScoreDocs.toArray((T[]) new ScoreDoc[0]);
     }
 }

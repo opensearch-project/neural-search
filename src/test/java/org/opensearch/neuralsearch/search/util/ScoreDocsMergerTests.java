@@ -2,12 +2,12 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.search.query;
+package org.opensearch.neuralsearch.search.util;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 
-import static org.opensearch.neuralsearch.search.query.HybridCollectorManager.SCORE_DOC_BY_SCORE_COMPARATOR;
+import static org.opensearch.neuralsearch.search.util.TopDocsMerger.SCORE_DOC_BY_SCORE_COMPARATOR;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createDelimiterElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.MAGIC_NUMBER_START_STOP;
@@ -18,7 +18,7 @@ public class ScoreDocsMergerTests extends OpenSearchQueryTestCase {
     private static final float DELTA_FOR_ASSERTION = 0.001f;
 
     public void testIncorrectInput_whenScoreDocsAreNullOrNotEnoughElements_thenFail() {
-        ScoreDocsMerger scoreDocsMerger = new ScoreDocsMerger();
+        ScoreDocsMerger<ScoreDoc> scoreDocsMerger = new ScoreDocsMerger<>();
 
         ScoreDoc[] scores = new ScoreDoc[] {
             createStartStopElementForHybridSearchResults(2),
@@ -28,33 +28,30 @@ public class ScoreDocsMergerTests extends OpenSearchQueryTestCase {
 
         NullPointerException exception = assertThrows(
             NullPointerException.class,
-            () -> scoreDocsMerger.mergedScoreDocs(scores, null, SCORE_DOC_BY_SCORE_COMPARATOR)
+            () -> scoreDocsMerger.merge(scores, null, SCORE_DOC_BY_SCORE_COMPARATOR)
         );
         assertEquals("score docs cannot be null", exception.getMessage());
 
-        exception = assertThrows(
-            NullPointerException.class,
-            () -> scoreDocsMerger.mergedScoreDocs(scores, null, SCORE_DOC_BY_SCORE_COMPARATOR)
-        );
+        exception = assertThrows(NullPointerException.class, () -> scoreDocsMerger.merge(scores, null, SCORE_DOC_BY_SCORE_COMPARATOR));
         assertEquals("score docs cannot be null", exception.getMessage());
 
         ScoreDoc[] lessElementsScoreDocs = new ScoreDoc[] { createStartStopElementForHybridSearchResults(2), new ScoreDoc(1, 0.7f) };
 
         IllegalArgumentException notEnoughException = assertThrows(
             IllegalArgumentException.class,
-            () -> scoreDocsMerger.mergedScoreDocs(lessElementsScoreDocs, scores, SCORE_DOC_BY_SCORE_COMPARATOR)
+            () -> scoreDocsMerger.merge(lessElementsScoreDocs, scores, SCORE_DOC_BY_SCORE_COMPARATOR)
         );
         assertEquals("cannot merge top docs because it does not have enough elements", notEnoughException.getMessage());
 
         notEnoughException = assertThrows(
             IllegalArgumentException.class,
-            () -> scoreDocsMerger.mergedScoreDocs(scores, lessElementsScoreDocs, SCORE_DOC_BY_SCORE_COMPARATOR)
+            () -> scoreDocsMerger.merge(scores, lessElementsScoreDocs, SCORE_DOC_BY_SCORE_COMPARATOR)
         );
         assertEquals("cannot merge top docs because it does not have enough elements", notEnoughException.getMessage());
     }
 
     public void testMergeScoreDocs_whenBothTopDocsHasHits_thenSuccessful() {
-        ScoreDocsMerger scoreDocsMerger = new ScoreDocsMerger();
+        ScoreDocsMerger<ScoreDoc> scoreDocsMerger = new ScoreDocsMerger<>();
 
         ScoreDoc[] scoreDocsOriginal = new ScoreDoc[] {
             createStartStopElementForHybridSearchResults(0),
@@ -74,7 +71,7 @@ public class ScoreDocsMergerTests extends OpenSearchQueryTestCase {
             new ScoreDoc(4, 0.6f),
             createStartStopElementForHybridSearchResults(2) };
 
-        ScoreDoc[] mergedScoreDocs = scoreDocsMerger.mergedScoreDocs(scoreDocsOriginal, scoreDocsNew, SCORE_DOC_BY_SCORE_COMPARATOR);
+        ScoreDoc[] mergedScoreDocs = scoreDocsMerger.merge(scoreDocsOriginal, scoreDocsNew, SCORE_DOC_BY_SCORE_COMPARATOR);
 
         assertNotNull(mergedScoreDocs);
         assertEquals(10, mergedScoreDocs.length);
@@ -93,7 +90,7 @@ public class ScoreDocsMergerTests extends OpenSearchQueryTestCase {
     }
 
     public void testMergeScoreDocs_whenOneTopDocsHasHitsAndOtherIsEmpty_thenSuccessful() {
-        ScoreDocsMerger scoreDocsMerger = new ScoreDocsMerger();
+        ScoreDocsMerger<ScoreDoc> scoreDocsMerger = new ScoreDocsMerger<>();
 
         ScoreDoc[] scoreDocsOriginal = new ScoreDoc[] {
             createStartStopElementForHybridSearchResults(0),
@@ -110,7 +107,7 @@ public class ScoreDocsMergerTests extends OpenSearchQueryTestCase {
             new ScoreDoc(4, 0.6f),
             createStartStopElementForHybridSearchResults(2) };
 
-        ScoreDoc[] mergedScoreDocs = scoreDocsMerger.mergedScoreDocs(scoreDocsOriginal, scoreDocsNew, SCORE_DOC_BY_SCORE_COMPARATOR);
+        ScoreDoc[] mergedScoreDocs = scoreDocsMerger.merge(scoreDocsOriginal, scoreDocsNew, SCORE_DOC_BY_SCORE_COMPARATOR);
 
         assertNotNull(mergedScoreDocs);
         assertEquals(8, mergedScoreDocs.length);
@@ -126,7 +123,7 @@ public class ScoreDocsMergerTests extends OpenSearchQueryTestCase {
     }
 
     public void testMergeScoreDocs_whenBothTopDocsHasNoHits_thenSuccessful() {
-        ScoreDocsMerger scoreDocsMerger = new ScoreDocsMerger();
+        ScoreDocsMerger<ScoreDoc> scoreDocsMerger = new ScoreDocsMerger<>();
 
         ScoreDoc[] scoreDocsOriginal = new ScoreDoc[] {
             createStartStopElementForHybridSearchResults(0),
@@ -139,7 +136,7 @@ public class ScoreDocsMergerTests extends OpenSearchQueryTestCase {
             createDelimiterElementForHybridSearchResults(2),
             createStartStopElementForHybridSearchResults(2) };
 
-        ScoreDoc[] mergedScoreDocs = scoreDocsMerger.mergedScoreDocs(scoreDocsOriginal, scoreDocsNew, SCORE_DOC_BY_SCORE_COMPARATOR);
+        ScoreDoc[] mergedScoreDocs = scoreDocsMerger.merge(scoreDocsOriginal, scoreDocsNew, SCORE_DOC_BY_SCORE_COMPARATOR);
 
         assertNotNull(mergedScoreDocs);
         assertEquals(4, mergedScoreDocs.length);
