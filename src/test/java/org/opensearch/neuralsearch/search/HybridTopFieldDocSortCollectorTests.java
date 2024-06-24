@@ -197,7 +197,7 @@ public class HybridTopFieldDocSortCollectorTests extends OpenSearchQueryTestCase
             NUM_DOCS,
             new HitsThresholdChecker(TOTAL_HITS_UP_TO),
             new Sort(sortField),
-            new FieldDoc(DOC_ID_2, 0.0f, new Object[] { DOC_ID_2 })
+            new FieldDoc(Integer.MAX_VALUE, 0.0f, new Object[] { DOC_ID_2 })
         );
         Weight weight = mock(Weight.class);
         hybridTopFieldDocSortCollector.setWeight(weight);
@@ -230,13 +230,14 @@ public class HybridTopFieldDocSortCollectorTests extends OpenSearchQueryTestCase
         for (TopFieldDocs topFieldDoc : topFieldDocs) {
             // assert results for each sub-query, there must be correct number of matches, all doc id are correct and scores must be desc
             // ordered
-            assertEquals(4, topFieldDoc.totalHits.value);
+            assertEquals(4 - (indexPositionOfDocId2 + 1), topFieldDoc.totalHits.value);
             ScoreDoc[] scoreDocs = topFieldDoc.scoreDocs;
             assertNotNull(scoreDocs);
-            assertEquals(4 - indexPositionOfDocId2 + 1, scoreDocs.length);
+            assertEquals(4 - (indexPositionOfDocId2 + 1), scoreDocs.length);
             assertTrue(IntStream.range(0, scoreDocs.length - 1).noneMatch(idx -> scoreDocs[idx].doc > scoreDocs[idx + 1].doc));
             List<Integer> resultDocIds = Arrays.stream(scoreDocs).map(scoreDoc -> scoreDoc.doc).collect(Collectors.toList());
-            assertTrue(Arrays.stream(docIdsForQuery).allMatch(resultDocIds::contains));
+            List<Integer> docIdsByQueryList = Arrays.stream(docIdsForQuery).boxed().collect(Collectors.toList());
+            resultDocIds.stream().forEach(val -> assertTrue(docIdsByQueryList.contains(val)));
         }
         w.close();
         reader.close();
