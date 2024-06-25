@@ -71,6 +71,30 @@ public class HybridSearchResultFormatUtil {
     }
 
     /**
+     * Checking if passed scoreDocs object is a special element (start/stop or delimiter) in the list of hybrid query result scores
+     * @param scoreDoc score doc object to check on
+     * @return true if it is a special element
+     */
+    public static boolean isHybridQuerySpecialElement(final ScoreDoc scoreDoc) {
+        if (Objects.isNull(scoreDoc)) {
+            return false;
+        }
+        return isHybridQueryStartStopElement(scoreDoc) || isHybridQueryDelimiterElement(scoreDoc);
+    }
+
+    /**
+     * Checking if passed scoreDocs object is a document score element
+     * @param scoreDoc score doc object to check on
+     * @return true if element has score
+     */
+    public static boolean isHybridQueryScoreDocElement(final ScoreDoc scoreDoc) {
+        if (Objects.isNull(scoreDoc)) {
+            return false;
+        }
+        return !isHybridQuerySpecialElement(scoreDoc);
+    }
+
+    /**
      * This method is for creating dummy sort object for the field docs having magic number scores which acts as delimiters.
      *  The sort object should be in the same type of the field on which sorting criteria is applied.
      * @param fields contains the information about the object type of the field on which sorting criteria is applied
