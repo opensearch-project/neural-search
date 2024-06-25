@@ -68,165 +68,165 @@ public class BucketAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
 
     @SneakyThrows
     public void testBucketAndNestedAggs_whenAdjacencyMatrix_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testAdjacencyMatrixAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenAdjacencyMatrix_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testAdjacencyMatrixAggs();
     }
 
     @SneakyThrows
     public void testBucketAndNestedAggs_whenDiversifiedSampler_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testDiversifiedSampler();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenDiversifiedSampler_thenFail() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
 
         testDiversifiedSampler();
     }
 
     @SneakyThrows
     public void testBucketAndNestedAggs_whenAvgNestedIntoFilter_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testAvgNestedIntoFilter();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenAvgNestedIntoFilter_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testAvgNestedIntoFilter();
     }
 
     @SneakyThrows
     public void testBucketAndNestedAggs_whenSumNestedIntoFilters_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testSumNestedIntoFilters();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenSumNestedIntoFilters_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testSumNestedIntoFilters();
     }
 
     @SneakyThrows
     public void testBucketAggs_whenGlobalAggUsedWithQuery_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testGlobalAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenGlobalAggUsedWithQuery_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testGlobalAggs();
     }
 
     @SneakyThrows
     public void testBucketAggs_whenHistogramAgg_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testHistogramAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenHistogramAgg_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testHistogramAggs();
     }
 
     @SneakyThrows
     public void testBucketAggs_whenNestedAgg_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testNestedAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenNestedAgg_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testNestedAggs();
     }
 
     @SneakyThrows
     public void testBucketAggs_whenSamplerAgg_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testSampler();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenSamplerAgg_thenFail() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
 
         testSampler();
     }
 
     @SneakyThrows
     public void testPipelineSiblingAggs_whenDateBucketedSumsPipelinedToBucketMinMaxSumAvgAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testDateBucketedSumsPipelinedToBucketMinMaxSumAvgAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenDateBucketedSumsPipelinedToBucketMinMaxSumAvgAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testDateBucketedSumsPipelinedToBucketMinMaxSumAvgAggs();
     }
 
     @SneakyThrows
     public void testPipelineSiblingAggs_whenDateBucketedSumsPipelinedToBucketStatsAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testDateBucketedSumsPipelinedToBucketStatsAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenDateBucketedSumsPipelinedToBucketStatsAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testDateBucketedSumsPipelinedToBucketStatsAggs();
     }
 
     @SneakyThrows
     public void testPipelineSiblingAggs_whenDateBucketedSumsPipelinedToBucketScriptAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testDateBucketedSumsPipelinedToBucketScriptedAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenDateBucketedSumsPipelinedToBucketScriptedAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testDateBucketedSumsPipelinedToBucketScriptedAggs();
     }
 
     @SneakyThrows
     public void testPipelineParentAggs_whenDateBucketedSumsPipelinedToBucketScriptedAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testDateBucketedSumsPipelinedToBucketScriptedAggs();
     }
 
     @SneakyThrows
     public void testMetricAggs_whenTermsAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testTermsAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenTermsAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testTermsAggs();
     }
 
     @SneakyThrows
     public void testMetricAggs_whenSignificantTermsAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testSignificantTermsAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenSignificantTermsAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testSignificantTermsAggs();
     }
 

@@ -83,6 +83,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         "processor/PipelineForTextImageEmbeddingProcessorConfiguration.json"
     );
     private static final Set<RestStatus> SUCCESS_STATUSES = Set.of(RestStatus.CREATED, RestStatus.OK);
+    protected static final String CONCURRENT_SEGMENT_SEARCH_ENABLED = "search.concurrent_segment_search.enabled";
 
     protected final ClassLoader classLoader = this.getClass().getClassLoader();
 
