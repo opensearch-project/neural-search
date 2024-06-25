@@ -77,7 +77,6 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
     protected static final String AVG_AGGREGATION_NAME = "avg_field";
     protected static final String GENERIC_AGGREGATION_NAME = "my_aggregation";
     protected static final String DATE_AGGREGATION_NAME = "date_aggregation";
-    protected static final String CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH = "search.concurrent_segment_search.enabled";
 
     @BeforeClass
     @SneakyThrows

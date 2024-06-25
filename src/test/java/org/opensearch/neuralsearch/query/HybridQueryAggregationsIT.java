@@ -100,43 +100,43 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testPipelineAggs_whenConcurrentSearchEnabled_thenSuccessful() {
-        updateClusterSettings("search.concurrent_segment_search.enabled", true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testAvgSumMinMaxAggs();
     }
 
     @SneakyThrows
     public void testPipelineAggs_whenConcurrentSearchDisabled_thenSuccessful() {
-        updateClusterSettings("search.concurrent_segment_search.enabled", false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testAvgSumMinMaxAggs();
     }
 
     @SneakyThrows
     public void testMetricAggsOnSingleShard_whenMaxAggsAndConcurrentSearchEnabled_thenSuccessful() {
-        updateClusterSettings("search.concurrent_segment_search.enabled", true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testMaxAggsOnSingleShardCluster();
     }
 
     @SneakyThrows
     public void testMetricAggsOnSingleShard_whenMaxAggsAndConcurrentSearchDisabled_thenSuccessful() {
-        updateClusterSettings("search.concurrent_segment_search.enabled", false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testMaxAggsOnSingleShardCluster();
     }
 
     @SneakyThrows
     public void testBucketAndNestedAggs_whenConcurrentSearchDisabled_thenSuccessful() {
-        updateClusterSettings("search.concurrent_segment_search.enabled", false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testDateRange();
     }
 
     @SneakyThrows
     public void testBucketAndNestedAggs_whenConcurrentSearchEnabled_thenSuccessful() {
-        updateClusterSettings("search.concurrent_segment_search.enabled", true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testDateRange();
     }
 
     @SneakyThrows
     public void testAggregationNotSupportedConcurrentSearch_whenUseSamplerAgg_thenSuccessful() {
-        updateClusterSettings("search.concurrent_segment_search.enabled", true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
 
         try {
             prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
@@ -177,14 +177,14 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testPostFilterOnIndexWithMultipleShards_WhenConcurrentSearchNotEnabled_thenSuccessful() {
-        updateClusterSettings("search.concurrent_segment_search.enabled", false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testPostFilterWithSimpleHybridQuery(false, true);
         testPostFilterWithComplexHybridQuery(false, true);
     }
 
     @SneakyThrows
     public void testPostFilterOnIndexWithMultipleShards_WhenConcurrentSearchEnabled_thenSuccessful() {
-        updateClusterSettings("search.concurrent_segment_search.enabled", true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testPostFilterWithSimpleHybridQuery(false, true);
         testPostFilterWithComplexHybridQuery(false, true);
     }
@@ -420,14 +420,14 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testPostFilterOnIndexWithSingleShards_WhenConcurrentSearchNotEnabled_thenSuccessful() {
-        updateClusterSettings("search.concurrent_segment_search.enabled", false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testPostFilterWithSimpleHybridQuery(true, true);
         testPostFilterWithComplexHybridQuery(true, true);
     }
 
     @SneakyThrows
     public void testPostFilterOnIndexWithSingleShards_WhenConcurrentSearchEnabled_thenSuccessful() {
-        updateClusterSettings("search.concurrent_segment_search.enabled", true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testPostFilterWithSimpleHybridQuery(true, true);
         testPostFilterWithComplexHybridQuery(true, true);
     }

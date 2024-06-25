@@ -52,4 +52,28 @@ public class HybridSearchResultFormatUtil {
     public static boolean isHybridQueryDelimiterElement(final ScoreDoc scoreDoc) {
         return Objects.nonNull(scoreDoc) && scoreDoc.doc >= 0 && Float.compare(scoreDoc.score, MAGIC_NUMBER_DELIMITER) == 0;
     }
+
+    /**
+     * Checking if passed scoreDocs object is a special element (start/stop or delimiter) in the list of hybrid query result scores
+     * @param scoreDoc score doc object to check on
+     * @return true if it is a special element
+     */
+    public static boolean isHybridQuerySpecialElement(final ScoreDoc scoreDoc) {
+        if (Objects.isNull(scoreDoc)) {
+            return false;
+        }
+        return isHybridQueryStartStopElement(scoreDoc) || isHybridQueryDelimiterElement(scoreDoc);
+    }
+
+    /**
+     * Checking if passed scoreDocs object is a document score element
+     * @param scoreDoc score doc object to check on
+     * @return true if element has score
+     */
+    public static boolean isHybridQueryScoreDocElement(final ScoreDoc scoreDoc) {
+        if (Objects.isNull(scoreDoc)) {
+            return false;
+        }
+        return !isHybridQuerySpecialElement(scoreDoc);
+    }
 }
