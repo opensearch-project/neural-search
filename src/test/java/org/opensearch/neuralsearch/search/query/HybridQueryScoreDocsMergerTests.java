@@ -2,12 +2,12 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.search.util;
+package org.opensearch.neuralsearch.search.query;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 
-import static org.opensearch.neuralsearch.search.util.TopDocsMerger.SCORE_DOC_BY_SCORE_COMPARATOR;
+import static org.opensearch.neuralsearch.search.query.TopDocsMerger.SCORE_DOC_BY_SCORE_COMPARATOR;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createDelimiterElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.MAGIC_NUMBER_START_STOP;

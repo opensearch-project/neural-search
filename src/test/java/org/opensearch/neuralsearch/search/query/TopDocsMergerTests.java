@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.search.util;
+package org.opensearch.neuralsearch.search.query;
 
 import lombok.SneakyThrows;
 import org.apache.lucene.search.ScoreDoc;

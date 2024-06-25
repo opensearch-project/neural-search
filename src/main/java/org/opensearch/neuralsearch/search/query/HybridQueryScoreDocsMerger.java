@@ -2,8 +2,9 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.search.util;
+package org.opensearch.neuralsearch.search.query;
 
+import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import org.apache.lucene.search.ScoreDoc;
 
@@ -17,8 +18,8 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 /**
  * Merges two ScoreDoc arrays into one
  */
-@NoArgsConstructor
-public class HybridQueryScoreDocsMerger<T extends ScoreDoc> {
+@NoArgsConstructor(access = AccessLevel.PACKAGE)
+class HybridQueryScoreDocsMerger<T extends ScoreDoc> {
 
     private static final int MIN_NUMBER_OF_ELEMENTS_IN_SCORE_DOC = 3;
 

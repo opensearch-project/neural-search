@@ -19,8 +19,6 @@ import org.opensearch.common.lucene.search.FilteredCollector;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 import org.opensearch.neuralsearch.search.HybridTopScoreDocCollector;
-import org.opensearch.neuralsearch.search.util.HybridQueryScoreDocsMerger;
-import org.opensearch.neuralsearch.search.util.TopDocsMerger;
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.SearchContext;
@@ -37,6 +35,7 @@ import java.util.List;
 import java.util.Objects;
 
 import static org.apache.lucene.search.TotalHits.Relation;
+import static org.opensearch.neuralsearch.search.query.TopDocsMerger.TOP_DOCS_MERGER_TOP_SCORES;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createDelimiterElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
 
@@ -54,8 +53,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     @Nullable
     private final Weight filterWeight;
     private static final float boost_factor = 1f;
-    private final HybridQueryScoreDocsMerger<ScoreDoc> scoreDocsMerger = new HybridQueryScoreDocsMerger<>();
-    private final TopDocsMerger topDocsMerger = new TopDocsMerger(scoreDocsMerger);
+    private final TopDocsMerger topDocsMerger;
 
     /**
      * Create new instance of HybridCollectorManager depending on the concurrent search beeing enabled or disabled.
@@ -227,6 +225,8 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     ) {
         // this is case of first collector, query result object doesn't have any top docs set, so we can
         // just set new top docs without merge
+        // this call is effectively checking if QuerySearchResult.topDoc is null. using it in such way because
+        // getter throws exception in case topDocs is null
         if (result.hasConsumedTopDocs()) {
             result.topDocs(topDocsAndMaxScore, docValueFormats);
             return;
@@ -270,7 +270,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             SortAndFormats sortAndFormats,
             Weight filteringWeight
         ) {
-            super(numHits, hitsThresholdChecker, trackTotalHitsUpTo, sortAndFormats, filteringWeight);
+            super(numHits, hitsThresholdChecker, trackTotalHitsUpTo, sortAndFormats, filteringWeight, TOP_DOCS_MERGER_TOP_SCORES);
             scoreCollector = Objects.requireNonNull(super.newCollector(), "collector for hybrid query cannot be null");
         }
 
@@ -299,7 +299,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             SortAndFormats sortAndFormats,
             Weight filteringWeight
         ) {
-            super(numHits, hitsThresholdChecker, trackTotalHitsUpTo, sortAndFormats, filteringWeight);
+            super(numHits, hitsThresholdChecker, trackTotalHitsUpTo, sortAndFormats, filteringWeight, TOP_DOCS_MERGER_TOP_SCORES);
         }
     }
 }

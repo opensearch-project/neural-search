@@ -2,9 +2,10 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.search.util;
+package org.opensearch.neuralsearch.search.query;
 
 import com.google.common.annotations.VisibleForTesting;
+import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
@@ -17,12 +18,16 @@ import java.util.Objects;
 /**
  * Utility class for merging TopDocs and MaxScore across multiple search queries
  */
-@RequiredArgsConstructor
-public class TopDocsMerger {
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
+class TopDocsMerger {
 
     private final HybridQueryScoreDocsMerger<ScoreDoc> scoreDocsMerger;
     @VisibleForTesting
     protected static final Comparator<ScoreDoc> SCORE_DOC_BY_SCORE_COMPARATOR = Comparator.comparing((scoreDoc) -> scoreDoc.score);
+    /**
+     * Uses hybrid query score docs merger to merge internal score docs
+     */
+    static final TopDocsMerger TOP_DOCS_MERGER_TOP_SCORES = new TopDocsMerger(new HybridQueryScoreDocsMerger<>());
 
     /**
      * Merge TopDocs and MaxScore from multiple search queries into a single TopDocsAndMaxScore object.
