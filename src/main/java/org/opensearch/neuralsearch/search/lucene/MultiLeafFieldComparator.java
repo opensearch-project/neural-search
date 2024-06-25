@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.search.lucene;
 
 import java.io.IOException;
+import java.util.Locale;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.LeafFieldComparator;
 import org.apache.lucene.search.Scorable;
@@ -26,7 +27,12 @@ public final class MultiLeafFieldComparator implements LeafFieldComparator {
     public MultiLeafFieldComparator(LeafFieldComparator[] comparators, int[] reverseMul) {
         if (comparators.length != reverseMul.length) {
             throw new IllegalArgumentException(
-                "Must have the same number of comparators and reverseMul, got " + comparators.length + " and " + reverseMul.length
+                String.format(
+                    Locale.ROOT,
+                    "Must have the same number of comparators and reverseMul, got %s and %s",
+                    comparators.length,
+                    reverseMul.length
+                )
             );
         }
         this.comparators = comparators;

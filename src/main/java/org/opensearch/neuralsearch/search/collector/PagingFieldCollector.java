@@ -22,7 +22,7 @@ public final class PagingFieldCollector extends HybridTopFieldDocSortCollector {
     private final FieldDoc after;
 
     public PagingFieldCollector(int numHits, HitsThresholdChecker hitsThresholdChecker, Sort sort, @Nullable FieldDoc after) {
-        super(numHits, hitsThresholdChecker, sort);
+        super(numHits, hitsThresholdChecker, sort, after);
         this.after = after;
     }
 
@@ -30,7 +30,7 @@ public final class PagingFieldCollector extends HybridTopFieldDocSortCollector {
     public LeafCollector getLeafCollector(LeafReaderContext context) {
         docBase = context.docBase;
         final int afterDoc = after.doc - docBase;
-        return new HybridTopDocSortLeafCollector(after) {
+        return new HybridTopDocSortLeafCollector() {
             @Override
             public void collect(int doc) throws IOException {
                 if (Objects.isNull(compoundQueryScorer)) {

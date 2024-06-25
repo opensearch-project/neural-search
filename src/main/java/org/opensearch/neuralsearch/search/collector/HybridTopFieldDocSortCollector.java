@@ -42,8 +42,11 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
     private final int numHits;
     private final HitsThresholdChecker hitsThresholdChecker;
     private final Sort sort;
+    @Nullable
+    private FieldDoc after;
     private FieldComparator<?> firstComparator;
-    private FieldValueHitQueue.Entry bottom = null;
+    // bottom would be set to null per shard.
+    private FieldValueHitQueue.Entry bottom;
     @Getter
     private int totalHits;
     protected int docBase;
@@ -67,7 +70,7 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
     // searchSortPartOfIndexSort is used to evaluate whether to perform index sort or not.
     private Boolean searchSortPartOfIndexSort = null;
 
-    private static final TopFieldDocs EMPTY_TOPDOCS = new TopFieldDocs(
+    private static final TopFieldDocs EMPTY_TOP_FIELD_DOCS = new TopFieldDocs(
         new TotalHits(0, TotalHits.Relation.EQUAL_TO),
         new ScoreDoc[0],
         new SortField[0]
@@ -78,10 +81,16 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
     // internal versions. If someone will define a constructor with any other
     // visibility, then anyone will be able to extend the class, which is not what
     // we want.
-    HybridTopFieldDocSortCollector(final int numHits, final HitsThresholdChecker hitsThresholdChecker, final Sort sort) {
+    HybridTopFieldDocSortCollector(
+        final int numHits,
+        final HitsThresholdChecker hitsThresholdChecker,
+        final Sort sort,
+        final FieldDoc after
+    ) {
         this.numHits = numHits;
         this.hitsThresholdChecker = hitsThresholdChecker;
         this.sort = sort;
+        this.after = after;
     }
 
     /**
@@ -116,20 +125,17 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
     protected abstract class HybridTopDocSortLeafCollector implements LeafCollector {
         protected HybridQueryScorer compoundQueryScorer;
         private boolean collectedAllCompetitiveHits = false;
-        @Nullable
-        private FieldDoc after;
 
         /**
          1. initializeComparators method needs to be initialized once per shard.
          2. Also, after initializing for every segment the comparators has to be refreshed.
-        Therefore, to do the above two things lazily we have to use a flag isComparatorsInitialized which is set to true when a leafCollector is initialized per segment.
+        Therefore, to do the above two things lazily we have to use a flag initializeLeafComparatorsPerSegmentOnce which is set to true when a leafCollector is initialized per segment.
         Later, in the collect method when number of sub-queries has been found then initialize the comparators(1) or (2) refresh the comparators and set the flag to false.
         */
-        private boolean isComparatorsInitialized;
+        private boolean initializeLeafComparatorsPerSegmentOnce;
 
-        public HybridTopDocSortLeafCollector(@Nullable FieldDoc after) {
-            this.after = after;
-            this.isComparatorsInitialized = true;
+        public HybridTopDocSortLeafCollector() {
+            this.initializeLeafComparatorsPerSegmentOnce = true;
         }
 
         @Override
@@ -249,11 +255,11 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
                     initializeLeafFieldComparators(context, i);
                 }
             }
-            if (isComparatorsInitialized) {
+            if (initializeLeafComparatorsPerSegmentOnce) {
                 for (int i = 0; i < numberOfSubQueries; i++) {
                     initializeComparators(context, i);
                 }
-                isComparatorsInitialized = false;
+                initializeLeafComparatorsPerSegmentOnce = false;
             }
         }
 
@@ -328,7 +334,7 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
         }
 
         if (start >= howMany || howMany == 0) {
-            return EMPTY_TOPDOCS;
+            return EMPTY_TOP_FIELD_DOCS;
         }
 
         int size = howMany - start;
@@ -369,7 +375,11 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
         // slot = totalHits - 1, or when hitsCollected == numHits (in PagingFieldCollector this is hits
         // on the current page) and slot = hitsCollected - 1.
         assert slot < numHits;
-        queueFull[subQueryNumber] = slot == numHits - 1;
+        boolean isQueueFull = false;
+        if (slot == (numHits - 1)) {
+            isQueueFull = true;
+        }
+        queueFull[subQueryNumber] = isQueueFull;
     }
 
     private void updateBottom(int doc, FieldValueHitQueue<FieldValueHitQueue.Entry> compoundScore) {
@@ -388,15 +398,15 @@ public abstract class HybridTopFieldDocSortCollector implements Collector {
 
     private boolean canEarlyTerminateOnPrefix(Sort searchSort, Sort indexSort) {
         if (indexSort != null) {
-            final SortField[] fields1 = searchSort.getSort();
-            final SortField[] fields2 = indexSort.getSort();
+            final SortField[] searchSortField = searchSort.getSort();
+            final SortField[] indexSortField = indexSort.getSort();
             // early termination is possible if fields1 is a prefix of fields2
-            if (fields1.length > fields2.length) {
+            if (searchSortField.length > indexSortField.length) {
                 return false;
             }
             // Compare fields1 and the corresponding prefix of fields2
-            for (int i = 0; i < fields1.length; i++) {
-                if (!fields1[i].equals(fields2[i])) {
+            for (int i = 0; i < searchSortField.length; i++) {
+                if (!searchSortField[i].equals(indexSortField[i])) {
                     return false;
                 }
             }

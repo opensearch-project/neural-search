@@ -18,14 +18,14 @@ import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 public final class SimpleFieldCollector extends HybridTopFieldDocSortCollector {
 
     public SimpleFieldCollector(int numHits, HitsThresholdChecker hitsThresholdChecker, Sort sort) {
-        super(numHits, hitsThresholdChecker, sort);
+        super(numHits, hitsThresholdChecker, sort, null);
     }
 
     @Override
     public LeafCollector getLeafCollector(LeafReaderContext context) {
         docBase = context.docBase;
 
-        return new HybridTopDocSortLeafCollector(null) {
+        return new HybridTopDocSortLeafCollector() {
             @Override
             public void collect(int doc) throws IOException {
                 if (Objects.isNull(compoundQueryScorer)) {

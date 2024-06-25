@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.search.query;
 
+import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.Collector;
@@ -116,24 +117,25 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
 
     @Override
     public Collector newCollector() {
-        if (sortAndFormats == null) {
-            // Hybrid Query
-            // Check if filterWeight is present. If it is present then return wrap Hybrid collector object underneath the FilteredCollector
-            // object and return it.
-            Collector hybridcollector = new HybridTopScoreDocCollector(numHits, hitsThresholdChecker);
-            return Objects.nonNull(filterWeight) ? new FilteredCollector(hybridcollector, filterWeight) : hybridcollector;
-        }
-        // Hybrid Query with Sorting Applied
-        Collector hybridSortcollector;
-        if (after == null) {
-            hybridSortcollector = new SimpleFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort);
-        } else {
-            validateSearchAfterFieldAndSortFormats();
-            hybridSortcollector = new PagingFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort, after);
-        }
+        Collector hybridCollector = getHybridQueryCollector();
         // Check if filterWeight is present. If it is present then return wrap Hybrid Sort collector object underneath the FilteredCollector
         // object and return it.
-        return Objects.nonNull(filterWeight) ? new FilteredCollector(hybridSortcollector, filterWeight) : hybridSortcollector;
+        return Objects.nonNull(filterWeight) ? new FilteredCollector(hybridCollector, filterWeight) : hybridCollector;
+    }
+
+    private Collector getHybridQueryCollector() {
+        if (sortAndFormats == null) {
+            return new HybridTopScoreDocCollector(numHits, hitsThresholdChecker);
+        } else {
+            // Sorting is applied
+            if (after == null) {
+                return new SimpleFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort);
+            } else {
+                // search_after is applied
+                validateSearchAfterFieldAndSortFormats();
+                return new PagingFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort, after);
+            }
+        }
     }
 
     /**
@@ -247,7 +249,12 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
 
         if (after.fields.length != sortAndFormats.sort.getSort().length) {
             throw new IllegalArgumentException(
-                "after.fields has " + after.fields.length + " values but sort has " + sortAndFormats.sort.getSort().length
+                String.format(
+                    Locale.ROOT,
+                    "after.fields has %s values but sort has %s",
+                    after.fields.length,
+                    sortAndFormats.sort.getSort().length
+                )
             );
         }
     }
