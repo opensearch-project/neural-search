@@ -61,7 +61,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
     public static void setUpCluster() {
         // we need new instance because we're calling non-static methods from static method.
         // main purpose is to minimize network calls, initialization is only needed once
-        HybridQueryPostFilterIT instance = new HybridQueryPostFilterIT();
+        HybridQuerySortIT instance = new HybridQuerySortIT();
         instance.initClient();
         instance.updateClusterSettings();
     }
