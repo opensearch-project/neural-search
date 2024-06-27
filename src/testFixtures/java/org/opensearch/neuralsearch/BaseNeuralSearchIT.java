@@ -510,7 +510,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Map<String, String> requestParams,
         List<Object> aggs
     ) {
-        return search(index, queryBuilder, rescorer, resultSize, requestParams, aggs, null);
+        return search(index, queryBuilder, rescorer, resultSize, requestParams, aggs, null, null, false, null);
     }
 
     @SneakyThrows
