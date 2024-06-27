@@ -68,16 +68,20 @@ public class NormalizationProcessorWorkflow {
         log.debug("Do score normalization");
         scoreNormalizer.normalizeScores(queryTopDocs, normalizationTechnique);
 
-        // Check if sort is enabled
-        Sort sort = evaluateSortCriteria(querySearchResults, queryTopDocs);
+        CombineScoresDTO combineScoresDTO = new CombineScoresDTO(
+            queryTopDocs,
+            combinationTechnique,
+            querySearchResults,
+            evaluateSortCriteria(querySearchResults, queryTopDocs)
+        );
 
         // combine
         log.debug("Do score combination");
-        scoreCombiner.combineScores(new CombineScoresDTO(queryTopDocs, combinationTechnique, sort));
+        scoreCombiner.combineScores(combineScoresDTO);
 
         // post-process data
         log.debug("Post-process query results after score normalization and combination");
-        updateOriginalQueryResults(querySearchResults, queryTopDocs, sort);
+        updateOriginalQueryResults(combineScoresDTO);
         updateOriginalFetchResults(querySearchResults, fetchSearchResultOptional, unprocessedDocIds);
     }
 
@@ -105,21 +109,10 @@ public class NormalizationProcessorWorkflow {
         return queryTopDocs;
     }
 
-    private void updateOriginalQueryResults(
-        final List<QuerySearchResult> querySearchResults,
-        final List<CompoundTopDocs> queryTopDocs,
-        final Sort sort
-    ) {
-        if (querySearchResults.size() != queryTopDocs.size()) {
-            throw new IllegalStateException(
-                String.format(
-                    Locale.ROOT,
-                    "query results were not formatted correctly by the hybrid query; sizes of querySearchResults [%d] and queryTopDocs [%d] must match",
-                    querySearchResults.size(),
-                    queryTopDocs.size()
-                )
-            );
-        }
+    private void updateOriginalQueryResults(final CombineScoresDTO combineScoresDTO) {
+        final List<QuerySearchResult> querySearchResults = combineScoresDTO.getQuerySearchResults();
+        final List<CompoundTopDocs> queryTopDocs = getCompoundTopDocs(combineScoresDTO, querySearchResults);
+        final Sort sort = combineScoresDTO.getSort();
         for (int index = 0; index < querySearchResults.size(); index++) {
             QuerySearchResult querySearchResult = querySearchResults.get(index);
             CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
@@ -151,6 +144,21 @@ public class NormalizationProcessorWorkflow {
             }
             querySearchResult.topDocs(updatedTopDocsAndMaxScore, querySearchResult.sortValueFormats());
         }
+    }
+
+    private List<CompoundTopDocs> getCompoundTopDocs(CombineScoresDTO combineScoresDTO, List<QuerySearchResult> querySearchResults) {
+        final List<CompoundTopDocs> queryTopDocs = combineScoresDTO.getQueryTopDocs();
+        if (querySearchResults.size() != queryTopDocs.size()) {
+            throw new IllegalStateException(
+                String.format(
+                    Locale.ROOT,
+                    "query results were not formatted correctly by the hybrid query; sizes of querySearchResults [%d] and queryTopDocs [%d] must match",
+                    querySearchResults.size(),
+                    queryTopDocs.size()
+                )
+            );
+        }
+        return queryTopDocs;
     }
 
     /**

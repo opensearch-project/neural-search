@@ -187,26 +187,35 @@ public class ScoreCombiner {
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
         final List<Integer> sortedScores,
         final long maxHits,
-        Map<Integer, Object[]> docIdSortFieldMap,
+        final Map<Integer, Object[]> docIdSortFieldMap,
         boolean isSortingEnabled
     ) {
+        // ShardId will be -1 when index has multiple shards
         int shardId = -1;
+        // ShardId will not be -1 in when index has single shard because Fetch phase gets executed before Normalization
         if (!compoundQueryTopDocs.getScoreDocs().isEmpty()) {
             shardId = compoundQueryTopDocs.getScoreDocs().get(0).shardIndex;
         }
         List<ScoreDoc> scoreDocs = new ArrayList<>();
-        if (isSortingEnabled) {
-            for (int j = 0; j < maxHits && j < sortedScores.size(); j++) {
-                int docId = sortedScores.get(j);
-                scoreDocs.add(new FieldDoc(docId, combinedNormalizedScoresByDocId.get(docId), docIdSortFieldMap.get(docId), shardId));
-            }
-        } else {
-            for (int j = 0; j < maxHits && j < sortedScores.size(); j++) {
-                int docId = sortedScores.get(j);
-                scoreDocs.add(new ScoreDoc(docId, combinedNormalizedScoresByDocId.get(docId), shardId));
-            }
+        for (int j = 0; j < maxHits && j < sortedScores.size(); j++) {
+            int docId = sortedScores.get(j);
+            scoreDocs.add(getScoreDoc(isSortingEnabled, docId, shardId, combinedNormalizedScoresByDocId, docIdSortFieldMap));
         }
         return scoreDocs;
+    }
+
+    private ScoreDoc getScoreDoc(
+        final boolean isSortEnabled,
+        final int docId,
+        final int shardId,
+        final Map<Integer, Float> combinedNormalizedScoresByDocId,
+        final Map<Integer, Object[]> docIdSortFieldMap
+    ) {
+        if (isSortEnabled && docIdSortFieldMap != null) {
+            return new FieldDoc(docId, combinedNormalizedScoresByDocId.get(docId), docIdSortFieldMap.get(docId), shardId);
+        } else {
+            return new ScoreDoc(docId, combinedNormalizedScoresByDocId.get(docId), shardId);
+        }
     }
 
     public Map<Integer, float[]> getNormalizedScoresPerDocument(final List<TopDocs> topDocsPerSubQuery) {
