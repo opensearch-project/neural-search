@@ -92,7 +92,7 @@ public class CompoundTopDocs {
                 ScoreDoc[] subQueryScores = scoreDocList.toArray(new ScoreDoc[0]);
                 TotalHits totalHits = new TotalHits(subQueryScores.length, TotalHits.Relation.EQUAL_TO);
                 TopDocs subQueryTopDocs;
-                if (isSortEnabled) {
+                if (isSortEnabled && topDocs instanceof TopFieldDocs) {
                     subQueryTopDocs = new TopFieldDocs(totalHits, subQueryScores, ((TopFieldDocs) topDocs).fields);
                 } else {
                     subQueryTopDocs = new TopDocs(totalHits, subQueryScores);
@@ -124,15 +124,17 @@ public class CompoundTopDocs {
 
         // do deep copy
         List<ScoreDoc> scoreDocs = new ArrayList<>();
-        for (int scoreDocIndex = 0; scoreDocIndex < maxScoreDocs.length; scoreDocIndex++) {
-            if (isSortEnabled) {
-                FieldDoc fieldDoc = (FieldDoc) maxScoreDocs[scoreDocIndex];
-                scoreDocs.add(new FieldDoc(fieldDoc.doc, fieldDoc.score, fieldDoc.fields, fieldDoc.shardIndex));
-            } else {
-                ScoreDoc scoreDoc = maxScoreDocs[scoreDocIndex];
-                scoreDocs.add(new ScoreDoc(scoreDoc.doc, scoreDoc.score, scoreDoc.shardIndex));
-            }
+        for (ScoreDoc scoreDoc : maxScoreDocs) {
+            scoreDocs.add(deepCopyScoreDoc(scoreDoc, isSortEnabled));
         }
         return scoreDocs;
+    }
+
+    private ScoreDoc deepCopyScoreDoc(final ScoreDoc scoreDoc, final boolean isSortEnabled) {
+        if (!isSortEnabled) {
+            return new ScoreDoc(scoreDoc.doc, scoreDoc.score, scoreDoc.shardIndex);
+        }
+        FieldDoc fieldDoc = (FieldDoc) scoreDoc;
+        return new FieldDoc(fieldDoc.doc, fieldDoc.score, fieldDoc.fields, fieldDoc.shardIndex);
     }
 }

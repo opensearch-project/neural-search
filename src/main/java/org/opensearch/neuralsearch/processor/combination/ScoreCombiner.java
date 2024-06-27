@@ -25,12 +25,14 @@ import org.apache.lucene.search.SortField;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.processor.combination.dto.CombineScoresDTO;
 
 /**
  * Abstracts combination of scores in query search results.
  */
 @Log4j2
 public class ScoreCombiner {
+    public static final Float MAX_SCORE_WHEN_NO_HITS_FOUND = 0.0f;
 
     /**
      * Performs score combination based on input combination technique. Mutates input object by updating combined scores
@@ -43,18 +45,19 @@ public class ScoreCombiner {
      * Different score combination techniques are different in step 2, where we create map of "doc id" - "combined score",
      * other steps are same for all techniques.
      *
-     * @param queryTopDocs              query results that need to be normalized, mutated by method execution
-     * @param scoreCombinationTechnique exact combination method that should be applied
-     * @param sort                      sort criteria
+     * @param combineScoresDTO   contains details of query top docs, score combination technique and sort is enabled or disabled.
      */
-    public void combineScores(
-        final List<CompoundTopDocs> queryTopDocs,
-        final ScoreCombinationTechnique scoreCombinationTechnique,
-        Sort sort
-    ) {
+    public void combineScores(final CombineScoresDTO combineScoresDTO) {
         // iterate over results from each shard. Every CompoundTopDocs object has results from
         // multiple sub queries, doc ids may repeat for each sub query results
-        queryTopDocs.forEach(compoundQueryTopDocs -> combineShardScores(scoreCombinationTechnique, compoundQueryTopDocs, sort));
+        combineScoresDTO.getQueryTopDocs()
+            .forEach(
+                compoundQueryTopDocs -> combineShardScores(
+                    combineScoresDTO.getScoreCombinationTechnique(),
+                    compoundQueryTopDocs,
+                    combineScoresDTO.getSort()
+                )
+            );
     }
 
     private void combineShardScores(
@@ -82,9 +85,11 @@ public class ScoreCombiner {
         if (sort != null) {
             final boolean isSortByScore = checkIfSortOrderByScore(sort);
             topFieldDocs = new ArrayList<>();
-            for (int i = 0; i < topDocsPerSubQuery.size(); i++) {
-                if (topDocsPerSubQuery.get(i).scoreDocs.length != 0) {
-                    topFieldDocs.add((TopFieldDocs) topDocsPerSubQuery.get(i));
+            for (TopDocs topDocs : topDocsPerSubQuery) {
+                // Check for scoreDocs length.
+                // If scoreDocs length=0 then it means that no results are found for that particular subquery.
+                if (topDocs.scoreDocs.length != 0) {
+                    topFieldDocs.add((TopFieldDocs) topDocs);
                 }
             }
             docIdSortFieldMap = getDocIdSortFieldsMap(compoundQueryTopDocs, isSortByScore, combinedNormalizedScoresByDocId);
@@ -101,18 +106,21 @@ public class ScoreCombiner {
             combinedNormalizedScoresByDocId,
             sortedDocsIds,
             docIdSortFieldMap,
-            sort != null ? true : false
+            sort != null
         );
     }
 
     private boolean checkIfSortOrderByScore(Sort sort) {
-        if (sort != null) {
-            for (SortField sortField : sort.getSort()) {
-                if (sortField.getType().equals(SortField.Type.SCORE)) {
-                    return true;
-                }
+        if (sort == null) {
+            return false;
+        }
+
+        for (SortField sortField : sort.getSort()) {
+            if (sortField.getType().equals(SortField.Type.SCORE)) {
+                return true;
             }
         }
+
         return false;
     }
 

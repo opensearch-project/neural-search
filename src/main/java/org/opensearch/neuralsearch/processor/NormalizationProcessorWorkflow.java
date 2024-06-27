@@ -17,12 +17,11 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.TopFieldDocs;
-import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.FieldDoc;
-import org.apache.lucene.search.SortedNumericSortField;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
+import org.opensearch.neuralsearch.processor.combination.dto.CombineScoresDTO;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.search.SearchHit;
@@ -32,8 +31,8 @@ import org.opensearch.search.query.QuerySearchResult;
 
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
-import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.MAX_SCORE_WHEN_NO_HITS_FOUND;
-import org.opensearch.search.sort.SortedWiderNumericSortField;
+import static org.opensearch.neuralsearch.processor.combination.ScoreCombiner.MAX_SCORE_WHEN_NO_HITS_FOUND;
+import static org.opensearch.neuralsearch.search.util.HybridSearchSortUtil.evaluateSortCriteria;
 
 /**
  * Class abstracts steps required for score normalization and combination, this includes pre-processing of incoming data
@@ -70,11 +69,11 @@ public class NormalizationProcessorWorkflow {
         scoreNormalizer.normalizeScores(queryTopDocs, normalizationTechnique);
 
         // Check if sort is enabled
-        Sort sort = evaluateSortCriteria(queryTopDocs);
+        Sort sort = evaluateSortCriteria(querySearchResults, queryTopDocs);
 
         // combine
         log.debug("Do score combination");
-        scoreCombiner.combineScores(queryTopDocs, combinationTechnique, sort);
+        scoreCombiner.combineScores(new CombineScoresDTO(queryTopDocs, combinationTechnique, sort));
 
         // post-process data
         log.debug("Post-process query results after score normalization and combination");
@@ -136,13 +135,15 @@ public class NormalizationProcessorWorkflow {
             } else {
                 final FieldDoc[] fieldDocs = new FieldDoc[updatedTopDocs.getScoreDocs().size()];
                 int i = 0;
-                if (updatedTopDocs.getTotalHits().value > 0) {
+                // If totalHits are not found then return max score = 0
+                if (updatedTopDocs.getTotalHits().value == 0) {
+                    maxScore = MAX_SCORE_WHEN_NO_HITS_FOUND;
+                } else {
+                    // Determine the max normalized score from the score docs
                     for (ScoreDoc scoreDoc : updatedTopDocs.getScoreDocs()) {
                         maxScore = Math.max(maxScore, scoreDoc.score);
                         fieldDocs[i++] = (FieldDoc) scoreDoc;
                     }
-                } else {
-                    maxScore = MAX_SCORE_WHEN_NO_HITS_FOUND;
                 }
 
                 TopFieldDocs topFieldDocs = new TopFieldDocs(updatedTopDocs.getTotalHits(), fieldDocs, sort.getSort());
@@ -237,78 +238,5 @@ public class NormalizationProcessorWorkflow {
                 .map(scoreDoc -> scoreDoc.doc)
                 .collect(Collectors.toList());
         return docIds;
-    }
-
-    /**
-     * This method processes a list of query top documents and retrieved the top documents
-     * that match certain criteria. If a valid top document is found, it creates and returns a sort object based on the first FieldDoc in the scoreDocs array of the top document.
-     * Otherwise, it returns null.
-     * @param queryTopDocs List of query top documents to be evaluated.
-     * @return Sort object based on the first FieldDoc in the scoreDocs array, or null if no valid document is found.
-     */
-    private Sort evaluateSortCriteria(List<CompoundTopDocs> queryTopDocs) {
-        for (CompoundTopDocs compoundTopDocs : queryTopDocs) {
-            if (compoundTopDocs != null && compoundTopDocs.getTotalHits().value > 0) {
-                List<TopDocs> topDocs = compoundTopDocs.getTopDocs();
-                TopDocs foundTopDoc = null;
-                for (TopDocs topDoc : topDocs) {
-                    if (topDoc != null && topDoc.scoreDocs.length > 0) {
-                        foundTopDoc = topDoc;
-                        break;
-                    }
-                }
-
-                if (foundTopDoc != null && foundTopDoc.scoreDocs[0] instanceof FieldDoc) {
-                    return createSort(topDocs.toArray(new TopFieldDocs[0]));
-                } else {
-                    return null;
-                }
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Creates a Sort object based on the provided top field documents.
-     * This method takes an array of top field documents and processes each field to create a corresponding SortField.
-     * The created  SortField objects are then used to create and return a new Sort object.
-     * @param topFieldDocs array of top field documents need to be processed.
-     * @return Sort object created based on provided top field documents.
-     */
-    private static Sort createSort(TopFieldDocs[] topFieldDocs) {
-        final SortField[] firstTopDocFields = topFieldDocs[0].fields;
-        final SortField[] newFields = new SortField[firstTopDocFields.length];
-
-        for (int i = 0; i < firstTopDocFields.length; i++) {
-            final SortField delegate = firstTopDocFields[i];
-            final SortField.Type type = delegate instanceof SortedNumericSortField
-                ? ((SortedNumericSortField) delegate).getNumericType()
-                : delegate.getType();
-
-            if (SortedWiderNumericSortField.isTypeSupported(type) && isSortWideningRequired(topFieldDocs, i)) {
-                newFields[i] = new SortedWiderNumericSortField(delegate.getField(), type, delegate.getReverse());
-            } else {
-                newFields[i] = firstTopDocFields[i];
-            }
-        }
-        return new Sort(newFields);
-    }
-
-    /**
-     * Checks if sort widening is required for the provided top field documents.
-     *
-     * This method iterates through the provided topFieldDocs array and checks if any adjacent pairs of sort fields at the specified index are not equal.
-     * If any such pair is found, it returns true, indicating that sort widening is required. Otherwise, it returns false.
-     * @param topFieldDocs array of top field documents to be checked.
-     * @param sortFieldindex index of the sort field to be checked within each top field document.
-     * @return true if sort widening is required, false otherwise.
-     */
-    private static boolean isSortWideningRequired(TopFieldDocs[] topFieldDocs, int sortFieldindex) {
-        for (int i = 0; i < topFieldDocs.length - 1; i++) {
-            if (!topFieldDocs[i].fields[sortFieldindex].equals(topFieldDocs[i + 1].fields[sortFieldindex])) {
-                return true;
-            }
-        }
-        return false;
     }
 }
