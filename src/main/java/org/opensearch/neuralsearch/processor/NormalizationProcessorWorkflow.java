@@ -146,20 +146,20 @@ public class NormalizationProcessorWorkflow {
      * @return  max score
      */
     private float maxScoreForShard(CompoundTopDocs updatedTopDocs, boolean isSortEnabled) {
-        float maxScore = MAX_SCORE_WHEN_NO_HITS_FOUND;
-        if (updatedTopDocs.getTotalHits().value > 0 && !updatedTopDocs.getScoreDocs().isEmpty()) {
-            if (isSortEnabled) {
-                // In case of sorting iterate over score docs and deduce the max score
-                for (ScoreDoc scoreDoc : updatedTopDocs.getScoreDocs()) {
-                    maxScore = Math.max(maxScore, scoreDoc.score);
-                }
-                return maxScore;
-            } else {
-                // If it is a normal hybrid query then first entry of score doc will have max score
-                return updatedTopDocs.getScoreDocs().get(0).score;
-            }
+        if (updatedTopDocs.getTotalHits().value == 0 || updatedTopDocs.getScoreDocs().isEmpty()) {
+            return MAX_SCORE_WHEN_NO_HITS_FOUND;
         }
-        return maxScore;
+        if (isSortEnabled) {
+            float maxScore = MAX_SCORE_WHEN_NO_HITS_FOUND;
+            // In case of sorting iterate over score docs and deduce the max score
+            for (ScoreDoc scoreDoc : updatedTopDocs.getScoreDocs()) {
+                maxScore = Math.max(maxScore, scoreDoc.score);
+            }
+            return maxScore;
+        } else {
+            // If it is a normal hybrid query then first entry of score doc will have max score
+            return updatedTopDocs.getScoreDocs().get(0).score;
+        }
     }
 
     /**
