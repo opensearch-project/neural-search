@@ -116,32 +116,10 @@ public class NormalizationProcessorWorkflow {
         for (int index = 0; index < querySearchResults.size(); index++) {
             QuerySearchResult querySearchResult = querySearchResults.get(index);
             CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
-            float maxScore = 0.0f;
-            if (updatedTopDocs.getTotalHits().value > 0 && !updatedTopDocs.getScoreDocs().isEmpty()) {
-                maxScore = updatedTopDocs.getScoreDocs().get(0).score;
-            }
-            TopDocsAndMaxScore updatedTopDocsAndMaxScore;
-            if (sort == null) {
-                // create final version of top docs with all updated values
-                TopDocs topDocs = new TopDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new ScoreDoc[0]));
-                updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(topDocs, maxScore);
-            } else {
-                final FieldDoc[] fieldDocs = new FieldDoc[updatedTopDocs.getScoreDocs().size()];
-                int i = 0;
-                // If totalHits are not found then return max score = 0
-                if (updatedTopDocs.getTotalHits().value == 0) {
-                    maxScore = MAX_SCORE_WHEN_NO_HITS_FOUND;
-                } else {
-                    // Determine the max normalized score from the score docs
-                    for (ScoreDoc scoreDoc : updatedTopDocs.getScoreDocs()) {
-                        maxScore = Math.max(maxScore, scoreDoc.score);
-                        fieldDocs[i++] = (FieldDoc) scoreDoc;
-                    }
-                }
-
-                TopFieldDocs topFieldDocs = new TopFieldDocs(updatedTopDocs.getTotalHits(), fieldDocs, sort.getSort());
-                updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(topFieldDocs, maxScore);
-            }
+            TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(
+                getTopDocsOnShard(updatedTopDocs, sort),
+                maxScoreForShard(updatedTopDocs, sort != null)
+            );
             querySearchResult.topDocs(updatedTopDocsAndMaxScore, querySearchResult.sortValueFormats());
         }
     }
@@ -159,6 +137,43 @@ public class NormalizationProcessorWorkflow {
             );
         }
         return queryTopDocs;
+    }
+
+    /**
+     * Get Max score on Shard
+     * @param updatedTopDocs updatedTopDocs compound top docs on a shard
+     * @param isSortEnabled if sort is enabled or disabled
+     * @return  max score
+     */
+    private float maxScoreForShard(CompoundTopDocs updatedTopDocs, boolean isSortEnabled) {
+        float maxScore = MAX_SCORE_WHEN_NO_HITS_FOUND;
+        if (updatedTopDocs.getTotalHits().value > 0 && !updatedTopDocs.getScoreDocs().isEmpty()) {
+            if (isSortEnabled) {
+                // In case of sorting iterate over score docs and deduce the max score
+                for (ScoreDoc scoreDoc : updatedTopDocs.getScoreDocs()) {
+                    maxScore = Math.max(maxScore, scoreDoc.score);
+                }
+                return maxScore;
+            } else {
+                // If it is a normal hybrid query then first entry of score doc will have max score
+                return updatedTopDocs.getScoreDocs().get(0).score;
+            }
+        }
+        return maxScore;
+    }
+
+    /**
+     * Get Top Docs on Shard
+     * @param updatedTopDocs compound top docs on a shard
+     * @param sort  sort criteria
+     * @return TopDocs which will be instance of TopFieldDocs  if sort is enabled.
+     */
+    private TopDocs getTopDocsOnShard(CompoundTopDocs updatedTopDocs, Sort sort) {
+        if (sort != null) {
+            return new TopFieldDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new FieldDoc[0]), sort.getSort());
+        } else {
+            return new TopDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new ScoreDoc[0]));
+        }
     }
 
     /**
