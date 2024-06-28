@@ -21,7 +21,6 @@ import org.apache.lucene.search.FieldDoc;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
-import org.opensearch.neuralsearch.processor.combination.dto.CombineScoresDTO;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.search.SearchHit;
@@ -33,6 +32,7 @@ import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import static org.opensearch.neuralsearch.processor.combination.ScoreCombiner.MAX_SCORE_WHEN_NO_HITS_FOUND;
 import static org.opensearch.neuralsearch.search.util.HybridSearchSortUtil.evaluateSortCriteria;
+import static org.opensearch.neuralsearch.processor.combination.BaseScoreCombinationFactory.CombineScoresDTO;
 
 /**
  * Class abstracts steps required for score normalization and combination, this includes pre-processing of incoming data
@@ -68,12 +68,12 @@ public class NormalizationProcessorWorkflow {
         log.debug("Do score normalization");
         scoreNormalizer.normalizeScores(queryTopDocs, normalizationTechnique);
 
-        CombineScoresDTO combineScoresDTO = new CombineScoresDTO(
-            queryTopDocs,
-            combinationTechnique,
-            querySearchResults,
-            evaluateSortCriteria(querySearchResults, queryTopDocs)
-        );
+        CombineScoresDTO combineScoresDTO = CombineScoresDTO.builder()
+            .queryTopDocs(queryTopDocs)
+            .scoreCombinationTechnique(combinationTechnique)
+            .querySearchResults(querySearchResults)
+            .sort(evaluateSortCriteria(querySearchResults, queryTopDocs))
+            .build();
 
         // combine
         log.debug("Do score combination");

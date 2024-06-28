@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.processor;
 
 import java.util.Collections;
-import org.opensearch.neuralsearch.processor.combination.dto.CombineScoresDTO;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 
 import java.util.List;
@@ -16,12 +15,19 @@ import org.apache.lucene.search.TotalHits;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.test.OpenSearchTestCase;
+import static org.opensearch.neuralsearch.processor.combination.BaseScoreCombinationFactory.CombineScoresDTO;
 
 public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
 
     public void testEmptyResults_whenEmptyResultsAndDefaultMethod_thenNoProcessing() {
         ScoreCombiner scoreCombiner = new ScoreCombiner();
-        scoreCombiner.combineScores(new CombineScoresDTO(List.of(), ScoreCombinationFactory.DEFAULT_METHOD, Collections.emptyList(), null));
+        scoreCombiner.combineScores(
+            CombineScoresDTO.builder()
+                .queryTopDocs(List.of())
+                .scoreCombinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+                .querySearchResults(Collections.emptyList())
+                .build()
+        );
     }
 
     public void testCombination_whenMultipleSubqueriesResultsAndDefaultMethod_thenScoresCombined() {

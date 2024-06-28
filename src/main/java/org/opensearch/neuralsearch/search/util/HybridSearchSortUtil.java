@@ -19,6 +19,11 @@ import org.opensearch.search.sort.SortedWiderNumericSortField;
  */
 public class HybridSearchSortUtil {
 
+    /**
+     * @param querySearchResults list of query search results where each search result represents a result from the shard.
+     * @param queryTopDocs list of top docs which have results with top scores.
+     * @return sort criteria
+     */
     public static Sort evaluateSortCriteria(final List<QuerySearchResult> querySearchResults, final List<CompoundTopDocs> queryTopDocs) {
         if (!checkIfSortEnabled(querySearchResults)) {
             return null;
@@ -63,11 +68,14 @@ public class HybridSearchSortUtil {
     }
 
     /**
-     * Creates a Sort object based on the provided top field documents.
-     * This method takes an array of top field documents and processes each field to create a corresponding SortField.
-     * The created  SortField objects are then used to create and return a new Sort object.
-     * @param topFieldDocs array of top field documents need to be processed.
-     * @return Sort object created based on provided top field documents.
+     * Creates Sort object from topFieldsDocs fields.
+     * It is necessary to widen the SortField.Type to maximum byte size for merging sorted docs.
+     * Different indices might have different types. This will avoid user to do re-index of data
+     * in case of mapping field change for newly indexed data.
+     * This will support Int to Long and Float to Double.
+     * Earlier widening of type was taken care in IndexNumericFieldData, but since we now want to
+     * support sort optimization, we removed type widening there and taking care here during merging.
+     * More details here https://github.com/opensearch-project/OpenSearch/issues/6326
      */
     private static Sort createSort(TopFieldDocs[] topFieldDocs) {
         if (topFieldDocs == null || topFieldDocs[0] == null) {
@@ -92,13 +100,8 @@ public class HybridSearchSortUtil {
     }
 
     /**
-     * Checks if sort widening is required for the provided top field documents.
-     *
-     * This method iterates through the provided topFieldDocs array and checks if any adjacent pairs of sort fields at the specified index are not equal.
-     * If any such pair is found, it returns true, indicating that sort widening is required. Otherwise, it returns false.
-     * @param topFieldDocs array of top field documents to be checked.
-     * @param sortFieldindex index of the sort field to be checked within each top field document.
-     * @return true if sort widening is required, false otherwise.
+     * It will compare respective SortField between shards to see if any shard results have different
+     * field mapping type, accordingly it will decide to widen the sort fields.
      */
     private static boolean isSortWideningRequired(TopFieldDocs[] topFieldDocs, int sortFieldindex) {
         for (int i = 0; i < topFieldDocs.length - 1; i++) {
