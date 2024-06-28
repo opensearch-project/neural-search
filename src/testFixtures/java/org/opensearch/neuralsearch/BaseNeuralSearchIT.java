@@ -81,7 +81,9 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         ProcessorType.SPARSE_ENCODING,
         "processor/SparseEncodingPipelineConfiguration.json",
         ProcessorType.TEXT_IMAGE_EMBEDDING,
-        "processor/PipelineForTextImageEmbeddingProcessorConfiguration.json"
+        "processor/PipelineForTextImageEmbeddingProcessorConfiguration.json",
+        ProcessorType.TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING,
+        "processor/PipelineConfigurationWithNestedFieldsMapping.json"
     );
     private static final Set<RestStatus> SUCCESS_STATUSES = Set.of(RestStatus.CREATED, RestStatus.OK);
     protected static final String CONCURRENT_SEGMENT_SEARCH_ENABLED = "search.concurrent_segment_search.enabled";
@@ -1344,6 +1346,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      */
     protected enum ProcessorType {
         TEXT_EMBEDDING,
+        TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING,
         TEXT_IMAGE_EMBEDDING,
         SPARSE_ENCODING
     }

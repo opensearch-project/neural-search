@@ -102,6 +102,27 @@
                 "m": 24
               }
             }
+          },
+          "level_2": {
+            "type": "nested",
+            "properties": {
+              "level_3_text": {
+                "type": "text"
+              },
+              "level_3_embedding": {
+                "type": "knn_vector",
+                "dimension": 768,
+                "method": {
+                  "name": "hnsw",
+                  "space_type": "l2",
+                  "engine": "lucene",
+                  "parameters": {
+                    "ef_construction": 128,
+                    "m": 24
+                  }
+                }
+              }
+            }
           }
         }
       }

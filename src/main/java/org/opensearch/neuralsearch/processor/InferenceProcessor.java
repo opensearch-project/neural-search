@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.processor;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -21,6 +22,8 @@ import java.util.stream.IntStream;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.cluster.service.ClusterService;
@@ -120,7 +123,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
     public void execute(IngestDocument ingestDocument, BiConsumer<IngestDocument, Exception> handler) {
         try {
             validateEmbeddingFieldsValue(ingestDocument);
-            Map<String, Object> processMap = buildMapWithTargetKeyAndOriginalValue(ingestDocument);
+            Map<String, Object> processMap = buildMapWithTargetKeys(ingestDocument);
             List<String> inferenceList = createInferenceList(processMap);
             if (inferenceList.size() == 0) {
                 handler.accept(ingestDocument, null);
@@ -228,7 +231,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
             List<String> inferenceList = null;
             try {
                 validateEmbeddingFieldsValue(ingestDocumentWrapper.getIngestDocument());
-                processMap = buildMapWithTargetKeyAndOriginalValue(ingestDocumentWrapper.getIngestDocument());
+                processMap = buildMapWithTargetKeys(ingestDocumentWrapper.getIngestDocument());
                 inferenceList = createInferenceList(processMap);
             } catch (Exception e) {
                 ingestDocumentWrapper.update(ingestDocumentWrapper.getIngestDocument(), e);
@@ -276,15 +279,17 @@ public abstract class InferenceProcessor extends AbstractProcessor {
     }
 
     @VisibleForTesting
-    Map<String, Object> buildMapWithTargetKeyAndOriginalValue(IngestDocument ingestDocument) {
+    Map<String, Object> buildMapWithTargetKeys(IngestDocument ingestDocument) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
         Map<String, Object> mapWithProcessorKeys = new LinkedHashMap<>();
         for (Map.Entry<String, Object> fieldMapEntry : fieldMap.entrySet()) {
-            String originalKey = fieldMapEntry.getKey();
-            Object targetKey = fieldMapEntry.getValue();
+            Pair<String, Object> processedNestedKey = processNestedKey(fieldMapEntry);
+            String originalKey = processedNestedKey.getKey();
+            Object targetKey = processedNestedKey.getValue();
+
             if (targetKey instanceof Map) {
                 Map<String, Object> treeRes = new LinkedHashMap<>();
-                buildMapWithProcessorKeyAndOriginalValueForMapType(originalKey, targetKey, sourceAndMetadataMap, treeRes);
+                buildNestedMap(originalKey, targetKey, sourceAndMetadataMap, treeRes);
                 mapWithProcessorKeys.put(originalKey, treeRes.get(originalKey));
             } else {
                 mapWithProcessorKeys.put(String.valueOf(targetKey), sourceAndMetadataMap.get(originalKey));
@@ -293,20 +298,23 @@ public abstract class InferenceProcessor extends AbstractProcessor {
         return mapWithProcessorKeys;
     }
 
-    private void buildMapWithProcessorKeyAndOriginalValueForMapType(
+    private void buildNestedMap(
         String parentKey,
         Object processorKey,
         Map<String, Object> sourceAndMetadataMap,
         Map<String, Object> treeRes
     ) {
-        if (processorKey == null || sourceAndMetadataMap == null) return;
+        if (Objects.isNull(processorKey) || Objects.isNull(sourceAndMetadataMap)) {
+            return;
+        }
         if (processorKey instanceof Map) {
             Map<String, Object> next = new LinkedHashMap<>();
             if (sourceAndMetadataMap.get(parentKey) instanceof Map) {
                 for (Map.Entry<String, Object> nestedFieldMapEntry : ((Map<String, Object>) processorKey).entrySet()) {
-                    buildMapWithProcessorKeyAndOriginalValueForMapType(
-                        nestedFieldMapEntry.getKey(),
-                        nestedFieldMapEntry.getValue(),
+                    Pair<String, Object> processedNestedKey = processNestedKey(nestedFieldMapEntry);
+                    buildNestedMap(
+                        processedNestedKey.getKey(),
+                        processedNestedKey.getValue(),
                         (Map<String, Object>) sourceAndMetadataMap.get(parentKey),
                         next
                     );
@@ -317,19 +325,43 @@ public abstract class InferenceProcessor extends AbstractProcessor {
                     List<Object> listOfStrings = list.stream().map(x -> x.get(nestedFieldMapEntry.getKey())).collect(Collectors.toList());
                     Map<String, Object> map = new LinkedHashMap<>();
                     map.put(nestedFieldMapEntry.getKey(), listOfStrings);
-                    buildMapWithProcessorKeyAndOriginalValueForMapType(
-                        nestedFieldMapEntry.getKey(),
-                        nestedFieldMapEntry.getValue(),
-                        map,
-                        next
-                    );
+                    buildNestedMap(nestedFieldMapEntry.getKey(), nestedFieldMapEntry.getValue(), map, next);
                 }
             }
-            treeRes.put(parentKey, next);
+            treeRes.merge(parentKey, next, (v1, v2) -> {
+                if (v1 instanceof Collection && v2 instanceof Collection) {
+                    ((Collection) v1).addAll((Collection) v2);
+                    return v1;
+                } else if (v1 instanceof Map && v2 instanceof Map) {
+                    ((Map) v1).putAll((Map) v2);
+                    return v1;
+                } else {
+                    return v2;
+                }
+            });
         } else {
             String key = String.valueOf(processorKey);
             treeRes.put(key, sourceAndMetadataMap.get(parentKey));
         }
+    }
+
+    /**
+     * Process the nested key, such as "a.b.c" to "a", "b.c"
+     * @param nestedFieldMapEntry
+     * @return A pair of the original key and the target key
+     */
+    private Pair<String, Object> processNestedKey(final Map.Entry<String, Object> nestedFieldMapEntry) {
+        String originalKey = nestedFieldMapEntry.getKey();
+        Object targetKey = nestedFieldMapEntry.getValue();
+        int nestedDotIndex = originalKey.indexOf('.');
+        if (nestedDotIndex != -1) {
+            Map<String, Object> newTargetKey = new LinkedHashMap<>();
+            newTargetKey.put(originalKey.substring(nestedDotIndex + 1), targetKey);
+            targetKey = newTargetKey;
+
+            originalKey = originalKey.substring(0, nestedDotIndex);
+        }
+        return new ImmutablePair<>(originalKey, targetKey);
     }
 
     private void validateEmbeddingFieldsValue(IngestDocument ingestDocument) {
