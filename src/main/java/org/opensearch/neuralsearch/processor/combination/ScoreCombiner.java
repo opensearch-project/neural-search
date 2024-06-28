@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.processor.combination;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -96,7 +97,11 @@ public class ScoreCombiner {
 
         // - sort documents by scores and take first "max number" of docs
         // create a collection of doc ids that are sorted by their combined scores
-        List<Integer> sortedDocsIds = getSortedDocIds(combinedNormalizedScoresByDocId, getTopFieldDocs(sort, topDocsPerSubQuery), sort);
+        Collection<Integer> sortedDocsIds = getSortedDocIds(
+            combinedNormalizedScoresByDocId,
+            getTopFieldDocs(sort, topDocsPerSubQuery),
+            sort
+        );
 
         // - update query search results with normalized scores
         updateQueryTopDocsWithCombinedScores(
@@ -181,16 +186,16 @@ public class ScoreCombiner {
         return docIdSortFieldMap;
     }
 
-    private List<Integer> getSortedDocIds(
+    private Collection<Integer> getSortedDocIds(
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
         final List<TopFieldDocs> topFieldDocs,
         final Sort sort
     ) {
         // we're merging docs with normalized and combined scores. we need to have only maxHits results
-        List<Integer> sortedDocsIds;
         if (Objects.isNull(sort)) {
-            sortedDocsIds = new ArrayList<>(combinedNormalizedScoresByDocId.keySet());
+            List<Integer> sortedDocsIds = new ArrayList<>(combinedNormalizedScoresByDocId.keySet());
             sortedDocsIds.sort((a, b) -> Float.compare(combinedNormalizedScoresByDocId.get(b), combinedNormalizedScoresByDocId.get(a)));
+            return sortedDocsIds;
         } else {
             if (Objects.isNull(topFieldDocs)) {
                 throw new IllegalArgumentException("topFieldDocs cannot be null when sorting is enabled.");
@@ -219,15 +224,14 @@ public class ScoreCombiner {
             for (ScoreDoc scoreDoc : sortedTopDocs.scoreDocs) {
                 uniqueDocIds.add(scoreDoc.doc);
             }
-            sortedDocsIds = new ArrayList<>(uniqueDocIds);
+            return uniqueDocIds;
         }
-        return sortedDocsIds;
     }
 
     private List<ScoreDoc> getCombinedScoreDocs(
         final CompoundTopDocs compoundQueryTopDocs,
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
-        final List<Integer> sortedScores,
+        final Collection<Integer> sortedScores,
         final long maxHits,
         final Map<Integer, Object[]> docIdSortFieldMap,
         boolean isSortingEnabled
@@ -239,9 +243,13 @@ public class ScoreCombiner {
             shardId = compoundQueryTopDocs.getScoreDocs().get(0).shardIndex;
         }
         List<ScoreDoc> scoreDocs = new ArrayList<>();
-        for (int j = 0; j < maxHits && j < sortedScores.size(); j++) {
-            int docId = sortedScores.get(j);
+        int j = 0;
+        for (Integer docId : sortedScores) {
+            if (j == maxHits) {
+                break;
+            }
             scoreDocs.add(getScoreDoc(isSortingEnabled, docId, shardId, combinedNormalizedScoresByDocId, docIdSortFieldMap));
+            j++;
         }
         return scoreDocs;
     }
@@ -289,7 +297,7 @@ public class ScoreCombiner {
         final CompoundTopDocs compoundQueryTopDocs,
         final List<TopDocs> topDocsPerSubQuery,
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
-        final List<Integer> sortedScores,
+        final Collection<Integer> sortedScores,
         Map<Integer, Object[]> docIdSortFieldMap,
         boolean isSortingEnabled
     ) {
