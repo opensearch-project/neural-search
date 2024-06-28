@@ -42,7 +42,6 @@ import java.util.List;
 import java.util.Objects;
 
 import static org.apache.lucene.search.TotalHits.Relation;
-import static org.opensearch.neuralsearch.search.query.TopDocsMerger.TOP_DOCS_MERGER_TOP_SCORES;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createDelimiterElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createFieldDocStartStopElementForHybridSearchResults;
@@ -156,7 +155,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         return reduceSearchResults(getSearchResults(hybridSearchCollectors));
     }
 
-    private List<ReduceableSearchResult> getSearchResults(List<Collector> hybridSearchCollectors) {
+    private List<ReduceableSearchResult> getSearchResults(final List<Collector> hybridSearchCollectors) {
         List<ReduceableSearchResult> results = new ArrayList<>();
         DocValueFormat[] docValueFormats = getSortValueFormats(sortAndFormats);
         for (Collector collector : hybridSearchCollectors) {
@@ -166,7 +165,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         return results;
     }
 
-    private TopDocsAndMaxScore getTopDocsAndAndMaxScore(Collector collector, DocValueFormat[] docValueFormats) {
+    private TopDocsAndMaxScore getTopDocsAndAndMaxScore(final Collector collector, final DocValueFormat[] docValueFormats) {
         float maxScore;
         TopDocs newTopDocs;
         if (docValueFormats != null) {
@@ -187,7 +186,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         return new TopDocsAndMaxScore(newTopDocs, maxScore);
     }
 
-    private List<Collector> getHybridSearchCollectors(Collection<Collector> collectors) {
+    private List<Collector> getHybridSearchCollectors(final Collection<Collector> collectors) {
         final List<Collector> hybridSearchCollectors = new ArrayList<>();
         for (final Collector collector : collectors) {
             if (collector instanceof MultiCollectorWrapper) {
@@ -368,7 +367,11 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         return sortAndFormats == null ? null : sortAndFormats.formats;
     }
 
-    private void reduceCollectorResults(QuerySearchResult result, TopDocsAndMaxScore topDocsAndMaxScore, DocValueFormat[] docValueFormats) {
+    private void reduceCollectorResults(
+        final QuerySearchResult result,
+        final TopDocsAndMaxScore topDocsAndMaxScore,
+        final DocValueFormat[] docValueFormats
+    ) {
         // this is case of first collector, query result object doesn't have any top docs set, so we can
         // just set new top docs without merge
         // this call is effectively checking if QuerySearchResult.topDoc is null. using it in such way because
@@ -384,8 +387,18 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         }
         // we need to do actual merge because query result and current collector both have some score hits
         TopDocsAndMaxScore originalTotalDocsAndHits = result.topDocs();
-        TopDocsAndMaxScore mergeTopDocsAndMaxScores = topDocsMerger.merge(originalTotalDocsAndHits, topDocsAndMaxScore);
-        result.topDocs(mergeTopDocsAndMaxScores, docValueFormats);
+        result.topDocs(getMergeTopDocsAndMaxScores(originalTotalDocsAndHits, topDocsAndMaxScore), docValueFormats);
+    }
+
+    private TopDocsAndMaxScore getMergeTopDocsAndMaxScores(
+        final TopDocsAndMaxScore originalTotalDocsAndHits,
+        final TopDocsAndMaxScore topDocsAndMaxScore
+    ) {
+        if (sortAndFormats != null) {
+            return topDocsMerger.mergeFieldDocs(originalTotalDocsAndHits, topDocsAndMaxScore, sortAndFormats);
+        } else {
+            return topDocsMerger.merge(originalTotalDocsAndHits, topDocsAndMaxScore);
+        }
     }
 
     /**
@@ -393,7 +406,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
      * @param results collection of search results
      * @return single search result that represents all results as one object
      */
-    private ReduceableSearchResult reduceSearchResults(List<ReduceableSearchResult> results) {
+    private ReduceableSearchResult reduceSearchResults(final List<ReduceableSearchResult> results) {
         return (result) -> {
             for (ReduceableSearchResult r : results) {
                 // call reduce for results of each single collector, this will update top docs in query result
@@ -423,7 +436,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 trackTotalHitsUpTo,
                 sortAndFormats,
                 filteringWeight,
-                TOP_DOCS_MERGER_TOP_SCORES,
+                new TopDocsMerger(sortAndFormats),
                 (FieldDoc) searchAfter
             );
             scoreCollector = Objects.requireNonNull(super.newCollector(), "collector for hybrid query cannot be null");
@@ -461,7 +474,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 trackTotalHitsUpTo,
                 sortAndFormats,
                 filteringWeight,
-                TOP_DOCS_MERGER_TOP_SCORES,
+                new TopDocsMerger(sortAndFormats),
                 (FieldDoc) searchAfter
             );
         }
