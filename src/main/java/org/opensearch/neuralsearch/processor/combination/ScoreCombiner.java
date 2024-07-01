@@ -242,13 +242,13 @@ public class ScoreCombiner {
             shardId = compoundQueryTopDocs.getScoreDocs().get(0).shardIndex;
         }
         List<ScoreDoc> scoreDocs = new ArrayList<>();
-        int numHits = 0;
+        int hitCount = 0;
         for (Integer docId : sortedScores) {
-            if (numHits == maxHits) {
+            if (hitCount == maxHits) {
                 break;
             }
             scoreDocs.add(getScoreDoc(isSortingEnabled, docId, shardId, combinedNormalizedScoresByDocId, docIdSortFieldMap));
-            numHits++;
+            hitCount++;
         }
         return scoreDocs;
     }
