@@ -19,6 +19,7 @@ import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.FieldDoc;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
+import org.opensearch.neuralsearch.processor.combination.CombineScoresDTO;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
@@ -32,7 +33,6 @@ import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import static org.opensearch.neuralsearch.processor.combination.ScoreCombiner.MAX_SCORE_WHEN_NO_HITS_FOUND;
 import static org.opensearch.neuralsearch.search.util.HybridSearchSortUtil.evaluateSortCriteria;
-import static org.opensearch.neuralsearch.processor.combination.BaseScoreCombinationFactory.CombineScoresDTO;
 
 /**
  * Class abstracts steps required for score normalization and combination, this includes pre-processing of incoming data

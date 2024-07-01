@@ -26,7 +26,6 @@ import org.apache.lucene.search.SortField;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import lombok.extern.log4j.Log4j2;
-import static org.opensearch.neuralsearch.processor.combination.BaseScoreCombinationFactory.CombineScoresDTO;
 
 /**
  * Abstracts combination of scores in query search results.
@@ -243,13 +242,13 @@ public class ScoreCombiner {
             shardId = compoundQueryTopDocs.getScoreDocs().get(0).shardIndex;
         }
         List<ScoreDoc> scoreDocs = new ArrayList<>();
-        int j = 0;
+        int numHits = 0;
         for (Integer docId : sortedScores) {
-            if (j == maxHits) {
+            if (numHits == maxHits) {
                 break;
             }
             scoreDocs.add(getScoreDoc(isSortingEnabled, docId, shardId, combinedNormalizedScoresByDocId, docIdSortFieldMap));
-            j++;
+            numHits++;
         }
         return scoreDocs;
     }
