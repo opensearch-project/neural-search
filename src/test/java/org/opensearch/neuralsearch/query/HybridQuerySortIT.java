@@ -66,14 +66,9 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
         instance.updateClusterSettings();
     }
 
-    @Override
-    protected boolean preserveClusterUponCompletion() {
-        return true;
-    }
-
     // TODO Enable the test after catering the fix for https://github.com/opensearch-project/neural-search/issues/799
     // @SneakyThrows
-    // public void testSortOnSingleShard_WhenConcurrentSearchEnabled_thenSuccessful() {
+    // public void testSortOnSingleShard_whenConcurrentSearchEnabled_thenSuccessful() {
     // try {
     // updateClusterSettings("search.concurrent_segment_search.enabled", true);
     // prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
@@ -85,7 +80,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
     // }
 
     @SneakyThrows
-    public void testSortOnSingleShard_WhenConcurrentSearchDisabled_thenSuccessful() {
+    public void testSortOnSingleShard_whenConcurrentSearchDisabled_thenSuccessful() {
         try {
             updateClusterSettings("search.concurrent_segment_search.enabled", false);
             prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
@@ -99,7 +94,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
 
     // TODO Enable the test after catering the fix for https://github.com/opensearch-project/neural-search/issues/799
     // @SneakyThrows
-    // public void testSortOnMultipleShard_WhenConcurrentSearchEnabled_thenSuccessful() {
+    // public void testSortOnMultipleShard_whenConcurrentSearchEnabled_thenSuccessful() {
     // try {
     // updateClusterSettings("search.concurrent_segment_search.enabled", true);
     // prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
@@ -112,7 +107,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
     // }
 
     @SneakyThrows
-    public void testSortOnMultipleShard_WhenConcurrentSearchDisabled_thenSuccessful() {
+    public void testSortOnMultipleShard_whenConcurrentSearchDisabled_thenSuccessful() {
         try {
             updateClusterSettings("search.concurrent_segment_search.enabled", false);
             prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
@@ -251,7 +246,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
 
     // TODO Enable the test after catering the fix for https://github.com/opensearch-project/neural-search/issues/799
     // @SneakyThrows
-    // public void testSearchAfterWithSortOnSingleShard_WhenConcurrentSearchEnabled_thenSuccessful() {
+    // public void testSearchAfterWithSortOnSingleShard_whenConcurrentSearchEnabled_thenSuccessful() {
     // try {
     // updateClusterSettings("search.concurrent_segment_search.enabled", true);
     // prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
@@ -263,7 +258,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
     // }
 
     @SneakyThrows
-    public void testSearchAfterWithSortOnSingleShard_WhenConcurrentSearchDisabled_thenSuccessful() {
+    public void testSearchAfterWithSortOnSingleShard_whenConcurrentSearchDisabled_thenSuccessful() {
         try {
             updateClusterSettings("search.concurrent_segment_search.enabled", false);
             prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
@@ -276,7 +271,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
 
     // TODO Enable the test after catering the fix for https://github.com/opensearch-project/neural-search/issues/799
     // @SneakyThrows
-    // public void testSearchAfterWithSortOnMultipleShard_WhenConcurrentSearchEnabled_thenSuccessful() {
+    // public void testSearchAfterWithSortOnMultipleShard_whenConcurrentSearchEnabled_thenSuccessful() {
     // try {
     // updateClusterSettings("search.concurrent_segment_search.enabled", true);
     // prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
@@ -288,7 +283,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
     // }
 
     @SneakyThrows
-    public void testSearchAfterWithSortOnMultipleShard_WhenConcurrentSearchDisabled_thenSuccessful() {
+    public void testSearchAfterWithSortOnMultipleShard_whenConcurrentSearchDisabled_thenSuccessful() {
         try {
             updateClusterSettings("search.concurrent_segment_search.enabled", false);
             prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);

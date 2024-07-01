@@ -9,7 +9,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.search.Sort;
 import org.opensearch.common.Nullable;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
@@ -21,7 +20,6 @@ import org.opensearch.search.query.QuerySearchResult;
 @AllArgsConstructor
 @Builder
 @Getter
-@Log4j2
 public class CombineScoresDTO {
     @NonNull
     private List<CompoundTopDocs> queryTopDocs;
