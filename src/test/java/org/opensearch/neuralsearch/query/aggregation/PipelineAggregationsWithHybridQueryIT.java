@@ -53,49 +53,49 @@ public class PipelineAggregationsWithHybridQueryIT extends BaseAggregationsWithH
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenDateBucketedSumsPipelinedToBucketStatsAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testDateBucketedSumsPipelinedToBucketStatsAggs();
     }
 
     @SneakyThrows
     public void testPipelineSiblingAggs_whenDateBucketedSumsPipelinedToBucketStatsAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testDateBucketedSumsPipelinedToBucketStatsAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenDateBucketedSumsPipelinedToBucketScriptedAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testDateBucketedSumsPipelinedToBucketScriptedAggs();
     }
 
     @SneakyThrows
     public void testPipelineParentAggs_whenDateBucketedSumsPipelinedToBucketScriptedAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testDateBucketedSumsPipelinedToBucketScriptedAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenDateBucketedSumsPipelinedToBucketSortAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testDateBucketedSumsPipelinedToBucketSortAggs();
     }
 
     @SneakyThrows
     public void testPipelineParentAggs_whenDateBucketedSumsPipelinedToBucketSortAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testDateBucketedSumsPipelinedToBucketSortAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenDateBucketedSumsPipelinedToCumulativeSumAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testDateBucketedSumsPipelinedToCumulativeSumAggs();
     }
 
     @SneakyThrows
     public void testPipelineParentAggs_whenDateBucketedSumsPipelinedToCumulativeSumAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testDateBucketedSumsPipelinedToCumulativeSumAggs();
     }
 
