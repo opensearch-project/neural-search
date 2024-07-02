@@ -30,7 +30,8 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
                         new TotalHits(2, TotalHits.Relation.EQUAL_TO),
                         new ScoreDoc[] { new ScoreDoc(2, scores[0]), new ScoreDoc(4, scores[1]) }
                     )
-                )
+                ),
+                false
             )
         );
         normalizationTechnique.normalize(compoundTopDocs);
@@ -44,7 +45,8 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
                         new ScoreDoc(2, l2Norm(scores[0], Arrays.asList(scores))),
                         new ScoreDoc(4, l2Norm(scores[1], Arrays.asList(scores))) }
                 )
-            )
+            ),
+            false
         );
         assertNotNull(compoundTopDocs);
         assertEquals(1, compoundTopDocs.size());
@@ -75,7 +77,8 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
                             new ScoreDoc(4, scoresQuery2[1]),
                             new ScoreDoc(2, scoresQuery2[2]) }
                     )
-                )
+                ),
+                false
             )
         );
         normalizationTechnique.normalize(compoundTopDocs);
@@ -97,7 +100,8 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
                         new ScoreDoc(4, l2Norm(scoresQuery2[1], Arrays.asList(scoresQuery2))),
                         new ScoreDoc(2, l2Norm(scoresQuery2[2], Arrays.asList(scoresQuery2))) }
                 )
-            )
+            ),
+            false
         );
         assertNotNull(compoundTopDocs);
         assertEquals(1, compoundTopDocs.size());
@@ -128,7 +132,8 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
                             new ScoreDoc(4, scoresShard1and2Query3[1]),
                             new ScoreDoc(2, scoresShard1and2Query3[2]) }
                     )
-                )
+                ),
+                false
             ),
             new CompoundTopDocs(
                 new TotalHits(4, TotalHits.Relation.EQUAL_TO),
@@ -146,7 +151,8 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
                             new ScoreDoc(10, scoresShard1and2Query3[5]),
                             new ScoreDoc(15, scoresShard1and2Query3[6]) }
                     )
-                )
+                ),
+                false
             )
         );
         normalizationTechnique.normalize(compoundTopDocs);
@@ -168,7 +174,8 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
                         new ScoreDoc(4, l2Norm(scoresShard1and2Query3[1], Arrays.asList(scoresShard1and2Query3))),
                         new ScoreDoc(2, l2Norm(scoresShard1and2Query3[2], Arrays.asList(scoresShard1and2Query3))) }
                 )
-            )
+            ),
+            false
         );
 
         CompoundTopDocs expectedCompoundDocsShard2 = new CompoundTopDocs(
@@ -189,7 +196,8 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
                         new ScoreDoc(10, l2Norm(scoresShard1and2Query3[5], Arrays.asList(scoresShard1and2Query3))),
                         new ScoreDoc(15, l2Norm(scoresShard1and2Query3[6], Arrays.asList(scoresShard1and2Query3))) }
                 )
-            )
+            ),
+            false
         );
 
         assertNotNull(compoundTopDocs);
