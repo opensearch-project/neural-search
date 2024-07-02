@@ -20,7 +20,7 @@ import org.opensearch.search.query.QuerySearchResult;
 @AllArgsConstructor
 @Builder
 @Getter
-public class CombineScoresDTO {
+public class CombineScoresDto {
     @NonNull
     private List<CompoundTopDocs> queryTopDocs;
     @NonNull

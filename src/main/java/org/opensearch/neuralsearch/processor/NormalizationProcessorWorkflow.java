@@ -19,7 +19,7 @@ import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.FieldDoc;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
-import org.opensearch.neuralsearch.processor.combination.CombineScoresDTO;
+import org.opensearch.neuralsearch.processor.combination.CombineScoresDto;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
@@ -68,7 +68,7 @@ public class NormalizationProcessorWorkflow {
         log.debug("Do score normalization");
         scoreNormalizer.normalizeScores(queryTopDocs, normalizationTechnique);
 
-        CombineScoresDTO combineScoresDTO = CombineScoresDTO.builder()
+        CombineScoresDto combineScoresDTO = CombineScoresDto.builder()
             .queryTopDocs(queryTopDocs)
             .scoreCombinationTechnique(combinationTechnique)
             .querySearchResults(querySearchResults)
@@ -109,7 +109,7 @@ public class NormalizationProcessorWorkflow {
         return queryTopDocs;
     }
 
-    private void updateOriginalQueryResults(final CombineScoresDTO combineScoresDTO) {
+    private void updateOriginalQueryResults(final CombineScoresDto combineScoresDTO) {
         final List<QuerySearchResult> querySearchResults = combineScoresDTO.getQuerySearchResults();
         final List<CompoundTopDocs> queryTopDocs = getCompoundTopDocs(combineScoresDTO, querySearchResults);
         final Sort sort = combineScoresDTO.getSort();
@@ -117,14 +117,14 @@ public class NormalizationProcessorWorkflow {
             QuerySearchResult querySearchResult = querySearchResults.get(index);
             CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
             TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(
-                getTopDocsOnShard(updatedTopDocs, sort),
+                buildTopDocs(updatedTopDocs, sort),
                 maxScoreForShard(updatedTopDocs, sort != null)
             );
             querySearchResult.topDocs(updatedTopDocsAndMaxScore, querySearchResult.sortValueFormats());
         }
     }
 
-    private List<CompoundTopDocs> getCompoundTopDocs(CombineScoresDTO combineScoresDTO, List<QuerySearchResult> querySearchResults) {
+    private List<CompoundTopDocs> getCompoundTopDocs(CombineScoresDto combineScoresDTO, List<QuerySearchResult> querySearchResults) {
         final List<CompoundTopDocs> queryTopDocs = combineScoresDTO.getQueryTopDocs();
         if (querySearchResults.size() != queryTopDocs.size()) {
             throw new IllegalStateException(
@@ -156,10 +156,9 @@ public class NormalizationProcessorWorkflow {
                 maxScore = Math.max(maxScore, scoreDoc.score);
             }
             return maxScore;
-        } else {
-            // If it is a normal hybrid query then first entry of score doc will have max score
-            return updatedTopDocs.getScoreDocs().get(0).score;
         }
+        // If it is a normal hybrid query then first entry of score doc will have max score
+        return updatedTopDocs.getScoreDocs().get(0).score;
     }
 
     /**
@@ -168,12 +167,11 @@ public class NormalizationProcessorWorkflow {
      * @param sort  sort criteria
      * @return TopDocs which will be instance of TopFieldDocs  if sort is enabled.
      */
-    private TopDocs getTopDocsOnShard(CompoundTopDocs updatedTopDocs, Sort sort) {
+    private TopDocs buildTopDocs(CompoundTopDocs updatedTopDocs, Sort sort) {
         if (sort != null) {
             return new TopFieldDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new FieldDoc[0]), sort.getSort());
-        } else {
-            return new TopDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new ScoreDoc[0]));
         }
+        return new TopDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new ScoreDoc[0]));
     }
 
     /**

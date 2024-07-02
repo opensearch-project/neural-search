@@ -5,7 +5,7 @@
 package org.opensearch.neuralsearch.processor;
 
 import java.util.Collections;
-import org.opensearch.neuralsearch.processor.combination.CombineScoresDTO;
+import org.opensearch.neuralsearch.processor.combination.CombineScoresDto;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 
 import java.util.List;
@@ -22,7 +22,7 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
     public void testEmptyResults_whenEmptyResultsAndDefaultMethod_thenNoProcessing() {
         ScoreCombiner scoreCombiner = new ScoreCombiner();
         scoreCombiner.combineScores(
-            CombineScoresDTO.builder()
+            CombineScoresDto.builder()
                 .queryTopDocs(List.of())
                 .scoreCombinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
                 .querySearchResults(Collections.emptyList())
@@ -70,7 +70,7 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
         );
 
         scoreCombiner.combineScores(
-            CombineScoresDTO.builder()
+            CombineScoresDto.builder()
                 .queryTopDocs(queryTopDocs)
                 .scoreCombinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
                 .querySearchResults(Collections.emptyList())

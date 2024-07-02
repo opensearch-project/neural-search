@@ -34,7 +34,7 @@ public class HybridSearchSortUtil {
     // Check if sort is enabled by checking docValueFormats Object
     private static boolean checkIfSortEnabled(final List<QuerySearchResult> querySearchResults) {
         if (querySearchResults == null || querySearchResults.isEmpty() || querySearchResults.get(0) == null) {
-            throw new IllegalArgumentException("shard result cannot be null in the normalization process.");
+            throw new IllegalArgumentException("shard results cannot be null in the normalization process.");
         }
         return querySearchResults.get(0).sortValueFormats() != null;
     }
@@ -47,14 +47,14 @@ public class HybridSearchSortUtil {
             if (compoundTopDocs == null) {
                 throw new IllegalArgumentException("CompoundTopDocs cannot be null in the normalization process");
             }
-            if (checkIfTopFieldDocExists(compoundTopDocs.getTopDocs())) {
+            if (containsTopFieldDocs(compoundTopDocs.getTopDocs())) {
                 return compoundTopDocs.getTopDocs().toArray(new TopFieldDocs[0]);
             }
         }
         return new TopFieldDocs[0];
     }
 
-    private static boolean checkIfTopFieldDocExists(List<TopDocs> topDocs) {
+    private static boolean containsTopFieldDocs(List<TopDocs> topDocs) {
         // topDocs can be empty if no results found in the shard
         if (topDocs == null || topDocs.isEmpty()) {
             return false;
@@ -86,12 +86,12 @@ public class HybridSearchSortUtil {
 
         for (int i = 0; i < firstTopDocFields.length; i++) {
             final SortField delegate = firstTopDocFields[i];
-            final SortField.Type type = delegate instanceof SortedNumericSortField
+            final SortField.Type sortFieldType = delegate instanceof SortedNumericSortField
                 ? ((SortedNumericSortField) delegate).getNumericType()
                 : delegate.getType();
 
-            if (SortedWiderNumericSortField.isTypeSupported(type) && isSortWideningRequired(topFieldDocs, i)) {
-                newFields[i] = new SortedWiderNumericSortField(delegate.getField(), type, delegate.getReverse());
+            if (SortedWiderNumericSortField.isTypeSupported(sortFieldType) && isSortWideningRequired(topFieldDocs, i)) {
+                newFields[i] = new SortedWiderNumericSortField(delegate.getField(), sortFieldType, delegate.getReverse());
             } else {
                 newFields[i] = firstTopDocFields[i];
             }
