@@ -66,23 +66,22 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
         instance.updateClusterSettings();
     }
 
-    // TODO Enable the test after catering the fix for https://github.com/opensearch-project/neural-search/issues/799
-    // @SneakyThrows
-    // public void testSortOnSingleShard_whenConcurrentSearchEnabled_thenSuccessful() {
-    // try {
-    // updateClusterSettings("search.concurrent_segment_search.enabled", true);
-    // prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
-    // testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
-    // testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
-    // } finally {
-    // wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, null, null, SEARCH_PIPELINE);
-    // }
-    // }
+    @SneakyThrows
+    public void testSortOnSingleShard_whenConcurrentSearchEnabled_thenSuccessful() {
+        try {
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
+            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
+            testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+            testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, null, null, SEARCH_PIPELINE);
+        }
+    }
 
     @SneakyThrows
     public void testSortOnSingleShard_whenConcurrentSearchDisabled_thenSuccessful() {
         try {
-            updateClusterSettings("search.concurrent_segment_search.enabled", false);
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
             prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
             testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
             testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
@@ -92,24 +91,23 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
         }
     }
 
-    // TODO Enable the test after catering the fix for https://github.com/opensearch-project/neural-search/issues/799
-    // @SneakyThrows
-    // public void testSortOnMultipleShard_whenConcurrentSearchEnabled_thenSuccessful() {
-    // try {
-    // updateClusterSettings("search.concurrent_segment_search.enabled", true);
-    // prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
-    // testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
-    // testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
-    // testScoreSort_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
-    // } finally {
-    // wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-    // }
-    // }
+    @SneakyThrows
+    public void testSortOnMultipleShard_whenConcurrentSearchEnabled_thenSuccessful() {
+        try {
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
+            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+            testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+            testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+            testScoreSort_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
+        }
+    }
 
     @SneakyThrows
     public void testSortOnMultipleShard_whenConcurrentSearchDisabled_thenSuccessful() {
         try {
-            updateClusterSettings("search.concurrent_segment_search.enabled", false);
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
             prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
             testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
             testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
@@ -244,23 +242,10 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
         }
     }
 
-    // TODO Enable the test after catering the fix for https://github.com/opensearch-project/neural-search/issues/799
-    // @SneakyThrows
-    // public void testSearchAfterWithSortOnSingleShard_whenConcurrentSearchEnabled_thenSuccessful() {
-    // try {
-    // updateClusterSettings("search.concurrent_segment_search.enabled", true);
-    // prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
-    // testSearchAfter_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
-    // testSearchAfter_whenMultipleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
-    // } finally {
-    // wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, null, null, SEARCH_PIPELINE);
-    // }
-    // }
-
     @SneakyThrows
-    public void testSearchAfterWithSortOnSingleShard_whenConcurrentSearchDisabled_thenSuccessful() {
+    public void testSearchAfterWithSortOnSingleShard_whenConcurrentSearchEnabled_thenSuccessful() {
         try {
-            updateClusterSettings("search.concurrent_segment_search.enabled", false);
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
             prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
             testSearchAfter_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
             testSearchAfter_whenMultipleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
@@ -269,23 +254,34 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
         }
     }
 
-    // TODO Enable the test after catering the fix for https://github.com/opensearch-project/neural-search/issues/799
-    // @SneakyThrows
-    // public void testSearchAfterWithSortOnMultipleShard_whenConcurrentSearchEnabled_thenSuccessful() {
-    // try {
-    // updateClusterSettings("search.concurrent_segment_search.enabled", true);
-    // prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
-    // testSearchAfter_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
-    // testSearchAfter_whenMultipleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
-    // } finally {
-    // wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-    // }
-    // }
+    @SneakyThrows
+    public void testSearchAfterWithSortOnSingleShard_whenConcurrentSearchDisabled_thenSuccessful() {
+        try {
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
+            testSearchAfter_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+            testSearchAfter_whenMultipleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, null, null, SEARCH_PIPELINE);
+        }
+    }
+
+    @SneakyThrows
+    public void testSearchAfterWithSortOnMultipleShard_whenConcurrentSearchEnabled_thenSuccessful() {
+        try {
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
+            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+            testSearchAfter_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+            testSearchAfter_whenMultipleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
+        }
+    }
 
     @SneakyThrows
     public void testSearchAfterWithSortOnMultipleShard_whenConcurrentSearchDisabled_thenSuccessful() {
         try {
-            updateClusterSettings("search.concurrent_segment_search.enabled", false);
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
             prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
             testSearchAfter_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
             testSearchAfter_whenMultipleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
