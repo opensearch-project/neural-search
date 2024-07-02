@@ -5,15 +5,24 @@
 package org.opensearch.neuralsearch.processor.combination;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Objects;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+
 import java.util.stream.Collectors;
 
-import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.TopFieldDocs;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.TotalHits;
+import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.SortField;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import lombok.extern.log4j.Log4j2;
@@ -23,33 +32,59 @@ import lombok.extern.log4j.Log4j2;
  */
 @Log4j2
 public class ScoreCombiner {
+    public static final Float MAX_SCORE_WHEN_NO_HITS_FOUND = 0.0f;
+    // Tie-breaker to merge multiple top docs
+    private static final Comparator<ScoreDoc> SORTING_TIE_BREAKER = (o1, o2) -> {
+        int scoreComparison = Double.compare(o1.score, o2.score);
+        if (scoreComparison != 0) {
+            return scoreComparison;
+        }
 
-    private static final Float ZERO_SCORE = 0.0f;
+        int docIdComparison = Integer.compare(o1.doc, o2.doc);
+        if (docIdComparison != 0) {
+            return docIdComparison;
+        }
+
+        // When duplicate result found then both score and doc ID are equal (o1.score == o2.score && o1.doc == o2.doc) then return 1
+        return 1;
+    };
 
     /**
      * Performs score combination based on input combination technique. Mutates input object by updating combined scores
      * Main steps we're doing for combination:
-     *  - create map of normalized scores per doc id
-     *  - using normalized scores create another map of combined scores per doc id
-     *  - count max number of hits among sub-queries
-     *  - sort documents by scores and take first "max number" of docs
-     *  - update query search results with normalized scores
-     *  Different score combination techniques are different in step 2, where we create map of "doc id" - "combined score",
-     *  other steps are same for all techniques.
-     * @param queryTopDocs query results that need to be normalized, mutated by method execution
-     * @param scoreCombinationTechnique exact combination method that should be applied
+     * - create map of normalized scores per doc id
+     * - using normalized scores create another map of combined scores per doc id
+     * - count max number of hits among sub-queries
+     * - sort documents by scores and take first "max number" of docs
+     * - update query search results with normalized scores
+     * Different score combination techniques are different in step 2, where we create map of "doc id" - "combined score",
+     * other steps are same for all techniques.
+     *
+     * @param combineScoresDTO   contains details of query top docs, score combination technique and sort is enabled or disabled.
      */
-    public void combineScores(final List<CompoundTopDocs> queryTopDocs, final ScoreCombinationTechnique scoreCombinationTechnique) {
+    public void combineScores(final CombineScoresDto combineScoresDTO) {
         // iterate over results from each shard. Every CompoundTopDocs object has results from
         // multiple sub queries, doc ids may repeat for each sub query results
-        queryTopDocs.forEach(compoundQueryTopDocs -> combineShardScores(scoreCombinationTechnique, compoundQueryTopDocs));
+        combineScoresDTO.getQueryTopDocs()
+            .forEach(
+                compoundQueryTopDocs -> combineShardScores(
+                    combineScoresDTO.getScoreCombinationTechnique(),
+                    compoundQueryTopDocs,
+                    combineScoresDTO.getSort()
+                )
+            );
     }
 
-    private void combineShardScores(final ScoreCombinationTechnique scoreCombinationTechnique, final CompoundTopDocs compoundQueryTopDocs) {
+    private void combineShardScores(
+        final ScoreCombinationTechnique scoreCombinationTechnique,
+        final CompoundTopDocs compoundQueryTopDocs,
+        final Sort sort
+    ) {
         if (Objects.isNull(compoundQueryTopDocs) || compoundQueryTopDocs.getTotalHits().value == 0) {
             return;
         }
         List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
+
         // - create map of normalized scores results returned from the single shard
         Map<Integer, float[]> normalizedScoresPerDoc = getNormalizedScoresPerDocument(topDocsPerSubQuery);
 
@@ -61,10 +96,92 @@ public class ScoreCombiner {
 
         // - sort documents by scores and take first "max number" of docs
         // create a collection of doc ids that are sorted by their combined scores
-        List<Integer> sortedDocsIds = getSortedDocIds(combinedNormalizedScoresByDocId);
+        Collection<Integer> sortedDocsIds;
+        if (sort != null) {
+            sortedDocsIds = getSortedDocIdsBySortCriteria(getTopFieldDocs(sort, topDocsPerSubQuery), sort);
+        } else {
+            sortedDocsIds = getSortedDocIds(combinedNormalizedScoresByDocId);
+        }
 
         // - update query search results with normalized scores
-        updateQueryTopDocsWithCombinedScores(compoundQueryTopDocs, topDocsPerSubQuery, combinedNormalizedScoresByDocId, sortedDocsIds);
+        updateQueryTopDocsWithCombinedScores(
+            compoundQueryTopDocs,
+            topDocsPerSubQuery,
+            combinedNormalizedScoresByDocId,
+            sortedDocsIds,
+            getDocIdSortFieldsMap(compoundQueryTopDocs, combinedNormalizedScoresByDocId, sort),
+            sort != null
+        );
+    }
+
+    private boolean isSortOrderByScore(Sort sort) {
+        if (sort == null) {
+            return false;
+        }
+
+        for (SortField sortField : sort.getSort()) {
+            if (SortField.Type.SCORE.equals(sortField.getType())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param sort sort criteria
+     * @param topDocsPerSubQuery top docs per subquery
+     * @return list of top field docs which is deduced by typcasting top docs to top field docs.
+     */
+    private List<TopFieldDocs> getTopFieldDocs(final Sort sort, final List<TopDocs> topDocsPerSubQuery) {
+        if (sort == null) {
+            return null;
+        }
+        List<TopFieldDocs> topFieldDocs = new ArrayList<>();
+        for (TopDocs topDocs : topDocsPerSubQuery) {
+            // Check for scoreDocs length.
+            // If scoreDocs length=0 then it means that no results are found for that particular subquery.
+            if (topDocs.scoreDocs.length != 0) {
+                topFieldDocs.add((TopFieldDocs) topDocs);
+            }
+        }
+        return topFieldDocs;
+    }
+
+    /**
+     * @param compoundTopDocs top docs that represent on shard
+     * @param combinedNormalizedScoresByDocId docId to normalized scores map
+     * @param sort sort criteria
+     * @return map of docId and sort fields if sorting is enabled.
+     */
+    private Map<Integer, Object[]> getDocIdSortFieldsMap(
+        final CompoundTopDocs compoundTopDocs,
+        final Map<Integer, Float> combinedNormalizedScoresByDocId,
+        final Sort sort
+    ) {
+        // If sort is null then no sort fields present therefore return null.
+        if (sort == null) {
+            return null;
+        }
+        // we're merging docs with normalized and combined scores. we need to have only maxHits results
+        Map<Integer, Object[]> docIdSortFieldMap = new HashMap<>();
+        final List<TopDocs> topFieldDocs = compoundTopDocs.getTopDocs();
+        final boolean isSortByScore = isSortOrderByScore(sort);
+        for (TopDocs topDocs : topFieldDocs) {
+            for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
+                FieldDoc fieldDoc = (FieldDoc) scoreDoc;
+
+                if (docIdSortFieldMap.get(fieldDoc.doc) == null) {
+                    // If sort by score then replace sort field value with normalized score.
+                    if (isSortByScore) {
+                        docIdSortFieldMap.put(fieldDoc.doc, new Object[] { combinedNormalizedScoresByDocId.get(fieldDoc.doc) });
+                    } else {
+                        docIdSortFieldMap.put(fieldDoc.doc, fieldDoc.fields);
+                    }
+                }
+            }
+        }
+        return docIdSortFieldMap;
     }
 
     private List<Integer> getSortedDocIds(final Map<Integer, Float> combinedNormalizedScoresByDocId) {
@@ -74,19 +191,75 @@ public class ScoreCombiner {
         return sortedDocsIds;
     }
 
+    private Set<Integer> getSortedDocIdsBySortCriteria(final List<TopFieldDocs> topFieldDocs, final Sort sort) {
+        if (Objects.isNull(topFieldDocs)) {
+            throw new IllegalArgumentException("topFieldDocs cannot be null when sorting is enabled.");
+        }
+        // size will be equal to the number of score docs
+        int size = 0;
+        for (TopFieldDocs topFieldDoc : topFieldDocs) {
+            size += topFieldDoc.scoreDocs.length;
+        }
+
+        // Merge the sorted results of individual queries to form a one final result per shard which is sorted.
+        // Input
+        // < 0, 0.7, shardId, [90]> //Query 1` result scoreDoc
+        // < 1, 0.7, shardId, [70]> //Query 1 result scoreDoc
+        // < 2, 0.3, shardId, [100]> //Query 2 result scoreDoc
+        // < 1, 0.3, shardId, [70]> //Query 2 result scoreDoc
+
+        // Output
+        // < 2, 0.3, shardId, [100]>
+        // < 0, 0.7, shardId, [90]>
+        // < 1, 0.7, shardId, [70]>
+        // < 1, 0.3, shardId, [70]>
+        final TopDocs sortedTopDocs = TopDocs.merge(sort, 0, size, topFieldDocs.toArray(new TopFieldDocs[0]), SORTING_TIE_BREAKER);
+
+        // Remove duplicates from the sorted top docs.
+        Set<Integer> uniqueDocIds = new LinkedHashSet<>();
+        for (ScoreDoc scoreDoc : sortedTopDocs.scoreDocs) {
+            uniqueDocIds.add(scoreDoc.doc);
+        }
+        return uniqueDocIds;
+    }
+
     private List<ScoreDoc> getCombinedScoreDocs(
         final CompoundTopDocs compoundQueryTopDocs,
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
-        final List<Integer> sortedScores,
-        final long maxHits
+        final Collection<Integer> sortedScores,
+        final long maxHits,
+        final Map<Integer, Object[]> docIdSortFieldMap,
+        boolean isSortingEnabled
     ) {
+        // ShardId will be -1 when index has multiple shards
+        int shardId = -1;
+        // ShardId will not be -1 in when index has single shard because Fetch phase gets executed before Normalization
+        if (!compoundQueryTopDocs.getScoreDocs().isEmpty()) {
+            shardId = compoundQueryTopDocs.getScoreDocs().get(0).shardIndex;
+        }
         List<ScoreDoc> scoreDocs = new ArrayList<>();
-        int shardId = compoundQueryTopDocs.getScoreDocs().get(0).shardIndex;
-        for (int j = 0; j < maxHits && j < sortedScores.size(); j++) {
-            int docId = sortedScores.get(j);
-            scoreDocs.add(new ScoreDoc(docId, combinedNormalizedScoresByDocId.get(docId), shardId));
+        int hitCount = 0;
+        for (Integer docId : sortedScores) {
+            if (hitCount == maxHits) {
+                break;
+            }
+            scoreDocs.add(getScoreDoc(isSortingEnabled, docId, shardId, combinedNormalizedScoresByDocId, docIdSortFieldMap));
+            hitCount++;
         }
         return scoreDocs;
+    }
+
+    private ScoreDoc getScoreDoc(
+        final boolean isSortEnabled,
+        final int docId,
+        final int shardId,
+        final Map<Integer, Float> combinedNormalizedScoresByDocId,
+        final Map<Integer, Object[]> docIdSortFieldMap
+    ) {
+        if (isSortEnabled && docIdSortFieldMap != null) {
+            return new FieldDoc(docId, combinedNormalizedScoresByDocId.get(docId), docIdSortFieldMap.get(docId), shardId);
+        }
+        return new ScoreDoc(docId, combinedNormalizedScoresByDocId.get(docId), shardId);
     }
 
     public Map<Integer, float[]> getNormalizedScoresPerDocument(final List<TopDocs> topDocsPerSubQuery) {
@@ -118,13 +291,22 @@ public class ScoreCombiner {
         final CompoundTopDocs compoundQueryTopDocs,
         final List<TopDocs> topDocsPerSubQuery,
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
-        final List<Integer> sortedScores
+        final Collection<Integer> sortedScores,
+        Map<Integer, Object[]> docIdSortFieldMap,
+        boolean isSortingEnabled
     ) {
         // - max number of hits will be the same which are passed from QueryPhase
         long maxHits = compoundQueryTopDocs.getTotalHits().value;
         // - update query search results with normalized scores
         compoundQueryTopDocs.setScoreDocs(
-            getCombinedScoreDocs(compoundQueryTopDocs, combinedNormalizedScoresByDocId, sortedScores, maxHits)
+            getCombinedScoreDocs(
+                compoundQueryTopDocs,
+                combinedNormalizedScoresByDocId,
+                sortedScores,
+                maxHits,
+                docIdSortFieldMap,
+                isSortingEnabled
+            )
         );
         compoundQueryTopDocs.setTotalHits(getTotalHits(topDocsPerSubQuery, maxHits));
     }

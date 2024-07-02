@@ -48,6 +48,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
+import org.opensearch.search.sort.SortBuilder;
 import org.opensearch.test.ClusterServiceUtils;
 import org.opensearch.threadpool.TestThreadPool;
 import org.opensearch.threadpool.ThreadPool;
@@ -509,7 +510,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Map<String, String> requestParams,
         List<Object> aggs
     ) {
-        return search(index, queryBuilder, rescorer, resultSize, requestParams, aggs, null);
+        return search(index, queryBuilder, rescorer, resultSize, requestParams, aggs, null, null, false, null);
     }
 
     @SneakyThrows
@@ -520,7 +521,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         int resultSize,
         Map<String, String> requestParams,
         List<Object> aggs,
-        QueryBuilder postFilterBuilder
+        QueryBuilder postFilterBuilder,
+        List<SortBuilder<?>> sortBuilders,
+        boolean trackScores,
+        List<Object> searchAfter
     ) {
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
 
@@ -545,21 +549,39 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             builder.field("post_filter");
             postFilterBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
         }
+        if (Objects.nonNull(sortBuilders) && !sortBuilders.isEmpty()) {
+            builder.startArray("sort");
+            for (SortBuilder sortBuilder : sortBuilders) {
+                sortBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
+            }
+            builder.endArray();
+        }
+
+        if (trackScores) {
+            builder.field("track_scores", trackScores);
+        }
+        if (searchAfter != null && !searchAfter.isEmpty()) {
+            builder.startArray("search_after");
+            for (Object searchAfterEntry : searchAfter) {
+                builder.value(searchAfterEntry);
+            }
+            builder.endArray();
+        }
 
         builder.endObject();
 
-        Request request = new Request("POST", "/" + index + "/_search");
+        Request request = new Request("GET", "/" + index + "/_search?timeout=1000s");
         request.addParameter("size", Integer.toString(resultSize));
         if (requestParams != null && !requestParams.isEmpty()) {
             requestParams.forEach(request::addParameter);
         }
+        logger.info("Sorting request  " + builder.toString());
         request.setJsonEntity(builder.toString());
-
         Response response = client().performRequest(request);
         assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
 
         String responseBody = EntityUtils.toString(response.getEntity());
-
+        logger.info("Response  " + responseBody);
         return XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
     }
 

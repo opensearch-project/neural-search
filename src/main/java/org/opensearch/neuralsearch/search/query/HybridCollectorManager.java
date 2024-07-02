@@ -169,12 +169,12 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             } else if (collector instanceof HybridTopFieldDocSortCollector) {
                 hybridSortedTopDocCollectors.add((HybridTopFieldDocSortCollector) collector);
             } else if (collector instanceof FilteredCollector
-                    && ((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector) {
-                hybridTopScoreDocCollectors.add((HybridTopScoreDocCollector) ((FilteredCollector) collector).getCollector());
-            } else if (collector instanceof FilteredCollector
+                && ((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector) {
+                    hybridTopScoreDocCollectors.add((HybridTopScoreDocCollector) ((FilteredCollector) collector).getCollector());
+                } else if (collector instanceof FilteredCollector
                     && ((FilteredCollector) collector).getCollector() instanceof HybridTopFieldDocSortCollector) {
-                hybridSortedTopDocCollectors.add((HybridTopFieldDocSortCollector) ((FilteredCollector) collector).getCollector());
-            }
+                        hybridSortedTopDocCollectors.add((HybridTopFieldDocSortCollector) ((FilteredCollector) collector).getCollector());
+                    }
         }
 
         if (!hybridTopScoreDocCollectors.isEmpty()) {

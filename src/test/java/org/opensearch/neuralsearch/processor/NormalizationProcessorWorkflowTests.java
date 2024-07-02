@@ -26,7 +26,6 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
-import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.SearchShardTarget;
@@ -66,7 +65,7 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
                     ),
                     0.5f
                 ),
-                new DocValueFormat[0]
+                null
             );
             querySearchResult.setSearchShardTarget(searchShardTarget);
             querySearchResult.setShardIndex(shardId);
@@ -108,7 +107,7 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
                     ),
                     0.0f
                 ),
-                new DocValueFormat[0]
+                null
             );
             querySearchResult.setSearchShardTarget(searchShardTarget);
             querySearchResult.setShardIndex(shardId);
@@ -155,7 +154,7 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
                 ),
                 0.5f
             ),
-            new DocValueFormat[0]
+            null
         );
         querySearchResult.setSearchShardTarget(searchShardTarget);
         querySearchResult.setShardIndex(shardId);
@@ -215,7 +214,7 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
                 ),
                 0.5f
             ),
-            new DocValueFormat[0]
+            null
         );
         querySearchResult.setSearchShardTarget(searchShardTarget);
         querySearchResult.setShardIndex(shardId);
@@ -275,7 +274,7 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
                 ),
                 0.5f
             ),
-            new DocValueFormat[0]
+            null
         );
         querySearchResult.setSearchShardTarget(searchShardTarget);
         querySearchResult.setShardIndex(shardId);
@@ -327,7 +326,7 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
                 ),
                 0.5f
             ),
-            new DocValueFormat[0]
+            null
         );
         querySearchResult.setSearchShardTarget(searchShardTarget);
         querySearchResult.setShardIndex(shardId);
