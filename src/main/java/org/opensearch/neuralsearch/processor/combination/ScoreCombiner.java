@@ -96,11 +96,12 @@ public class ScoreCombiner {
 
         // - sort documents by scores and take first "max number" of docs
         // create a collection of doc ids that are sorted by their combined scores
-        Collection<Integer> sortedDocsIds = getSortedDocIds(
-            combinedNormalizedScoresByDocId,
-            getTopFieldDocs(sort, topDocsPerSubQuery),
-            sort
-        );
+        Collection<Integer> sortedDocsIds;
+        if (sort != null) {
+            sortedDocsIds = getSortedDocIdsBySortCriteria(getTopFieldDocs(sort, topDocsPerSubQuery), sort);
+        } else {
+            sortedDocsIds = getSortedDocIds(combinedNormalizedScoresByDocId);
+        }
 
         // - update query search results with normalized scores
         updateQueryTopDocsWithCombinedScores(
@@ -183,23 +184,21 @@ public class ScoreCombiner {
         return docIdSortFieldMap;
     }
 
-    private Collection<Integer> getSortedDocIds(
-        final Map<Integer, Float> combinedNormalizedScoresByDocId,
-        final List<TopFieldDocs> topFieldDocs,
-        final Sort sort
-    ) {
+    private List<Integer> getSortedDocIds(final Map<Integer, Float> combinedNormalizedScoresByDocId) {
         // we're merging docs with normalized and combined scores. we need to have only maxHits results
-        if (sort == null) {
-            List<Integer> sortedDocsIds = new ArrayList<>(combinedNormalizedScoresByDocId.keySet());
-            sortedDocsIds.sort((a, b) -> Float.compare(combinedNormalizedScoresByDocId.get(b), combinedNormalizedScoresByDocId.get(a)));
-            return sortedDocsIds;
-        }
+        List<Integer> sortedDocsIds = new ArrayList<>(combinedNormalizedScoresByDocId.keySet());
+        sortedDocsIds.sort((a, b) -> Float.compare(combinedNormalizedScoresByDocId.get(b), combinedNormalizedScoresByDocId.get(a)));
+        return sortedDocsIds;
+    }
+
+    private Set<Integer> getSortedDocIdsBySortCriteria(final List<TopFieldDocs> topFieldDocs, final Sort sort) {
         if (Objects.isNull(topFieldDocs)) {
             throw new IllegalArgumentException("topFieldDocs cannot be null when sorting is enabled.");
         }
-        int topN = 0;
+        // size will be equal to the number of score docs
+        int size = 0;
         for (TopFieldDocs topFieldDoc : topFieldDocs) {
-            topN += topFieldDoc.scoreDocs.length;
+            size += topFieldDoc.scoreDocs.length;
         }
 
         // Merge the sorted results of individual queries to form a one final result per shard which is sorted.
@@ -214,7 +213,7 @@ public class ScoreCombiner {
         // < 0, 0.7, shardId, [90]>
         // < 1, 0.7, shardId, [70]>
         // < 1, 0.3, shardId, [70]>
-        final TopDocs sortedTopDocs = TopDocs.merge(sort, 0, topN, topFieldDocs.toArray(new TopFieldDocs[0]), SORTING_TIE_BREAKER);
+        final TopDocs sortedTopDocs = TopDocs.merge(sort, 0, size, topFieldDocs.toArray(new TopFieldDocs[0]), SORTING_TIE_BREAKER);
 
         // Remove duplicates from the sorted top docs.
         Set<Integer> uniqueDocIds = new LinkedHashSet<>();

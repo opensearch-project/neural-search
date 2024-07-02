@@ -78,9 +78,6 @@ public class HybridSearchSortUtil {
      * More details here https://github.com/opensearch-project/OpenSearch/issues/6326
      */
     private static Sort createSort(TopFieldDocs[] topFieldDocs) {
-        if (topFieldDocs == null || topFieldDocs[0] == null) {
-            throw new IllegalArgumentException("topFieldDocs cannot be null when sorting is applied");
-        }
         final SortField[] firstTopDocFields = topFieldDocs[0].fields;
         final SortField[] newFields = new SortField[firstTopDocFields.length];
 
