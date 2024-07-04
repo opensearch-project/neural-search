@@ -22,6 +22,7 @@ import org.opensearch.common.Nullable;
 import org.opensearch.common.lucene.search.FilteredCollector;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
+import org.opensearch.neuralsearch.search.collector.HybridSearchCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopFieldDocSortCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopScoreDocCollector;
 import org.opensearch.neuralsearch.search.collector.SimpleFieldCollector;
@@ -148,59 +149,59 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
      */
     @Override
     public ReduceableSearchResult reduce(Collection<Collector> collectors) {
-        final List<Collector> hybridSearchCollectors = getHybridSearchCollectors(collectors);
+        final List<HybridSearchCollector> hybridSearchCollectors = getHybridSearchCollectors(collectors);
         if (hybridSearchCollectors.isEmpty()) {
             throw new IllegalStateException("cannot collect results of hybrid search query, there are no proper score collectors");
         }
         return reduceSearchResults(getSearchResults(hybridSearchCollectors));
     }
 
-    private List<ReduceableSearchResult> getSearchResults(final List<Collector> hybridSearchCollectors) {
+    private List<ReduceableSearchResult> getSearchResults(final List<HybridSearchCollector> hybridSearchCollectors) {
         List<ReduceableSearchResult> results = new ArrayList<>();
         DocValueFormat[] docValueFormats = getSortValueFormats(sortAndFormats);
-        for (Collector collector : hybridSearchCollectors) {
+        for (HybridSearchCollector collector : hybridSearchCollectors) {
             TopDocsAndMaxScore topDocsAndMaxScore = getTopDocsAndAndMaxScore(collector, docValueFormats);
             results.add((QuerySearchResult result) -> reduceCollectorResults(result, topDocsAndMaxScore, docValueFormats));
         }
         return results;
     }
 
-    private TopDocsAndMaxScore getTopDocsAndAndMaxScore(final Collector collector, final DocValueFormat[] docValueFormats) {
-        float maxScore;
+    private TopDocsAndMaxScore getTopDocsAndAndMaxScore(
+        final HybridSearchCollector hybridSearchCollector,
+        final DocValueFormat[] docValueFormats
+    ) {
         TopDocs newTopDocs;
+        List<? extends TopDocs> topDocs = hybridSearchCollector.topDocs();
         if (docValueFormats != null) {
-            HybridTopFieldDocSortCollector hybridTopFieldDocSortCollector = (HybridTopFieldDocSortCollector) collector;
-            List<TopFieldDocs> topFieldDocs = hybridTopFieldDocSortCollector.topDocs();
-            maxScore = hybridTopFieldDocSortCollector.getMaxScore();
             newTopDocs = getNewTopFieldDocs(
-                getTotalHits(this.trackTotalHitsUpTo, topFieldDocs, hybridTopFieldDocSortCollector.getTotalHits()),
-                topFieldDocs,
+                getTotalHits(this.trackTotalHitsUpTo, topDocs, hybridSearchCollector.getTotalHits()),
+                (List<TopFieldDocs>) topDocs,
                 sortAndFormats.sort.getSort()
             );
         } else {
-            HybridTopScoreDocCollector hybridTopScoreDocCollector = (HybridTopScoreDocCollector) collector;
-            List<TopDocs> topDocs = hybridTopScoreDocCollector.topDocs();
-            maxScore = hybridTopScoreDocCollector.getMaxScore();
-            newTopDocs = getNewTopDocs(getTotalHits(this.trackTotalHitsUpTo, topDocs, hybridTopScoreDocCollector.getTotalHits()), topDocs);
+            newTopDocs = getNewTopDocs(
+                getTotalHits(this.trackTotalHitsUpTo, topDocs, hybridSearchCollector.getTotalHits()),
+                (List<TopDocs>) topDocs
+            );
         }
-        return new TopDocsAndMaxScore(newTopDocs, maxScore);
+        return new TopDocsAndMaxScore(newTopDocs, hybridSearchCollector.getMaxScore());
     }
 
-    private List<Collector> getHybridSearchCollectors(final Collection<Collector> collectors) {
-        final List<Collector> hybridSearchCollectors = new ArrayList<>();
+    private List<HybridSearchCollector> getHybridSearchCollectors(final Collection<Collector> collectors) {
+        final List<HybridSearchCollector> hybridSearchCollectors = new ArrayList<>();
         for (final Collector collector : collectors) {
             if (collector instanceof MultiCollectorWrapper) {
                 for (final Collector sub : (((MultiCollectorWrapper) collector).getCollectors())) {
                     if (sub instanceof HybridTopScoreDocCollector || sub instanceof HybridTopFieldDocSortCollector) {
-                        hybridSearchCollectors.add(sub);
+                        hybridSearchCollectors.add((HybridSearchCollector) sub);
                     }
                 }
             } else if (collector instanceof HybridTopScoreDocCollector || collector instanceof HybridTopFieldDocSortCollector) {
-                hybridSearchCollectors.add(collector);
+                hybridSearchCollectors.add((HybridSearchCollector) collector);
             } else if (collector instanceof FilteredCollector
                 && (((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector
                     || ((FilteredCollector) collector).getCollector() instanceof HybridTopFieldDocSortCollector)) {
-                        hybridSearchCollectors.add(((FilteredCollector) collector).getCollector());
+                        hybridSearchCollectors.add((HybridSearchCollector) ((FilteredCollector) collector).getCollector());
                     }
         }
         return hybridSearchCollectors;
