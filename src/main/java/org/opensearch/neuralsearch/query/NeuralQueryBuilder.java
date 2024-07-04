@@ -292,15 +292,14 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             if (vectorSupplier().get() == null) {
                 return this;
             }
-            KNNQueryBuilder knnQueryBuilder = new KNNQueryBuilder(fieldName(), vectorSupplier.get()).filter(filter());
-            if (maxDistance != null) {
-                knnQueryBuilder.maxDistance(maxDistance);
-            } else if (minScore != null) {
-                knnQueryBuilder.minScore(minScore);
-            } else {
-                knnQueryBuilder.k(k);
-            }
-            return knnQueryBuilder;
+            return KNNQueryBuilder.builder()
+                .fieldName(fieldName())
+                .vector(vectorSupplier.get())
+                .filter(filter())
+                .maxDistance(maxDistance)
+                .minScore(minScore)
+                .k(k)
+                .build();
         }
 
         SetOnce<float[]> vectorSetOnce = new SetOnce<>();
