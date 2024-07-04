@@ -73,6 +73,7 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
                     loadModel(modelId);
                     addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, null, null);
                     validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId);
+                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, Map.of("ef_search", 100));
                 } finally {
                     wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, SEARCH_PIPELINE_NAME);
                 }
@@ -83,10 +84,15 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
     }
 
     private void validateTestIndexOnUpgrade(final int numberOfDocs, final String modelId) throws Exception {
+        validateTestIndexOnUpgrade(numberOfDocs, modelId, null);
+    }
+
+    private void validateTestIndexOnUpgrade(final int numberOfDocs, final String modelId, Map<String, ?> methodParameters)
+        throws Exception {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
         loadModel(modelId);
-        HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId);
+        HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, methodParameters);
         Map<String, Object> searchResponseAsMap = search(
             getIndexNameForTest(),
             hybridQueryBuilder,
@@ -103,12 +109,15 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
         }
     }
 
-    private HybridQueryBuilder getQueryBuilder(final String modelId) {
+    private HybridQueryBuilder getQueryBuilder(final String modelId, final Map<String, ?> methodParameters) {
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
         neuralQueryBuilder.fieldName("passage_embedding");
         neuralQueryBuilder.modelId(modelId);
         neuralQueryBuilder.queryText(QUERY);
         neuralQueryBuilder.k(5);
+        if (methodParameters != null) {
+            neuralQueryBuilder.methodParameters(methodParameters);
+        }
 
         MatchQueryBuilder matchQueryBuilder = new MatchQueryBuilder("text", QUERY);
 
