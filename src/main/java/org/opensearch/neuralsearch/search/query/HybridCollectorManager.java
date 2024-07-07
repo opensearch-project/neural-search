@@ -388,18 +388,8 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         }
         // we need to do actual merge because query result and current collector both have some score hits
         TopDocsAndMaxScore originalTotalDocsAndHits = result.topDocs();
-        result.topDocs(getMergeTopDocsAndMaxScores(originalTotalDocsAndHits, topDocsAndMaxScore), docValueFormats);
-    }
-
-    private TopDocsAndMaxScore getMergeTopDocsAndMaxScores(
-        final TopDocsAndMaxScore originalTotalDocsAndHits,
-        final TopDocsAndMaxScore topDocsAndMaxScore
-    ) {
-        if (sortAndFormats != null) {
-            return topDocsMerger.mergeFieldDocs(originalTotalDocsAndHits, topDocsAndMaxScore, sortAndFormats);
-        } else {
-            return topDocsMerger.merge(originalTotalDocsAndHits, topDocsAndMaxScore);
-        }
+        TopDocsAndMaxScore mergeTopDocsAndMaxScores = topDocsMerger.merge(originalTotalDocsAndHits, topDocsAndMaxScore);
+        result.topDocs(mergeTopDocsAndMaxScores, docValueFormats);
     }
 
     /**

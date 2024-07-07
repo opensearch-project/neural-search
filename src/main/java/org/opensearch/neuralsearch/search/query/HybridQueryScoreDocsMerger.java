@@ -32,6 +32,8 @@ class HybridQueryScoreDocsMerger<T extends ScoreDoc> {
      * Method returns new object and doesn't mutate original ScoreDocs arrays.
      * @param sourceScoreDocs original score docs from query result
      * @param newScoreDocs new score docs that we need to merge into existing scores
+     * @param comparator comparator to compare the score docs
+     * @param isSortEnabled flag that show if sort is enabled or disabled
      * @return merged array of ScoreDocs objects
      */
     public T[] merge(final T[] sourceScoreDocs, final T[] newScoreDocs, final Comparator<T> comparator, final boolean isSortEnabled) {

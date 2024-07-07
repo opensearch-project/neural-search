@@ -289,11 +289,7 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
             sortAndFormats.sort.getSort()
         );
         TopDocsAndMaxScore topDocsAndMaxScoreNew = new TopDocsAndMaxScore(topDocsNew, 0.7f);
-        TopDocsAndMaxScore mergedTopDocsAndMaxScore = topDocsMerger.mergeFieldDocs(
-            topDocsAndMaxScoreOriginal,
-            topDocsAndMaxScoreNew,
-            sortAndFormats
-        );
+        TopDocsAndMaxScore mergedTopDocsAndMaxScore = topDocsMerger.merge(topDocsAndMaxScoreOriginal, topDocsAndMaxScoreNew);
 
         assertNotNull(mergedTopDocsAndMaxScore);
 
@@ -352,11 +348,7 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
             sortAndFormats.sort.getSort()
         );
         TopDocsAndMaxScore topDocsAndMaxScoreNew = new TopDocsAndMaxScore(topDocsNew, 0.7f);
-        TopDocsAndMaxScore mergedTopDocsAndMaxScore = topDocsMerger.mergeFieldDocs(
-            topDocsAndMaxScoreOriginal,
-            topDocsAndMaxScoreNew,
-            sortAndFormats
-        );
+        TopDocsAndMaxScore mergedTopDocsAndMaxScore = topDocsMerger.merge(topDocsAndMaxScoreOriginal, topDocsAndMaxScoreNew);
 
         assertNotNull(mergedTopDocsAndMaxScore);
 
@@ -409,11 +401,7 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
             sortAndFormats.sort.getSort()
         );
         TopDocsAndMaxScore topDocsAndMaxScoreNew = new TopDocsAndMaxScore(topDocsNew, 0);
-        TopDocsAndMaxScore mergedTopDocsAndMaxScore = topDocsMerger.mergeFieldDocs(
-            topDocsAndMaxScoreOriginal,
-            topDocsAndMaxScoreNew,
-            sortAndFormats
-        );
+        TopDocsAndMaxScore mergedTopDocsAndMaxScore = topDocsMerger.merge(topDocsAndMaxScoreOriginal, topDocsAndMaxScoreNew);
 
         assertNotNull(mergedTopDocsAndMaxScore);
 
@@ -465,11 +453,7 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
             sortAndFormats.sort.getSort()
         );
         TopDocsAndMaxScore topDocsAndMaxScoreNew = new TopDocsAndMaxScore(topDocsNew, 0.7f);
-        TopDocsAndMaxScore firstMergedTopDocsAndMaxScore = topDocsMerger.mergeFieldDocs(
-            topDocsAndMaxScoreOriginal,
-            topDocsAndMaxScoreNew,
-            sortAndFormats
-        );
+        TopDocsAndMaxScore firstMergedTopDocsAndMaxScore = topDocsMerger.merge(topDocsAndMaxScoreOriginal, topDocsAndMaxScoreNew);
 
         assertNotNull(firstMergedTopDocsAndMaxScore);
 
@@ -488,10 +472,9 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
             sortAndFormats.sort.getSort()
         );
         TopDocsAndMaxScore topDocsAndMaxScoreThirdCollector = new TopDocsAndMaxScore(topDocsThirdCollector, 0.85f);
-        TopDocsAndMaxScore finalMergedTopDocsAndMaxScore = topDocsMerger.mergeFieldDocs(
+        TopDocsAndMaxScore finalMergedTopDocsAndMaxScore = topDocsMerger.merge(
             firstMergedTopDocsAndMaxScore,
-            topDocsAndMaxScoreThirdCollector,
-            sortAndFormats
+            topDocsAndMaxScoreThirdCollector
         );
 
         assertEquals(0.85f, finalMergedTopDocsAndMaxScore.maxScore, DELTA_FOR_ASSERTION);

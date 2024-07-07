@@ -26,6 +26,7 @@ class TopDocsMerger {
 
     private HybridQueryScoreDocsMerger<ScoreDoc> scoreDocsMerger;
     private HybridQueryScoreDocsMerger<FieldDoc> fieldDocsMerger;
+    private SortAndFormats sortAndFormats;
     @VisibleForTesting
     protected static Comparator<ScoreDoc> SCORE_DOC_BY_SCORE_COMPARATOR;
     @VisibleForTesting
@@ -39,7 +40,8 @@ class TopDocsMerger {
      * Uses hybrid query score docs merger to merge internal score docs
      */
     TopDocsMerger(final SortAndFormats sortAndFormats) {
-        if (sortAndFormats != null) {
+        this.sortAndFormats = sortAndFormats;
+        if (this.sortAndFormats != null) {
             fieldDocsMerger = new HybridQueryScoreDocsMerger<>();
             FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR = new HybridQueryFieldDocComparator(sortAndFormats.sort.getSort(), MERGING_TIE_BREAKER);
         } else {
@@ -58,67 +60,51 @@ class TopDocsMerger {
         if (Objects.isNull(newTopDocs) || Objects.isNull(newTopDocs.topDocs) || newTopDocs.topDocs.totalHits.value == 0) {
             return source;
         }
-        // we need to merge hits per individual sub-query
-        // format of results in both new and source TopDocs is following
-        // doc_id | magic_number_1
-        // doc_id | magic_number_2
-        // ...
-        // doc_id | magic_number_2
-        // ...
-        // doc_id | magic_number_2
-        // ...
-        // doc_id | magic_number_1
-        ScoreDoc[] mergedScoreDocs = scoreDocsMerger.merge(
-            source.topDocs.scoreDocs,
-            newTopDocs.topDocs.scoreDocs,
-            SCORE_DOC_BY_SCORE_COMPARATOR,
-            false
-        );
         TotalHits mergedTotalHits = getMergedTotalHits(source, newTopDocs);
         TopDocsAndMaxScore result = new TopDocsAndMaxScore(
-            new TopDocs(mergedTotalHits, mergedScoreDocs),
+            getTopDocs(getMergedScoreDocs(source.topDocs.scoreDocs, newTopDocs.topDocs.scoreDocs), mergedTotalHits),
             Math.max(source.maxScore, newTopDocs.maxScore)
         );
         return result;
     }
 
-    /**
-     * Merge TopFieldDocs and MaxScore from multiple search queries into a single TopDocsAndMaxScore object.
-     * @param source TopDocsAndMaxScore for the original query
-     * @param newTopDocs TopDocsAndMaxScore for the new query
-     * @return merged TopDocsAndMaxScore object
-     */
-    public TopDocsAndMaxScore mergeFieldDocs(
-        final TopDocsAndMaxScore source,
-        final TopDocsAndMaxScore newTopDocs,
-        final SortAndFormats sortAndFormats
-    ) {
-        if (Objects.isNull(newTopDocs) || Objects.isNull(newTopDocs.topDocs) || newTopDocs.topDocs.totalHits.value == 0) {
-            return source;
-        }
-        // we need to merge hits per individual sub-query
-        // format of results in both new and source TopDocs is following
-        // doc_id | magic_number_1 | [1]
-        // doc_id | magic_number_2 | [1]
-        // ...
-        // doc_id | magic_number_2 | [1]
-        // ...
-        // doc_id | magic_number_2 | [1]
-        // ...
-        // doc_id | magic_number_1 | [1]
-        FieldDoc[] mergedScoreDocs = fieldDocsMerger.merge(
-            (FieldDoc[]) source.topDocs.scoreDocs,
-            (FieldDoc[]) newTopDocs.topDocs.scoreDocs,
-            FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
-            true
-        );
-        TotalHits mergedTotalHits = getMergedTotalHits(source, newTopDocs);
-        TopDocsAndMaxScore result = new TopDocsAndMaxScore(
-            new TopFieldDocs(mergedTotalHits, mergedScoreDocs, sortAndFormats.sort.getSort()),
-            Math.max(source.maxScore, newTopDocs.maxScore)
-        );
-        return result;
-    }
+    // /**
+    // * Merge TopFieldDocs and MaxScore from multiple search queries into a single TopDocsAndMaxScore object.
+    // * @param source TopDocsAndMaxScore for the original query
+    // * @param newTopDocs TopDocsAndMaxScore for the new query
+    // * @return merged TopDocsAndMaxScore object
+    // */
+    // public TopDocsAndMaxScore mergeFieldDocs(
+    // final TopDocsAndMaxScore source,
+    // final TopDocsAndMaxScore newTopDocs,
+    // final SortAndFormats sortAndFormats
+    // ) {
+    // if (Objects.isNull(newTopDocs) || Objects.isNull(newTopDocs.topDocs) || newTopDocs.topDocs.totalHits.value == 0) {
+    // return source;
+    // }
+    // // we need to merge hits per individual sub-query
+    // // format of results in both new and source TopDocs is following
+    // // doc_id | magic_number_1 | [1]
+    // // doc_id | magic_number_2 | [1]
+    // // ...
+    // // doc_id | magic_number_2 | [1]
+    // // ...
+    // // doc_id | magic_number_2 | [1]
+    // // ...
+    // // doc_id | magic_number_1 | [1]
+    // FieldDoc[] mergedScoreDocs = fieldDocsMerger.merge(
+    // (FieldDoc[]) source.topDocs.scoreDocs,
+    // (FieldDoc[]) newTopDocs.topDocs.scoreDocs,
+    // FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+    // true
+    // );
+    // TotalHits mergedTotalHits = getMergedTotalHits(source, newTopDocs);
+    // TopDocsAndMaxScore result = new TopDocsAndMaxScore(
+    // new TopFieldDocs(mergedTotalHits, mergedScoreDocs, sortAndFormats.sort.getSort()),
+    // Math.max(source.maxScore, newTopDocs.maxScore)
+    // );
+    // return result;
+    // }
 
     private TotalHits getMergedTotalHits(final TopDocsAndMaxScore source, final TopDocsAndMaxScore newTopDocs) {
         // merged value is a lower bound - if both are equal_to than merged will also be equal_to,
@@ -128,5 +114,39 @@ class TopDocsMerger {
                 ? TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO
                 : TotalHits.Relation.EQUAL_TO;
         return new TotalHits(source.topDocs.totalHits.value + newTopDocs.topDocs.totalHits.value, mergedHitsRelation);
+    }
+
+    private TopDocs getTopDocs(ScoreDoc[] mergedScoreDocs, TotalHits mergedTotalHits) {
+        if (sortAndFormats != null) {
+            return new TopFieldDocs(mergedTotalHits, mergedScoreDocs, sortAndFormats.sort.getSort());
+        }
+        return new TopDocs(mergedTotalHits, mergedScoreDocs);
+    }
+
+    private ScoreDoc[] getMergedScoreDocs(ScoreDoc[] source, ScoreDoc[] newScoreDocs) {
+        if (sortAndFormats != null) {
+            // we need to merge hits per individual sub-query
+            // format of results in both new and source TopDocs is following
+            // doc_id | magic_number_1 | [1]
+            // doc_id | magic_number_2 | [1]
+            // ...
+            // doc_id | magic_number_2 | [1]
+            // ...
+            // doc_id | magic_number_2 | [1]
+            // ...
+            // doc_id | magic_number_1 | [1]
+            return fieldDocsMerger.merge((FieldDoc[]) source, (FieldDoc[]) newScoreDocs, FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR, true);
+        }
+        // we need to merge hits per individual sub-query
+        // format of results in both new and source TopDocs is following
+        // doc_id | magic_number_1
+        // doc_id | magic_number_2
+        // ...
+        // doc_id | magic_number_2
+        // ...
+        // doc_id | magic_number_2
+        // ...
+        // doc_id | magic_number_1
+        return scoreDocsMerger.merge(source, newScoreDocs, SCORE_DOC_BY_SCORE_COMPARATOR, false);
     }
 }
