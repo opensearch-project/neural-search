@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * Adds dynamic knn query parameters efsearch and nprobes [#814](https://github.com/opensearch-project/neural-search/pull/814/)
 ### Bug Fixes
 ### Infrastructure
+- Add BWC for batch ingestion ([#769](https://github.com/opensearch-project/neural-search/pull/769))
 ### Documentation
 ### Maintenance
 ### Refactoring
