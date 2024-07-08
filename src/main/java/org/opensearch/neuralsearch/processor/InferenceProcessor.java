@@ -65,6 +65,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
 
     private final Environment environment;
     private final ClusterService clusterService;
+    List<Pair<String, Object>> mappingForNestedFields;
 
     public InferenceProcessor(
         String tag,
@@ -87,6 +88,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
         this.mlCommonsClientAccessor = clientAccessor;
         this.environment = environment;
         this.clusterService = clusterService;
+        mappingForNestedFields = fieldMap.entrySet().stream().map(this::processNestedKey).collect(Collectors.toList());
     }
 
     private void validateEmbeddingConfiguration(Map<String, Object> fieldMap) {
@@ -282,8 +284,7 @@ public abstract class InferenceProcessor extends AbstractProcessor {
     Map<String, Object> buildMapWithTargetKeys(IngestDocument ingestDocument) {
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
         Map<String, Object> mapWithProcessorKeys = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> fieldMapEntry : fieldMap.entrySet()) {
-            Pair<String, Object> processedNestedKey = processNestedKey(fieldMapEntry);
+        for (Pair<String, Object> processedNestedKey : mappingForNestedFields) {
             String originalKey = processedNestedKey.getKey();
             Object targetKey = processedNestedKey.getValue();
 
