@@ -10,9 +10,10 @@ import org.opensearch.neuralsearch.util.TestUtils;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
-import static org.opensearch.neuralsearch.util.TestUtils.TEXT_EMBEDDING_PROCESSOR;
+import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESSOR;
 
 public class NeuralSparseTwoPhaseProcessorIT extends AbstractRestartUpgradeRestTestCase {
 
@@ -29,13 +30,13 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRestartUpgradeRestT
             String modelId = uploadSparseEncodingModel();
             loadModel(modelId);
             neuralSparseQueryBuilder.modelId(modelId);
-            createPipelineProcessor(modelId, NEURAL_SPARSE_INGEST_PIPELINE_NAME);
+            createPipelineForSparseEncodingProcessor(modelId, NEURAL_SPARSE_INGEST_PIPELINE_NAME);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
-                Files.readString(Path.of(classLoader.getResource("processor/IndexMappingMultipleShard.json").toURI())),
+                Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),
                 NEURAL_SPARSE_INGEST_PIPELINE_NAME
             );
-            addDocument(getIndexNameForTest(), "0", TEST_TEXT_FIELD, TEXT_1, null, null);
+            addSparseEncodingDoc(getIndexNameForTest(), "0", List.of(), List.of(), List.of(TEST_TEXT_FIELD), List.of(TEXT_1));
             createNeuralSparseTwoPhaseSearchProcessor(NEURAL_SPARSE_TWO_PHASE_SEARCH_PIPELINE_NAME);
             updateIndexSettings(
                 getIndexNameForTest(),
@@ -46,7 +47,7 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRestartUpgradeRestT
         } else {
             String modelId = null;
             try {
-                modelId = TestUtils.getModelId(getIngestionPipeline(NEURAL_SPARSE_INGEST_PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                modelId = TestUtils.getModelId(getIngestionPipeline(NEURAL_SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
                 loadModel(modelId);
                 neuralSparseQueryBuilder.modelId(modelId);
                 Object resultWith2PhasePipeline = search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits");
