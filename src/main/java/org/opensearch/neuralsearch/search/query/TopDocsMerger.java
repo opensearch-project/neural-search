@@ -68,44 +68,6 @@ class TopDocsMerger {
         return result;
     }
 
-    // /**
-    // * Merge TopFieldDocs and MaxScore from multiple search queries into a single TopDocsAndMaxScore object.
-    // * @param source TopDocsAndMaxScore for the original query
-    // * @param newTopDocs TopDocsAndMaxScore for the new query
-    // * @return merged TopDocsAndMaxScore object
-    // */
-    // public TopDocsAndMaxScore mergeFieldDocs(
-    // final TopDocsAndMaxScore source,
-    // final TopDocsAndMaxScore newTopDocs,
-    // final SortAndFormats sortAndFormats
-    // ) {
-    // if (Objects.isNull(newTopDocs) || Objects.isNull(newTopDocs.topDocs) || newTopDocs.topDocs.totalHits.value == 0) {
-    // return source;
-    // }
-    // // we need to merge hits per individual sub-query
-    // // format of results in both new and source TopDocs is following
-    // // doc_id | magic_number_1 | [1]
-    // // doc_id | magic_number_2 | [1]
-    // // ...
-    // // doc_id | magic_number_2 | [1]
-    // // ...
-    // // doc_id | magic_number_2 | [1]
-    // // ...
-    // // doc_id | magic_number_1 | [1]
-    // FieldDoc[] mergedScoreDocs = fieldDocsMerger.merge(
-    // (FieldDoc[]) source.topDocs.scoreDocs,
-    // (FieldDoc[]) newTopDocs.topDocs.scoreDocs,
-    // FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
-    // true
-    // );
-    // TotalHits mergedTotalHits = getMergedTotalHits(source, newTopDocs);
-    // TopDocsAndMaxScore result = new TopDocsAndMaxScore(
-    // new TopFieldDocs(mergedTotalHits, mergedScoreDocs, sortAndFormats.sort.getSort()),
-    // Math.max(source.maxScore, newTopDocs.maxScore)
-    // );
-    // return result;
-    // }
-
     private TotalHits getMergedTotalHits(final TopDocsAndMaxScore source, final TopDocsAndMaxScore newTopDocs) {
         // merged value is a lower bound - if both are equal_to than merged will also be equal_to,
         // otherwise assign greater_than_or_equal
