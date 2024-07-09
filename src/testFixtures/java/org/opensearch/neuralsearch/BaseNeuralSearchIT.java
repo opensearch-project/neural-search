@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.ArrayList;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.StringUtils;
@@ -81,7 +82,9 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         ProcessorType.SPARSE_ENCODING,
         "processor/SparseEncodingPipelineConfiguration.json",
         ProcessorType.TEXT_IMAGE_EMBEDDING,
-        "processor/PipelineForTextImageEmbeddingProcessorConfiguration.json"
+        "processor/PipelineForTextImageEmbeddingProcessorConfiguration.json",
+        ProcessorType.TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING,
+        "processor/PipelineConfigurationWithNestedFieldsMapping.json"
     );
     private static final Set<RestStatus> SUCCESS_STATUSES = Set.of(RestStatus.CREATED, RestStatus.OK);
     protected static final String CONCURRENT_SEGMENT_SEARCH_ENABLED = "search.concurrent_segment_search.enabled";
@@ -744,6 +747,36 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertEquals(request.getEndpoint() + ": failed", RestStatus.CREATED, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
     }
 
+    protected void bulkAddDocuments(
+        final String index,
+        final String textField,
+        final String pipeline,
+        final List<Map<String, String>> docs,
+        final int batchSize
+    ) throws IOException, ParseException {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < docs.size(); ++i) {
+            String doc = String.format(
+                Locale.ROOT,
+                "{ \"index\": { \"_index\": \"%s\", \"_id\": \"%s\" } },\n" + "{ \"%s\": \"%s\"}",
+                index,
+                docs.get(i).get("id"),
+                textField,
+                docs.get(i).get("text")
+            );
+            builder.append(doc);
+            builder.append("\n");
+        }
+        Request request = new Request(
+            "POST",
+            String.format(Locale.ROOT, "/_bulk?refresh=true&pipeline=%s&batch_size=%d", pipeline, batchSize)
+        );
+        request.setJsonEntity(builder.toString());
+
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+    }
+
     /**
      * Parse the first returned hit from a search response as a map
      *
@@ -1308,12 +1341,34 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         }
     }
 
+    protected Object validateDocCountAndInfo(
+        String indexName,
+        int expectedDocCount,
+        Supplier<Map<String, Object>> documentSupplier,
+        final String field,
+        final Class<?> valueType
+    ) {
+        int count = getDocCount(indexName);
+        assertEquals(expectedDocCount, count);
+        Map<String, Object> document = documentSupplier.get();
+        assertNotNull(document);
+        Object documentSource = document.get("_source");
+        assertTrue(documentSource instanceof Map);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> documentSourceMap = (Map<String, Object>) documentSource;
+        assertTrue(documentSourceMap.containsKey(field));
+        Object outputs = documentSourceMap.get(field);
+        assertTrue(valueType.isAssignableFrom(outputs.getClass()));
+        return outputs;
+    }
+
     /**
      * Enumeration for types of pipeline processors, used to lookup resources like create
      * processor request as those are type specific
      */
     protected enum ProcessorType {
         TEXT_EMBEDDING,
+        TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING,
         TEXT_IMAGE_EMBEDDING,
         SPARSE_ENCODING
     }

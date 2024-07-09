@@ -5,6 +5,12 @@
 package org.opensearch.neuralsearch.query;
 
 import static org.opensearch.knn.index.query.KNNQueryBuilder.FILTER_FIELD;
+import static org.opensearch.knn.index.query.KNNQueryBuilder.MAX_DISTANCE_FIELD;
+import static org.opensearch.knn.index.query.KNNQueryBuilder.METHOD_PARAMS_FIELD;
+import static org.opensearch.knn.index.query.KNNQueryBuilder.MIN_SCORE_FIELD;
+import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersion;
+import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport;
+import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForRadialSearch;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.INPUT_IMAGE;
 import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.INPUT_TEXT;
@@ -19,7 +25,6 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.apache.lucene.search.Query;
-import org.opensearch.Version;
 import org.opensearch.common.SetOnce;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.action.ActionListener;
@@ -34,8 +39,9 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
+import org.opensearch.knn.index.query.parser.MethodParametersParser;
+import org.opensearch.neuralsearch.common.MinClusterVersionUtil;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
-import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -69,17 +75,10 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     @VisibleForTesting
     static final ParseField QUERY_IMAGE_FIELD = new ParseField("query_image");
 
-    @VisibleForTesting
-    static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
+    public static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
 
     @VisibleForTesting
     static final ParseField K_FIELD = new ParseField("k");
-
-    @VisibleForTesting
-    static final ParseField MAX_DISTANCE_FIELD = new ParseField("max_distance");
-
-    @VisibleForTesting
-    static final ParseField MIN_SCORE_FIELD = new ParseField("min_score");
 
     private static final int DEFAULT_K = 10;
 
@@ -101,8 +100,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     @Setter(AccessLevel.PACKAGE)
     private Supplier<float[]> vectorSupplier;
     private QueryBuilder filter;
-    private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_11_0;
-    private static final Version MINIMAL_SUPPORTED_VERSION_RADIAL_SEARCH = Version.V_2_14_0;
+    private Map<String, ?> methodParameters;
 
     /**
      * Constructor from stream input
@@ -130,6 +128,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             this.maxDistance = in.readOptionalFloat();
             this.minScore = in.readOptionalFloat();
         }
+        if (isClusterOnOrAfterMinReqVersion(METHOD_PARAMS_FIELD.getPreferredName())) {
+            this.methodParameters = MethodParametersParser.streamInput(in, MinClusterVersionUtil::isClusterOnOrAfterMinReqVersion);
+        }
     }
 
     @Override
@@ -152,6 +153,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             out.writeOptionalFloat(this.maxDistance);
             out.writeOptionalFloat(this.minScore);
         }
+        if (isClusterOnOrAfterMinReqVersion(METHOD_PARAMS_FIELD.getPreferredName())) {
+            MethodParametersParser.streamOutput(out, methodParameters, MinClusterVersionUtil::isClusterOnOrAfterMinReqVersion);
+        }
     }
 
     @Override
@@ -173,6 +177,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         }
         if (Objects.nonNull(minScore)) {
             xContentBuilder.field(MIN_SCORE_FIELD.getPreferredName(), minScore);
+        }
+        if (Objects.nonNull(methodParameters)) {
+            MethodParametersParser.doXContent(xContentBuilder, methodParameters);
         }
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
@@ -267,6 +274,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             } else if (token == XContentParser.Token.START_OBJECT) {
                 if (FILTER_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     neuralQueryBuilder.filter(parseInnerQueryBuilder(parser));
+                } else if (METHOD_PARAMS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    neuralQueryBuilder.methodParameters(MethodParametersParser.fromXContent(parser));
                 }
             } else {
                 throw new ParsingException(
@@ -325,7 +334,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             maxDistance(),
             minScore(),
             vectorSetOnce::get,
-            filter()
+            filter(),
+            methodParameters()
         );
     }
 
@@ -356,14 +366,6 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     @Override
     public String getWriteableName() {
         return NAME;
-    }
-
-    private static boolean isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport() {
-        return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID);
-    }
-
-    private static boolean isClusterOnOrAfterMinReqVersionForRadialSearch() {
-        return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_RADIAL_SEARCH);
     }
 
     private static boolean validateKNNQueryType(NeuralQueryBuilder neuralQueryBuilder) {
