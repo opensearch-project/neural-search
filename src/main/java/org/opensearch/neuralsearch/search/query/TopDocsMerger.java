@@ -24,7 +24,7 @@ import org.opensearch.search.sort.SortAndFormats;
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 class TopDocsMerger {
 
-    private HybridQueryScoreDocsMerger scoreDocsMerger;
+    private HybridQueryScoreDocsMerger docsMerger;
     private SortAndFormats sortAndFormats;
     @VisibleForTesting
     protected static Comparator<ScoreDoc> SCORE_DOC_BY_SCORE_COMPARATOR;
@@ -40,11 +40,11 @@ class TopDocsMerger {
      */
     TopDocsMerger(final SortAndFormats sortAndFormats) {
         this.sortAndFormats = sortAndFormats;
-        if (this.sortAndFormats != null) {
-            scoreDocsMerger = new HybridQueryScoreDocsMerger<FieldDoc>();
+        if (isSortingEnabled()) {
+            docsMerger = new HybridQueryScoreDocsMerger<FieldDoc>();
             FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR = new HybridQueryFieldDocComparator(sortAndFormats.sort.getSort(), MERGING_TIE_BREAKER);
         } else {
-            scoreDocsMerger = new HybridQueryScoreDocsMerger<>();
+            docsMerger = new HybridQueryScoreDocsMerger<>();
             SCORE_DOC_BY_SCORE_COMPARATOR = Comparator.comparing((scoreDoc) -> scoreDoc.score);
         }
     }
@@ -108,10 +108,14 @@ class TopDocsMerger {
         // doc_id | magic_number_2
         // ...
         // doc_id | magic_number_1
-        return scoreDocsMerger.merge(source, newScoreDocs, comparator(), sortAndFormats != null);
+        return docsMerger.merge(source, newScoreDocs, comparator(), isSortingEnabled());
     }
 
     private Comparator<? extends ScoreDoc> comparator() {
         return sortAndFormats != null ? FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR : SCORE_DOC_BY_SCORE_COMPARATOR;
+    }
+
+    private boolean isSortingEnabled() {
+        return sortAndFormats != null;
     }
 }
