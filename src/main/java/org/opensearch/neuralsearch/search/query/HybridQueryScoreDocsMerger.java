@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.search.query;
 
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
+import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.ScoreDoc;
 
 import java.util.ArrayList;
@@ -31,9 +32,11 @@ class HybridQueryScoreDocsMerger<T extends ScoreDoc> {
      * Method returns new object and doesn't mutate original ScoreDocs arrays.
      * @param sourceScoreDocs original score docs from query result
      * @param newScoreDocs new score docs that we need to merge into existing scores
+     * @param comparator comparator to compare the score docs
+     * @param isSortEnabled flag that show if sort is enabled or disabled
      * @return merged array of ScoreDocs objects
      */
-    public T[] merge(final T[] sourceScoreDocs, final T[] newScoreDocs, final Comparator<T> comparator) {
+    public T[] merge(final T[] sourceScoreDocs, final T[] newScoreDocs, final Comparator<T> comparator, final boolean isSortEnabled) {
         if (Objects.requireNonNull(sourceScoreDocs, "score docs cannot be null").length < MIN_NUMBER_OF_ELEMENTS_IN_SCORE_DOC
             || Objects.requireNonNull(newScoreDocs, "score docs cannot be null").length < MIN_NUMBER_OF_ELEMENTS_IN_SCORE_DOC) {
             throw new IllegalArgumentException("cannot merge top docs because it does not have enough elements");
@@ -58,7 +61,7 @@ class HybridQueryScoreDocsMerger<T extends ScoreDoc> {
                 && isHybridQueryScoreDocElement(sourceScoreDocs[sourcePointer])
                 && newPointer < newScoreDocs.length
                 && isHybridQueryScoreDocElement(newScoreDocs[newPointer])) {
-                if (comparator.compare(sourceScoreDocs[sourcePointer], newScoreDocs[newPointer]) >= 0) {
+                if (compareCondition(sourceScoreDocs[sourcePointer], newScoreDocs[newPointer], comparator, isSortEnabled)) {
                     mergedScoreDocs.add(sourceScoreDocs[sourcePointer]);
                     sourcePointer++;
                 } else {
@@ -78,6 +81,23 @@ class HybridQueryScoreDocsMerger<T extends ScoreDoc> {
         }
         // mark end of hybrid query results by end element
         mergedScoreDocs.add(sourceScoreDocs[sourceScoreDocs.length - 1]);
+        if (isSortEnabled) {
+            return mergedScoreDocs.toArray((T[]) new FieldDoc[0]);
+        }
         return mergedScoreDocs.toArray((T[]) new ScoreDoc[0]);
+    }
+
+    private boolean compareCondition(
+        final ScoreDoc oldScoreDoc,
+        final ScoreDoc secondScoreDoc,
+        final Comparator<T> comparator,
+        final boolean isSortEnabled
+    ) {
+        // If sorting is enabled then compare condition will be different then normal HybridQuery
+        if (isSortEnabled) {
+            return comparator.compare((T) oldScoreDoc, (T) secondScoreDoc) < 0;
+        } else {
+            return comparator.compare((T) oldScoreDoc, (T) secondScoreDoc) >= 0;
+        }
     }
 }

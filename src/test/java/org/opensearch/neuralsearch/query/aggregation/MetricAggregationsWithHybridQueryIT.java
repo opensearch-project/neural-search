@@ -421,7 +421,10 @@ public class MetricAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
                 10,
                 Map.of("search_pipeline", SEARCH_PIPELINE),
                 List.of(aggsBuilder),
-                rangeFilterQuery
+                rangeFilterQuery,
+                null,
+                false,
+                null
             );
 
             Map<String, Object> aggregations = getAggregations(searchResponseAsMap);

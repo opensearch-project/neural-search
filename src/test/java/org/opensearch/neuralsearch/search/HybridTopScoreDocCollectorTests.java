@@ -46,6 +46,7 @@ import org.opensearch.neuralsearch.query.HybridQueryScorer;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 
 import lombok.SneakyThrows;
+import org.opensearch.neuralsearch.search.collector.HybridTopScoreDocCollector;
 
 public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
 
