@@ -78,7 +78,7 @@ class TopDocsMerger {
     }
 
     private TopDocs getTopDocs(ScoreDoc[] mergedScoreDocs, TotalHits mergedTotalHits) {
-        if (sortAndFormats != null) {
+        if (isSortingEnabled()) {
             return new TopFieldDocs(mergedTotalHits, mergedScoreDocs, sortAndFormats.sort.getSort());
         }
         return new TopDocs(mergedTotalHits, mergedScoreDocs);
