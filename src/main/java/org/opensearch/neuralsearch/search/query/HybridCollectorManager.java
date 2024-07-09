@@ -62,7 +62,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     private final SortAndFormats sortAndFormats;
     @Nullable
     private final Weight filterWeight;
-    private static final float boost_factor = 1f;
+    private static final float boostFactor = 1f;
     private final TopDocsMerger topDocsMerger;
     @Nullable
     private final FieldDoc after;
@@ -92,7 +92,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             // Boost factor 1f is taken because if boost is multiplicative of 1 then it means "no boost"
             // Previously this code in OpenSearch looked like
             // https://github.com/opensearch-project/OpenSearch/commit/36a5cf8f35e5cbaa1ff857b5a5db8c02edc1a187
-            filteringWeight = searcher.createWeight(searcher.rewrite(filterQuery), ScoreMode.COMPLETE_NO_SCORES, boost_factor);
+            filteringWeight = searcher.createWeight(searcher.rewrite(filterQuery), ScoreMode.COMPLETE_NO_SCORES, boostFactor);
         }
 
         return searchContext.shouldUseConcurrentSearch()
@@ -151,7 +151,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     public ReduceableSearchResult reduce(Collection<Collector> collectors) {
         final List<HybridSearchCollector> hybridSearchCollectors = getHybridSearchCollectors(collectors);
         if (hybridSearchCollectors.isEmpty()) {
-            throw new IllegalStateException("cannot collect results of hybrid search query, there are no proper score collectors");
+            throw new IllegalStateException("cannot collect results of hybrid search query, there are no proper collectors");
         }
         return reduceSearchResults(getSearchResults(hybridSearchCollectors));
     }
