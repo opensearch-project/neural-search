@@ -29,7 +29,8 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
         final List<CompoundTopDocs> queryTopDocs = List.of(
             new CompoundTopDocs(
                 new TotalHits(1, TotalHits.Relation.EQUAL_TO),
-                List.of(new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(1, 2.0f) }))
+                List.of(new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(1, 2.0f) })),
+                false
             )
         );
         scoreNormalizationMethod.normalizeScores(queryTopDocs, ScoreNormalizationFactory.DEFAULT_METHOD);
@@ -59,7 +60,8 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
                         new TotalHits(3, TotalHits.Relation.EQUAL_TO),
                         new ScoreDoc[] { new ScoreDoc(1, 10.0f), new ScoreDoc(2, 2.5f), new ScoreDoc(4, 0.1f) }
                     )
-                )
+                ),
+                false
             )
         );
         scoreNormalizationMethod.normalizeScores(queryTopDocs, ScoreNormalizationFactory.DEFAULT_METHOD);
@@ -95,7 +97,8 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
                         new TotalHits(2, TotalHits.Relation.EQUAL_TO),
                         new ScoreDoc[] { new ScoreDoc(3, 0.8f), new ScoreDoc(5, 0.5f) }
                     )
-                )
+                ),
+                false
             )
         );
         scoreNormalizationMethod.normalizeScores(queryTopDocs, ScoreNormalizationFactory.DEFAULT_METHOD);
@@ -143,7 +146,8 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
                         new TotalHits(2, TotalHits.Relation.EQUAL_TO),
                         new ScoreDoc[] { new ScoreDoc(3, 0.8f), new ScoreDoc(5, 0.5f) }
                     )
-                )
+                ),
+                false
             ),
             new CompoundTopDocs(
                 new TotalHits(4, TotalHits.Relation.EQUAL_TO),
@@ -153,14 +157,16 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
                         new TotalHits(4, TotalHits.Relation.EQUAL_TO),
                         new ScoreDoc[] { new ScoreDoc(2, 2.2f), new ScoreDoc(4, 1.8f), new ScoreDoc(7, 0.9f), new ScoreDoc(9, 0.01f) }
                     )
-                )
+                ),
+                false
             ),
             new CompoundTopDocs(
                 new TotalHits(0, TotalHits.Relation.EQUAL_TO),
                 List.of(
                     new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
                     new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0])
-                )
+                ),
+                false
             )
         );
         scoreNormalizationMethod.normalizeScores(queryTopDocs, ScoreNormalizationFactory.DEFAULT_METHOD);

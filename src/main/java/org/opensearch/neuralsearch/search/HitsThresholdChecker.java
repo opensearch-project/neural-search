@@ -26,15 +26,15 @@ public class HitsThresholdChecker {
         this.totalHitsThreshold = totalHitsThreshold;
     }
 
-    protected void incrementHitCount() {
+    public void incrementHitCount() {
         ++hitCount;
     }
 
-    protected boolean isThresholdReached() {
+    public boolean isThresholdReached() {
         return hitCount >= getTotalHitsThreshold();
     }
 
-    protected ScoreMode scoreMode() {
+    public ScoreMode scoreMode() {
         return ScoreMode.TOP_SCORES;
     }
 }
