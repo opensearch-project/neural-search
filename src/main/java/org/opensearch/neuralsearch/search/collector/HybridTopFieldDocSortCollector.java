@@ -13,7 +13,6 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.FieldValueHitQueue;
 import org.apache.lucene.search.ScoreDoc;
@@ -38,7 +37,7 @@ import org.opensearch.neuralsearch.search.lucene.MultiLeafFieldComparator;
  The individual query results are sorted as per the sort criteria sent in the search request.
  */
 @Log4j2
-public abstract class HybridTopFieldDocSortCollector implements Collector {
+public abstract class HybridTopFieldDocSortCollector implements HybridSearchCollector {
     private final int numHits;
     private final HitsThresholdChecker hitsThresholdChecker;
     private final Sort sort;

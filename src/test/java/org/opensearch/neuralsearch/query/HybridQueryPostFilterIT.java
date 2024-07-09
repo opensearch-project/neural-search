@@ -68,7 +68,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testPostFilterOnIndexWithSingleShard_whenConcurrentSearchEnabled_thenSuccessful() {
         try {
-            updateClusterSettings("search.concurrent_segment_search.enabled", true);
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
             prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
             testPostFilterRangeQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
             testPostFilterBoolQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
@@ -81,7 +81,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testPostFilterOnIndexWithSingleShard_whenConcurrentSearchDisabled_thenSuccessful() {
         try {
-            updateClusterSettings("search.concurrent_segment_search.enabled", false);
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
             prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
             testPostFilterRangeQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
             testPostFilterBoolQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
@@ -94,7 +94,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testPostFilterOnIndexWithMultipleShards_whenConcurrentSearchEnabled_thenSuccessful() {
         try {
-            updateClusterSettings("search.concurrent_segment_search.enabled", true);
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
             prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
             testPostFilterRangeQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
             testPostFilterBoolQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
@@ -107,7 +107,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testPostFilterOnIndexWithMultipleShards_whenConcurrentSearchDisabled_thenSuccessful() {
         try {
-            updateClusterSettings("search.concurrent_segment_search.enabled", false);
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
             prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
             testPostFilterRangeQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
             testPostFilterBoolQuery(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);

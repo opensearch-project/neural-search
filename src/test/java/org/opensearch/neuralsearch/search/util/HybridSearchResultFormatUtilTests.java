@@ -4,16 +4,14 @@
  */
 package org.opensearch.neuralsearch.search.util;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.MAGIC_NUMBER_DELIMITER;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.MAGIC_NUMBER_START_STOP;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createDelimiterElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryDelimiterElement;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryStartStopElement;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryScoreDocElement;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQuerySpecialElement;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.opensearch.common.Randomness;
@@ -56,5 +54,24 @@ public class HybridSearchResultFormatUtilTests extends OpenSearchQueryTestCase {
         assertNotNull(delimiterElement);
         assertEquals(docId, delimiterElement.doc);
         assertEquals(MAGIC_NUMBER_DELIMITER, delimiterElement.score, 0.0f);
+    }
+
+    public void testSpecialElementCheck_whenElementIsSpecialAndIsNotSpecial_thenSuccessful() {
+        int docId = 1;
+        ScoreDoc startStopElement = new ScoreDoc(docId, MAGIC_NUMBER_START_STOP);
+        assertTrue(isHybridQuerySpecialElement(startStopElement));
+        assertFalse(isHybridQueryScoreDocElement(startStopElement));
+
+        ScoreDoc delimiterElement = new ScoreDoc(docId, MAGIC_NUMBER_DELIMITER);
+        assertTrue(isHybridQuerySpecialElement(delimiterElement));
+        assertFalse(isHybridQueryScoreDocElement(delimiterElement));
+    }
+
+    public void testScoreElementCheck_whenElementIsSpecialAndIsNotSpecial_thenSuccessful() {
+        int docId = 1;
+        float score = Randomness.get().nextFloat();
+        ScoreDoc startStopElement = new ScoreDoc(docId, score);
+        assertFalse(isHybridQuerySpecialElement(startStopElement));
+        assertTrue(isHybridQueryScoreDocElement(startStopElement));
     }
 }

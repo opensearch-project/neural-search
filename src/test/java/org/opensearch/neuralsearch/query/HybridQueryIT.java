@@ -22,6 +22,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.IntStream;
 
+import org.apache.commons.lang.RandomStringUtils;
+import org.apache.commons.lang.math.RandomUtils;
 import org.apache.lucene.search.join.ScoreMode;
 import org.junit.Before;
 import org.opensearch.client.ResponseException;
@@ -47,6 +49,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD =
         "test-hybrid-multi-doc-nested-type-single-shard-index";
     private static final String TEST_INDEX_WITH_KEYWORDS_ONE_SHARD = "test-hybrid-keywords-single-shard-index";
+    private static final String TEST_INDEX_DOC_QTY_ONE_SHARD = "test-hybrid-doc-qty-single-shard-index";
+    private static final String TEST_INDEX_DOC_QTY_MULTIPLE_SHARDS = "test-hybrid-doc-qty-multiple-shards-index";
     private static final String TEST_INDEX_WITH_KEYWORDS_THREE_SHARDS = "test-hybrid-keywords-three-shards-index";
     private static final String TEST_QUERY_TEXT = "greetings";
     private static final String TEST_QUERY_TEXT2 = "salute";
@@ -76,6 +80,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     private static final int INTEGER_FIELD_PRICE_4_VALUE = 25;
     private static final int INTEGER_FIELD_PRICE_5_VALUE = 30;
     private static final int INTEGER_FIELD_PRICE_6_VALUE = 350;
+    protected static final int SINGLE_SHARD = 1;
+    protected static final int MULTIPLE_SHARDS = 3;
     private final float[] testVector1 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector2 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector3 = createRandomVector(TEST_DIMENSION);
@@ -693,6 +699,101 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
+    public void testConcurrentSearchWithMultipleSlices_whenSingleShardIndex_thenSuccessful() {
+        try {
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
+            int numberOfDocumentsInIndex = 1_000;
+            initializeIndexIfNotExist(TEST_INDEX_DOC_QTY_ONE_SHARD, SINGLE_SHARD, numberOfDocumentsInIndex);
+            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+
+            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+            hybridQueryBuilder.add(QueryBuilders.matchAllQuery());
+
+            // first query with cache flag executed normally by reading documents from index
+            Map<String, Object> firstSearchResponseAsMap = search(
+                TEST_INDEX_DOC_QTY_ONE_SHARD,
+                hybridQueryBuilder,
+                null,
+                numberOfDocumentsInIndex,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            );
+
+            int queryHitCount = getHitCount(firstSearchResponseAsMap);
+            assertEquals(numberOfDocumentsInIndex, queryHitCount);
+
+            List<Map<String, Object>> hitsNestedList = getNestedHits(firstSearchResponseAsMap);
+            List<String> ids = new ArrayList<>();
+            List<Double> scores = new ArrayList<>();
+            for (Map<String, Object> oneHit : hitsNestedList) {
+                ids.add((String) oneHit.get("_id"));
+                scores.add((Double) oneHit.get("_score"));
+            }
+
+            // verify that scores are in desc order
+            assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
+            // verify that all ids are unique
+            assertEquals(Set.copyOf(ids).size(), ids.size());
+
+            Map<String, Object> total = getTotalHits(firstSearchResponseAsMap);
+            assertNotNull(total.get("value"));
+            assertEquals(numberOfDocumentsInIndex, total.get("value"));
+            assertNotNull(total.get("relation"));
+            assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+        } finally {
+            wipeOfTestResources(TEST_INDEX_DOC_QTY_ONE_SHARD, null, null, SEARCH_PIPELINE);
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+        }
+    }
+
+    @SneakyThrows
+    public void testConcurrentSearchWithMultipleSlices_whenMultipleShardsIndex_thenSuccessful() {
+        try {
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
+            int numberOfDocumentsInIndex = 2_000;
+            initializeIndexIfNotExist(TEST_INDEX_DOC_QTY_MULTIPLE_SHARDS, MULTIPLE_SHARDS, numberOfDocumentsInIndex);
+            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+
+            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+            hybridQueryBuilder.add(QueryBuilders.matchAllQuery());
+            hybridQueryBuilder.add(QueryBuilders.rangeQuery(INTEGER_FIELD_PRICE).gte(0).lte(1000));
+
+            // first query with cache flag executed normally by reading documents from index
+            Map<String, Object> firstSearchResponseAsMap = search(
+                TEST_INDEX_DOC_QTY_MULTIPLE_SHARDS,
+                hybridQueryBuilder,
+                null,
+                numberOfDocumentsInIndex,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            );
+
+            int queryHitCount = getHitCount(firstSearchResponseAsMap);
+            assertEquals(numberOfDocumentsInIndex, queryHitCount);
+
+            List<Map<String, Object>> hitsNestedList = getNestedHits(firstSearchResponseAsMap);
+            List<String> ids = new ArrayList<>();
+            List<Double> scores = new ArrayList<>();
+            for (Map<String, Object> oneHit : hitsNestedList) {
+                ids.add((String) oneHit.get("_id"));
+                scores.add((Double) oneHit.get("_score"));
+            }
+
+            // verify that scores are in desc order
+            assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
+            // verify that all ids are unique
+            assertEquals(Set.copyOf(ids).size(), ids.size());
+
+            Map<String, Object> total = getTotalHits(firstSearchResponseAsMap);
+            assertNotNull(total.get("value"));
+            assertEquals(numberOfDocumentsInIndex, total.get("value"));
+            assertNotNull(total.get("relation"));
+            assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+        } finally {
+            wipeOfTestResources(TEST_INDEX_DOC_QTY_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+        }
+    }
+
+    @SneakyThrows
     private void initializeIndexIfNotExist(String indexName) throws IOException {
         if (TEST_BASIC_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_INDEX_NAME)) {
             prepareKnnIndex(
@@ -784,7 +885,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 buildIndexConfiguration(
                     Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)),
                     List.of(TEST_NESTED_TYPE_FIELD_NAME_1),
-                    1
+                    SINGLE_SHARD
                 ),
                 ""
             );
@@ -805,7 +906,14 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         if (TEST_INDEX_WITH_KEYWORDS_ONE_SHARD.equals(indexName) && !indexExists(TEST_INDEX_WITH_KEYWORDS_ONE_SHARD)) {
             createIndexWithConfiguration(
                 indexName,
-                buildIndexConfiguration(List.of(), List.of(), List.of(INTEGER_FIELD_PRICE), List.of(KEYWORD_FIELD_1), List.of(), 1),
+                buildIndexConfiguration(
+                    List.of(),
+                    List.of(),
+                    List.of(INTEGER_FIELD_PRICE),
+                    List.of(KEYWORD_FIELD_1),
+                    List.of(),
+                    SINGLE_SHARD
+                ),
                 ""
             );
             addDocWithKeywordsAndIntFields(
@@ -898,6 +1006,34 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 KEYWORD_FIELD_1,
                 KEYWORD_FIELD_4_VALUE
             );
+        }
+    }
+
+    @SneakyThrows
+    private void initializeIndexIfNotExist(String indexName, int numberOfShards, int numberOfDocuments) {
+        if (!indexExists(indexName)) {
+            createIndexWithConfiguration(
+                indexName,
+                buildIndexConfiguration(
+                    List.of(),
+                    List.of(),
+                    List.of(INTEGER_FIELD_PRICE),
+                    List.of(KEYWORD_FIELD_1),
+                    List.of(),
+                    numberOfShards
+                ),
+                ""
+            );
+            for (int i = 0; i < numberOfDocuments; i++) {
+                addDocWithKeywordsAndIntFields(
+                    indexName,
+                    String.valueOf(i),
+                    INTEGER_FIELD_PRICE,
+                    RandomUtils.nextInt(1000),
+                    KEYWORD_FIELD_1,
+                    RandomStringUtils.randomAlphabetic(10)
+                );
+            }
         }
     }
 
