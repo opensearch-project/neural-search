@@ -299,12 +299,8 @@ public abstract class InferenceProcessor extends AbstractProcessor {
         return mapWithProcessorKeys;
     }
 
-    private void buildNestedMap(
-        String parentKey,
-        Object processorKey,
-        Map<String, Object> sourceAndMetadataMap,
-        Map<String, Object> treeRes
-    ) {
+    @VisibleForTesting
+    void buildNestedMap(String parentKey, Object processorKey, Map<String, Object> sourceAndMetadataMap, Map<String, Object> treeRes) {
         if (Objects.isNull(processorKey) || Objects.isNull(sourceAndMetadataMap)) {
             return;
         }
@@ -351,7 +347,8 @@ public abstract class InferenceProcessor extends AbstractProcessor {
      * @param nestedFieldMapEntry
      * @return A pair of the original key and the target key
      */
-    private Pair<String, Object> processNestedKey(final Map.Entry<String, Object> nestedFieldMapEntry) {
+    @VisibleForTesting
+    protected Pair<String, Object> processNestedKey(final Map.Entry<String, Object> nestedFieldMapEntry) {
         String originalKey = nestedFieldMapEntry.getKey();
         Object targetKey = nestedFieldMapEntry.getValue();
         int nestedDotIndex = originalKey.indexOf('.');

@@ -18,14 +18,17 @@ import static org.mockito.Mockito.isA;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Arrays;
+import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.junit.Before;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -677,6 +680,100 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         }
     }
 
+    public void testParsingNestedField_whenNestedFieldsConfigured_thenSuccessful() {
+        Map<String, Object> config = createNestedMapConfiguration();
+        TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
+        /**
+         * Assert that mapping
+         * "favorites": {
+         *      "favorite.movie": "favorite_movie_knn",
+         *      "favorite.games": {
+         *         "adventure.action": "with_action_knn"
+         *     }
+         * }
+         * has been transformed to structure:
+         * "favorites": {
+         *      "favorite": {
+         *          "movie": "favorite_movie_knn",
+         *          "games": {
+         *              "adventure": {
+         *                  "action": "with_action_knn"
+         *              }
+         *          }
+         *      }
+         * }
+         */
+        assertMapWithNestedFields(
+            processor.processNestedKey(
+                config.entrySet().stream().filter(entry -> entry.getKey().equals("favorites")).findAny().orElseThrow()
+            ),
+            List.of("favorites"),
+            Optional.empty()
+        );
+
+        Map<String, Object> favorites = (Map) config.get("favorites");
+
+        assertMapWithNestedFields(
+            processor.processNestedKey(
+                favorites.entrySet().stream().filter(entry -> entry.getKey().equals("favorite.games")).findAny().orElseThrow()
+            ),
+            List.of("favorite", "games"),
+            Optional.of("favorite_movie_knn")
+        );
+
+        assertMapWithNestedFields(
+            processor.processNestedKey(
+                favorites.entrySet().stream().filter(entry -> entry.getKey().equals("favorite.movie")).findAny().orElseThrow()
+            ),
+            List.of("favorite", "movie"),
+            Optional.empty()
+        );
+
+        Map<String, Object> adventureActionMap = (Map<String, Object>) favorites.get("favorite.games");
+        assertMapWithNestedFields(
+            processor.processNestedKey(
+                adventureActionMap.entrySet().stream().filter(entry -> entry.getKey().equals("adventure.action")).findAny().orElseThrow()
+            ),
+            List.of("adventure", "action"),
+            Optional.of("with_action_knn")
+        );
+    }
+
+    public void testBuildingOfNestedMap_whenHasNestedMapping_thenSuccessful() {
+        /**
+         * assert based on following structure:
+         * "nestedField": {
+         *     "nestedField": {
+         *             "textField": "vectorField"
+         *     }
+         * }
+         */
+        Map<String, Object> config = createNestedList2LevelConfiguration();
+        TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
+        Map<String, Object> resultAsTree = new LinkedHashMap<>();
+        processor.buildNestedMap("nestedField", config.get("nestedField"), config, resultAsTree);
+        assertNotNull(resultAsTree);
+        Map<String, Object> actualMapLevel1 = (Map<String, Object>) resultAsTree.get("nestedField");
+        assertEquals(1, actualMapLevel1.size());
+        assertEquals(Map.of("vectorField", "vectorField"), actualMapLevel1.get("nestedField"));
+    }
+
+    private void assertMapWithNestedFields(Pair<String, Object> actual, List<String> expectedKeys, Optional<Object> expectedFinalValue) {
+        assertNotNull(actual);
+        assertEquals(expectedKeys.get(0), actual.getKey());
+        Map<String, Object> actualValue = (Map<String, Object>) actual.getValue();
+        for (int i = 1; i < expectedKeys.size(); i++) {
+            assertTrue(actualValue.containsKey(expectedKeys.get(i)));
+            if (actualValue.get(expectedKeys.get(i)) instanceof Map) {
+                actualValue = (Map<String, Object>) actualValue.get(expectedKeys.get(i));
+            } else if (expectedFinalValue.isPresent()) {
+                assertEquals(expectedFinalValue.get(), actualValue.get(expectedKeys.get(i)));
+            } else {
+                break;
+            }
+        }
+    }
+
     @SneakyThrows
     private TextEmbeddingProcessor createInstanceWithNestedMapConfiguration(Map<String, Object> fieldMap) {
         Map<String, Processor.Factory> registry = new HashMap<>();
@@ -755,28 +852,6 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         favorites.put("actor", "Charlie Chaplin");
         Map<String, Object> favorite = new HashMap<>();
         favorite.put("favorite", favorites);
-        Map<String, Object> result = new HashMap<>();
-        result.put("favorites", favorite);
-        return new IngestDocument(result, new HashMap<>());
-    }
-
-    private IngestDocument createNestedMapIngestDocument2() {
-        Map<String, Object> adventureGames = new HashMap<>();
-        List<String> actionGames = new ArrayList<>();
-        actionGames.add("jojo world");
-        actionGames.add(null);
-        adventureGames.put("with.action", actionGames);
-        adventureGames.put("with.reaction", "overwatch");
-        Map<String, Object> puzzleGames = new HashMap<>();
-        puzzleGames.put("maze", "zelda");
-        puzzleGames.put("card", "hearthstone");
-        Map<String, Object> favoriteGames = new HashMap<>();
-        favoriteGames.put("adventure", adventureGames);
-        favoriteGames.put("puzzle", puzzleGames);
-        Map<String, Object> favorite = new HashMap<>();
-        favorite.put("favorite.movie", "favorite.movie.knn");
-        favorite.put("favorite.games", favoriteGames);
-        favorite.put("favorite.songs", "In The Name Of Father");
         Map<String, Object> result = new HashMap<>();
         result.put("favorites", favorite);
         return new IngestDocument(result, new HashMap<>());
