@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.search;
+package org.opensearch.neuralsearch.search.collector;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -12,7 +12,6 @@ import java.util.Objects;
 
 import lombok.Getter;
 import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.HitQueue;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.Scorable;
@@ -24,12 +23,13 @@ import org.apache.lucene.util.PriorityQueue;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.query.HybridQueryScorer;
+import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
 /**
  * Collects the TopDocs after executing hybrid query. Uses HybridQueryTopDocs as DTO to handle each sub query results
  */
 @Log4j2
-public class HybridTopScoreDocCollector implements Collector {
+public class HybridTopScoreDocCollector implements HybridSearchCollector {
     private static final TopDocs EMPTY_TOPDOCS = new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]);
     private int docBase;
     private final HitsThresholdChecker hitsThresholdChecker;

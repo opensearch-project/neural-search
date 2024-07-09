@@ -15,7 +15,11 @@ import java.util.stream.Collectors;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.TopFieldDocs;
+import org.apache.lucene.search.FieldDoc;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
+import org.opensearch.neuralsearch.processor.combination.CombineScoresDto;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
@@ -27,6 +31,8 @@ import org.opensearch.search.query.QuerySearchResult;
 
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import static org.opensearch.neuralsearch.processor.combination.ScoreCombiner.MAX_SCORE_WHEN_NO_HITS_FOUND;
+import static org.opensearch.neuralsearch.search.util.HybridSearchSortUtil.evaluateSortCriteria;
 
 /**
  * Class abstracts steps required for score normalization and combination, this includes pre-processing of incoming data
@@ -62,13 +68,20 @@ public class NormalizationProcessorWorkflow {
         log.debug("Do score normalization");
         scoreNormalizer.normalizeScores(queryTopDocs, normalizationTechnique);
 
+        CombineScoresDto combineScoresDTO = CombineScoresDto.builder()
+            .queryTopDocs(queryTopDocs)
+            .scoreCombinationTechnique(combinationTechnique)
+            .querySearchResults(querySearchResults)
+            .sort(evaluateSortCriteria(querySearchResults, queryTopDocs))
+            .build();
+
         // combine
         log.debug("Do score combination");
-        scoreCombiner.combineScores(queryTopDocs, combinationTechnique);
+        scoreCombiner.combineScores(combineScoresDTO);
 
         // post-process data
         log.debug("Post-process query results after score normalization and combination");
-        updateOriginalQueryResults(querySearchResults, queryTopDocs);
+        updateOriginalQueryResults(combineScoresDTO);
         updateOriginalFetchResults(querySearchResults, fetchSearchResultOptional, unprocessedDocIds);
     }
 
@@ -96,7 +109,23 @@ public class NormalizationProcessorWorkflow {
         return queryTopDocs;
     }
 
-    private void updateOriginalQueryResults(final List<QuerySearchResult> querySearchResults, final List<CompoundTopDocs> queryTopDocs) {
+    private void updateOriginalQueryResults(final CombineScoresDto combineScoresDTO) {
+        final List<QuerySearchResult> querySearchResults = combineScoresDTO.getQuerySearchResults();
+        final List<CompoundTopDocs> queryTopDocs = getCompoundTopDocs(combineScoresDTO, querySearchResults);
+        final Sort sort = combineScoresDTO.getSort();
+        for (int index = 0; index < querySearchResults.size(); index++) {
+            QuerySearchResult querySearchResult = querySearchResults.get(index);
+            CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
+            TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(
+                buildTopDocs(updatedTopDocs, sort),
+                maxScoreForShard(updatedTopDocs, sort != null)
+            );
+            querySearchResult.topDocs(updatedTopDocsAndMaxScore, querySearchResult.sortValueFormats());
+        }
+    }
+
+    private List<CompoundTopDocs> getCompoundTopDocs(CombineScoresDto combineScoresDTO, List<QuerySearchResult> querySearchResults) {
+        final List<CompoundTopDocs> queryTopDocs = combineScoresDTO.getQueryTopDocs();
         if (querySearchResults.size() != queryTopDocs.size()) {
             throw new IllegalStateException(
                 String.format(
@@ -107,17 +136,42 @@ public class NormalizationProcessorWorkflow {
                 )
             );
         }
-        for (int index = 0; index < querySearchResults.size(); index++) {
-            QuerySearchResult querySearchResult = querySearchResults.get(index);
-            CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
-            float maxScore = updatedTopDocs.getTotalHits().value > 0 ? updatedTopDocs.getScoreDocs().get(0).score : 0.0f;
+        return queryTopDocs;
+    }
 
-            // create final version of top docs with all updated values
-            TopDocs topDocs = new TopDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new ScoreDoc[0]));
-
-            TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(topDocs, maxScore);
-            querySearchResult.topDocs(updatedTopDocsAndMaxScore, null);
+    /**
+     * Get Max score on Shard
+     * @param updatedTopDocs updatedTopDocs compound top docs on a shard
+     * @param isSortEnabled if sort is enabled or disabled
+     * @return  max score
+     */
+    private float maxScoreForShard(CompoundTopDocs updatedTopDocs, boolean isSortEnabled) {
+        if (updatedTopDocs.getTotalHits().value == 0 || updatedTopDocs.getScoreDocs().isEmpty()) {
+            return MAX_SCORE_WHEN_NO_HITS_FOUND;
         }
+        if (isSortEnabled) {
+            float maxScore = MAX_SCORE_WHEN_NO_HITS_FOUND;
+            // In case of sorting iterate over score docs and deduce the max score
+            for (ScoreDoc scoreDoc : updatedTopDocs.getScoreDocs()) {
+                maxScore = Math.max(maxScore, scoreDoc.score);
+            }
+            return maxScore;
+        }
+        // If it is a normal hybrid query then first entry of score doc will have max score
+        return updatedTopDocs.getScoreDocs().get(0).score;
+    }
+
+    /**
+     * Get Top Docs on Shard
+     * @param updatedTopDocs compound top docs on a shard
+     * @param sort  sort criteria
+     * @return TopDocs which will be instance of TopFieldDocs  if sort is enabled.
+     */
+    private TopDocs buildTopDocs(CompoundTopDocs updatedTopDocs, Sort sort) {
+        if (sort != null) {
+            return new TopFieldDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new FieldDoc[0]), sort.getSort());
+        }
+        return new TopDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new ScoreDoc[0]));
     }
 
     /**

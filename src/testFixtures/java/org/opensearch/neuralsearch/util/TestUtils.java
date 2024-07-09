@@ -325,6 +325,28 @@ public class TestUtils {
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
 
+    public static void assertHitResultsFromQueryWhenSortIsEnabled(
+        int expectedCollectedHits,
+        int expectedTotalHits,
+        Map<String, Object> searchResponseAsMap
+    ) {
+        assertEquals(expectedCollectedHits, getHitCount(searchResponseAsMap));
+
+        List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
+        List<String> ids = new ArrayList<>();
+        for (Map<String, Object> oneHit : hitsNestedList) {
+            ids.add((String) oneHit.get("_id"));
+        }
+        // verify that all ids are unique
+        assertEquals(Set.copyOf(ids).size(), ids.size());
+
+        Map<String, Object> total = getTotalHits(searchResponseAsMap);
+        assertNotNull(total.get("value"));
+        assertEquals(expectedTotalHits, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+    }
+
     private static List<Map<String, Object>> getNestedHits(Map<String, Object> searchResponseAsMap) {
         Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
         return (List<Map<String, Object>>) hitsMap.get("hits");

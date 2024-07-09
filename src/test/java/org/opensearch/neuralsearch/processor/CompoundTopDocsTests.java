@@ -28,7 +28,7 @@ public class CompoundTopDocsTests extends OpenSearchQueryTestCase {
                 new ScoreDoc(5, RandomUtils.nextFloat()) }
         );
         List<TopDocs> topDocs = List.of(topDocs1, topDocs2);
-        CompoundTopDocs compoundTopDocs = new CompoundTopDocs(new TotalHits(3, TotalHits.Relation.EQUAL_TO), topDocs);
+        CompoundTopDocs compoundTopDocs = new CompoundTopDocs(new TotalHits(3, TotalHits.Relation.EQUAL_TO), topDocs, false);
         assertNotNull(compoundTopDocs);
         assertEquals(topDocs, compoundTopDocs.getTopDocs());
     }
@@ -44,7 +44,8 @@ public class CompoundTopDocsTests extends OpenSearchQueryTestCase {
                         new ScoreDoc(4, RandomUtils.nextFloat()),
                         new ScoreDoc(5, RandomUtils.nextFloat()) }
                 )
-            )
+            ),
+            false
         );
         assertNotNull(hybridQueryScoreTopDocs);
         assertNotNull(hybridQueryScoreTopDocs.getScoreDocs());
@@ -58,20 +59,21 @@ public class CompoundTopDocsTests extends OpenSearchQueryTestCase {
             new ScoreDoc[] { new ScoreDoc(2, RandomUtils.nextFloat()), new ScoreDoc(4, RandomUtils.nextFloat()) }
         );
         List<TopDocs> topDocs = List.of(topDocs1, topDocs2);
-        CompoundTopDocs compoundTopDocs = new CompoundTopDocs(new TotalHits(2, TotalHits.Relation.EQUAL_TO), topDocs);
+        CompoundTopDocs compoundTopDocs = new CompoundTopDocs(new TotalHits(2, TotalHits.Relation.EQUAL_TO), topDocs, false);
         assertNotNull(compoundTopDocs);
         assertNotNull(compoundTopDocs.getScoreDocs());
         assertEquals(2, compoundTopDocs.getScoreDocs().size());
     }
 
     public void testBasics_whenMultipleTopDocsIsNull_thenScoreDocsIsNull() {
-        CompoundTopDocs compoundTopDocs = new CompoundTopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), (List<TopDocs>) null);
+        CompoundTopDocs compoundTopDocs = new CompoundTopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), (List<TopDocs>) null, false);
         assertNotNull(compoundTopDocs);
         assertNull(compoundTopDocs.getScoreDocs());
 
         CompoundTopDocs compoundTopDocsWithNullArray = new CompoundTopDocs(
             new TotalHits(0, TotalHits.Relation.EQUAL_TO),
-            Arrays.asList(null, null)
+            Arrays.asList(null, null),
+            false
         );
         assertNotNull(compoundTopDocsWithNullArray);
         assertNotNull(compoundTopDocsWithNullArray.getScoreDocs());
