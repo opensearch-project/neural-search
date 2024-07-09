@@ -171,18 +171,15 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         final DocValueFormat[] docValueFormats
     ) {
         TopDocs newTopDocs;
-        List<? extends TopDocs> topDocs = hybridSearchCollector.topDocs();
+        List topDocs = hybridSearchCollector.topDocs();
         if (docValueFormats != null) {
             newTopDocs = getNewTopFieldDocs(
                 getTotalHits(this.trackTotalHitsUpTo, topDocs, hybridSearchCollector.getTotalHits()),
-                (List<TopFieldDocs>) topDocs,
+                topDocs,
                 sortAndFormats.sort.getSort()
             );
         } else {
-            newTopDocs = getNewTopDocs(
-                getTotalHits(this.trackTotalHitsUpTo, topDocs, hybridSearchCollector.getTotalHits()),
-                (List<TopDocs>) topDocs
-            );
+            newTopDocs = getNewTopDocs(getTotalHits(this.trackTotalHitsUpTo, topDocs, hybridSearchCollector.getTotalHits()), topDocs);
         }
         return new TopDocsAndMaxScore(newTopDocs, hybridSearchCollector.getMaxScore());
     }
