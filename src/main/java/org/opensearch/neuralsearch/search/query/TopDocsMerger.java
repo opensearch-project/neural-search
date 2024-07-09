@@ -24,8 +24,7 @@ import org.opensearch.search.sort.SortAndFormats;
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 class TopDocsMerger {
 
-    private HybridQueryScoreDocsMerger<ScoreDoc> scoreDocsMerger;
-    private HybridQueryScoreDocsMerger<FieldDoc> fieldDocsMerger;
+    private HybridQueryScoreDocsMerger scoreDocsMerger;
     private SortAndFormats sortAndFormats;
     @VisibleForTesting
     protected static Comparator<ScoreDoc> SCORE_DOC_BY_SCORE_COMPARATOR;
@@ -42,7 +41,7 @@ class TopDocsMerger {
     TopDocsMerger(final SortAndFormats sortAndFormats) {
         this.sortAndFormats = sortAndFormats;
         if (this.sortAndFormats != null) {
-            fieldDocsMerger = new HybridQueryScoreDocsMerger<>();
+            scoreDocsMerger = new HybridQueryScoreDocsMerger<FieldDoc>();
             FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR = new HybridQueryFieldDocComparator(sortAndFormats.sort.getSort(), MERGING_TIE_BREAKER);
         } else {
             scoreDocsMerger = new HybridQueryScoreDocsMerger<>();
@@ -86,19 +85,19 @@ class TopDocsMerger {
     }
 
     private ScoreDoc[] getMergedScoreDocs(ScoreDoc[] source, ScoreDoc[] newScoreDocs) {
-        if (sortAndFormats != null) {
-            // we need to merge hits per individual sub-query
-            // format of results in both new and source TopDocs is following
-            // doc_id | magic_number_1 | [1]
-            // doc_id | magic_number_2 | [1]
-            // ...
-            // doc_id | magic_number_2 | [1]
-            // ...
-            // doc_id | magic_number_2 | [1]
-            // ...
-            // doc_id | magic_number_1 | [1]
-            return fieldDocsMerger.merge((FieldDoc[]) source, (FieldDoc[]) newScoreDocs, FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR, true);
-        }
+        // Case 1 when sorting is enabled then below will be the TopDocs format
+        // we need to merge hits per individual sub-query
+        // format of results in both new and source TopDocs is following
+        // doc_id | magic_number_1 | [1]
+        // doc_id | magic_number_2 | [1]
+        // ...
+        // doc_id | magic_number_2 | [1]
+        // ...
+        // doc_id | magic_number_2 | [1]
+        // ...
+        // doc_id | magic_number_1 | [1]
+
+        // Case 2 when sorting is disabled then below will be the TopDocs format
         // we need to merge hits per individual sub-query
         // format of results in both new and source TopDocs is following
         // doc_id | magic_number_1
@@ -109,6 +108,10 @@ class TopDocsMerger {
         // doc_id | magic_number_2
         // ...
         // doc_id | magic_number_1
-        return scoreDocsMerger.merge(source, newScoreDocs, SCORE_DOC_BY_SCORE_COMPARATOR, false);
+        return scoreDocsMerger.merge(source, newScoreDocs, comparator(), sortAndFormats != null);
+    }
+
+    private Comparator<? extends ScoreDoc> comparator() {
+        return sortAndFormats != null ? FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR : SCORE_DOC_BY_SCORE_COMPARATOR;
     }
 }
