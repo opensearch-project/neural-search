@@ -42,7 +42,7 @@ public class TextImageEmbeddingProcessorFactoryTests extends OpenSearchTestCase 
         config.put(MODEL_ID_FIELD, "1234567678");
         config.put(EMBEDDING_FIELD, "embedding_field");
         config.put(FIELD_MAP_FIELD, Map.of(TEXT_FIELD_NAME, "my_text_field", IMAGE_FIELD_NAME, "my_image_field"));
-        TextImageEmbeddingProcessor inferenceProcessor = textImageEmbeddingProcessorFactory.create(
+        TextImageEmbeddingProcessor inferenceProcessor = (TextImageEmbeddingProcessor) textImageEmbeddingProcessorFactory.create(
             processorFactories,
             tag,
             description,
@@ -68,7 +68,7 @@ public class TextImageEmbeddingProcessorFactoryTests extends OpenSearchTestCase 
         configOnlyTextField.put(MODEL_ID_FIELD, "1234567678");
         configOnlyTextField.put(EMBEDDING_FIELD, "embedding_field");
         configOnlyTextField.put(FIELD_MAP_FIELD, Map.of(TEXT_FIELD_NAME, "my_text_field"));
-        TextImageEmbeddingProcessor processor = textImageEmbeddingProcessorFactory.create(
+        TextImageEmbeddingProcessor processor = (TextImageEmbeddingProcessor) textImageEmbeddingProcessorFactory.create(
             processorFactories,
             tag,
             description,
@@ -81,7 +81,12 @@ public class TextImageEmbeddingProcessorFactoryTests extends OpenSearchTestCase 
         configOnlyImageField.put(MODEL_ID_FIELD, "1234567678");
         configOnlyImageField.put(EMBEDDING_FIELD, "embedding_field");
         configOnlyImageField.put(FIELD_MAP_FIELD, Map.of(TEXT_FIELD_NAME, "my_text_field"));
-        processor = textImageEmbeddingProcessorFactory.create(processorFactories, tag, description, configOnlyImageField);
+        processor = (TextImageEmbeddingProcessor) textImageEmbeddingProcessorFactory.create(
+            processorFactories,
+            tag,
+            description,
+            configOnlyImageField
+        );
         assertNotNull(processor);
         assertEquals("text_image_embedding", processor.getType());
     }

@@ -30,13 +30,14 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
     public TextEmbeddingProcessor(
         String tag,
         String description,
+        int batchSize,
         String modelId,
         Map<String, Object> fieldMap,
         MLCommonsClientAccessor clientAccessor,
         Environment environment,
         ClusterService clusterService
     ) {
-        super(tag, description, TYPE, LIST_TYPE_NESTED_MAP_KEY, modelId, fieldMap, clientAccessor, environment, clusterService);
+        super(tag, description, batchSize, TYPE, LIST_TYPE_NESTED_MAP_KEY, modelId, fieldMap, clientAccessor, environment, clusterService);
     }
 
     @Override
