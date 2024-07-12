@@ -38,6 +38,7 @@ import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
 import org.opensearch.index.mapper.IndexFieldMapper;
+import org.opensearch.ingest.AbstractBatchingProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.IngestDocumentWrapper;
 import org.opensearch.ingest.Processor;
@@ -76,7 +77,17 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         Map<String, Object> config = new HashMap<>();
         config.put(SparseEncodingProcessor.MODEL_ID_FIELD, "mockModelId");
         config.put(SparseEncodingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1Mapped", "key2", "key2Mapped"));
-        return sparseEncodingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+        return (SparseEncodingProcessor) sparseEncodingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+    }
+
+    @SneakyThrows
+    private SparseEncodingProcessor createInstance(int batchSize) {
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        config.put(SparseEncodingProcessor.MODEL_ID_FIELD, "mockModelId");
+        config.put(SparseEncodingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1Mapped", "key2", "key2Mapped"));
+        config.put(AbstractBatchingProcessor.BATCH_SIZE_FIELD, batchSize);
+        return (SparseEncodingProcessor) sparseEncodingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
     }
 
     public void testExecute_successful() {
@@ -115,7 +126,12 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         Map<String, Object> config = new HashMap<>();
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
         config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1Mapped", "key2", "key2Mapped"));
-        SparseEncodingProcessor processor = sparseEncodingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+        SparseEncodingProcessor processor = (SparseEncodingProcessor) sparseEncodingProcessorFactory.create(
+            registry,
+            PROCESSOR_TAG,
+            DESCRIPTION,
+            config
+        );
         doThrow(new RuntimeException()).when(accessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
@@ -181,7 +197,12 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
             SparseEncodingProcessor.FIELD_MAP_FIELD,
             ImmutableMap.of("key1", Map.of("test1", "test1_knn"), "key2", Map.of("test4", "test4_knn"))
         );
-        SparseEncodingProcessor processor = sparseEncodingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+        SparseEncodingProcessor processor = (SparseEncodingProcessor) sparseEncodingProcessorFactory.create(
+            registry,
+            PROCESSOR_TAG,
+            DESCRIPTION,
+            config
+        );
 
         List<Map<String, ?>> dataAsMapList = createMockMapResult(2);
         doAnswer(invocation -> {
@@ -199,7 +220,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
     public void test_batchExecute_successful() {
         final int docCount = 5;
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
-        SparseEncodingProcessor processor = createInstance();
+        SparseEncodingProcessor processor = createInstance(docCount);
         List<Map<String, ?>> dataAsMapList = createMockMapResult(10);
         doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
@@ -221,7 +242,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
     public void test_batchExecute_exception() {
         final int docCount = 5;
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
-        SparseEncodingProcessor processor = createInstance();
+        SparseEncodingProcessor processor = createInstance(docCount);
         doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
             listener.onFailure(new RuntimeException());

@@ -14,14 +14,14 @@ import java.util.Map;
 
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
-import org.opensearch.ingest.Processor;
+import org.opensearch.ingest.AbstractBatchingProcessor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 
 /**
  * Factory for text embedding ingest processor for ingestion pipeline. Instantiates processor based on user provided input.
  */
-public class TextEmbeddingProcessorFactory implements Processor.Factory {
+public final class TextEmbeddingProcessorFactory extends AbstractBatchingProcessor.Factory {
 
     private final MLCommonsClientAccessor clientAccessor;
 
@@ -34,20 +34,16 @@ public class TextEmbeddingProcessorFactory implements Processor.Factory {
         final Environment environment,
         final ClusterService clusterService
     ) {
+        super(TYPE);
         this.clientAccessor = clientAccessor;
         this.environment = environment;
         this.clusterService = clusterService;
     }
 
     @Override
-    public TextEmbeddingProcessor create(
-        final Map<String, Processor.Factory> registry,
-        final String processorTag,
-        final String description,
-        final Map<String, Object> config
-    ) throws Exception {
-        String modelId = readStringProperty(TYPE, processorTag, config, MODEL_ID_FIELD);
-        Map<String, Object> filedMap = readMap(TYPE, processorTag, config, FIELD_MAP_FIELD);
-        return new TextEmbeddingProcessor(processorTag, description, modelId, filedMap, clientAccessor, environment, clusterService);
+    protected AbstractBatchingProcessor newProcessor(String tag, String description, int batchSize, Map<String, Object> config) {
+        String modelId = readStringProperty(TYPE, tag, config, MODEL_ID_FIELD);
+        Map<String, Object> filedMap = readMap(TYPE, tag, config, FIELD_MAP_FIELD);
+        return new TextEmbeddingProcessor(tag, description, batchSize, modelId, filedMap, clientAccessor, environment, clusterService);
     }
 }
