@@ -98,6 +98,13 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
         }
     }
 
+    // Excluding the NeuralSparseQuery two-phase search pipeline tests because we introduce this feature in 2.15
+    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10") || ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12") || ext.neural_search_bwc_version.startsWith("2.13") || ext.neural_search_bwc_version.startsWith("2.14")){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseTwoPhaseProcessorIT.*"
+        }
+    }
+
     nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
     nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
     systemProperty 'tests.security.manager', 'false'
@@ -152,6 +159,13 @@ task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.KnnRadialSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.BatchIngestionIT.*"
+        }
+    }
+
+    // Excluding the NeuralSparseQuery two-phase search pipeline tests because we introduce this feature in 2.15
+    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10") || ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12") || ext.neural_search_bwc_version.startsWith("2.13") || ext.neural_search_bwc_version.startsWith("2.14")){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseTwoPhaseProcessorIT.*"
         }
     }
 
