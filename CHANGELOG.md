@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fix for missing HybridQuery results when concurrent segment search is enabled ([#800](https://github.com/opensearch-project/neural-search/pull/800))
 ### Infrastructure
 - Add BWC for batch ingestion ([#769](https://github.com/opensearch-project/neural-search/pull/769))
+- Add backward test cases for neural sparse two phase processor ([#777](https://github.com/opensearch-project/neural-search/pull/777))
 ### Documentation
 ### Maintenance
 ### Refactoring
