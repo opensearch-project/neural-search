@@ -1,5 +1,6 @@
 {
   "title": "This is a good day",
+  "text": "%s",
   "description": "daily logging",
   "favor_list": [
     "test",
