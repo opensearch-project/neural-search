@@ -21,6 +21,11 @@ test.enabled = false
 assemble.enabled = false
 dependenciesInfo.enabled = false
 
+java {
+    targetCompatibility = JavaVersion.VERSION_21
+    sourceCompatibility = JavaVersion.VERSION_21
+}
+
 configurations {
     zipArchive
 }
