@@ -59,6 +59,8 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
     protected static final String CHILD_FIELD_LEVEL_2 = "child_level2";
     protected static final String CHILD_LEVEL_2_TEXT_FIELD_VALUE = "text_field_value";
     protected static final String CHILD_LEVEL_2_KNN_FIELD = "test3_knn";
+    protected static final String CHILD_LEVEL_3_KNN_FIELD = "child_level2.test3_knn";
+    protected static final String CHILD_1_TEXT_FIELD = "child_1_text_field";
     @Mock
     private MLCommonsClientAccessor mlCommonsClientAccessor;
 
@@ -357,6 +359,61 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         assertEquals(CHILD_LEVEL_2_TEXT_FIELD_VALUE, childLevel2AfterProcessor.get(CHILD_FIELD_LEVEL_2));
         assertNotNull(childLevel2AfterProcessor.get(CHILD_LEVEL_2_KNN_FIELD));
         List<Float> vectors = (List<Float>) childLevel2AfterProcessor.get(CHILD_LEVEL_2_KNN_FIELD);
+        assertEquals(100, vectors.size());
+        for (Float vector : vectors) {
+            assertTrue(vector >= 0.0f && vector <= 1.0f);
+        }
+    }
+
+    @SneakyThrows
+    public void testNestedFieldInMappingForSourceAndDestination_withMapTypeInputWithNonExistentField_successful() {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        Map<String, String> childLevel2NestedField = new HashMap<>();
+        childLevel2NestedField.put(CHILD_LEVEL_2_TEXT_FIELD_VALUE, "abc");
+        Map<String, Object> childLevel2 = new HashMap<>();
+        childLevel2.put(CHILD_FIELD_LEVEL_2, childLevel2NestedField);
+        childLevel2.put(CHILD_1_TEXT_FIELD, "text_value");
+        Map<String, Object> childLevel1 = new HashMap<>();
+        childLevel1.put(CHILD_FIELD_LEVEL_1, childLevel2);
+        sourceAndMetadata.put(PARENT_FIELD, childLevel1);
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
+        config.put(
+            TextEmbeddingProcessor.FIELD_MAP_FIELD,
+            ImmutableMap.of(
+                String.join(".", Arrays.asList(PARENT_FIELD, CHILD_FIELD_LEVEL_1, CHILD_1_TEXT_FIELD)),
+                CHILD_FIELD_LEVEL_2 + "." + CHILD_LEVEL_2_KNN_FIELD
+            )
+        );
+        TextEmbeddingProcessor processor = (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(
+            registry,
+            PROCESSOR_TAG,
+            DESCRIPTION,
+            config
+        );
+
+        List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(1, 100, 0.0f, 1.0f);
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            listener.onResponse(modelTensorList);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+
+        processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
+        assertNotNull(ingestDocument);
+        assertNotNull(ingestDocument.getSourceAndMetadata().get(PARENT_FIELD));
+        Map<String, Object> parent1AfterProcessor = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get(PARENT_FIELD);
+        Map<String, Object> childLevel1AfterProcessor = (Map<String, Object>) parent1AfterProcessor.get(CHILD_FIELD_LEVEL_1);
+        assertEquals(2, childLevel1AfterProcessor.size());
+        assertEquals("text_value", childLevel1AfterProcessor.get(CHILD_1_TEXT_FIELD));
+        Map<String, Object> child2AfterProc = (Map<String, Object>) childLevel1AfterProcessor.get(CHILD_FIELD_LEVEL_2);
+        assertEquals(2, child2AfterProc.size());
+        assertEquals("abc", child2AfterProc.get(CHILD_LEVEL_2_TEXT_FIELD_VALUE));
+        List<Float> vectors = (List<Float>) child2AfterProc.get(CHILD_LEVEL_2_KNN_FIELD);
         assertEquals(100, vectors.size());
         for (Float vector : vectors) {
             assertTrue(vector >= 0.0f && vector <= 1.0f);

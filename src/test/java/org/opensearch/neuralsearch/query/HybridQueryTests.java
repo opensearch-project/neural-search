@@ -39,6 +39,7 @@ import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.knn.index.SpaceType;
+import org.opensearch.knn.index.VectorDataType;
 import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
 
@@ -119,6 +120,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         when(mockKNNVectorField.getDimension()).thenReturn(4);
         when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
         when(mockKNNVectorField.getSpaceType()).thenReturn(SpaceType.L2);
+        when(mockKNNVectorField.getVectorDataType()).thenReturn(VectorDataType.FLOAT);
         KNNQueryBuilder knnQueryBuilder = new KNNQueryBuilder(VECTOR_FIELD_NAME, VECTOR_QUERY, K);
         Query knnQuery = knnQueryBuilder.toQuery(mockQueryShardContext);
 

@@ -11,7 +11,7 @@
             "game": "game_knn",
             "movie": "movie_knn"
           },
-          "nested_passages.level_2.level_3_text": "level_3_embedding"
+          "nested_passages.level_2.level_3_text": "level_3_container.level_3_embedding"
         }
       }
     }

@@ -41,6 +41,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
     protected static final String LEVEL_1_FIELD = "nested_passages";
     protected static final String LEVEL_2_FIELD = "level_2";
     protected static final String LEVEL_3_FIELD_TEXT = "level_3_text";
+    protected static final String LEVEL_3_FIELD_CONTAINER = "level_3_container";
     protected static final String LEVEL_3_FIELD_EMBEDDING = "level_3_embedding";
     private final String INGEST_DOC1 = Files.readString(Path.of(classLoader.getResource("processor/ingest_doc1.json").toURI()));
     private final String INGEST_DOC2 = Files.readString(Path.of(classLoader.getResource("processor/ingest_doc2.json").toURI()));
@@ -107,15 +108,15 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
             assertTrue(nestedPassages.containsKey(LEVEL_2_FIELD));
             Map<String, Object> level2 = (Map<String, Object>) nestedPassages.get(LEVEL_2_FIELD);
             assertEquals(QUERY_TEXT, level2.get(LEVEL_3_FIELD_TEXT));
-            assertTrue(level2.containsKey(LEVEL_3_FIELD_EMBEDDING));
-            List<Double> embeddings = (List<Double>) level2.get(LEVEL_3_FIELD_EMBEDDING);
+            Map<String, Object> level3 = (Map<String, Object>) level2.get(LEVEL_3_FIELD_CONTAINER);
+            List<Double> embeddings = (List<Double>) level3.get(LEVEL_3_FIELD_EMBEDDING);
             assertEquals(768, embeddings.size());
             for (Double embedding : embeddings) {
                 assertTrue(embedding >= 0.0 && embedding <= 1.0);
             }
 
             NeuralQueryBuilder neuralQueryBuilderQuery = new NeuralQueryBuilder(
-                LEVEL_1_FIELD + "." + LEVEL_2_FIELD + "." + LEVEL_3_FIELD_EMBEDDING,
+                LEVEL_1_FIELD + "." + LEVEL_2_FIELD + "." + LEVEL_3_FIELD_CONTAINER + "." + LEVEL_3_FIELD_EMBEDDING,
                 QUERY_TEXT,
                 "",
                 modelId,

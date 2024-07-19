@@ -14,7 +14,10 @@
     {
       "level_2":
           {
-            "level_3_text": "hello"
+            "level_3_text": "hello",
+            "level_3_container": {
+              "random_field1": "abc"
+            }
           }
     }
 }

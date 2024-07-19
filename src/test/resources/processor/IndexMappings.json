@@ -109,16 +109,23 @@
               "level_3_text": {
                 "type": "text"
               },
-              "level_3_embedding": {
-                "type": "knn_vector",
-                "dimension": 768,
-                "method": {
-                  "name": "hnsw",
-                  "space_type": "l2",
-                  "engine": "lucene",
-                  "parameters": {
-                    "ef_construction": 128,
-                    "m": 24
+              "level_3_container": {
+                "properties": {
+                  "level_3_embedding": {
+                    "type": "knn_vector",
+                    "dimension": 768,
+                    "method": {
+                      "name": "hnsw",
+                      "space_type": "l2",
+                      "engine": "lucene",
+                      "parameters": {
+                        "ef_construction": 128,
+                        "m": 24
+                      }
+                    }
+                  },
+                  "random_field1": {
+                    "type": "text"
                   }
                 }
               }
