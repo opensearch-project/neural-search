@@ -867,7 +867,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final String queryText
     ) {
         float[] queryVector = runInference(modelId, queryText);
-        return spaceType.getKnnVectorSimilarityFunction().compare(queryVector, indexVector);
+        return spaceType.getVectorSimilarityFunction().compare(queryVector, indexVector);
     }
 
     protected Map<String, Object> getTaskQueryResponse(final String taskId) throws Exception {
