@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Infrastructure
 - Add BWC for batch ingestion ([#769](https://github.com/opensearch-project/neural-search/pull/769))
 - Add backward test cases for neural sparse two phase processor ([#777](https://github.com/opensearch-project/neural-search/pull/777))
+- Fix CI for JDK upgrade towards 21 ([#835](https://github.com/opensearch-project/neural-search/pull/835))
 ### Documentation
 ### Maintenance
 ### Refactoring
