@@ -22,6 +22,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.ArrayList;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.StringUtils;
@@ -49,6 +50,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
+import org.opensearch.search.sort.SortBuilder;
 import org.opensearch.test.ClusterServiceUtils;
 import org.opensearch.threadpool.TestThreadPool;
 import org.opensearch.threadpool.ThreadPool;
@@ -80,9 +82,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         ProcessorType.SPARSE_ENCODING,
         "processor/SparseEncodingPipelineConfiguration.json",
         ProcessorType.TEXT_IMAGE_EMBEDDING,
-        "processor/PipelineForTextImageEmbeddingProcessorConfiguration.json"
+        "processor/PipelineForTextImageEmbeddingProcessorConfiguration.json",
+        ProcessorType.TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING,
+        "processor/PipelineConfigurationWithNestedFieldsMapping.json"
     );
     private static final Set<RestStatus> SUCCESS_STATUSES = Set.of(RestStatus.CREATED, RestStatus.OK);
+    protected static final String CONCURRENT_SEGMENT_SEARCH_ENABLED = "search.concurrent_segment_search.enabled";
 
     protected final ClassLoader classLoader = this.getClass().getClassLoader();
 
@@ -509,7 +514,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Map<String, String> requestParams,
         List<Object> aggs
     ) {
-        return search(index, queryBuilder, rescorer, resultSize, requestParams, aggs, null);
+        return search(index, queryBuilder, rescorer, resultSize, requestParams, aggs, null, null, false, null);
     }
 
     @SneakyThrows
@@ -520,7 +525,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         int resultSize,
         Map<String, String> requestParams,
         List<Object> aggs,
-        QueryBuilder postFilterBuilder
+        QueryBuilder postFilterBuilder,
+        List<SortBuilder<?>> sortBuilders,
+        boolean trackScores,
+        List<Object> searchAfter
     ) {
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
 
@@ -545,21 +553,39 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             builder.field("post_filter");
             postFilterBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
         }
+        if (Objects.nonNull(sortBuilders) && !sortBuilders.isEmpty()) {
+            builder.startArray("sort");
+            for (SortBuilder sortBuilder : sortBuilders) {
+                sortBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
+            }
+            builder.endArray();
+        }
+
+        if (trackScores) {
+            builder.field("track_scores", trackScores);
+        }
+        if (searchAfter != null && !searchAfter.isEmpty()) {
+            builder.startArray("search_after");
+            for (Object searchAfterEntry : searchAfter) {
+                builder.value(searchAfterEntry);
+            }
+            builder.endArray();
+        }
 
         builder.endObject();
 
-        Request request = new Request("POST", "/" + index + "/_search");
+        Request request = new Request("GET", "/" + index + "/_search?timeout=1000s");
         request.addParameter("size", Integer.toString(resultSize));
         if (requestParams != null && !requestParams.isEmpty()) {
             requestParams.forEach(request::addParameter);
         }
+        logger.info("Sorting request  " + builder.toString());
         request.setJsonEntity(builder.toString());
-
         Response response = client().performRequest(request);
         assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
 
         String responseBody = EntityUtils.toString(response.getEntity());
-
+        logger.info("Response  " + responseBody);
         return XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
     }
 
@@ -721,6 +747,36 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertEquals(request.getEndpoint() + ": failed", RestStatus.CREATED, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
     }
 
+    protected void bulkAddDocuments(
+        final String index,
+        final String textField,
+        final String pipeline,
+        final List<Map<String, String>> docs,
+        final int batchSize
+    ) throws IOException, ParseException {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < docs.size(); ++i) {
+            String doc = String.format(
+                Locale.ROOT,
+                "{ \"index\": { \"_index\": \"%s\", \"_id\": \"%s\" } },\n" + "{ \"%s\": \"%s\"}",
+                index,
+                docs.get(i).get("id"),
+                textField,
+                docs.get(i).get("text")
+            );
+            builder.append(doc);
+            builder.append("\n");
+        }
+        Request request = new Request(
+            "POST",
+            String.format(Locale.ROOT, "/_bulk?refresh=true&pipeline=%s&batch_size=%d", pipeline, batchSize)
+        );
+        request.setJsonEntity(builder.toString());
+
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+    }
+
     /**
      * Parse the first returned hit from a search response as a map
      *
@@ -811,7 +867,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final String queryText
     ) {
         float[] queryVector = runInference(modelId, queryText);
-        return spaceType.getVectorSimilarityFunction().compare(queryVector, indexVector);
+        return spaceType.getKnnVectorSimilarityFunction().compare(queryVector, indexVector);
     }
 
     protected Map<String, Object> getTaskQueryResponse(final String taskId) throws Exception {
@@ -1285,12 +1341,34 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         }
     }
 
+    protected Object validateDocCountAndInfo(
+        String indexName,
+        int expectedDocCount,
+        Supplier<Map<String, Object>> documentSupplier,
+        final String field,
+        final Class<?> valueType
+    ) {
+        int count = getDocCount(indexName);
+        assertEquals(expectedDocCount, count);
+        Map<String, Object> document = documentSupplier.get();
+        assertNotNull(document);
+        Object documentSource = document.get("_source");
+        assertTrue(documentSource instanceof Map);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> documentSourceMap = (Map<String, Object>) documentSource;
+        assertTrue(documentSourceMap.containsKey(field));
+        Object outputs = documentSourceMap.get(field);
+        assertTrue(valueType.isAssignableFrom(outputs.getClass()));
+        return outputs;
+    }
+
     /**
      * Enumeration for types of pipeline processors, used to lookup resources like create
      * processor request as those are type specific
      */
     protected enum ProcessorType {
         TEXT_EMBEDDING,
+        TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING,
         TEXT_IMAGE_EMBEDDING,
         SPARSE_ENCODING
     }

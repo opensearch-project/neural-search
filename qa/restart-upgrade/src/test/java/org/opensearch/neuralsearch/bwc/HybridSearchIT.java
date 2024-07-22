@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+
 import org.opensearch.index.query.MatchQueryBuilder;
 import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
@@ -69,6 +70,7 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
                 loadModel(modelId);
                 addDocuments(getIndexNameForTest(), false);
                 validateTestIndex(modelId, getIndexNameForTest(), searchPipelineName);
+                validateTestIndex(modelId, getIndexNameForTest(), searchPipelineName, Map.of("ef_search", 100));
             } finally {
                 wipeOfTestResources(getIndexNameForTest(), pipelineName, modelId, searchPipelineName);
             }
@@ -96,10 +98,14 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         );
     }
 
-    private void validateTestIndex(final String modelId, final String index, final String searchPipeline) throws Exception {
+    private void validateTestIndex(final String modelId, final String index, final String searchPipeline) {
+        validateTestIndex(modelId, index, searchPipeline, null);
+    }
+
+    private void validateTestIndex(final String modelId, final String index, final String searchPipeline, Map<String, ?> methodParameters) {
         int docCount = getDocCount(index);
         assertEquals(6, docCount);
-        HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId);
+        HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, methodParameters);
         Map<String, Object> searchResponseAsMap = search(index, hybridQueryBuilder, null, 1, Map.of("search_pipeline", searchPipeline));
         assertNotNull(searchResponseAsMap);
         int hits = getHitCount(searchResponseAsMap);
@@ -110,12 +116,15 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         }
     }
 
-    private HybridQueryBuilder getQueryBuilder(final String modelId) {
+    private HybridQueryBuilder getQueryBuilder(final String modelId, Map<String, ?> methodParameters) {
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
         neuralQueryBuilder.fieldName("passage_embedding");
         neuralQueryBuilder.modelId(modelId);
         neuralQueryBuilder.queryText(QUERY);
         neuralQueryBuilder.k(5);
+        if (methodParameters != null) {
+            neuralQueryBuilder.methodParameters(methodParameters);
+        }
 
         MatchQueryBuilder matchQueryBuilder = new MatchQueryBuilder("text", QUERY);
 

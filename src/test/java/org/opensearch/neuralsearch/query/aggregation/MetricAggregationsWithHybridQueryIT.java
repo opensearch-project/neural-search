@@ -81,103 +81,103 @@ public class MetricAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
      */
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenAvgAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testAvgAggs();
     }
 
     @SneakyThrows
     public void testMetricAggs_whenCardinalityAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testCardinalityAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenCardinalityAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testCardinalityAggs();
     }
 
     @SneakyThrows
     public void testMetricAggs_whenExtendedStatsAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testExtendedStatsAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenExtendedStatsAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testExtendedStatsAggs();
     }
 
     @SneakyThrows
     public void testMetricAggs_whenTopHitsAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testTopHitsAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenTopHitsAggs_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testTopHitsAggs();
     }
 
     @SneakyThrows
     public void testMetricAggs_whenPercentileRank_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testPercentileRankAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenPercentileRank_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testPercentileRankAggs();
     }
 
     @SneakyThrows
     public void testMetricAggs_whenPercentile_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testPercentileAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenPercentile_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testPercentileAggs();
     }
 
     @SneakyThrows
     public void testMetricAggs_whenScriptedMetrics_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testScriptedMetricsAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenScriptedMetrics_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testScriptedMetricsAggs();
     }
 
     @SneakyThrows
     public void testMetricAggs_whenSumAgg_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testSumAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenSumAgg_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testSumAggs();
     }
 
     @SneakyThrows
     public void testMetricAggs_whenValueCount_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, false);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         testValueCountAggs();
     }
 
     @SneakyThrows
     public void testWithConcurrentSegmentSearch_whenValueCount_thenSuccessful() {
-        updateClusterSettings(CLUSTER_SETTING_CONCURRENT_SEGMENT_SEARCH, true);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         testValueCountAggs();
     }
 
@@ -421,7 +421,10 @@ public class MetricAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
                 10,
                 Map.of("search_pipeline", SEARCH_PIPELINE),
                 List.of(aggsBuilder),
-                rangeFilterQuery
+                rangeFilterQuery,
+                null,
+                false,
+                null
             );
 
             Map<String, Object> aggregations = getAggregations(searchResponseAsMap);

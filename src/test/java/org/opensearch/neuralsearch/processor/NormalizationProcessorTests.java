@@ -45,7 +45,6 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
-import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.SearchShardTarget;
@@ -172,7 +171,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
                     createStartStopElementForHybridSearchResults(4) }
 
             );
-            querySearchResult.topDocs(new TopDocsAndMaxScore(topDocs, 0.5f), new DocValueFormat[0]);
+            querySearchResult.topDocs(new TopDocsAndMaxScore(topDocs, 0.5f), null);
             querySearchResult.setSearchShardTarget(searchShardTarget);
             querySearchResult.setShardIndex(shardId);
 
@@ -240,7 +239,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
                 createStartStopElementForHybridSearchResults(10) }
 
         );
-        querySearchResult.topDocs(new TopDocsAndMaxScore(topDocs, 25.438505f), new DocValueFormat[0]);
+        querySearchResult.topDocs(new TopDocsAndMaxScore(topDocs, 25.438505f), null);
         querySearchResult.setSearchShardTarget(searchShardTarget);
         querySearchResult.setShardIndex(shardId);
 
@@ -318,7 +317,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
                 new TotalHits(4, TotalHits.Relation.EQUAL_TO),
                 new ScoreDoc[] { new ScoreDoc(0, 0.5f), new ScoreDoc(2, 0.3f), new ScoreDoc(4, 0.25f), new ScoreDoc(10, 0.2f) }
             );
-            querySearchResult.topDocs(new TopDocsAndMaxScore(topDocs, 0.5f), new DocValueFormat[0]);
+            querySearchResult.topDocs(new TopDocsAndMaxScore(topDocs, 0.5f), null);
             querySearchResult.setSearchShardTarget(searchShardTarget);
             querySearchResult.setShardIndex(shardId);
 
@@ -382,7 +381,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
                 createStartStopElementForHybridSearchResults(4) }
 
         );
-        querySearchResult.topDocs(new TopDocsAndMaxScore(topDocs, 0.5f), new DocValueFormat[0]);
+        querySearchResult.topDocs(new TopDocsAndMaxScore(topDocs, 0.5f), null);
         querySearchResult.setSearchShardTarget(searchShardTarget);
         querySearchResult.setShardIndex(shardId);
 
@@ -471,7 +470,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
                 createStartStopElementForHybridSearchResults(4) }
 
         );
-        querySearchResult.topDocs(new TopDocsAndMaxScore(topDocs, 0.5f), new DocValueFormat[0]);
+        querySearchResult.topDocs(new TopDocsAndMaxScore(topDocs, 0.5f), null);
         querySearchResult.setSearchShardTarget(searchShardTarget);
         querySearchResult.setShardIndex(shardId);
 
