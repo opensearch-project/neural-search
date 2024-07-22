@@ -45,9 +45,9 @@ testClusters {
             }
         }else{
             versions = [ext.neural_search_bwc_version, opensearch_version]
-            plugin(project.tasks.unZipBwcMlCommonsPlugin.archiveFile)
-            plugin(project.tasks.unZipBwcKnnPlugin.archiveFile)
-            plugin(project.tasks.unZipBwcPlugin.archiveFile)
+            plugin(project.tasks.zipBwcMlCommonsPlugin.archiveFile)
+            plugin(project.tasks.zipBwcKnnPlugin.archiveFile)
+            plugin(project.tasks.zipBwcPlugin.archiveFile)
         }
         setting 'path.repo', "${buildDir}/cluster/shared/repo/${baseName}"
         setting 'http.content_type.required', 'true'
@@ -57,7 +57,7 @@ testClusters {
 // Task to run BWC tests against the old cluster
 task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
     if(!ext.bwcBundleTest){
-        dependsOn "unZipBwcPlugin"
+        dependsOn "zipBwcPlugin"
     }
     useCluster testClusters."${baseName}"
     systemProperty 'tests.rest.bwcsuite_cluster', 'old_cluster'

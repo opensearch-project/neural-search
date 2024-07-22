@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Adds dynamic knn query parameters efsearch and nprobes [#814](https://github.com/opensearch-project/neural-search/pull/814/)
 - Enable '.' for nested field in text embedding processor ([#811](https://github.com/opensearch-project/neural-search/pull/811))
 ### Bug Fixes
+- Fix function names and comments in the gradle file for BWC tests ([#795](https://github.com/opensearch-project/neural-search/pull/795/files))
 - Fix for missing HybridQuery results when concurrent segment search is enabled ([#800](https://github.com/opensearch-project/neural-search/pull/800))
 ### Infrastructure
 - Add BWC for batch ingestion ([#769](https://github.com/opensearch-project/neural-search/pull/769))
