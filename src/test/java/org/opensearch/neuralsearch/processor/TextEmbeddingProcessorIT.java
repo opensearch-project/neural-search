@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 import org.apache.http.HttpHeaders;
@@ -41,10 +42,15 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
     protected static final String LEVEL_1_FIELD = "nested_passages";
     protected static final String LEVEL_2_FIELD = "level_2";
     protected static final String LEVEL_3_FIELD_TEXT = "level_3_text";
+    protected static final String LEVEL_3_FIELD_CONTAINER = "level_3_container";
     protected static final String LEVEL_3_FIELD_EMBEDDING = "level_3_embedding";
+    protected static final String TEXT_FIELD_VALUE_1 = "hello";
+    protected static final String TEXT_FIELD_VALUE_2 = "clown";
+    protected static final String TEXT_FIELD_VALUE_3 = "abc";
     private final String INGEST_DOC1 = Files.readString(Path.of(classLoader.getResource("processor/ingest_doc1.json").toURI()));
     private final String INGEST_DOC2 = Files.readString(Path.of(classLoader.getResource("processor/ingest_doc2.json").toURI()));
     private final String INGEST_DOC3 = Files.readString(Path.of(classLoader.getResource("processor/ingest_doc3.json").toURI()));
+    private final String INGEST_DOC4 = Files.readString(Path.of(classLoader.getResource("processor/ingest_doc4.json").toURI()));
     private final String BULK_ITEM_TEMPLATE = Files.readString(
         Path.of(classLoader.getResource("processor/bulk_item_template.json").toURI())
     );
@@ -99,23 +105,17 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
             createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING);
             createTextEmbeddingIndex();
             ingestDocument(INGEST_DOC3, "3");
+            ingestDocument(INGEST_DOC4, "4");
 
-            Map<String, Object> sourceMap = (Map<String, Object>) getDocById(INDEX_NAME, "3").get("_source");
-            assertNotNull(sourceMap);
-            assertTrue(sourceMap.containsKey(LEVEL_1_FIELD));
-            Map<String, Object> nestedPassages = (Map<String, Object>) sourceMap.get(LEVEL_1_FIELD);
-            assertTrue(nestedPassages.containsKey(LEVEL_2_FIELD));
-            Map<String, Object> level2 = (Map<String, Object>) nestedPassages.get(LEVEL_2_FIELD);
-            assertEquals(QUERY_TEXT, level2.get(LEVEL_3_FIELD_TEXT));
-            assertTrue(level2.containsKey(LEVEL_3_FIELD_EMBEDDING));
-            List<Double> embeddings = (List<Double>) level2.get(LEVEL_3_FIELD_EMBEDDING);
-            assertEquals(768, embeddings.size());
-            for (Double embedding : embeddings) {
-                assertTrue(embedding >= 0.0 && embedding <= 1.0);
-            }
+            assertDoc(
+                (Map<String, Object>) getDocById(INDEX_NAME, "3").get("_source"),
+                TEXT_FIELD_VALUE_1,
+                Optional.of(TEXT_FIELD_VALUE_3)
+            );
+            assertDoc((Map<String, Object>) getDocById(INDEX_NAME, "4").get("_source"), TEXT_FIELD_VALUE_2, Optional.empty());
 
             NeuralQueryBuilder neuralQueryBuilderQuery = new NeuralQueryBuilder(
-                LEVEL_1_FIELD + "." + LEVEL_2_FIELD + "." + LEVEL_3_FIELD_EMBEDDING,
+                LEVEL_1_FIELD + "." + LEVEL_2_FIELD + "." + LEVEL_3_FIELD_CONTAINER + "." + LEVEL_3_FIELD_EMBEDDING,
                 QUERY_TEXT,
                 "",
                 modelId,
@@ -133,7 +133,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
             );
             QueryBuilder queryNestedHighLevel = QueryBuilders.nestedQuery(LEVEL_1_FIELD, queryNestedLowerLevel, ScoreMode.Total);
 
-            Map<String, Object> searchResponseAsMap = search(INDEX_NAME, queryNestedHighLevel, 1);
+            Map<String, Object> searchResponseAsMap = search(INDEX_NAME, queryNestedHighLevel, 2);
             assertNotNull(searchResponseAsMap);
 
             Map<String, Object> hits = (Map<String, Object>) searchResponseAsMap.get("hits");
@@ -142,12 +142,35 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
             assertEquals(1.0, hits.get("max_score"));
             List<Map<String, Object>> listOfHits = (List<Map<String, Object>>) hits.get("hits");
             assertNotNull(listOfHits);
-            assertEquals(1, listOfHits.size());
-            Map<String, Object> hitsInner = listOfHits.get(0);
-            assertEquals("3", hitsInner.get("_id"));
-            assertEquals(1.0, hitsInner.get("_score"));
+            assertEquals(2, listOfHits.size());
+
+            Map<String, Object> innerHitDetails = listOfHits.get(0);
+            assertEquals("3", innerHitDetails.get("_id"));
+            assertEquals(1.0, innerHitDetails.get("_score"));
+
+            innerHitDetails = listOfHits.get(1);
+            assertEquals("4", innerHitDetails.get("_id"));
+            assertTrue((double) innerHitDetails.get("_score") <= 1.0);
         } finally {
             wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
+        }
+    }
+
+    private void assertDoc(Map<String, Object> sourceMap, String textFieldValue, Optional<String> level3ExpectedValue) {
+        assertNotNull(sourceMap);
+        assertTrue(sourceMap.containsKey(LEVEL_1_FIELD));
+        Map<String, Object> nestedPassages = (Map<String, Object>) sourceMap.get(LEVEL_1_FIELD);
+        assertTrue(nestedPassages.containsKey(LEVEL_2_FIELD));
+        Map<String, Object> level2 = (Map<String, Object>) nestedPassages.get(LEVEL_2_FIELD);
+        assertEquals(textFieldValue, level2.get(LEVEL_3_FIELD_TEXT));
+        Map<String, Object> level3 = (Map<String, Object>) level2.get(LEVEL_3_FIELD_CONTAINER);
+        List<Double> embeddings = (List<Double>) level3.get(LEVEL_3_FIELD_EMBEDDING);
+        assertEquals(768, embeddings.size());
+        for (Double embedding : embeddings) {
+            assertTrue(embedding >= 0.0 && embedding <= 1.0);
+        }
+        if (level3ExpectedValue.isPresent()) {
+            assertEquals(level3ExpectedValue.get(), level3.get("level_4_text_field"));
         }
     }
 

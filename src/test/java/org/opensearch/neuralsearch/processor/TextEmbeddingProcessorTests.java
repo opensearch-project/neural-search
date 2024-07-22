@@ -59,6 +59,9 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
     protected static final String CHILD_FIELD_LEVEL_2 = "child_level2";
     protected static final String CHILD_LEVEL_2_TEXT_FIELD_VALUE = "text_field_value";
     protected static final String CHILD_LEVEL_2_KNN_FIELD = "test3_knn";
+    protected static final String CHILD_1_TEXT_FIELD = "child_1_text_field";
+    protected static final String TEXT_VALUE_1 = "text_value";
+    protected static final String TEXT_FIELD_2 = "abc";
     @Mock
     private MLCommonsClientAccessor mlCommonsClientAccessor;
 
@@ -357,6 +360,126 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         assertEquals(CHILD_LEVEL_2_TEXT_FIELD_VALUE, childLevel2AfterProcessor.get(CHILD_FIELD_LEVEL_2));
         assertNotNull(childLevel2AfterProcessor.get(CHILD_LEVEL_2_KNN_FIELD));
         List<Float> vectors = (List<Float>) childLevel2AfterProcessor.get(CHILD_LEVEL_2_KNN_FIELD);
+        assertEquals(100, vectors.size());
+        for (Float vector : vectors) {
+            assertTrue(vector >= 0.0f && vector <= 1.0f);
+        }
+    }
+
+    @SneakyThrows
+    public void testNestedFieldInMappingForSourceAndDestination_withIngestDocumentHasTheDestinationStructure_theSuccessful() {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        /*
+        modeling following document:
+          parent:
+           child_level_1:
+               child_level_1_text_field: "text"
+               child_level_2:
+                   child_level_2_text_field: "abc"
+         */
+        Map<String, String> childLevel2NestedField = new HashMap<>();
+        childLevel2NestedField.put(CHILD_LEVEL_2_TEXT_FIELD_VALUE, TEXT_FIELD_2);
+        Map<String, Object> childLevel2 = new HashMap<>();
+        childLevel2.put(CHILD_FIELD_LEVEL_2, childLevel2NestedField);
+        childLevel2.put(CHILD_1_TEXT_FIELD, TEXT_VALUE_1);
+        Map<String, Object> childLevel1 = new HashMap<>();
+        childLevel1.put(CHILD_FIELD_LEVEL_1, childLevel2);
+        sourceAndMetadata.put(PARENT_FIELD, childLevel1);
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
+        config.put(
+            TextEmbeddingProcessor.FIELD_MAP_FIELD,
+            ImmutableMap.of(
+                String.join(".", Arrays.asList(PARENT_FIELD, CHILD_FIELD_LEVEL_1, CHILD_1_TEXT_FIELD)),
+                CHILD_FIELD_LEVEL_2 + "." + CHILD_LEVEL_2_KNN_FIELD
+            )
+        );
+        TextEmbeddingProcessor processor = (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(
+            registry,
+            PROCESSOR_TAG,
+            DESCRIPTION,
+            config
+        );
+
+        List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(1, 100, 0.0f, 1.0f);
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            listener.onResponse(modelTensorList);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+
+        processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
+        assertNotNull(ingestDocument);
+        assertNotNull(ingestDocument.getSourceAndMetadata().get(PARENT_FIELD));
+        Map<String, Object> parent1AfterProcessor = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get(PARENT_FIELD);
+        Map<String, Object> childLevel1Actual = (Map<String, Object>) parent1AfterProcessor.get(CHILD_FIELD_LEVEL_1);
+        assertEquals(2, childLevel1Actual.size());
+        assertEquals(TEXT_VALUE_1, childLevel1Actual.get(CHILD_1_TEXT_FIELD));
+        Map<String, Object> child2Actual = (Map<String, Object>) childLevel1Actual.get(CHILD_FIELD_LEVEL_2);
+        assertEquals(2, child2Actual.size());
+        assertEquals(TEXT_FIELD_2, child2Actual.get(CHILD_LEVEL_2_TEXT_FIELD_VALUE));
+        List<Float> vectors = (List<Float>) child2Actual.get(CHILD_LEVEL_2_KNN_FIELD);
+        assertEquals(100, vectors.size());
+        for (Float vector : vectors) {
+            assertTrue(vector >= 0.0f && vector <= 1.0f);
+        }
+    }
+
+    @SneakyThrows
+    public void testNestedFieldInMappingForSourceAndDestination_withIngestDocumentWithoutDestinationStructure_theSuccessful() {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        /*
+        modeling following document:
+          parent:
+           child_level_1:
+               child_level_1_text_field: "text"
+        */
+        Map<String, Object> childLevel2 = new HashMap<>();
+        childLevel2.put(CHILD_1_TEXT_FIELD, TEXT_VALUE_1);
+        Map<String, Object> childLevel1 = new HashMap<>();
+        childLevel1.put(CHILD_FIELD_LEVEL_1, childLevel2);
+        sourceAndMetadata.put(PARENT_FIELD, childLevel1);
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
+        config.put(
+            TextEmbeddingProcessor.FIELD_MAP_FIELD,
+            ImmutableMap.of(
+                String.join(".", Arrays.asList(PARENT_FIELD, CHILD_FIELD_LEVEL_1, CHILD_1_TEXT_FIELD)),
+                CHILD_FIELD_LEVEL_2 + "." + CHILD_LEVEL_2_KNN_FIELD
+            )
+        );
+        TextEmbeddingProcessor processor = (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(
+            registry,
+            PROCESSOR_TAG,
+            DESCRIPTION,
+            config
+        );
+
+        List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(1, 100, 0.0f, 1.0f);
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            listener.onResponse(modelTensorList);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+
+        processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
+        assertNotNull(ingestDocument);
+        assertNotNull(ingestDocument.getSourceAndMetadata().get(PARENT_FIELD));
+        Map<String, Object> parent1AfterProcessor = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get(PARENT_FIELD);
+        Map<String, Object> childLevel1Actual = (Map<String, Object>) parent1AfterProcessor.get(CHILD_FIELD_LEVEL_1);
+        assertEquals(2, childLevel1Actual.size());
+        assertEquals(TEXT_VALUE_1, childLevel1Actual.get(CHILD_1_TEXT_FIELD));
+        Map<String, Object> child2Actual = (Map<String, Object>) childLevel1Actual.get(CHILD_FIELD_LEVEL_2);
+        assertEquals(1, child2Actual.size());
+        List<Float> vectors = (List<Float>) child2Actual.get(CHILD_LEVEL_2_KNN_FIELD);
         assertEquals(100, vectors.size());
         for (Float vector : vectors) {
             assertTrue(vector >= 0.0f && vector <= 1.0f);
