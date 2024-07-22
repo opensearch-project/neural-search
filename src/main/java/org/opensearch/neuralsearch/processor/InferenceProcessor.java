@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -29,6 +30,7 @@ import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
 import org.opensearch.index.mapper.IndexFieldMapper;
+
 import org.opensearch.ingest.AbstractBatchingProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.IngestDocumentWrapper;
@@ -50,6 +52,17 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
 
     public static final String MODEL_ID_FIELD = "model_id";
     public static final String FIELD_MAP_FIELD = "field_map";
+    private static final BiFunction<Object, Object, Object> REMAPPING_FUNCTION = (v1, v2) -> {
+        if (v1 instanceof Collection && v2 instanceof Collection) {
+            ((Collection) v1).addAll((Collection) v2);
+            return v1;
+        } else if (v1 instanceof Map && v2 instanceof Map) {
+            ((Map) v1).putAll((Map) v2);
+            return v1;
+        } else {
+            return v2;
+        }
+    };
 
     private final String type;
 
@@ -325,17 +338,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
                     buildNestedMap(nestedFieldMapEntry.getKey(), nestedFieldMapEntry.getValue(), map, next);
                 }
             }
-            treeRes.merge(parentKey, next, (v1, v2) -> {
-                if (v1 instanceof Collection && v2 instanceof Collection) {
-                    ((Collection) v1).addAll((Collection) v2);
-                    return v1;
-                } else if (v1 instanceof Map && v2 instanceof Map) {
-                    ((Map) v1).putAll((Map) v2);
-                    return v1;
-                } else {
-                    return v2;
-                }
-            });
+            treeRes.merge(parentKey, next, REMAPPING_FUNCTION);
         } else {
             String key = String.valueOf(processorKey);
             treeRes.put(key, sourceAndMetadataMap.get(parentKey));
@@ -389,8 +392,9 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         IndexWrapper indexWrapper = new IndexWrapper(0);
         Map<String, Object> result = new LinkedHashMap<>();
         for (Map.Entry<String, Object> knnMapEntry : processorMap.entrySet()) {
-            String knnKey = knnMapEntry.getKey();
-            Object sourceValue = knnMapEntry.getValue();
+            Pair<String, Object> processedNestedKey = processNestedKey(knnMapEntry);
+            String knnKey = processedNestedKey.getKey();
+            Object sourceValue = processedNestedKey.getValue();
             if (sourceValue instanceof String) {
                 result.put(knnKey, results.get(indexWrapper.index++));
             } else if (sourceValue instanceof List) {
@@ -419,19 +423,31 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
                         nestedElement.put(inputNestedMapEntry.getKey(), results.get(indexWrapper.index++));
                     }
                 } else {
+                    Pair<String, Object> processedNestedKey = processNestedKey(inputNestedMapEntry);
+                    Map<String, Object> sourceMap;
+                    if (sourceAndMetadataMap.get(processorKey) == null) {
+                        sourceMap = new HashMap<>();
+                        sourceAndMetadataMap.put(processorKey, sourceMap);
+                    } else {
+                        sourceMap = (Map<String, Object>) sourceAndMetadataMap.get(processorKey);
+                    }
                     putNLPResultToSourceMapForMapType(
-                        inputNestedMapEntry.getKey(),
-                        inputNestedMapEntry.getValue(),
+                        processedNestedKey.getKey(),
+                        processedNestedKey.getValue(),
                         results,
                         indexWrapper,
-                        (Map<String, Object>) sourceAndMetadataMap.get(processorKey)
+                        sourceMap
                     );
                 }
             }
         } else if (sourceValue instanceof String) {
-            sourceAndMetadataMap.put(processorKey, results.get(indexWrapper.index++));
+            sourceAndMetadataMap.merge(processorKey, results.get(indexWrapper.index++), REMAPPING_FUNCTION);
         } else if (sourceValue instanceof List) {
-            sourceAndMetadataMap.put(processorKey, buildNLPResultForListType((List<String>) sourceValue, results, indexWrapper));
+            sourceAndMetadataMap.merge(
+                processorKey,
+                buildNLPResultForListType((List<String>) sourceValue, results, indexWrapper),
+                REMAPPING_FUNCTION
+            );
         }
     }
 
