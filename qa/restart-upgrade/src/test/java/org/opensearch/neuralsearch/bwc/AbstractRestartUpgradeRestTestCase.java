@@ -93,11 +93,23 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
         createPipelineProcessor(requestBody, pipelineName, modelId);
     }
 
-    protected void createPipelineForSparseEncodingProcessor(final String modelId, final String pipelineName) throws Exception {
+    protected void createPipelineForSparseEncodingProcessor(String modelId, String pipelineName, Integer batchSize) throws Exception {
         String requestBody = Files.readString(
             Path.of(classLoader.getResource("processor/PipelineForSparseEncodingProcessorConfiguration.json").toURI())
         );
+        final String batchSizeTag = "{{batch_size}}";
+        if (requestBody.contains(batchSizeTag)) {
+            if (batchSize != null) {
+                requestBody = requestBody.replace(batchSizeTag, String.format(LOCALE, "\n\"batch_size\": %d,\n", batchSize));
+            } else {
+                requestBody = requestBody.replace(batchSizeTag, "");
+            }
+        }
         createPipelineProcessor(requestBody, pipelineName, modelId);
+    }
+
+    protected void createPipelineForSparseEncodingProcessor(final String modelId, final String pipelineName) throws Exception {
+        createPipelineForSparseEncodingProcessor(modelId, pipelineName, null);
     }
 
     protected void createPipelineForTextChunkingProcessor(String pipelineName) throws Exception {
