@@ -304,24 +304,21 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final Integer batchSize
     ) throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource(PIPELINE_CONFIGS_BY_TYPE.get(processorType)).toURI()));
-        final String batchSizeTag = "{{batch_size}}";
-        if (requestBody.contains(batchSizeTag)) {
-            if (batchSize != null) {
-                requestBody = requestBody.replace(batchSizeTag, String.format(LOCALE, "\n\"batch_size\": %d,\n", batchSize));
-            } else {
-                requestBody = requestBody.replace(batchSizeTag, "");
-            }
-        }
-        createPipelineProcessor(requestBody, pipelineName, modelId);
+        createPipelineProcessor(requestBody, pipelineName, modelId, batchSize);
     }
 
-    protected void createPipelineProcessor(final String requestBody, final String pipelineName, final String modelId) throws Exception {
+    protected void createPipelineProcessor(
+        final String requestBody,
+        final String pipelineName,
+        final String modelId,
+        final Integer batchSize
+    ) throws Exception {
         Response pipelineCreateResponse = makeRequest(
             client(),
             "PUT",
             "/_ingest/pipeline/" + pipelineName,
             null,
-            toHttpEntity(String.format(LOCALE, requestBody, modelId)),
+            toHttpEntity(String.format(LOCALE, requestBody, modelId, batchSize == null ? 1 : batchSize)),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
         Map<String, Object> node = XContentHelper.convertToMap(
