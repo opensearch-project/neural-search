@@ -40,7 +40,7 @@ import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.knn.index.VectorDataType;
-import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
+import org.opensearch.knn.index.mapper.KNNVectorFieldType;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
@@ -115,7 +115,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         assertSame(hybridQueryWithTerm, rewritten);
 
         Index dummyIndex = new Index("dummy", "dummy");
-        KNNVectorFieldMapper.KNNVectorFieldType mockKNNVectorField = mock(KNNVectorFieldMapper.KNNVectorFieldType.class);
+        KNNVectorFieldType mockKNNVectorField = mock(KNNVectorFieldType.class);
         when(mockQueryShardContext.index()).thenReturn(dummyIndex);
         when(mockKNNVectorField.getDimension()).thenReturn(4);
         when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
