@@ -5,14 +5,19 @@
 package org.opensearch.neuralsearch.processor.normalization;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import lombok.ToString;
+import org.opensearch.neuralsearch.processor.DocIdAtQueryPhase;
 
 /**
  * Abstracts normalization of scores based on L2 method
@@ -48,6 +53,49 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
                 }
             }
         }
+    }
+
+    @Override
+    public String describe() {
+        return String.format(
+            Locale.ROOT,
+            "normalization technique %s [%s]",
+            TECHNIQUE_NAME,
+            "score = score/sqrt(score1^2 + score2^2 + ... + scoreN^2)"
+        );
+    }
+
+    @Override
+    public Map<DocIdAtQueryPhase, String> explain(List<CompoundTopDocs> queryTopDocs) {
+        Map<DocIdAtQueryPhase, List<Float>> normalizedScores = new HashMap<>();
+        Map<DocIdAtQueryPhase, List<Float>> sourceScores = new HashMap<>();
+        List<Float> normsPerSubquery = getL2Norm(queryTopDocs);
+
+        for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
+            if (Objects.isNull(compoundQueryTopDocs)) {
+                continue;
+            }
+            List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
+            for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
+                TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
+                for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
+                    normalizedScores.computeIfAbsent(
+                        new DocIdAtQueryPhase(scoreDoc.doc, compoundQueryTopDocs.getSearchShard()),
+                        k -> new ArrayList<>()
+                    ).add(normalizeSingleScore(scoreDoc.score, normsPerSubquery.get(j)));
+                    sourceScores.computeIfAbsent(
+                        new DocIdAtQueryPhase(scoreDoc.doc, compoundQueryTopDocs.getSearchShard()),
+                        k -> new ArrayList<>()
+                    ).add(scoreDoc.score);
+                }
+            }
+        }
+        Map<DocIdAtQueryPhase, String> explain = sourceScores.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, entry -> {
+            List<Float> srcScores = entry.getValue();
+            List<Float> normScores = normalizedScores.get(entry.getKey());
+            return "source scores " + srcScores + " normalized scores " + normScores;
+        }));
+        return explain;
     }
 
     private List<Float> getL2Norm(final List<CompoundTopDocs> queryTopDocs) {

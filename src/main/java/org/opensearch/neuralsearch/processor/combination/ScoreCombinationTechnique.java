@@ -12,4 +12,8 @@ public interface ScoreCombinationTechnique {
      * @return combined score
      */
     float combine(final float[] scores);
+
+    default String describe() {
+        return "generic score combination technique";
+    }
 }

@@ -13,6 +13,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.Sort;
@@ -27,10 +28,13 @@ import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.fetch.FetchSearchResult;
+import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.query.QuerySearchResult;
 
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+
+import static org.opensearch.neuralsearch.plugin.NeuralSearch.PROCESSOR_EXPLAIN;
 import static org.opensearch.neuralsearch.processor.combination.ScoreCombiner.MAX_SCORE_WHEN_NO_HITS_FOUND;
 import static org.opensearch.neuralsearch.search.util.HybridSearchSortUtil.evaluateSortCriteria;
 
@@ -57,22 +61,35 @@ public class NormalizationProcessorWorkflow {
         final ScoreNormalizationTechnique normalizationTechnique,
         final ScoreCombinationTechnique combinationTechnique
     ) {
+        NormalizationProcessorWorkflowExecuteRequest request = NormalizationProcessorWorkflowExecuteRequest.builder()
+            .querySearchResults(querySearchResults)
+            .fetchSearchResultOptional(fetchSearchResultOptional)
+            .normalizationTechnique(normalizationTechnique)
+            .combinationTechnique(combinationTechnique)
+            .explain(false)
+            .build();
+        execute(request);
+    }
+
+    public void execute(final NormalizationProcessorWorkflowExecuteRequest request) {
         // save original state
-        List<Integer> unprocessedDocIds = unprocessedDocIds(querySearchResults);
+        List<Integer> unprocessedDocIds = unprocessedDocIds(request.getQuerySearchResults());
 
         // pre-process data
         log.debug("Pre-process query results");
-        List<CompoundTopDocs> queryTopDocs = getQueryTopDocs(querySearchResults);
+        List<CompoundTopDocs> queryTopDocs = getQueryTopDocs(request.getQuerySearchResults());
+
+        explain(request, queryTopDocs);
 
         // normalize
         log.debug("Do score normalization");
-        scoreNormalizer.normalizeScores(queryTopDocs, normalizationTechnique);
+        scoreNormalizer.normalizeScores(queryTopDocs, request.getNormalizationTechnique());
 
         CombineScoresDto combineScoresDTO = CombineScoresDto.builder()
             .queryTopDocs(queryTopDocs)
-            .scoreCombinationTechnique(combinationTechnique)
-            .querySearchResults(querySearchResults)
-            .sort(evaluateSortCriteria(querySearchResults, queryTopDocs))
+            .scoreCombinationTechnique(request.getCombinationTechnique())
+            .querySearchResults(request.getQuerySearchResults())
+            .sort(evaluateSortCriteria(request.getQuerySearchResults(), queryTopDocs))
             .build();
 
         // combine
@@ -82,7 +99,33 @@ public class NormalizationProcessorWorkflow {
         // post-process data
         log.debug("Post-process query results after score normalization and combination");
         updateOriginalQueryResults(combineScoresDTO);
-        updateOriginalFetchResults(querySearchResults, fetchSearchResultOptional, unprocessedDocIds);
+        updateOriginalFetchResults(request.getQuerySearchResults(), request.getFetchSearchResultOptional(), unprocessedDocIds);
+    }
+
+    private void explain(NormalizationProcessorWorkflowExecuteRequest request, List<CompoundTopDocs> queryTopDocs) {
+        if (request.isExplain()) {
+            // general description of techniques
+            String explanationDetailsMessage = String.format(
+                Locale.ROOT,
+                "%s, %s",
+                request.getNormalizationTechnique().describe(),
+                request.getCombinationTechnique().describe()
+            );
+
+            Explanation explanation = Explanation.match(0.0f, explanationDetailsMessage);
+
+            // build final result object with all explain related information
+            if (Objects.nonNull(request.getPipelineProcessingContext())) {
+                ProcessorExplainDto processorExplainDto = ProcessorExplainDto.builder()
+                    .explanation(explanation)
+                    .normalizedScoresByDocId(scoreNormalizer.explain(queryTopDocs, request.getNormalizationTechnique()))
+                    .combinedScoresByDocId(scoreCombiner.explain(queryTopDocs, request.getCombinationTechnique()))
+                    .build();
+                // store explain object to pipeline context
+                PipelineProcessingContext pipelineProcessingContext = request.getPipelineProcessingContext();
+                pipelineProcessingContext.setAttribute(PROCESSOR_EXPLAIN, processorExplainDto);
+            }
+        }
     }
 
     /**
@@ -93,7 +136,6 @@ public class NormalizationProcessorWorkflow {
     private List<CompoundTopDocs> getQueryTopDocs(final List<QuerySearchResult> querySearchResults) {
         List<CompoundTopDocs> queryTopDocs = querySearchResults.stream()
             .filter(searchResult -> Objects.nonNull(searchResult.topDocs()))
-            .map(querySearchResult -> querySearchResult.topDocs().topDocs)
             .map(CompoundTopDocs::new)
             .collect(Collectors.toList());
         if (queryTopDocs.size() != querySearchResults.size()) {

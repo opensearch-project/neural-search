@@ -20,6 +20,7 @@ import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTec
 import org.opensearch.search.SearchPhaseResult;
 import org.opensearch.search.fetch.FetchSearchResult;
 import org.opensearch.search.internal.SearchContext;
+import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.query.QuerySearchResult;
 
@@ -52,13 +53,40 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
         final SearchPhaseResults<Result> searchPhaseResult,
         final SearchPhaseContext searchPhaseContext
     ) {
+        doProcessStuff(searchPhaseResult, searchPhaseContext, Optional.empty());
+    }
+
+    @Override
+    public <Result extends SearchPhaseResult> void process(
+        SearchPhaseResults<Result> searchPhaseResult,
+        SearchPhaseContext searchPhaseContext,
+        PipelineProcessingContext requestContext
+    ) {
+        doProcessStuff(searchPhaseResult, searchPhaseContext, Optional.ofNullable(requestContext));
+    }
+
+    private <Result extends SearchPhaseResult> void doProcessStuff(
+        SearchPhaseResults<Result> searchPhaseResult,
+        SearchPhaseContext searchPhaseContext,
+        Optional<PipelineProcessingContext> requestContextOptional
+    ) {
         if (shouldSkipProcessor(searchPhaseResult)) {
             log.debug("Query results are not compatible with normalization processor");
             return;
         }
         List<QuerySearchResult> querySearchResults = getQueryPhaseSearchResults(searchPhaseResult);
         Optional<FetchSearchResult> fetchSearchResult = getFetchSearchResults(searchPhaseResult);
-        normalizationWorkflow.execute(querySearchResults, fetchSearchResult, normalizationTechnique, combinationTechnique);
+        boolean explain = Objects.nonNull(searchPhaseContext.getRequest().source().explain())
+            && searchPhaseContext.getRequest().source().explain();
+        NormalizationProcessorWorkflowExecuteRequest request = NormalizationProcessorWorkflowExecuteRequest.builder()
+            .querySearchResults(querySearchResults)
+            .fetchSearchResultOptional(fetchSearchResult)
+            .normalizationTechnique(normalizationTechnique)
+            .combinationTechnique(combinationTechnique)
+            .explain(explain)
+            .pipelineProcessingContext(requestContextOptional.orElse(null))
+            .build();
+        normalizationWorkflow.execute(request);
     }
 
     @Override

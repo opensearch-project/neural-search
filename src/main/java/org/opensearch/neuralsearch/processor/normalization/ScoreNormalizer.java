@@ -5,9 +5,11 @@
 package org.opensearch.neuralsearch.processor.normalization;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
+import org.opensearch.neuralsearch.processor.DocIdAtQueryPhase;
 
 public class ScoreNormalizer {
 
@@ -24,5 +26,15 @@ public class ScoreNormalizer {
 
     private boolean canQueryResultsBeNormalized(final List<CompoundTopDocs> queryTopDocs) {
         return queryTopDocs.stream().filter(Objects::nonNull).anyMatch(topDocs -> topDocs.getTopDocs().size() > 0);
+    }
+
+    public Map<DocIdAtQueryPhase, String> explain(
+        final List<CompoundTopDocs> queryTopDocs,
+        final ScoreNormalizationTechnique scoreNormalizationTechnique
+    ) {
+        if (canQueryResultsBeNormalized(queryTopDocs)) {
+            return scoreNormalizationTechnique.explain(queryTopDocs);
+        }
+        return Map.of();
     }
 }

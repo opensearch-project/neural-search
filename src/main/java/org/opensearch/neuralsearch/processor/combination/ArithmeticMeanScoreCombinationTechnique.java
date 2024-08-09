@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.processor.combination;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -27,6 +28,11 @@ public class ArithmeticMeanScoreCombinationTechnique implements ScoreCombination
         scoreCombinationUtil = combinationUtil;
         scoreCombinationUtil.validateParams(params, SUPPORTED_PARAMS);
         weights = scoreCombinationUtil.getWeights(params);
+    }
+
+    @Override
+    public String describe() {
+        return String.format(Locale.ROOT, "combination technique %s [%s]", TECHNIQUE_NAME, "score = (score1 + score2 + ... + scoreN)/N");
     }
 
     /**

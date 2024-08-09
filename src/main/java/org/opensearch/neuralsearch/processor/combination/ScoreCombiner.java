@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.processor.combination;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -26,6 +27,7 @@ import org.apache.lucene.search.SortField;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.processor.DocIdAtQueryPhase;
 
 /**
  * Abstracts combination of scores in query search results.
@@ -60,7 +62,7 @@ public class ScoreCombiner {
      * Different score combination techniques are different in step 2, where we create map of "doc id" - "combined score",
      * other steps are same for all techniques.
      *
-     * @param combineScoresDTO   contains details of query top docs, score combination technique and sort is enabled or disabled.
+     * @param combineScoresDTO contains details of query top docs, score combination technique and sort is enabled or disabled.
      */
     public void combineScores(final CombineScoresDto combineScoresDTO) {
         // iterate over results from each shard. Every CompoundTopDocs object has results from
@@ -107,6 +109,7 @@ public class ScoreCombiner {
         updateQueryTopDocsWithCombinedScores(
             compoundQueryTopDocs,
             topDocsPerSubQuery,
+            normalizedScoresPerDoc,
             combinedNormalizedScoresByDocId,
             sortedDocsIds,
             getDocIdSortFieldsMap(compoundQueryTopDocs, combinedNormalizedScoresByDocId, sort),
@@ -129,7 +132,7 @@ public class ScoreCombiner {
     }
 
     /**
-     * @param sort sort criteria
+     * @param sort               sort criteria
      * @param topDocsPerSubQuery top docs per subquery
      * @return list of top field docs which is deduced by typcasting top docs to top field docs.
      */
@@ -149,9 +152,9 @@ public class ScoreCombiner {
     }
 
     /**
-     * @param compoundTopDocs top docs that represent on shard
+     * @param compoundTopDocs                 top docs that represent on shard
      * @param combinedNormalizedScoresByDocId docId to normalized scores map
-     * @param sort sort criteria
+     * @param sort                            sort criteria
      * @return map of docId and sort fields if sorting is enabled.
      */
     private Map<Integer, Object[]> getDocIdSortFieldsMap(
@@ -290,6 +293,7 @@ public class ScoreCombiner {
     private void updateQueryTopDocsWithCombinedScores(
         final CompoundTopDocs compoundQueryTopDocs,
         final List<TopDocs> topDocsPerSubQuery,
+        Map<Integer, float[]> normalizedScoresPerDoc,
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
         final Collection<Integer> sortedScores,
         Map<Integer, Object[]> docIdSortFieldMap,
@@ -317,5 +321,42 @@ public class ScoreCombiner {
             totalHits = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;
         }
         return new TotalHits(maxHits, totalHits);
+    }
+
+    public Map<DocIdAtQueryPhase, String> explain(
+        final List<CompoundTopDocs> queryTopDocs,
+        ScoreCombinationTechnique combinationTechnique
+    ) {
+        Map<DocIdAtQueryPhase, String> explain = new HashMap<>();
+        queryTopDocs.forEach(compoundQueryTopDocs -> explainByShard(combinationTechnique, compoundQueryTopDocs, explain));
+        return explain;
+    }
+
+    private void explainByShard(
+        final ScoreCombinationTechnique scoreCombinationTechnique,
+        final CompoundTopDocs compoundQueryTopDocs,
+        Map<DocIdAtQueryPhase, String> explain
+    ) {
+        if (Objects.isNull(compoundQueryTopDocs) || compoundQueryTopDocs.getTotalHits().value == 0) {
+            return;
+        }
+        List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
+
+        // - create map of normalized scores results returned from the single shard
+        Map<Integer, float[]> normalizedScoresPerDoc = getNormalizedScoresPerDocument(topDocsPerSubQuery);
+
+        // - create map of combined scores per doc id
+        Map<Integer, Float> combinedNormalizedScoresByDocId = normalizedScoresPerDoc.entrySet()
+            .stream()
+            .collect(Collectors.toMap(Map.Entry::getKey, entry -> scoreCombinationTechnique.combine(entry.getValue())));
+
+        normalizedScoresPerDoc.entrySet().stream().forEach(entry -> {
+            float[] srcScores = entry.getValue();
+            float combinedScore = combinedNormalizedScoresByDocId.get(entry.getKey());
+            explain.put(
+                new DocIdAtQueryPhase(entry.getKey(), compoundQueryTopDocs.getSearchShard()),
+                "source scores " + Arrays.toString(srcScores) + " combined score " + combinedScore
+            );
+        });
     }
 }
