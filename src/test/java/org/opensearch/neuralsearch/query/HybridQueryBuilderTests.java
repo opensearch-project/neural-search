@@ -17,18 +17,27 @@ import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.K_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MODEL_ID_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TEXT_FIELD;
 
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.ArrayList;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 import org.opensearch.Version;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.io.stream.BytesStreamOutput;
+import org.opensearch.common.settings.ClusterSettings;
+import org.opensearch.common.settings.Setting;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.common.ParsingException;
@@ -47,8 +56,13 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.knn.index.KNNSettings;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.knn.index.VectorDataType;
+import org.opensearch.knn.index.engine.KNNEngine;
+import org.opensearch.knn.index.engine.KNNMethodContext;
+import org.opensearch.knn.index.engine.MethodComponentContext;
+import org.opensearch.knn.index.mapper.KNNMappingConfig;
 import org.opensearch.knn.index.mapper.KNNVectorFieldType;
 import org.opensearch.knn.index.query.KNNQuery;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
@@ -69,6 +83,26 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     static final float BOOST = 1.8f;
     static final Supplier<float[]> TEST_VECTOR_SUPPLIER = () -> new float[4];
     static final QueryBuilder TEST_FILTER = new MatchAllQueryBuilder();
+    @Mock
+    private ClusterService clusterService;
+    private AutoCloseable openMocks;
+
+    @Override
+    public void setUp() throws Exception {
+        super.setUp();
+        openMocks = MockitoAnnotations.openMocks(this);
+        // This is required to make sure that before every test we are initializing the KNNSettings. Not doing this
+        // leads to failures of unit tests cases when a unit test is run separately. Try running this test:
+        // ./gradlew ':test' --tests "org.opensearch.knn.training.TrainingJobTests.testRun_success" and see it fails
+        // but if run along with other tests this test passes.
+        initKNNSettings();
+    }
+
+    @Override
+    public void tearDown() throws Exception {
+        super.tearDown();
+        openMocks.close();
+    }
 
     @SneakyThrows
     public void testDoToQuery_whenNoSubqueries_thenBuildSuccessfully() {
@@ -86,11 +120,14 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         Index dummyIndex = new Index("dummy", "dummy");
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         KNNVectorFieldType mockKNNVectorField = mock(KNNVectorFieldType.class);
+        KNNMappingConfig mockKNNMappingConfig = mock(KNNMappingConfig.class);
+        KNNMethodContext knnMethodContext = new KNNMethodContext(KNNEngine.FAISS, SpaceType.L2, MethodComponentContext.EMPTY);
+        when(mockKNNVectorField.getKnnMappingConfig()).thenReturn(mockKNNMappingConfig);
+        when(mockKNNMappingConfig.getKnnMethodContext()).thenReturn(Optional.of(knnMethodContext));
         when(mockQueryShardContext.index()).thenReturn(dummyIndex);
-        when(mockKNNVectorField.getDimension()).thenReturn(4);
+        when(mockKNNVectorField.getKnnMappingConfig().getDimension()).thenReturn(4);
         when(mockKNNVectorField.getVectorDataType()).thenReturn(VectorDataType.FLOAT);
         when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
-        when(mockKNNVectorField.getSpaceType()).thenReturn(SpaceType.L2);
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
             .queryText(QUERY_TEXT)
@@ -116,10 +153,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         Index dummyIndex = new Index("dummy", "dummy");
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         KNNVectorFieldType mockKNNVectorField = mock(KNNVectorFieldType.class);
+        KNNMappingConfig mockKNNMappingConfig = mock(KNNMappingConfig.class);
+        KNNMethodContext knnMethodContext = new KNNMethodContext(KNNEngine.FAISS, SpaceType.L2, MethodComponentContext.EMPTY);
+        when(mockKNNVectorField.getKnnMappingConfig()).thenReturn(mockKNNMappingConfig);
+        when(mockKNNMappingConfig.getKnnMethodContext()).thenReturn(Optional.of(knnMethodContext));
         when(mockQueryShardContext.index()).thenReturn(dummyIndex);
-        when(mockKNNVectorField.getDimension()).thenReturn(4);
+        when(mockKNNVectorField.getKnnMappingConfig().getDimension()).thenReturn(4);
         when(mockKNNVectorField.getVectorDataType()).thenReturn(VectorDataType.FLOAT);
-        when(mockKNNVectorField.getSpaceType()).thenReturn(SpaceType.L2);
         when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
@@ -367,8 +407,10 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         Index dummyIndex = new Index("dummy", "dummy");
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         KNNVectorFieldType mockKNNVectorField = mock(KNNVectorFieldType.class);
+        KNNMappingConfig mockKNNMappingConfig = mock(KNNMappingConfig.class);
+        when(mockKNNVectorField.getKnnMappingConfig()).thenReturn(mockKNNMappingConfig);
         when(mockQueryShardContext.index()).thenReturn(dummyIndex);
-        when(mockKNNVectorField.getDimension()).thenReturn(4);
+        when(mockKNNVectorField.getKnnMappingConfig().getDimension()).thenReturn(4);
         when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
 
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
@@ -584,9 +626,11 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         KNNVectorFieldType mockKNNVectorField = mock(KNNVectorFieldType.class);
+        KNNMappingConfig mockKNNMappingConfig = mock(KNNMappingConfig.class);
+        when(mockKNNVectorField.getKnnMappingConfig()).thenReturn(mockKNNMappingConfig);
         Index dummyIndex = new Index("dummy", "dummy");
         when(mockQueryShardContext.index()).thenReturn(dummyIndex);
-        when(mockKNNVectorField.getDimension()).thenReturn(4);
+        when(mockKNNVectorField.getKnnMappingConfig().getDimension()).thenReturn(4);
         when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
 
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
@@ -736,5 +780,18 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     private void setUpClusterService() {
         ClusterService clusterService = NeuralSearchClusterTestUtils.mockClusterService(Version.CURRENT);
         NeuralSearchClusterUtil.instance().initialize(clusterService);
+    }
+
+    private void initKNNSettings() {
+        Set<Setting<?>> defaultClusterSettings = new HashSet<>(ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
+        defaultClusterSettings.addAll(
+            KNNSettings.state()
+                .getSettings()
+                .stream()
+                .filter(s -> s.getProperties().contains(Setting.Property.NodeScope))
+                .collect(Collectors.toList())
+        );
+        when(clusterService.getClusterSettings()).thenReturn(new ClusterSettings(Settings.EMPTY, defaultClusterSettings));
+        KNNSettings.state().setClusterService(clusterService);
     }
 }
