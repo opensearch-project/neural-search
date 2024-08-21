@@ -1,8 +1,8 @@
 <img src="https://opensearch.org/assets/img/opensearch-logo-themed.svg" height="64px">
 
-The maintainers of the k-NN/neural-search Repo's seek to promote an inclusive and engaged community of contributors. In 
-order to facilitate this, bi-weekly triage meetings are open-to-all and attendance is encouraged for anyone who hopes to 
-contribute, discuss an issue, or learn more about the project. To learn more about contributing to the 
+The maintainers of the k-NN/neural-search Repo's seek to promote an inclusive and engaged community of contributors. In
+order to facilitate this, bi-weekly triage meetings are open-to-all and attendance is encouraged for anyone who hopes to
+contribute, discuss an issue, or learn more about the project. To learn more about contributing to the
 k-NN/neural-search Repo visit the [Contributing](./CONTRIBUTING.md) documentation.
 
 ### Do I need to attend for my issue to be addressed/triaged?
@@ -11,19 +11,19 @@ Attendance is not required for your issue to be triaged or addressed. All new is
 
 ### What happens if my issue does not get covered this time?
 
-Each meeting we seek to  address all new issues. However, should we run out of time before your issue is discussed, you 
+Each meeting we seek to  address all new issues. However, should we run out of time before your issue is discussed, you
 are always welcome to attend the next meeting or to follow up on the issue post itself.
 
 ### How do I join the Backlog & Triage meeting?
 
-Meetings are hosted regularly at 5 PM Pacific Time on Tuesdays bi-weekly and can be joined via the links posted on the 
-[OpenSearch Meetup Group](https://www.meetup.com/opensearch/events/) list of events. The event will be titled 
+Meetings are hosted regularly at 5 PM Pacific Time on Tuesdays bi-weekly and can be joined via the links posted on the
+[OpenSearch Meetup Group](https://www.meetup.com/opensearch/events/) list of events. The event will be titled
 `Development Backlog & Triage Meeting - k-NN/neural-search`.
 
-After joining the Chime meeting, you can enable your video / voice to join the discussion.  If you do not have a webcam 
+After joining the Chime meeting, you can enable your video / voice to join the discussion.  If you do not have a webcam
 or microphone available, you can still join in via the text chat.
 
-If you have an issue you'd like to bring forth please consider getting a link to the issue so it can be presented to 
+If you have an issue you'd like to bring forth please consider getting a link to the issue so it can be presented to
 everyone in the meeting.
 
 ### Is there an agenda for each week?
@@ -48,13 +48,13 @@ No, all are welcome and encouraged to attend. Attending the Backlog & Triage mee
 
 ### What if I have an issue that is almost a duplicate, should I open a new one to be triaged?
 
-You can always open an issue including one that you think may be a duplicate. However, in cases where you believe there 
-is an important distinction to be made between an existing issue and your newly created one, you are encouraged to 
+You can always open an issue including one that you think may be a duplicate. However, in cases where you believe there
+is an important distinction to be made between an existing issue and your newly created one, you are encouraged to
 attend the triaging meeting to explain.
 
 ### What if I have follow-up questions on an issue?
 
-If you have an existing issue you would like to discuss, you can always comment on the issue itself. Alternatively, you 
+If you have an existing issue you would like to discuss, you can always comment on the issue itself. Alternatively, you
 are welcome to come to the triage meeting to discuss.
 
 ### Is this meeting a good place to get help setting up k-NN/neural-search features on my OpenSearch instance?

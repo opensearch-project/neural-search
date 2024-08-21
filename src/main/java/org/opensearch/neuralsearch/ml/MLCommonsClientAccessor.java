@@ -15,8 +15,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import org.apache.logging.log4j.util.Strings;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.core.common.Strings;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.FunctionName;
@@ -237,7 +237,7 @@ public class MLCommonsClientAccessor {
             final List<ModelTensor> tensorsList = tensors.getMlModelTensors();
             for (final ModelTensor tensor : tensorsList) {
                 if (Objects.isNull(tensor.getData())) {
-                    if (Objects.nonNull(tensor.getDataAsMap()) && Strings.isNotBlank((String) tensor.getDataAsMap().get("message"))) {
+                    if (Objects.nonNull(tensor.getDataAsMap()) && Strings.hasText((String) tensor.getDataAsMap().get("message"))) {
                         String errorFromModel = (String) tensor.getDataAsMap().get("message");
                         throw new IllegalStateException(
                             String.format(Locale.ROOT, "%s: %s", EXCEPTION_MESSAGE_PREFIX_MODEL_PREDICT_FAILED, errorFromModel)
