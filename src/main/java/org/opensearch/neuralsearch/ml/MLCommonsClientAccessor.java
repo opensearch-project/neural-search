@@ -16,6 +16,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.core.common.Strings;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.FunctionName;
@@ -236,7 +237,7 @@ public class MLCommonsClientAccessor {
             final List<ModelTensor> tensorsList = tensors.getMlModelTensors();
             for (final ModelTensor tensor : tensorsList) {
                 if (Objects.isNull(tensor.getData())) {
-                    if (Objects.nonNull(tensor.getDataAsMap()) && checkIfStringIsNotBlank((String) tensor.getDataAsMap().get("message"))) {
+                    if (Objects.nonNull(tensor.getDataAsMap()) && Strings.hasText((String) tensor.getDataAsMap().get("message"))) {
                         String errorFromModel = (String) tensor.getDataAsMap().get("message");
                         throw new IllegalStateException(
                             String.format(Locale.ROOT, "%s: %s", EXCEPTION_MESSAGE_PREFIX_MODEL_PREDICT_FAILED, errorFromModel)
@@ -309,19 +310,5 @@ public class MLCommonsClientAccessor {
         final ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
         final MLInputDataset inputDataset = new TextDocsInputDataSet(inputText, modelResultFilter);
         return new MLInput(FunctionName.TEXT_EMBEDDING, null, inputDataset);
-    }
-
-    private boolean checkIfStringIsNotBlank(String value) {
-        if (value == null || value.isEmpty()) {
-            return false;
-        }
-        // returns true when the String even contain a single character which is not a white space.
-        for (int i = 0; i < value.length(); ++i) {
-            char c = value.charAt(i);
-            if (!Character.isWhitespace(c)) {
-                return true;
-            }
-        }
-        return false;
     }
 }
