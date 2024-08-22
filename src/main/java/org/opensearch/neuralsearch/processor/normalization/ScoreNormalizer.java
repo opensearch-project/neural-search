@@ -8,19 +8,28 @@ import java.util.List;
 import java.util.Objects;
 
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
+import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 
 public class ScoreNormalizer {
 
     /**
      * Performs score normalization based on input normalization technique. Mutates input object by updating normalized scores.
-     * @param queryTopDocs original query results from multiple shards and multiple sub-queries
-     * @param scoreNormalizationTechnique exact normalization technique that should be applied
+     * //@param queryTopDocs original query results from multiple shards and multiple sub-queries
+     * //@param scoreNormalizationTechnique exact normalization technique that should be applied
      */
-    public void normalizeScores(final List<CompoundTopDocs> queryTopDocs, final ScoreNormalizationTechnique scoreNormalizationTechnique) {
+    public void normalizeScores(final NormalizeScoresDTO normalizeScoresDTO) {
+        final List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
+        final ScoreNormalizationTechnique scoreNormalizationTechnique = normalizeScoresDTO.getNormalizationTechnique();
         if (canQueryResultsBeNormalized(queryTopDocs)) {
-            scoreNormalizationTechnique.normalize(queryTopDocs);
+            scoreNormalizationTechnique.normalize(normalizeScoresDTO);
         }
     }
+
+    /*    public void normalizeScores(final List<CompoundTopDocs> queryTopDocs, final ScoreNormalizationTechnique scoreNormalizationTechnique, Map<String, Object> rrfParams) {
+        if (canQueryResultsBeNormalized(queryTopDocs)) {
+            scoreNormalizationTechnique.normalize(queryTopDocs, rrfParams);
+        }
+    }*/
 
     private boolean canQueryResultsBeNormalized(final List<CompoundTopDocs> queryTopDocs) {
         return queryTopDocs.stream().filter(Objects::nonNull).anyMatch(topDocs -> topDocs.getTopDocs().size() > 0);

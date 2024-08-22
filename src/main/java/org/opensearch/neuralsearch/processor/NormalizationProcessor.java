@@ -58,7 +58,14 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
         }
         List<QuerySearchResult> querySearchResults = getQueryPhaseSearchResults(searchPhaseResult);
         Optional<FetchSearchResult> fetchSearchResult = getFetchSearchResults(searchPhaseResult);
-        normalizationWorkflow.execute(querySearchResults, fetchSearchResult, normalizationTechnique, combinationTechnique);
+        NormalizationExecuteDTO normalizeDTO = NormalizationExecuteDTO.builder()
+            .querySearchResults(querySearchResults)
+            .fetchSearchResultOptional(fetchSearchResult)
+            .normalizationTechnique(normalizationTechnique)
+            .combinationTechnique(combinationTechnique)
+            .build();
+        normalizationWorkflow.execute(normalizeDTO);
+        // normalizationWorkflow.execute(querySearchResults, fetchSearchResult, normalizationTechnique, combinationTechnique);
     }
 
     @Override

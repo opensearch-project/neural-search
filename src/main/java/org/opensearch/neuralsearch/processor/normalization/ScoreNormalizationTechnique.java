@@ -4,9 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor.normalization;
 
-import java.util.List;
-
-import org.opensearch.neuralsearch.processor.CompoundTopDocs;
+import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 
 /**
  * Abstracts normalization of scores in query search results.
@@ -15,7 +13,9 @@ public interface ScoreNormalizationTechnique {
 
     /**
      * Performs score normalization based on input normalization technique. Mutates input object by updating normalized scores.
-     * @param queryTopDocs original query results from multiple shards and multiple sub-queries
+     * //@param queryTopDocs original query results from multiple shards and multiple sub-queries
      */
-    void normalize(final List<CompoundTopDocs> queryTopDocs);
+    void normalize(final NormalizeScoresDTO normalizeScoresDTO);
+
+    // void normalize(final List<CompoundTopDocs> queryTopDocs, Map<String, Object> rrfParams);
 }
