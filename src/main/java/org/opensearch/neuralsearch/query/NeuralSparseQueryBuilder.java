@@ -376,13 +376,21 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     }
 
     private static void validateForRewrite(String queryText, String modelId) {
-        if (StringUtils.isBlank(queryText) || StringUtils.isBlank(modelId)) {
+        if (StringUtils.isBlank(modelId) && !isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
-                    "%s and %s cannot be null",
-                    QUERY_TEXT_FIELD.getPreferredName(),
+                    "%s cannot be null",
                     MODEL_ID_FIELD.getPreferredName()
+                )
+            );
+        }
+        if (StringUtils.isBlank(queryText)) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "%s cannot be null",
+                    QUERY_TEXT_FIELD.getPreferredName()
                 )
             );
         }
