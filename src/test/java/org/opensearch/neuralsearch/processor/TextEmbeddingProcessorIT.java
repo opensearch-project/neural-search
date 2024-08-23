@@ -82,9 +82,9 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         try {
             modelId = uploadTextEmbeddingModel();
             loadModel(modelId);
-            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
+            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING, 2);
             createTextEmbeddingIndex();
-            ingestBatchDocumentWithBulk("batch_", 2, 2, Collections.emptySet(), Collections.emptySet());
+            ingestBatchDocumentWithBulk("batch_", 2, Collections.emptySet(), Collections.emptySet());
             assertEquals(2, getDocCount(INDEX_NAME));
 
             ingestDocument(String.format(LOCALE, INGEST_DOC1, "success"), "1");
@@ -183,10 +183,10 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
             URL pipelineURLPath = classLoader.getResource("processor/PipelineConfigurationWithBatchSize.json");
             Objects.requireNonNull(pipelineURLPath);
             String requestBody = Files.readString(Path.of(pipelineURLPath.toURI()));
-            createPipelineProcessor(requestBody, PIPELINE_NAME, modelId);
+            createPipelineProcessor(requestBody, PIPELINE_NAME, modelId, null);
             createTextEmbeddingIndex();
             int docCount = 5;
-            ingestBatchDocumentWithBulk("batch_", docCount, docCount, Collections.emptySet(), Collections.emptySet());
+            ingestBatchDocumentWithBulk("batch_", docCount, Collections.emptySet(), Collections.emptySet());
             assertEquals(5, getDocCount(INDEX_NAME));
 
             for (int i = 0; i < docCount; ++i) {
@@ -215,10 +215,10 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
             URL pipelineURLPath = classLoader.getResource("processor/PipelineConfigurationWithBatchSize.json");
             Objects.requireNonNull(pipelineURLPath);
             String requestBody = Files.readString(Path.of(pipelineURLPath.toURI()));
-            createPipelineProcessor(requestBody, PIPELINE_NAME, modelId);
+            createPipelineProcessor(requestBody, PIPELINE_NAME, modelId, null);
             createTextEmbeddingIndex();
             int docCount = 5;
-            ingestBatchDocumentWithBulk("batch_", docCount, docCount, Set.of(0), Set.of(1));
+            ingestBatchDocumentWithBulk("batch_", docCount, Set.of(0), Set.of(1));
             assertEquals(3, getDocCount(INDEX_NAME));
 
             for (int i = 2; i < docCount; ++i) {
@@ -275,7 +275,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         assertEquals("created", map.get("result"));
     }
 
-    private void ingestBatchDocumentWithBulk(String idPrefix, int docCount, int batchSize, Set<Integer> failedIds, Set<Integer> droppedIds)
+    private void ingestBatchDocumentWithBulk(String idPrefix, int docCount, Set<Integer> failedIds, Set<Integer> droppedIds)
         throws Exception {
         StringBuilder payloadBuilder = new StringBuilder();
         for (int i = 0; i < docCount; ++i) {
@@ -295,7 +295,6 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         final String payload = payloadBuilder.toString();
         Map<String, String> params = new HashMap<>();
         params.put("refresh", "true");
-        params.put("batch_size", String.valueOf(batchSize));
         Response response = makeRequest(
             client(),
             "POST",
