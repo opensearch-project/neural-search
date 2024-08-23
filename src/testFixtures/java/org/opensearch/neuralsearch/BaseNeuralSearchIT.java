@@ -296,17 +296,31 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     protected void createPipelineProcessor(final String modelId, final String pipelineName, final ProcessorType processorType)
         throws Exception {
-        String requestBody = Files.readString(Path.of(classLoader.getResource(PIPELINE_CONFIGS_BY_TYPE.get(processorType)).toURI()));
-        createPipelineProcessor(requestBody, pipelineName, modelId);
+        createPipelineProcessor(modelId, pipelineName, processorType, null);
     }
 
-    protected void createPipelineProcessor(final String requestBody, final String pipelineName, final String modelId) throws Exception {
+    protected void createPipelineProcessor(
+        final String modelId,
+        final String pipelineName,
+        final ProcessorType processorType,
+        final Integer batchSize
+    ) throws Exception {
+        String requestBody = Files.readString(Path.of(classLoader.getResource(PIPELINE_CONFIGS_BY_TYPE.get(processorType)).toURI()));
+        createPipelineProcessor(requestBody, pipelineName, modelId, batchSize);
+    }
+
+    protected void createPipelineProcessor(
+        final String requestBody,
+        final String pipelineName,
+        final String modelId,
+        final Integer batchSize
+    ) throws Exception {
         Response pipelineCreateResponse = makeRequest(
             client(),
             "PUT",
             "/_ingest/pipeline/" + pipelineName,
             null,
-            toHttpEntity(String.format(LOCALE, requestBody, modelId)),
+            toHttpEntity(String.format(LOCALE, requestBody, modelId, batchSize == null ? 1 : batchSize)),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
         Map<String, Object> node = XContentHelper.convertToMap(
@@ -750,13 +764,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertEquals(request.getEndpoint() + ": failed", RestStatus.CREATED, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
     }
 
-    protected void bulkAddDocuments(
-        final String index,
-        final String textField,
-        final String pipeline,
-        final List<Map<String, String>> docs,
-        final int batchSize
-    ) throws IOException, ParseException {
+    protected void bulkAddDocuments(final String index, final String textField, final String pipeline, final List<Map<String, String>> docs)
+        throws IOException {
         StringBuilder builder = new StringBuilder();
         for (int i = 0; i < docs.size(); ++i) {
             String doc = String.format(
@@ -770,10 +779,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             builder.append(doc);
             builder.append("\n");
         }
-        Request request = new Request(
-            "POST",
-            String.format(Locale.ROOT, "/_bulk?refresh=true&pipeline=%s&batch_size=%d", pipeline, batchSize)
-        );
+        Request request = new Request("POST", String.format(Locale.ROOT, "/_bulk?refresh=true&pipeline=%s", pipeline));
         request.setJsonEntity(builder.toString());
 
         Response response = client().performRequest(request);

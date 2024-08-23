@@ -54,6 +54,13 @@ testClusters {
     }
 }
 
+def versionsBelow2_11 = ["2.9", "2.10"]
+def versionsBelow2_12 = versionsBelow2_11 + "2.11"
+def versionsBelow2_13 = versionsBelow2_12 + "2.12"
+def versionsBelow2_14 = versionsBelow2_13 + "2.13"
+def versionsBelow2_15 = versionsBelow2_14 + "2.14"
+def versionsBelow2_16 = versionsBelow2_15 + "2.15"
+
 // Task to run BWC tests against the old cluster
 task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
     if(!ext.bwcBundleTest){
@@ -67,7 +74,7 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
 
     // Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT, NeuralQueryEnricherProcessorIT tests from neural search version 2.9 and 2.10
     // because these features were released in 2.11 version.
-    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10")){
+    if (versionsBelow2_11.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
@@ -76,32 +83,32 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
         }
     }
 
-    // Excluding the test because we introduce this feature in 2.13
-    if (ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12")){
+    // Excluding the these tests because we introduce them in 2.13
+    if (versionsBelow2_13.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow"
-        }
-    }
-
-    // Excluding the text chunking processor test because we introduce this feature in 2.13
-    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10") || ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12")){
-        filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.TextChunkingProcessorIT.*"
         }
     }
 
-    // Excluding the k-NN radial search tests and batch ingestion tests because we introduce these features in 2.14
-    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10") || ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12") || ext.neural_search_bwc_version.startsWith("2.13")){
+    // Excluding the k-NN radial search tests because we introduce this feature in 2.14
+    if (versionsBelow2_14.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.KnnRadialSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.BatchIngestionIT.*"
         }
     }
 
     // Excluding the NeuralSparseQuery two-phase search pipeline tests because we introduce this feature in 2.15
-    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10") || ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12") || ext.neural_search_bwc_version.startsWith("2.13") || ext.neural_search_bwc_version.startsWith("2.14")){
+    if (versionsBelow2_15.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseTwoPhaseProcessorIT.*"
+        }
+    }
+
+    // Excluding the batching processor tests because we introduce this feature in 2.16
+    if (versionsBelow2_16.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.BatchIngestionIT.*"
         }
     }
 
@@ -131,7 +138,7 @@ task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
 
     // Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT, NeuralQueryEnricherProcessorIT tests from neural search version 2.9 and 2.10
     // because these features were released in 2.11 version.
-    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10")){
+    if (versionsBelow2_11.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
@@ -140,32 +147,32 @@ task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
         }
     }
 
-    // Excluding the test because we introduce this feature in 2.13
-    if (ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12")){
+    // Excluding these tests because we introduce them in 2.13
+    if (versionsBelow2_13.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow"
-        }
-    }
-
-    // Excluding the text chunking processor test because we introduce this feature in 2.13
-    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10") || ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12")){
-        filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.TextChunkingProcessorIT.*"
         }
     }
 
-    // Excluding the k-NN radial search tests and batch ingestion tests because we introduce these features in 2.14
-    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10") || ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12") || ext.neural_search_bwc_version.startsWith("2.13")){
+    // Excluding the k-NN radial search tests because we introduce this feature in 2.14
+    if (versionsBelow2_14.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.KnnRadialSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.BatchIngestionIT.*"
         }
     }
 
     // Excluding the NeuralSparseQuery two-phase search pipeline tests because we introduce this feature in 2.15
-    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10") || ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12") || ext.neural_search_bwc_version.startsWith("2.13") || ext.neural_search_bwc_version.startsWith("2.14")){
+    if (versionsBelow2_15.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseTwoPhaseProcessorIT.*"
+        }
+    }
+
+    // Excluding the batch processor tests because we introduce this feature in 2.16
+    if (versionsBelow2_16.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.BatchIngestionIT.*"
         }
     }
 
