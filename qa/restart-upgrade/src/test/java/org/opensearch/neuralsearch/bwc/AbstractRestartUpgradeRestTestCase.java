@@ -76,7 +76,7 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
 
     protected void createPipelineProcessor(final String modelId, final String pipelineName) throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/PipelineConfiguration.json").toURI()));
-        createPipelineProcessor(requestBody, pipelineName, modelId);
+        createPipelineProcessor(requestBody, pipelineName, modelId, null);
     }
 
     protected String uploadSparseEncodingModel() throws Exception {
@@ -90,20 +90,25 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
         String requestBody = Files.readString(
             Path.of(classLoader.getResource("processor/PipelineForTextImageProcessorConfiguration.json").toURI())
         );
-        createPipelineProcessor(requestBody, pipelineName, modelId);
+        createPipelineProcessor(requestBody, pipelineName, modelId, null);
     }
 
-    protected void createPipelineForSparseEncodingProcessor(final String modelId, final String pipelineName) throws Exception {
+    protected void createPipelineForSparseEncodingProcessor(final String modelId, final String pipelineName, final Integer batchSize)
+        throws Exception {
         String requestBody = Files.readString(
             Path.of(classLoader.getResource("processor/PipelineForSparseEncodingProcessorConfiguration.json").toURI())
         );
-        createPipelineProcessor(requestBody, pipelineName, modelId);
+        createPipelineProcessor(requestBody, pipelineName, modelId, batchSize);
+    }
+
+    protected void createPipelineForSparseEncodingProcessor(final String modelId, final String pipelineName) throws Exception {
+        createPipelineForSparseEncodingProcessor(modelId, pipelineName, null);
     }
 
     protected void createPipelineForTextChunkingProcessor(String pipelineName) throws Exception {
         String requestBody = Files.readString(
             Path.of(classLoader.getResource("processor/PipelineForTextChunkingProcessorConfiguration.json").toURI())
         );
-        createPipelineProcessor(requestBody, pipelineName, "");
+        createPipelineProcessor(requestBody, pipelineName, "", null);
     }
 }

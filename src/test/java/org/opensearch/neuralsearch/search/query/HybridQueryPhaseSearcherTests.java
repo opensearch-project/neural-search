@@ -62,6 +62,8 @@ import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.index.remote.RemoteStoreEnums;
 import org.opensearch.index.shard.IndexShard;
+import org.opensearch.index.shard.SearchOperationListener;
+import org.opensearch.knn.index.mapper.KNNMappingConfig;
 import org.opensearch.knn.index.mapper.KNNVectorFieldType;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
@@ -93,8 +95,10 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         HybridQueryPhaseSearcher hybridQueryPhaseSearcher = spy(new HybridQueryPhaseSearcher());
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         KNNVectorFieldType mockKNNVectorField = mock(KNNVectorFieldType.class);
+        KNNMappingConfig mockKNNMappingConfig = mock(KNNMappingConfig.class);
+        when(mockKNNVectorField.getKnnMappingConfig()).thenReturn(mockKNNMappingConfig);
         when(mockQueryShardContext.index()).thenReturn(dummyIndex);
-        when(mockKNNVectorField.getDimension()).thenReturn(4);
+        when(mockKNNVectorField.getKnnMappingConfig().getDimension()).thenReturn(4);
         when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
         MapperService mapperService = createMapperService();
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) mapperService.fieldType(TEXT_FIELD_NAME);
@@ -138,6 +142,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.searcher()).thenReturn(contextIndexSearcher);
         IndexShard indexShard = mock(IndexShard.class);
         when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
         when(searchContext.indexShard()).thenReturn(indexShard);
         when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
         when(searchContext.mapperService()).thenReturn(mapperService);
@@ -209,6 +214,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.searcher()).thenReturn(contextIndexSearcher);
         IndexShard indexShard = mock(IndexShard.class);
         when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
         when(searchContext.indexShard()).thenReturn(indexShard);
         when(searchContext.queryResult()).thenReturn(new QuerySearchResult());
         when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
@@ -280,6 +286,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.searcher()).thenReturn(contextIndexSearcher);
         IndexShard indexShard = mock(IndexShard.class);
         when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
         when(searchContext.indexShard()).thenReturn(indexShard);
         QuerySearchResult querySearchResult = new QuerySearchResult();
         when(searchContext.queryResult()).thenReturn(querySearchResult);
@@ -366,6 +373,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.searcher()).thenReturn(contextIndexSearcher);
         IndexShard indexShard = mock(IndexShard.class);
         when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
         when(searchContext.indexShard()).thenReturn(indexShard);
         when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
         when(searchContext.mapperService()).thenReturn(mapperService);
@@ -452,6 +460,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.searcher()).thenReturn(contextIndexSearcher);
         IndexShard indexShard = mock(IndexShard.class);
         when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
         when(searchContext.indexShard()).thenReturn(indexShard);
         when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
         when(searchContext.mapperService()).thenReturn(mapperService);
@@ -676,6 +685,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.searcher()).thenReturn(contextIndexSearcher);
         IndexShard indexShard = mock(IndexShard.class);
         when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
         when(searchContext.indexShard()).thenReturn(indexShard);
         when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
         when(searchContext.mapperService()).thenReturn(mapperService);
@@ -766,6 +776,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.searcher()).thenReturn(contextIndexSearcher);
         IndexShard indexShard = mock(IndexShard.class);
         when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
         when(searchContext.indexShard()).thenReturn(indexShard);
         when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
         when(searchContext.mapperService()).thenReturn(mapperService);
@@ -816,8 +827,10 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         HybridQueryPhaseSearcher hybridQueryPhaseSearcher = spy(new HybridQueryPhaseSearcher());
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         KNNVectorFieldType mockKNNVectorField = mock(KNNVectorFieldType.class);
+        KNNMappingConfig mockKNNMappingConfig = mock(KNNMappingConfig.class);
+        when(mockKNNVectorField.getKnnMappingConfig()).thenReturn(mockKNNMappingConfig);
         when(mockQueryShardContext.index()).thenReturn(dummyIndex);
-        when(mockKNNVectorField.getDimension()).thenReturn(4);
+        when(mockKNNVectorField.getKnnMappingConfig().getDimension()).thenReturn(4);
         when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
         MapperService mapperService = createMapperService();
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) mapperService.fieldType(TEXT_FIELD_NAME);
@@ -861,6 +874,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.searcher()).thenReturn(contextIndexSearcher);
         IndexShard indexShard = mock(IndexShard.class);
         when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
         when(searchContext.indexShard()).thenReturn(indexShard);
         when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
         when(searchContext.mapperService()).thenReturn(mapperService);
@@ -954,6 +968,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         when(searchContext.searcher()).thenReturn(contextIndexSearcher);
         IndexShard indexShard = mock(IndexShard.class);
         when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
         when(searchContext.indexShard()).thenReturn(indexShard);
         when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
         when(searchContext.mapperService()).thenReturn(mapperService);

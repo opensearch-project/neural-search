@@ -75,7 +75,8 @@ public class ValidateDependentPluginInstallationIT extends OpenSearchSecureRestT
             .endObject()
             .toString();
         mapping = mapping.substring(1, mapping.length() - 1);
-        createIndex(KNN_INDEX_NAME, Settings.EMPTY, mapping);
+        Settings settings = Settings.builder().put("index.knn", true).build();
+        createIndex(KNN_INDEX_NAME, settings, mapping);
     }
 
     private Set<String> getAllInstalledPlugins() throws IOException {
