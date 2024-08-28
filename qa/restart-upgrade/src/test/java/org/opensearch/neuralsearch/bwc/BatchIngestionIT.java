@@ -27,14 +27,14 @@ public class BatchIngestionIT extends AbstractRestartUpgradeRestTestCase {
         if (isRunningAgainstOldCluster()) {
             String modelId = uploadSparseEncodingModel();
             loadModel(modelId);
-            createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME);
+            createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME, batchSize);
             createIndexWithConfiguration(
                 indexName,
                 Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),
                 PIPELINE_NAME
             );
             List<Map<String, String>> docs = prepareDataForBulkIngestion(0, 5);
-            bulkAddDocuments(indexName, TEXT_FIELD_NAME, PIPELINE_NAME, docs, batchSize);
+            bulkAddDocuments(indexName, TEXT_FIELD_NAME, PIPELINE_NAME, docs);
             validateDocCountAndInfo(indexName, 5, () -> getDocById(indexName, "4"), EMBEDDING_FIELD_NAME, Map.class);
         } else {
             String modelId = null;
@@ -42,7 +42,7 @@ public class BatchIngestionIT extends AbstractRestartUpgradeRestTestCase {
             loadModel(modelId);
             try {
                 List<Map<String, String>> docs = prepareDataForBulkIngestion(5, 5);
-                bulkAddDocuments(indexName, TEXT_FIELD_NAME, PIPELINE_NAME, docs, batchSize);
+                bulkAddDocuments(indexName, TEXT_FIELD_NAME, PIPELINE_NAME, docs);
                 validateDocCountAndInfo(indexName, 10, () -> getDocById(indexName, "9"), EMBEDDING_FIELD_NAME, Map.class);
             } finally {
                 wipeOfTestResources(indexName, PIPELINE_NAME, modelId, null);
