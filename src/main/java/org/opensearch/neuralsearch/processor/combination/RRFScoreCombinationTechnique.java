@@ -12,18 +12,6 @@ import java.util.Map;
 @Log4j2
 /**
  * Abstracts combination of scores based on reciprocal rank fusion algorithm
-=======
-
-package org.opensearch.neuralsearch.processor.combination;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import lombok.ToString;
-
-/**
- * Abstracts combination of scores based on geometrical mean method
  */
 @ToString(onlyExplicitlyIncluded = true)
 public class RRFScoreCombinationTechnique implements ScoreCombinationTechnique {
