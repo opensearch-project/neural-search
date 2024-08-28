@@ -58,14 +58,16 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
         }
         List<QuerySearchResult> querySearchResults = getQueryPhaseSearchResults(searchPhaseResult);
         Optional<FetchSearchResult> fetchSearchResult = getFetchSearchResults(searchPhaseResult);
-        NormalizationExecuteDTO normalizeDTO = NormalizationExecuteDTO.builder()
+        // Builds data transfer object to pass into execute, DTO has nullable field for rankConstant which
+        // is only used for RRF technique
+        NormalizationExecuteDTO normalizationExecuteDTO = NormalizationExecuteDTO.builder()
             .querySearchResults(querySearchResults)
             .fetchSearchResultOptional(fetchSearchResult)
             .normalizationTechnique(normalizationTechnique)
             .combinationTechnique(combinationTechnique)
             .build();
-        normalizationWorkflow.execute(normalizeDTO);
-        // normalizationWorkflow.execute(querySearchResults, fetchSearchResult, normalizationTechnique, combinationTechnique);
+        normalizationWorkflow.execute(normalizationExecuteDTO);
+
     }
 
     @Override

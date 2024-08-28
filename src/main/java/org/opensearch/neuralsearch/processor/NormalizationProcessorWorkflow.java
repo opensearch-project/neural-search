@@ -47,9 +47,9 @@ public class NormalizationProcessorWorkflow {
 
     /**
      * Start execution of this workflow
-     * //@param querySearchResults input data with QuerySearchResult from multiple shards
-     * //@param normalizationTechnique technique for score normalization
-     * //@param combinationTechnique technique for score combination
+     * @param normalizationExecuteDTO contains querySearchResults input data with QuerySearchResult
+     * from multiple shards, fetchSearchResultOptional, normalizationTechnique technique for score normalization
+     *  combinationTechnique technique for score combination, and nullable rankConstant only used in RRF technique
      */
     public void execute(final NormalizationExecuteDTO normalizationExecuteDTO) {
         final List<QuerySearchResult> querySearchResults = normalizationExecuteDTO.getQuerySearchResults();
@@ -64,6 +64,7 @@ public class NormalizationProcessorWorkflow {
         log.debug("Pre-process query results");
         List<CompoundTopDocs> queryTopDocs = getQueryTopDocs(querySearchResults);
 
+        // Data transfer object for score normalization used to pass nullable rankConstant which is only used in RRF
         NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
             .queryTopDocs(queryTopDocs)
             .normalizationTechnique(normalizationTechnique)

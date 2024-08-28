@@ -12,10 +12,12 @@ import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 public interface ScoreNormalizationTechnique {
 
     /**
-     * Performs score normalization based on input normalization technique. Mutates input object by updating normalized scores.
-     * //@param queryTopDocs original query results from multiple shards and multiple sub-queries
+     * Performs score normalization based on input normalization technique.
+     * Mutates input object by updating normalized scores.
+     * @param normalizeScoresDTO is a data transfer object that contains queryTopDocs
+     * original query results from multiple shards and multiple sub-queries, ScoreNormalizationTechnique,
+     * and nullable rankConstant that is only used in RRF technique
      */
     void normalize(final NormalizeScoresDTO normalizeScoresDTO);
 
-    // void normalize(final List<CompoundTopDocs> queryTopDocs, Map<String, Object> rrfParams);
 }

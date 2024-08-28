@@ -9,7 +9,6 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 import java.util.stream.Collectors;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -47,28 +46,6 @@ public class RRFProcessor implements SearchPhaseResultsProcessor {
     private final ScoreCombinationTechnique combinationTechnique;
     private final NormalizationProcessorWorkflow normalizationWorkflow;
     private final int rankConstant;
-    //public static ScoreNormalizer scoreNormalizer;
-    //public static ScoreCombiner scoreCombiner;
-
-
-    /*private List<CompoundTopDocs> getQueryTopDocs(final List<QuerySearchResult> querySearchResults) {
-        List<CompoundTopDocs> queryTopDocs = querySearchResults.stream()
-            .filter(searchResult -> Objects.nonNull(searchResult.topDocs()))
-            .map(querySearchResult -> querySearchResult.topDocs().topDocs)
-            .map(CompoundTopDocs::new)
-            .collect(Collectors.toList());
-        if (queryTopDocs.size() != querySearchResults.size()) {
-            throw new IllegalStateException(
-                String.format(
-                    Locale.ROOT,
-                    "query results were not formatted correctly by the hybrid query; sizes of querySearchResults [%d] and queryTopDocs [%d] must match",
-                    querySearchResults.size(),
-                    queryTopDocs.size()
-                )
-            );
-        }
-        return queryTopDocs;
-    }*/
 
     /**
      * Method abstracts functional aspect of score normalization and score combination. Exact methods for each processing stage
@@ -78,30 +55,6 @@ public class RRFProcessor implements SearchPhaseResultsProcessor {
      */
     @Override
     public <Result extends SearchPhaseResult> void process(
-            final SearchPhaseResults<Result> searchPhaseResult,
-            final SearchPhaseContext searchPhaseContext
-    ) {
-        if (shouldSkipProcessor(searchPhaseResult)) {
-            log.debug("Query results are not compatible with RRF processor");
-            return;
-        }
-        List<QuerySearchResult> querySearchResults = getQueryPhaseSearchResults(searchPhaseResult);
-        Optional<FetchSearchResult> fetchSearchResult = getFetchSearchResults(searchPhaseResult);
-        //make data transfer object to pass in, execute will get object with 4 or 5 fields, depending
-        //on coming from NormalizationProcessor or RRFProcessor
-
-        NormalizationExecuteDTO normalizeExecuteDTO = NormalizationExecuteDTO.builder()
-                        .querySearchResults(querySearchResults)
-                        .fetchSearchResultOptional(fetchSearchResult)
-                        .normalizationTechnique(normalizationTechnique)
-                        .combinationTechnique(combinationTechnique)
-                        .rankConstant(rankConstant)
-                        .build();
-        normalizationWorkflow.execute(normalizeExecuteDTO);
-    }
-
-    //@Override
-    /*public <Result extends SearchPhaseResult> void process(
         final SearchPhaseResults<Result> searchPhaseResult,
         final SearchPhaseContext searchPhaseContext
     ) {
@@ -111,257 +64,18 @@ public class RRFProcessor implements SearchPhaseResultsProcessor {
         }
         List<QuerySearchResult> querySearchResults = getQueryPhaseSearchResults(searchPhaseResult);
         Optional<FetchSearchResult> fetchSearchResult = getFetchSearchResults(searchPhaseResult);
-        // this is for rare cases of 1 shard return from query phase, ignore this for now
-        final Optional<FetchSearchResult> fetchSearchResultOptional = fetchSearchResult;
-        // normalizationWorkflow.execute(querySearchResults, fetchSearchResult, normalizationTechnique, combinationTechnique);
-        // implement RRF algorithm using querySearchResults(may need more or different parameters)
-        *//**
-         * This is from NormalizationProcessorWorkflow and ScoreNormalizer
-         *//*
 
-        // save original state
-        List<Integer> unprocessedDocIds = unprocessedDocIds(querySearchResults);
-
-        // pre-process data
-        log.debug("Pre-process query results");
-        List<CompoundTopDocs> queryTopDocs = getQueryTopDocs(querySearchResults);
-
-        // normalize
-        log.debug("Do score normalization");
-        getRankScores(queryTopDocs);
-
-        CombineScoresDto combineScoresDTO = CombineScoresDto.builder()
-            .queryTopDocs(queryTopDocs)
-            .scoreCombinationTechnique(combinationTechnique)
+        // make data transfer object to pass in, execute will get object with 4 or 5 fields, depending
+        // on coming from NormalizationProcessor or RRFProcessor
+        NormalizationExecuteDTO normalizationExecuteDTO = NormalizationExecuteDTO.builder()
             .querySearchResults(querySearchResults)
-            .sort(evaluateSortCriteria(querySearchResults, queryTopDocs))
+            .fetchSearchResultOptional(fetchSearchResult)
+            .normalizationTechnique(normalizationTechnique)
+            .combinationTechnique(combinationTechnique)
+            .rankConstant(rankConstant)
             .build();
-
-        // combine
-        log.debug("Do score combination");
-        scoreCombiner.combineScores(combineScoresDTO);
-
-        // post-process data
-        log.debug("Post-process query results after score normalization and combination");
-        updateOriginalQueryResults(combineScoresDTO);
-        updateOriginalFetchResults(querySearchResults, fetchSearchResultOptional, unprocessedDocIds);
-
-        *//**
-         * This is from NormalizationProcessorWorkflow
-         *//*
-    }*/
-
-    // @Override
-    // public void normalize(final List<CompoundTopDocs> queryTopDocs) {
-    // get l2 norms for each sub-query
-    // List<Float> rankScoresPerSubquery = getRankScores(queryTopDocs);
-
-    // do normalization using actual score and l2 norm
-    // for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
-    // if (Objects.isNull(compoundQueryTopDocs)) {
-    // continue;
-    // }
-    // List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
-    // for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
-    // TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
-    // for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
-    // scoreDoc.score = rankScoresPerSubquery.get(j);
-    // }
-    // }
-    // }
-    // }
-
-    /*public void getRankScores(final List<CompoundTopDocs> queryTopDocs) {
-        // find any non-empty compound top docs, it's either empty if shard does not have any results for all of sub-queries,
-        // or it has results for all the sub-queries. In edge case of shard having results only for one sub-query, there will be TopDocs for
-        // rest of sub-queries with zero total hits
-        int numOfSubqueries = queryTopDocs.stream()
-            .filter(Objects::nonNull)
-            .filter(topDocs -> topDocs.getTopDocs().size() > 0)
-            .findAny()
-            .get()
-            .getTopDocs()
-            .size();
-        // float[] rankScores = new float[numOfSubqueries];
-        for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
-            if (Objects.isNull(compoundQueryTopDocs)) {
-                continue;
-            }
-            List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
-            int numSubQueriesBound = topDocsPerSubQuery.size();
-            for (int index = 0; index < numSubQueriesBound; index++) {
-                int numDocsPerSubQueryBound = topDocsPerSubQuery.get(index).scoreDocs.length;
-                for (int j = 0; j < numDocsPerSubQueryBound; j++) {
-                    topDocsPerSubQuery.get(index).scoreDocs[j].score = (float) (1 / (rankConstant + j + 1));
-                }
-
-            }
-        }
-    }*/
-
-    /**
-     * This section is copied and modified from L2ScoreNormalizationTechnique
-     */
-
-    /**
-     * This is from NormalizationProcessorWorkflow
-     */
-
-    /*private void updateOriginalQueryResults(final CombineScoresDto combineScoresDTO) {
-        final List<QuerySearchResult> querySearchResults = combineScoresDTO.getQuerySearchResults();
-        final List<CompoundTopDocs> queryTopDocs = getCompoundTopDocs(combineScoresDTO, querySearchResults);
-        final Sort sort = combineScoresDTO.getSort();
-        for (int index = 0; index < querySearchResults.size(); index++) {
-            QuerySearchResult querySearchResult = querySearchResults.get(index);
-            CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
-            TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(
-                buildTopDocs(updatedTopDocs, sort),
-                maxScoreForShard(updatedTopDocs, sort != null)
-            );
-            querySearchResult.topDocs(updatedTopDocsAndMaxScore, querySearchResult.sortValueFormats());
-        }
+        normalizationWorkflow.execute(normalizationExecuteDTO);
     }
-
-    private List<CompoundTopDocs> getCompoundTopDocs(CombineScoresDto combineScoresDTO, List<QuerySearchResult> querySearchResults) {
-        final List<CompoundTopDocs> queryTopDocs = combineScoresDTO.getQueryTopDocs();
-        if (querySearchResults.size() != queryTopDocs.size()) {
-            throw new IllegalStateException(
-                String.format(
-                    Locale.ROOT,
-                    "query results were not formatted correctly by the hybrid query; sizes of querySearchResults [%d] and queryTopDocs [%d] must match",
-                    querySearchResults.size(),
-                    queryTopDocs.size()
-                )
-            );
-        }
-        return queryTopDocs;
-    }
-
-    *//**
-     * Get Max score on Shard
-     * @param updatedTopDocs updatedTopDocs compound top docs on a shard
-     * @param isSortEnabled if sort is enabled or disabled
-     * @return  max score
-     *//*
-    private float maxScoreForShard(CompoundTopDocs updatedTopDocs, boolean isSortEnabled) {
-        if (updatedTopDocs.getTotalHits().value == 0 || updatedTopDocs.getScoreDocs().isEmpty()) {
-            return MAX_SCORE_WHEN_NO_HITS_FOUND;
-        }
-        if (isSortEnabled) {
-            float maxScore = MAX_SCORE_WHEN_NO_HITS_FOUND;
-            // In case of sorting iterate over score docs and deduce the max score
-            for (ScoreDoc scoreDoc : updatedTopDocs.getScoreDocs()) {
-                maxScore = Math.max(maxScore, scoreDoc.score);
-            }
-            return maxScore;
-        }
-        // If it is a normal hybrid query then first entry of score doc will have max score
-        return updatedTopDocs.getScoreDocs().get(0).score;
-    }
-
-    *//**
-     * Get Top Docs on Shard
-     * @param updatedTopDocs compound top docs on a shard
-     * @param sort  sort criteria
-     * @return TopDocs which will be instance of TopFieldDocs  if sort is enabled.
-     *//*
-    private TopDocs buildTopDocs(CompoundTopDocs updatedTopDocs, Sort sort) {
-        if (sort != null) {
-            return new TopFieldDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new FieldDoc[0]), sort.getSort());
-        }
-        return new TopDocs(updatedTopDocs.getTotalHits(), updatedTopDocs.getScoreDocs().toArray(new ScoreDoc[0]));
-    }
-
-    *//**
-     * A workaround for a single shard case, fetch has happened, and we need to update both fetch and query results
-     *//*
-    private void updateOriginalFetchResults(
-        final List<QuerySearchResult> querySearchResults,
-        final Optional<FetchSearchResult> fetchSearchResultOptional,
-        final List<Integer> docIds
-    ) {
-        if (fetchSearchResultOptional.isEmpty()) {
-            return;
-        }
-        // fetch results have list of document content, that includes start/stop and
-        // delimiter elements. list is in original order from query searcher. We need to:
-        // 1. filter out start/stop and delimiter elements
-        // 2. filter out duplicates from different sub-queries
-        // 3. update original scores to normalized and combined values
-        // 4. order scores based on normalized and combined values
-        FetchSearchResult fetchSearchResult = fetchSearchResultOptional.get();
-        // checking case when results are cached
-        boolean requestCache = Objects.nonNull(querySearchResults)
-            && !querySearchResults.isEmpty()
-            && Objects.nonNull(querySearchResults.get(0).getShardSearchRequest().requestCache())
-            && querySearchResults.get(0).getShardSearchRequest().requestCache();
-
-        SearchHit[] searchHitArray = getSearchHits(docIds, fetchSearchResult, requestCache);
-
-        // create map of docId to index of search hits. This solves (2), duplicates are from
-        // delimiter and start/stop elements, they all have same valid doc_id. For this map
-        // we use doc_id as a key, and all those special elements are collapsed into a single
-        // key-value pair.
-        Map<Integer, SearchHit> docIdToSearchHit = new HashMap<>();
-        for (int i = 0; i < searchHitArray.length; i++) {
-            int originalDocId = docIds.get(i);
-            docIdToSearchHit.put(originalDocId, searchHitArray[i]);
-        }
-
-        QuerySearchResult querySearchResult = querySearchResults.get(0);
-        TopDocs topDocs = querySearchResult.topDocs().topDocs;
-        // iterate over the normalized/combined scores, that solves (1) and (3)
-        SearchHit[] updatedSearchHitArray = Arrays.stream(topDocs.scoreDocs).map(scoreDoc -> {
-            // get fetched hit content by doc_id
-            SearchHit searchHit = docIdToSearchHit.get(scoreDoc.doc);
-            // update score to normalized/combined value (3)
-            searchHit.score(scoreDoc.score);
-            return searchHit;
-        }).toArray(SearchHit[]::new);
-        SearchHits updatedSearchHits = new SearchHits(
-            updatedSearchHitArray,
-            querySearchResult.getTotalHits(),
-            querySearchResult.getMaxScore()
-        );
-        fetchSearchResult.hits(updatedSearchHits);
-    }
-
-    private SearchHit[] getSearchHits(final List<Integer> docIds, final FetchSearchResult fetchSearchResult, final boolean requestCache) {
-        SearchHits searchHits = fetchSearchResult.hits();
-        SearchHit[] searchHitArray = searchHits.getHits();
-        // validate the both collections are of the same size
-        if (Objects.isNull(searchHitArray)) {
-            throw new IllegalStateException(
-                "score normalization processor cannot produce final query result, fetch query phase returns empty results"
-            );
-        }
-        // in case of cached request results of fetch and query may be different, only restriction is
-        // that number of query results size is greater or equal size of fetch results
-        if ((!requestCache && searchHitArray.length != docIds.size()) || requestCache && docIds.size() < searchHitArray.length) {
-            throw new IllegalStateException(
-                String.format(
-                    Locale.ROOT,
-                    "score normalization processor cannot produce final query result, the number of documents after fetch phase [%d] is different from number of documents from query phase [%d]",
-                    searchHitArray.length,
-                    docIds.size()
-                )
-            );
-        }
-        return searchHitArray;
-    }
-
-    private List<Integer> unprocessedDocIds(final List<QuerySearchResult> querySearchResults) {
-        List<Integer> docIds = querySearchResults.isEmpty()
-            ? List.of()
-            : Arrays.stream(querySearchResults.get(0).topDocs().topDocs.scoreDocs)
-                .map(scoreDoc -> scoreDoc.doc)
-                .collect(Collectors.toList());
-        return docIds;
-    }*/
-
-    /**
-     * This is from NormalizationProcessorWorkflow
-     */
 
     @Override
     public SearchPhaseName getBeforePhase() {

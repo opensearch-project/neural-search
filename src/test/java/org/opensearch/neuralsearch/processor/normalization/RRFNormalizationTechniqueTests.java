@@ -4,8 +4,6 @@
  */
 package org.opensearch.neuralsearch.processor.normalization;
 
-import java.util.List;
-
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
@@ -13,21 +11,25 @@ import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 
+import java.util.List;
+
 /**
- * Abstracts normalization of scores based on min-max method
+ * Abstracts testing of normalization of scores based on RRF method
  */
-public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase {
+public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     private static final float DELTA_FOR_ASSERTION = 0.0001f;
+    static final int RANK_CONSTANT = 60;
 
     public void testNormalization_whenResultFromOneShardOneSubQuery_thenSuccessful() {
-        MinMaxScoreNormalizationTechnique normalizationTechnique = new MinMaxScoreNormalizationTechnique();
+        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique();
+        Float[] scores = { 0.5f, 0.2f };
         List<CompoundTopDocs> compoundTopDocs = List.of(
             new CompoundTopDocs(
                 new TotalHits(2, TotalHits.Relation.EQUAL_TO),
                 List.of(
                     new TopDocs(
                         new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                        new ScoreDoc[] { new ScoreDoc(2, 0.5f), new ScoreDoc(4, 0.2f) }
+                        new ScoreDoc[] { new ScoreDoc(2, scores[0]), new ScoreDoc(4, scores[1]) }
                     )
                 ),
                 false
@@ -36,6 +38,7 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
             .queryTopDocs(compoundTopDocs)
             .normalizationTechnique(normalizationTechnique)
+            .rankConstant(RANK_CONSTANT)
             .build();
         normalizationTechnique.normalize(normalizeScoresDTO);
 
@@ -44,7 +47,7 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
             List.of(
                 new TopDocs(
                     new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                    new ScoreDoc[] { new ScoreDoc(2, 1.0f), new ScoreDoc(4, 0.001f) }
+                    new ScoreDoc[] { new ScoreDoc(2, rrfNorm(0)), new ScoreDoc(4, rrfNorm(1)) }
                 )
             ),
             false
@@ -59,19 +62,24 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
     }
 
     public void testNormalization_whenResultFromOneShardMultipleSubQueries_thenSuccessful() {
-        MinMaxScoreNormalizationTechnique normalizationTechnique = new MinMaxScoreNormalizationTechnique();
+        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique();
+        Float[] scoresQuery1 = { 0.5f, 0.2f };
+        Float[] scoresQuery2 = { 0.9f, 0.7f, 0.1f };
         List<CompoundTopDocs> compoundTopDocs = List.of(
             new CompoundTopDocs(
                 new TotalHits(3, TotalHits.Relation.EQUAL_TO),
                 List.of(
                     new TopDocs(
                         new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                        new ScoreDoc[] { new ScoreDoc(2, 0.5f), new ScoreDoc(4, 0.2f) }
+                        new ScoreDoc[] { new ScoreDoc(2, scoresQuery1[0]), new ScoreDoc(4, scoresQuery1[1]) }
                     ),
                     new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
                     new TopDocs(
                         new TotalHits(3, TotalHits.Relation.EQUAL_TO),
-                        new ScoreDoc[] { new ScoreDoc(3, 0.9f), new ScoreDoc(4, 0.7f), new ScoreDoc(2, 0.1f) }
+                        new ScoreDoc[] {
+                            new ScoreDoc(3, scoresQuery2[0]),
+                            new ScoreDoc(4, scoresQuery2[1]),
+                            new ScoreDoc(2, scoresQuery2[2]) }
                     )
                 ),
                 false
@@ -88,12 +96,12 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
             List.of(
                 new TopDocs(
                     new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                    new ScoreDoc[] { new ScoreDoc(2, 1.0f), new ScoreDoc(4, 0.001f) }
+                    new ScoreDoc[] { new ScoreDoc(2, rrfNorm(0)), new ScoreDoc(4, rrfNorm(1)) }
                 ),
                 new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
                 new TopDocs(
                     new TotalHits(3, TotalHits.Relation.EQUAL_TO),
-                    new ScoreDoc[] { new ScoreDoc(3, 1.0f), new ScoreDoc(4, 0.75f), new ScoreDoc(2, 0.001f) }
+                    new ScoreDoc[] { new ScoreDoc(3, rrfNorm(0)), new ScoreDoc(4, rrfNorm(1)), new ScoreDoc(2, rrfNorm(2)) }
                 )
             ),
             false
@@ -107,30 +115,44 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
     }
 
     public void testNormalization_whenResultFromMultipleShardsMultipleSubQueries_thenSuccessful() {
-        MinMaxScoreNormalizationTechnique normalizationTechnique = new MinMaxScoreNormalizationTechnique();
+        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique();
+        Float[] scoresShard1Query1 = { 0.5f, 0.2f };
+        Float[] scoresShard1and2Query3 = { 0.9f, 0.7f, 0.1f, 0.8f, 0.7f, 0.6f, 0.5f };
+        Float[] scoresShard2Query2 = { 2.9f, 0.7f };
         List<CompoundTopDocs> compoundTopDocs = List.of(
             new CompoundTopDocs(
                 new TotalHits(3, TotalHits.Relation.EQUAL_TO),
                 List.of(
                     new TopDocs(
                         new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                        new ScoreDoc[] { new ScoreDoc(2, 0.5f), new ScoreDoc(4, 0.2f) }
+                        new ScoreDoc[] { new ScoreDoc(2, scoresShard1Query1[0]), new ScoreDoc(4, scoresShard1Query1[1]) }
                     ),
                     new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
                     new TopDocs(
                         new TotalHits(3, TotalHits.Relation.EQUAL_TO),
-                        new ScoreDoc[] { new ScoreDoc(3, 0.9f), new ScoreDoc(4, 0.7f), new ScoreDoc(2, 0.1f) }
+                        new ScoreDoc[] {
+                            new ScoreDoc(3, scoresShard1and2Query3[0]),
+                            new ScoreDoc(4, scoresShard1and2Query3[1]),
+                            new ScoreDoc(2, scoresShard1and2Query3[2]) }
                     )
                 ),
                 false
             ),
             new CompoundTopDocs(
-                new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                new TotalHits(4, TotalHits.Relation.EQUAL_TO),
                 List.of(
                     new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
                     new TopDocs(
                         new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                        new ScoreDoc[] { new ScoreDoc(7, 2.9f), new ScoreDoc(9, 0.7f) }
+                        new ScoreDoc[] { new ScoreDoc(7, scoresShard2Query2[0]), new ScoreDoc(9, scoresShard2Query2[1]) }
+                    ),
+                    new TopDocs(
+                        new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] {
+                            new ScoreDoc(3, scoresShard1and2Query3[3]),
+                            new ScoreDoc(9, scoresShard1and2Query3[4]),
+                            new ScoreDoc(10, scoresShard1and2Query3[5]),
+                            new ScoreDoc(15, scoresShard1and2Query3[6]) }
                     )
                 ),
                 false
@@ -147,24 +169,32 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
             List.of(
                 new TopDocs(
                     new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                    new ScoreDoc[] { new ScoreDoc(2, 1.0f), new ScoreDoc(4, 0.001f) }
+                    new ScoreDoc[] { new ScoreDoc(2, rrfNorm(0)), new ScoreDoc(4, rrfNorm(1)) }
                 ),
                 new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
                 new TopDocs(
                     new TotalHits(3, TotalHits.Relation.EQUAL_TO),
-                    new ScoreDoc[] { new ScoreDoc(3, 1.0f), new ScoreDoc(4, 0.75f), new ScoreDoc(2, 0.001f) }
+                    new ScoreDoc[] { new ScoreDoc(3, rrfNorm(0)), new ScoreDoc(4, rrfNorm(1)), new ScoreDoc(2, rrfNorm(2)) }
                 )
             ),
             false
         );
 
         CompoundTopDocs expectedCompoundDocsShard2 = new CompoundTopDocs(
-            new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+            new TotalHits(4, TotalHits.Relation.EQUAL_TO),
             List.of(
                 new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
                 new TopDocs(
                     new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-                    new ScoreDoc[] { new ScoreDoc(7, 1.0f), new ScoreDoc(9, 0.001f) }
+                    new ScoreDoc[] { new ScoreDoc(7, rrfNorm(0)), new ScoreDoc(9, rrfNorm(1)) }
+                ),
+                new TopDocs(
+                    new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+                    new ScoreDoc[] {
+                        new ScoreDoc(3, rrfNorm(3)),
+                        new ScoreDoc(9, rrfNorm(4)),
+                        new ScoreDoc(10, rrfNorm(5)),
+                        new ScoreDoc(15, rrfNorm(6)) }
                 )
             ),
             false
@@ -180,6 +210,10 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         for (int i = 0; i < expectedCompoundDocsShard2.getTopDocs().size(); i++) {
             assertCompoundTopDocs(expectedCompoundDocsShard2.getTopDocs().get(i), compoundTopDocs.get(1).getTopDocs().get(i));
         }
+    }
+
+    private float rrfNorm(int rank) {
+        return 1.0f / (float) (rank + RANK_CONSTANT + 1);
     }
 
     private void assertCompoundTopDocs(TopDocs expected, TopDocs actual) {

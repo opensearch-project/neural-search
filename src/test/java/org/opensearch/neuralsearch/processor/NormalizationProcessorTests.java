@@ -271,8 +271,13 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         );
         SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
         normalizationProcessor.process(null, searchPhaseContext);
-
-        verify(normalizationProcessorWorkflow, never()).execute(any(), any(), any(), any());
+        NormalizationExecuteDTO normalizationExecuteDTO = NormalizationExecuteDTO.builder()
+            .querySearchResults(any())
+            .fetchSearchResultOptional(any())
+            .normalizationTechnique(any())
+            .combinationTechnique(any())
+            .build();
+        verify(normalizationProcessorWorkflow, never()).execute(normalizationExecuteDTO);
     }
 
     public void testNotHybridSearchResult_whenResultsNotEmptyAndNotHybridSearchResult_thenDoNotExecuteWorkflow() {
@@ -327,8 +332,14 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
         when(searchPhaseContext.getNumShards()).thenReturn(numberOfShards);
         normalizationProcessor.process(queryPhaseResultConsumer, searchPhaseContext);
+        NormalizationExecuteDTO normalizationExecuteDTO = NormalizationExecuteDTO.builder()
+            .querySearchResults(any())
+            .fetchSearchResultOptional(any())
+            .normalizationTechnique(any())
+            .combinationTechnique(any())
+            .build();
+        verify(normalizationProcessorWorkflow, never()).execute(normalizationExecuteDTO);
 
-        verify(normalizationProcessorWorkflow, never()).execute(any(), any(), any(), any());
     }
 
     public void testResultTypes_whenQueryAndFetchPresentAndSizeSame_thenCallNormalization() {
@@ -417,7 +428,13 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
             .collect(Collectors.toList());
 
         TestUtils.assertQueryResultScores(querySearchResults);
-        verify(normalizationProcessorWorkflow).execute(any(), any(), any(), any());
+        NormalizationExecuteDTO normalizationExecuteDTO = NormalizationExecuteDTO.builder()
+            .querySearchResults(any())
+            .fetchSearchResultOptional(any())
+            .normalizationTechnique(any())
+            .combinationTechnique(any())
+            .build();
+        verify(normalizationProcessorWorkflow).execute(normalizationExecuteDTO);
     }
 
     public void testResultTypes_whenQueryAndFetchPresentButSizeDifferent_thenFail() {

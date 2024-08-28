@@ -26,6 +26,7 @@ import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
 
 /**
  * Factory for query results RRF processor for search pipeline. Instantiates processor based on user provided input.
+ * If user doesn't pass in value for rank constant, value defaults to 60.
  */
 @AllArgsConstructor
 @Log4j2
@@ -34,7 +35,7 @@ public class RRFProcessorFactory implements Processor.Factory<SearchPhaseResults
     public static final String COMBINATION_CLAUSE = "combination";
     public static final String TECHNIQUE = "technique";
     public static final String PARAMETERS = "parameters";
-    public static final String RANK_CONSTANT = "rank_constant";
+    public static final int DEFAULT_RANK_CONSTANT = 60;
 
     private final NormalizationProcessorWorkflow normalizationProcessorWorkflow;
     private ScoreNormalizationFactory scoreNormalizationFactory;
@@ -50,13 +51,9 @@ public class RRFProcessorFactory implements Processor.Factory<SearchPhaseResults
         final Processor.PipelineContext pipelineContext
     ) throws Exception {
         Map<String, Object> normalizationClause = readOptionalMap(RRFProcessor.TYPE, tag, config, NORMALIZATION_CLAUSE);
+        // reads parameters passed in from user to get rank constant to be used in RRFNormalizationTechnique
         Map<String, Object> normalizationParams = readOptionalMap(RRFProcessor.TYPE, tag, normalizationClause, PARAMETERS);
-        /*Map<String, Object> rrfParams = (Map<String, Object>) readOptionalObject(
-            (Map<String, Object>) normalizationClause.get("combination"),
-            "parameters"
-        );*/
-        int rrfParams = (int) normalizationParams.getOrDefault("rank_constant", 60);
-        int rankConstant = rrfParams;
+        int rankConstant = (int) normalizationParams.getOrDefault("rank_constant", DEFAULT_RANK_CONSTANT);
         ScoreNormalizationTechnique normalizationTechnique = ScoreNormalizationFactory.DEFAULT_METHOD;
         if (Objects.nonNull(normalizationClause)) {
             String normalizationTechniqueName = readStringProperty(
@@ -71,7 +68,7 @@ public class RRFProcessorFactory implements Processor.Factory<SearchPhaseResults
 
         Map<String, Object> combinationClause = readOptionalMap(RRFProcessor.TYPE, tag, config, COMBINATION_CLAUSE);
 
-        ScoreCombinationTechnique scoreCombinationTechnique = ScoreCombinationFactory.DEFAULT_METHOD;
+        ScoreCombinationTechnique scoreCombinationTechnique = ScoreCombinationFactory.RRF_METHOD;
         if (Objects.nonNull(combinationClause)) {
             String combinationTechnique = readStringProperty(
                 RRFProcessor.TYPE,

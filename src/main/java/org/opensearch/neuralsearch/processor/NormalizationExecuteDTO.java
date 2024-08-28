@@ -18,7 +18,9 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * DTO object to hold data required for score normalization.
+ * DTO object to hold data required for score normalization passed to execute() function
+ * in NormalizationProcessorWorkflow. Field rankConstant
+ * used in RRF but will be null for other normalization techniques
  */
 @AllArgsConstructor
 @Builder
