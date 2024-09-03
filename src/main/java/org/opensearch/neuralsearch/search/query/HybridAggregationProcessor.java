@@ -32,6 +32,7 @@ public class HybridAggregationProcessor implements AggregationProcessor {
         delegateAggsProcessor.preProcess(context);
 
         if (isHybridQuery(context.query(), context)) {
+            // TODO remove this check after following issue https://github.com/opensearch-project/neural-search/issues/280 gets resolved.
             if (context.from() != 0) {
                 throw new IllegalArgumentException("In the current OpenSearch version pagination is not supported with hybrid query");
             }
