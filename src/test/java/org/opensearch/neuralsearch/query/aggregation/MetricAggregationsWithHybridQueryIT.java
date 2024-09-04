@@ -424,7 +424,8 @@ public class MetricAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
                 rangeFilterQuery,
                 null,
                 false,
-                null
+                null,
+                0
             );
 
             Map<String, Object> aggregations = getAggregations(searchResponseAsMap);

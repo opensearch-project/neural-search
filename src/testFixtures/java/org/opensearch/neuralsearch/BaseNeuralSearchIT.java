@@ -514,7 +514,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Map<String, String> requestParams,
         List<Object> aggs
     ) {
-        return search(index, queryBuilder, rescorer, resultSize, requestParams, aggs, null, null, false, null);
+        return search(index, queryBuilder, rescorer, resultSize, requestParams, aggs, null, null, false, null, 0);
     }
 
     @SneakyThrows
@@ -528,10 +528,11 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         QueryBuilder postFilterBuilder,
         List<SortBuilder<?>> sortBuilders,
         boolean trackScores,
-        List<Object> searchAfter
+        List<Object> searchAfter,
+        int from
     ) {
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
-
+        builder.field("from", from);
         if (queryBuilder != null) {
             builder.field("query");
             queryBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
