@@ -55,8 +55,11 @@ class TopDocsMerger {
      * @return merged TopDocsAndMaxScore object
      */
     public TopDocsAndMaxScore merge(final TopDocsAndMaxScore source, final TopDocsAndMaxScore newTopDocs) {
-        if (Objects.isNull(newTopDocs) || Objects.isNull(newTopDocs.topDocs) || newTopDocs.topDocs.totalHits.value == 0) {
+        if (isEmpty(newTopDocs)) {
             return source;
+        }
+        if (isEmpty(source)) {
+            return newTopDocs;
         }
         TotalHits mergedTotalHits = getMergedTotalHits(source, newTopDocs);
         TopDocsAndMaxScore result = new TopDocsAndMaxScore(
@@ -64,6 +67,20 @@ class TopDocsMerger {
             Math.max(source.maxScore, newTopDocs.maxScore)
         );
         return result;
+    }
+
+    /**
+     * Checks if TopDocsAndMaxScore is null, has no top docs or zero total hits
+     * @param topDocsAndMaxScore
+     * @return
+     */
+    private static boolean isEmpty(final TopDocsAndMaxScore topDocsAndMaxScore) {
+        if (Objects.isNull(topDocsAndMaxScore)
+            || Objects.isNull(topDocsAndMaxScore.topDocs)
+            || topDocsAndMaxScore.topDocs.totalHits.value == 0) {
+            return true;
+        }
+        return false;
     }
 
     private TotalHits getMergedTotalHits(final TopDocsAndMaxScore source, final TopDocsAndMaxScore newTopDocs) {
