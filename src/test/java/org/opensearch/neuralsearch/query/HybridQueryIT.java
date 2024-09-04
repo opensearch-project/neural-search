@@ -793,6 +793,46 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         }
     }
 
+    // TODO remove this test after following issue https://github.com/opensearch-project/neural-search/issues/280 gets resolved.
+    @SneakyThrows
+    public void testHybridQuery_whenFromIsSetInSearchRequest_thenFail() {
+        try {
+            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+            MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+            HybridQueryBuilder hybridQueryBuilderOnlyTerm = new HybridQueryBuilder();
+            hybridQueryBuilderOnlyTerm.add(matchQueryBuilder);
+
+            ResponseException exceptionNoNestedTypes = expectThrows(
+                ResponseException.class,
+                () -> search(
+                    TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD,
+                    hybridQueryBuilderOnlyTerm,
+                    null,
+                    10,
+                    Map.of("search_pipeline", SEARCH_PIPELINE),
+                    null,
+                    null,
+                    null,
+                    false,
+                    null,
+                    10
+                )
+
+            );
+
+            org.hamcrest.MatcherAssert.assertThat(
+                exceptionNoNestedTypes.getMessage(),
+                allOf(
+                    containsString("In the current OpenSearch version pagination is not supported with hybrid query"),
+                    containsString("illegal_argument_exception")
+                )
+            );
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, null, null, SEARCH_PIPELINE);
+        }
+    }
+
     @SneakyThrows
     private void initializeIndexIfNotExist(String indexName) throws IOException {
         if (TEST_BASIC_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_INDEX_NAME)) {
