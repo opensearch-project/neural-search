@@ -86,6 +86,7 @@ public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
             null,
             null,
             null,
+            null,
             null
         );
         Map<String, Object> responseWithKQuery = search(getIndexNameForTest(), neuralQueryBuilderWithKQuery, 1);

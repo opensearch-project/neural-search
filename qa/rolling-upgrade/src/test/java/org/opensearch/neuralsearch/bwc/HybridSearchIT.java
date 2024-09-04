@@ -16,6 +16,8 @@ import static org.opensearch.neuralsearch.util.TestUtils.TEXT_EMBEDDING_PROCESSO
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
+
+import org.opensearch.knn.index.query.rescore.RescoreContext;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
@@ -59,11 +61,13 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
-                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId);
+                    HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null);
+                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, hybridQueryBuilder);
                     addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_MIXED, null, null);
                 } else {
                     totalDocsCountMixed = 2 * NUM_DOCS_PER_ROUND;
-                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId);
+                    HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null);
+                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, hybridQueryBuilder);
                 }
                 break;
             case UPGRADED:
@@ -72,8 +76,10 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
                     int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
                     loadModel(modelId);
                     addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, null, null);
-                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId);
-                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, Map.of("ef_search", 100));
+                    HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null);
+                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, hybridQueryBuilder);
+                    hybridQueryBuilder = getQueryBuilder(modelId, Map.of("ef_search", 100), RescoreContext.getDefault());
+                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, hybridQueryBuilder);
                 } finally {
                     wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, SEARCH_PIPELINE_NAME);
                 }
@@ -83,16 +89,11 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
         }
     }
 
-    private void validateTestIndexOnUpgrade(final int numberOfDocs, final String modelId) throws Exception {
-        validateTestIndexOnUpgrade(numberOfDocs, modelId, null);
-    }
-
-    private void validateTestIndexOnUpgrade(final int numberOfDocs, final String modelId, Map<String, ?> methodParameters)
+    private void validateTestIndexOnUpgrade(final int numberOfDocs, final String modelId, HybridQueryBuilder hybridQueryBuilder)
         throws Exception {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
         loadModel(modelId);
-        HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, methodParameters);
         Map<String, Object> searchResponseAsMap = search(
             getIndexNameForTest(),
             hybridQueryBuilder,
@@ -109,7 +110,11 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
         }
     }
 
-    private HybridQueryBuilder getQueryBuilder(final String modelId, final Map<String, ?> methodParameters) {
+    private HybridQueryBuilder getQueryBuilder(
+        final String modelId,
+        final Map<String, ?> methodParameters,
+        final RescoreContext rescoreContext
+    ) {
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
         neuralQueryBuilder.fieldName("passage_embedding");
         neuralQueryBuilder.modelId(modelId);
@@ -117,6 +122,9 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
         neuralQueryBuilder.k(5);
         if (methodParameters != null) {
             neuralQueryBuilder.methodParameters(methodParameters);
+        }
+        if (rescoreContext != null) {
+            neuralQueryBuilder.rescoreContext(rescoreContext);
         }
 
         MatchQueryBuilder matchQueryBuilder = new MatchQueryBuilder("text", QUERY);
