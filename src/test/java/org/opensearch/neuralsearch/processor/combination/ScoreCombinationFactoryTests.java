@@ -34,6 +34,14 @@ public class ScoreCombinationFactoryTests extends OpenSearchQueryTestCase {
         assertTrue(scoreCombinationTechnique instanceof GeometricMeanScoreCombinationTechnique);
     }
 
+    public void testRRF_whenCreatingByName_thenReturnCorrectInstance() {
+        ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();
+        ScoreCombinationTechnique scoreCombinationTechnique = scoreCombinationFactory.createCombination("rrf");
+
+        assertNotNull(scoreCombinationTechnique);
+        assertTrue(scoreCombinationTechnique instanceof RRFScoreCombinationTechnique);
+    }
+
     public void testUnsupportedTechnique_whenPassingInvalidName_thenFail() {
         ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();
         IllegalArgumentException illegalArgumentException = expectThrows(
