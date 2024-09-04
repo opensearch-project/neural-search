@@ -55,6 +55,9 @@ class TopDocsMerger {
      * @return merged TopDocsAndMaxScore object
      */
     public TopDocsAndMaxScore merge(final TopDocsAndMaxScore source, final TopDocsAndMaxScore newTopDocs) {
+        // we need to check if any of source and destination top docs are empty. This is needed for case when concurrent segment search
+        // is enabled. In such case search is done by multiple workers, and results are saved in multiple doc collectors. Any on those
+        // results can be empty, in such case we can skip actual merge logic and just return result object.
         if (isEmpty(newTopDocs)) {
             return source;
         }
