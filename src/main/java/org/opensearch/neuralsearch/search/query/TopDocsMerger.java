@@ -55,8 +55,14 @@ class TopDocsMerger {
      * @return merged TopDocsAndMaxScore object
      */
     public TopDocsAndMaxScore merge(final TopDocsAndMaxScore source, final TopDocsAndMaxScore newTopDocs) {
-        if (Objects.isNull(newTopDocs) || Objects.isNull(newTopDocs.topDocs) || newTopDocs.topDocs.totalHits.value == 0) {
+        // we need to check if any of source and destination top docs are empty. This is needed for case when concurrent segment search
+        // is enabled. In such case search is done by multiple workers, and results are saved in multiple doc collectors. Any on those
+        // results can be empty, in such case we can skip actual merge logic and just return result object.
+        if (isEmpty(newTopDocs)) {
             return source;
+        }
+        if (isEmpty(source)) {
+            return newTopDocs;
         }
         TotalHits mergedTotalHits = getMergedTotalHits(source, newTopDocs);
         TopDocsAndMaxScore result = new TopDocsAndMaxScore(
@@ -64,6 +70,20 @@ class TopDocsMerger {
             Math.max(source.maxScore, newTopDocs.maxScore)
         );
         return result;
+    }
+
+    /**
+     * Checks if TopDocsAndMaxScore is null, has no top docs or zero total hits
+     * @param topDocsAndMaxScore
+     * @return
+     */
+    private static boolean isEmpty(final TopDocsAndMaxScore topDocsAndMaxScore) {
+        if (Objects.isNull(topDocsAndMaxScore)
+            || Objects.isNull(topDocsAndMaxScore.topDocs)
+            || topDocsAndMaxScore.topDocs.totalHits.value == 0) {
+            return true;
+        }
+        return false;
     }
 
     private TotalHits getMergedTotalHits(final TopDocsAndMaxScore source, final TopDocsAndMaxScore newTopDocs) {
