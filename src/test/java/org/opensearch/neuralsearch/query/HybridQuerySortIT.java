@@ -139,7 +139,8 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
             null,
             createSortBuilders(fieldSortOrderMap, false),
             false,
-            null
+            null,
+            0
         );
         List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6, 6);
         assertStockValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, LARGEST_STOCK_VALUE_IN_QUERY_RESULT, true, true);
@@ -168,7 +169,8 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
             null,
             createSortBuilders(fieldSortOrderMap, false),
             false,
-            null
+            null,
+            0
         );
         List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6, 6);
         assertStockValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, LARGEST_STOCK_VALUE_IN_QUERY_RESULT, true, false);
@@ -200,7 +202,8 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                     null,
                     createSortBuilders(fieldSortOrderMap, false),
                     true,
-                    null
+                    null,
+                    0
                 )
             );
         } finally {
@@ -234,7 +237,8 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                     null,
                     createSortBuilders(fieldSortOrderMap, false),
                     true,
-                    null
+                    null,
+                    0
                 )
             );
         } finally {
@@ -312,7 +316,8 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
             null,
             createSortBuilders(fieldSortOrderMap, false),
             false,
-            searchAfter
+            searchAfter,
+            0
         );
         List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 3, 6);
         assertStockValueWithSortOrderInHybridQueryResults(
@@ -348,7 +353,8 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
             null,
             createSortBuilders(fieldSortOrderMap, false),
             false,
-            searchAfter
+            searchAfter,
+            0
         );
         List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 5, 6);
         assertStockValueWithSortOrderInHybridQueryResults(
@@ -381,7 +387,8 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
             null,
             createSortBuilders(fieldSortOrderMap, false),
             false,
-            null
+            null,
+            0
         );
         List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6, 6);
         assertScoreWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, 1.0);
@@ -415,7 +422,8 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                     null,
                     createSortBuilders(fieldSortOrderMap, false),
                     true,
-                    searchAfter
+                    searchAfter,
+                    0
                 )
             );
         } finally {
@@ -450,7 +458,8 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                     null,
                     createSortBuilders(fieldSortOrderMap, false),
                     true,
-                    searchAfter
+                    searchAfter,
+                    0
                 )
             );
         } finally {
