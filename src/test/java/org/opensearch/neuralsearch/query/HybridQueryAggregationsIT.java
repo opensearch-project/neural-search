@@ -215,7 +215,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     rangeFilterQuery,
                     null,
                     false,
-                    null
+                    null,
+                    0
                 );
 
                 assertHitResultsFromQuery(1, searchResponseAsMap);
@@ -230,7 +231,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     null,
                     null,
                     false,
-                    null
+                    null,
+                    0
                 );
                 assertHitResultsFromQuery(2, searchResponseAsMap);
             } else if (!isSingleShard && hasPostFilterQuery) {
@@ -244,7 +246,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     rangeFilterQuery,
                     null,
                     false,
-                    null
+                    null,
+                    0
                 );
                 assertHitResultsFromQuery(2, searchResponseAsMap);
             } else {
@@ -258,7 +261,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     null,
                     null,
                     false,
-                    null
+                    null,
+                    0
                 );
                 assertHitResultsFromQuery(3, searchResponseAsMap);
             }
@@ -319,7 +323,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     rangeFilterQuery,
                     null,
                     false,
-                    null
+                    null,
+                    0
                 );
 
                 assertHitResultsFromQuery(1, searchResponseAsMap);
@@ -334,7 +339,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     null,
                     null,
                     false,
-                    null
+                    null,
+                    0
                 );
                 assertHitResultsFromQuery(2, searchResponseAsMap);
             } else if (!isSingleShard && hasPostFilterQuery) {
@@ -348,7 +354,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     rangeFilterQuery,
                     null,
                     false,
-                    null
+                    null,
+                    0
                 );
                 assertHitResultsFromQuery(4, searchResponseAsMap);
             } else {
@@ -362,7 +369,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                     null,
                     null,
                     false,
-                    null
+                    null,
+                    0
                 );
                 assertHitResultsFromQuery(3, searchResponseAsMap);
             }
