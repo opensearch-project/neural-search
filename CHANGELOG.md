@@ -12,11 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Maintenance
 ### Refactoring
 
-## [Unreleased 2.x](https://github.com/opensearch-project/neural-search/compare/2.16...2.x)
+## [Unreleased 2.x](https://github.com/opensearch-project/neural-search/compare/2.17...2.x)
 ### Features
 ### Enhancements
 ### Bug Fixes
-- Fixed merge logic in hybrid query for multiple shards case ([#877](https://github.com/opensearch-project/neural-search/pull/877))
 ### Infrastructure
 ### Documentation
 ### Maintenance
