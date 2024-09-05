@@ -18,6 +18,8 @@ import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
 import static org.opensearch.neuralsearch.util.TestUtils.TEXT_EMBEDDING_PROCESSOR;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
+
+import org.opensearch.knn.index.query.rescore.RescoreContext;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
@@ -69,8 +71,10 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
                 modelId = getModelId(getIngestionPipeline(pipelineName), TEXT_EMBEDDING_PROCESSOR);
                 loadModel(modelId);
                 addDocuments(getIndexNameForTest(), false);
-                validateTestIndex(modelId, getIndexNameForTest(), searchPipelineName);
-                validateTestIndex(modelId, getIndexNameForTest(), searchPipelineName, Map.of("ef_search", 100));
+                HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null);
+                validateTestIndex(getIndexNameForTest(), searchPipelineName, hybridQueryBuilder);
+                hybridQueryBuilder = getQueryBuilder(modelId, Map.of("ef_search", 100), RescoreContext.getDefault());
+                validateTestIndex(getIndexNameForTest(), searchPipelineName, hybridQueryBuilder);
             } finally {
                 wipeOfTestResources(getIndexNameForTest(), pipelineName, modelId, searchPipelineName);
             }
@@ -98,15 +102,10 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         );
     }
 
-    private void validateTestIndex(final String modelId, final String index, final String searchPipeline) {
-        validateTestIndex(modelId, index, searchPipeline, null);
-    }
-
-    private void validateTestIndex(final String modelId, final String index, final String searchPipeline, Map<String, ?> methodParameters) {
+    private void validateTestIndex(final String index, final String searchPipeline, HybridQueryBuilder queryBuilder) {
         int docCount = getDocCount(index);
         assertEquals(6, docCount);
-        HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, methodParameters);
-        Map<String, Object> searchResponseAsMap = search(index, hybridQueryBuilder, null, 1, Map.of("search_pipeline", searchPipeline));
+        Map<String, Object> searchResponseAsMap = search(index, queryBuilder, null, 1, Map.of("search_pipeline", searchPipeline));
         assertNotNull(searchResponseAsMap);
         int hits = getHitCount(searchResponseAsMap);
         assertEquals(1, hits);
@@ -116,7 +115,7 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         }
     }
 
-    private HybridQueryBuilder getQueryBuilder(final String modelId, Map<String, ?> methodParameters) {
+    private HybridQueryBuilder getQueryBuilder(final String modelId, Map<String, ?> methodParameters, RescoreContext rescoreContext) {
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
         neuralQueryBuilder.fieldName("passage_embedding");
         neuralQueryBuilder.modelId(modelId);
@@ -124,6 +123,9 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         neuralQueryBuilder.k(5);
         if (methodParameters != null) {
             neuralQueryBuilder.methodParameters(methodParameters);
+        }
+        if (rescoreContext != null) {
+            neuralQueryBuilder.rescoreContext(rescoreContext);
         }
 
         MatchQueryBuilder matchQueryBuilder = new MatchQueryBuilder("text", QUERY);
