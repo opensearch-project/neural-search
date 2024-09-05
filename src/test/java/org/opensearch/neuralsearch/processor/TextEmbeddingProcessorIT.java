@@ -124,6 +124,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
                 null,
                 null,
                 null,
+                null,
                 null
             );
             QueryBuilder queryNestedLowerLevel = QueryBuilders.nestedQuery(
