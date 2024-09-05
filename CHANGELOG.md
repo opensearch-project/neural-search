@@ -15,7 +15,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 2.x](https://github.com/opensearch-project/neural-search/compare/2.17...2.x)
 ### Features
 ### Enhancements
-- Adds rescore parameter support ([#885](https://github.com/opensearch-project/neural-search/pull/885)) 
 ### Bug Fixes
 ### Infrastructure
 ### Documentation
