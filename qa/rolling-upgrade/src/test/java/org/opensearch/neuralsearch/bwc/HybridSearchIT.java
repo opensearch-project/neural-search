@@ -50,16 +50,16 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
                 loadModel(modelId);
                 createPipelineProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
-                    getIndexNameForTest(),
-                    Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
-                    PIPELINE_NAME
+                        getIndexNameForTest(),
+                        Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
+                        PIPELINE_NAME
                 );
                 addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, null, null);
                 createSearchPipeline(
-                    SEARCH_PIPELINE_NAME,
-                    DEFAULT_NORMALIZATION_METHOD,
-                    DEFAULT_COMBINATION_METHOD,
-                    Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.7f }))
+                        SEARCH_PIPELINE_NAME,
+                        DEFAULT_NORMALIZATION_METHOD,
+                        DEFAULT_COMBINATION_METHOD,
+                        Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.7f }))
                 );
                 break;
             case MIXED:
@@ -98,20 +98,20 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
     }
 
     private void validateTestIndexOnUpgrade(
-        final int numberOfDocs,
-        final String modelId,
-        HybridQueryBuilder hybridQueryBuilder,
-        QueryBuilder rescorer
+            final int numberOfDocs,
+            final String modelId,
+            HybridQueryBuilder hybridQueryBuilder,
+            QueryBuilder rescorer
     ) throws Exception {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
         loadModel(modelId);
         Map<String, Object> searchResponseAsMap = search(
-            getIndexNameForTest(),
-            hybridQueryBuilder,
-            rescorer,
-            1,
-            Map.of("search_pipeline", SEARCH_PIPELINE_NAME)
+                getIndexNameForTest(),
+                hybridQueryBuilder,
+                rescorer,
+                1,
+                Map.of("search_pipeline", SEARCH_PIPELINE_NAME)
         );
         assertNotNull(searchResponseAsMap);
         int hits = getHitCount(searchResponseAsMap);
@@ -123,9 +123,9 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
     }
 
     private HybridQueryBuilder getQueryBuilder(
-        final String modelId,
-        final Map<String, ?> methodParameters,
-        final RescoreContext rescoreContextForNeuralQuery
+            final String modelId,
+            final Map<String, ?> methodParameters,
+            final RescoreContext rescoreContextForNeuralQuery
     ) {
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
         neuralQueryBuilder.fieldName(VECTOR_EMBEDDING_FIELD);
