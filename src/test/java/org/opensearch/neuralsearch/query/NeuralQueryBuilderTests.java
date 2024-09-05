@@ -14,6 +14,8 @@ import static org.opensearch.index.query.AbstractQueryBuilder.NAME_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.FILTER_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.MAX_DISTANCE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.MIN_SCORE_FIELD;
+import static org.opensearch.knn.index.query.KNNQueryBuilder.RESCORE_FIELD;
+import static org.opensearch.knn.index.query.KNNQueryBuilder.RESCORE_OVERSAMPLE_FIELD;
 import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.K_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MODEL_ID_FIELD;
@@ -52,6 +54,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
+import org.opensearch.knn.index.query.rescore.RescoreContext;
 import org.opensearch.neuralsearch.common.VectorUtil;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
@@ -136,10 +139,52 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         contentParser.nextToken();
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.fromXContent(contentParser);
 
+        assertEquals(Map.of("ef_search", 1000), neuralQueryBuilder.methodParameters());
         assertEquals(FIELD_NAME, neuralQueryBuilder.fieldName());
         assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
         assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
         assertEquals(K, neuralQueryBuilder.k());
+        assertNull(neuralQueryBuilder.rescoreContext());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_withRescoreContext_thenBuildSuccessfully() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": "string",
+                "query_image": "string",
+                "model_id": "string",
+                "k": int,
+                "rescore": {
+                    "oversample_factor" : int
+                }
+              }
+          }
+        */
+        setUpClusterService(Version.V_2_10_0);
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .field(K_FIELD.getPreferredName(), K)
+            .startObject(RESCORE_FIELD.getPreferredName())
+            .field(RESCORE_OVERSAMPLE_FIELD.getPreferredName(), 1)
+            .endObject()
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.fromXContent(contentParser);
+
+        assertEquals(FIELD_NAME, neuralQueryBuilder.fieldName());
+        assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
+        assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
+        assertEquals(K, neuralQueryBuilder.k());
+        assertEquals(RescoreContext.getDefault(), neuralQueryBuilder.rescoreContext());
+        assertNull(neuralQueryBuilder.methodParameters());
     }
 
     @SneakyThrows
@@ -679,13 +724,20 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
             .queryImage(IMAGE_TEXT)
             .modelId(MODEL_ID)
             .k(K)
+            .methodParameters(Map.of("ef_search", 100))
+            .rescoreContext(RescoreContext.getDefault())
             .vectorSupplier(TEST_VECTOR_SUPPLIER);
+
+        KNNQueryBuilder expected = KNNQueryBuilder.builder()
+            .k(K)
+            .fieldName(neuralQueryBuilder.fieldName())
+            .methodParameters(neuralQueryBuilder.methodParameters())
+            .rescoreContext(neuralQueryBuilder.rescoreContext())
+            .vector(TEST_VECTOR_SUPPLIER.get())
+            .build();
+
         QueryBuilder queryBuilder = neuralQueryBuilder.doRewrite(null);
-        assertTrue(queryBuilder instanceof KNNQueryBuilder);
-        KNNQueryBuilder knnQueryBuilder = (KNNQueryBuilder) queryBuilder;
-        assertEquals(neuralQueryBuilder.fieldName(), knnQueryBuilder.fieldName());
-        assertEquals((int) neuralQueryBuilder.k(), knnQueryBuilder.getK());
-        assertArrayEquals(TEST_VECTOR_SUPPLIER.get(), (float[]) knnQueryBuilder.vector(), 0.0f);
+        assertEquals(expected, queryBuilder);
     }
 
     public void testRewrite_whenFilterSet_thenKNNQueryBuilderFilterSet() {
