@@ -4,9 +4,11 @@
  */
 package org.opensearch.neuralsearch.plugin;
 
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -17,6 +19,7 @@ import org.mockito.MockitoAnnotations;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.common.util.concurrent.OpenSearchExecutors;
 import org.opensearch.env.Environment;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.ingest.IngestService;
@@ -42,6 +45,7 @@ import org.opensearch.search.pipeline.SearchResponseProcessor;
 import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.threadpool.ExecutorBuilder;
 import org.opensearch.threadpool.FixedExecutorBuilder;
+import org.opensearch.threadpool.ThreadPool;
 
 public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
@@ -49,9 +53,14 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
     @Mock
     private SearchPipelineService searchPipelineService;
-    private SearchPipelinePlugin.Parameters parameters;
+    private SearchPipelinePlugin.Parameters searchParameters;
+    @Mock
+    private IngestService ingestService;
+    private Processor.Parameters ingestParameters;
     @Mock
     private ClusterService clusterService;
+    @Mock
+    private ThreadPool threadPool;
 
     @Before
     public void setup() {
@@ -60,15 +69,29 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         plugin = new NeuralSearch();
 
         when(searchPipelineService.getClusterService()).thenReturn(clusterService);
-        parameters = new SearchPipelinePlugin.Parameters(null, null, null, null, null, null, searchPipelineService, null, null, null);
+        searchParameters = new SearchPipelinePlugin.Parameters(null, null, null, null, null, null, searchPipelineService, null, null, null);
+        ingestParameters = new Processor.Parameters(null, null, null, null, null, null, ingestService, null, null, null);
+        when(threadPool.executor(anyString())).thenReturn(OpenSearchExecutors.newDirectExecutorService());
     }
 
     public void testCreateComponents() {
-        // Empty method to explain why createComponents isn't covered by tests
-        //
-        // CreateComponents uses initialize() methods on three other classes which sets static class variables.
-        // This breaks the encapsulation of tests and produces unpredictable behavior in these other tests.
-        // It's possible to work around these limitations but not worth it just to cover some lines of code
+        // clientAccessor can not be null, and this is the only way to access it from this test
+        plugin.getProcessors(ingestParameters);
+        Collection<Object> components = plugin.createComponents(
+            null,
+            clusterService,
+            threadPool,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+        );
+
+        assertEquals(1, components.size());
     }
 
     public void testQuerySpecs() {
@@ -118,7 +141,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
     public void testSearchPhaseResultsProcessors() {
         Map<String, org.opensearch.search.pipeline.Processor.Factory<SearchPhaseResultsProcessor>> searchPhaseResultsProcessors = plugin
-            .getSearchPhaseResultsProcessors(parameters);
+            .getSearchPhaseResultsProcessors(searchParameters);
         assertNotNull(searchPhaseResultsProcessors);
         assertEquals(1, searchPhaseResultsProcessors.size());
         assertTrue(searchPhaseResultsProcessors.containsKey("normalization-processor"));
@@ -136,7 +159,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
     public void testRequestProcessors() {
         Map<String, org.opensearch.search.pipeline.Processor.Factory<SearchRequestProcessor>> processors = plugin.getRequestProcessors(
-            parameters
+            searchParameters
         );
         assertNotNull(processors);
         assertNotNull(processors.get(NeuralQueryEnricherProcessor.TYPE));
@@ -144,7 +167,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
     }
 
     public void testResponseProcessors() {
-        Map<String, Factory<SearchResponseProcessor>> processors = plugin.getResponseProcessors(parameters);
+        Map<String, Factory<SearchResponseProcessor>> processors = plugin.getResponseProcessors(searchParameters);
         assertNotNull(processors);
         assertNotNull(processors.get(RerankProcessor.TYPE));
     }
