@@ -48,6 +48,9 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
     private static final String TEST_DOCUMENT = "processor/chunker/TextChunkingTestDocument.json";
 
     private static final String TEST_LONG_DOCUMENT = "processor/chunker/TextChunkingTestLongDocument.json";
+    private static final String TEST_DOCUMENT_NO_BODY = "processor/chunker/TextChunkingTestDocumentNoBody.json";
+
+    private static final String IGNORE_MISSING_PIPELINE_NAME = "pipeline-with-ignore-missing";
 
     private static final Map<String, String> PIPELINE_CONFIGS_BY_NAME = Map.of(
         FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME,
@@ -59,7 +62,9 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         DELIMITER_PIPELINE_NAME,
         "processor/chunker/PipelineForDelimiterChunker.json",
         CASCADE_PIPELINE_NAME,
-        "processor/chunker/PipelineForCascadedChunker.json"
+        "processor/chunker/PipelineForCascadedChunker.json",
+        IGNORE_MISSING_PIPELINE_NAME,
+        "processor/chunker/PipelineWithIgnoreMissing.json"
     );
 
     @Before
@@ -170,6 +175,36 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
             expectedPassages.add(
                 " The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch."
             );
+            validateIndexIngestResults(INDEX_NAME, INTERMEDIATE_FIELD, expectedPassages);
+        } finally {
+            wipeOfTestResources(INDEX_NAME, CASCADE_PIPELINE_NAME, null, null);
+        }
+    }
+
+    @SneakyThrows
+    public void testTextChunkingProcessor_withIgnoreMissing() {
+        try {
+            createPipelineProcessor(IGNORE_MISSING_PIPELINE_NAME);
+            createTextChunkingIndex(INDEX_NAME, IGNORE_MISSING_PIPELINE_NAME);
+            ingestDocument(TEST_DOCUMENT_NO_BODY);
+
+            validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, null);
+
+            validateIndexIngestResults(INDEX_NAME, INTERMEDIATE_FIELD, null);
+        } finally {
+            wipeOfTestResources(INDEX_NAME, CASCADE_PIPELINE_NAME, null, null);
+        }
+    }
+
+    @SneakyThrows
+    public void testTextChunkingProcessor_withoutIgnoreMissing() {
+        try {
+            createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
+            createTextChunkingIndex(INDEX_NAME, CASCADE_PIPELINE_NAME);
+            ingestDocument(TEST_DOCUMENT_NO_BODY);
+
+            List<String> expectedPassages = new ArrayList<>();
+            validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
             validateIndexIngestResults(INDEX_NAME, INTERMEDIATE_FIELD, expectedPassages);
         } finally {
             wipeOfTestResources(INDEX_NAME, CASCADE_PIPELINE_NAME, null, null);

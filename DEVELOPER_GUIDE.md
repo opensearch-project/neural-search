@@ -43,8 +43,8 @@ One easy way to get Java 11 on *nix is to use [sdkman](https://sdkman.io/).
 ```bash
 curl -s "https://get.sdkman.io" | bash
 source ~/.sdkman/bin/sdkman-init.sh
-sdk install java 11.0.2-open
-sdk use java 11.0.2-open
+sdk install java 21.0.2-open
+sdk use java 21.0.2-open
 ```
 
 JDK versions 14 and 17 were tested and are fully supported for local development.
