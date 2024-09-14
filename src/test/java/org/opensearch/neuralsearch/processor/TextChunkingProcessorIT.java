@@ -48,7 +48,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
     private static final String TEST_DOCUMENT = "processor/chunker/TextChunkingTestDocument.json";
 
     private static final String TEST_LONG_DOCUMENT = "processor/chunker/TextChunkingTestLongDocument.json";
-    private static final String TEST_DOCUMENT_NO_BODY = "processor/chunker/TextChunkingTestDocumentNoBody.json";
+    private static final String TEST_MISSING_FIELD_DOCUMENT = "processor/chunker/TextChunkingTestMissingFieldDocument.json";
 
     private static final String IGNORE_MISSING_PIPELINE_NAME = "pipeline-with-ignore-missing";
 
@@ -186,13 +186,11 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         try {
             createPipelineProcessor(IGNORE_MISSING_PIPELINE_NAME);
             createTextChunkingIndex(INDEX_NAME, IGNORE_MISSING_PIPELINE_NAME);
-            ingestDocument(TEST_DOCUMENT_NO_BODY);
+            ingestDocument(TEST_MISSING_FIELD_DOCUMENT);
 
             validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, null);
-
-            validateIndexIngestResults(INDEX_NAME, INTERMEDIATE_FIELD, null);
         } finally {
-            wipeOfTestResources(INDEX_NAME, CASCADE_PIPELINE_NAME, null, null);
+            wipeOfTestResources(INDEX_NAME, IGNORE_MISSING_PIPELINE_NAME, null, null);
         }
     }
 
@@ -200,14 +198,13 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
     public void testTextChunkingProcessor_withoutIgnoreMissing() {
         try {
             createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
-            createTextChunkingIndex(INDEX_NAME, CASCADE_PIPELINE_NAME);
-            ingestDocument(TEST_DOCUMENT_NO_BODY);
+            createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
+            ingestDocument(TEST_MISSING_FIELD_DOCUMENT);
 
             List<String> expectedPassages = new ArrayList<>();
             validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
-            validateIndexIngestResults(INDEX_NAME, INTERMEDIATE_FIELD, expectedPassages);
         } finally {
-            wipeOfTestResources(INDEX_NAME, CASCADE_PIPELINE_NAME, null, null);
+            wipeOfTestResources(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME, null, null);
         }
     }
 
