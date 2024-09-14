@@ -188,7 +188,17 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
             createTextChunkingIndex(INDEX_NAME, IGNORE_MISSING_PIPELINE_NAME);
             ingestDocument(TEST_MISSING_FIELD_DOCUMENT);
 
-            validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, null);
+            assertEquals(1, getDocCount(INDEX_NAME));
+            MatchAllQueryBuilder query = new MatchAllQueryBuilder();
+            Map<String, Object> searchResults = search(INDEX_NAME, query, 10);
+            assertNotNull(searchResults);
+            Map<String, Object> document = getFirstInnerHit(searchResults);
+            assertNotNull(document);
+            Object documentSource = document.get("_source");
+            assert (documentSource instanceof Map);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> documentSourceMap = (Map<String, Object>) documentSource;
+            assert !(documentSourceMap).containsKey(OUTPUT_FIELD);
         } finally {
             wipeOfTestResources(INDEX_NAME, IGNORE_MISSING_PIPELINE_NAME, null, null);
         }
