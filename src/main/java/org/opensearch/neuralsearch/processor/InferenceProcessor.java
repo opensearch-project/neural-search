@@ -419,8 +419,14 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
             for (Map.Entry<String, Object> inputNestedMapEntry : ((Map<String, Object>) sourceValue).entrySet()) {
                 if (sourceAndMetadataMap.get(processorKey) instanceof List) {
                     // build nlp output for list of nested objects
+                    List<Object> inputNestedMapValue = (List<Object>) inputNestedMapEntry.getValue();
+                    int valueIndex = 0;
                     for (Map<String, Object> nestedElement : (List<Map<String, Object>>) sourceAndMetadataMap.get(processorKey)) {
-                        nestedElement.put(inputNestedMapEntry.getKey(), results.get(indexWrapper.index++));
+                        // Only fill in when value is not null
+                        if (valueIndex < inputNestedMapValue.size() && inputNestedMapValue.get(valueIndex) != null) {
+                            nestedElement.put(inputNestedMapEntry.getKey(), results.get(indexWrapper.index++));
+                        }
+                        valueIndex++;
                     }
                 } else {
                     Pair<String, Object> processedNestedKey = processNestedKey(inputNestedMapEntry);
