@@ -963,11 +963,13 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testExecute_withIgnoreMissing_thenSucceed() {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put("text_field", "");
+        sourceAndMetadata.put(IndexFieldMapper.NAME, INDEX_NAME);
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+
         TextChunkingProcessor processor = createIgnoreMissingInstance();
-        IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
         IngestDocument document = processor.execute(ingestDocument);
-        assert document.getSourceAndMetadata().containsKey(OUTPUT_FIELD);
-        Object passages = document.getSourceAndMetadata().get(OUTPUT_FIELD);
-        assertNull(passages);
+        assertFalse(document.getSourceAndMetadata().containsKey(OUTPUT_FIELD));
     }
 }
