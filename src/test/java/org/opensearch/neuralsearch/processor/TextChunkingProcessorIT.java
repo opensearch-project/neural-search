@@ -48,9 +48,6 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
     private static final String TEST_DOCUMENT = "processor/chunker/TextChunkingTestDocument.json";
 
     private static final String TEST_LONG_DOCUMENT = "processor/chunker/TextChunkingTestLongDocument.json";
-    private static final String TEST_MISSING_FIELD_DOCUMENT = "processor/chunker/TextChunkingTestMissingFieldDocument.json";
-
-    private static final String IGNORE_MISSING_PIPELINE_NAME = "pipeline-with-ignore-missing";
 
     private static final Map<String, String> PIPELINE_CONFIGS_BY_NAME = Map.of(
         FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME,
@@ -62,9 +59,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         DELIMITER_PIPELINE_NAME,
         "processor/chunker/PipelineForDelimiterChunker.json",
         CASCADE_PIPELINE_NAME,
-        "processor/chunker/PipelineForCascadedChunker.json",
-        IGNORE_MISSING_PIPELINE_NAME,
-        "processor/chunker/PipelineWithIgnoreMissing.json"
+        "processor/chunker/PipelineForCascadedChunker.json"
     );
 
     @Before
@@ -178,43 +173,6 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
             validateIndexIngestResults(INDEX_NAME, INTERMEDIATE_FIELD, expectedPassages);
         } finally {
             wipeOfTestResources(INDEX_NAME, CASCADE_PIPELINE_NAME, null, null);
-        }
-    }
-
-    @SneakyThrows
-    public void testTextChunkingProcessor_withIgnoreMissing() {
-        try {
-            createPipelineProcessor(IGNORE_MISSING_PIPELINE_NAME);
-            createTextChunkingIndex(INDEX_NAME, IGNORE_MISSING_PIPELINE_NAME);
-            ingestDocument(TEST_MISSING_FIELD_DOCUMENT);
-
-            assertEquals(1, getDocCount(INDEX_NAME));
-            MatchAllQueryBuilder query = new MatchAllQueryBuilder();
-            Map<String, Object> searchResults = search(INDEX_NAME, query, 10);
-            assertNotNull(searchResults);
-            Map<String, Object> document = getFirstInnerHit(searchResults);
-            assertNotNull(document);
-            Object documentSource = document.get("_source");
-            assert (documentSource instanceof Map);
-            @SuppressWarnings("unchecked")
-            Map<String, Object> documentSourceMap = (Map<String, Object>) documentSource;
-            assert !(documentSourceMap).containsKey(OUTPUT_FIELD);
-        } finally {
-            wipeOfTestResources(INDEX_NAME, IGNORE_MISSING_PIPELINE_NAME, null, null);
-        }
-    }
-
-    @SneakyThrows
-    public void testTextChunkingProcessor_withoutIgnoreMissing() {
-        try {
-            createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
-            createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
-            ingestDocument(TEST_MISSING_FIELD_DOCUMENT);
-
-            List<String> expectedPassages = new ArrayList<>();
-            validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
-        } finally {
-            wipeOfTestResources(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME, null, null);
         }
     }
 

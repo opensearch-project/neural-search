@@ -47,12 +47,12 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     public static final String ALGORITHM_FIELD = "algorithm";
     private static final String DEFAULT_ALGORITHM = FixedTokenLengthChunker.ALGORITHM_NAME;
     public static final String IGNORE_MISSING = "ignore_missing";
-    public static final Boolean DEFAULT_IGNORE_MISSING = false;
+    public static final boolean DEFAULT_IGNORE_MISSING = false;
 
     private int maxChunkLimit;
     private Chunker chunker;
     private final Map<String, Object> fieldMap;
-    private final Boolean ignoreMissing;
+    private final boolean ignoreMissing;
     private final ClusterService clusterService;
     private final AnalysisRegistry analysisRegistry;
     private final Environment environment;
@@ -256,7 +256,8 @@ public final class TextChunkingProcessor extends AbstractProcessor {
                 // chunk the object when target key is of leaf type (null, string and list of string)
                 Object chunkObject = sourceAndMetadataMap.get(originalKey);
 
-                if (!(ignoreMissing && chunkObject == null)) {
+                // if ignore missing is true null fields will return null. If ignore missing is false null fields will return an empty list
+                if (!ignoreMissing || Objects.nonNull(chunkObject)) {
                     List<String> chunkedResult = chunkLeafType(chunkObject, runtimeParameters);
                     sourceAndMetadataMap.put(String.valueOf(targetKey), chunkedResult);
                 }
