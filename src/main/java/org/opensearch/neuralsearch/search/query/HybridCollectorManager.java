@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.search.query;
 
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.CollectorManager;
@@ -18,6 +19,7 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.FieldDoc;
+import org.opensearch.OpenSearchException;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.lucene.search.FilteredCollector;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
@@ -33,6 +35,7 @@ import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.MultiCollectorWrapper;
 import org.opensearch.search.query.QuerySearchResult;
 import org.opensearch.search.query.ReduceableSearchResult;
+import org.opensearch.search.rescore.RescoreContext;
 import org.opensearch.search.sort.SortAndFormats;
 
 import java.io.IOException;
@@ -55,6 +58,7 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
  * In most cases it will be wrapped in MultiCollectorManager.
  */
 @RequiredArgsConstructor
+@Log4j2
 public abstract class HybridCollectorManager implements CollectorManager<Collector, ReduceableSearchResult> {
 
     private final int numHits;
@@ -67,6 +71,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     private final TopDocsMerger topDocsMerger;
     @Nullable
     private final FieldDoc after;
+    private final SearchContext searchContext;
 
     /**
      * Create new instance of HybridCollectorManager depending on the concurrent search beeing enabled or disabled.
@@ -101,17 +106,15 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 numDocs,
                 new HitsThresholdChecker(Math.max(numDocs, searchContext.trackTotalHitsUpTo())),
                 trackTotalHitsUpTo,
-                searchContext.sort(),
                 filteringWeight,
-                searchContext.searchAfter()
+                searchContext
             )
             : new HybridCollectorNonConcurrentManager(
                 numDocs,
                 new HitsThresholdChecker(Math.max(numDocs, searchContext.trackTotalHitsUpTo())),
                 trackTotalHitsUpTo,
-                searchContext.sort(),
                 filteringWeight,
-                searchContext.searchAfter()
+                searchContext
             );
     }
 
@@ -161,28 +164,83 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         List<ReduceableSearchResult> results = new ArrayList<>();
         DocValueFormat[] docValueFormats = getSortValueFormats(sortAndFormats);
         for (HybridSearchCollector collector : hybridSearchCollectors) {
-            TopDocsAndMaxScore topDocsAndMaxScore = getTopDocsAndAndMaxScore(collector, docValueFormats);
+            boolean isSortEnabled = docValueFormats != null;
+            TopDocsAndMaxScore topDocsAndMaxScore = getTopDocsAndAndMaxScore(collector, isSortEnabled);
             results.add((QuerySearchResult result) -> reduceCollectorResults(result, topDocsAndMaxScore, docValueFormats));
         }
         return results;
     }
 
-    private TopDocsAndMaxScore getTopDocsAndAndMaxScore(
-        final HybridSearchCollector hybridSearchCollector,
-        final DocValueFormat[] docValueFormats
-    ) {
-        TopDocs newTopDocs;
+    private TopDocsAndMaxScore getTopDocsAndAndMaxScore(final HybridSearchCollector hybridSearchCollector, final boolean isSortEnabled) {
         List topDocs = hybridSearchCollector.topDocs();
-        if (docValueFormats != null) {
-            newTopDocs = getNewTopFieldDocs(
-                getTotalHits(this.trackTotalHitsUpTo, topDocs, hybridSearchCollector.getTotalHits()),
-                topDocs,
-                sortAndFormats.sort.getSort()
-            );
-        } else {
-            newTopDocs = getNewTopDocs(getTotalHits(this.trackTotalHitsUpTo, topDocs, hybridSearchCollector.getTotalHits()), topDocs);
+        if (isSortEnabled) {
+            return getSortedTopDocsAndMaxScore(topDocs, hybridSearchCollector);
         }
-        return new TopDocsAndMaxScore(newTopDocs, hybridSearchCollector.getMaxScore());
+        return getTopDocsAndMaxScore(topDocs, hybridSearchCollector);
+    }
+
+    private TopDocsAndMaxScore getSortedTopDocsAndMaxScore(List<TopFieldDocs> topDocs, HybridSearchCollector hybridSearchCollector) {
+        TopDocs sortedTopDocs = getNewTopFieldDocs(
+            getTotalHits(this.trackTotalHitsUpTo, topDocs, hybridSearchCollector.getTotalHits()),
+            topDocs,
+            sortAndFormats.sort.getSort()
+        );
+        return new TopDocsAndMaxScore(sortedTopDocs, hybridSearchCollector.getMaxScore());
+    }
+
+    private TopDocsAndMaxScore getTopDocsAndMaxScore(List<TopDocs> topDocs, HybridSearchCollector hybridSearchCollector) {
+        List<TopDocs> rescoredTopDocs = rescore(topDocs);
+        float maxScore = calculateMaxScore(rescoredTopDocs, hybridSearchCollector.getMaxScore());
+        TopDocs finalTopDocs = getNewTopDocs(
+            getTotalHits(this.trackTotalHitsUpTo, rescoredTopDocs, hybridSearchCollector.getTotalHits()),
+            rescoredTopDocs
+        );
+        return new TopDocsAndMaxScore(finalTopDocs, maxScore);
+    }
+
+    private List<TopDocs> rescore(List<TopDocs> topDocs) {
+        List<RescoreContext> rescoreContexts = searchContext.rescore();
+        boolean shouldRescore = Objects.nonNull(rescoreContexts) && !rescoreContexts.isEmpty();
+        if (!shouldRescore) {
+            return topDocs;
+        }
+        List<TopDocs> rescoredTopDocs = topDocs;
+        for (RescoreContext ctx : rescoreContexts) {
+            rescoredTopDocs = rescoredTopDocs(ctx, rescoredTopDocs);
+        }
+        return rescoredTopDocs;
+    }
+
+    /**
+     * Rescores the top documents using the provided context. The input topDocs may be modified during this process.
+     */
+    private List<TopDocs> rescoredTopDocs(final RescoreContext ctx, final List<TopDocs> topDocs) {
+        List<TopDocs> result = new ArrayList<>(topDocs.size());
+        for (TopDocs topDoc : topDocs) {
+            try {
+                result.add(ctx.rescorer().rescore(topDoc, searchContext.searcher(), ctx));
+            } catch (IOException exception) {
+                log.error("rescore failed for hybrid query", exception);
+                throw new OpenSearchException("rescore failed", exception);
+            }
+        }
+        return result;
+    }
+
+    /**
+    * Calculates the maximum score from the provided TopDocs, considering rescoring.
+    */
+    private float calculateMaxScore(List<TopDocs> topDocsList, float initialMaxScore) {
+        List<RescoreContext> rescoreContexts = searchContext.rescore();
+        if (Objects.nonNull(rescoreContexts) && !rescoreContexts.isEmpty()) {
+            for (TopDocs topDocs : topDocsList) {
+                if (Objects.nonNull(topDocs.scoreDocs) && topDocs.scoreDocs.length > 0) {
+                    // first top doc for each sub-query has the max score because top docs are sorted by score desc
+                    initialMaxScore = Math.max(initialMaxScore, topDocs.scoreDocs[0].score);
+                }
+            }
+        }
+        return initialMaxScore;
     }
 
     private List<HybridSearchCollector> getHybridSearchCollectors(final Collection<Collector> collectors) {
@@ -415,18 +473,18 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             int numHits,
             HitsThresholdChecker hitsThresholdChecker,
             int trackTotalHitsUpTo,
-            SortAndFormats sortAndFormats,
             Weight filteringWeight,
-            ScoreDoc searchAfter
+            SearchContext searchContext
         ) {
             super(
                 numHits,
                 hitsThresholdChecker,
                 trackTotalHitsUpTo,
-                sortAndFormats,
+                searchContext.sort(),
                 filteringWeight,
-                new TopDocsMerger(sortAndFormats),
-                (FieldDoc) searchAfter
+                new TopDocsMerger(searchContext.sort()),
+                searchContext.searchAfter(),
+                searchContext
             );
             scoreCollector = Objects.requireNonNull(super.newCollector(), "collector for hybrid query cannot be null");
         }
@@ -453,18 +511,18 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             int numHits,
             HitsThresholdChecker hitsThresholdChecker,
             int trackTotalHitsUpTo,
-            SortAndFormats sortAndFormats,
             Weight filteringWeight,
-            ScoreDoc searchAfter
+            SearchContext searchContext
         ) {
             super(
                 numHits,
                 hitsThresholdChecker,
                 trackTotalHitsUpTo,
-                sortAndFormats,
+                searchContext.sort(),
                 filteringWeight,
-                new TopDocsMerger(sortAndFormats),
-                (FieldDoc) searchAfter
+                new TopDocsMerger(searchContext.sort()),
+                searchContext.searchAfter(),
+                searchContext
             );
         }
     }
