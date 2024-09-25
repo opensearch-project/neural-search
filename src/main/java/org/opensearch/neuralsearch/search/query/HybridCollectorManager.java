@@ -22,6 +22,7 @@ import org.apache.lucene.search.FieldDoc;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.lucene.search.FilteredCollector;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
+import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 import org.opensearch.neuralsearch.search.collector.HybridSearchCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopFieldDocSortCollector;
@@ -82,7 +83,8 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     public static CollectorManager createHybridCollectorManager(final SearchContext searchContext) throws IOException {
         final IndexReader reader = searchContext.searcher().getIndexReader();
         final int totalNumDocs = Math.max(0, reader.numDocs());
-        int numDocs = Math.min(searchContext.from() + searchContext.size(), totalNumDocs);
+        HybridQuery hybridQuery = (HybridQuery) searchContext.query();
+        int numDocs = Math.min(hybridQuery.getPaginationDepth(), totalNumDocs);
         int trackTotalHitsUpTo = searchContext.trackTotalHitsUpTo();
         if (searchContext.sort() != null) {
             validateSortCriteria(searchContext, searchContext.trackScores());

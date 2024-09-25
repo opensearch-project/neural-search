@@ -34,13 +34,14 @@ import org.opensearch.neuralsearch.executors.HybridQueryRewriteCollectorManager;
 public final class HybridQuery extends Query implements Iterable<Query> {
 
     private final List<Query> subQueries;
+    private int paginationDepth;
 
     /**
      * Create new instance of hybrid query object based on collection of sub queries and filter query
      * @param subQueries collection of queries that are executed individually and contribute to a final list of combined scores
      * @param filterQueries list of filters that will be applied to each sub query. Each filter from the list is added as bool "filter" clause. If this is null sub queries will be executed as is
      */
-    public HybridQuery(final Collection<Query> subQueries, final List<Query> filterQueries) {
+    public HybridQuery(final Collection<Query> subQueries, final List<Query> filterQueries, int paginationDepth) {
         Objects.requireNonNull(subQueries, "collection of queries must not be null");
         if (subQueries.isEmpty()) {
             throw new IllegalArgumentException("collection of queries must not be empty");
@@ -57,10 +58,11 @@ public final class HybridQuery extends Query implements Iterable<Query> {
             }
             this.subQueries = modifiedSubQueries;
         }
+        this.paginationDepth = paginationDepth;
     }
 
-    public HybridQuery(final Collection<Query> subQueries) {
-        this(subQueries, List.of());
+    public HybridQuery(final Collection<Query> subQueries, final int paginationDepth) {
+        this(subQueries, List.of(), paginationDepth);
     }
 
     /**
@@ -128,7 +130,7 @@ public final class HybridQuery extends Query implements Iterable<Query> {
             return super.rewrite(indexSearcher);
         }
         final List<Query> rewrittenSubQueries = manager.getQueriesAfterRewrite(collectors);
-        return new HybridQuery(rewrittenSubQueries);
+        return new HybridQuery(rewrittenSubQueries, paginationDepth);
     }
 
     private Void rewriteQuery(Query query, HybridQueryExecutorCollector<IndexSearcher, Map.Entry<Query, Boolean>> collector) {
@@ -188,6 +190,10 @@ public final class HybridQuery extends Query implements Iterable<Query> {
 
     public Collection<Query> getSubQueries() {
         return Collections.unmodifiableCollection(subQueries);
+    }
+
+    public int getPaginationDepth() {
+        return paginationDepth;
     }
 
     /**
