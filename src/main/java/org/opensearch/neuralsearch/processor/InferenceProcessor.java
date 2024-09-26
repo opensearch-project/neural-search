@@ -285,7 +285,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         if (sourceValue instanceof Map) {
             ((Map<String, Object>) sourceValue).forEach((k, v) -> createInferenceListForMapTypeInput(v, texts));
         } else if (sourceValue instanceof List) {
-            texts.addAll(((List<String>) sourceValue));
+            ((List<String>) sourceValue).stream().filter(Objects::nonNull).forEach(texts::add);
         } else {
             if (sourceValue == null) return;
             texts.add(sourceValue.toString());
