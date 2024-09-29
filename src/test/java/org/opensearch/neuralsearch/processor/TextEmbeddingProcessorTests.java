@@ -739,6 +739,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         assertNotNull(nestedObj.get(1).get("vectorField"));
     }
 
+    @SuppressWarnings("unchecked")
     public void testBuildVectorOutput_withNestedListHasNotForEmbeddingField_successful() {
         Map<String, Object> config = createNestedListConfiguration();
         IngestDocument ingestDocument = createNestedListWithNotEmbeddingFieldIngestDocument();
@@ -768,6 +769,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         assertNotNull(nestedObj.get(1).get("vectorField"));
     }
 
+    @SuppressWarnings("unchecked")
     public void testBuildVectorOutput_withNestedListHasNotForEmbeddingField_Level2_successful() {
         Map<String, Object> config = createNestedList2LevelConfiguration();
         IngestDocument ingestDocument = create2LevelNestedListWithNotEmbeddingFieldIngestDocument();

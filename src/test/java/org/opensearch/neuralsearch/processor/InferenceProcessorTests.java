@@ -101,10 +101,7 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
         assertEquals(docCount, captor.getValue().size());
         for (int i = 0; i < docCount; ++i) {
             assertNotNull(captor.getValue().get(i).getException());
-            assertEquals(
-                "list type field [key1] has null, cannot process it",
-                captor.getValue().get(i).getException().getMessage()
-            );
+            assertEquals("list type field [key1] has null, cannot process it", captor.getValue().get(i).getException().getMessage());
             assertEquals(wrapperList.get(i).getIngestDocument(), captor.getValue().get(i).getIngestDocument());
         }
         verify(clientAccessor, never()).inferenceSentences(anyString(), anyList(), any());
