@@ -80,6 +80,11 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         return TYPE;
     }
 
+    // if ignore missing is true null fields return null. If ignore missing is false null fields return an empty list
+    private boolean shouldProcessChunk(Object chunkObject) {
+        return !ignoreMissing || Objects.nonNull(chunkObject);
+    }
+
     @SuppressWarnings("unchecked")
     private void parseAlgorithmMap(final Map<String, Object> algorithmMap) {
         if (algorithmMap.size() > 1) {
@@ -256,8 +261,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
                 // chunk the object when target key is of leaf type (null, string and list of string)
                 Object chunkObject = sourceAndMetadataMap.get(originalKey);
 
-                // if ignore missing is true null fields will return null. If ignore missing is false null fields will return an empty list
-                if (!ignoreMissing || Objects.nonNull(chunkObject)) {
+                if (shouldProcessChunk(chunkObject)) {
                     List<String> chunkedResult = chunkLeafType(chunkObject, runtimeParameters);
                     sourceAndMetadataMap.put(String.valueOf(targetKey), chunkedResult);
                 }
