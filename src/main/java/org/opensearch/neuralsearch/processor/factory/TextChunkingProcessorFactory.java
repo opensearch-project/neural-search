@@ -14,7 +14,10 @@ import org.opensearch.neuralsearch.processor.TextChunkingProcessor;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.TYPE;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.FIELD_MAP_FIELD;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.ALGORITHM_FIELD;
+import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.IGNORE_MISSING;
+import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.DEFAULT_IGNORE_MISSING;
 import static org.opensearch.ingest.ConfigurationUtils.readMap;
+import static org.opensearch.ingest.ConfigurationUtils.readBooleanProperty;
 
 /**
  * Factory for chunking ingest processor for ingestion pipeline.
@@ -45,6 +48,16 @@ public class TextChunkingProcessorFactory implements Processor.Factory {
     ) throws Exception {
         Map<String, Object> fieldMap = readMap(TYPE, processorTag, config, FIELD_MAP_FIELD);
         Map<String, Object> algorithmMap = readMap(TYPE, processorTag, config, ALGORITHM_FIELD);
-        return new TextChunkingProcessor(processorTag, description, fieldMap, algorithmMap, environment, clusterService, analysisRegistry);
+        boolean ignoreMissing = readBooleanProperty(TYPE, processorTag, config, IGNORE_MISSING, DEFAULT_IGNORE_MISSING);
+        return new TextChunkingProcessor(
+            processorTag,
+            description,
+            fieldMap,
+            algorithmMap,
+            ignoreMissing,
+            environment,
+            clusterService,
+            analysisRegistry
+        );
     }
 }
