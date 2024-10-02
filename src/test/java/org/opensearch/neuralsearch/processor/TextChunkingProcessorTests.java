@@ -42,6 +42,7 @@ import org.opensearch.test.OpenSearchTestCase;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.TYPE;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.FIELD_MAP_FIELD;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.ALGORITHM_FIELD;
+import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.IGNORE_MISSING;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.MAX_CHUNK_LIMIT_FIELD;
 
 public class TextChunkingProcessorTests extends OpenSearchTestCase {
@@ -177,6 +178,20 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
         config.put(FIELD_MAP_FIELD, fieldMap);
         config.put(ALGORITHM_FIELD, algorithmMap);
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        return textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+    }
+
+    @SneakyThrows
+    private TextChunkingProcessor createIgnoreMissingInstance() {
+        Map<String, Object> config = new HashMap<>();
+        Map<String, Object> fieldMap = new HashMap<>();
+        Map<String, Object> algorithmMap = new HashMap<>();
+        algorithmMap.put(DelimiterChunker.ALGORITHM_NAME, createDelimiterParameters());
+        fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
+        config.put(FIELD_MAP_FIELD, fieldMap);
+        config.put(ALGORITHM_FIELD, algorithmMap);
+        config.put(IGNORE_MISSING, true);
         Map<String, Processor.Factory> registry = new HashMap<>();
         return textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
     }
@@ -944,5 +959,17 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         expectedPassages.add("This is an example document to be chunked.");
         expectedPassages.add(" The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.");
         assertEquals(expectedPassages, passages);
+    }
+
+    @SneakyThrows
+    public void testExecute_withIgnoreMissing_thenSucceed() {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put("text_field", "");
+        sourceAndMetadata.put(IndexFieldMapper.NAME, INDEX_NAME);
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+
+        TextChunkingProcessor processor = createIgnoreMissingInstance();
+        IngestDocument document = processor.execute(ingestDocument);
+        assertFalse(document.getSourceAndMetadata().containsKey(OUTPUT_FIELD));
     }
 }
