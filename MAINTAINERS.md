@@ -21,7 +21,6 @@ This document contains a list of maintainers in this repo. See [opensearch-proje
 | Vijayan Balasubramanian | [VijayanB](https://github.com/VijayanB)                   | Amazon      |
 | Varun Jain              | [vibrantvarun](https://github.com/vibrantvarun)           | Amazon      |
 | Zhichao Geng            | [zhichao-aws](https://github.com/zhichao-aws)             | Amazon      |
-| Yuye Zhu                | [yueye-aws](https://github.com/yuye-aws)                  | Amazon      | 
 
 ## Emeritus
 
