@@ -5,6 +5,8 @@
 package org.opensearch.neuralsearch.search.query;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
+
+import java.io.IOException;
 import java.util.Arrays;
 import lombok.SneakyThrows;
 import org.apache.lucene.document.FieldType;
@@ -47,6 +49,7 @@ import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.search.collector.HybridTopScoreDocCollector;
 import org.opensearch.neuralsearch.search.collector.PagingFieldCollector;
 import org.opensearch.neuralsearch.search.collector.SimpleFieldCollector;
+import org.opensearch.neuralsearch.search.query.exception.HybridSearchRescoreQueryException;
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.SearchContext;
@@ -66,6 +69,7 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 
 import org.opensearch.search.rescore.QueryRescorerBuilder;
 import org.opensearch.search.rescore.RescoreContext;
+import org.opensearch.search.rescore.Rescorer;
 import org.opensearch.search.rescore.RescorerBuilder;
 import org.opensearch.search.sort.SortAndFormats;
 
@@ -1003,5 +1007,75 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         w2.close();
         reader2.close();
         directory2.close();
+    }
+
+    @SneakyThrows
+    public void testReduceAndRescore_whenRescorerThrowsException_thenFail() {
+        SearchContext searchContext = mock(SearchContext.class);
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+
+        HybridQuery hybridQueryWithTerm = new HybridQuery(
+            List.of(
+                QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1).toQuery(mockQueryShardContext),
+                QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY2).toQuery(mockQueryShardContext)
+            )
+        );
+        when(searchContext.query()).thenReturn(hybridQueryWithTerm);
+        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+        IndexReader indexReader = mock(IndexReader.class);
+        when(indexReader.numDocs()).thenReturn(3);
+        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
+        when(searchContext.searcher()).thenReturn(indexSearcher);
+        when(searchContext.size()).thenReturn(2);
+        IndexReaderContext indexReaderContext = mock(IndexReaderContext.class);
+        when(indexReader.getContext()).thenReturn(indexReaderContext);
+
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
+        when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
+        when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
+
+        Directory directory = newDirectory();
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
+        ft.setOmitNorms(random().nextBoolean());
+        ft.freeze();
+
+        int docId1 = RandomizedTest.randomInt();
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId1, TEST_DOC_TEXT1, ft));
+        w.flush();
+        w.commit();
+
+        IndexReader reader = DirectoryReader.open(w);
+        IndexSearcher searcher = newSearcher(reader);
+
+        RescoreContext rescoreContext = mock(RescoreContext.class);
+        Rescorer rescorer = mock(Rescorer.class);
+        when(rescoreContext.rescorer()).thenReturn(rescorer);
+        when(rescorer.rescore(any(), any(), any())).thenThrow(new IOException("something happened with rescorer"));
+        List<RescoreContext> rescoreContexts = List.of(rescoreContext);
+        when(searchContext.rescore()).thenReturn(rescoreContexts);
+
+        CollectorManager hybridCollectorManager1 = HybridCollectorManager.createHybridCollectorManager(searchContext);
+        HybridTopScoreDocCollector collector = (HybridTopScoreDocCollector) hybridCollectorManager1.newCollector();
+
+        Weight weight = new HybridQueryWeight(hybridQueryWithTerm, searcher, ScoreMode.TOP_SCORES, BoostingQueryBuilder.DEFAULT_BOOST);
+        collector.setWeight(weight);
+
+        LeafReaderContext leafReaderContext = searcher.getIndexReader().leaves().get(0);
+        LeafCollector leafCollector = collector.getLeafCollector(leafReaderContext);
+
+        BulkScorer scorer = weight.bulkScorer(leafReaderContext);
+        scorer.score(leafCollector, leafReaderContext.reader().getLiveDocs());
+        leafCollector.finish();
+
+        expectThrows(HybridSearchRescoreQueryException.class, () -> hybridCollectorManager1.reduce(List.of()));
+
+        // release resources
+        w.close();
+        reader.close();
+        directory.close();
     }
 }

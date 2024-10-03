@@ -19,7 +19,6 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.FieldDoc;
-import org.opensearch.OpenSearchException;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.lucene.search.FilteredCollector;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
@@ -37,6 +36,7 @@ import org.opensearch.search.query.QuerySearchResult;
 import org.opensearch.search.query.ReduceableSearchResult;
 import org.opensearch.search.rescore.RescoreContext;
 import org.opensearch.search.sort.SortAndFormats;
+import org.opensearch.neuralsearch.search.query.exception.HybridSearchRescoreQueryException;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -189,23 +189,22 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     }
 
     private TopDocsAndMaxScore getTopDocsAndMaxScore(List<TopDocs> topDocs, HybridSearchCollector hybridSearchCollector) {
-        List<TopDocs> rescoredTopDocs = rescore(topDocs);
-        float maxScore = calculateMaxScore(rescoredTopDocs, hybridSearchCollector.getMaxScore());
-        TopDocs finalTopDocs = getNewTopDocs(
-            getTotalHits(this.trackTotalHitsUpTo, rescoredTopDocs, hybridSearchCollector.getTotalHits()),
-            rescoredTopDocs
-        );
+        if (shouldRescore()) {
+            topDocs = rescore(topDocs);
+        }
+        float maxScore = calculateMaxScore(topDocs, hybridSearchCollector.getMaxScore());
+        TopDocs finalTopDocs = getNewTopDocs(getTotalHits(this.trackTotalHitsUpTo, topDocs, hybridSearchCollector.getTotalHits()), topDocs);
         return new TopDocsAndMaxScore(finalTopDocs, maxScore);
     }
 
-    private List<TopDocs> rescore(List<TopDocs> topDocs) {
+    private boolean shouldRescore() {
         List<RescoreContext> rescoreContexts = searchContext.rescore();
-        boolean shouldRescore = Objects.nonNull(rescoreContexts) && !rescoreContexts.isEmpty();
-        if (!shouldRescore) {
-            return topDocs;
-        }
+        return Objects.nonNull(rescoreContexts) && !rescoreContexts.isEmpty();
+    }
+
+    private List<TopDocs> rescore(List<TopDocs> topDocs) {
         List<TopDocs> rescoredTopDocs = topDocs;
-        for (RescoreContext ctx : rescoreContexts) {
+        for (RescoreContext ctx : searchContext.rescore()) {
             rescoredTopDocs = rescoredTopDocs(ctx, rescoredTopDocs);
         }
         return rescoredTopDocs;
@@ -220,8 +219,8 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             try {
                 result.add(ctx.rescorer().rescore(topDoc, searchContext.searcher(), ctx));
             } catch (IOException exception) {
-                log.error("rescore failed for hybrid query", exception);
-                throw new OpenSearchException("rescore failed", exception);
+                log.error("rescore failed for hybrid query in collector_manager.reduce call", exception);
+                throw new HybridSearchRescoreQueryException(exception);
             }
         }
         return result;
