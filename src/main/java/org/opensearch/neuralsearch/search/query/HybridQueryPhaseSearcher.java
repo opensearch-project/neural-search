@@ -66,7 +66,9 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             }
             Query hybridQuery = extractHybridQuery(searchContext, query);
             QueryPhaseSearcher queryPhaseSearcher = getQueryPhaseSearcher(searchContext);
-            return queryPhaseSearcher.searchWith(searchContext, searcher, hybridQuery, collectors, hasFilterCollector, hasTimeout);
+            queryPhaseSearcher.searchWith(searchContext, searcher, hybridQuery, collectors, hasFilterCollector, hasTimeout);
+            // we decide on rescore later in collector manager
+            return false;
         }
     }
 
