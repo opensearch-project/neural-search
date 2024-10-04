@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Features
 ### Enhancements
 - Implement `ignore_missing` field in text chunking processors ([#907](https://github.com/opensearch-project/neural-search/pull/907))
+- Added rescorer in hybrid query ([#917](https://github.com/opensearch-project/neural-search/pull/917))
 ### Bug Fixes
 ### Infrastructure
 ### Documentation
