@@ -76,6 +76,15 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
         }
     }
 
+    // Excluding the test because hybrid query with rescore is not compatible with 2.14 and lower
+    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10")
+            || ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12")
+            || ext.neural_search_bwc_version.startsWith("2.13") || ext.neural_search_bwc_version.startsWith("2.14")) {
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchWithRescoreIT.*"
+        }
+    }
+
     // Excluding the test because we introduce this feature in 2.13
     if (ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12")){
         filter {
@@ -141,6 +150,15 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.*"
+        }
+    }
+
+    // Excluding the test because hybrid query with rescore is not compatible with 2.14 and lower
+    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10")
+            || ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12")
+            || ext.neural_search_bwc_version.startsWith("2.13") || ext.neural_search_bwc_version.startsWith("2.14")) {
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchWithRescoreIT.*"
         }
     }
 
@@ -211,6 +229,15 @@ task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
         }
     }
 
+    // Excluding the test because hybrid query with rescore is not compatible with 2.14 and lower
+    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10")
+            || ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12")
+            || ext.neural_search_bwc_version.startsWith("2.13") || ext.neural_search_bwc_version.startsWith("2.14")) {
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchWithRescoreIT.*"
+        }
+    }
+
     // Excluding the test because we introduce this feature in 2.13
     if (ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12")){
         filter {
@@ -275,6 +302,15 @@ task testRollingUpgrade(type: StandaloneRestIntegTestTask) {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.*"
+        }
+    }
+
+    // Excluding the test because hybrid query with rescore is not compatible with 2.14 and lower
+    if (ext.neural_search_bwc_version.startsWith("2.9") || ext.neural_search_bwc_version.startsWith("2.10")
+            || ext.neural_search_bwc_version.startsWith("2.11") || ext.neural_search_bwc_version.startsWith("2.12")
+            || ext.neural_search_bwc_version.startsWith("2.13") || ext.neural_search_bwc_version.startsWith("2.14")) {
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchWithRescoreIT.*"
         }
     }
 
