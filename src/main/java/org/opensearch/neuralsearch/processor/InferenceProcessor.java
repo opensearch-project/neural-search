@@ -10,6 +10,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -285,7 +286,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         if (sourceValue instanceof Map) {
             ((Map<String, Object>) sourceValue).forEach((k, v) -> createInferenceListForMapTypeInput(v, texts));
         } else if (sourceValue instanceof List) {
-            texts.addAll(((List<String>) sourceValue));
+            ((List<String>) sourceValue).stream().filter(Objects::nonNull).forEach(texts::add);
         } else {
             if (sourceValue == null) return;
             texts.add(sourceValue.toString());
@@ -419,8 +420,12 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
             for (Map.Entry<String, Object> inputNestedMapEntry : ((Map<String, Object>) sourceValue).entrySet()) {
                 if (sourceAndMetadataMap.get(processorKey) instanceof List) {
                     // build nlp output for list of nested objects
+                    Iterator<Object> inputNestedMapValueIt = ((List<Object>) inputNestedMapEntry.getValue()).iterator();
                     for (Map<String, Object> nestedElement : (List<Map<String, Object>>) sourceAndMetadataMap.get(processorKey)) {
-                        nestedElement.put(inputNestedMapEntry.getKey(), results.get(indexWrapper.index++));
+                        // Only fill in when value is not null
+                        if (inputNestedMapValueIt.hasNext() && inputNestedMapValueIt.next() != null) {
+                            nestedElement.put(inputNestedMapEntry.getKey(), results.get(indexWrapper.index++));
+                        }
                     }
                 } else {
                     Pair<String, Object> processedNestedKey = processNestedKey(inputNestedMapEntry);

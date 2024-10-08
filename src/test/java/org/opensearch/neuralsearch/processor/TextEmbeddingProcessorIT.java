@@ -310,5 +310,14 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         );
         assertEquals(!failedIds.isEmpty(), map.get("errors"));
         assertEquals(docCount, ((List) map.get("items")).size());
+
+        int failedDocCount = 0;
+        for (Object item : ((List) map.get("items"))) {
+            Map<String, Map<String, Object>> itemMap = (Map<String, Map<String, Object>>) item;
+            if (itemMap.get("index").get("error") != null) {
+                failedDocCount++;
+            }
+        }
+        assertEquals(failedIds.size(), failedDocCount);
     }
 }
