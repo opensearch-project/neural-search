@@ -48,6 +48,9 @@ public abstract class RerankProcessor implements SearchResponseProcessor {
         final SearchResponse searchResponse,
         final ActionListener<Map<String, Object>> listener
     ) {
+        if (this.subType == RerankType.BY_FIELD) {
+            listener.onResponse(Map.of());
+        }
         Map<String, Object> overallContext = new ConcurrentHashMap<>();
         AtomicInteger successfulContexts = new AtomicInteger(contextSourceFetchers.size());
         for (ContextSourceFetcher csf : contextSourceFetchers) {
