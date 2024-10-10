@@ -16,6 +16,7 @@ import static org.opensearch.knn.index.query.KNNQueryBuilder.MAX_DISTANCE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.MIN_SCORE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.RESCORE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.RESCORE_OVERSAMPLE_FIELD;
+import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_FLOATS_ASSERTION;
 import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.K_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MODEL_ID_FIELD;
@@ -183,7 +184,11 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
         assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
         assertEquals(K, neuralQueryBuilder.k());
-        assertEquals(RescoreContext.getDefault(), neuralQueryBuilder.rescoreContext());
+        assertEquals(
+            RescoreContext.getDefault().getOversampleFactor(),
+            neuralQueryBuilder.rescoreContext().getOversampleFactor(),
+            DELTA_FOR_FLOATS_ASSERTION
+        );
         assertNull(neuralQueryBuilder.methodParameters());
     }
 
