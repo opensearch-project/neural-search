@@ -88,11 +88,21 @@ Please follow these formatting guidelines:
 OpenSearch neural-search uses a [Gradle](https://docs.gradle.org/6.6.1/userguide/userguide.html) wrapper for its build.
 Run `gradlew` on Unix systems.
 
-Build OpenSearch neural-search using `gradlew build`
+Build OpenSearch neural-search using `gradlew build`. This command will
+also run Integration Tests and Unit Tests.
 
 ```
 ./gradlew build
 ```
+
+## Run Unit Tests
+If you want to strictly test that your unit tests are passing
+you can run the following.
+
+```
+./gradlew test
+```
+
 
 ## Run OpenSearch neural-search
 
@@ -292,3 +302,28 @@ original PR with an appropriate label `backport <backport-branch-name>` is merge
 run successfully on the PR. For example, if a PR on main needs to be backported to `2.x` branch, add a label
 `backport 2.x` to the PR and make sure the backport workflow runs on the PR along with other checks. Once this PR is
 merged to main, the workflow will create a backport PR to the `2.x` branch.
+
+## Building on Lucene Version updates
+There may be a Lucene version update that can affect your workflow causing errors like
+`java.lang.NoClassDefFoundError: org/apache/lucene/codecs/lucene99/Lucene99Codec`.
+This results in having issues with not being able to do `./gradlew run` or `./gradlew build`.
+
+You can check this [PR](https://github.com/opensearch-project/k-NN/pull/2195) as an example of this event happening
+
+**Follow the steps to remedy the gradle run issue.**
+1. From your cloned neural search repo root directory `rm -rf build .gradle`
+2. Clear the following directories from your gradle folder located in your root directory
+   1. `cd ~/.gradle`
+   2. `rm -rf caches workers wrapper daemon`
+   3. `cd -` switch back the previous directory (i.e. the neural search repo root directory)
+3. Finally run `./gradlew run`
+
+**Follow the steps to remedy the gradle build issue**
+
+**PREREQ:** Make sure you have OpenSearch repo cloned locally
+
+1. From your cloned neural search repo root directory `rm -rf build .gradle`
+2. Delete the .gradle folder and .m2 folder. `rm -rf ~/.gradle ~/.m2`
+3. Head over to your OpenSearch cloned repo root directory
+   1. `./gradlew publisToMavenLocal`
+4. Finally run `./gradlew build` from the neural search repo
