@@ -90,6 +90,9 @@
           "text": {
             "type": "text"
           },
+          "text_not_for_embedding": {
+            "type": "text"
+          },
           "embedding": {
             "type": "knn_vector",
             "dimension": 768,
