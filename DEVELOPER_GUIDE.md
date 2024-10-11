@@ -305,10 +305,13 @@ merged to main, the workflow will create a backport PR to the `2.x` branch.
 
 ## Building on Lucene Version updates
 There may be a Lucene version update that can affect your workflow causing errors like
-`java.lang.NoClassDefFoundError: org/apache/lucene/codecs/lucene99/Lucene99Codec`.
+`java.lang.NoClassDefFoundError: org/apache/lucene/codecs/lucene99/Lucene99Codec` or 
+`Provider org.opensearch.knn.index.codec.KNN910Codec.KNN910Codec could not be instantiated`. In this case
+we can observe there may be an issue with a dependency with [KNN](https://github.com/opensearch-project/k-NN).
 This results in having issues with not being able to do `./gradlew run` or `./gradlew build`.
 
-You can check this [PR](https://github.com/opensearch-project/k-NN/pull/2195) as an example of this event happening
+You can check this [KNN PR](https://github.com/opensearch-project/k-NN/pull/2195) as an example of this event happening or this [Neural Search PR](https://github.com/opensearch-project/neural-search/pull/913#issuecomment-2400189329) that shows a developer going
+through the same build issue.
 
 **Follow the steps to remedy the gradle run issue.**
 1. From your cloned neural search repo root directory `rm -rf build .gradle`
