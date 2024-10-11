@@ -13,6 +13,9 @@
   },
   "nested_passages": [
     {
+      "text_not_for_embedding": "test"
+    },
+    {
       "text": "hello"
     },
     {
