@@ -12,6 +12,7 @@ import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Abstracts testing of normalization of scores based on RRF method
@@ -19,9 +20,10 @@ import java.util.List;
 public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     private static final float DELTA_FOR_ASSERTION = 0.001f;
     static final int RANK_CONSTANT = 60;
+    private ScoreNormalizationUtil scoreNormalizationUtil = new ScoreNormalizationUtil();
 
     public void testNormalization_whenResultFromOneShardOneSubQuery_thenSuccessful() {
-        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique();
+        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
         Float[] scores = { 0.5f, 0.2f };
         List<CompoundTopDocs> compoundTopDocs = List.of(
             new CompoundTopDocs(
@@ -38,7 +40,6 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
             .queryTopDocs(compoundTopDocs)
             .normalizationTechnique(normalizationTechnique)
-            .rankConstant(RANK_CONSTANT)
             .build();
         normalizationTechnique.normalize(normalizeScoresDTO);
 
@@ -62,7 +63,7 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     }
 
     public void testNormalization_whenResultFromOneShardMultipleSubQueries_thenSuccessful() {
-        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique();
+        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
         Float[] scoresQuery1 = { 0.5f, 0.2f };
         Float[] scoresQuery2 = { 0.9f, 0.7f, 0.1f };
         List<CompoundTopDocs> compoundTopDocs = List.of(
@@ -88,7 +89,6 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
             .queryTopDocs(compoundTopDocs)
             .normalizationTechnique(normalizationTechnique)
-            .rankConstant(60)
             .build();
         normalizationTechnique.normalize(normalizeScoresDTO);
 
@@ -116,7 +116,7 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     }
 
     public void testNormalization_whenResultFromMultipleShardsMultipleSubQueries_thenSuccessful() {
-        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique();
+        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
         Float[] scoresShard1Query1 = { 0.5f, 0.2f };
         Float[] scoresShard1and2Query3 = { 0.9f, 0.7f, 0.1f, 0.8f, 0.7f, 0.6f, 0.5f };
         Float[] scoresShard2Query2 = { 2.9f, 0.7f };
@@ -162,7 +162,6 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
             .queryTopDocs(compoundTopDocs)
             .normalizationTechnique(normalizationTechnique)
-            .rankConstant(60)
             .build();
         normalizationTechnique.normalize(normalizeScoresDTO);
 

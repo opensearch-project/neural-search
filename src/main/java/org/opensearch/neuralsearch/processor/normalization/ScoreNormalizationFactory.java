@@ -6,21 +6,24 @@ package org.opensearch.neuralsearch.processor.normalization;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * Abstracts creation of exact score normalization method based on technique name
  */
 public class ScoreNormalizationFactory {
 
+    private static final ScoreNormalizationUtil scoreNormalizationUtil = new ScoreNormalizationUtil();
+
     public static final ScoreNormalizationTechnique DEFAULT_METHOD = new MinMaxScoreNormalizationTechnique();
 
-    private final Map<String, ScoreNormalizationTechnique> scoreNormalizationMethodsMap = Map.of(
+    private final Map<String, Function<Map<String, Object>, ScoreNormalizationTechnique>> scoreNormalizationMethodsMap = Map.of(
         MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME,
-        new MinMaxScoreNormalizationTechnique(),
+        params -> new MinMaxScoreNormalizationTechnique(),
         L2ScoreNormalizationTechnique.TECHNIQUE_NAME,
-        new L2ScoreNormalizationTechnique(),
+        params -> new L2ScoreNormalizationTechnique(),
         RRFNormalizationTechnique.TECHNIQUE_NAME,
-        new RRFNormalizationTechnique()
+        params -> new RRFNormalizationTechnique(params, scoreNormalizationUtil)
     );
 
     /**
@@ -29,7 +32,12 @@ public class ScoreNormalizationFactory {
      * @return instance of ScoreNormalizationMethod for technique name
      */
     public ScoreNormalizationTechnique createNormalization(final String technique) {
+        return createNormalization(technique, Map.of());
+    }
+
+    public ScoreNormalizationTechnique createNormalization(final String technique, final Map<String, Object> params) {
         return Optional.ofNullable(scoreNormalizationMethodsMap.get(technique))
-            .orElseThrow(() -> new IllegalArgumentException("provided normalization technique is not supported"));
+            .orElseThrow(() -> new IllegalArgumentException("provided normalization technique is not supported"))
+            .apply(params);
     }
 }

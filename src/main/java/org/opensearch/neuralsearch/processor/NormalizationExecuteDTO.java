@@ -8,7 +8,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
-import org.opensearch.common.Nullable;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.search.fetch.FetchSearchResult;
@@ -34,6 +33,4 @@ public class NormalizationExecuteDTO {
     private ScoreNormalizationTechnique normalizationTechnique;
     @NonNull
     private ScoreCombinationTechnique combinationTechnique;
-    @Nullable
-    private int rankConstant;
 }

@@ -8,7 +8,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
-import org.opensearch.common.Nullable;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 
 import java.util.List;
@@ -24,6 +23,4 @@ public class NormalizeScoresDTO {
     private List<CompoundTopDocs> queryTopDocs;
     @NonNull
     private ScoreNormalizationTechnique normalizationTechnique;
-    @Nullable
-    private int rankConstant;
 }

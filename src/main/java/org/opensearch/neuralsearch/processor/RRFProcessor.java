@@ -72,7 +72,6 @@ public class RRFProcessor implements SearchPhaseResultsProcessor {
             .fetchSearchResultOptional(fetchSearchResult)
             .normalizationTechnique(normalizationTechnique)
             .combinationTechnique(combinationTechnique)
-            .rankConstant(rankConstant)
             .build();
         normalizationWorkflow.execute(normalizationExecuteDTO);
     }

@@ -18,7 +18,6 @@ public class ScoreCombinationFactory {
         Map.of(),
         scoreCombinationUtil
     );
-    public static final ScoreCombinationTechnique RRF_METHOD = new RRFScoreCombinationTechnique(Map.of(), scoreCombinationUtil);
 
     private final Map<String, Function<Map<String, Object>, ScoreCombinationTechnique>> scoreCombinationMethodsMap = Map.of(
         ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME,

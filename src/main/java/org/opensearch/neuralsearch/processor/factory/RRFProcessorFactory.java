@@ -68,7 +68,9 @@ public class RRFProcessorFactory implements Processor.Factory<SearchPhaseResults
 
         Map<String, Object> combinationClause = readOptionalMap(RRFProcessor.TYPE, tag, config, COMBINATION_CLAUSE);
 
-        ScoreCombinationTechnique scoreCombinationTechnique = ScoreCombinationFactory.RRF_METHOD;
+        ScoreCombinationTechnique scoreCombinationTechnique = scoreCombinationFactory.createCombination(
+            RRFScoreCombinationTechnique.TECHNIQUE_NAME
+        );
         if (Objects.nonNull(combinationClause)) {
             String combinationTechnique = readStringProperty(
                 RRFProcessor.TYPE,

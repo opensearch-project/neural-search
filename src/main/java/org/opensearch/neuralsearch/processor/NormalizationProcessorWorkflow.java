@@ -56,7 +56,6 @@ public class NormalizationProcessorWorkflow {
         final Optional<FetchSearchResult> fetchSearchResultOptional = normalizationExecuteDTO.getFetchSearchResultOptional();
         final ScoreNormalizationTechnique normalizationTechnique = normalizationExecuteDTO.getNormalizationTechnique();
         final ScoreCombinationTechnique combinationTechnique = normalizationExecuteDTO.getCombinationTechnique();
-        final int rankConstant = normalizationExecuteDTO.getRankConstant();
         // save original state
         List<Integer> unprocessedDocIds = unprocessedDocIds(querySearchResults);
 
@@ -68,7 +67,6 @@ public class NormalizationProcessorWorkflow {
         NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
             .queryTopDocs(queryTopDocs)
             .normalizationTechnique(normalizationTechnique)
-            .rankConstant(rankConstant)
             .build();
 
         // normalize
