@@ -39,6 +39,7 @@ public class TestUtils {
 
     public static final String RELATION_EQUAL_TO = "eq";
     public static final float DELTA_FOR_SCORE_ASSERTION = 0.001f;
+    public static final float DELTA_FOR_FLOATS_ASSERTION = 0.001f;
     public static final String RESTART_UPGRADE_OLD_CLUSTER = "tests.is_old_cluster";
     public static final String BWC_VERSION = "tests.plugin_bwc_version";
     public static final String NEURAL_SEARCH_BWC_PREFIX = "neuralsearch-bwc-";
