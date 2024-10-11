@@ -15,6 +15,7 @@
     - [Adding new tests](#adding-new-tests)
   - [Supported configurations](#supported-configurations)
   - [Submitting Changes](#submitting-changes)
+  - [Building on Lucene Version updates](#building-on-lucene-version-updates)
 
 # Developer Guide
 
