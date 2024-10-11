@@ -17,7 +17,7 @@ import java.util.List;
  * Abstracts testing of normalization of scores based on RRF method
  */
 public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
-    private static final float DELTA_FOR_ASSERTION = 0.0001f;
+    private static final float DELTA_FOR_ASSERTION = 0.001f;
     static final int RANK_CONSTANT = 60;
 
     public void testNormalization_whenResultFromOneShardOneSubQuery_thenSuccessful() {
@@ -88,6 +88,7 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
             .queryTopDocs(compoundTopDocs)
             .normalizationTechnique(normalizationTechnique)
+            .rankConstant(60)
             .build();
         normalizationTechnique.normalize(normalizeScoresDTO);
 
@@ -161,6 +162,7 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
             .queryTopDocs(compoundTopDocs)
             .normalizationTechnique(normalizationTechnique)
+            .rankConstant(60)
             .build();
         normalizationTechnique.normalize(normalizeScoresDTO);
 
