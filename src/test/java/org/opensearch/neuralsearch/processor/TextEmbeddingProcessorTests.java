@@ -730,7 +730,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         IngestDocument ingestDocument = createNestedListIngestDocument();
         TextEmbeddingProcessor textEmbeddingProcessor = createInstanceWithNestedMapConfiguration(config);
         Map<String, Object> knnMap = textEmbeddingProcessor.buildMapWithTargetKeys(ingestDocument);
-        List<List<Float>> modelTensorList = createMockVectorResult();
+        List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(2, 2, 0.0f, 1.0f);
         textEmbeddingProcessor.buildNLPResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
         List<Map<String, Object>> nestedObj = (List<Map<String, Object>>) ingestDocument.getSourceAndMetadata().get("nestedField");
         assertTrue(nestedObj.get(0).containsKey("vectorField"));
@@ -739,18 +739,49 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         assertNotNull(nestedObj.get(1).get("vectorField"));
     }
 
+    @SuppressWarnings("unchecked")
+    public void testBuildVectorOutput_withNestedListHasNotForEmbeddingField_successful() {
+        Map<String, Object> config = createNestedListConfiguration();
+        IngestDocument ingestDocument = createNestedListWithNotEmbeddingFieldIngestDocument();
+        TextEmbeddingProcessor textEmbeddingProcessor = createInstanceWithNestedMapConfiguration(config);
+        Map<String, Object> knnMap = textEmbeddingProcessor.buildMapWithTargetKeys(ingestDocument);
+        List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(1, 2, 0.0f, 1.0f);
+        textEmbeddingProcessor.buildNLPResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
+        List<Map<String, Object>> nestedObj = (List<Map<String, Object>>) ingestDocument.getSourceAndMetadata().get("nestedField");
+        assertFalse(nestedObj.get(0).containsKey("vectorField"));
+        assertTrue(nestedObj.get(0).containsKey("textFieldNotForEmbedding"));
+        assertTrue(nestedObj.get(1).containsKey("vectorField"));
+        assertNotNull(nestedObj.get(1).get("vectorField"));
+    }
+
     public void testBuildVectorOutput_withNestedList_Level2_successful() {
         Map<String, Object> config = createNestedList2LevelConfiguration();
         IngestDocument ingestDocument = create2LevelNestedListIngestDocument();
         TextEmbeddingProcessor textEmbeddingProcessor = createInstanceWithNestedMapConfiguration(config);
         Map<String, Object> knnMap = textEmbeddingProcessor.buildMapWithTargetKeys(ingestDocument);
-        List<List<Float>> modelTensorList = createMockVectorResult();
+        List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(2, 2, 0.0f, 1.0f);
         textEmbeddingProcessor.buildNLPResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
         Map<String, Object> nestedLevel1 = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("nestedField");
         List<Map<String, Object>> nestedObj = (List<Map<String, Object>>) nestedLevel1.get("nestedField");
         assertTrue(nestedObj.get(0).containsKey("vectorField"));
         assertTrue(nestedObj.get(1).containsKey("vectorField"));
         assertNotNull(nestedObj.get(0).get("vectorField"));
+        assertNotNull(nestedObj.get(1).get("vectorField"));
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testBuildVectorOutput_withNestedListHasNotForEmbeddingField_Level2_successful() {
+        Map<String, Object> config = createNestedList2LevelConfiguration();
+        IngestDocument ingestDocument = create2LevelNestedListWithNotEmbeddingFieldIngestDocument();
+        TextEmbeddingProcessor textEmbeddingProcessor = createInstanceWithNestedMapConfiguration(config);
+        Map<String, Object> knnMap = textEmbeddingProcessor.buildMapWithTargetKeys(ingestDocument);
+        List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(1, 2, 0.0f, 1.0f);
+        textEmbeddingProcessor.buildNLPResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
+        Map<String, Object> nestedLevel1 = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("nestedField");
+        List<Map<String, Object>> nestedObj = (List<Map<String, Object>>) nestedLevel1.get("nestedField");
+        assertFalse(nestedObj.get(0).containsKey("vectorField"));
+        assertTrue(nestedObj.get(0).containsKey("textFieldNotForEmbedding"));
+        assertTrue(nestedObj.get(1).containsKey("vectorField"));
         assertNotNull(nestedObj.get(1).get("vectorField"));
     }
 
@@ -1039,9 +1070,31 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         return new IngestDocument(nestedList, new HashMap<>());
     }
 
+    private IngestDocument createNestedListWithNotEmbeddingFieldIngestDocument() {
+        HashMap<String, Object> nestedObj1 = new HashMap<>();
+        nestedObj1.put("textFieldNotForEmbedding", "This is a text field");
+        HashMap<String, Object> nestedObj2 = new HashMap<>();
+        nestedObj2.put("textField", "This is another text field");
+        HashMap<String, Object> nestedList = new HashMap<>();
+        nestedList.put("nestedField", Arrays.asList(nestedObj1, nestedObj2));
+        return new IngestDocument(nestedList, new HashMap<>());
+    }
+
     private IngestDocument create2LevelNestedListIngestDocument() {
         HashMap<String, Object> nestedObj1 = new HashMap<>();
         nestedObj1.put("textField", "This is a text field");
+        HashMap<String, Object> nestedObj2 = new HashMap<>();
+        nestedObj2.put("textField", "This is another text field");
+        HashMap<String, Object> nestedList = new HashMap<>();
+        nestedList.put("nestedField", Arrays.asList(nestedObj1, nestedObj2));
+        HashMap<String, Object> nestedList1 = new HashMap<>();
+        nestedList1.put("nestedField", nestedList);
+        return new IngestDocument(nestedList1, new HashMap<>());
+    }
+
+    private IngestDocument create2LevelNestedListWithNotEmbeddingFieldIngestDocument() {
+        HashMap<String, Object> nestedObj1 = new HashMap<>();
+        nestedObj1.put("textFieldNotForEmbedding", "This is a text field");
         HashMap<String, Object> nestedObj2 = new HashMap<>();
         nestedObj2.put("textField", "This is another text field");
         HashMap<String, Object> nestedList = new HashMap<>();

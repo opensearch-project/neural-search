@@ -8,6 +8,7 @@ import static org.opensearch.knn.index.query.KNNQueryBuilder.FILTER_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.MAX_DISTANCE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.METHOD_PARAMS_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.MIN_SCORE_FIELD;
+import static org.opensearch.knn.index.query.KNNQueryBuilder.RESCORE_FIELD;
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersion;
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport;
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForRadialSearch;
@@ -40,6 +41,8 @@ import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.knn.index.query.parser.MethodParametersParser;
+import org.opensearch.knn.index.query.parser.RescoreParser;
+import org.opensearch.knn.index.query.rescore.RescoreContext;
 import org.opensearch.neuralsearch.common.MinClusterVersionUtil;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
@@ -101,6 +104,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     private Supplier<float[]> vectorSupplier;
     private QueryBuilder filter;
     private Map<String, ?> methodParameters;
+    private RescoreContext rescoreContext;
 
     /**
      * Constructor from stream input
@@ -131,6 +135,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         if (isClusterOnOrAfterMinReqVersion(METHOD_PARAMS_FIELD.getPreferredName())) {
             this.methodParameters = MethodParametersParser.streamInput(in, MinClusterVersionUtil::isClusterOnOrAfterMinReqVersion);
         }
+        this.rescoreContext = RescoreParser.streamInput(in);
     }
 
     @Override
@@ -156,6 +161,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         if (isClusterOnOrAfterMinReqVersion(METHOD_PARAMS_FIELD.getPreferredName())) {
             MethodParametersParser.streamOutput(out, methodParameters, MinClusterVersionUtil::isClusterOnOrAfterMinReqVersion);
         }
+        RescoreParser.streamOutput(out, rescoreContext);
     }
 
     @Override
@@ -180,6 +186,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         }
         if (Objects.nonNull(methodParameters)) {
             MethodParametersParser.doXContent(xContentBuilder, methodParameters);
+        }
+        if (Objects.nonNull(rescoreContext)) {
+            RescoreParser.doXContent(xContentBuilder, rescoreContext);
         }
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
@@ -276,6 +285,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                     neuralQueryBuilder.filter(parseInnerQueryBuilder(parser));
                 } else if (METHOD_PARAMS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     neuralQueryBuilder.methodParameters(MethodParametersParser.fromXContent(parser));
+                } else if (RESCORE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    neuralQueryBuilder.rescoreContext(RescoreParser.fromXContent(parser));
                 }
             } else {
                 throw new ParsingException(
@@ -308,6 +319,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 .maxDistance(maxDistance)
                 .minScore(minScore)
                 .k(k)
+                .methodParameters(methodParameters)
+                .rescoreContext(rescoreContext)
                 .build();
         }
 
@@ -335,7 +348,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             minScore(),
             vectorSetOnce::get,
             filter(),
-            methodParameters()
+            methodParameters(),
+            rescoreContext()
         );
     }
 

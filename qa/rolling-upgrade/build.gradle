@@ -84,9 +84,16 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
 
     // Excluding the tests because we introduce these features in 2.13
     if (versionsBelow2_13.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
+            filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.TextChunkingProcessorIT.*"
+        }
+    }
+
+    // Excluding the test because hybrid query with rescore is not compatible with 2.14 and lower
+    if (versionsBelow2_15.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchWithRescoreIT.*"
         }
     }
 
@@ -154,6 +161,13 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.TextChunkingProcessorIT.*"
         }
     }
+    
+    // Excluding the test because hybrid query with rescore is not compatible with 2.14 and lower
+    if (versionsBelow2_15.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchWithRescoreIT.*"
+        }
+    }
 
     // Excluding the k-NN radial search and batch ingestion tests because we introduce these features in 2.14
     if (versionsBelow2_14.any { ext.neural_search_bwc_version.startsWith(it) }){
@@ -219,6 +233,13 @@ task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.TextChunkingProcessorIT.*"
         }
     }
+    
+    // Excluding the test because hybrid query with rescore is not compatible with 2.14 and lower
+    if (versionsBelow2_15.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchWithRescoreIT.*"
+        }
+    }
 
     // Excluding the k-NN radial search and batch ingestion tests because we introduce these features in 2.14
     if (versionsBelow2_14.any { ext.neural_search_bwc_version.startsWith(it) }){
@@ -282,6 +303,13 @@ task testRollingUpgrade(type: StandaloneRestIntegTestTask) {
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow"
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.TextChunkingProcessorIT.*"
+        }
+    }
+    
+    // Excluding the test because hybrid query with rescore is not compatible with 2.14 and lower
+    if (versionsBelow2_15.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchWithRescoreIT.*"
         }
     }
 

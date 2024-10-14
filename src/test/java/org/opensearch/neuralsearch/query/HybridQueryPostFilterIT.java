@@ -177,7 +177,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             postFilterQuery,
             null,
             false,
-            null
+            null,
+            0
         );
         assertHybridQueryResults(searchResponseAsMap, 1, 0, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
     }
@@ -262,7 +263,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             postFilterQuery,
             null,
             false,
-            null
+            null,
+            0
         );
         assertHybridQueryResults(searchResponseAsMap, 2, 1, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
         // Case 2 A Query with a combination of hybrid query (Match Query, Term Query, Range Query), aggregation (Average stock price
@@ -278,7 +280,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             postFilterQuery,
             null,
             false,
-            null
+            null,
+            0
         );
         assertHybridQueryResults(searchResponseAsMap, 2, 1, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
         Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
@@ -303,7 +306,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             postFilterQuery,
             null,
             false,
-            null
+            null,
+            0
         );
         assertHybridQueryResults(searchResponseAsMap, 0, 0, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
         // Case 4 A Query with a combination of hybrid query (Match Query, Range Query) and a post filter query (Bool Query with a should
@@ -324,7 +328,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             postFilterQuery,
             null,
             false,
-            null
+            null,
+            0
         );
         assertHybridQueryResults(searchResponseAsMap, 0, 0, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
     }
@@ -382,7 +387,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             postFilterQuery,
             null,
             false,
-            null
+            null,
+            0
         );
         assertHybridQueryResults(searchResponseAsMap, 4, 3, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
 
@@ -399,7 +405,8 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             postFilterQuery,
             null,
             false,
-            null
+            null,
+            0
         );
         assertHybridQueryResults(searchResponseAsMap, 0, 0, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
     }

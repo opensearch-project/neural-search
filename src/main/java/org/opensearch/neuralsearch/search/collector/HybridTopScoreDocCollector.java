@@ -172,11 +172,6 @@ public class HybridTopScoreDocCollector implements HybridSearchCollector {
 
         int size = howMany - start;
         ScoreDoc[] results = new ScoreDoc[size];
-        // pq's pop() returns the 'least' element in the queue, therefore need
-        // to discard the first ones, until we reach the requested range.
-        for (int i = pq.size() - start - size; i > 0; i--) {
-            pq.pop();
-        }
 
         // Get the requested results from pq.
         populateResults(results, size, pq);

@@ -46,10 +46,13 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     public static final String FIELD_MAP_FIELD = "field_map";
     public static final String ALGORITHM_FIELD = "algorithm";
     private static final String DEFAULT_ALGORITHM = FixedTokenLengthChunker.ALGORITHM_NAME;
+    public static final String IGNORE_MISSING = "ignore_missing";
+    public static final boolean DEFAULT_IGNORE_MISSING = false;
 
     private int maxChunkLimit;
     private Chunker chunker;
     private final Map<String, Object> fieldMap;
+    private final boolean ignoreMissing;
     private final ClusterService clusterService;
     private final AnalysisRegistry analysisRegistry;
     private final Environment environment;
@@ -59,12 +62,14 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         final String description,
         final Map<String, Object> fieldMap,
         final Map<String, Object> algorithmMap,
+        final boolean ignoreMissing,
         final Environment environment,
         final ClusterService clusterService,
         final AnalysisRegistry analysisRegistry
     ) {
         super(tag, description);
         this.fieldMap = fieldMap;
+        this.ignoreMissing = ignoreMissing;
         this.environment = environment;
         this.clusterService = clusterService;
         this.analysisRegistry = analysisRegistry;
@@ -73,6 +78,11 @@ public final class TextChunkingProcessor extends AbstractProcessor {
 
     public String getType() {
         return TYPE;
+    }
+
+    // if ignore missing is true null fields return null. If ignore missing is false null fields return an empty list
+    private boolean shouldProcessChunk(Object chunkObject) {
+        return !ignoreMissing || Objects.nonNull(chunkObject);
     }
 
     @SuppressWarnings("unchecked")
@@ -250,8 +260,11 @@ public final class TextChunkingProcessor extends AbstractProcessor {
             } else {
                 // chunk the object when target key is of leaf type (null, string and list of string)
                 Object chunkObject = sourceAndMetadataMap.get(originalKey);
-                List<String> chunkedResult = chunkLeafType(chunkObject, runtimeParameters);
-                sourceAndMetadataMap.put(String.valueOf(targetKey), chunkedResult);
+
+                if (shouldProcessChunk(chunkObject)) {
+                    List<String> chunkedResult = chunkLeafType(chunkObject, runtimeParameters);
+                    sourceAndMetadataMap.put(String.valueOf(targetKey), chunkedResult);
+                }
             }
         }
     }

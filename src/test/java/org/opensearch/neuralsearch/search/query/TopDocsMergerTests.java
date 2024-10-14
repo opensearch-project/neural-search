@@ -177,6 +177,65 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
+    public void testMergeScoreDocs_whenSomeSegmentsHasNoHits_thenSuccessful() {
+        // Given
+        TopDocsMerger topDocsMerger = new TopDocsMerger(null);
+
+        // When
+        // first segment has no results, and we merge with non-empty segment
+        TopDocs topDocsOriginal = new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] {});
+        TopDocsAndMaxScore topDocsAndMaxScoreOriginal = new TopDocsAndMaxScore(topDocsOriginal, 0);
+        TopDocs topDocsNew = new TopDocs(
+            new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+            new ScoreDoc[] {
+                createStartStopElementForHybridSearchResults(0),
+                createDelimiterElementForHybridSearchResults(0),
+                new ScoreDoc(0, 0.5f),
+                new ScoreDoc(2, 0.3f),
+                createStartStopElementForHybridSearchResults(0) }
+        );
+        TopDocsAndMaxScore topDocsAndMaxScoreNew = new TopDocsAndMaxScore(topDocsNew, 0.5f);
+        TopDocsAndMaxScore mergedTopDocsAndMaxScore = topDocsMerger.merge(topDocsAndMaxScoreOriginal, topDocsAndMaxScoreNew);
+
+        // Then
+        assertNotNull(mergedTopDocsAndMaxScore);
+
+        assertEquals(0.5f, mergedTopDocsAndMaxScore.maxScore, DELTA_FOR_ASSERTION);
+        assertEquals(2, mergedTopDocsAndMaxScore.topDocs.totalHits.value);
+        assertEquals(TotalHits.Relation.EQUAL_TO, mergedTopDocsAndMaxScore.topDocs.totalHits.relation);
+        assertEquals(5, mergedTopDocsAndMaxScore.topDocs.scoreDocs.length);
+        // check format, all elements one by one
+        ScoreDoc[] scoreDocs = mergedTopDocsAndMaxScore.topDocs.scoreDocs;
+        assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[0].score, 0);
+        assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[1].score, 0);
+        assertScoreDoc(scoreDocs[2], 0, 0.5f);
+        assertScoreDoc(scoreDocs[3], 2, 0.3f);
+        assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[4].score, 0);
+
+        // When
+        // source object has results, and we merge with empty segment
+        TopDocs topDocsNewEmpty = new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] {});
+        TopDocsAndMaxScore topDocsAndMaxScoreNewEmpty = new TopDocsAndMaxScore(topDocsNewEmpty, 0);
+        TopDocsAndMaxScore finalMergedTopDocsAndMaxScore = topDocsMerger.merge(mergedTopDocsAndMaxScore, topDocsAndMaxScoreNewEmpty);
+
+        // Then
+        // merged object remains unchanged
+        assertNotNull(finalMergedTopDocsAndMaxScore);
+
+        assertEquals(0.5f, finalMergedTopDocsAndMaxScore.maxScore, DELTA_FOR_ASSERTION);
+        assertEquals(2, finalMergedTopDocsAndMaxScore.topDocs.totalHits.value);
+        assertEquals(TotalHits.Relation.EQUAL_TO, finalMergedTopDocsAndMaxScore.topDocs.totalHits.relation);
+        assertEquals(5, finalMergedTopDocsAndMaxScore.topDocs.scoreDocs.length);
+        // check format, all elements one by one
+        ScoreDoc[] finalScoreDocs = finalMergedTopDocsAndMaxScore.topDocs.scoreDocs;
+        assertEquals(MAGIC_NUMBER_START_STOP, finalScoreDocs[0].score, 0);
+        assertEquals(MAGIC_NUMBER_DELIMITER, finalScoreDocs[1].score, 0);
+        assertScoreDoc(finalScoreDocs[2], 0, 0.5f);
+        assertScoreDoc(finalScoreDocs[3], 2, 0.3f);
+        assertEquals(MAGIC_NUMBER_START_STOP, finalScoreDocs[4].score, 0);
+    }
+
+    @SneakyThrows
     public void testThreeSequentialMerges_whenAllTopDocsHasHits_thenSuccessful() {
         TopDocsMerger topDocsMerger = new TopDocsMerger(null);
 

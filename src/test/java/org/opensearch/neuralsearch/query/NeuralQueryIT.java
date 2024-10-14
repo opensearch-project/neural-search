@@ -18,6 +18,7 @@ import org.junit.Before;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.knn.index.query.rescore.RescoreContext;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 import com.google.common.primitives.Floats;
@@ -111,6 +112,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 null,
                 null,
                 null,
+                null,
                 null
             );
 
@@ -133,7 +135,8 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 null,
                 null,
                 null,
-                Map.of("ef_search", 10)
+                Map.of("ef_search", 10),
+                RescoreContext.getDefault()
             );
             Map<String, Object> searchResponseAsMapMultimodalQuery = search(TEST_BASIC_INDEX_NAME, neuralQueryBuilderMultimodalQuery, 1);
             Map<String, Object> firstInnerHitMultimodalQuery = getFirstInnerHit(searchResponseAsMapMultimodalQuery);
@@ -157,6 +160,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 modelId,
                 null,
                 100.0f,
+                null,
                 null,
                 null,
                 null,
@@ -187,6 +191,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 null,
                 null,
                 0.01f,
+                null,
                 null,
                 null,
                 null
@@ -240,6 +245,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 "",
                 modelId,
                 1,
+                null,
                 null,
                 null,
                 null,
@@ -322,6 +328,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 null,
                 null,
                 null,
+                null,
                 null
             );
             NeuralQueryBuilder neuralQueryBuilder2 = new NeuralQueryBuilder(
@@ -330,6 +337,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 "",
                 modelId,
                 1,
+                null,
                 null,
                 null,
                 null,
@@ -358,6 +366,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 "",
                 modelId,
                 1,
+                null,
                 null,
                 null,
                 null,
@@ -418,6 +427,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 null,
                 null,
                 null,
+                null,
                 null
             );
 
@@ -469,6 +479,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 null,
                 null,
                 new MatchQueryBuilder("_id", "3"),
+                null,
                 null
             );
             Map<String, Object> searchResponseAsMap = search(TEST_MULTI_DOC_INDEX_NAME, neuralQueryBuilder, 3);

@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import lombok.SneakyThrows;
 import org.junit.BeforeClass;
 import org.opensearch.client.ResponseException;
+import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
@@ -139,7 +140,8 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
             null,
             createSortBuilders(fieldSortOrderMap, false),
             false,
-            null
+            null,
+            0
         );
         List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6, 6);
         assertStockValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, LARGEST_STOCK_VALUE_IN_QUERY_RESULT, true, true);
@@ -168,7 +170,8 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
             null,
             createSortBuilders(fieldSortOrderMap, false),
             false,
-            null
+            null,
+            0
         );
         List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6, 6);
         assertStockValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, LARGEST_STOCK_VALUE_IN_QUERY_RESULT, true, false);
@@ -200,7 +203,8 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                     null,
                     createSortBuilders(fieldSortOrderMap, false),
                     true,
-                    null
+                    null,
+                    0
                 )
             );
         } finally {
@@ -234,7 +238,8 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                     null,
                     createSortBuilders(fieldSortOrderMap, false),
                     true,
-                    null
+                    null,
+                    0
                 )
             );
         } finally {
@@ -312,7 +317,8 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
             null,
             createSortBuilders(fieldSortOrderMap, false),
             false,
-            searchAfter
+            searchAfter,
+            0
         );
         List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 3, 6);
         assertStockValueWithSortOrderInHybridQueryResults(
@@ -348,7 +354,8 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
             null,
             createSortBuilders(fieldSortOrderMap, false),
             false,
-            searchAfter
+            searchAfter,
+            0
         );
         List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 5, 6);
         assertStockValueWithSortOrderInHybridQueryResults(
@@ -381,7 +388,8 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
             null,
             createSortBuilders(fieldSortOrderMap, false),
             false,
-            null
+            null,
+            0
         );
         List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6, 6);
         assertScoreWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, 1.0);
@@ -415,7 +423,8 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                     null,
                     createSortBuilders(fieldSortOrderMap, false),
                     true,
-                    searchAfter
+                    searchAfter,
+                    0
                 )
             );
         } finally {
@@ -450,11 +459,75 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                     null,
                     createSortBuilders(fieldSortOrderMap, false),
                     true,
-                    searchAfter
+                    searchAfter,
+                    0
                 )
             );
         } finally {
             wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
+        }
+    }
+
+    @SneakyThrows
+    public void testSortingWithRescoreWhenConcurrentSegmentSearchEnabledAndDisabled_whenBothSortAndRescorePresent_thenFail() {
+        try {
+            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+            HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
+                "mission",
+                "part",
+                LTE_OF_RANGE_IN_HYBRID_QUERY,
+                GTE_OF_RANGE_IN_HYBRID_QUERY
+            );
+
+            Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
+            fieldSortOrderMap.put("stock", SortOrder.DESC);
+
+            List<Object> searchAfter = new ArrayList<>();
+            searchAfter.add(25);
+
+            QueryBuilder rescoreQuery = QueryBuilders.matchQuery(TEXT_FIELD_1_NAME, TEXT_FIELD_VALUE_1_DUNES);
+
+            assertThrows(
+                "Cannot use [sort] option in conjunction with [rescore].",
+                ResponseException.class,
+                () -> search(
+                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+                    hybridQueryBuilder,
+                    rescoreQuery,
+                    10,
+                    Map.of("search_pipeline", SEARCH_PIPELINE),
+                    null,
+                    null,
+                    createSortBuilders(fieldSortOrderMap, false),
+                    false,
+                    searchAfter,
+                    0
+                )
+            );
+
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
+
+            assertThrows(
+                "Cannot use [sort] option in conjunction with [rescore].",
+                ResponseException.class,
+                () -> search(
+                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+                    hybridQueryBuilder,
+                    rescoreQuery,
+                    10,
+                    Map.of("search_pipeline", SEARCH_PIPELINE),
+                    null,
+                    null,
+                    createSortBuilders(fieldSortOrderMap, false),
+                    false,
+                    searchAfter,
+                    0
+                )
+            );
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         }
     }
 
