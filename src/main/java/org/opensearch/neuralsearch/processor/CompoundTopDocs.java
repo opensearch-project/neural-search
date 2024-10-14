@@ -85,17 +85,17 @@ public class CompoundTopDocs {
     public CompoundTopDocs(final QuerySearchResult querySearchResult) {
         final TopDocs topDocs = querySearchResult.topDocs().topDocs;
         final SearchShardTarget searchShardTarget = querySearchResult.getSearchShardTarget();
+        SearchShard searchShard = new SearchShard(
+            searchShardTarget.getIndex(),
+            searchShardTarget.getShardId().id(),
+            searchShardTarget.getNodeId()
+        );
         boolean isSortEnabled = false;
         if (topDocs instanceof TopFieldDocs) {
             isSortEnabled = true;
         }
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         if (Objects.isNull(scoreDocs) || scoreDocs.length < 2) {
-            SearchShard searchShard = new SearchShard(
-                searchShardTarget.getIndex(),
-                searchShardTarget.getShardId().id(),
-                searchShardTarget.getNodeId()
-            );
             initialize(topDocs.totalHits, new ArrayList<>(), isSortEnabled, searchShard);
             return;
         }

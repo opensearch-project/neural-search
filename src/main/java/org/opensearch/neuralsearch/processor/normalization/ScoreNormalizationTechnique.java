@@ -5,10 +5,8 @@
 package org.opensearch.neuralsearch.processor.normalization;
 
 import java.util.List;
-import java.util.Map;
 
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
-import org.opensearch.neuralsearch.processor.DocIdAtQueryPhase;
 
 /**
  * Abstracts normalization of scores in query search results.
@@ -20,10 +18,4 @@ public interface ScoreNormalizationTechnique {
      * @param queryTopDocs original query results from multiple shards and multiple sub-queries
      */
     void normalize(final List<CompoundTopDocs> queryTopDocs);
-
-    default String describe() {
-        return "score normalization technique";
-    }
-
-    Map<DocIdAtQueryPhase, String> explain(final List<CompoundTopDocs> queryTopDocs);
 }

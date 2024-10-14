@@ -9,12 +9,15 @@ import java.util.Map;
 import java.util.Set;
 
 import lombok.ToString;
+import org.opensearch.neuralsearch.processor.ExplainableTechnique;
+
+import static org.opensearch.neuralsearch.processor.util.ExplainUtils.describeCombinationTechnique;
 
 /**
  * Abstracts combination of scores based on geometrical mean method
  */
 @ToString(onlyExplicitlyIncluded = true)
-public class GeometricMeanScoreCombinationTechnique implements ScoreCombinationTechnique {
+public class GeometricMeanScoreCombinationTechnique implements ScoreCombinationTechnique, ExplainableTechnique {
     @ToString.Include
     public static final String TECHNIQUE_NAME = "geometric_mean";
     public static final String PARAM_NAME_WEIGHTS = "weights";
@@ -53,5 +56,10 @@ public class GeometricMeanScoreCombinationTechnique implements ScoreCombinationT
             weightedLnSum += weight * Math.log(score);
         }
         return sumOfWeights == 0 ? ZERO_SCORE : (float) Math.exp(weightedLnSum / sumOfWeights);
+    }
+
+    @Override
+    public String describe() {
+        return describeCombinationTechnique(TECHNIQUE_NAME, weights);
     }
 }

@@ -103,29 +103,43 @@ public class NormalizationProcessorWorkflow {
     }
 
     private void explain(NormalizationProcessorWorkflowExecuteRequest request, List<CompoundTopDocs> queryTopDocs) {
-        if (request.isExplain()) {
-            // general description of techniques
-            String explanationDetailsMessage = String.format(
-                Locale.ROOT,
-                "%s, %s",
-                request.getNormalizationTechnique().describe(),
-                request.getCombinationTechnique().describe()
+        if (!request.isExplain()) {
+            return;
+        }
+        Explanation describedTechniqueForExplain = describeTechniqueForExplain(request);
+
+        // build final result object with all explain related information
+        if (Objects.nonNull(request.getPipelineProcessingContext())) {
+            Map<DocIdAtQueryPhase, String> explainedNormalization = scoreNormalizer.explain(
+                queryTopDocs,
+                (ExplainableTechnique) request.getNormalizationTechnique()
             );
 
-            Explanation explanation = Explanation.match(0.0f, explanationDetailsMessage);
-
-            // build final result object with all explain related information
-            if (Objects.nonNull(request.getPipelineProcessingContext())) {
-                ProcessorExplainDto processorExplainDto = ProcessorExplainDto.builder()
-                    .explanation(explanation)
-                    .normalizedScoresByDocId(scoreNormalizer.explain(queryTopDocs, request.getNormalizationTechnique()))
-                    .combinedScoresByDocId(scoreCombiner.explain(queryTopDocs, request.getCombinationTechnique()))
-                    .build();
-                // store explain object to pipeline context
-                PipelineProcessingContext pipelineProcessingContext = request.getPipelineProcessingContext();
-                pipelineProcessingContext.setAttribute(PROCESSOR_EXPLAIN, processorExplainDto);
-            }
+            ProcessorExplainDto processorExplainDto = ProcessorExplainDto.builder()
+                .explanation(describedTechniqueForExplain)
+                .normalizedScoresByDocId(explainedNormalization)
+                .combinedScoresByDocId(scoreCombiner.explain(queryTopDocs, request.getCombinationTechnique()))
+                .build();
+            // store explain object to pipeline context
+            PipelineProcessingContext pipelineProcessingContext = request.getPipelineProcessingContext();
+            pipelineProcessingContext.setAttribute(PROCESSOR_EXPLAIN, processorExplainDto);
         }
+
+    }
+
+    private static Explanation describeTechniqueForExplain(NormalizationProcessorWorkflowExecuteRequest request) {
+        // general description of techniques
+        ExplainableTechnique explainableCombinationTechnique = (ExplainableTechnique) request.getCombinationTechnique();
+        ExplainableTechnique explainableNormalizationTechnique = (ExplainableTechnique) request.getNormalizationTechnique();
+        String explanationDetailsMessage = String.format(
+            Locale.ROOT,
+            "%s, %s",
+            explainableNormalizationTechnique.describe(),
+            explainableCombinationTechnique.describe()
+        );
+
+        Explanation explanation = Explanation.match(0.0f, explanationDetailsMessage);
+        return explanation;
     }
 
     /**

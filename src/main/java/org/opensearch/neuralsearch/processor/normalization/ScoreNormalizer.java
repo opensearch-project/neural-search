@@ -10,6 +10,7 @@ import java.util.Objects;
 
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.processor.DocIdAtQueryPhase;
+import org.opensearch.neuralsearch.processor.ExplainableTechnique;
 
 public class ScoreNormalizer {
 
@@ -30,7 +31,7 @@ public class ScoreNormalizer {
 
     public Map<DocIdAtQueryPhase, String> explain(
         final List<CompoundTopDocs> queryTopDocs,
-        final ScoreNormalizationTechnique scoreNormalizationTechnique
+        final ExplainableTechnique scoreNormalizationTechnique
     ) {
         if (canQueryResultsBeNormalized(queryTopDocs)) {
             return scoreNormalizationTechnique.explain(queryTopDocs);

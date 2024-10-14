@@ -9,12 +9,15 @@ import java.util.Map;
 import java.util.Set;
 
 import lombok.ToString;
+import org.opensearch.neuralsearch.processor.ExplainableTechnique;
+
+import static org.opensearch.neuralsearch.processor.util.ExplainUtils.describeCombinationTechnique;
 
 /**
  * Abstracts combination of scores based on harmonic mean method
  */
 @ToString(onlyExplicitlyIncluded = true)
-public class HarmonicMeanScoreCombinationTechnique implements ScoreCombinationTechnique {
+public class HarmonicMeanScoreCombinationTechnique implements ScoreCombinationTechnique, ExplainableTechnique {
     @ToString.Include
     public static final String TECHNIQUE_NAME = "harmonic_mean";
     public static final String PARAM_NAME_WEIGHTS = "weights";
@@ -50,5 +53,10 @@ public class HarmonicMeanScoreCombinationTechnique implements ScoreCombinationTe
             sumOfHarmonics += weightOfSubQuery / score;
         }
         return sumOfHarmonics > 0 ? sumOfWeights / sumOfHarmonics : ZERO_SCORE;
+    }
+
+    @Override
+    public String describe() {
+        return describeCombinationTechnique(TECHNIQUE_NAME, weights);
     }
 }

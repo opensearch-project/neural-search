@@ -355,7 +355,7 @@ public class ScoreCombiner {
             float combinedScore = combinedNormalizedScoresByDocId.get(entry.getKey());
             explain.put(
                 new DocIdAtQueryPhase(entry.getKey(), compoundQueryTopDocs.getSearchShard()),
-                "source scores " + Arrays.toString(srcScores) + " combined score " + combinedScore
+                String.format("source scores [%s], combined score [%s]", Arrays.toString(srcScores), combinedScore)
             );
         });
     }
