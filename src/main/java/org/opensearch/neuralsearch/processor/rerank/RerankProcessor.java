@@ -35,6 +35,7 @@ public abstract class RerankProcessor implements SearchResponseProcessor {
     @Getter
     private final boolean ignoreFailure;
     protected List<ContextSourceFetcher> contextSourceFetchers;
+    static final protected List<RerankType> processorsWithNoContext = List.of(RerankType.BY_FIELD);
 
     /**
      * Generate the information that this processor needs in order to rerank.
@@ -48,9 +49,11 @@ public abstract class RerankProcessor implements SearchResponseProcessor {
         final SearchResponse searchResponse,
         final ActionListener<Map<String, Object>> listener
     ) {
-        if (this.subType == RerankType.BY_FIELD) {
+        // Processors that don't require context, result on a listener infinitely waiting for a response without this check
+        if (!processorRequiresContext(subType)) {
             listener.onResponse(Map.of());
         }
+
         Map<String, Object> overallContext = new ConcurrentHashMap<>();
         AtomicInteger successfulContexts = new AtomicInteger(contextSourceFetchers.size());
         for (ContextSourceFetcher csf : contextSourceFetchers) {
@@ -104,5 +107,9 @@ public abstract class RerankProcessor implements SearchResponseProcessor {
         } catch (Exception e) {
             responseListener.onFailure(e);
         }
+    }
+
+    public static boolean processorRequiresContext(RerankType subType) {
+        return !processorsWithNoContext.contains(subType);
     }
 }

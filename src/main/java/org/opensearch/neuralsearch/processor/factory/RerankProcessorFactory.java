@@ -19,11 +19,14 @@ import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.StringJoiner;
+
+import static org.opensearch.neuralsearch.processor.rerank.RerankProcessor.processorRequiresContext;
 
 /**
  * Factory for rerank processors. Must:
@@ -39,6 +42,11 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
     private final MLCommonsClientAccessor clientAccessor;
     private final ClusterService clusterService;
 
+    public RerankProcessorFactory(ClusterService clusterService) {
+        this.clusterService = clusterService;
+        this.clientAccessor = null;
+    }
+
     @Override
     public SearchResponseProcessor create(
         final Map<String, Processor.Factory<SearchResponseProcessor>> processorFactories,
@@ -50,10 +58,10 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
     ) {
         RerankType type = findRerankType(config);
         boolean includeQueryContextFetcher = ContextFetcherFactory.shouldIncludeQueryContextFetcher(type);
-        List<ContextSourceFetcher> contextFetchers = List.of();
-        if (type != RerankType.BY_FIELD) {
-            contextFetchers = ContextFetcherFactory.createFetchers(config, includeQueryContextFetcher, tag, clusterService);
-        }
+
+        List<ContextSourceFetcher> contextFetchers = processorRequiresContext(type)
+            ? ContextFetcherFactory.createFetchers(config, includeQueryContextFetcher, tag, clusterService)
+            : Collections.emptyList();
 
         Map<String, Object> rerankerConfig = ConfigurationUtils.readMap(RERANK_PROCESSOR_TYPE, tag, config, type.getLabel());
 
@@ -73,7 +81,15 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
                     rerankerConfig,
                     ByFieldRerankProcessor.TARGET_FIELD
                 );
-                return new ByFieldRerankProcessor(description, tag, ignoreFailure, targetField, contextFetchers);
+                boolean removeTargetField = ConfigurationUtils.readBooleanProperty(
+                    RERANK_PROCESSOR_TYPE,
+                    tag,
+                    rerankerConfig,
+                    ByFieldRerankProcessor.REMOVE_TARGET_FIELD,
+                    false
+                );
+
+                return new ByFieldRerankProcessor(description, tag, ignoreFailure, targetField, removeTargetField, contextFetchers);
             default:
                 throw new IllegalArgumentException(String.format(Locale.ROOT, "Cannot build reranker type %s", type.getLabel()));
         }
