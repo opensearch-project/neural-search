@@ -196,7 +196,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         URL pipelineURLPath = classLoader.getResource(PIPELINE_CONFIGS_BY_NAME.get(pipelineName));
         Objects.requireNonNull(pipelineURLPath);
         String requestBody = Files.readString(Path.of(pipelineURLPath.toURI()));
-        createPipelineProcessor(requestBody, pipelineName, "");
+        createPipelineProcessor(requestBody, pipelineName, "", null);
     }
 
     private void createTextChunkingIndex(String indexName, String pipelineName) throws Exception {
