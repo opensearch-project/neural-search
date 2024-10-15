@@ -177,14 +177,23 @@ public class NormalizationProcessorWorkflow {
         final List<QuerySearchResult> querySearchResults = combineScoresDTO.getQuerySearchResults();
         final List<CompoundTopDocs> queryTopDocs = getCompoundTopDocs(combineScoresDTO, querySearchResults);
         final Sort sort = combineScoresDTO.getSort();
+        final int from = querySearchResults.get(0).from();
+        int totalScoreDocsCount = 0;
         for (int index = 0; index < querySearchResults.size(); index++) {
             QuerySearchResult querySearchResult = querySearchResults.get(index);
             CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
+            totalScoreDocsCount += updatedTopDocs.getScoreDocs().size();
             TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(
                 buildTopDocs(updatedTopDocs, sort),
                 maxScoreForShard(updatedTopDocs, sort != null)
             );
             querySearchResult.topDocs(updatedTopDocsAndMaxScore, querySearchResult.sortValueFormats());
+        }
+
+        if (from > 0 && from > totalScoreDocsCount) {
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "Reached end of search result, increase pagination_depth value to see more results")
+            );
         }
     }
 
