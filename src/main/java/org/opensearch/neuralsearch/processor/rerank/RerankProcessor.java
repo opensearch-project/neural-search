@@ -109,6 +109,17 @@ public abstract class RerankProcessor implements SearchResponseProcessor {
         }
     }
 
+    /**
+     * There are scenarios where ranking occurs without needing context. Currently, these are the processors don't require
+     * the context mapping
+     * <ul>
+     *     <li>
+     *         ByFieldRerankProcessor - Uses the search response to get value to rescore by
+     *     </li>
+     * </ul>
+     * @param subType The kind of rerank processor
+     * @return Whether a rerank subtype needs context to perform the rescore search response action.
+     */
     public static boolean processorRequiresContext(RerankType subType) {
         return !processorsWithNoContext.contains(subType);
     }

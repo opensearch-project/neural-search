@@ -42,11 +42,6 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
     private final MLCommonsClientAccessor clientAccessor;
     private final ClusterService clusterService;
 
-    public RerankProcessorFactory(ClusterService clusterService) {
-        this.clusterService = clusterService;
-        this.clientAccessor = null;
-    }
-
     @Override
     public SearchResponseProcessor create(
         final Map<String, Processor.Factory<SearchResponseProcessor>> processorFactories,
@@ -59,6 +54,8 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
         RerankType type = findRerankType(config);
         boolean includeQueryContextFetcher = ContextFetcherFactory.shouldIncludeQueryContextFetcher(type);
 
+        // Currently the createFetchers method requires that you provide a context map, this branch makes sure we can ignore this on
+        // processors that don't need the context map
         List<ContextSourceFetcher> contextFetchers = processorRequiresContext(type)
             ? ContextFetcherFactory.createFetchers(config, includeQueryContextFetcher, tag, clusterService)
             : Collections.emptyList();
@@ -133,9 +130,8 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
 
         /**
          * Create necessary queryContextFetchers for this processor
-         *
-         * @param config                     processor config object. Look for "context" field to find fetchers
-         * @param includeQueryContextFetcher should I include the queryContextFetcher?
+         * @param config Processor config object. Look for "context" field to find fetchers
+         * @param includeQueryContextFetcher Should I include the queryContextFetcher?
          * @return list of contextFetchers for the processor to use
          */
         public static List<ContextSourceFetcher> createFetchers(
