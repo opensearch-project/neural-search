@@ -15,7 +15,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Collection of utility methods for score combination technique classes
@@ -24,23 +23,6 @@ import java.util.stream.Collectors;
 class ScoreNormalizationUtil {
     private static final String PARAM_NAME_WEIGHTS = "weights";
     private static final float DELTA_FOR_SCORE_ASSERTION = 0.01f;
-
-    /**
-     * Get collection of weights based on user provided config
-     * @param params map of named parameters and their values
-     * @return collection of weights
-     */
-    public List<Float> getRankConstant(final Map<String, Object> params) {
-        if (Objects.isNull(params) || params.isEmpty()) {
-            return List.of();
-        }
-        // get weights, we don't need to check for instance as it's done during validation
-        List<Float> weightsList = ((List<Double>) params.getOrDefault(PARAM_NAME_WEIGHTS, List.of())).stream()
-            .map(Double::floatValue)
-            .collect(Collectors.toUnmodifiableList());
-        validateWeights(weightsList);
-        return weightsList;
-    }
 
     /**
      * Validate config parameters for this technique
@@ -61,7 +43,7 @@ class ScoreNormalizationUtil {
                 String.format(
                     Locale.ROOT,
                     "provided parameter for combination technique is not supported. supported parameters are [%s]",
-                    supportedParams.stream().collect(Collectors.joining(","))
+                    String.join(",", supportedParams)
                 )
             );
         }
@@ -115,7 +97,7 @@ class ScoreNormalizationUtil {
      * @param weightsList
      */
     private void validateWeights(final List<Float> weightsList) {
-        boolean isOutOfRange = weightsList.stream().anyMatch(weight -> !Range.between(0.0f, 1.0f).contains(weight));
+        boolean isOutOfRange = weightsList.stream().anyMatch(weight -> !Range.of(0.0f, 1.0f).contains(weight));
         if (isOutOfRange) {
             throw new IllegalArgumentException(
                 String.format(

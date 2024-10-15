@@ -89,13 +89,6 @@ public class RRFProcessorFactory implements Processor.Factory<SearchPhaseResults
             normalizationTechnique,
             scoreCombinationTechnique
         );
-        return new RRFProcessor(
-            tag,
-            description,
-            normalizationTechnique,
-            scoreCombinationTechnique,
-            normalizationProcessorWorkflow,
-            rankConstant
-        );
+        return new RRFProcessor(tag, description, normalizationTechnique, scoreCombinationTechnique, normalizationProcessorWorkflow);
     }
 }

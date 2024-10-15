@@ -17,12 +17,9 @@ import java.util.Map;
 public class RRFScoreCombinationTechnique implements ScoreCombinationTechnique {
     @ToString.Include
     public static final String TECHNIQUE_NAME = "rrf";
-    private final ScoreCombinationUtil scoreCombinationUtil;
 
     // Not currently using weights for RRF, no need to modify or verify these params
-    public RRFScoreCombinationTechnique(final Map<String, Object> params, final ScoreCombinationUtil combinationUtil) {
-        this.scoreCombinationUtil = combinationUtil;
-    }
+    public RRFScoreCombinationTechnique(final Map<String, Object> params, final ScoreCombinationUtil combinationUtil) {}
 
     @Override
     public float combine(final float[] scores) {

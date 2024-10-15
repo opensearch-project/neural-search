@@ -67,7 +67,6 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
             .combinationTechnique(combinationTechnique)
             .build();
         normalizationWorkflow.execute(normalizationExecuteDTO);
-
     }
 
     @Override

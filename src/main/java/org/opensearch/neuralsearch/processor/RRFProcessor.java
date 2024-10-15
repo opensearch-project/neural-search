@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+import lombok.Getter;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.search.fetch.FetchSearchResult;
@@ -40,12 +41,13 @@ import lombok.extern.log4j.Log4j2;
 public class RRFProcessor implements SearchPhaseResultsProcessor {
     public static final String TYPE = "score-ranker-processor";
 
+    @Getter
     private final String tag;
+    @Getter
     private final String description;
     private final ScoreNormalizationTechnique normalizationTechnique;
     private final ScoreCombinationTechnique combinationTechnique;
     private final NormalizationProcessorWorkflow normalizationWorkflow;
-    private final int rankConstant;
 
     /**
      * Method abstracts functional aspect of score normalization and score combination. Exact methods for each processing stage
@@ -92,26 +94,15 @@ public class RRFProcessor implements SearchPhaseResultsProcessor {
     }
 
     @Override
-    public String getTag() {
-        return tag;
-    }
-
-    @Override
-    public String getDescription() {
-        return description;
-    }
-
-    @Override
     public boolean isIgnoreFailure() {
         return false;
     }
 
     private <Result extends SearchPhaseResult> boolean shouldSkipProcessor(SearchPhaseResults<Result> searchPhaseResult) {
-        if (Objects.isNull(searchPhaseResult) || !(searchPhaseResult instanceof QueryPhaseResultConsumer)) {
+        if (Objects.isNull(searchPhaseResult) || !(searchPhaseResult instanceof QueryPhaseResultConsumer queryPhaseResultConsumer)) {
             return true;
         }
 
-        QueryPhaseResultConsumer queryPhaseResultConsumer = (QueryPhaseResultConsumer) searchPhaseResult;
         return queryPhaseResultConsumer.getAtomicArray().asList().stream().filter(Objects::nonNull).noneMatch(this::isHybridQuery);
     }
 
