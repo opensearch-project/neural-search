@@ -55,11 +55,10 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique {
                 continue;
             }
             List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
-            int numSubQueriesBound = topDocsPerSubQuery.size();
-            for (int index = 0; index < numSubQueriesBound; index++) {
-                int numDocsPerSubQueryBound = topDocsPerSubQuery.get(index).scoreDocs.length;
+            for (int index = 0; index < topDocsPerSubQuery.size(); index++) {
+                int docsCountPerSubQuery = topDocsPerSubQuery.get(index).scoreDocs.length;
                 ScoreDoc[] scoreDocs = topDocsPerSubQuery.get(index).scoreDocs;
-                for (int j = 0; j < numDocsPerSubQueryBound; j++) {
+                for (int j = 0; j < docsCountPerSubQuery; j++) {
                     scoreDocs[j].score = (1.f / (float) (rankConstant + j + 1));
                 }
             }
@@ -76,12 +75,12 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique {
     }
 
     private void validateRankConstant(final int rankConstant) {
-        boolean isOutOfRange = rankConstant < 1 || rankConstant >= 10000;
+        boolean isOutOfRange = rankConstant < 1 || rankConstant >= 10_000;
         if (isOutOfRange) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
-                    "rank constant must be in the interval between 1 and 10.000, submitted rank constant: %d",
+                    "rank constant must be in the interval between 1 and 10000, submitted rank constant: %d",
                     rankConstant
                 )
             );
