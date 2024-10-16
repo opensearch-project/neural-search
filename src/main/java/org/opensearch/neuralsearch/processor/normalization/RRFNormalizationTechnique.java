@@ -4,6 +4,8 @@
  */
 package org.opensearch.neuralsearch.processor.normalization;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -60,7 +62,10 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique {
                 int docsCountPerSubQuery = topDocs.scoreDocs.length;
                 ScoreDoc[] scoreDocs = topDocs.scoreDocs;
                 for (int j = 0; j < docsCountPerSubQuery; j++) {
-                    scoreDocs[j].score = (1.f / (float) (rankConstant + j + 1));
+                    // using big decimal approach to minimize error caused by floating point ops
+                    // score = 1.f / (float) (rankConstant + j + 1))
+                    scoreDocs[j].score = BigDecimal.ONE.divide(BigDecimal.valueOf(rankConstant + j + 1), 10, RoundingMode.HALF_UP)
+                        .floatValue();
                 }
             }
         }
