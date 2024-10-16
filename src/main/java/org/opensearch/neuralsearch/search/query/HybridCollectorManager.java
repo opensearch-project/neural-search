@@ -84,7 +84,13 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         final IndexReader reader = searchContext.searcher().getIndexReader();
         final int totalNumDocs = Math.max(0, reader.numDocs());
         HybridQuery hybridQuery = (HybridQuery) searchContext.query();
-        int numDocs = Math.min(hybridQuery.getPaginationDepth(), totalNumDocs);
+        int retrievalSize;
+        if (hybridQuery.getPaginationDepth() == 0) {
+            retrievalSize = searchContext.from() + searchContext.size();
+        } else {
+            retrievalSize = hybridQuery.getPaginationDepth();
+        }
+        int numDocs = Math.min(retrievalSize, totalNumDocs);
         int trackTotalHitsUpTo = searchContext.trackTotalHitsUpTo();
         if (searchContext.sort() != null) {
             validateSortCriteria(searchContext, searchContext.trackScores());
