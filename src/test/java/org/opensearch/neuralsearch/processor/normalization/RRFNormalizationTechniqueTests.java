@@ -24,7 +24,7 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
 
     public void testNormalization_whenResultFromOneShardOneSubQuery_thenSuccessful() {
         RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
-        Float[] scores = { 0.5f, 0.2f };
+        float[] scores = { 0.5f, 0.2f };
         List<CompoundTopDocs> compoundTopDocs = List.of(
             new CompoundTopDocs(
                 new TotalHits(2, TotalHits.Relation.EQUAL_TO),
@@ -64,8 +64,8 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
 
     public void testNormalization_whenResultFromOneShardMultipleSubQueries_thenSuccessful() {
         RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
-        Float[] scoresQuery1 = { 0.5f, 0.2f };
-        Float[] scoresQuery2 = { 0.9f, 0.7f, 0.1f };
+        float[] scoresQuery1 = { 0.5f, 0.2f };
+        float[] scoresQuery2 = { 0.9f, 0.7f, 0.1f };
         List<CompoundTopDocs> compoundTopDocs = List.of(
             new CompoundTopDocs(
                 new TotalHits(3, TotalHits.Relation.EQUAL_TO),
@@ -117,9 +117,9 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
 
     public void testNormalization_whenResultFromMultipleShardsMultipleSubQueries_thenSuccessful() {
         RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
-        Float[] scoresShard1Query1 = { 0.5f, 0.2f };
-        Float[] scoresShard1and2Query3 = { 0.9f, 0.7f, 0.1f, 0.8f, 0.7f, 0.6f, 0.5f };
-        Float[] scoresShard2Query2 = { 2.9f, 0.7f };
+        float[] scoresShard1Query1 = { 0.5f, 0.2f };
+        float[] scoresShard1and2Query3 = { 0.9f, 0.7f, 0.1f, 0.8f, 0.7f, 0.6f, 0.5f };
+        float[] scoresShard2Query2 = { 2.9f, 0.7f };
         List<CompoundTopDocs> compoundTopDocs = List.of(
             new CompoundTopDocs(
                 new TotalHits(3, TotalHits.Relation.EQUAL_TO),
