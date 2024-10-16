@@ -4,11 +4,8 @@
  */
 package org.opensearch.neuralsearch.processor.normalization;
 
-import com.google.common.math.DoubleMath;
 import lombok.extern.log4j.Log4j2;
-import org.apache.commons.lang3.Range;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -55,67 +52,6 @@ class ScoreNormalizationUtil {
                     String.format(Locale.ROOT, "parameter [%s] must be a collection of numbers", PARAM_NAME_WEIGHTS)
                 );
             }
-        }
-    }
-
-    /**
-     * Get weight for sub-query based on its index in the hybrid search query. Use user provided weight or 1.0 otherwise
-     * @param weights collection of weights for sub-queries
-     * @param indexOfSubQuery 0-based index of sub-query in the Hybrid Search query
-     * @return weight for sub-query, use one that is set in processor/pipeline definition or 1.0 as default
-     */
-    public float getWeightForSubQuery(final List<Float> weights, final int indexOfSubQuery) {
-        return indexOfSubQuery < weights.size() ? weights.get(indexOfSubQuery) : 1.0f;
-    }
-
-    /**
-     * Check if number of weights matches number of queries. This does not apply for case when
-     * weights were not provided, as this is valid default value
-     * @param scores collection of scores from all sub-queries of a single hybrid search query
-     * @param weights score combination weights that are defined as part of search result processor
-     */
-    protected void validateIfWeightsMatchScores(final float[] scores, final List<Float> weights) {
-        if (weights.isEmpty()) {
-            return;
-        }
-        if (scores.length != weights.size()) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "number of weights [%d] must match number of sub-queries [%d] in hybrid query",
-                    weights.size(),
-                    scores.length
-                )
-            );
-        }
-    }
-
-    /**
-     * Check if provided weights are valid for combination. Following conditions are checked:
-     * - every weight is between 0.0 and 1.0
-     * - sum of all weights must be equal 1.0
-     * @param weightsList
-     */
-    private void validateWeights(final List<Float> weightsList) {
-        boolean isOutOfRange = weightsList.stream().anyMatch(weight -> !Range.of(0.0f, 1.0f).contains(weight));
-        if (isOutOfRange) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "all weights must be in range [0.0 ... 1.0], submitted weights: %s",
-                    Arrays.toString(weightsList.toArray(new Float[0]))
-                )
-            );
-        }
-        float sumOfWeights = weightsList.stream().reduce(0.0f, Float::sum);
-        if (!DoubleMath.fuzzyEquals(1.0f, sumOfWeights, DELTA_FOR_SCORE_ASSERTION)) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "sum of weights for combination must be equal to 1.0, submitted weights: %s",
-                    Arrays.toString(weightsList.toArray(new Float[0]))
-                )
-            );
         }
     }
 }

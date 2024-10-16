@@ -92,9 +92,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique {
         try {
             return NumberUtils.createInteger(String.valueOf(parameters.get(fieldName)));
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "parameter [%s] must be an integer", fieldName)
-            );
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "parameter [%s] must be an integer", fieldName));
         }
     }
 }
