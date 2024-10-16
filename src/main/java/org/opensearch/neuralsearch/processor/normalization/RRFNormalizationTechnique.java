@@ -10,6 +10,7 @@ import java.util.Objects;
 import java.util.Locale;
 import java.util.Set;
 
+import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
@@ -29,7 +30,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique {
     public static final String PARAM_NAME_RANK_CONSTANT = "rank_constant";
     private static final Set<String> SUPPORTED_PARAMS = Set.of(PARAM_NAME_RANK_CONSTANT);
 
-    final int rankConstant;
+    private final int rankConstant;
 
     public RRFNormalizationTechnique(final Map<String, Object> params, final ScoreNormalizationUtil scoreNormalizationUtil) {
         scoreNormalizationUtil.validateParams(params, SUPPORTED_PARAMS);
@@ -55,9 +56,9 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique {
                 continue;
             }
             List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
-            for (int index = 0; index < topDocsPerSubQuery.size(); index++) {
-                int docsCountPerSubQuery = topDocsPerSubQuery.get(index).scoreDocs.length;
-                ScoreDoc[] scoreDocs = topDocsPerSubQuery.get(index).scoreDocs;
+            for (TopDocs topDocs : topDocsPerSubQuery) {
+                int docsCountPerSubQuery = topDocs.scoreDocs.length;
+                ScoreDoc[] scoreDocs = topDocs.scoreDocs;
                 for (int j = 0; j < docsCountPerSubQuery; j++) {
                     scoreDocs[j].score = (1.f / (float) (rankConstant + j + 1));
                 }
@@ -66,12 +67,12 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique {
     }
 
     private int getRankConstant(final Map<String, Object> params) {
-        if (params.containsKey(PARAM_NAME_RANK_CONSTANT)) {
-            int rankConstant = (int) params.get(PARAM_NAME_RANK_CONSTANT);
-            validateRankConstant(rankConstant);
-            return rankConstant;
+        if (!params.containsKey(PARAM_NAME_RANK_CONSTANT)) {
+            return DEFAULT_RANK_CONSTANT;
         }
-        return DEFAULT_RANK_CONSTANT;
+        int rankConstant = getParamAsInteger(params, PARAM_NAME_RANK_CONSTANT);
+        validateRankConstant(rankConstant);
+        return rankConstant;
     }
 
     private void validateRankConstant(final int rankConstant) {
@@ -83,6 +84,16 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique {
                     "rank constant must be in the interval between 1 and 10000, submitted rank constant: %d",
                     rankConstant
                 )
+            );
+        }
+    }
+
+    public static int getParamAsInteger(final Map<String, Object> parameters, final String fieldName) {
+        try {
+            return NumberUtils.createInteger(String.valueOf(parameters.get(fieldName)));
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "parameter [%s] must be an integer", fieldName)
             );
         }
     }

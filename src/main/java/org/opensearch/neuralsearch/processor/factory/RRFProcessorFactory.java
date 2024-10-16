@@ -31,11 +31,9 @@ import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
 @AllArgsConstructor
 @Log4j2
 public class RRFProcessorFactory implements Processor.Factory<SearchPhaseResultsProcessor> {
-    public static final String NORMALIZATION_CLAUSE = "combination";
     public static final String COMBINATION_CLAUSE = "combination";
     public static final String TECHNIQUE = "technique";
     public static final String PARAMETERS = "parameters";
-    public static final int DEFAULT_RANK_CONSTANT = 60;
 
     private final NormalizationProcessorWorkflow normalizationProcessorWorkflow;
     private ScoreNormalizationFactory scoreNormalizationFactory;
@@ -50,27 +48,14 @@ public class RRFProcessorFactory implements Processor.Factory<SearchPhaseResults
         final Map<String, Object> config,
         final Processor.PipelineContext pipelineContext
     ) throws Exception {
-        Map<String, Object> normalizationClause = readOptionalMap(RRFProcessor.TYPE, tag, config, NORMALIZATION_CLAUSE);
-        // reads parameters passed in from user to get rank constant to be used in RRFNormalizationTechnique
-        Map<String, Object> normalizationParams = readOptionalMap(RRFProcessor.TYPE, tag, normalizationClause, PARAMETERS);
-        int rankConstant = (int) normalizationParams.getOrDefault("rank_constant", DEFAULT_RANK_CONSTANT);
-        ScoreNormalizationTechnique normalizationTechnique = ScoreNormalizationFactory.DEFAULT_METHOD;
-        if (Objects.nonNull(normalizationClause)) {
-            String normalizationTechniqueName = readStringProperty(
-                RRFProcessor.TYPE,
-                tag,
-                normalizationClause,
-                TECHNIQUE,
-                RRFNormalizationTechnique.TECHNIQUE_NAME
-            );
-            normalizationTechnique = scoreNormalizationFactory.createNormalization(normalizationTechniqueName);
-        }
-
-        Map<String, Object> combinationClause = readOptionalMap(RRFProcessor.TYPE, tag, config, COMBINATION_CLAUSE);
-
+        // assign defaults
+        ScoreNormalizationTechnique normalizationTechnique = scoreNormalizationFactory.createNormalization(
+            RRFNormalizationTechnique.TECHNIQUE_NAME
+        );
         ScoreCombinationTechnique scoreCombinationTechnique = scoreCombinationFactory.createCombination(
             RRFScoreCombinationTechnique.TECHNIQUE_NAME
         );
+        Map<String, Object> combinationClause = readOptionalMap(RRFProcessor.TYPE, tag, config, COMBINATION_CLAUSE);
         if (Objects.nonNull(combinationClause)) {
             String combinationTechnique = readStringProperty(
                 RRFProcessor.TYPE,
@@ -80,8 +65,9 @@ public class RRFProcessorFactory implements Processor.Factory<SearchPhaseResults
                 RRFScoreCombinationTechnique.TECHNIQUE_NAME
             );
             // check for optional combination params
-            Map<String, Object> combinationParams = readOptionalMap(RRFProcessor.TYPE, tag, combinationClause, PARAMETERS);
-            scoreCombinationTechnique = scoreCombinationFactory.createCombination(combinationTechnique, combinationParams);
+            Map<String, Object> params = readOptionalMap(RRFProcessor.TYPE, tag, combinationClause, PARAMETERS);
+            normalizationTechnique = scoreNormalizationFactory.createNormalization(RRFNormalizationTechnique.TECHNIQUE_NAME, params);
+            scoreCombinationTechnique = scoreCombinationFactory.createCombination(combinationTechnique);
         }
         log.info(
             "Creating search phase results processor of type [{}] with normalization [{}] and combination [{}]",
