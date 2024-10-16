@@ -14,6 +14,7 @@ import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.SearchResponseSections;
 import org.opensearch.action.search.ShardSearchFailure;
 import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.document.DocumentField;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.bytes.BytesArray;
@@ -70,84 +71,29 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         factory = new RerankProcessorFactory(null, clusterService);
     }
 
-    /**
-     * Creates a searchResponse where the value to reRank by is Nested.
-     * The location where the target is within a map of size 1 meaning after
-     * Using ByFieldReRank the expected behavior is to delete the info mapping
-     * as it is only has one mapping i.e. the duplicate value.
-     * <hr>
-     * The targetField for this scenario is <code>ml.info.score</code>
-     */
-    public void setUpValidSearchResultsWithNestedTargetValue() throws IOException {
-        SearchHit[] hits = new SearchHit[sampleIndexMLScorePairs.size()];
+    public void testBasics() throws IOException {
+        setUpValidSearchResultsWithNonNestedTargetValueWithDenseSourceMapping();
+        String targetField = "ml_score";
+        Map<String, Object> config = new HashMap<>(
+            Map.of(RerankType.BY_FIELD.getLabel(), new HashMap<>(Map.of(ByFieldRerankProcessor.TARGET_FIELD, targetField)))
+        );
+        processor = (ByFieldRerankProcessor) factory.create(
+            Map.of(),
+            "rerank processor",
+            "processor for 2nd level reranking based on provided field",
+            false,
+            config,
+            pipelineContext
+        );
 
-        String templateString = """
-            {
-               "my_field" : "%s",
-               "ml": {
-                    "model" : "myModel",
-                    "info"  : {
-                              "score": %s
-                    }
-               }
-            }
-            """.replace("\n", "");
-
-        for (int i = 0; i < sampleIndexMLScorePairs.size(); i++) {
-            int docId = sampleIndexMLScorePairs.get(i).getKey();
-            String mlScore = sampleIndexMLScorePairs.get(i).getValue() + "";
-
-            String sourceMap = templateString.formatted(i, mlScore);
-
-            hits[i] = new SearchHit(docId, docId + "", Collections.emptyMap(), Collections.emptyMap());
-            hits[i].sourceRef(new BytesArray(sourceMap));
-            hits[i].score(new Random().nextFloat());
-        }
-
-        TotalHits totalHits = new TotalHits(sampleIndexMLScorePairs.size(), TotalHits.Relation.EQUAL_TO);
-
-        SearchHits searchHits = new SearchHits(hits, totalHits, 1.0f);
-        SearchResponseSections internal = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
-        response = new SearchResponse(internal, null, 1, 1, 0, 1, new ShardSearchFailure[0], new SearchResponse.Clusters(1, 1, 0), null);
-    }
-
-    /**
-     * Creates a searchResponse where the value to reRank is not Nested.
-     * The location where the target is within the first level of the _source mapping.
-     * There will be other fields as well (this is a dense map), the expected behavior is to leave the _source mapping
-     * without the targetField and leave the other fields intact.
-     * <hr>
-     * The targetField for this scenario is <code>ml_score</code>
-     */
-    public void setUpValidSearchResultsWithNonNestedTargetValueWithDenseSourceMapping() throws IOException {
-        SearchHit[] hits = new SearchHit[sampleIndexMLScorePairs.size()];
-
-        String templateString = """
-            {
-               "my_field" : "%s",
-               "ml_score" : %s,
-                "info"    : {
-                       "model" : "myModel"
-                }
-            }
-            """.replace("\n", "");
-
-        for (int i = 0; i < sampleIndexMLScorePairs.size(); i++) {
-            int docId = sampleIndexMLScorePairs.get(i).getKey();
-            String mlScore = sampleIndexMLScorePairs.get(i).getValue() + "";
-
-            String sourceMap = templateString.formatted(i, mlScore);
-
-            hits[i] = new SearchHit(docId, docId + "", Collections.emptyMap(), Collections.emptyMap());
-            hits[i].sourceRef(new BytesArray(sourceMap));
-            hits[i].score(new Random().nextFloat());
-        }
-
-        TotalHits totalHits = new TotalHits(sampleIndexMLScorePairs.size(), TotalHits.Relation.EQUAL_TO);
-
-        SearchHits searchHits = new SearchHits(hits, totalHits, 1.0f);
-        SearchResponseSections internal = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
-        response = new SearchResponse(internal, null, 1, 1, 0, 1, new ShardSearchFailure[0], new SearchResponse.Clusters(1, 1, 0), null);
+        assert (processor.getTag().equals("rerank processor"));
+        assert (processor.getDescription().equals("processor for 2nd level reranking based on provided field"));
+        assert (!processor.isIgnoreFailure());
+        assertThrows(
+            "Use asyncProcessResponse unless you can guarantee to not deadlock yourself",
+            UnsupportedOperationException.class,
+            () -> processor.processResponse(request, response)
+        );
     }
 
     /**
@@ -388,7 +334,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         processor = (ByFieldRerankProcessor) factory.create(
             Map.of(),
             "rerank processor",
-            "processor for 2nd level reranking based on provided field, This will check a nested field",
+            "processor for 2nd level reranking based on provided field, This will check a NON-nested field",
             false,
             config,
             pipelineContext
@@ -511,7 +457,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         processor = (ByFieldRerankProcessor) factory.create(
             Map.of(),
             "rerank processor",
-            "processor for 2nd level reranking based on provided field, This will check a nested field",
+            "processor for 2nd level reranking based on provided field, This will check a Non-nested field",
             false,
             config,
             pipelineContext
@@ -534,7 +480,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
 
             assertEquals("The document Ids need to match to compare previous scores", trackedDocId, currentDocId);
             assertEquals(
-                "The scores for the search response previoiusly need to match to the score in the source map",
+                "The scores for the search response previously need to match to the score in the source map",
                 trackedPreviousScore,
                 currentPreviousScore,
                 0.01
@@ -542,4 +488,325 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
 
         }
     }
+
+    /**
+     * Creates a searchResponse where the value to reRank by is Nested.
+     * The location where the target is within a map of size 1 meaning after
+     * Using ByFieldReRank the expected behavior is to delete the info mapping
+     * as it is only has one mapping i.e. the duplicate value.
+     * <hr>
+     * The targetField for this scenario is <code>ml.info.score</code>
+     */
+    private void setUpValidSearchResultsWithNestedTargetValue() throws IOException {
+        SearchHit[] hits = new SearchHit[sampleIndexMLScorePairs.size()];
+
+        String templateString = """
+            {
+               "my_field" : "%s",
+               "ml": {
+                    "model" : "myModel",
+                    "info"  : {
+                              "score": %s
+                    }
+               }
+            }
+            """.replace("\n", "");
+
+        for (int i = 0; i < sampleIndexMLScorePairs.size(); i++) {
+            int docId = sampleIndexMLScorePairs.get(i).getKey();
+            String mlScore = sampleIndexMLScorePairs.get(i).getValue() + "";
+
+            String sourceMap = templateString.formatted(i, mlScore);
+
+            hits[i] = new SearchHit(docId, docId + "", Collections.emptyMap(), Collections.emptyMap());
+            hits[i].sourceRef(new BytesArray(sourceMap));
+            hits[i].score(new Random().nextFloat());
+        }
+
+        TotalHits totalHits = new TotalHits(sampleIndexMLScorePairs.size(), TotalHits.Relation.EQUAL_TO);
+
+        SearchHits searchHits = new SearchHits(hits, totalHits, 1.0f);
+        SearchResponseSections internal = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        response = new SearchResponse(internal, null, 1, 1, 0, 1, new ShardSearchFailure[0], new SearchResponse.Clusters(1, 1, 0), null);
+    }
+
+    /**
+     * Creates a searchResponse where the value to reRank is not Nested.
+     * The location where the target is within the first level of the _source mapping.
+     * There will be other fields as well (this is a dense map), the expected behavior is to leave the _source mapping
+     * without the targetField and leave the other fields intact.
+     * <hr>
+     * The targetField for this scenario is <code>ml_score</code>
+     */
+    private void setUpValidSearchResultsWithNonNestedTargetValueWithDenseSourceMapping() throws IOException {
+        SearchHit[] hits = new SearchHit[sampleIndexMLScorePairs.size()];
+
+        String templateString = """
+            {
+               "my_field" : "%s",
+               "ml_score" : %s,
+                "info"    : {
+                       "model" : "myModel"
+                }
+            }
+            """.replace("\n", "");
+
+        for (int i = 0; i < sampleIndexMLScorePairs.size(); i++) {
+            int docId = sampleIndexMLScorePairs.get(i).getKey();
+            String mlScore = sampleIndexMLScorePairs.get(i).getValue() + "";
+
+            String sourceMap = templateString.formatted(i, mlScore);
+
+            hits[i] = new SearchHit(docId, docId + "", Collections.emptyMap(), Collections.emptyMap());
+            hits[i].sourceRef(new BytesArray(sourceMap));
+            hits[i].score(new Random().nextFloat());
+        }
+
+        TotalHits totalHits = new TotalHits(sampleIndexMLScorePairs.size(), TotalHits.Relation.EQUAL_TO);
+
+        SearchHits searchHits = new SearchHits(hits, totalHits, 1.0f);
+        SearchResponseSections internal = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        response = new SearchResponse(internal, null, 1, 1, 0, 1, new ShardSearchFailure[0], new SearchResponse.Clusters(1, 1, 0), null);
+    }
+
+    /**
+     * This scenario checks the byField rerank is able to check when a search hit has no source mapping.
+     * It is always required to have a source mapping if you want to use this processor.
+     */
+    public void testRerank_throwsExceptionOnNoSource_WhenSearchResponseHasNoSourceMapping() {
+        String targetField = "similarity_score";
+        boolean removeTargetField = true;
+        setUpInvalidSearchResultsWithNonSourceMapping();
+
+        Map<String, Object> config = new HashMap<>(
+            Map.of(
+                RerankType.BY_FIELD.getLabel(),
+                new HashMap<>(
+                    Map.of(ByFieldRerankProcessor.TARGET_FIELD, targetField, ByFieldRerankProcessor.REMOVE_TARGET_FIELD, removeTargetField)
+                )
+            )
+        );
+
+        processor = (ByFieldRerankProcessor) factory.create(
+            Map.of(),
+            "rerank processor",
+            "processor for 2nd level reranking based on provided field. <This will be used for error handling>",
+            false,
+            config,
+            pipelineContext
+        );
+
+        ActionListener<SearchResponse> listener = mock(ActionListener.class);
+
+        processor.rerank(response, config, listener);
+
+        ArgumentCaptor<Exception> argumentCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener, times(1)).onFailure(argumentCaptor.capture());
+
+        assertEquals("There is no source field to be able to perform rerank on hit [" + 1 + "]", argumentCaptor.getValue().getMessage());
+        assert (argumentCaptor.getValue() instanceof IllegalArgumentException);
+    }
+
+    /**
+     * The scenario checks that the search response has a source mapping for each search hit and verifies that the target field exists.
+     * In this case the test will see that the target field has no entry inside the source mapping.
+     */
+    public void testRerank_throwsExceptionOnMappingNotExistingInSource_WhenSearchResponseHasAMissingMapping() {
+        String targetField = "similarity_score";
+        boolean removeTargetField = true;
+        setUpInvalidSearchResultsWithMissingTargetFieldMapping();
+
+        Map<String, Object> config = new HashMap<>(
+            Map.of(
+                RerankType.BY_FIELD.getLabel(),
+                new HashMap<>(
+                    Map.of(ByFieldRerankProcessor.TARGET_FIELD, targetField, ByFieldRerankProcessor.REMOVE_TARGET_FIELD, removeTargetField)
+                )
+            )
+        );
+
+        processor = (ByFieldRerankProcessor) factory.create(
+            Map.of(),
+            "rerank processor",
+            "processor for 2nd level reranking based on provided field. <This will be used for error handling>",
+            false,
+            config,
+            pipelineContext
+        );
+
+        ActionListener<SearchResponse> listener = mock(ActionListener.class);
+
+        processor.rerank(response, config, listener);
+
+        ArgumentCaptor<Exception> argumentCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener, times(1)).onFailure(argumentCaptor.capture());
+
+        assertEquals("The field to rerank [" + targetField + "] is not found at hit [" + 1 + "]", argumentCaptor.getValue().getMessage());
+        assert (argumentCaptor.getValue() instanceof IllegalArgumentException);
+    }
+
+    /**
+     * The scenario checks that the search response has source mapping within each search hit
+     * and the entry for the target field exists. However, the value for the target value target field is null the
+     * expected behavior is to return a message that it is not found, similar to the test case where there's no
+     * entry mapping for this target field
+     */
+    public void testRerank_throwsExceptionOnHavingEmptyMapping_WhenTargetFieldHasNullMapping() {
+        String targetField = "similarity_score";
+        boolean removeTargetField = true;
+        setUpInvalidSearchResultsWithTargetFieldHavingNullMapping();
+
+        Map<String, Object> config = new HashMap<>(
+            Map.of(
+                RerankType.BY_FIELD.getLabel(),
+                new HashMap<>(
+                    Map.of(ByFieldRerankProcessor.TARGET_FIELD, targetField, ByFieldRerankProcessor.REMOVE_TARGET_FIELD, removeTargetField)
+                )
+            )
+        );
+
+        processor = (ByFieldRerankProcessor) factory.create(
+            Map.of(),
+            "rerank processor",
+            "processor for 2nd level reranking based on provided field. <This will be used for error handling>",
+            false,
+            config,
+            pipelineContext
+        );
+
+        ActionListener<SearchResponse> listener = mock(ActionListener.class);
+
+        processor.rerank(response, config, listener);
+
+        ArgumentCaptor<Exception> argumentCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener, times(1)).onFailure(argumentCaptor.capture());
+
+        assertEquals("The field to rerank [" + targetField + "] is not found at hit [" + 1 + "]", argumentCaptor.getValue().getMessage());
+        assert (argumentCaptor.getValue() instanceof IllegalArgumentException);
+    }
+
+    /**
+     * the scenario checks that the search response has source mapping within each search it and the entry for the target field exist.
+     * however, the value for the target field is non-numeric the expected behaviors is to throw an exception that the value is not numeric.
+     */
+    public void testRerank_throwsExceptionOnHavingNonNumericValue_WhenTargetFieldHasNonNumericMapping() {
+        String targetField = "similarity_score";
+        boolean removeTargetField = true;
+        setUpInvalidSearchResultsWithTargetFieldHavingNonNumericMapping();
+
+        Map<String, Object> config = new HashMap<>(
+            Map.of(
+                RerankType.BY_FIELD.getLabel(),
+                new HashMap<>(
+                    Map.of(ByFieldRerankProcessor.TARGET_FIELD, targetField, ByFieldRerankProcessor.REMOVE_TARGET_FIELD, removeTargetField)
+                )
+            )
+        );
+
+        processor = (ByFieldRerankProcessor) factory.create(
+            Map.of(),
+            "rerank processor",
+            "processor for 2nd level reranking based on provided field. <This will be used for error handling>",
+            false,
+            config,
+            pipelineContext
+        );
+
+        ActionListener<SearchResponse> listener = mock(ActionListener.class);
+
+        processor.rerank(response, config, listener);
+
+        ArgumentCaptor<Exception> argumentCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener, times(1)).onFailure(argumentCaptor.capture());
+
+        assertEquals(
+            "The field mapping to rerank [" + targetField + ": " + "hello world" + "] is a not Numerical",
+            argumentCaptor.getValue().getMessage()
+        );
+        assert (argumentCaptor.getValue() instanceof IllegalArgumentException);
+
+    }
+
+    /**
+     * This creates a search response with two hits, the first hit being in the correct form.
+     * While, the second search hit has a non-numeric target field mapping.
+     */
+    private void setUpInvalidSearchResultsWithTargetFieldHavingNonNumericMapping() {
+        SearchHit[] hits = new SearchHit[2];
+        hits[0] = new SearchHit(0, "1", Collections.emptyMap(), Collections.emptyMap());
+        hits[0].sourceRef(new BytesArray("{\"diary\" : \"how are you\",\"similarity_score\":777}"));
+        hits[0].score(1.0F);
+
+        Map<String, DocumentField> dummyMap = new HashMap<>();
+        dummyMap.put("test", new DocumentField("test", Collections.singletonList("test-field-mapping")));
+        hits[1] = new SearchHit(1, "2", dummyMap, Collections.emptyMap());
+        hits[1].sourceRef(new BytesArray("{\"diary\" : \"how do you do\",\"similarity_score\":\"hello world\"}"));
+        hits[1].score(1.0F);
+
+        SearchHits searchHits = new SearchHits(hits, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1);
+        SearchResponseSections searchResponseSections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        this.response = new SearchResponse(searchResponseSections, null, 1, 1, 0, 10, null, null);
+    }
+
+    /**
+     * This creates a search response with two hits, the first hit being in the correct form.
+     * While, the second search hit has a null target field mapping.
+     */
+    private void setUpInvalidSearchResultsWithTargetFieldHavingNullMapping() {
+        SearchHit[] hits = new SearchHit[2];
+        hits[0] = new SearchHit(0, "1", Collections.emptyMap(), Collections.emptyMap());
+        hits[0].sourceRef(new BytesArray("{\"diary\" : \"how are you\",\"similarity_score\":-11.055182}"));
+        hits[0].score(1.0F);
+
+        Map<String, DocumentField> dummyMap = new HashMap<>();
+        dummyMap.put("test", new DocumentField("test", Collections.singletonList("test-field-mapping")));
+        hits[1] = new SearchHit(1, "2", dummyMap, Collections.emptyMap());
+        hits[1].sourceRef(new BytesArray("{\"diary\" : \"how are you\",\"similarity_score\":null}"));
+        hits[1].score(1.0F);
+
+        SearchHits searchHits = new SearchHits(hits, new TotalHits(2, TotalHits.Relation.EQUAL_TO), 1);
+        SearchResponseSections searchResponseSections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        this.response = new SearchResponse(searchResponseSections, null, 1, 1, 0, 10, null, null);
+    }
+
+    /**
+     * This creates a search response with two hits, the first hit being in the correct form.
+     * While, the second search hit has having a missing entry that is needed to perform reranking
+     */
+    private void setUpInvalidSearchResultsWithMissingTargetFieldMapping() {
+        SearchHit[] hits = new SearchHit[2];
+        hits[0] = new SearchHit(0, "1", Collections.emptyMap(), Collections.emptyMap());
+        hits[0].sourceRef(new BytesArray("{\"diary\" : \"how are you\",\"similarity_score\":-11.055182}"));
+        hits[0].score(1.0F);
+
+        hits[1] = new SearchHit(1, "2", Collections.emptyMap(), Collections.emptyMap());
+        hits[1].sourceRef(new BytesArray("{\"diary\" : \"how are you\" }"));
+        hits[1].score(1.0F);
+
+        SearchHits searchHits = new SearchHits(hits, new TotalHits(2, TotalHits.Relation.EQUAL_TO), 1);
+        SearchResponseSections searchResponseSections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        this.response = new SearchResponse(searchResponseSections, null, 1, 1, 0, 10, null, null);
+
+    }
+
+    /**
+     * This creates a search response with two hits, the first hit being in correct form.
+     * While, the second search hit has no source mapping.
+     */
+    private void setUpInvalidSearchResultsWithNonSourceMapping() {
+        SearchHit[] hits = new SearchHit[2];
+        hits[0] = new SearchHit(0, "1", Collections.emptyMap(), Collections.emptyMap());
+        hits[0].sourceRef(new BytesArray("{\"diary\" : \"how are you\",\"similarity_score\":-11.055182}"));
+        hits[0].score(1.0F);
+
+        Map<String, DocumentField> dummyMap = new HashMap<>();
+        dummyMap.put("test", new DocumentField("test", Collections.singletonList("test-field-mapping")));
+        hits[1] = new SearchHit(1, "2", dummyMap, Collections.emptyMap());
+        hits[1].score(1.0F);
+
+        SearchHits searchHits = new SearchHits(hits, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1);
+        SearchResponseSections searchResponseSections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        this.response = new SearchResponse(searchResponseSections, null, 1, 1, 0, 10, null, null);
+    }
+
 }

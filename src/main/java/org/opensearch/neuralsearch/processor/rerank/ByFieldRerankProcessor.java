@@ -202,12 +202,8 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
             }
 
             Optional<Object> val = getValueFromSource(sourceMap, targetField);
-            if (val.isEmpty()) {
-                listener.onFailure(
-                    new IllegalArgumentException("The field to rerank [" + targetField + "] is found to be null at hit [" + i + "]")
-                );
-                return false;
-            } else if (!(val.get() instanceof Number)) {
+
+            if (!(val.get() instanceof Number)) {
                 listener.onFailure(
                     new IllegalArgumentException("The field mapping to rerank [" + targetField + ": " + val.get() + "] is a not Numerical")
                 );
@@ -236,7 +232,7 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
         for (String key : keys) {
             currentValue = currentValue.flatMap(value -> {
                 Map<String, Object> currentMap = (Map<String, Object>) value;
-                return Optional.of(currentMap.get(key));
+                return Optional.ofNullable(currentMap.get(key));
             });
 
             if (currentValue.isEmpty()) {
@@ -249,7 +245,9 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
 
     /**
      * Determines whether there exists a value that has a mapping according to the pathToValue. This is particularly
-     * useful when the source map is a map of maps and when the pathToValue is of the form key[.key]
+     * useful when the source map is a map of maps and when the pathToValue is of the form key[.key].
+     * <hr>
+     * To Exist in a map it must have a mapping that is not null or the key-value pair does not exist
      * @param sourceAsMap the source field converted to a map
      * @param pathToValue A string of the form key[.key] indicating what keys to apply to the sourceMap
      * @return Whether the mapping using the pathToValue exists
