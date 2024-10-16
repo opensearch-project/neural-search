@@ -72,6 +72,7 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
                 );
                 return new MLOpenSearchRerankProcessor(description, tag, ignoreFailure, modelId, contextFetchers, clientAccessor);
             case BY_FIELD:
+                boolean DEFAULT_REMOVE_TARGET_FIELD = false;
                 String targetField = ConfigurationUtils.readStringProperty(
                     RERANK_PROCESSOR_TYPE,
                     tag,
@@ -83,7 +84,7 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
                     tag,
                     rerankerConfig,
                     ByFieldRerankProcessor.REMOVE_TARGET_FIELD,
-                    false
+                    DEFAULT_REMOVE_TARGET_FIELD
                 );
 
                 return new ByFieldRerankProcessor(description, tag, ignoreFailure, targetField, removeTargetField, contextFetchers);
