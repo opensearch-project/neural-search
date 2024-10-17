@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.processor.factory;
 import lombok.SneakyThrows;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.RRFProcessor;
+import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
@@ -20,11 +21,36 @@ import java.util.Map;
 
 import static org.mockito.Mockito.mock;
 
+import static org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory.NORMALIZATION_CLAUSE;
 import static org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory.PARAMETERS;
 import static org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory.COMBINATION_CLAUSE;
 import static org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory.TECHNIQUE;
 
 public class RRFProcessorFactoryTests extends OpenSearchTestCase {
+
+    @SneakyThrows
+    public void testDefaults_whenNoValuesPassed_thenSuccessful() {
+        RRFProcessorFactory rrfProcessorFactory = new RRFProcessorFactory(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner()),
+            new ScoreNormalizationFactory(),
+            new ScoreCombinationFactory()
+        );
+        final Map<String, Processor.Factory<SearchPhaseResultsProcessor>> processorFactories = new HashMap<>();
+        String tag = "tag";
+        String description = "description";
+        boolean ignoreFailure = false;
+        Map<String, Object> config = new HashMap<>();
+        Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
+        SearchPhaseResultsProcessor searchPhaseResultsProcessor = rrfProcessorFactory.create(
+            processorFactories,
+            tag,
+            description,
+            ignoreFailure,
+            config,
+            pipelineContext
+        );
+        assertRRFProcessor(searchPhaseResultsProcessor);
+    }
 
     @SneakyThrows
     public void testCombinationParams_whenValidValues_thenSuccessful() {
@@ -48,10 +74,7 @@ public class RRFProcessorFactoryTests extends OpenSearchTestCase {
             config,
             pipelineContext
         );
-        assertNotNull(searchPhaseResultsProcessor);
-        assertTrue(searchPhaseResultsProcessor instanceof RRFProcessor);
-        RRFProcessor rrfProcessor = (RRFProcessor) searchPhaseResultsProcessor;
-        assertEquals("score-ranker-processor", rrfProcessor.getType());
+        assertRRFProcessor(searchPhaseResultsProcessor);
     }
 
     @SneakyThrows
@@ -150,5 +173,42 @@ public class RRFProcessorFactoryTests extends OpenSearchTestCase {
             () -> rrfProcessorFactory.create(processorFactories, tag, description, ignoreFailure, config, pipelineContext)
         );
         assertTrue(exception.getMessage().contains("provided combination technique is not supported"));
+    }
+
+    @SneakyThrows
+    public void testInvalidTechniqueType_whenPassingNormalization_thenSuccessful() {
+        RRFProcessorFactory rrfProcessorFactory = new RRFProcessorFactory(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner()),
+            new ScoreNormalizationFactory(),
+            new ScoreCombinationFactory()
+        );
+        final Map<String, Processor.Factory<SearchPhaseResultsProcessor>> processorFactories = new HashMap<>();
+        String tag = "tag";
+        String description = "description";
+        boolean ignoreFailure = false;
+
+        Map<String, Object> config = new HashMap<>();
+        config.put(COMBINATION_CLAUSE, new HashMap<>(Map.of(TECHNIQUE, "rrf", PARAMETERS, new HashMap<>(Map.of("rank_constant", 100)))));
+        config.put(
+            NORMALIZATION_CLAUSE,
+            new HashMap<>(Map.of(TECHNIQUE, ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME, PARAMETERS, new HashMap<>(Map.of())))
+        );
+        Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
+        SearchPhaseResultsProcessor searchPhaseResultsProcessor = rrfProcessorFactory.create(
+            processorFactories,
+            tag,
+            description,
+            ignoreFailure,
+            config,
+            pipelineContext
+        );
+        assertRRFProcessor(searchPhaseResultsProcessor);
+    }
+
+    private static void assertRRFProcessor(SearchPhaseResultsProcessor searchPhaseResultsProcessor) {
+        assertNotNull(searchPhaseResultsProcessor);
+        assertTrue(searchPhaseResultsProcessor instanceof RRFProcessor);
+        RRFProcessor rrfProcessor = (RRFProcessor) searchPhaseResultsProcessor;
+        assertEquals("score-ranker-processor", rrfProcessor.getType());
     }
 }
