@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * DTO object to hold data required for score normalization passed to execute() function
+ * DTO object to hold data in NormalizationProcessorWorkflow class
  * in NormalizationProcessorWorkflow.
  */
 @AllArgsConstructor
