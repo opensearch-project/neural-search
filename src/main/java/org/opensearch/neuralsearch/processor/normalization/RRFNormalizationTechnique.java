@@ -22,7 +22,7 @@ import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 
 /**
  * Abstracts calculation of rank scores for each document returned as part of
- * reciprocal rank fusion. Rank scores are summed across subqueries in combination classes
+ * reciprocal rank fusion. Rank scores are summed across subqueries in combination classes.
  */
 @ToString(onlyExplicitlyIncluded = true)
 public class RRFNormalizationTechnique implements ScoreNormalizationTechnique {
@@ -31,7 +31,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique {
     public static final int DEFAULT_RANK_CONSTANT = 60;
     public static final String PARAM_NAME_RANK_CONSTANT = "rank_constant";
     private static final Set<String> SUPPORTED_PARAMS = Set.of(PARAM_NAME_RANK_CONSTANT);
-
+    @ToString.Include
     private final int rankConstant;
 
     public RRFNormalizationTechnique(final Map<String, Object> params, final ScoreNormalizationUtil scoreNormalizationUtil) {

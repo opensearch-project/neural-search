@@ -25,8 +25,7 @@ import static org.opensearch.ingest.ConfigurationUtils.readOptionalMap;
 import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
 
 /**
- * Factory for query results RRF processor for search pipeline. Instantiates processor based on user provided input.
- * If user doesn't pass in value for rank constant, value defaults to 60.
+ * Factory class to instantiate RRF processor based on user provided input.
  */
 @AllArgsConstructor
 @Log4j2
