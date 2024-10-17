@@ -25,7 +25,7 @@ import lombok.extern.log4j.Log4j2;
 @Log4j2
 class ScoreCombinationUtil {
     private static final String PARAM_NAME_WEIGHTS = "weights";
-    private static final float DELTA_FOR_SCORE_ASSERTION = 0.01f;
+    private static final float DELTA_FOR_WEIGHTS_ASSERTION = 0.01f;
 
     /**
      * Get collection of weights based on user provided config
@@ -117,7 +117,7 @@ class ScoreCombinationUtil {
      * @param weightsList
      */
     private void validateWeights(final List<Float> weightsList) {
-        boolean isOutOfRange = weightsList.stream().anyMatch(weight -> !Range.between(0.0f, 1.0f).contains(weight));
+        boolean isOutOfRange = weightsList.stream().anyMatch(weight -> !Range.of(0.0f, 1.0f).contains(weight));
         if (isOutOfRange) {
             throw new IllegalArgumentException(
                 String.format(
@@ -128,7 +128,7 @@ class ScoreCombinationUtil {
             );
         }
         float sumOfWeights = weightsList.stream().reduce(0.0f, Float::sum);
-        if (!DoubleMath.fuzzyEquals(1.0f, sumOfWeights, DELTA_FOR_SCORE_ASSERTION)) {
+        if (!DoubleMath.fuzzyEquals(1.0f, sumOfWeights, DELTA_FOR_WEIGHTS_ASSERTION)) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,

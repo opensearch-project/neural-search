@@ -47,16 +47,15 @@ public class NormalizationProcessorWorkflow {
 
     /**
      * Start execution of this workflow
-     * @param querySearchResults input data with QuerySearchResult from multiple shards
-     * @param normalizationTechnique technique for score normalization
-     * @param combinationTechnique technique for score combination
+     * @param normalizationExecuteDTO contains querySearchResults input data with QuerySearchResult
+     * from multiple shards, fetchSearchResultOptional, normalizationTechnique technique for score normalization
+     *  combinationTechnique technique for score combination, and nullable rankConstant only used in RRF technique
      */
-    public void execute(
-        final List<QuerySearchResult> querySearchResults,
-        final Optional<FetchSearchResult> fetchSearchResultOptional,
-        final ScoreNormalizationTechnique normalizationTechnique,
-        final ScoreCombinationTechnique combinationTechnique
-    ) {
+    public void execute(final NormalizationExecuteDTO normalizationExecuteDTO) {
+        final List<QuerySearchResult> querySearchResults = normalizationExecuteDTO.getQuerySearchResults();
+        final Optional<FetchSearchResult> fetchSearchResultOptional = normalizationExecuteDTO.getFetchSearchResultOptional();
+        final ScoreNormalizationTechnique normalizationTechnique = normalizationExecuteDTO.getNormalizationTechnique();
+        final ScoreCombinationTechnique combinationTechnique = normalizationExecuteDTO.getCombinationTechnique();
         // save original state
         List<Integer> unprocessedDocIds = unprocessedDocIds(querySearchResults);
 
@@ -64,9 +63,15 @@ public class NormalizationProcessorWorkflow {
         log.debug("Pre-process query results");
         List<CompoundTopDocs> queryTopDocs = getQueryTopDocs(querySearchResults);
 
+        // Data transfer object for score normalization used to pass nullable rankConstant which is only used in RRF
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(queryTopDocs)
+            .normalizationTechnique(normalizationTechnique)
+            .build();
+
         // normalize
         log.debug("Do score normalization");
-        scoreNormalizer.normalizeScores(queryTopDocs, normalizationTechnique);
+        scoreNormalizer.normalizeScores(normalizeScoresDTO);
 
         CombineScoresDto combineScoresDTO = CombineScoresDto.builder()
             .queryTopDocs(queryTopDocs)
