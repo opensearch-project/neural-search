@@ -72,7 +72,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique {
     }
 
     private int getRankConstant(final Map<String, Object> params) {
-        if (!params.containsKey(PARAM_NAME_RANK_CONSTANT)) {
+        if (Objects.isNull(params) || !params.containsKey(PARAM_NAME_RANK_CONSTANT)) {
             return DEFAULT_RANK_CONSTANT;
         }
         int rankConstant = getParamAsInteger(params, PARAM_NAME_RANK_CONSTANT);
