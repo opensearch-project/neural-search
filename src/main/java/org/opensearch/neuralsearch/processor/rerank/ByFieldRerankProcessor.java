@@ -23,9 +23,9 @@ import java.util.Optional;
 /**
  * A reranking processor that reorders search results based on the content of a specified field.
  * <p>
- * The ByFieldRerankProcessor extends the RescoringRerankProcessor to provide field-based reranking
- * capabilities. It allows for reordering of search results by considering the content of a
- * designated target field within each document.
+ * The ByFieldRerankProcessor allows for reordering of search results by considering the content of a
+ * designated target field within each document. This processor will update the <code>_score</code> field with what has been provided
+ * by {@code target_field}, when this happens a new field is appended called <code>previous_score</code> which was the score prior to reranking.
  * <p>
  * Key features:
  * <ul>
@@ -52,7 +52,7 @@ import java.util.Optional;
  * }
  * </pre>
  * <p>
- * This processor is particularly useful in scenarios where additional, document-specific
+ * This processor is useful in scenarios where additional, document-specific
  * information stored in a field can be used to improve the relevance of search results
  * beyond the initial scoring.
  */
