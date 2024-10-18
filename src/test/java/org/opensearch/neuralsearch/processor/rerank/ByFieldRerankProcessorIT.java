@@ -65,6 +65,7 @@ public class ByFieldRerankProcessorIT extends BaseNeuralSearchIT {
     private final static String POST = "POST";
     private final static String TARGET_FIELD = "similarity_score";
     private final static String REMOVE_TARGET_FIELD = "true";
+    private final static String KEEP_PREVIOUS_FIELD = "true";
     private SearchResponse searchResponse;
 
     /**
@@ -120,7 +121,8 @@ public class ByFieldRerankProcessorIT extends BaseNeuralSearchIT {
             LOCALE,
             Files.readString(Path.of(classLoader.getResource(PATH_TO_BY_FIELD_RERANK_PIPELINE_TEMPLATE).toURI())),
             TARGET_FIELD,
-            REMOVE_TARGET_FIELD
+            REMOVE_TARGET_FIELD,
+            KEEP_PREVIOUS_FIELD
         ).replace("\"true\"", "true").replace("\"false\"", "false");
 
         Response pipelineCreateResponse = makeRequest(

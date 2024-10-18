@@ -232,7 +232,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
     // End of MLOpenSearchRerankProcessor Tests
 
     // Start of ByFieldRerankProcessor Tests
-    public void testByFieldCreation_whenTargetFieldSpecifiedWithDefaultRemoveTargetField_thenSuccessful() {
+    public void testByFieldCreation_whenTargetFieldSpecifiedWithDefaultRemoveTargetFieldAndDefaultPreviousScore_thenSuccessful() {
         Map<String, Object> config = new HashMap<>(
             Map.of(RerankType.BY_FIELD.getLabel(), new HashMap<>(Map.of(ByFieldRerankProcessor.TARGET_FIELD, "path.to.target_field")))
         );
@@ -253,6 +253,27 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
                         "path.to.target_field",
                         ByFieldRerankProcessor.REMOVE_TARGET_FIELD,
                         removeTargetField
+                    )
+                )
+            )
+        );
+        SearchResponseProcessor processor = factory.create(Map.of(), TAG, DESC, false, config, pipelineContext);
+        assert (processor instanceof RerankProcessor);
+        assert (processor instanceof ByFieldRerankProcessor);
+        assert (processor.getType().equals(RerankProcessor.TYPE));
+    }
+
+    public void testByFieldCreation_whenTargetFieldSpecifiedWithPreviousScoreKept_thenSuccessful() {
+        boolean keepPreviousScore = true;
+        Map<String, Object> config = new HashMap<>(
+            Map.of(
+                RerankType.BY_FIELD.getLabel(),
+                new HashMap<>(
+                    Map.of(
+                        ByFieldRerankProcessor.TARGET_FIELD,
+                        "path.to.target_field",
+                        ByFieldRerankProcessor.KEEP_PREVIOUS_SCORE,
+                        keepPreviousScore
                     )
                 )
             )

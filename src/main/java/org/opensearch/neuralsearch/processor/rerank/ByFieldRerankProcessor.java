@@ -25,7 +25,7 @@ import java.util.Optional;
  * <p>
  * The ByFieldRerankProcessor allows for reordering of search results by considering the content of a
  * designated target field within each document. This processor will update the <code>_score</code> field with what has been provided
- * by {@code target_field}, when this happens a new field is appended called <code>previous_score</code> which was the score prior to reranking.
+ * by {@code target_field}. When {@code keep_previous_score} is enabled a new field is appended called <code>previous_score</code> which was the score prior to reranking.
  * <p>
  * Key features:
  * <ul>
@@ -38,6 +38,7 @@ import java.util.Optional;
  * <ul>
  *   <li>{@code target_field}: The field to be used for reranking (required)</li>
  *   <li>{@code remove_target_field}: Whether to remove the target field from the final results (optional, default: false)</li>
+ *   <li>{@code keep_previous_score}: Whether to append the previous score in a field called <code>previous_score</code> (optional, default: false)</li>
  * </ul>
  * <p>
  * Usage example:
@@ -46,7 +47,8 @@ import java.util.Optional;
  *   "rerank": {
  *     "by_field": {
  *       "target_field": "document.relevance_score",
- *       "remove_target_field": true
+ *       "remove_target_field": true,
+ *       keep_previous_score: false
  *     }
  *   }
  * }
@@ -60,9 +62,11 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
 
     public static final String TARGET_FIELD = "target_field";
     public static final String REMOVE_TARGET_FIELD = "remove_target_field";
+    public static final String KEEP_PREVIOUS_SCORE = "keep_previous_score";
 
     protected final String targetField;
     protected final boolean removeTargetField;
+    protected final boolean keepPreviousScore;
 
     /**
      * Constructor to pass values to the RerankProcessor constructor.
@@ -71,9 +75,9 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
      * @param tag                   The processor's identifier
      * @param ignoreFailure         If true, OpenSearch ignores any failure of this processor and
      *                              continues to run the remaining processors in the search pipeline.
-     *
      * @param targetField           The field you want to replace your <code>_score</code> with
      * @param removeTargetField     A flag to let you delete the target_field for better visualization (i.e. removes a duplicate value)
+     * @param keepPreviousScore     A flag to let you decide to stash your previous <code>_score</code> in a field called <code>previous_score</code> (i.e. for debugging purposes)
      * @param contextSourceFetchers  Context from some source and puts it in a map for a reranking processor to use <b> (Unused in ByFieldRerankProcessor)</b>
      */
     public ByFieldRerankProcessor(
@@ -82,11 +86,13 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
         boolean ignoreFailure,
         String targetField,
         boolean removeTargetField,
+        boolean keepPreviousScore,
         final List<ContextSourceFetcher> contextSourceFetchers
     ) {
         super(RerankType.BY_FIELD, description, tag, ignoreFailure, contextSourceFetchers);
         this.targetField = targetField;
         this.removeTargetField = removeTargetField;
+        this.keepPreviousScore = keepPreviousScore;
     }
 
     @Override
@@ -106,7 +112,10 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
             Object val = getValueFromSource(sourceAsMap, targetField).get();
             scores.add(((Number) val).floatValue());
 
-            sourceAsMap.put("previous_score", hit.getScore());
+            if (keepPreviousScore) {
+                sourceAsMap.put("previous_score", hit.getScore());
+            }
+
             if (removeTargetField) {
                 removeTargetFieldFromSource(sourceAsMap);
             }

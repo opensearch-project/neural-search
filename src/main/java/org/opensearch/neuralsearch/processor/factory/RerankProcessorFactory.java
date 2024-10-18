@@ -73,6 +73,8 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
                 return new MLOpenSearchRerankProcessor(description, tag, ignoreFailure, modelId, contextFetchers, clientAccessor);
             case BY_FIELD:
                 boolean DEFAULT_REMOVE_TARGET_FIELD = false;
+                boolean DEFAULT_KEEP_PREVIOUS_SCORE = false;
+
                 String targetField = ConfigurationUtils.readStringProperty(
                     RERANK_PROCESSOR_TYPE,
                     tag,
@@ -86,8 +88,23 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
                     ByFieldRerankProcessor.REMOVE_TARGET_FIELD,
                     DEFAULT_REMOVE_TARGET_FIELD
                 );
+                boolean keepPreviousScore = ConfigurationUtils.readBooleanProperty(
+                    RERANK_PROCESSOR_TYPE,
+                    tag,
+                    rerankerConfig,
+                    ByFieldRerankProcessor.KEEP_PREVIOUS_SCORE,
+                    DEFAULT_KEEP_PREVIOUS_SCORE
+                );
 
-                return new ByFieldRerankProcessor(description, tag, ignoreFailure, targetField, removeTargetField, contextFetchers);
+                return new ByFieldRerankProcessor(
+                    description,
+                    tag,
+                    ignoreFailure,
+                    targetField,
+                    removeTargetField,
+                    keepPreviousScore,
+                    contextFetchers
+                );
             default:
                 throw new IllegalArgumentException(String.format(Locale.ROOT, "Cannot build reranker type %s", type.getLabel()));
         }

@@ -217,7 +217,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
 
     /**
      * This scenario adds the <code>remove_target_field</code> to be able to test that <code>_source</code> mapping
-     * has been modified.
+     * has been modified. It also asserts that the previous_score has been aggregated by <code>keep_previous_score</code>
      * <p>
      * In this scenario the object will start off like this
      * <pre>
@@ -242,18 +242,27 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
      * }
      * </pre>
      * The reason for this was to delete any empty maps as the result of deleting <code>score</code>.
-     * This test also checks that previous score was added
+     * This test also checks that previous score was added as a result of <code>keep_previous_score</code> being true
      */
-    public void testReRank_deletesEmptyMaps_WhenResponseHasNestedField() throws IOException {
+    public void testReRank_deletesEmptyMapsAndKeepsPreviousScore_WhenResponseHasNestedField() throws IOException {
         String targetField = "ml.info.score";
         boolean removeTargetField = true;
+        boolean keepPreviousScore = true;
+
         setUpValidSearchResultsWithNestedTargetValue();
 
         Map<String, Object> config = new HashMap<>(
             Map.of(
                 RerankType.BY_FIELD.getLabel(),
                 new HashMap<>(
-                    Map.of(ByFieldRerankProcessor.TARGET_FIELD, targetField, ByFieldRerankProcessor.REMOVE_TARGET_FIELD, removeTargetField)
+                    Map.of(
+                        ByFieldRerankProcessor.TARGET_FIELD,
+                        targetField,
+                        ByFieldRerankProcessor.REMOVE_TARGET_FIELD,
+                        removeTargetField,
+                        ByFieldRerankProcessor.KEEP_PREVIOUS_SCORE,
+                        keepPreviousScore
+                    )
                 )
             )
         );
@@ -293,8 +302,100 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
     }
 
     /**
+     * This scenario tests the rerank functionality when the response has a nested field.
+     * It adds the <code>remove_target_field</code> to verify that the <code>_source</code> mapping
+     * has been modified. It also asserts that empty maps are deleted and no previous score is retained.
+     * <p>
+     * In this scenario the object will start off like this:
+     * <pre>
+     * {
+     *    "my_field" : "%s",
+     *    "ml": {
+     *         "model" : "myModel",
+     *         "info"  : {
+     *          "score": %s
+     *         }
+     *    }
+     * }
+     * </pre>
+     * and then be transformed into:
+     * <pre>
+     * {
+     *     "my_field" : "%s",
+     *     "ml": {
+     *         "model" : "myModel"
+     *     }
+     * }
+     * </pre>
+     * The reason for this transformation is to delete any empty maps resulting from removing the <code>target_field</code>.
+     * This test also verifies that the nested structure is properly handled and the target field is removed.
+     */
+    public void testReRank_deletesEmptyMapsAndHasNoPreviousScore_WhenResponseHasNestedField() throws IOException {
+        String targetField = "ml.info.score";
+        boolean removeTargetField = true;
+        boolean keepPreviousScore = false;
+
+        setUpValidSearchResultsWithNestedTargetValue();
+
+        Map<String, Object> config = new HashMap<>(
+            Map.of(
+                RerankType.BY_FIELD.getLabel(),
+                new HashMap<>(
+                    Map.of(
+                        ByFieldRerankProcessor.TARGET_FIELD,
+                        targetField,
+                        ByFieldRerankProcessor.REMOVE_TARGET_FIELD,
+                        removeTargetField,
+                        ByFieldRerankProcessor.KEEP_PREVIOUS_SCORE,
+                        keepPreviousScore
+                    )
+                )
+            )
+        );
+        processor = (ByFieldRerankProcessor) factory.create(
+            Map.of(),
+            "rerank processor",
+            "processor for 2nd level reranking based on provided field, This will check a nested field",
+            false,
+            config,
+            pipelineContext
+        );
+        ActionListener<SearchResponse> listener = mock(ActionListener.class);
+        processor.rerank(response, Map.of(), listener);
+
+        ArgumentCaptor<SearchResponse> argCaptor = ArgumentCaptor.forClass(SearchResponse.class);
+
+        verify(listener, times(1)).onResponse(argCaptor.capture());
+        SearchResponse searchResponse = argCaptor.getValue();
+
+        assertEquals(sampleIndexMLScorePairs.size(), searchResponse.getHits().getHits().length);
+
+        for (int i = 0; i < searchResponse.getHits().getHits().length; i++) {
+            SearchHit searchHit = searchResponse.getHits().getAt(i);
+            Map<String, Object> sourceMap = searchHit.getSourceAsMap();
+
+            assertTrue(
+                "The source mapping does ot have `previous_score` entry because "
+                    + ByFieldRerankProcessor.KEEP_PREVIOUS_SCORE
+                    + " is "
+                    + keepPreviousScore,
+                !sourceMap.containsKey("previous_score")
+            );
+            assertEquals("The first level of the map is the containing `my_field` and `ml`", 2, sourceMap.size());
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> innerMLMap = (Map<String, Object>) sourceMap.get("ml");
+
+            assertEquals("The ml map now only has 1 mapping `model` instead of 2", 1, innerMLMap.size());
+            assertTrue("The ml map has `model` as a mapping", innerMLMap.containsKey("model"));
+            assertFalse("The ml map no longer has the score `info` mapping ", innerMLMap.containsKey("info"));
+
+        }
+    }
+
+    /**
      * This scenario adds the <code>remove_target_field</code> to be able to test that <code>_source</code> mapping
-     * has been modified.
+     * has been modified. It also enables <code>keep_previous_score</code> to test that <code>previous_score</code> is appended.
      * <p>
      * In this scenario the object will start off like this
      * <pre>
@@ -316,18 +417,25 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
      *    "previous_score" : float
      * }
      * </pre>
-     * This test also checks that previous score was added
      */
-    public void testReRank_deletesEmptyMaps_WhenResponseHasNonNestedField() throws IOException {
+    public void testReRank_deletesEmptyMapsAndKeepsPreviousScore_WhenResponseHasNonNestedField() throws IOException {
         String targetField = "ml_score";
         boolean removeTargetField = true;
+        boolean keepPreviousScore = true;
         setUpValidSearchResultsWithNonNestedTargetValueWithDenseSourceMapping();
 
         Map<String, Object> config = new HashMap<>(
             Map.of(
                 RerankType.BY_FIELD.getLabel(),
                 new HashMap<>(
-                    Map.of(ByFieldRerankProcessor.TARGET_FIELD, targetField, ByFieldRerankProcessor.REMOVE_TARGET_FIELD, removeTargetField)
+                    Map.of(
+                        ByFieldRerankProcessor.TARGET_FIELD,
+                        targetField,
+                        ByFieldRerankProcessor.REMOVE_TARGET_FIELD,
+                        removeTargetField,
+                        ByFieldRerankProcessor.KEEP_PREVIOUS_SCORE,
+                        keepPreviousScore
+                    )
                 )
             )
         );
@@ -366,13 +474,105 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
     }
 
     /**
-     * This scenario makes sure the contents of the nested mapping have been updated by checking that a new field
-     * <code>previous_score</code> was added along with the correct values in which they came from
+    * This scenario tests the rerank functionality when the response has a non-nested field.
+    * It adds the <code>remove_target_field</code> to verify that the <code>_source</code> mapping
+    * has been modified. It also disables <code>keep_previous_score</code> to test that <code>previous_score</code> is not appended.
+    * <p>
+    * In this scenario the object will start off like this:
+    * <pre>
+    * {
+    *  "my_field" : "%s",
+    *  "ml_score" : %s,
+    *   "info"    : {
+    *          "model" : "myModel"
+    *    }
+    * }
+    * </pre>
+    * and then be transformed into:
+    * <pre>
+    * {
+    *  "my_field" : "%s",
+    *   "info"    : {
+    *          "model" : "myModel"
+    *    }
+    * }
+    * </pre>
+    * This test verifies that the target field is removed, empty maps are deleted, and no previous score is retained
+    * when dealing with a non-nested field structure.
+    */
+    public void testReRank_deletesEmptyMapsAndHasNoPreviousScore_WhenResponseHasNonNestedField() throws IOException {
+        String targetField = "ml_score";
+        boolean removeTargetField = true;
+        boolean keepPreviousScore = false;
+        setUpValidSearchResultsWithNonNestedTargetValueWithDenseSourceMapping();
+
+        Map<String, Object> config = new HashMap<>(
+            Map.of(
+                RerankType.BY_FIELD.getLabel(),
+                new HashMap<>(
+                    Map.of(
+                        ByFieldRerankProcessor.TARGET_FIELD,
+                        targetField,
+                        ByFieldRerankProcessor.REMOVE_TARGET_FIELD,
+                        removeTargetField,
+                        ByFieldRerankProcessor.KEEP_PREVIOUS_SCORE,
+                        keepPreviousScore
+                    )
+                )
+            )
+        );
+        processor = (ByFieldRerankProcessor) factory.create(
+            Map.of(),
+            "rerank processor",
+            "processor for 2nd level reranking based on provided field, This will check a NON-nested field",
+            false,
+            config,
+            pipelineContext
+        );
+        ActionListener<SearchResponse> listener = mock(ActionListener.class);
+        processor.rerank(response, Map.of(), listener);
+
+        ArgumentCaptor<SearchResponse> argCaptor = ArgumentCaptor.forClass(SearchResponse.class);
+
+        verify(listener, times(1)).onResponse(argCaptor.capture());
+        SearchResponse searchResponse = argCaptor.getValue();
+
+        assertEquals(sampleIndexMLScorePairs.size(), searchResponse.getHits().getHits().length);
+
+        for (int i = 0; i < searchResponse.getHits().getHits().length; i++) {
+            SearchHit searchHit = searchResponse.getHits().getAt(i);
+            Map<String, Object> sourceMap = searchHit.getSourceAsMap();
+
+            assertTrue(
+                "The source mapping does ot have `previous_score` entry because "
+                    + ByFieldRerankProcessor.KEEP_PREVIOUS_SCORE
+                    + " is "
+                    + keepPreviousScore,
+                !sourceMap.containsKey("previous_score")
+            );
+            assertEquals("The first level of the map is the containing `my_field` and `info`", 2, sourceMap.size());
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> innerInfoMap = (Map<String, Object>) sourceMap.get("info");
+
+            assertEquals("The info map has 1 mapping", 1, innerInfoMap.size());
+            assertTrue("The info map has the model as the only mapping", innerInfoMap.containsKey("model"));
+
+        }
+    }
+
+    /**
+     * This scenario makes sure turning on <code>keep_previous_score</code>, updates the contents of the <b>nested
+     * mapping</b> by checking that a new field <code>previous_score</code> was added along with the correct values in which they came from
      * and that the targetField has been deleted (along with other empty maps as a result of deleting this entry).
+     * <hr>
+     * In order to check that <code>previous_score</code> is valid it will check that the docIds and scores match from
+     * the resulting rerank and original sample data
      */
     public void testReRank_storesPreviousScoresInSourceMap_WhenResponseHasNestedField() throws IOException {
         String targetField = "ml.info.score";
         boolean removeTargetField = true;
+        boolean keepPreviousScore = true;
         setUpValidSearchResultsWithNestedTargetValue();
 
         List<AbstractMap.SimpleImmutableEntry<Integer, Float>> previousDocIdScorePair = IntStream.range(
@@ -388,7 +588,14 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
             Map.of(
                 RerankType.BY_FIELD.getLabel(),
                 new HashMap<>(
-                    Map.of(ByFieldRerankProcessor.TARGET_FIELD, targetField, ByFieldRerankProcessor.REMOVE_TARGET_FIELD, removeTargetField)
+                    Map.of(
+                        ByFieldRerankProcessor.TARGET_FIELD,
+                        targetField,
+                        ByFieldRerankProcessor.REMOVE_TARGET_FIELD,
+                        removeTargetField,
+                        ByFieldRerankProcessor.KEEP_PREVIOUS_SCORE,
+                        keepPreviousScore
+                    )
                 )
             )
         );
@@ -428,13 +635,17 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
     }
 
     /**
-     * This scenario makes sure the contents of the mapping have been updated by checking that a new field
-     * <code>previous_score</code> was added along with the correct values in which they came from
-     * and that the targetField has been deleted.
+     * This scenario makes sure turning on <code>keep_previous_score</code>, updates the contents of the <b>NON-nested
+     * mapping</b> by checking that a new field <code>previous_score</code> was added along with the correct values in which they came from
+     * and that the targetField has been deleted (along with other empty maps as a result of deleting this entry).
+     * <hr>
+     * In order to check that <code>previous_score</code> is valid it will check that the docIds and scores match from
+     * the resulting rerank and original sample data
      */
     public void testReRank_storesPreviousScoresInSourceMap_WhenResponseHasNonNestedField() throws IOException {
         String targetField = "ml_score";
         boolean removeTargetField = true;
+        boolean keepPreviousScore = true;
         setUpValidSearchResultsWithNonNestedTargetValueWithDenseSourceMapping();
 
         List<AbstractMap.SimpleImmutableEntry<Integer, Float>> previousDocIdScorePair = IntStream.range(
@@ -450,7 +661,14 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
             Map.of(
                 RerankType.BY_FIELD.getLabel(),
                 new HashMap<>(
-                    Map.of(ByFieldRerankProcessor.TARGET_FIELD, targetField, ByFieldRerankProcessor.REMOVE_TARGET_FIELD, removeTargetField)
+                    Map.of(
+                        ByFieldRerankProcessor.TARGET_FIELD,
+                        targetField,
+                        ByFieldRerankProcessor.REMOVE_TARGET_FIELD,
+                        removeTargetField,
+                        ByFieldRerankProcessor.KEEP_PREVIOUS_SCORE,
+                        keepPreviousScore
+                    )
                 )
             )
         );
@@ -485,6 +703,55 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
                 currentPreviousScore,
                 0.01
             );
+
+        }
+    }
+
+    public void testRerank_keepsTargetFieldAndHasNoPreviousScore_WhenByFieldHasDefaultValues() throws IOException {
+        String targetField = "ml.info.score";
+        setUpValidSearchResultsWithNestedTargetValue();
+        List<Map.Entry<Integer, Float>> sortedScoresDescending = sampleIndexMLScorePairs.stream()
+            .sorted(Map.Entry.<Integer, Float>comparingByValue().reversed())
+            .toList();
+
+        Map<String, Object> config = new HashMap<>(
+            Map.of(RerankType.BY_FIELD.getLabel(), new HashMap<>(Map.of(ByFieldRerankProcessor.TARGET_FIELD, targetField)))
+        );
+        processor = (ByFieldRerankProcessor) factory.create(
+            Map.of(),
+            "rerank processor",
+            "processor for 2nd level reranking based on provided field, This will check a nested field",
+            false,
+            config,
+            pipelineContext
+        );
+        ActionListener<SearchResponse> listener = mock(ActionListener.class);
+        processor.rerank(response, Map.of(), listener);
+
+        ArgumentCaptor<SearchResponse> argCaptor = ArgumentCaptor.forClass(SearchResponse.class);
+
+        verify(listener, times(1)).onResponse(argCaptor.capture());
+        SearchResponse searchResponse = argCaptor.getValue();
+
+        assertEquals(sampleIndexMLScorePairs.size(), searchResponse.getHits().getHits().length);
+        assertEquals(sortedScoresDescending.getFirst().getValue(), searchResponse.getHits().getMaxScore(), 0.0001);
+
+        for (int i = 0; i < sortedScoresDescending.size(); i++) {
+            int docId = sortedScoresDescending.get(i).getKey();
+            float ml_score = sortedScoresDescending.get(i).getValue();
+            assertEquals(docId, searchResponse.getHits().getAt(i).docId());
+            assertEquals(ml_score, searchResponse.getHits().getAt(i).getScore(), 0.001);
+
+            // Test that the path to targetField is valid
+            Map<String, Object> currentMap = searchResponse.getHits().getAt(i).getSourceAsMap();
+            String[] keys = targetField.split("\\.");
+            String lastKey = keys[keys.length - 1];
+            for (int keyIndex = 0; keyIndex < keys.length - 1; keyIndex++) {
+                String key = keys[keyIndex];
+                assertTrue("The key:" + key + "does not exist in" + currentMap, currentMap.containsKey(key));
+                currentMap = (Map<String, Object>) currentMap.get(key);
+            }
+            assertTrue("The key:" + lastKey + "does not exist in" + currentMap, currentMap.containsKey(lastKey));
 
         }
     }
