@@ -6,10 +6,9 @@ package org.opensearch.neuralsearch.processor.rerank;
 
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.xcontent.XContentHelper;
+import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.xcontent.MediaType;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.neuralsearch.processor.rerank.context.ContextSourceFetcher;
 import org.opensearch.search.SearchHit;
@@ -19,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Stack;
 
 /**
  * A reranking processor that reorders search results based on the content of a specified field.
@@ -106,11 +106,10 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
         List<Float> scores = new ArrayList<>(searchHits.length);
 
         for (SearchHit hit : searchHits) {
-            Tuple<? extends MediaType, Map<String, Object>> mediaTypeAndSourceMapTuple = getMediaTypeAndSourceMapTuple(hit);
-            Map<String, Object> sourceAsMap = mediaTypeAndSourceMapTuple.v2();
+            Map<String, Object> sourceAsMap = hit.getSourceAsMap();
 
-            Object val = getValueFromSource(sourceAsMap, targetField).get();
-            scores.add(((Number) val).floatValue());
+            float val = getScoreFromSourceMap(sourceAsMap, targetField);
+            scores.add(val);
 
             if (keepPreviousScore) {
                 sourceAsMap.put("previous_score", hit.getScore());
@@ -121,9 +120,9 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
             }
 
             try {
-                XContentBuilder builder = XContentBuilder.builder(mediaTypeAndSourceMapTuple.v1().xContent());
-                builder.map(sourceAsMap);
-                hit.sourceRef(BytesReference.bytes(builder));
+                XContentBuilder builder = XContentBuilder.builder(XContentType.JSON.xContent());
+                BytesReference sourceMapAsBytes = BytesReference.bytes(builder.map(sourceAsMap));
+                hit.sourceRef(sourceMapAsBytes);
             } catch (IOException e) {
                 listener.onFailure(new RuntimeException(e));
                 return;
@@ -134,46 +133,82 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
     }
 
     /**
+     * Used to get the numeric mapping from the sourcemap using the <code>target_field</code>
+     * <hr>
+     * <b>This method assumes that the path to the mapping exists (and is numerical) as checked by {@link #validateSearchHits(SearchHit[], ActionListener)}</b>
+     * As such no error checking is done in the methods implementing this functionality
+     * @param sourceAsMap the map of maps that contains the <code>targetField</code>
+     * @param targetField the path to take to get the score to replace by
+     * @return The numerical score found using the <code>target_field</code>
+     */
+    private float getScoreFromSourceMap(Map<String, Object> sourceAsMap, String targetField) {
+        Object val = getValueFromSource(sourceAsMap, targetField).get();
+        return ((Number) val).floatValue();
+    }
+
+    /**
      * This helper method is used to initialize the path to take to get to the targetField
-     * to remove. It is implemented recursively to delete empty maps as a result of removing the
-     * targetField
+     * to remove as well as the empty maps as the result of the operation.
      * <hr>
      * <b>This method assumes that the path to the mapping exists as checked by {@link #validateSearchHits(SearchHit[], ActionListener)}</b>
-     * As such no error cehcking is done in the methods implementing this functionality
+     * As such no error checking is done in the methods implementing this functionality
      * @param sourceAsMap the map of maps that contains the <code>targetField</code>
      */
     private void removeTargetFieldFromSource(Map<String, Object> sourceAsMap) {
         String[] keys = targetField.split("\\.");
-        exploreMapAndRemove(sourceAsMap, keys, 0);
+        deleteTargetFieldAndEmptyMaps(sourceAsMap, keys);
     }
 
     /**
-     * This recursive method traces the path to targetField in a sliding window fashion. It does so
-     * by passing the parent map and the key (child) to get to the targetField (lastChild). Once it is found it will
-     * be deleted. The consequence of this, is having to delete all subsequent empty maps , this is
-     * accounted for by the last check to see that the mapping should be removed.
+     * This method performs the deletion of the targetField and emptyMaps in 3 phases
+     * <ol>
+     *     <li>Collect the maps and the respective keys (the key is used to get the inner map) in a stack. It will be used
+     *     to delete empty maps and the target field</li>
+     *     <li>Delete the top most entry, this is guaranteed even when the source mapping is non nested. This is the
+     *     mapping containing the targetField</li>
+     *     <li>Iteratively delete the rest of the maps that have (possibly been) emptied as the result of deleting the targetField</li>
+     * </ol>
      * <hr>
      * <b>This method assumes that the path to the mapping exists as checked by {@link #validateSearchHits(SearchHit[], ActionListener)}</b>
-     * As such no error cehcking is done in the methods implementing this functionality
+     * As such no error checking is done in the methods implementing this functionality
      * @param sourceAsMap the map of maps that contains the <code>targetField</code>
      * @param keys The keys used to traverse the nested map
-     * @param currentKeyIndex A sentinel to get the current key to look at
+     * @implNote You can think of this algorithm as a recursive one the base case is deleting the targetField. The recursive case
+     * is going to the next map along with the respective key. Along the way if it finds a map is empty it will delete it
      */
-    private void exploreMapAndRemove(Map<String, Object> sourceAsMap, String[] keys, int currentKeyIndex) {
-        String child = keys[currentKeyIndex];
-        String lastChild = keys[keys.length - 1];
+    private void deleteTargetFieldAndEmptyMaps(Map<String, Object> sourceAsMap, String[] keys) {
+        Stack<Tuple<Map<String, Object>, String>> parentMapChildrenKeyTupleStack = new Stack<>();
 
-        if (!child.equals(lastChild)) {
-            exploreMapAndRemove((Map<String, Object>) sourceAsMap.get(child), keys, currentKeyIndex + 1);
-        } else {
-            sourceAsMap.remove(child);
+        Map<String, Object> currentMap = sourceAsMap;
+        String lastKey = keys[keys.length - 1];
+
+        // Collect the parent maps with respective children to use them inside out
+        for (String key : keys) {
+            parentMapChildrenKeyTupleStack.add(new Tuple<>(currentMap, key));
+            if (key.equals(lastKey)) {
+                break;
+            }
+            currentMap = (Map<String, Object>) currentMap.get(key);
         }
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> innerMap = (Map<String, Object>) sourceAsMap.get(child);
+        // Remove the last key this is guaranteed
+        Tuple<Map<String, Object>, String> currentParentMapWithChild = parentMapChildrenKeyTupleStack.pop();
+        Map<String, Object> parentMap = currentParentMapWithChild.v1();
+        String key = currentParentMapWithChild.v2();
+        parentMap.remove(key);
 
-        if (innerMap != null && innerMap.isEmpty()) {
-            sourceAsMap.remove(child);
+        // Delete the empty maps inside out using the stack to mock a recursive solution
+        while (!parentMapChildrenKeyTupleStack.isEmpty()) {
+            currentParentMapWithChild = parentMapChildrenKeyTupleStack.pop();
+            parentMap = currentParentMapWithChild.v1();
+            key = currentParentMapWithChild.v2();
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> innerMap = (Map<String, Object>) parentMap.get(key);
+
+            if (innerMap != null && innerMap.isEmpty()) {
+                parentMap.remove(key);
+            }
         }
     }
 
@@ -202,7 +237,7 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
                 return false;
             }
 
-            Map<String, Object> sourceMap = getMediaTypeAndSourceMapTuple(hit).v2();
+            Map<String, Object> sourceMap = hit.getSourceAsMap();
             if (!mappingExistsInSource(sourceMap, targetField)) {
                 listener.onFailure(
                     new IllegalArgumentException("The field to rerank [" + targetField + "] is not found at hit [" + i + "]")
@@ -263,18 +298,6 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
      */
     private boolean mappingExistsInSource(Map<String, Object> sourceAsMap, String pathToValue) {
         return getValueFromSource(sourceAsMap, pathToValue).isPresent();
-    }
-
-    /**
-     * This helper method is used to retrieve the <code>_source</code> mapping (via v2()) and
-     * any metadata associated in this mapping (via v1()).
-     *
-     * @param hit The searchHit that is expected to have a <code>_source</code> mapping
-     * @return Object that contains metadata (MediaType) on the mapping v1() and the actual contents (sourceMap) v2()
-     */
-    private static Tuple<? extends MediaType, Map<String, Object>> getMediaTypeAndSourceMapTuple(SearchHit hit) {
-        BytesReference sourceRef = hit.getSourceRef();
-        return XContentHelper.convertToMap(sourceRef, false, (MediaType) null);
     }
 
 }
