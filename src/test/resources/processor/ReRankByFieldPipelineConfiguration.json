@@ -1,0 +1,14 @@
+{
+  "description": "Pipeline for reranking ByField",
+  "response_processors": [
+    {
+        "rerank": {
+            "by_field": {
+                "target_field": "%s",
+                "remove_target_field": "%s",
+                "keep_previous_score": "%s"
+            }
+        }
+    }
+  ]
+}
