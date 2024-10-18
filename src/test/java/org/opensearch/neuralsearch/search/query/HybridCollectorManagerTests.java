@@ -81,7 +81,6 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
     private static final String TEST_DOC_TEXT3 = "We would like to welcome everyone";
     private static final String QUERY1 = "hello";
     private static final String QUERY2 = "hi";
-    private static final float DELTA_FOR_ASSERTION = 0.001f;
     protected static final String QUERY3 = "everyone";
 
     @SneakyThrows

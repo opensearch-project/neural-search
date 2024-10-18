@@ -12,7 +12,7 @@ import java.util.Map;
 
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 
-public class ScoreCombinationUtilTests extends OpenSearchQueryTestCase {
+public class ScoreNormalizationUtilTests extends OpenSearchQueryTestCase {
 
     public void testCombinationWeights_whenEmptyInputPassed_thenCreateEmptyWeightCollection() {
         ScoreCombinationUtil scoreCombinationUtil = new ScoreCombinationUtil();
