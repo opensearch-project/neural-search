@@ -242,28 +242,8 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
         assert (processor.getType().equals(RerankProcessor.TYPE));
     }
 
-    public void testByFieldCreation_whenTargetFieldSpecifiedWithManualRemoveTargetField_thenSuccessful() {
+    public void testByFieldCreation_whenTargetFieldSpecifiedWithManualRemoveTargetFieldAndPreviousKeptScore_thenSuccessful() {
         boolean removeTargetField = true;
-        Map<String, Object> config = new HashMap<>(
-            Map.of(
-                RerankType.BY_FIELD.getLabel(),
-                new HashMap<>(
-                    Map.of(
-                        ByFieldRerankProcessor.TARGET_FIELD,
-                        "path.to.target_field",
-                        ByFieldRerankProcessor.REMOVE_TARGET_FIELD,
-                        removeTargetField
-                    )
-                )
-            )
-        );
-        SearchResponseProcessor processor = factory.create(Map.of(), TAG, DESC, false, config, pipelineContext);
-        assert (processor instanceof RerankProcessor);
-        assert (processor instanceof ByFieldRerankProcessor);
-        assert (processor.getType().equals(RerankProcessor.TYPE));
-    }
-
-    public void testByFieldCreation_whenTargetFieldSpecifiedWithPreviousScoreKept_thenSuccessful() {
         boolean keepPreviousScore = true;
         Map<String, Object> config = new HashMap<>(
             Map.of(
@@ -272,6 +252,8 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
                     Map.of(
                         ByFieldRerankProcessor.TARGET_FIELD,
                         "path.to.target_field",
+                        ByFieldRerankProcessor.REMOVE_TARGET_FIELD,
+                        removeTargetField,
                         ByFieldRerankProcessor.KEEP_PREVIOUS_SCORE,
                         keepPreviousScore
                     )
