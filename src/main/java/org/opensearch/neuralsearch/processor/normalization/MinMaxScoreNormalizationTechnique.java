@@ -19,6 +19,7 @@ import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import com.google.common.primitives.Floats;
 
 import lombok.ToString;
+import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
@@ -43,7 +44,8 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
      * - iterate over each result and update score as per formula above where "score" is raw score returned by Hybrid query
      */
     @Override
-    public void normalize(final List<CompoundTopDocs> queryTopDocs) {
+    public void normalize(final NormalizeScoresDTO normalizeScoresDTO) {
+        final List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
         MinMaxScores minMaxScores = getMinMaxScoresResult(queryTopDocs);
         // do normalization using actual score and min and max scores for corresponding sub query
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
