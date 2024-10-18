@@ -91,6 +91,11 @@ jobs:
         run: |
           ./gradlew check
 
+      - name: Upload Coverage Report
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
   Precommit-neural-search-linux:
     needs: Get-CI-Image-Tag
     strategy:
@@ -131,8 +136,7 @@ jobs:
           su `id -un 1000` -c "./gradlew precommit --parallel"
 
       - name: Upload Coverage Report
-        if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -164,3 +168,7 @@ jobs:
         run: |
           ./gradlew precommit --parallel
 
+      - name: Upload Coverage Report
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
