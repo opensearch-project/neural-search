@@ -11,6 +11,7 @@ import java.util.Objects;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
+import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 
 import lombok.ToString;
 
@@ -31,7 +32,8 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
      * - iterate over each result and update score as per formula above where "score" is raw score returned by Hybrid query
      */
     @Override
-    public void normalize(final List<CompoundTopDocs> queryTopDocs) {
+    public void normalize(final NormalizeScoresDTO normalizeScoresDTO) {
+        List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
         // get l2 norms for each sub-query
         List<Float> normsPerSubquery = getL2Norm(queryTopDocs);
 

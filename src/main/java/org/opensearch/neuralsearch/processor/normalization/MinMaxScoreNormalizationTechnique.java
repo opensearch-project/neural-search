@@ -11,10 +11,12 @@ import java.util.Objects;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
+import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 
 import com.google.common.primitives.Floats;
 
 import lombok.ToString;
+import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 
 /**
  * Abstracts normalization of scores based on min-max method
@@ -34,7 +36,8 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
      * - iterate over each result and update score as per formula above where "score" is raw score returned by Hybrid query
      */
     @Override
-    public void normalize(final List<CompoundTopDocs> queryTopDocs) {
+    public void normalize(final NormalizeScoresDTO normalizeScoresDTO) {
+        final List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
         int numOfSubqueries = queryTopDocs.stream()
             .filter(Objects::nonNull)
             .filter(topDocs -> topDocs.getTopDocs().size() > 0)
