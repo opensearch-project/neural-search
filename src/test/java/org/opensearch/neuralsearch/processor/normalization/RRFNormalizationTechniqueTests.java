@@ -11,6 +11,8 @@ import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
 
@@ -18,7 +20,6 @@ import java.util.Map;
  * Abstracts testing of normalization of scores based on RRF method
  */
 public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
-    private static final float DELTA_FOR_ASSERTION = 0.001f;
     static final int RANK_CONSTANT = 60;
     private ScoreNormalizationUtil scoreNormalizationUtil = new ScoreNormalizationUtil();
 
@@ -214,7 +215,8 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     }
 
     private float rrfNorm(int rank) {
-        return 1.0f / (float) (rank + RANK_CONSTANT + 1);
+        // 1.0f / (float) (rank + RANK_CONSTANT + 1);
+        return BigDecimal.ONE.divide(BigDecimal.valueOf(rank + RANK_CONSTANT + 1), 10, RoundingMode.HALF_UP).floatValue();
     }
 
     private void assertCompoundTopDocs(TopDocs expected, TopDocs actual) {

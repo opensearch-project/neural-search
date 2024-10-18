@@ -12,6 +12,7 @@ import java.util.Objects;
 import java.util.Locale;
 import java.util.Set;
 
+import org.apache.commons.lang3.Range;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
@@ -31,6 +32,9 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique {
     public static final int DEFAULT_RANK_CONSTANT = 60;
     public static final String PARAM_NAME_RANK_CONSTANT = "rank_constant";
     private static final Set<String> SUPPORTED_PARAMS = Set.of(PARAM_NAME_RANK_CONSTANT);
+    private static final int MIN_RANK_CONSTANT = 1;
+    private static final int MAX_RANK_CONSTANT = 10_000;
+    private static final Range<Integer> RANK_CONSTANT_RANGE = Range.of(MIN_RANK_CONSTANT, MAX_RANK_CONSTANT);
     @ToString.Include
     private final int rankConstant;
 
@@ -81,8 +85,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique {
     }
 
     private void validateRankConstant(final int rankConstant) {
-        boolean isOutOfRange = rankConstant < 1 || rankConstant >= 10_000;
-        if (isOutOfRange) {
+        if (!RANK_CONSTANT_RANGE.contains(rankConstant)) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
