@@ -167,22 +167,21 @@ public class NormalizationProcessorFactoryTests extends OpenSearchTestCase {
         String tag = "tag";
         String description = "description";
         boolean ignoreFailure = false;
+
+        // First value is always 0.5
+        double first = 0.5;
+        // Second value is random between 0.3 and 1.0
+        double second = 0.3 + (RandomizedTest.randomDouble() * 0.7);
+        // Third value is random between 0.3 and 1.0
+        double third = 0.3 + (RandomizedTest.randomDouble() * 0.7);
+        // This ensures minimum sum of 1.1 (0.5 + 0.3 + 0.3)
+
         Map<String, Object> config = new HashMap<>();
         config.put(NORMALIZATION_CLAUSE, new HashMap<>(Map.of("technique", "min_max")));
         config.put(
             COMBINATION_CLAUSE,
             new HashMap<>(
-                Map.of(
-                    TECHNIQUE,
-                    "arithmetic_mean",
-                    PARAMETERS,
-                    new HashMap<>(
-                        Map.of(
-                            "weights",
-                            Arrays.asList(RandomizedTest.randomDouble(), RandomizedTest.randomDouble(), RandomizedTest.randomDouble())
-                        )
-                    )
-                )
+                Map.of(TECHNIQUE, "arithmetic_mean", PARAMETERS, new HashMap<>(Map.of("weights", Arrays.asList(first, second, third))))
             )
         );
         Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);

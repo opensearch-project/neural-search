@@ -53,6 +53,8 @@ import org.opensearch.test.OpenSearchTestCase;
 
 public abstract class OpenSearchQueryTestCase extends OpenSearchTestCase {
 
+    protected static final float DELTA_FOR_ASSERTION = 0.001f;
+
     protected final MapperService createMapperService(Version version, XContentBuilder mapping) throws IOException {
         IndexMetadata meta = IndexMetadata.builder("index")
             .settings(Settings.builder().put("index.version.created", version))
