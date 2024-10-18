@@ -13,10 +13,10 @@ import java.util.Objects;
 
 import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.describeCombinationTechnique;
 
-@Log4j2
 /**
  * Abstracts combination of scores based on reciprocal rank fusion algorithm
  */
+@Log4j2
 @ToString(onlyExplicitlyIncluded = true)
 public class RRFScoreCombinationTechnique implements ScoreCombinationTechnique, ExplainableTechnique {
     @ToString.Include
