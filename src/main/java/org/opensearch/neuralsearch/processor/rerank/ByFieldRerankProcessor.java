@@ -10,7 +10,7 @@ import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.neuralsearch.processor.rerank.context.ContextSourceFetcher;
-import org.opensearch.neuralsearch.processor.util.processorSearchResponseUtil.SearchHitValidator;
+import org.opensearch.neuralsearch.processor.util.ProcessorUtils.SearchHitValidator;
 import org.opensearch.search.SearchHit;
 
 import java.io.IOException;
@@ -19,11 +19,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static org.opensearch.neuralsearch.processor.util.processorSearchResponseUtil.getScoreFromSourceMap;
-import static org.opensearch.neuralsearch.processor.util.processorSearchResponseUtil.getValueFromSource;
-import static org.opensearch.neuralsearch.processor.util.processorSearchResponseUtil.mappingExistsInSource;
-import static org.opensearch.neuralsearch.processor.util.processorSearchResponseUtil.removeTargetFieldFromSource;
-import static org.opensearch.neuralsearch.processor.util.processorSearchResponseUtil.validateRerankCriteria;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getScoreFromSourceMap;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getValueFromSource;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.mappingExistsInSource;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.removeTargetFieldFromSource;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.validateRerankCriteria;
 
 /**
  * A reranking processor that reorders search results based on the content of a specified field.
@@ -123,8 +123,7 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
             }
 
             if (removeTargetField) {
-                String[] keysToTargetField = targetField.split("\\.");
-                removeTargetFieldFromSource(sourceAsMap, keysToTargetField);
+                removeTargetFieldFromSource(sourceAsMap, targetField);
             }
 
             try {

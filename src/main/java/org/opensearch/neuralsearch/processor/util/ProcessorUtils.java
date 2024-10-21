@@ -18,7 +18,7 @@ import java.util.Stack;
  * to see that the searchResponse is in correct form or if the data you want to extract/edit
  * from the SearchResponse
  */
-public class processorSearchResponseUtil {
+public class ProcessorUtils {
 
     /**
      * Represents a function used to validate a <code>SearchHit</code> based on the provided implementation
@@ -93,12 +93,13 @@ public class processorSearchResponseUtil {
      * <b>This method assumes that the path to the mapping exists as checked by {@link #validateRerankCriteria(SearchHit[], SearchHitValidator, ActionListener)}</b>
      * As such no error checking is done in the methods implementing this functionality
      * @param sourceAsMap the map of maps that contains the <code>targetField</code>
-     * @param keys The keys used to traverse the nested map
+     * @param targetField The path to take to remove the targetField
      * @implNote You can think of this algorithm as a recursive one the base case is deleting the targetField. The recursive case
      * is going to the next map along with the respective key. Along the way if it finds a map is empty it will delete it
      */
-    public static void removeTargetFieldFromSource(Map<String, Object> sourceAsMap, String[] keys) {
+    public static void removeTargetFieldFromSource(Map<String, Object> sourceAsMap, String targetField) {
         Stack<Tuple<Map<String, Object>, String>> parentMapChildrenKeyTupleStack = new Stack<>();
+        String[] keys = targetField.split("\\.");
 
         Map<String, Object> currentMap = sourceAsMap;
         String lastKey = keys[keys.length - 1];
@@ -141,15 +142,18 @@ public class processorSearchResponseUtil {
      * the map to see if a mapping exists.
      *
      * @param sourceAsMap The Source map (a map of maps) to iterate through
-     * @param pathToValue The path to take to get the desired mapping
+     * @param targetField The path to take to get the desired mapping
      * @return A possible result within an optional
      */
-    public static Optional<Object> getValueFromSource(Map<String, Object> sourceAsMap, String pathToValue) {
-        String[] keys = pathToValue.split("\\.");
+    public static Optional<Object> getValueFromSource(Map<String, Object> sourceAsMap, String targetField) {
+        String[] keys = targetField.split("\\.");
         Optional<Object> currentValue = Optional.of(sourceAsMap);
 
         for (String key : keys) {
             currentValue = currentValue.flatMap(value -> {
+                if (!(value instanceof Map<?, ?>)) {
+                    return Optional.empty();
+                }
                 Map<String, Object> currentMap = (Map<String, Object>) value;
                 return Optional.ofNullable(currentMap.get(key));
             });
