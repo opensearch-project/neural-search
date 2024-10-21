@@ -31,7 +31,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.stream.IntStream;
 
 import static org.mockito.Mockito.doReturn;
@@ -787,7 +786,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
 
             hits[i] = new SearchHit(docId, docId + "", Collections.emptyMap(), Collections.emptyMap());
             hits[i].sourceRef(new BytesArray(sourceMap));
-            hits[i].score(new Random().nextFloat());
+            hits[i].score(1);
         }
 
         TotalHits totalHits = new TotalHits(sampleIndexMLScorePairs.size(), TotalHits.Relation.EQUAL_TO);
@@ -826,7 +825,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
 
             hits[i] = new SearchHit(docId, docId + "", Collections.emptyMap(), Collections.emptyMap());
             hits[i].sourceRef(new BytesArray(sourceMap));
-            hits[i].score(new Random().nextFloat());
+            hits[i].score(1);
         }
 
         TotalHits totalHits = new TotalHits(sampleIndexMLScorePairs.size(), TotalHits.Relation.EQUAL_TO);

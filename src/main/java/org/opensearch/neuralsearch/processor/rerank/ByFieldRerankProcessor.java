@@ -139,6 +139,16 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
         listener.onResponse(scores);
     }
 
+    /**
+     * Implements the behavior of the SearchHit validator {@code SearchHitValidator}
+     * It checks all the following
+     * <ul>
+     *     <li>Checks the search hit has a source mapping</li>
+     *     <li>Checks that the mapping exists in the source mapping using the target_field</li>
+     *     <li>Checks that the mapping has a numerical score for it to rerank</li>
+     * </ul>
+     * @param hit A search hit to validate
+     */
     public void byFieldSearchHitValidator(SearchHit hit) {
         if (!hit.hasSource()) {
             throw new IllegalArgumentException("There is no source field to be able to perform rerank on hit [" + hit.docId() + "]");

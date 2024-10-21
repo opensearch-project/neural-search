@@ -92,10 +92,11 @@ public class ProcessorUtils {
      * <hr>
      * <b>This method assumes that the path to the mapping exists as checked by {@link #validateRerankCriteria(SearchHit[], SearchHitValidator, ActionListener)}</b>
      * As such no error checking is done in the methods implementing this functionality
+     * <hr>
+     *  You can think of this algorithm as a recursive one the base case is deleting the targetField. The recursive case
+     *  is going to the next map along with the respective key. Along the way if it finds a map is empty it will delete it
      * @param sourceAsMap the map of maps that contains the <code>targetField</code>
      * @param targetField The path to take to remove the targetField
-     * @implNote You can think of this algorithm as a recursive one the base case is deleting the targetField. The recursive case
-     * is going to the next map along with the respective key. Along the way if it finds a map is empty it will delete it
      */
     public static void removeTargetFieldFromSource(Map<String, Object> sourceAsMap, String targetField) {
         Stack<Tuple<Map<String, Object>, String>> parentMapChildrenKeyTupleStack = new Stack<>();
