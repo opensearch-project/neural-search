@@ -74,9 +74,7 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
             () -> factory.create(Map.of(), TAG, DESC, false, config, pipelineContext)
         );
 
-        Map<String, Object> config2 = new HashMap<>(
-            Map.of("<Nonsense>", Map.of(ByFieldRerankProcessor.TARGET_FIELD, "path.to.target_field"))
-        );
+        Map<String, Object> config2 = new HashMap<>(Map.of("key", Map.of(ByFieldRerankProcessor.TARGET_FIELD, "path.to.target_field")));
         assertThrows(
             "no rerank type found",
             IllegalArgumentException.class,
