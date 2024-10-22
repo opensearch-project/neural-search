@@ -21,6 +21,7 @@ import org.opensearch.OpenSearchParseException;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.processor.rerank.ByFieldRerankProcessor;
 import org.opensearch.neuralsearch.processor.rerank.MLOpenSearchRerankProcessor;
 import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
 import org.opensearch.neuralsearch.processor.rerank.RerankType;
@@ -72,8 +73,16 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
             IllegalArgumentException.class,
             () -> factory.create(Map.of(), TAG, DESC, false, config, pipelineContext)
         );
+
+        Map<String, Object> config2 = new HashMap<>(Map.of("key", Map.of(ByFieldRerankProcessor.TARGET_FIELD, "path.to.target_field")));
+        assertThrows(
+            "no rerank type found",
+            IllegalArgumentException.class,
+            () -> factory.create(Map.of(), TAG, DESC, false, config2, pipelineContext)
+        );
     }
 
+    // Start of MLOpenSearchRerankProcessor Tests
     public void testCrossEncoder_whenCorrectParams_thenSuccessful() {
         Map<String, Object> config = new HashMap<>(
             Map.of(
@@ -218,5 +227,68 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
             () -> factory.create(Map.of(), TAG, DESC, false, config, pipelineContext)
         );
     }
+    // End of MLOpenSearchRerankProcessor Tests
+
+    // Start of ByFieldRerankProcessor Tests
+    public void testByFieldCreation_whenTargetFieldSpecifiedWithDefaultRemoveTargetFieldAndDefaultPreviousScore_thenSuccessful() {
+        Map<String, Object> config = new HashMap<>(
+            Map.of(RerankType.BY_FIELD.getLabel(), new HashMap<>(Map.of(ByFieldRerankProcessor.TARGET_FIELD, "path.to.target_field")))
+        );
+        SearchResponseProcessor processor = factory.create(Map.of(), TAG, DESC, false, config, pipelineContext);
+        assert (processor instanceof RerankProcessor);
+        assert (processor instanceof ByFieldRerankProcessor);
+        assert (processor.getType().equals(RerankProcessor.TYPE));
+    }
+
+    public void testByFieldCreation_whenTargetFieldSpecifiedWithManualRemoveTargetFieldAndPreviousKeptScore_thenSuccessful() {
+        boolean removeTargetField = true;
+        boolean keepPreviousScore = true;
+        Map<String, Object> config = new HashMap<>(
+            Map.of(
+                RerankType.BY_FIELD.getLabel(),
+                new HashMap<>(
+                    Map.of(
+                        ByFieldRerankProcessor.TARGET_FIELD,
+                        "path.to.target_field",
+                        ByFieldRerankProcessor.REMOVE_TARGET_FIELD,
+                        removeTargetField,
+                        ByFieldRerankProcessor.KEEP_PREVIOUS_SCORE,
+                        keepPreviousScore
+                    )
+                )
+            )
+        );
+        SearchResponseProcessor processor = factory.create(Map.of(), TAG, DESC, false, config, pipelineContext);
+        assert (processor instanceof RerankProcessor);
+        assert (processor instanceof ByFieldRerankProcessor);
+        assert (processor.getType().equals(RerankProcessor.TYPE));
+    }
+
+    public void testByFieldCreation_WithContext_thenSucceed() {
+        // You can pass context but, it won't ever be used by ByFieldRerank
+        Map<String, Object> config = new HashMap<>(
+            Map.of(
+                RerankType.BY_FIELD.getLabel(),
+                new HashMap<>(Map.of(ByFieldRerankProcessor.TARGET_FIELD, "path.to.target_field")),
+                RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
+                new HashMap<>(Map.of(DocumentContextSourceFetcher.NAME, new ArrayList<>(List.of("text_representation"))))
+            )
+        );
+        SearchResponseProcessor processor = factory.create(Map.of(), TAG, DESC, false, config, pipelineContext);
+
+        assert (processor instanceof RerankProcessor);
+        assert (processor instanceof ByFieldRerankProcessor);
+        assert (processor.getType().equals(RerankProcessor.TYPE));
+    }
+
+    public void testByField_whenEmptySubConfig_thenFail() {
+        Map<String, Object> config = new HashMap<>(Map.of(RerankType.BY_FIELD.getLabel(), new HashMap<>()));
+        assertThrows(
+            String.format(Locale.ROOT, "[%s] required property is missing", ByFieldRerankProcessor.TARGET_FIELD),
+            OpenSearchParseException.class,
+            () -> factory.create(Map.of(), TAG, DESC, false, config, pipelineContext)
+        );
+    }
+    // End of ByFieldRerankProcessor Tests
 
 }
