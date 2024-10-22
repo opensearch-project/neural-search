@@ -4,7 +4,7 @@
 Compatible with OpenSearch 2.18.0
 
 ### Features
-- Introduces ByFieldRerankProcessor for second level reranking on documents (This is done locally) ([#932](https://github.com/opensearch-project/neural-search/pull/932))
+- Introduces ByFieldRerankProcessor for second level reranking on documents ([#932](https://github.com/opensearch-project/neural-search/pull/932))
 
 ### Enhancements
 - Implement `ignore_missing` field in text chunking processors ([#907](https://github.com/opensearch-project/neural-search/pull/907))
