@@ -409,10 +409,10 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
 
         List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(1, 100, 0.0f, 1.0f);
         doAnswer(invocation -> {
-            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(3);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(MLAlgoParams.class), isA(ActionListener.class));
 
         processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
         assertNotNull(ingestDocument);
@@ -467,10 +467,10 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
 
         List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(1, 100, 0.0f, 1.0f);
         doAnswer(invocation -> {
-            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(3);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(MLAlgoParams.class), isA(ActionListener.class));
 
         processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
         assertNotNull(ingestDocument);
@@ -518,10 +518,10 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
 
         List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(1, 100, 0.0f, 1.0f);
         doAnswer(invocation -> {
-            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(3);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(MLAlgoParams.class), isA(ActionListener.class));
 
         processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
         assertNotNull(ingestDocument);
