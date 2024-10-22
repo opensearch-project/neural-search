@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -785,6 +786,39 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
     }
 
+    @SneakyThrows
+    protected void bulkIngest(final String ingestBulkPayload, final String pipeline) {
+        Map<String, String> params = new HashMap<>();
+        params.put("refresh", "true");
+        if (Objects.nonNull(pipeline)) {
+            params.put("pipeline", pipeline);
+        }
+        Response response = makeRequest(
+            client(),
+            "POST",
+            "_bulk",
+            params,
+            toHttpEntity(ingestBulkPayload),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+        );
+        Map<String, Object> map = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(response.getEntity()),
+            false
+        );
+
+        int failedDocCount = 0;
+        for (Object item : ((List) map.get("items"))) {
+            Map<String, Map<String, Object>> itemMap = (Map<String, Map<String, Object>>) item;
+            if (itemMap.get("index").get("error") != null) {
+                failedDocCount++;
+            }
+        }
+        assertEquals(0, failedDocCount);
+
+        assertEquals("_bulk failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+    }
+
     /**
      * Parse the first returned hit from a search response as a map
      *
@@ -925,6 +959,27 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final List<String> dateFields,
         final int numberOfShards
     ) {
+        return buildIndexConfiguration(
+            knnFieldConfigs,
+            nestedFields,
+            intFields,
+            Collections.emptyList(),
+            keywordFields,
+            dateFields,
+            numberOfShards
+        );
+    }
+
+    @SneakyThrows
+    protected String buildIndexConfiguration(
+        final List<KNNFieldConfig> knnFieldConfigs,
+        final List<String> nestedFields,
+        final List<String> intFields,
+        final List<String> floatFields,
+        final List<String> keywordFields,
+        final List<String> dateFields,
+        final int numberOfShards
+    ) {
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject("settings")
@@ -962,6 +1017,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
         for (String intField : intFields) {
             xContentBuilder.startObject(intField).field("type", "integer").endObject();
+        }
+
+        for (String floatField : floatFields) {
+            xContentBuilder.startObject(floatField).field("type", "float").endObject();
         }
 
         for (String keywordField : keywordFields) {
