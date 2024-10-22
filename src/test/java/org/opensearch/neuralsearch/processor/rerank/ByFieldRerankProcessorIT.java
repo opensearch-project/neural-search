@@ -7,10 +7,10 @@ package org.opensearch.neuralsearch.processor.rerank;
 import com.google.common.collect.ImmutableList;
 import lombok.SneakyThrows;
 import lombok.extern.log4j.Log4j2;
-import org.apache.hc.core5.http.HttpHeaders;
-import org.apache.hc.core5.http.ParseException;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.hc.core5.http.message.BasicHeader;
+import org.apache.http.HttpHeaders;
+import org.apache.http.ParseException;
+import org.apache.http.message.BasicHeader;
+import org.apache.http.util.EntityUtils;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
@@ -29,6 +29,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.opensearch.ml.repackage.com.google.common.net.HttpHeaders.USER_AGENT;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_USER_AGENT;
@@ -38,28 +39,22 @@ public class ByFieldRerankProcessorIT extends BaseNeuralSearchIT {
 
     private final static String PIPELINE_NAME = "rerank-byfield-pipeline";
     private final static String INDEX_NAME = "diary_index";
-    private final static String INDEX_CONFIG = """
-        {
-            "mappings" : {
-                "properties" : {
-                    "diary" : { "type" : "text" },
-                    "similarity_score" : { "type" : "float" }
-                }
-            }
-        }
-        """.replace("\n", "");
+    private final static String INDEX_CONFIG = "{"
+        + "\"mappings\":{"
+        + "    \"properties\":{"
+        + "        \"diary\":{\"type\":\"text\"},"
+        + "         \"similarity_score\":{\"type\":\"float\"}"
+        + "      }"
+        + "   }"
+        + "}";
+
     private final static List<Map.Entry<String, Float>> sampleCrossEncoderData = List.of(
         Map.entry("how are you", -11.055182f),
         Map.entry("today is sunny", 8.969885f),
         Map.entry("today is july fifth", -5.736348f),
         Map.entry("it is winter", -10.045217f)
     );
-    private final static String SAMPLE_CROSS_ENCODER_DATA_FORMAT = """
-        {
-            "diary" : "%s",
-            "similarity_score" :  %s
-        }
-        """.replace("\n", "");
+    private final static String SAMPLE_CROSS_ENCODER_DATA_FORMAT = "{" + "\"diary\":\"%s\"," + "\"similarity_score\":%s" + "}";
 
     private final static String PATH_TO_BY_FIELD_RERANK_PIPELINE_TEMPLATE = "processor/ReRankByFieldPipelineConfiguration.json";
     private final static String POST = "POST";
@@ -145,13 +140,7 @@ public class ByFieldRerankProcessorIT extends BaseNeuralSearchIT {
         Request request = new Request(POST, "/" + INDEX_NAME + "/_search");
         request.addParameter("search_pipeline", PIPELINE_NAME);
         // Filter out index metaData and only get document data. This gives search hits a score of 1 because of match all
-        request.setJsonEntity("""
-            {
-                "query": {
-                   "match_all": {}
-                 }
-            }
-            """.replace("\n", ""));
+        request.setJsonEntity("{" + "\"query\":{" + "\"match_all\":{}" + "}" + "}");
 
         Response response = client().performRequest(request);
         assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
@@ -163,7 +152,7 @@ public class ByFieldRerankProcessorIT extends BaseNeuralSearchIT {
     private void testSearchResponse() {
         List<Map.Entry<String, Float>> sortedDescendingSampleData = sampleCrossEncoderData.stream()
             .sorted(Map.Entry.<String, Float>comparingByKey().reversed())
-            .toList();
+            .collect(Collectors.toList());
 
         SearchHit[] searchHits = this.searchResponse.getHits().getHits();
         assertEquals("The sample data size should match the search response hits", sampleCrossEncoderData.size(), searchHits.length);

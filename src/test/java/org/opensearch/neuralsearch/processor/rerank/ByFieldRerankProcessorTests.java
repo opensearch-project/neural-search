@@ -30,7 +30,9 @@ import java.util.AbstractMap;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.mockito.Mockito.doReturn;
@@ -182,7 +184,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         setUpValidSearchResultsWithNestedTargetValue();
         List<Map.Entry<Integer, Float>> sortedScoresDescending = sampleIndexMLScorePairs.stream()
             .sorted(Map.Entry.<Integer, Float>comparingByValue().reversed())
-            .toList();
+            .collect(Collectors.toList());
 
         Map<String, Object> config = new HashMap<>(
             Map.of(RerankType.BY_FIELD.getLabel(), new HashMap<>(Map.of(ByFieldRerankProcessor.TARGET_FIELD, targetField)))
@@ -204,7 +206,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         SearchResponse searchResponse = argCaptor.getValue();
 
         assertEquals(sampleIndexMLScorePairs.size(), searchResponse.getHits().getHits().length);
-        assertEquals(sortedScoresDescending.getFirst().getValue(), searchResponse.getHits().getMaxScore(), 0.0001);
+        assertEquals(sortedScoresDescending.get(0).getValue(), searchResponse.getHits().getMaxScore(), 0.0001);
 
         for (int i = 0; i < sortedScoresDescending.size(); i++) {
             int docId = sortedScoresDescending.get(i).getKey();
@@ -581,7 +583,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
             .boxed()
             .map(i -> new AbstractMap.SimpleImmutableEntry<>(response.getHits().getAt(i).docId(), response.getHits().getAt(i).getScore()) {
             })
-            .toList();
+            .collect(Collectors.toList());
 
         Map<String, Object> config = new HashMap<>(
             Map.of(
@@ -654,7 +656,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
             .boxed()
             .map(i -> new AbstractMap.SimpleImmutableEntry<>(response.getHits().getAt(i).docId(), response.getHits().getAt(i).getScore()) {
             })
-            .toList();
+            .collect(Collectors.toList());
 
         Map<String, Object> config = new HashMap<>(
             Map.of(
@@ -711,7 +713,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         setUpValidSearchResultsWithNestedTargetValue();
         List<Map.Entry<Integer, Float>> sortedScoresDescending = sampleIndexMLScorePairs.stream()
             .sorted(Map.Entry.<Integer, Float>comparingByValue().reversed())
-            .toList();
+            .collect(Collectors.toList());
 
         Map<String, Object> config = new HashMap<>(
             Map.of(RerankType.BY_FIELD.getLabel(), new HashMap<>(Map.of(ByFieldRerankProcessor.TARGET_FIELD, targetField)))
@@ -733,7 +735,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         SearchResponse searchResponse = argCaptor.getValue();
 
         assertEquals(sampleIndexMLScorePairs.size(), searchResponse.getHits().getHits().length);
-        assertEquals(sortedScoresDescending.getFirst().getValue(), searchResponse.getHits().getMaxScore(), 0.0001);
+        assertEquals(sortedScoresDescending.get(0).getValue(), searchResponse.getHits().getMaxScore(), 0.0001);
 
         for (int i = 0; i < sortedScoresDescending.size(); i++) {
             int docId = sortedScoresDescending.get(i).getKey();
@@ -761,28 +763,37 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
      * Using ByFieldReRank the expected behavior is to delete the info mapping
      * as it is only has one mapping i.e. the duplicate value.
      * <hr>
-     * The targetField for this scenario is <code>ml.info.score</code>
+     * The targetField for this scenario is <code>ml.info.score</code>. The source mapping looks like so
+     * <pre>
+     *  {
+     *   "my_field" : "%s",
+     *      "ml": {
+     *       "model" : "myModel",
+     *       "info"  : {
+     *         "score": %s
+     *      }
+     *   }
+     *  }
+     * </pre>
      */
     private void setUpValidSearchResultsWithNestedTargetValue() throws IOException {
         SearchHit[] hits = new SearchHit[sampleIndexMLScorePairs.size()];
 
-        String templateString = """
-            {
-               "my_field" : "%s",
-               "ml": {
-                    "model" : "myModel",
-                    "info"  : {
-                              "score": %s
-                    }
-               }
-            }
-            """.replace("\n", "");
+        String templateString = "{"
+            + "\"my_field\":\"%s\","
+            + "\"ml\":{"
+            + "    \"model\":\"myModel\","
+            + "    \"info\":{"
+            + "       \"score\":%s "
+            + "      }"
+            + "     }"
+            + "}";
 
         for (int i = 0; i < sampleIndexMLScorePairs.size(); i++) {
             int docId = sampleIndexMLScorePairs.get(i).getKey();
             String mlScore = sampleIndexMLScorePairs.get(i).getValue() + "";
 
-            String sourceMap = templateString.formatted(i, mlScore);
+            String sourceMap = String.format(Locale.ROOT, templateString, i, mlScore);
 
             hits[i] = new SearchHit(docId, docId + "", Collections.emptyMap(), Collections.emptyMap());
             hits[i].sourceRef(new BytesArray(sourceMap));
@@ -802,26 +813,37 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
      * There will be other fields as well (this is a dense map), the expected behavior is to leave the _source mapping
      * without the targetField and leave the other fields intact.
      * <hr>
-     * The targetField for this scenario is <code>ml_score</code>
+     * The targetField for this scenario is <code>ml_score</code>. The source mapping looks like so
+     * <pre>
+     *  {
+     *  "my_field" : "%s",
+     *  "ml_score" : %s,
+     *   "info" : {
+     *     "model" : "myModel"
+     *   }
+     * }
+     * </pre>
      */
     private void setUpValidSearchResultsWithNonNestedTargetValueWithDenseSourceMapping() throws IOException {
         SearchHit[] hits = new SearchHit[sampleIndexMLScorePairs.size()];
 
-        String templateString = """
-            {
-               "my_field" : "%s",
-               "ml_score" : %s,
-                "info"    : {
-                       "model" : "myModel"
-                }
-            }
-            """.replace("\n", "");
+        String templateString = "{"
+            + "\"my_field\":\""
+            + "%s"
+            + "\","
+            + "\"ml_score\":"
+            + "%s"
+            + ","
+            + "\"info\":{"
+            + "\"model\":\"myModel\""
+            + "}"
+            + "}";
 
         for (int i = 0; i < sampleIndexMLScorePairs.size(); i++) {
             int docId = sampleIndexMLScorePairs.get(i).getKey();
             String mlScore = sampleIndexMLScorePairs.get(i).getValue() + "";
 
-            String sourceMap = templateString.formatted(i, mlScore);
+            String sourceMap = String.format(Locale.ROOT, templateString, i, mlScore);
 
             hits[i] = new SearchHit(docId, docId + "", Collections.emptyMap(), Collections.emptyMap());
             hits[i].sourceRef(new BytesArray(sourceMap));
