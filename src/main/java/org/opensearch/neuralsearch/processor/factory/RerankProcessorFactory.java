@@ -26,6 +26,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.StringJoiner;
 
+import static org.opensearch.neuralsearch.processor.rerank.ByFieldRerankProcessor.DEFAULT_KEEP_PREVIOUS_SCORE;
+import static org.opensearch.neuralsearch.processor.rerank.ByFieldRerankProcessor.DEFAULT_REMOVE_TARGET_FIELD;
 import static org.opensearch.neuralsearch.processor.rerank.RerankProcessor.processorRequiresContext;
 
 /**
@@ -72,9 +74,6 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
                 );
                 return new MLOpenSearchRerankProcessor(description, tag, ignoreFailure, modelId, contextFetchers, clientAccessor);
             case BY_FIELD:
-                boolean DEFAULT_REMOVE_TARGET_FIELD = false;
-                boolean DEFAULT_KEEP_PREVIOUS_SCORE = false;
-
                 String targetField = ConfigurationUtils.readStringProperty(
                     RERANK_PROCESSOR_TYPE,
                     tag,

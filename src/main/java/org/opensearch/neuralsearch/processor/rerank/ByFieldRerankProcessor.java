@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor.rerank;
 
+import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.action.ActionListener;
@@ -16,6 +17,7 @@ import org.opensearch.search.SearchHit;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -63,11 +65,15 @@ import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.validate
  * information stored in a field can be used to improve the relevance of search results
  * beyond the initial scoring.
  */
+@Log4j2
 public class ByFieldRerankProcessor extends RescoringRerankProcessor {
 
     public static final String TARGET_FIELD = "target_field";
     public static final String REMOVE_TARGET_FIELD = "remove_target_field";
     public static final String KEEP_PREVIOUS_SCORE = "keep_previous_score";
+
+    public static final boolean DEFAULT_REMOVE_TARGET_FIELD = false;
+    public static final boolean DEFAULT_KEEP_PREVIOUS_SCORE = false;
 
     protected final String targetField;
     protected final boolean removeTargetField;
@@ -86,12 +92,12 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
      * @param contextSourceFetchers  Context from some source and puts it in a map for a reranking processor to use <b> (Unused in ByFieldRerankProcessor)</b>
      */
     public ByFieldRerankProcessor(
-        String description,
-        String tag,
-        boolean ignoreFailure,
-        String targetField,
-        boolean removeTargetField,
-        boolean keepPreviousScore,
+        final String description,
+        final String tag,
+        final boolean ignoreFailure,
+        final String targetField,
+        final boolean removeTargetField,
+        final boolean keepPreviousScore,
         final List<ContextSourceFetcher> contextSourceFetchers
     ) {
         super(RerankType.BY_FIELD, description, tag, ignoreFailure, contextSourceFetchers);
@@ -101,7 +107,11 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
     }
 
     @Override
-    public void rescoreSearchResponse(SearchResponse response, Map<String, Object> rerankingContext, ActionListener<List<Float>> listener) {
+    public void rescoreSearchResponse(
+        final SearchResponse response,
+        final Map<String, Object> rerankingContext,
+        final ActionListener<List<Float>> listener
+    ) {
         SearchHit[] searchHits = response.getHits().getHits();
 
         SearchHitValidator searchHitValidator = this::byFieldSearchHitValidator;
@@ -131,6 +141,7 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
                 BytesReference sourceMapAsBytes = BytesReference.bytes(builder.map(sourceAsMap));
                 hit.sourceRef(sourceMapAsBytes);
             } catch (IOException e) {
+                log.error(e.getMessage());
                 listener.onFailure(new RuntimeException(e));
                 return;
             }
@@ -149,20 +160,29 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
      * </ul>
      * @param hit A search hit to validate
      */
-    public void byFieldSearchHitValidator(SearchHit hit) {
+    public void byFieldSearchHitValidator(final SearchHit hit) {
         if (!hit.hasSource()) {
-            throw new IllegalArgumentException("There is no source field to be able to perform rerank on hit [" + hit.docId() + "]");
+            log.error(String.format(Locale.ROOT, "There is no source field to be able to perform rerank on hit [%d]", hit.docId()));
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "There is no source field to be able to perform rerank on hit [%d]", hit.docId())
+            );
         }
 
         Map<String, Object> sourceMap = hit.getSourceAsMap();
         if (!mappingExistsInSource(sourceMap, targetField)) {
-            throw new IllegalArgumentException("The field to rerank [" + targetField + "] is not found at hit [" + hit.docId() + "]");
+            log.error(String.format(Locale.ROOT, "The field to rerank [%s] is not found at hit [%d]", targetField, hit.docId()));
+
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "The field to rerank by is not found at hit [%d]", hit.docId()));
         }
 
         Optional<Object> val = getValueFromSource(sourceMap, targetField);
 
         if (!(val.get() instanceof Number)) {
-            throw new IllegalArgumentException("The field mapping to rerank [" + targetField + ": " + val.get() + "] is a not Numerical");
+            log.error(String.format(Locale.ROOT, "The field mapping to rerank [%s: %s] is not Numerical", targetField, val.orElse(null)));
+
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "The field mapping to rerank by [%s] is not Numerical", val.orElse(null))
+            );
         }
 
     }

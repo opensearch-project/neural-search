@@ -38,7 +38,7 @@ public class ProcessorUtils {
          * @param hit The specific SearchHit were the invalidation occurred
          * @throws IllegalArgumentException if the validation for the hit fails
          */
-        void validate(SearchHit hit) throws IllegalArgumentException;
+        void validate(final SearchHit hit) throws IllegalArgumentException;
     }
 
     /**
@@ -51,9 +51,9 @@ public class ProcessorUtils {
      * @return The status indicating that the SearchHits are in correct form to perform the Rerank
      */
     public static boolean validateRerankCriteria(
-        SearchHit[] searchHits,
-        SearchHitValidator validator,
-        ActionListener<List<Float>> listener
+        final SearchHit[] searchHits,
+        final SearchHitValidator validator,
+        final ActionListener<List<Float>> listener
     ) {
         for (SearchHit hit : searchHits) {
             try {
@@ -75,7 +75,7 @@ public class ProcessorUtils {
      * @param targetField the path to take to get the score to replace by
      * @return The numerical score found using the <code>target_field</code>
      */
-    public static float getScoreFromSourceMap(Map<String, Object> sourceAsMap, String targetField) {
+    public static float getScoreFromSourceMap(final Map<String, Object> sourceAsMap, final String targetField) {
         Object val = getValueFromSource(sourceAsMap, targetField).get();
         return ((Number) val).floatValue();
     }
@@ -98,7 +98,7 @@ public class ProcessorUtils {
      * @param sourceAsMap the map of maps that contains the <code>targetField</code>
      * @param targetField The path to take to remove the targetField
      */
-    public static void removeTargetFieldFromSource(Map<String, Object> sourceAsMap, String targetField) {
+    public static void removeTargetFieldFromSource(final Map<String, Object> sourceAsMap, final String targetField) {
         Stack<Tuple<Map<String, Object>, String>> parentMapChildrenKeyTupleStack = new Stack<>();
         String[] keys = targetField.split("\\.");
 
@@ -146,7 +146,7 @@ public class ProcessorUtils {
      * @param targetField The path to take to get the desired mapping
      * @return A possible result within an optional
      */
-    public static Optional<Object> getValueFromSource(Map<String, Object> sourceAsMap, String targetField) {
+    public static Optional<Object> getValueFromSource(final Map<String, Object> sourceAsMap, final String targetField) {
         String[] keys = targetField.split("\\.");
         Optional<Object> currentValue = Optional.of(sourceAsMap);
 
@@ -176,7 +176,7 @@ public class ProcessorUtils {
      * @param pathToValue A string of the form key[.key] indicating what keys to apply to the sourceMap
      * @return Whether the mapping using the pathToValue exists
      */
-    public static boolean mappingExistsInSource(Map<String, Object> sourceAsMap, String pathToValue) {
+    public static boolean mappingExistsInSource(final Map<String, Object> sourceAsMap, final String pathToValue) {
         return getValueFromSource(sourceAsMap, pathToValue).isPresent();
     }
 
