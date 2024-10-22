@@ -304,6 +304,10 @@ public class TestUtils {
     }
 
     public static void assertHitResultsFromQuery(int expected, Map<String, Object> searchResponseAsMap) {
+        assertHitResultsFromQuery(expected, expected, searchResponseAsMap);
+    }
+
+    public static void assertHitResultsFromQuery(int expected, int expectedTotal, Map<String, Object> searchResponseAsMap) {
         assertEquals(expected, getHitCount(searchResponseAsMap));
 
         List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
@@ -321,7 +325,7 @@ public class TestUtils {
 
         Map<String, Object> total = getTotalHits(searchResponseAsMap);
         assertNotNull(total.get("value"));
-        assertEquals(expected, total.get("value"));
+        assertEquals(expectedTotal, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
