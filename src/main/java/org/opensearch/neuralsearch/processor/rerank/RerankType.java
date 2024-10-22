@@ -16,7 +16,8 @@ import lombok.Getter;
  */
 public enum RerankType {
 
-    ML_OPENSEARCH("ml_opensearch");
+    ML_OPENSEARCH("ml_opensearch"),
+    BY_FIELD("by_field");
 
     @Getter
     private final String label;
