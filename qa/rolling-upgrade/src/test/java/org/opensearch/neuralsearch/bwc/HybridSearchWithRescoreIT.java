@@ -50,16 +50,16 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
                 loadModel(modelId);
                 createPipelineProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
-                        getIndexNameForTest(),
-                        Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
-                        PIPELINE_NAME
+                    getIndexNameForTest(),
+                    Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
+                    PIPELINE_NAME
                 );
                 addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, null, null);
                 createSearchPipeline(
-                        SEARCH_PIPELINE_NAME,
-                        DEFAULT_NORMALIZATION_METHOD,
-                        DEFAULT_COMBINATION_METHOD,
-                        Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.7f }))
+                    SEARCH_PIPELINE_NAME,
+                    DEFAULT_NORMALIZATION_METHOD,
+                    DEFAULT_COMBINATION_METHOD,
+                    Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.7f }))
                 );
                 break;
             case MIXED:
