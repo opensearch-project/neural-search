@@ -1,7 +1,7 @@
 
 ## Version 2.18.0.0 Release Notes
 
-Compatible with OpenSearch 2.17.0
+Compatible with OpenSearch 2.18.0
 
 ### Enhancements
 - Implement `ignore_missing` field in text chunking processors ([#907](https://github.com/opensearch-project/neural-search/pull/907))
