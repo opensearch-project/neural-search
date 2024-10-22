@@ -4,16 +4,12 @@
  */
 package org.opensearch.neuralsearch.processor.factory;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-import java.util.StringJoiner;
-
+import com.google.common.collect.Sets;
+import lombok.AllArgsConstructor;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.ingest.ConfigurationUtils;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.processor.rerank.ByFieldRerankProcessor;
 import org.opensearch.neuralsearch.processor.rerank.MLOpenSearchRerankProcessor;
 import org.opensearch.neuralsearch.processor.rerank.RerankType;
 import org.opensearch.neuralsearch.processor.rerank.context.ContextSourceFetcher;
@@ -22,9 +18,17 @@ import org.opensearch.neuralsearch.processor.rerank.context.QueryContextSourceFe
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 
-import com.google.common.collect.Sets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.StringJoiner;
 
-import lombok.AllArgsConstructor;
+import static org.opensearch.neuralsearch.processor.rerank.ByFieldRerankProcessor.DEFAULT_KEEP_PREVIOUS_SCORE;
+import static org.opensearch.neuralsearch.processor.rerank.ByFieldRerankProcessor.DEFAULT_REMOVE_TARGET_FIELD;
+import static org.opensearch.neuralsearch.processor.rerank.RerankProcessor.processorRequiresContext;
 
 /**
  * Factory for rerank processors. Must:
@@ -51,15 +55,17 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
     ) {
         RerankType type = findRerankType(config);
         boolean includeQueryContextFetcher = ContextFetcherFactory.shouldIncludeQueryContextFetcher(type);
-        List<ContextSourceFetcher> contextFetchers = ContextFetcherFactory.createFetchers(
-            config,
-            includeQueryContextFetcher,
-            tag,
-            clusterService
-        );
+
+        // Currently the createFetchers method requires that you provide a context map, this branch makes sure we can ignore this on
+        // processors that don't need the context map
+        List<ContextSourceFetcher> contextFetchers = processorRequiresContext(type)
+            ? ContextFetcherFactory.createFetchers(config, includeQueryContextFetcher, tag, clusterService)
+            : Collections.emptyList();
+
+        Map<String, Object> rerankerConfig = ConfigurationUtils.readMap(RERANK_PROCESSOR_TYPE, tag, config, type.getLabel());
+
         switch (type) {
             case ML_OPENSEARCH:
-                Map<String, Object> rerankerConfig = ConfigurationUtils.readMap(RERANK_PROCESSOR_TYPE, tag, config, type.getLabel());
                 String modelId = ConfigurationUtils.readStringProperty(
                     RERANK_PROCESSOR_TYPE,
                     tag,
@@ -67,6 +73,37 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
                     MLOpenSearchRerankProcessor.MODEL_ID_FIELD
                 );
                 return new MLOpenSearchRerankProcessor(description, tag, ignoreFailure, modelId, contextFetchers, clientAccessor);
+            case BY_FIELD:
+                String targetField = ConfigurationUtils.readStringProperty(
+                    RERANK_PROCESSOR_TYPE,
+                    tag,
+                    rerankerConfig,
+                    ByFieldRerankProcessor.TARGET_FIELD
+                );
+                boolean removeTargetField = ConfigurationUtils.readBooleanProperty(
+                    RERANK_PROCESSOR_TYPE,
+                    tag,
+                    rerankerConfig,
+                    ByFieldRerankProcessor.REMOVE_TARGET_FIELD,
+                    DEFAULT_REMOVE_TARGET_FIELD
+                );
+                boolean keepPreviousScore = ConfigurationUtils.readBooleanProperty(
+                    RERANK_PROCESSOR_TYPE,
+                    tag,
+                    rerankerConfig,
+                    ByFieldRerankProcessor.KEEP_PREVIOUS_SCORE,
+                    DEFAULT_KEEP_PREVIOUS_SCORE
+                );
+
+                return new ByFieldRerankProcessor(
+                    description,
+                    tag,
+                    ignoreFailure,
+                    targetField,
+                    removeTargetField,
+                    keepPreviousScore,
+                    contextFetchers
+                );
             default:
                 throw new IllegalArgumentException(String.format(Locale.ROOT, "Cannot build reranker type %s", type.getLabel()));
         }
@@ -100,6 +137,7 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
 
         /**
          * Map rerank types to whether they should include the query context source fetcher
+         *
          * @param type the constructing RerankType
          * @return does this RerankType depend on the QueryContextSourceFetcher?
          */
@@ -109,8 +147,8 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
 
         /**
          * Create necessary queryContextFetchers for this processor
-         * @param config processor config object. Look for "context" field to find fetchers
-         * @param includeQueryContextFetcher should I include the queryContextFetcher?
+         * @param config Processor config object. Look for "context" field to find fetchers
+         * @param includeQueryContextFetcher Should I include the queryContextFetcher?
          * @return list of contextFetchers for the processor to use
          */
         public static List<ContextSourceFetcher> createFetchers(

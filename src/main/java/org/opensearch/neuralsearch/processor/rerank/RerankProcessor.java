@@ -35,6 +35,7 @@ public abstract class RerankProcessor implements SearchResponseProcessor {
     @Getter
     private final boolean ignoreFailure;
     protected List<ContextSourceFetcher> contextSourceFetchers;
+    static final protected List<RerankType> processorsWithNoContext = List.of(RerankType.BY_FIELD);
 
     /**
      * Generate the information that this processor needs in order to rerank.
@@ -48,6 +49,11 @@ public abstract class RerankProcessor implements SearchResponseProcessor {
         final SearchResponse searchResponse,
         final ActionListener<Map<String, Object>> listener
     ) {
+        // Processors that don't require context, result on a listener infinitely waiting for a response without this check
+        if (!processorRequiresContext(subType)) {
+            listener.onResponse(Map.of());
+        }
+
         Map<String, Object> overallContext = new ConcurrentHashMap<>();
         AtomicInteger successfulContexts = new AtomicInteger(contextSourceFetchers.size());
         for (ContextSourceFetcher csf : contextSourceFetchers) {
@@ -101,5 +107,20 @@ public abstract class RerankProcessor implements SearchResponseProcessor {
         } catch (Exception e) {
             responseListener.onFailure(e);
         }
+    }
+
+    /**
+     * There are scenarios where ranking occurs without needing context. Currently, these are the processors don't require
+     * the context mapping
+     * <ul>
+     *     <li>
+     *         ByFieldRerankProcessor - Uses the search response to get value to rescore by
+     *     </li>
+     * </ul>
+     * @param subType The kind of rerank processor
+     * @return Whether a rerank subtype needs context to perform the rescore search response action.
+     */
+    public static boolean processorRequiresContext(RerankType subType) {
+        return !processorsWithNoContext.contains(subType);
     }
 }

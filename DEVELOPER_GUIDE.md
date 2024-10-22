@@ -313,7 +313,7 @@ merged to main, the workflow will create a backport PR to the `2.x` branch.
 
 ## Building On Lucene Version Updates
 There may be a Lucene version update that can affect your workflow causing errors like
-`java.lang.NoClassDefFoundError: org/apache/lucene/codecs/lucene99/Lucene99Codec` or 
+`java.lang.NoClassDefFoundError: org/apache/lucene/codecs/lucene99/Lucene99Codec` or
 `Provider org.opensearch.knn.index.codec.KNN910Codec.KNN910Codec could not be instantiated`. In this case
 we can observe there may be an issue with a dependency with [K-NN](https://github.com/opensearch-project/k-NN).
 This results in having issues with not being able to do `./gradlew run` or `./gradlew build`.
