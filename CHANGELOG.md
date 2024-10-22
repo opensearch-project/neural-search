@@ -16,8 +16,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased 2.x](https://github.com/opensearch-project/neural-search/compare/2.18...2.x)
 ### Features
-- Introduces ByFieldRerankProcessor for second level reranking on documents (This is done locally) ([#932](https://github.com/opensearch-project/neural-search/pull/932))
-
 ### Enhancements
 ### Bug Fixes
 ### Infrastructure
