@@ -97,8 +97,13 @@ public final class HybridQueryScorer extends Scorer {
      */
     @Override
     public float score() throws IOException {
+        return score(getSubMatches());
+    }
+
+    private float score(DisiWrapper topList) throws IOException {
         float totalScore = 0.0f;
-        for (DisiWrapper disiWrapper : subScorersPQ) {
+        for (DisiWrapper disiWrapper = topList; disiWrapper != null; disiWrapper = disiWrapper.next) {
+            // check if this doc has match in the subQuery. If not, add score as 0.0 and continue
             if (disiWrapper.scorer.docID() == DocIdSetIterator.NO_MORE_DOCS) {
                 continue;
             }
