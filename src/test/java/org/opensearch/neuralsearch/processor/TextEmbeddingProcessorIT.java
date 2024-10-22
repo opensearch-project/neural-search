@@ -244,6 +244,11 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         return registerModelGroupAndUploadModel(requestBody);
     }
 
+    private String uploadAsymmetricEmbeddingModel() throws Exception {
+        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadAsymmetricModelRequestBody.json").toURI()));
+        return registerModelGroupAndUploadModel(requestBody);
+    }
+
     private void createTextEmbeddingIndex() throws Exception {
         createIndexWithConfiguration(
             INDEX_NAME,
@@ -255,7 +260,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
     public void testAsymmetricTextEmbeddingProcessor() throws Exception {
         String modelId = null;
         try {
-            modelId = uploadTextEmbeddingModel();
+            modelId = uploadAsymmetricEmbeddingModel();
             loadModel(modelId);
             createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING, 2);
             createTextEmbeddingIndex();
