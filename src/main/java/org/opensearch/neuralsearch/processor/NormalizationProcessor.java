@@ -58,7 +58,21 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
         }
         List<QuerySearchResult> querySearchResults = getQueryPhaseSearchResults(searchPhaseResult);
         Optional<FetchSearchResult> fetchSearchResult = getFetchSearchResults(searchPhaseResult);
-        normalizationWorkflow.execute(querySearchResults, fetchSearchResult, normalizationTechnique, combinationTechnique);
+        int fromValueForSingleShard = 0;
+        boolean isSingleShard = false;
+        if (searchPhaseContext.getNumShards() == 1 && fetchSearchResult.isPresent()) {
+            isSingleShard = true;
+            fromValueForSingleShard = searchPhaseContext.getRequest().source().from();
+        }
+
+        normalizationWorkflow.execute(
+            querySearchResults,
+            fetchSearchResult,
+            normalizationTechnique,
+            combinationTechnique,
+            fromValueForSingleShard,
+            isSingleShard
+        );
     }
 
     @Override

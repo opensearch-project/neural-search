@@ -60,10 +60,6 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             validateQuery(searchContext, query);
             return super.searchWith(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);
         } else {
-            // TODO remove this check after following issue https://github.com/opensearch-project/neural-search/issues/280 gets resolved.
-            if (searchContext.from() != 0) {
-                throw new IllegalArgumentException("In the current OpenSearch version pagination is not supported with hybrid query");
-            }
             Query hybridQuery = extractHybridQuery(searchContext, query);
             QueryPhaseSearcher queryPhaseSearcher = getQueryPhaseSearcher(searchContext);
             queryPhaseSearcher.searchWith(searchContext, searcher, hybridQuery, collectors, hasFilterCollector, hasTimeout);
@@ -97,7 +93,11 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
                 .filter(clause -> BooleanClause.Occur.FILTER == clause.getOccur())
                 .map(BooleanClause::getQuery)
                 .collect(Collectors.toList());
-            HybridQuery hybridQueryWithFilter = new HybridQuery(hybridQuery.getSubQueries(), filterQueries);
+            HybridQuery hybridQueryWithFilter = new HybridQuery(
+                hybridQuery.getSubQueries(),
+                filterQueries,
+                hybridQuery.getPaginationDepth()
+            );
             return hybridQueryWithFilter;
         }
         return query;

@@ -48,16 +48,19 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     public static final String NAME = "hybrid";
 
     private static final ParseField QUERIES_FIELD = new ParseField("queries");
+    private static final ParseField DEPTH_FIELD = new ParseField("pagination_depth");
 
     private final List<QueryBuilder> queries = new ArrayList<>();
 
     private String fieldName;
+    private int paginationDepth;
 
     static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
 
     public HybridQueryBuilder(StreamInput in) throws IOException {
         super(in);
         queries.addAll(readQueries(in));
+        paginationDepth = in.readInt();
     }
 
     /**
@@ -68,6 +71,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     @Override
     protected void doWriteTo(StreamOutput out) throws IOException {
         writeQueries(out, queries);
+        out.writeInt(paginationDepth);
     }
 
     /**
@@ -97,6 +101,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             queryBuilder.toXContent(builder, params);
         }
         builder.endArray();
+        builder.field(DEPTH_FIELD.getPreferredName(), paginationDepth);
         printBoostAndQueryName(builder);
         builder.endObject();
     }
@@ -113,7 +118,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         if (queryCollection.isEmpty()) {
             return Queries.newMatchNoDocsQuery(String.format(Locale.ROOT, "no clauses for %s query", NAME));
         }
-        return new HybridQuery(queryCollection);
+        return new HybridQuery(queryCollection, paginationDepth);
     }
 
     /**
@@ -149,6 +154,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     public static HybridQueryBuilder fromXContent(XContentParser parser) throws IOException {
         float boost = AbstractQueryBuilder.DEFAULT_BOOST;
 
+        int paginationDepth = 0;
         final List<QueryBuilder> queries = new ArrayList<>();
         String queryName = null;
 
@@ -196,6 +202,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                     }
                 } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     queryName = parser.text();
+                } else if (DEPTH_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    paginationDepth = parser.intValue();
                 } else {
                     log.error(String.format(Locale.ROOT, "[%s] query does not support [%s]", NAME, currentFieldName));
                     throw new ParsingException(
@@ -216,6 +224,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         HybridQueryBuilder compoundQueryBuilder = new HybridQueryBuilder();
         compoundQueryBuilder.queryName(queryName);
         compoundQueryBuilder.boost(boost);
+        compoundQueryBuilder.paginationDepth(paginationDepth);
         for (QueryBuilder query : queries) {
             compoundQueryBuilder.add(query);
         }
@@ -235,6 +244,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         if (changed) {
             newBuilder.queryName(queryName);
             newBuilder.boost(boost);
+            newBuilder.paginationDepth(paginationDepth);
             return newBuilder;
         } else {
             return this;
@@ -257,6 +267,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         EqualsBuilder equalsBuilder = new EqualsBuilder();
         equalsBuilder.append(fieldName, obj.fieldName);
         equalsBuilder.append(queries, obj.queries);
+        equalsBuilder.append(paginationDepth, obj.paginationDepth);
         return equalsBuilder.isEquals();
     }
 

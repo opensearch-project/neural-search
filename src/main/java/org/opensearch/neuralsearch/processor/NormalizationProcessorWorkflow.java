@@ -55,7 +55,9 @@ public class NormalizationProcessorWorkflow {
         final List<QuerySearchResult> querySearchResults,
         final Optional<FetchSearchResult> fetchSearchResultOptional,
         final ScoreNormalizationTechnique normalizationTechnique,
-        final ScoreCombinationTechnique combinationTechnique
+        final ScoreCombinationTechnique combinationTechnique,
+        final int fromValueForSingleShard,
+        final boolean isSingleShard
     ) {
         // save original state
         List<Integer> unprocessedDocIds = unprocessedDocIds(querySearchResults);
@@ -73,6 +75,8 @@ public class NormalizationProcessorWorkflow {
             .scoreCombinationTechnique(combinationTechnique)
             .querySearchResults(querySearchResults)
             .sort(evaluateSortCriteria(querySearchResults, queryTopDocs))
+            .fromValueForSingleShard(fromValueForSingleShard)
+            .isSingleShard(isSingleShard)
             .build();
 
         // combine
@@ -82,7 +86,7 @@ public class NormalizationProcessorWorkflow {
         // post-process data
         log.debug("Post-process query results after score normalization and combination");
         updateOriginalQueryResults(combineScoresDTO);
-        updateOriginalFetchResults(querySearchResults, fetchSearchResultOptional, unprocessedDocIds);
+        updateOriginalFetchResults(querySearchResults, fetchSearchResultOptional, unprocessedDocIds, fromValueForSingleShard);
     }
 
     /**
@@ -113,14 +117,27 @@ public class NormalizationProcessorWorkflow {
         final List<QuerySearchResult> querySearchResults = combineScoresDTO.getQuerySearchResults();
         final List<CompoundTopDocs> queryTopDocs = getCompoundTopDocs(combineScoresDTO, querySearchResults);
         final Sort sort = combineScoresDTO.getSort();
+        final int from = querySearchResults.get(0).from();
+        int totalScoreDocsCount = 0;
         for (int index = 0; index < querySearchResults.size(); index++) {
             QuerySearchResult querySearchResult = querySearchResults.get(index);
             CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
+            totalScoreDocsCount += updatedTopDocs.getScoreDocs().size();
             TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(
                 buildTopDocs(updatedTopDocs, sort),
                 maxScoreForShard(updatedTopDocs, sort != null)
             );
+            if (combineScoresDTO.isSingleShard()) {
+                querySearchResult.from(combineScoresDTO.getFromValueForSingleShard());
+            }
             querySearchResult.topDocs(updatedTopDocsAndMaxScore, querySearchResult.sortValueFormats());
+        }
+
+        if ((from > 0 || combineScoresDTO.getFromValueForSingleShard() > 0)
+            && (from > totalScoreDocsCount || combineScoresDTO.getFromValueForSingleShard() > totalScoreDocsCount)) {
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "Reached end of search result, increase pagination_depth value to see more results")
+            );
         }
     }
 
@@ -180,7 +197,8 @@ public class NormalizationProcessorWorkflow {
     private void updateOriginalFetchResults(
         final List<QuerySearchResult> querySearchResults,
         final Optional<FetchSearchResult> fetchSearchResultOptional,
-        final List<Integer> docIds
+        final List<Integer> docIds,
+        final int fromValueForSingleShard
     ) {
         if (fetchSearchResultOptional.isEmpty()) {
             return;
@@ -212,14 +230,26 @@ public class NormalizationProcessorWorkflow {
 
         QuerySearchResult querySearchResult = querySearchResults.get(0);
         TopDocs topDocs = querySearchResult.topDocs().topDocs;
+
         // iterate over the normalized/combined scores, that solves (1) and (3)
-        SearchHit[] updatedSearchHitArray = Arrays.stream(topDocs.scoreDocs).map(scoreDoc -> {
+        SearchHit[] updatedSearchHitArray = new SearchHit[topDocs.scoreDocs.length - fromValueForSingleShard];
+        for (int i = fromValueForSingleShard; i < topDocs.scoreDocs.length; i++) {
+            ScoreDoc scoreDoc = topDocs.scoreDocs[i];
             // get fetched hit content by doc_id
             SearchHit searchHit = docIdToSearchHit.get(scoreDoc.doc);
             // update score to normalized/combined value (3)
             searchHit.score(scoreDoc.score);
-            return searchHit;
-        }).toArray(SearchHit[]::new);
+            updatedSearchHitArray[i - fromValueForSingleShard] = searchHit;
+        }
+
+        // iterate over the normalized/combined scores, that solves (1) and (3)
+        // SearchHit[] updatedSearchHitArray = Arrays.stream(topDocs.scoreDocs).map(scoreDoc -> {
+        // // get fetched hit content by doc_id
+        // SearchHit searchHit = docIdToSearchHit.get(scoreDoc.doc);
+        // // update score to normalized/combined value (3)
+        // searchHit.score(scoreDoc.score);
+        // return searchHit;
+        // }).toArray(SearchHit[]::new);
         SearchHits updatedSearchHits = new SearchHits(
             updatedSearchHitArray,
             querySearchResult.getTotalHits(),

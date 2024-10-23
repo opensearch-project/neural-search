@@ -6,6 +6,8 @@ package org.opensearch.neuralsearch.processor;
 
 import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
@@ -272,7 +274,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
         normalizationProcessor.process(null, searchPhaseContext);
 
-        verify(normalizationProcessorWorkflow, never()).execute(any(), any(), any(), any());
+        verify(normalizationProcessorWorkflow, never()).execute(any(), any(), any(), any(), anyInt(), anyBoolean());
     }
 
     public void testNotHybridSearchResult_whenResultsNotEmptyAndNotHybridSearchResult_thenDoNotExecuteWorkflow() {
@@ -328,7 +330,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         when(searchPhaseContext.getNumShards()).thenReturn(numberOfShards);
         normalizationProcessor.process(queryPhaseResultConsumer, searchPhaseContext);
 
-        verify(normalizationProcessorWorkflow, never()).execute(any(), any(), any(), any());
+        verify(normalizationProcessorWorkflow, never()).execute(any(), any(), any(), any(), anyInt(), anyBoolean());
     }
 
     public void testResultTypes_whenQueryAndFetchPresentAndSizeSame_thenCallNormalization() {
@@ -417,7 +419,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
             .collect(Collectors.toList());
 
         TestUtils.assertQueryResultScores(querySearchResults);
-        verify(normalizationProcessorWorkflow).execute(any(), any(), any(), any());
+        verify(normalizationProcessorWorkflow).execute(any(), any(), any(), any(), anyInt(), anyBoolean());
     }
 
     public void testResultTypes_whenQueryAndFetchPresentButSizeDifferent_thenFail() {

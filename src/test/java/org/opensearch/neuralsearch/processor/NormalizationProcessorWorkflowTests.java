@@ -12,6 +12,7 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -76,7 +77,9 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
             querySearchResults,
             Optional.empty(),
             ScoreNormalizationFactory.DEFAULT_METHOD,
-            ScoreCombinationFactory.DEFAULT_METHOD
+            ScoreCombinationFactory.DEFAULT_METHOD,
+            0,
+            false
         );
 
         TestUtils.assertQueryResultScores(querySearchResults);
@@ -118,7 +121,9 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
             querySearchResults,
             Optional.empty(),
             ScoreNormalizationFactory.DEFAULT_METHOD,
-            ScoreCombinationFactory.DEFAULT_METHOD
+            ScoreCombinationFactory.DEFAULT_METHOD,
+            0,
+            false
         );
 
         TestUtils.assertQueryResultScoresWithNoMatches(querySearchResults);
@@ -177,7 +182,9 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
             querySearchResults,
             Optional.of(fetchSearchResult),
             ScoreNormalizationFactory.DEFAULT_METHOD,
-            ScoreCombinationFactory.DEFAULT_METHOD
+            ScoreCombinationFactory.DEFAULT_METHOD,
+            0,
+            false
         );
 
         TestUtils.assertQueryResultScores(querySearchResults);
@@ -237,7 +244,9 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
             querySearchResults,
             Optional.of(fetchSearchResult),
             ScoreNormalizationFactory.DEFAULT_METHOD,
-            ScoreCombinationFactory.DEFAULT_METHOD
+            ScoreCombinationFactory.DEFAULT_METHOD,
+            0,
+            false
         );
 
         TestUtils.assertQueryResultScores(querySearchResults);
@@ -291,7 +300,9 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
                 querySearchResults,
                 Optional.of(fetchSearchResult),
                 ScoreNormalizationFactory.DEFAULT_METHOD,
-                ScoreCombinationFactory.DEFAULT_METHOD
+                ScoreCombinationFactory.DEFAULT_METHOD,
+                0,
+                false
             )
         );
     }
@@ -341,11 +352,69 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
             querySearchResults,
             Optional.of(fetchSearchResult),
             ScoreNormalizationFactory.DEFAULT_METHOD,
-            ScoreCombinationFactory.DEFAULT_METHOD
+            ScoreCombinationFactory.DEFAULT_METHOD,
+            0,
+            false
         );
 
         TestUtils.assertQueryResultScores(querySearchResults);
         TestUtils.assertFetchResultScores(fetchSearchResult, 4);
+    }
+
+    public void testNormalization_whenFromIsGreaterThanResultsSize_thenFail() {
+        NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+        );
+
+        List<QuerySearchResult> querySearchResults = new ArrayList<>();
+        for (int shardId = 0; shardId < 4; shardId++) {
+            SearchShardTarget searchShardTarget = new SearchShardTarget(
+                "node",
+                new ShardId("index", "uuid", shardId),
+                null,
+                OriginalIndices.NONE
+            );
+            QuerySearchResult querySearchResult = new QuerySearchResult();
+            querySearchResult.topDocs(
+                new TopDocsAndMaxScore(
+                    new TopDocs(
+                        new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] {
+                            createStartStopElementForHybridSearchResults(0),
+                            createDelimiterElementForHybridSearchResults(0),
+                            new ScoreDoc(0, 0.5f),
+                            new ScoreDoc(2, 0.3f),
+                            new ScoreDoc(4, 0.25f),
+                            new ScoreDoc(10, 0.2f),
+                            createStartStopElementForHybridSearchResults(0) }
+                    ),
+                    0.5f
+                ),
+                null
+            );
+            querySearchResult.setSearchShardTarget(searchShardTarget);
+            querySearchResult.setShardIndex(shardId);
+            // requested page is out of bound for the total number of results
+            querySearchResult.from(17);
+            querySearchResults.add(querySearchResult);
+        }
+
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> normalizationProcessorWorkflow.execute(
+                querySearchResults,
+                Optional.empty(),
+                ScoreNormalizationFactory.DEFAULT_METHOD,
+                ScoreCombinationFactory.DEFAULT_METHOD,
+                0,
+                false
+            )
+        );
+
+        assertEquals(
+            String.format(Locale.ROOT, "Reached end of search result, increase pagination_depth value to see more results"),
+            illegalArgumentException.getMessage()
+        );
     }
 
     private static SearchHits getSearchHits() {
