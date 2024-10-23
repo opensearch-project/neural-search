@@ -51,6 +51,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
     private final String INGEST_DOC2 = Files.readString(Path.of(classLoader.getResource("processor/ingest_doc2.json").toURI()));
     private final String INGEST_DOC3 = Files.readString(Path.of(classLoader.getResource("processor/ingest_doc3.json").toURI()));
     private final String INGEST_DOC4 = Files.readString(Path.of(classLoader.getResource("processor/ingest_doc4.json").toURI()));
+    private final String INGEST_DOC5 = Files.readString(Path.of(classLoader.getResource("processor/ingest_doc5.json").toURI()));
     private final String BULK_ITEM_TEMPLATE = Files.readString(
         Path.of(classLoader.getResource("processor/bulk_item_template.json").toURI())
     );
@@ -244,12 +245,31 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         return registerModelGroupAndUploadModel(requestBody);
     }
 
+    private String uploadAsymmetricEmbeddingModel() throws Exception {
+        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadAsymmetricModelRequestBody.json").toURI()));
+        return registerModelGroupAndUploadModel(requestBody);
+    }
+
     private void createTextEmbeddingIndex() throws Exception {
         createIndexWithConfiguration(
             INDEX_NAME,
             Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
             PIPELINE_NAME
         );
+    }
+
+    public void testAsymmetricTextEmbeddingProcessor() throws Exception {
+        String modelId = null;
+        try {
+            modelId = uploadAsymmetricEmbeddingModel();
+            loadModel(modelId);
+            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING, 2);
+            createTextEmbeddingIndex();
+            ingestDocument(INGEST_DOC5, null);
+            assertEquals(1, getDocCount(INDEX_NAME));
+        } finally {
+            wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
+        }
     }
 
     private void ingestDocument(String doc, String id) throws Exception {
