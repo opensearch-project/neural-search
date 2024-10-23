@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 
+import lombok.Getter;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexSearcher;
@@ -31,17 +32,18 @@ import org.opensearch.neuralsearch.executors.HybridQueryRewriteCollectorManager;
  * Implementation of Query interface for type "hybrid". It allows execution of multiple sub-queries and collect individual
  * scores for each sub-query.
  */
+@Getter
 public final class HybridQuery extends Query implements Iterable<Query> {
 
     private final List<Query> subQueries;
-    private int paginationDepth;
+    private Integer paginationDepth;
 
     /**
      * Create new instance of hybrid query object based on collection of sub queries and filter query
      * @param subQueries collection of queries that are executed individually and contribute to a final list of combined scores
      * @param filterQueries list of filters that will be applied to each sub query. Each filter from the list is added as bool "filter" clause. If this is null sub queries will be executed as is
      */
-    public HybridQuery(final Collection<Query> subQueries, final List<Query> filterQueries, int paginationDepth) {
+    public HybridQuery(final Collection<Query> subQueries, final List<Query> filterQueries, final Integer paginationDepth) {
         Objects.requireNonNull(subQueries, "collection of queries must not be null");
         if (subQueries.isEmpty()) {
             throw new IllegalArgumentException("collection of queries must not be empty");
@@ -61,7 +63,7 @@ public final class HybridQuery extends Query implements Iterable<Query> {
         this.paginationDepth = paginationDepth;
     }
 
-    public HybridQuery(final Collection<Query> subQueries, final int paginationDepth) {
+    public HybridQuery(final Collection<Query> subQueries, final Integer paginationDepth) {
         this(subQueries, List.of(), paginationDepth);
     }
 
@@ -190,10 +192,6 @@ public final class HybridQuery extends Query implements Iterable<Query> {
 
     public Collection<Query> getSubQueries() {
         return Collections.unmodifiableCollection(subQueries);
-    }
-
-    public int getPaginationDepth() {
-        return paginationDepth;
     }
 
     /**

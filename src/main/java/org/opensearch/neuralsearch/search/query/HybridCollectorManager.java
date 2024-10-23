@@ -8,6 +8,7 @@ import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.CollectorManager;
 import org.apache.lucene.search.Weight;
@@ -73,6 +74,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     @Nullable
     private final FieldDoc after;
     private final SearchContext searchContext;
+    private static final int DEFAULT_PAGINATION_DEPTH = 10;
 
     /**
      * Create new instance of HybridCollectorManager depending on the concurrent search beeing enabled or disabled.
@@ -81,19 +83,19 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
      * @throws IOException
      */
     public static CollectorManager createHybridCollectorManager(final SearchContext searchContext) throws IOException {
+        if (searchContext.scrollContext() != null) {
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "Scroll operation is not supported in hybrid query"));
+        }
         final IndexReader reader = searchContext.searcher().getIndexReader();
         final int totalNumDocs = Math.max(0, reader.numDocs());
-        HybridQuery hybridQuery = (HybridQuery) searchContext.query();
-        int retrievalSize;
-        if (hybridQuery.getPaginationDepth() == 0) {
-            retrievalSize = searchContext.from() + searchContext.size();
-        } else {
-            retrievalSize = hybridQuery.getPaginationDepth();
-        }
-        int numDocs = Math.min(retrievalSize, totalNumDocs);
+        int numDocs = Math.min(getSubqueryResultsRetrievalSize(searchContext), totalNumDocs);
         int trackTotalHitsUpTo = searchContext.trackTotalHitsUpTo();
         if (searchContext.sort() != null) {
             validateSortCriteria(searchContext, searchContext.trackScores());
+        }
+        boolean isSingleShard = searchContext.numberOfShards() == 1;
+        if (isSingleShard && searchContext.from() > 0) {
+            searchContext.from(0);
         }
 
         Weight filteringWeight = null;
@@ -467,6 +469,42 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 r.reduce(result);
             }
         };
+    }
+
+    /**
+     * Get maximum subquery results count to be collected from each shard.
+     * @param searchContext search context that contains pagination depth
+     * @return results size to collected
+     */
+    private static int getSubqueryResultsRetrievalSize(final SearchContext searchContext) {
+        int paginationDepth;
+        HybridQuery hybridQuery;
+        Query query = searchContext.query();
+        if (query instanceof BooleanQuery) {
+            BooleanQuery booleanQuery = (BooleanQuery) query;
+            hybridQuery = (HybridQuery) booleanQuery.clauses().get(0).getQuery();
+            paginationDepth = hybridQuery.getPaginationDepth();
+        } else {
+            hybridQuery = (HybridQuery) query;
+            paginationDepth = hybridQuery.getPaginationDepth();
+        }
+
+        if (paginationDepth != 0) {
+            validatePaginationDepth(paginationDepth);
+            return paginationDepth;
+        } else if (searchContext.from() > 0 && paginationDepth == 0) {
+            return DEFAULT_PAGINATION_DEPTH;
+        } else {
+            return searchContext.from() + searchContext.size();
+        }
+    }
+
+    private static void validatePaginationDepth(int depth) {
+        if (depth < 0 || depth > 10000) {
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "Pagination depth should lie in the range of 1-1000. Received: %s", depth)
+            );
+        }
     }
 
     /**
