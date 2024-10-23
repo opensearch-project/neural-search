@@ -51,6 +51,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
     private final String INGEST_DOC2 = Files.readString(Path.of(classLoader.getResource("processor/ingest_doc2.json").toURI()));
     private final String INGEST_DOC3 = Files.readString(Path.of(classLoader.getResource("processor/ingest_doc3.json").toURI()));
     private final String INGEST_DOC4 = Files.readString(Path.of(classLoader.getResource("processor/ingest_doc4.json").toURI()));
+    private final String INGEST_DOC5 = Files.readString(Path.of(classLoader.getResource("processor/ingest_doc5.json").toURI()));
     private final String BULK_ITEM_TEMPLATE = Files.readString(
         Path.of(classLoader.getResource("processor/bulk_item_template.json").toURI())
     );
@@ -264,49 +265,11 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
             loadModel(modelId);
             createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING, 2);
             createTextEmbeddingIndex();
-            ingestDocument();
+            ingestDocument(INGEST_DOC5, null);
             assertEquals(1, getDocCount(INDEX_NAME));
         } finally {
             wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
         }
-    }
-
-    private void ingestDocument() throws Exception {
-        String ingestDocument = "{\n"
-            + "  \"title\": \"This is a good day\",\n"
-            + "  \"description\": \"daily logging\",\n"
-            + "  \"favor_list\": [\n"
-            + "    \"test\",\n"
-            + "    \"hello\",\n"
-            + "    \"mock\"\n"
-            + "  ],\n"
-            + "  \"favorites\": {\n"
-            + "    \"game\": \"overwatch\",\n"
-            + "    \"movie\": null\n"
-            + "  },\n"
-            + "  \"nested_passages\": [\n"
-            + "    {\n"
-            + "      \"text\": \"hello\"\n"
-            + "    },\n"
-            + "    {\n"
-            + "      \"text\": \"world\"\n"
-            + "    }\n"
-            + "  ]\n"
-            + "}\n";
-        Response response = makeRequest(
-            client(),
-            "POST",
-            INDEX_NAME + "/_doc?refresh",
-            null,
-            toHttpEntity(ingestDocument),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
-        );
-        Map<String, Object> map = XContentHelper.convertToMap(
-            XContentType.JSON.xContent(),
-            EntityUtils.toString(response.getEntity()),
-            false
-        );
-        assertEquals("created", map.get("result"));
     }
 
     private void ingestDocument(String doc, String id) throws Exception {
