@@ -796,6 +796,49 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
+    public void testPaginationDepth_whenSubqueriesCountIsGreaterThanFive_thenFail() {
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
+        TermQueryBuilder termQuery2Builder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT2);
+        MatchAllQueryBuilder matchAllQueryBuilder = QueryBuilders.matchAllQuery();
+        MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
+        MatchQueryBuilder matchQueryBuilder1 = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT2);
+        MatchQueryBuilder matchQueryBuilder2 = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        hybridQueryBuilder.add(termQueryBuilder);
+        hybridQueryBuilder.add(termQuery2Builder);
+        hybridQueryBuilder.add(matchAllQueryBuilder);
+        hybridQueryBuilder.add(matchQueryBuilder);
+        hybridQueryBuilder.add(matchQueryBuilder1);
+        hybridQueryBuilder.add(matchQueryBuilder2);
+        hybridQueryBuilder.paginationDepth(10);
+
+        ResponseException responseException = assertThrows(
+            ResponseException.class,
+            () -> search(
+                TEST_MULTI_DOC_INDEX_NAME,
+                hybridQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null,
+                null,
+                null,
+                false,
+                null,
+                0
+            )
+        );
+
+        org.hamcrest.MatcherAssert.assertThat(
+            responseException.getMessage(),
+            allOf(containsString("Number of sub-queries exceeds maximum supported by [hybrid] query"))
+        );
+
+    }
+
+    @SneakyThrows
     public void testPaginationOnSingleShard_whenConcurrentSearchEnabled_thenSuccessful() {
         try {
             updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);

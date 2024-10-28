@@ -53,6 +53,7 @@ import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.MatchAllQueryBuilder;
+import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
@@ -401,6 +402,80 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         contentParser2.nextToken();
 
         expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(contentParser2));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenQueriesCountIsGreaterThanFive_thenFail() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startArray("queries")
+            .startObject()
+            .startObject(NeuralQueryBuilder.NAME)
+            .startObject(VECTOR_FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .field(K_FIELD.getPreferredName(), K)
+            .field(BOOST_FIELD.getPreferredName(), BOOST)
+            .endObject()
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject(TermQueryBuilder.NAME)
+            .field(TEXT_FIELD_NAME, TERM_QUERY_TEXT)
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject(MatchQueryBuilder.NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject(TermQueryBuilder.NAME)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject(MatchAllQueryBuilder.NAME)
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject(TermQueryBuilder.NAME)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .endObject()
+            .endObject()
+            .endArray()
+            .endObject();
+
+        NamedXContentRegistry namedXContentRegistry = new NamedXContentRegistry(
+            List.of(
+                new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(TermQueryBuilder.NAME), TermQueryBuilder::fromXContent),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(NeuralQueryBuilder.NAME),
+                    NeuralQueryBuilder::fromXContent
+                ),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(HybridQueryBuilder.NAME),
+                    HybridQueryBuilder::fromXContent
+                ),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(MatchAllQueryBuilder.NAME),
+                    MatchAllQueryBuilder::fromXContent
+                ),
+                new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(MatchQueryBuilder.NAME), MatchQueryBuilder::fromXContent)
+            )
+        );
+        XContentParser contentParser = createParser(
+            namedXContentRegistry,
+            xContentBuilder.contentType().xContent(),
+            BytesReference.bytes(xContentBuilder)
+        );
+        contentParser.nextToken();
+        ParsingException exception = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(contentParser));
+        assertThat(exception.getMessage(), containsString("Number of sub-queries exceeds maximum supported by [hybrid] query"));
     }
 
     @SneakyThrows
