@@ -9,9 +9,9 @@ import java.util.Map;
 import java.util.Set;
 
 import lombok.ToString;
-import org.opensearch.neuralsearch.processor.ExplainableTechnique;
+import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 
-import static org.opensearch.neuralsearch.processor.util.ExplainUtils.describeCombinationTechnique;
+import static org.opensearch.neuralsearch.processor.explain.ExplainUtils.describeCombinationTechnique;
 
 /**
  * Abstracts combination of scores based on geometrical mean method

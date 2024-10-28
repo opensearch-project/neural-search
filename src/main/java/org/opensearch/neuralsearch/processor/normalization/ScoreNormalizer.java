@@ -9,8 +9,9 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
-import org.opensearch.neuralsearch.processor.DocIdAtQueryPhase;
-import org.opensearch.neuralsearch.processor.ExplainableTechnique;
+import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
+import org.opensearch.neuralsearch.processor.explain.ExplainDetails;
+import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 
 public class ScoreNormalizer {
 
@@ -29,7 +30,7 @@ public class ScoreNormalizer {
         return queryTopDocs.stream().filter(Objects::nonNull).anyMatch(topDocs -> topDocs.getTopDocs().size() > 0);
     }
 
-    public Map<DocIdAtQueryPhase, String> explain(
+    public Map<DocIdAtSearchShard, ExplainDetails> explain(
         final List<CompoundTopDocs> queryTopDocs,
         final ExplainableTechnique scoreNormalizationTechnique
     ) {

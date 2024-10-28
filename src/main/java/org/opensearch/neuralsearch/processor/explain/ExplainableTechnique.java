@@ -2,7 +2,9 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.processor;
+package org.opensearch.neuralsearch.processor.explain;
+
+import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import java.util.List;
 import java.util.Map;
@@ -26,7 +28,7 @@ public interface ExplainableTechnique {
      * @param queryTopDocs collection of CompoundTopDocs for each shard result
      * @return map of document per shard and corresponding explanation object
      */
-    default Map<DocIdAtQueryPhase, String> explain(final List<CompoundTopDocs> queryTopDocs) {
+    default Map<DocIdAtSearchShard, ExplainDetails> explain(final List<CompoundTopDocs> queryTopDocs) {
         return Map.of();
     }
 }

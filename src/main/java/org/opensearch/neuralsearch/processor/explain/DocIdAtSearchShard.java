@@ -2,7 +2,9 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.processor;
+package org.opensearch.neuralsearch.processor.explain;
+
+import org.opensearch.neuralsearch.processor.SearchShard;
 
 /**
  * Data class to store docId and search shard for a query.
@@ -10,5 +12,5 @@ package org.opensearch.neuralsearch.processor;
  * @param docId
  * @param searchShard
  */
-public record DocIdAtQueryPhase(int docId, SearchShard searchShard) {
+public record DocIdAtSearchShard(int docId, SearchShard searchShard) {
 }

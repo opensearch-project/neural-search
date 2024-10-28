@@ -16,10 +16,11 @@ import org.apache.lucene.search.TopDocs;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import lombok.ToString;
-import org.opensearch.neuralsearch.processor.DocIdAtQueryPhase;
-import org.opensearch.neuralsearch.processor.ExplainableTechnique;
+import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
+import org.opensearch.neuralsearch.processor.explain.ExplainDetails;
+import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 
-import static org.opensearch.neuralsearch.processor.util.ExplainUtils.getDocIdAtQueryPhaseStringMap;
+import static org.opensearch.neuralsearch.processor.explain.ExplainUtils.getDocIdAtQueryForNormalization;
 
 /**
  * Abstracts normalization of scores based on L2 method
@@ -57,14 +58,15 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
         }
     }
 
+    @Override
     public String describe() {
         return String.format(Locale.ROOT, "normalization technique [%s]", TECHNIQUE_NAME);
     }
 
     @Override
-    public Map<DocIdAtQueryPhase, String> explain(List<CompoundTopDocs> queryTopDocs) {
-        Map<DocIdAtQueryPhase, List<Float>> normalizedScores = new HashMap<>();
-        Map<DocIdAtQueryPhase, List<Float>> sourceScores = new HashMap<>();
+    public Map<DocIdAtSearchShard, ExplainDetails> explain(List<CompoundTopDocs> queryTopDocs) {
+        Map<DocIdAtSearchShard, List<Float>> normalizedScores = new HashMap<>();
+        Map<DocIdAtSearchShard, List<Float>> sourceScores = new HashMap<>();
         List<Float> normsPerSubquery = getL2Norm(queryTopDocs);
 
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
@@ -75,15 +77,15 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
             for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
                 TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
-                    DocIdAtQueryPhase docIdAtQueryPhase = new DocIdAtQueryPhase(scoreDoc.doc, compoundQueryTopDocs.getSearchShard());
+                    DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(scoreDoc.doc, compoundQueryTopDocs.getSearchShard());
                     float normalizedScore = normalizeSingleScore(scoreDoc.score, normsPerSubquery.get(j));
-                    normalizedScores.computeIfAbsent(docIdAtQueryPhase, k -> new ArrayList<>()).add(scoreDoc.score);
-                    sourceScores.computeIfAbsent(docIdAtQueryPhase, k -> new ArrayList<>()).add(scoreDoc.score);
+                    normalizedScores.computeIfAbsent(docIdAtSearchShard, k -> new ArrayList<>()).add(normalizedScore);
+                    sourceScores.computeIfAbsent(docIdAtSearchShard, k -> new ArrayList<>()).add(scoreDoc.score);
                     scoreDoc.score = normalizedScore;
                 }
             }
         }
-        return getDocIdAtQueryPhaseStringMap(normalizedScores, sourceScores);
+        return getDocIdAtQueryForNormalization(normalizedScores, sourceScores);
     }
 
     private List<Float> getL2Norm(final List<CompoundTopDocs> queryTopDocs) {
