@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.Objects;
@@ -362,6 +363,7 @@ public class ScoreCombiner {
                     new ExplainDetails(
                         combinedScore,
                         String.format(
+                            Locale.ROOT,
                             "source scores: %s, combined score %s",
                             Arrays.toString(normalizedScoresPerDoc.get(docId)),
                             combinedScore

@@ -37,7 +37,7 @@ public class ExplainUtils {
                 List<Float> normScores = normalizedScores.get(entry.getKey());
                 return new ExplainDetails(
                     normScores.stream().reduce(0.0f, Float::max),
-                    String.format("source scores: %s, normalized scores: %s", srcScores, normScores)
+                    String.format(Locale.ROOT, "source scores: %s, normalized scores: %s", srcScores, normScores)
                 );
             }));
         return explain;
@@ -66,7 +66,7 @@ public class ExplainUtils {
                 new DocIdAtSearchShard(key, searchShard),
                 new ExplainDetails(
                     combinedScore,
-                    String.format("source scores: %s, combined score %s", Arrays.toString(srcScores), combinedScore)
+                    String.format(Locale.ROOT, "source scores: %s, combined score %s", Arrays.toString(srcScores), combinedScore)
                 )
             );
         });

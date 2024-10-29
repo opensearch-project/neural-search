@@ -148,7 +148,7 @@ public class NormalizationProcessorWorkflow {
 
             ProcessorExplainDto processorExplainDto = ProcessorExplainDto.builder()
                 .explanation(topLevelExplanationForTechniques)
-                .explainDetailsByShard(combinedExplain)
+                .explainPayload(Map.of(ProcessorExplainDto.ExplanationType.NORMALIZATION_PROCESSOR, combinedExplain))
                 .build();
             // store explain object to pipeline context
             PipelineProcessingContext pipelineProcessingContext = request.getPipelineProcessingContext();

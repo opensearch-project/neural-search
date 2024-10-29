@@ -8,9 +8,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import org.apache.lucene.search.Explanation;
-import org.opensearch.neuralsearch.processor.SearchShard;
 
-import java.util.List;
 import java.util.Map;
 
 @AllArgsConstructor
@@ -18,5 +16,9 @@ import java.util.Map;
 @Getter
 public class ProcessorExplainDto {
     Explanation explanation;
-    Map<SearchShard, List<CombinedExplainDetails>> explainDetailsByShard;
+    Map<ExplanationType, Object> explainPayload;
+
+    public enum ExplanationType {
+        NORMALIZATION_PROCESSOR
+    }
 }
