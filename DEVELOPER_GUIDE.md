@@ -17,6 +17,7 @@
   - [Supported configurations](#supported-configurations)
   - [Submitting Changes](#submitting-changes)
   - [Building On Lucene Version Updates](#building-on-lucene-version-updates)
+  - [Code Guidelines](#code-guidelines)
 
 # Developer Guide
 
@@ -311,7 +312,6 @@ run successfully on the PR. For example, if a PR on main needs to be backported 
 `backport 2.x` to the PR and make sure the backport workflow runs on the PR along with other checks. Once this PR is
 merged to main, the workflow will create a backport PR to the `2.x` branch.
 
-
 ## Building On Lucene Version Updates
 There may be a Lucene version update that can affect your workflow causing errors like
 `java.lang.NoClassDefFoundError: org/apache/lucene/codecs/lucene99/Lucene99Codec` or
@@ -380,14 +380,20 @@ For the most part, we're using common conventions for Java projects. Here are a 
 3. Use `final` on all method arguments unless it's absolutely necessary 
 4. Wildcard imports are not allowed.
 5. Static imports are preferred over qualified imports when using static methods
-6. Prefer creating non-static methods whenever possible. Static methods should generally be avoided as they are often used as a shortcut.
+6. Prefer creating non-static public methods whenever possible. Avoid static methods in general, as they can often serve as shortcuts.
+Static methods are acceptable if they are private and do not access class state.
 7. Use functional programming style inside methods unless it's a performance critical section. 
 8. For parameters of lambda expression please use meaningful names instead of shorten cryptic ones.
 9. Use Optional for return values if the value may not be present. This should be preferred to returning null.
 10. Do not create checked exceptions, and do not throw checked exceptions from public methods whenever possible. In general, if you call a method with a checked exception, you should wrap that exception into an unchecked exception.
 11. Throwing checked exceptions from private methods is acceptable.
-12. Use String.format style in case your string is using parameters, prefer that to direct string concatenation
+12. Use String.format when a string includes parameters, and prefer this over direct string concatenation. Always specify a Locale with String.format; 
+as a rule of thumb, use Locale.ROOT.
 13. Prefer Lombok annotations to the manually written boilerplate code
+14. When throwing an exception, avoid including user-provided content in the exception message. For secure coding practices,
+limit exception messages to the bare minimum and log additional details to the application logs, as user input could be maliciously crafted.
+    
+
 
 Some of mentioned styles are enforced by the `spotless` Gradle plugin, please check [Java Language Formatting Guidelines](##Java Language Formatting Guidelines) section for more details.
 
@@ -402,6 +408,9 @@ Integration tests should be used sparingly, focusing primarily on the main (happ
 mocking is impractical. Include one or two unhappy paths to confirm that correct response codes are returned to the user. 
 Whenever possible, favor scenarios that do not require model deployment. If model deployment is necessary, use an existing 
 model, as tests involving new model deployments are the most resource-intensive.
+
+If your changes could affect backward compatibility, please include relevant backward compatibility tests along with your 
+PR. For guidance on adding these tests, refer to the [Backwards Compatibility Testing](#backwards-compatibility-testing) section in this guide.
 
 ### Outdated or irrelevant code
 
