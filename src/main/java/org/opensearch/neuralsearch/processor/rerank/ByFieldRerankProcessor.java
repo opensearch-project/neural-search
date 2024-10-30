@@ -162,26 +162,41 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
      */
     public void byFieldSearchHitValidator(final SearchHit hit) {
         if (!hit.hasSource()) {
-            log.error(String.format(Locale.ROOT, "There is no source field to be able to perform rerank on hit [%d]", hit.docId()));
+            log.error(String.format(Locale.ROOT, "There is no source field to be able to perform rerank on hit [%s]", hit.getId()));
             throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "There is no source field to be able to perform rerank on hit [%d]", hit.docId())
+                String.format(Locale.ROOT, "There is no source field to be able to perform rerank on hit [%s]", hit.getId())
             );
         }
 
         Map<String, Object> sourceMap = hit.getSourceAsMap();
         if (!mappingExistsInSource(sourceMap, targetField)) {
-            log.error(String.format(Locale.ROOT, "The field to rerank [%s] is not found at hit [%d]", targetField, hit.docId()));
+            log.error(String.format(Locale.ROOT, "The field to rerank [%s] is not found at hit [%s]", targetField, hit.getId()));
 
-            throw new IllegalArgumentException(String.format(Locale.ROOT, "The field to rerank by is not found at hit [%d]", hit.docId()));
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "The field to rerank by is not found at hit [%s]", hit.getId()));
         }
 
         Optional<Object> val = getValueFromSource(sourceMap, targetField);
 
         if (!(val.get() instanceof Number)) {
-            log.error(String.format(Locale.ROOT, "The field mapping to rerank [%s: %s] is not Numerical", targetField, val.orElse(null)));
+            // Strictly get the type of value removing the prefix of getClass() having a value is guaranteed so no NPE check
+            String typeOfMapping = val.get().getClass().toString().replace("class ", "");
+            log.error(
+                String.format(
+                    Locale.ROOT,
+                    "The field mapping to rerank [%s: %s] is not Numerical, instead of type [%s]",
+                    targetField,
+                    val.orElse(null),
+                    typeOfMapping
+                )
+            );
 
             throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "The field mapping to rerank by [%s] is not Numerical", val.orElse(null))
+                String.format(
+                    Locale.ROOT,
+                    "The field mapping to rerank by [%s] is not Numerical, instead of type [%s]",
+                    val.orElse(null),
+                    typeOfMapping
+                )
             );
         }
 
