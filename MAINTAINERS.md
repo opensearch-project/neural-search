@@ -14,6 +14,9 @@
 | Naveen Tatikonda        | [naveentatikonda](https://github.com/naveentatikonda)     | Amazon      |
 | Vijayan Balasubramanian | [VijayanB](https://github.com/VijayanB)                   | Amazon      |
 | Varun Jain              | [vibrantvarun](https://github.com/vibrantvarun)           | Amazon      |
+| Zhichao Geng            | [zhichao-aws](https://github.com/zhichao-aws)             | Amazon      |
+| Yuye Zhu                | [yuye-aws](https://github.com/yuye-aws)                   | Amazon      |
+| Minal Shah              | [minalsha](https://github.com/minalsha)                   | Amazon      |
 
 ## Emeritus
 
