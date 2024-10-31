@@ -20,6 +20,8 @@ This document contains a list of maintainers in this repo. See [opensearch-proje
 | Varun Jain              | [vibrantvarun](https://github.com/vibrantvarun)           | Amazon      |
 | Zhichao Geng            | [zhichao-aws](https://github.com/zhichao-aws)             | Amazon      |
 | Yuye Zhu                | [yuye-aws](https://github.com/yuye-aws)                   | Amazon      |
+| Minal Shah              | [minalsha](https://github.com/minalsha)                   | Amazon      |
+
 
 ## Emeritus
 
