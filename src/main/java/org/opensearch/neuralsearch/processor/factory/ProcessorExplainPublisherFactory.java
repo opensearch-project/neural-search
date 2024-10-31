@@ -4,7 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor.factory;
 
-import org.opensearch.neuralsearch.processor.ProcessorExplainPublisher;
+import org.opensearch.neuralsearch.processor.ExplainResponseProcessor;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 
@@ -21,6 +21,6 @@ public class ProcessorExplainPublisherFactory implements Processor.Factory<Searc
         Map<String, Object> config,
         Processor.PipelineContext pipelineContext
     ) throws Exception {
-        return new ProcessorExplainPublisher(description, tag, ignoreFailure);
+        return new ExplainResponseProcessor(description, tag, ignoreFailure);
     }
 }

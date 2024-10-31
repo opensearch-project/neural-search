@@ -40,7 +40,7 @@ import org.opensearch.search.query.QuerySearchResult;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
-import static org.opensearch.neuralsearch.plugin.NeuralSearch.PROCESSOR_EXPLAIN;
+import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLAIN_RESPONSE_KEY;
 import static org.opensearch.neuralsearch.processor.combination.ScoreCombiner.MAX_SCORE_WHEN_NO_HITS_FOUND;
 import static org.opensearch.neuralsearch.processor.explain.ExplainUtils.topLevelExpalantionForCombinedScore;
 import static org.opensearch.neuralsearch.search.util.HybridSearchSortUtil.evaluateSortCriteria;
@@ -152,7 +152,7 @@ public class NormalizationProcessorWorkflow {
                 .build();
             // store explain object to pipeline context
             PipelineProcessingContext pipelineProcessingContext = request.getPipelineProcessingContext();
-            pipelineProcessingContext.setAttribute(PROCESSOR_EXPLAIN, processorExplainDto);
+            pipelineProcessingContext.setAttribute(EXPLAIN_RESPONSE_KEY, processorExplainDto);
         }
 
     }

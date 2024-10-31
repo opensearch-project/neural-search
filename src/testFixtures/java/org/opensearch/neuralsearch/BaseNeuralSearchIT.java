@@ -49,7 +49,7 @@ import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
-import org.opensearch.neuralsearch.processor.ProcessorExplainPublisher;
+import org.opensearch.neuralsearch.processor.ExplainResponseProcessor;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 import org.opensearch.search.sort.SortBuilder;
@@ -1203,7 +1203,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         if (addExplainResponseProcessor) {
             stringBuilderForContentBody.append(", \"response_processors\": [ ")
                 .append("{\"")
-                .append(ProcessorExplainPublisher.TYPE)
+                .append(ExplainResponseProcessor.TYPE)
                 .append("\": {}}")
                 .append("]");
         }

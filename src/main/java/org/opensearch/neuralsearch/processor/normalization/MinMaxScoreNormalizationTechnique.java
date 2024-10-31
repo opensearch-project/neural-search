@@ -74,7 +74,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
 
     @Override
     public String describe() {
-        return String.format(Locale.ROOT, "normalization technique [%s]", TECHNIQUE_NAME);
+        return String.format(Locale.ROOT, "normalization [%s]", TECHNIQUE_NAME);
     }
 
     @Override

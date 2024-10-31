@@ -32,7 +32,7 @@ import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
-import org.opensearch.neuralsearch.processor.ProcessorExplainPublisher;
+import org.opensearch.neuralsearch.processor.ExplainResponseProcessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.TextChunkingProcessor;
@@ -82,7 +82,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     private NormalizationProcessorWorkflow normalizationProcessorWorkflow;
     private final ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
     private final ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();
-    public static final String PROCESSOR_EXPLAIN = "processor_explain";
+    public static final String EXPLAIN_RESPONSE_KEY = "explain_response";
 
     @Override
     public Collection<Object> createComponents(
@@ -185,7 +185,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         return Map.of(
             RerankProcessor.TYPE,
             new RerankProcessorFactory(clientAccessor, parameters.searchPipelineService.getClusterService()),
-            ProcessorExplainPublisher.TYPE,
+            ExplainResponseProcessor.TYPE,
             new ProcessorExplainPublisherFactory()
         );
     }

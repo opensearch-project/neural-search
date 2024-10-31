@@ -140,11 +140,10 @@ public final class HybridQueryWeight extends Weight {
     }
 
     /**
-     * Explain is not supported for hybrid query
-     *
+     * Returns a shard level {@link Explanation} that describes how the weight and scoring are calculated.
      * @param context the readers context to create the {@link Explanation} for.
-     * @param doc     the document's id relative to the given context's reader
-     * @return
+     * @param doc the document's id relative to the given context's reader
+     * @return shard level {@link Explanation}, each sub-query explanation is a single nested element
      * @throws IOException
      */
     @Override
@@ -165,7 +164,7 @@ public final class HybridQueryWeight extends Weight {
             }
         }
         if (match) {
-            final String desc = "combination of:";
+            final String desc = "base scores from subqueries:";
             return Explanation.match(max, desc, subsOnMatch);
         } else {
             return Explanation.noMatch("no matching clause", subsOnNoMatch);

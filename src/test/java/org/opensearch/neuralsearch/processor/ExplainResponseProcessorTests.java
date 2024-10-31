@@ -13,21 +13,21 @@ import org.opensearch.test.OpenSearchTestCase;
 
 import static org.mockito.Mockito.mock;
 
-public class ProcessorExplainPublisherTests extends OpenSearchTestCase {
+public class ExplainResponseProcessorTests extends OpenSearchTestCase {
     private static final String PROCESSOR_TAG = "mockTag";
     private static final String DESCRIPTION = "mockDescription";
 
     public void testClassFields_whenCreateNewObject_thenAllFieldsPresent() {
-        ProcessorExplainPublisher processorExplainPublisher = new ProcessorExplainPublisher(DESCRIPTION, PROCESSOR_TAG, false);
+        ExplainResponseProcessor explainResponseProcessor = new ExplainResponseProcessor(DESCRIPTION, PROCESSOR_TAG, false);
 
-        assertEquals(DESCRIPTION, processorExplainPublisher.getDescription());
-        assertEquals(PROCESSOR_TAG, processorExplainPublisher.getTag());
-        assertFalse(processorExplainPublisher.isIgnoreFailure());
+        assertEquals(DESCRIPTION, explainResponseProcessor.getDescription());
+        assertEquals(PROCESSOR_TAG, explainResponseProcessor.getTag());
+        assertFalse(explainResponseProcessor.isIgnoreFailure());
     }
 
     @SneakyThrows
     public void testPipelineContext_whenPipelineContextHasNoExplanationInfo_thenProcessorIsNoOp() {
-        ProcessorExplainPublisher processorExplainPublisher = new ProcessorExplainPublisher(DESCRIPTION, PROCESSOR_TAG, false);
+        ExplainResponseProcessor explainResponseProcessor = new ExplainResponseProcessor(DESCRIPTION, PROCESSOR_TAG, false);
         SearchRequest searchRequest = mock(SearchRequest.class);
         SearchResponse searchResponse = new SearchResponse(
             null,
@@ -40,14 +40,14 @@ public class ProcessorExplainPublisherTests extends OpenSearchTestCase {
             SearchResponse.Clusters.EMPTY
         );
 
-        SearchResponse processedResponse = processorExplainPublisher.processResponse(searchRequest, searchResponse);
+        SearchResponse processedResponse = explainResponseProcessor.processResponse(searchRequest, searchResponse);
         assertEquals(searchResponse, processedResponse);
 
-        SearchResponse processedResponse2 = processorExplainPublisher.processResponse(searchRequest, searchResponse, null);
+        SearchResponse processedResponse2 = explainResponseProcessor.processResponse(searchRequest, searchResponse, null);
         assertEquals(searchResponse, processedResponse2);
 
         PipelineProcessingContext pipelineProcessingContext = new PipelineProcessingContext();
-        SearchResponse processedResponse3 = processorExplainPublisher.processResponse(
+        SearchResponse processedResponse3 = explainResponseProcessor.processResponse(
             searchRequest,
             searchResponse,
             pipelineProcessingContext

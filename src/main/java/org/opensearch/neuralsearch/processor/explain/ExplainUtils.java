@@ -5,15 +5,14 @@
 package org.opensearch.neuralsearch.processor.explain;
 
 import org.apache.lucene.search.Explanation;
-import org.opensearch.neuralsearch.processor.SearchShard;
-import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import static org.opensearch.neuralsearch.processor.combination.ScoreCombinationUtil.PARAM_NAME_WEIGHTS;
 
 /**
  * Utility class for explain functionality
@@ -37,65 +36,36 @@ public class ExplainUtils {
                 List<Float> normScores = normalizedScores.get(entry.getKey());
                 return new ExplainDetails(
                     normScores.stream().reduce(0.0f, Float::max),
-                    String.format(Locale.ROOT, "source scores: %s, normalized scores: %s", srcScores, normScores)
+                    String.format(Locale.ROOT, "source scores: %s normalized to scores: %s", srcScores, normScores)
                 );
             }));
         return explain;
     }
 
     /**
-     * Creates map of DocIdAtQueryPhase to String containing source scores and combined score
-     * @param scoreCombinationTechnique the combination technique used
-     * @param normalizedScoresPerDoc map of DocIdAtQueryPhase to normalized scores
-     * @param searchShard the search shard
-     * @return map of DocIdAtQueryPhase to String containing source scores and combined score
+     * Return the detailed score combination explain for the single document
+     * @param docId
+     * @param combinedNormalizedScoresByDocId
+     * @param normalizedScoresPerDoc
+     * @return
      */
-    public static Map<DocIdAtSearchShard, ExplainDetails> getDocIdAtQueryForCombination(
-        ScoreCombinationTechnique scoreCombinationTechnique,
-        Map<Integer, float[]> normalizedScoresPerDoc,
-        SearchShard searchShard
+    public static ExplainDetails getScoreCombinationExplainDetailsForDocument(
+        final Integer docId,
+        final Map<Integer, Float> combinedNormalizedScoresByDocId,
+        final float[] normalizedScoresPerDoc
     ) {
-        Map<DocIdAtSearchShard, ExplainDetails> explain = new HashMap<>();
-        // - create map of combined scores per doc id
-        Map<Integer, Float> combinedNormalizedScoresByDocId = normalizedScoresPerDoc.entrySet()
-            .stream()
-            .collect(Collectors.toMap(Map.Entry::getKey, entry -> scoreCombinationTechnique.combine(entry.getValue())));
-        normalizedScoresPerDoc.forEach((key, srcScores) -> {
-            float combinedScore = combinedNormalizedScoresByDocId.get(key);
-            explain.put(
-                new DocIdAtSearchShard(key, searchShard),
-                new ExplainDetails(
-                    combinedScore,
-                    String.format(Locale.ROOT, "source scores: %s, combined score %s", Arrays.toString(srcScores), combinedScore)
-                )
-            );
-        });
-        return explain;
+        float combinedScore = combinedNormalizedScoresByDocId.get(docId);
+        return new ExplainDetails(
+            combinedScore,
+            String.format(
+                Locale.ROOT,
+                "normalized scores: %s combined to a final score: %s",
+                Arrays.toString(normalizedScoresPerDoc),
+                combinedScore
+            ),
+            docId
+        );
     }
-
-    /*    public static Map<DocIdAtSearchShard, List<ExplainDetails>> getExplainsByShardForCombination(
-        ScoreCombinationTechnique scoreCombinationTechnique,
-        Map<Integer, float[]> normalizedScoresPerDoc,
-        SearchShard searchShard
-    ) {
-        Map<DocIdAtSearchShard, ExplainDetails> explain = new HashMap<>();
-        // - create map of combined scores per doc id
-        Map<Integer, Float> combinedNormalizedScoresByDocId = normalizedScoresPerDoc.entrySet()
-            .stream()
-            .collect(Collectors.toMap(Map.Entry::getKey, entry -> scoreCombinationTechnique.combine(entry.getValue())));
-        normalizedScoresPerDoc.forEach((key, srcScores) -> {
-            float combinedScore = combinedNormalizedScoresByDocId.get(key);
-            explain.put(
-                new DocIdAtSearchShard(key, searchShard),
-                new ExplainDetails(
-                    combinedScore,
-                    String.format("source scores: %s, combined score %s", Arrays.toString(srcScores), combinedScore)
-                )
-            );
-        });
-        return explain;
-    }
-     */
 
     /**
      * Creates a string describing the combination technique and its parameters
@@ -104,7 +74,7 @@ public class ExplainUtils {
      * @return a string describing the combination technique and its parameters
      */
     public static String describeCombinationTechnique(final String techniqueName, final List<Float> weights) {
-        return String.format(Locale.ROOT, "combination technique [%s] with optional parameters [%s]", techniqueName, weights);
+        return String.format(Locale.ROOT, "combination [%s] with optional parameter [%s]: %s", techniqueName, PARAM_NAME_WEIGHTS, weights);
     }
 
     /**
@@ -119,7 +89,7 @@ public class ExplainUtils {
     ) {
         String explanationDetailsMessage = String.format(
             Locale.ROOT,
-            "combine score with techniques: %s, %s",
+            "combined score with techniques: %s, %s",
             explainableNormalizationTechnique.describe(),
             explainableCombinationTechnique.describe()
         );

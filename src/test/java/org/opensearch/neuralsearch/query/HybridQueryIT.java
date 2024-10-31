@@ -891,24 +891,26 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertNotNull(explanationForHit1);
             assertEquals((double) searchHit1.get("_score"), (double) explanationForHit1.get("value"), DELTA_FOR_SCORE_ASSERTION);
             String expectedGeneralCombineScoreDescription =
-                "combine score with techniques: normalization technique [min_max], combination technique [arithmetic_mean] with optional parameters [[]]";
+                "combined score with techniques: normalization [min_max], combination [arithmetic_mean] with optional parameter [weights]: []";
             assertEquals(expectedGeneralCombineScoreDescription, explanationForHit1.get("description"));
             List<Map<String, Object>> hit1Details = (List<Map<String, Object>>) explanationForHit1.get("details");
             assertEquals(3, hit1Details.size());
             Map<String, Object> hit1DetailsForHit1 = hit1Details.get(0);
             assertEquals(1.0, hit1DetailsForHit1.get("value"));
-            assertTrue(((String) hit1DetailsForHit1.get("description")).matches("source scores: \\[.*\\], normalized scores: \\[1\\.0\\]"));
+            assertTrue(
+                ((String) hit1DetailsForHit1.get("description")).matches("source scores: \\[.*\\] normalized to scores: \\[1\\.0\\]")
+            );
             assertEquals(0, ((List) hit1DetailsForHit1.get("details")).size());
 
             Map<String, Object> hit1DetailsForHit2 = hit1Details.get(1);
             assertEquals(0.5, hit1DetailsForHit2.get("value"));
-            assertEquals("source scores: [0.0, 1.0], combined score 0.5", hit1DetailsForHit2.get("description"));
+            assertEquals("normalized scores: [0.0, 1.0] combined to a final score: 0.5", hit1DetailsForHit2.get("description"));
             assertEquals(0, ((List) hit1DetailsForHit2.get("details")).size());
 
             Map<String, Object> hit1DetailsForHit3 = hit1Details.get(2);
             double actualHit1ScoreHit3 = ((double) hit1DetailsForHit3.get("value"));
             assertTrue(actualHit1ScoreHit3 > 0.0);
-            assertEquals("combination of:", hit1DetailsForHit3.get("description"));
+            assertEquals("base scores from subqueries:", hit1DetailsForHit3.get("description"));
             assertEquals(1, ((List) hit1DetailsForHit3.get("details")).size());
 
             Map<String, Object> hit1SubDetailsForHit3 = (Map<String, Object>) ((List) hit1DetailsForHit3.get("details")).get(0);
@@ -926,18 +928,20 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertEquals(3, hit2Details.size());
             Map<String, Object> hit2DetailsForHit1 = hit2Details.get(0);
             assertEquals(1.0, hit2DetailsForHit1.get("value"));
-            assertTrue(((String) hit2DetailsForHit1.get("description")).matches("source scores: \\[.*\\], normalized scores: \\[1\\.0\\]"));
+            assertTrue(
+                ((String) hit2DetailsForHit1.get("description")).matches("source scores: \\[.*\\] normalized to scores: \\[1\\.0\\]")
+            );
             assertEquals(0, ((List) hit2DetailsForHit1.get("details")).size());
 
             Map<String, Object> hit2DetailsForHit2 = hit2Details.get(1);
             assertEquals(0.5, hit2DetailsForHit2.get("value"));
-            assertEquals("source scores: [1.0, 0.0], combined score 0.5", hit2DetailsForHit2.get("description"));
+            assertEquals("normalized scores: [1.0, 0.0] combined to a final score: 0.5", hit2DetailsForHit2.get("description"));
             assertEquals(0, ((List) hit2DetailsForHit2.get("details")).size());
 
             Map<String, Object> hit2DetailsForHit3 = hit2Details.get(2);
             double actualHit2ScoreHit3 = ((double) hit2DetailsForHit3.get("value"));
             assertTrue(actualHit2ScoreHit3 > 0.0);
-            assertEquals("combination of:", hit2DetailsForHit3.get("description"));
+            assertEquals("base scores from subqueries:", hit2DetailsForHit3.get("description"));
             assertEquals(1, ((List) hit2DetailsForHit3.get("details")).size());
 
             Map<String, Object> hit2SubDetailsForHit3 = (Map<String, Object>) ((List) hit2DetailsForHit3.get("details")).get(0);
@@ -956,19 +960,19 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             Map<String, Object> hit3DetailsForHit1 = hit3Details.get(0);
             assertEquals(0.001, hit3DetailsForHit1.get("value"));
             assertTrue(
-                ((String) hit3DetailsForHit1.get("description")).matches("source scores: \\[.*\\], normalized scores: \\[0\\.001\\]")
+                ((String) hit3DetailsForHit1.get("description")).matches("source scores: \\[.*\\] normalized to scores: \\[0\\.001\\]")
             );
             assertEquals(0, ((List) hit3DetailsForHit1.get("details")).size());
 
             Map<String, Object> hit3DetailsForHit2 = hit3Details.get(1);
             assertEquals(0.0005, hit3DetailsForHit2.get("value"));
-            assertEquals("source scores: [0.0, 0.001], combined score 5.0E-4", hit3DetailsForHit2.get("description"));
+            assertEquals("normalized scores: [0.0, 0.001] combined to a final score: 5.0E-4", hit3DetailsForHit2.get("description"));
             assertEquals(0, ((List) hit3DetailsForHit2.get("details")).size());
 
             Map<String, Object> hit3DetailsForHit3 = hit3Details.get(2);
             double actualHit3ScoreHit3 = ((double) hit3DetailsForHit3.get("value"));
             assertTrue(actualHit3ScoreHit3 > 0.0);
-            assertEquals("combination of:", hit3DetailsForHit3.get("description"));
+            assertEquals("base scores from subqueries:", hit3DetailsForHit3.get("description"));
             assertEquals(1, ((List) hit3DetailsForHit3.get("details")).size());
 
             Map<String, Object> hit3SubDetailsForHit3 = (Map<String, Object>) ((List) hit3DetailsForHit3.get("details")).get(0);
@@ -1027,27 +1031,28 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertNotNull(explanationForHit1);
             assertEquals((double) searchHit1.get("_score"), (double) explanationForHit1.get("value"), DELTA_FOR_SCORE_ASSERTION);
             String expectedGeneralCombineScoreDescription =
-                "combine score with techniques: normalization technique [l2], combination technique [arithmetic_mean] with optional parameters ["
-                    + Arrays.toString(new float[] { 0.3f, 0.7f })
-                    + "]";
+                "combined score with techniques: normalization [l2], combination [arithmetic_mean] with optional parameter [weights]: "
+                    + Arrays.toString(new float[] { 0.3f, 0.7f });
             assertEquals(expectedGeneralCombineScoreDescription, explanationForHit1.get("description"));
             List<Map<String, Object>> hit1Details = (List<Map<String, Object>>) explanationForHit1.get("details");
             assertEquals(3, hit1Details.size());
             Map<String, Object> hit1DetailsForHit1 = hit1Details.get(0);
             assertTrue((double) hit1DetailsForHit1.get("value") > 0.5f);
             assertTrue(
-                ((String) hit1DetailsForHit1.get("description")).matches("source scores: \\[1.0, .*\\], normalized scores: \\[.*, .*\\]")
+                ((String) hit1DetailsForHit1.get("description")).matches("source scores: \\[1.0, .*\\] normalized to scores: \\[.*, .*\\]")
             );
             assertEquals(0, ((List) hit1DetailsForHit1.get("details")).size());
 
             Map<String, Object> hit1DetailsForHit2 = hit1Details.get(1);
             assertEquals(actualMaxScore, (double) hit1DetailsForHit2.get("value"), DELTA_FOR_SCORE_ASSERTION);
-            assertTrue(((String) hit1DetailsForHit2.get("description")).matches("source scores: \\[.*, .*\\], combined score .*"));
+            assertTrue(
+                ((String) hit1DetailsForHit2.get("description")).matches("normalized scores: \\[.*, .*\\] combined to a final score: .*")
+            );
             assertEquals(0, ((List) hit1DetailsForHit2.get("details")).size());
 
             Map<String, Object> hit1DetailsForHit3 = hit1Details.get(2);
             assertEquals(1.0, (double) hit1DetailsForHit3.get("value"), DELTA_FOR_SCORE_ASSERTION);
-            assertTrue(((String) hit1DetailsForHit3.get("description")).matches("combination of:"));
+            assertTrue(((String) hit1DetailsForHit3.get("description")).matches("base scores from subqueries:"));
             assertEquals(2, ((List) hit1DetailsForHit3.get("details")).size());
 
             // hit 2
@@ -1062,18 +1067,20 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             Map<String, Object> hit2DetailsForHit1 = hit2Details.get(0);
             assertTrue((double) hit2DetailsForHit1.get("value") > 0.5f);
             assertTrue(
-                ((String) hit2DetailsForHit1.get("description")).matches("source scores: \\[1.0, .*\\], normalized scores: \\[.*, .*\\]")
+                ((String) hit2DetailsForHit1.get("description")).matches("source scores: \\[1.0, .*\\] normalized to scores: \\[.*, .*\\]")
             );
             assertEquals(0, ((List) hit2DetailsForHit1.get("details")).size());
 
             Map<String, Object> hit2DetailsForHit2 = hit2Details.get(1);
             assertTrue(Range.of(0.0, (double) actualMaxScore).contains((double) hit2DetailsForHit2.get("value")));
-            assertTrue(((String) hit2DetailsForHit2.get("description")).matches("source scores: \\[.*, .*\\], combined score .*"));
+            assertTrue(
+                ((String) hit2DetailsForHit2.get("description")).matches("normalized scores: \\[.*, .*\\] combined to a final score: .*")
+            );
             assertEquals(0, ((List) hit2DetailsForHit2.get("details")).size());
 
             Map<String, Object> hit2DetailsForHit3 = hit2Details.get(2);
             assertEquals(1.0, (double) hit2DetailsForHit3.get("value"), DELTA_FOR_SCORE_ASSERTION);
-            assertTrue(((String) hit2DetailsForHit3.get("description")).matches("combination of:"));
+            assertTrue(((String) hit2DetailsForHit3.get("description")).matches("base scores from subqueries:"));
             assertEquals(2, ((List) hit2DetailsForHit3.get("details")).size());
 
             // hit 3
@@ -1087,17 +1094,19 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertEquals(3, hit3Details.size());
             Map<String, Object> hit3DetailsForHit1 = hit3Details.get(0);
             assertTrue((double) hit3DetailsForHit1.get("value") > 0.5f);
-            assertTrue(((String) hit3DetailsForHit1.get("description")).matches("source scores: \\[.*\\], normalized scores: \\[.*\\]"));
+            assertTrue(((String) hit3DetailsForHit1.get("description")).matches("source scores: \\[.*\\] normalized to scores: \\[.*\\]"));
             assertEquals(0, ((List) hit3DetailsForHit1.get("details")).size());
 
             Map<String, Object> hit3DetailsForHit2 = hit3Details.get(1);
             assertTrue(Range.of(0.0, (double) actualMaxScore).contains((double) hit3DetailsForHit2.get("value")));
-            assertTrue(((String) hit3DetailsForHit2.get("description")).matches("source scores: \\[0.0, .*\\], combined score .*"));
+            assertTrue(
+                ((String) hit3DetailsForHit2.get("description")).matches("normalized scores: \\[0.0, .*\\] combined to a final score: .*")
+            );
             assertEquals(0, ((List) hit3DetailsForHit2.get("details")).size());
 
             Map<String, Object> hit3DetailsForHit3 = hit3Details.get(2);
             assertTrue(Range.of(0.0, (double) actualMaxScore).contains((double) hit3DetailsForHit3.get("value")));
-            assertTrue(((String) hit3DetailsForHit3.get("description")).matches("combination of:"));
+            assertTrue(((String) hit3DetailsForHit3.get("description")).matches("base scores from subqueries:"));
             assertEquals(1, ((List) hit3DetailsForHit3.get("details")).size());
 
             // hit 4
@@ -1111,17 +1120,19 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertEquals(3, hit4Details.size());
             Map<String, Object> hit4DetailsForHit1 = hit4Details.get(0);
             assertTrue((double) hit4DetailsForHit1.get("value") > 0.5f);
-            assertTrue(((String) hit4DetailsForHit1.get("description")).matches("source scores: \\[1.0\\], normalized scores: \\[.*\\]"));
+            assertTrue(((String) hit4DetailsForHit1.get("description")).matches("source scores: \\[1.0\\] normalized to scores: \\[.*\\]"));
             assertEquals(0, ((List) hit4DetailsForHit1.get("details")).size());
 
             Map<String, Object> hit4DetailsForHit2 = hit4Details.get(1);
             assertTrue(Range.of(0.0, (double) actualMaxScore).contains((double) hit4DetailsForHit2.get("value")));
-            assertTrue(((String) hit4DetailsForHit2.get("description")).matches("source scores: \\[.*, 0.0\\], combined score .*"));
+            assertTrue(
+                ((String) hit4DetailsForHit2.get("description")).matches("normalized scores: \\[.*, 0.0\\] combined to a final score: .*")
+            );
             assertEquals(0, ((List) hit4DetailsForHit2.get("details")).size());
 
             Map<String, Object> hit4DetailsForHit3 = hit4Details.get(2);
             assertEquals(1.0, (double) hit4DetailsForHit3.get("value"), DELTA_FOR_SCORE_ASSERTION);
-            assertTrue(((String) hit4DetailsForHit3.get("description")).matches("combination of:"));
+            assertTrue(((String) hit4DetailsForHit3.get("description")).matches("base scores from subqueries:"));
             assertEquals(1, ((List) hit4DetailsForHit3.get("details")).size());
         } finally {
             wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME, null, null, SEARCH_PIPELINE);

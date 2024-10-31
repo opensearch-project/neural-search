@@ -23,8 +23,8 @@ import lombok.extern.log4j.Log4j2;
  * Collection of utility methods for score combination technique classes
  */
 @Log4j2
-class ScoreCombinationUtil {
-    private static final String PARAM_NAME_WEIGHTS = "weights";
+public class ScoreCombinationUtil {
+    public static final String PARAM_NAME_WEIGHTS = "weights";
     private static final float DELTA_FOR_SCORE_ASSERTION = 0.01f;
 
     /**

@@ -23,14 +23,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import static org.opensearch.neuralsearch.plugin.NeuralSearch.PROCESSOR_EXPLAIN;
+import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLAIN_RESPONSE_KEY;
 import static org.opensearch.neuralsearch.processor.explain.ProcessorExplainDto.ExplanationType.NORMALIZATION_PROCESSOR;
 
 @Getter
 @AllArgsConstructor
-public class ProcessorExplainPublisher implements SearchResponseProcessor {
+public class ExplainResponseProcessor implements SearchResponseProcessor {
 
-    public static final String TYPE = "processor_explain_publisher";
+    public static final String TYPE = "explain_response_processor";
 
     private final String description;
     private final String tag;
@@ -43,10 +43,10 @@ public class ProcessorExplainPublisher implements SearchResponseProcessor {
 
     @Override
     public SearchResponse processResponse(SearchRequest request, SearchResponse response, PipelineProcessingContext requestContext) {
-        if (Objects.isNull(requestContext) || (Objects.isNull(requestContext.getAttribute(PROCESSOR_EXPLAIN)))) {
+        if (Objects.isNull(requestContext) || (Objects.isNull(requestContext.getAttribute(EXPLAIN_RESPONSE_KEY)))) {
             return response;
         }
-        ProcessorExplainDto processorExplainDto = (ProcessorExplainDto) requestContext.getAttribute(PROCESSOR_EXPLAIN);
+        ProcessorExplainDto processorExplainDto = (ProcessorExplainDto) requestContext.getAttribute(EXPLAIN_RESPONSE_KEY);
         Map<ProcessorExplainDto.ExplanationType, Object> explainPayload = processorExplainDto.getExplainPayload();
         if (explainPayload.containsKey(NORMALIZATION_PROCESSOR)) {
             Explanation processorExplanation = processorExplainDto.getExplanation();
