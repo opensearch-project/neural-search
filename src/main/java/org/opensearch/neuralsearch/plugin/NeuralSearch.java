@@ -32,14 +32,14 @@ import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
-import org.opensearch.neuralsearch.processor.ExplainResponseProcessor;
+import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.TextChunkingProcessor;
 import org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
-import org.opensearch.neuralsearch.processor.factory.ProcessorExplainPublisherFactory;
+import org.opensearch.neuralsearch.processor.factory.ExplanationResponseProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.TextChunkingProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
@@ -185,8 +185,8 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         return Map.of(
             RerankProcessor.TYPE,
             new RerankProcessorFactory(clientAccessor, parameters.searchPipelineService.getClusterService()),
-            ExplainResponseProcessor.TYPE,
-            new ProcessorExplainPublisherFactory()
+            ExplanationResponseProcessor.TYPE,
+            new ExplanationResponseProcessorFactory()
         );
     }
 

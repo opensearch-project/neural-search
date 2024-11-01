@@ -590,7 +590,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
             assertEquals(0, ((List) hit1DetailsForHit1.get("details")).size());
 
             Map<String, Object> hit1DetailsForHit2 = hit1Details.get(1);
-            assertEquals(0.6666667, (double) hit1DetailsForHit2.get("value"), DELTA_FOR_SCORE_ASSERTION);
+            assertEquals(0.666, (double) hit1DetailsForHit2.get("value"), DELTA_FOR_SCORE_ASSERTION);
             assertEquals("normalized scores: [1.0, 0.0, 1.0] combined to a final score: 0.6666667", hit1DetailsForHit2.get("description"));
             assertEquals(0, ((List) hit1DetailsForHit2.get("details")).size());
 
@@ -627,7 +627,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
             assertEquals(0, ((List) hit1DetailsForHit4.get("details")).size());
 
             Map<String, Object> hit2DetailsForHit4 = hit4Details.get(1);
-            assertEquals(0.6666667, (double) hit2DetailsForHit4.get("value"), DELTA_FOR_SCORE_ASSERTION);
+            assertEquals(0.666, (double) hit2DetailsForHit4.get("value"), DELTA_FOR_SCORE_ASSERTION);
             assertEquals("normalized scores: [0.0, 1.0, 1.0] combined to a final score: 0.6666667", hit2DetailsForHit4.get("description"));
             assertEquals(0, ((List) hit2DetailsForHit4.get("details")).size());
 

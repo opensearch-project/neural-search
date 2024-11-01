@@ -56,14 +56,14 @@ public class ExplainUtils {
     ) {
         float combinedScore = combinedNormalizedScoresByDocId.get(docId);
         return new ExplainDetails(
+            docId,
             combinedScore,
             String.format(
                 Locale.ROOT,
                 "normalized scores: %s combined to a final score: %s",
                 Arrays.toString(normalizedScoresPerDoc),
                 combinedScore
-            ),
-            docId
+            )
         );
     }
 
@@ -96,5 +96,4 @@ public class ExplainUtils {
 
         return Explanation.match(0.0f, explanationDetailsMessage);
     }
-
 }

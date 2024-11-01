@@ -7,7 +7,7 @@ package org.opensearch.neuralsearch.processor.explain;
 import org.opensearch.neuralsearch.processor.SearchShard;
 
 /**
- * Data class to store docId and search shard for a query.
+ * DTO class to store docId and search shard for a query.
  * Used in {@link org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow} to normalize scores across shards.
  * @param docId
  * @param searchShard

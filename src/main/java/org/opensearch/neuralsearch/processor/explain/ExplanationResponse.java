@@ -11,10 +11,13 @@ import org.apache.lucene.search.Explanation;
 
 import java.util.Map;
 
+/**
+ * DTO class to hold explain details for normalization and combination
+ */
 @AllArgsConstructor
 @Builder
 @Getter
-public class ProcessorExplainDto {
+public class ExplanationResponse {
     Explanation explanation;
     Map<ExplanationType, Object> explainPayload;
 

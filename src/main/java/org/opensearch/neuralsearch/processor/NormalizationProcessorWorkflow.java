@@ -28,7 +28,7 @@ import org.opensearch.neuralsearch.processor.explain.CombinedExplainDetails;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplainDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
-import org.opensearch.neuralsearch.processor.explain.ProcessorExplainDto;
+import org.opensearch.neuralsearch.processor.explain.ExplanationResponse;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.search.SearchHit;
@@ -146,13 +146,13 @@ public class NormalizationProcessorWorkflow {
                 }
             });
 
-            ProcessorExplainDto processorExplainDto = ProcessorExplainDto.builder()
+            ExplanationResponse explanationResponse = ExplanationResponse.builder()
                 .explanation(topLevelExplanationForTechniques)
-                .explainPayload(Map.of(ProcessorExplainDto.ExplanationType.NORMALIZATION_PROCESSOR, combinedExplain))
+                .explainPayload(Map.of(ExplanationResponse.ExplanationType.NORMALIZATION_PROCESSOR, combinedExplain))
                 .build();
             // store explain object to pipeline context
             PipelineProcessingContext pipelineProcessingContext = request.getPipelineProcessingContext();
-            pipelineProcessingContext.setAttribute(EXPLAIN_RESPONSE_KEY, processorExplainDto);
+            pipelineProcessingContext.setAttribute(EXPLAIN_RESPONSE_KEY, explanationResponse);
         }
 
     }

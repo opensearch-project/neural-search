@@ -8,6 +8,9 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 
+/**
+ * DTO class to hold explain details for normalization and combination
+ */
 @AllArgsConstructor
 @Builder
 @Getter

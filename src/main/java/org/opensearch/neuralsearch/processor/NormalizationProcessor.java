@@ -44,7 +44,7 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
 
     /**
      * Method abstracts functional aspect of score normalization and score combination. Exact methods for each processing stage
-     * are set as part of class constructor
+     * are set as part of class constructor. This method is called when there is no pipeline context
      * @param searchPhaseResult {@link SearchPhaseResults} DTO that has query search results. Results will be mutated as part of this method execution
      * @param searchPhaseContext {@link SearchContext}
      */
@@ -53,19 +53,27 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
         final SearchPhaseResults<Result> searchPhaseResult,
         final SearchPhaseContext searchPhaseContext
     ) {
-        doProcessStuff(searchPhaseResult, searchPhaseContext, Optional.empty());
+        prepareAndExecuteNormalizationWorkflow(searchPhaseResult, searchPhaseContext, Optional.empty());
     }
 
+    /**
+     * Method abstracts functional aspect of score normalization and score combination. Exact methods for each processing stage
+     * are set as part of class constructor
+     * @param searchPhaseResult {@link SearchPhaseResults} DTO that has query search results. Results will be mutated as part of this method execution
+     * @param searchPhaseContext {@link SearchContext}
+     * @param requestContext {@link PipelineProcessingContext} processing context of search pipeline
+     * @param <Result>
+     */
     @Override
     public <Result extends SearchPhaseResult> void process(
-        SearchPhaseResults<Result> searchPhaseResult,
-        SearchPhaseContext searchPhaseContext,
-        PipelineProcessingContext requestContext
+            final SearchPhaseResults<Result> searchPhaseResult,
+            final SearchPhaseContext searchPhaseContext,
+            final PipelineProcessingContext requestContext
     ) {
-        doProcessStuff(searchPhaseResult, searchPhaseContext, Optional.ofNullable(requestContext));
+        prepareAndExecuteNormalizationWorkflow(searchPhaseResult, searchPhaseContext, Optional.ofNullable(requestContext));
     }
 
-    private <Result extends SearchPhaseResult> void doProcessStuff(
+    private <Result extends SearchPhaseResult> void prepareAndExecuteNormalizationWorkflow(
         SearchPhaseResults<Result> searchPhaseResult,
         SearchPhaseContext searchPhaseContext,
         Optional<PipelineProcessingContext> requestContextOptional

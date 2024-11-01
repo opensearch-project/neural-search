@@ -19,6 +19,9 @@ import java.util.Optional;
 @Builder
 @AllArgsConstructor
 @Getter
+/**
+ * DTO class to hold request parameters for normalization and combination
+ */
 public class NormalizationProcessorWorkflowExecuteRequest {
     final List<QuerySearchResult> querySearchResults;
     final Optional<FetchSearchResult> fetchSearchResultOptional;

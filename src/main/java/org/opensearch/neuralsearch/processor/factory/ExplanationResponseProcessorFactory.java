@@ -4,13 +4,16 @@
  */
 package org.opensearch.neuralsearch.processor.factory;
 
-import org.opensearch.neuralsearch.processor.ExplainResponseProcessor;
+import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 
 import java.util.Map;
 
-public class ProcessorExplainPublisherFactory implements Processor.Factory<SearchResponseProcessor> {
+/**
+ * Factory class for creating ExplanationResponseProcessor
+ */
+public class ExplanationResponseProcessorFactory implements Processor.Factory<SearchResponseProcessor> {
 
     @Override
     public SearchResponseProcessor create(
@@ -21,6 +24,6 @@ public class ProcessorExplainPublisherFactory implements Processor.Factory<Searc
         Map<String, Object> config,
         Processor.PipelineContext pipelineContext
     ) throws Exception {
-        return new ExplainResponseProcessor(description, tag, ignoreFailure);
+        return new ExplanationResponseProcessor(description, tag, ignoreFailure);
     }
 }

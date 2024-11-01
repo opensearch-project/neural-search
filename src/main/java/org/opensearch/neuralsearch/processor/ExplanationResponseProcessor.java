@@ -10,7 +10,7 @@ import org.apache.lucene.search.Explanation;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.neuralsearch.processor.explain.CombinedExplainDetails;
-import org.opensearch.neuralsearch.processor.explain.ProcessorExplainDto;
+import org.opensearch.neuralsearch.processor.explain.ExplanationResponse;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.SearchShardTarget;
@@ -24,13 +24,16 @@ import java.util.Map;
 import java.util.Objects;
 
 import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLAIN_RESPONSE_KEY;
-import static org.opensearch.neuralsearch.processor.explain.ProcessorExplainDto.ExplanationType.NORMALIZATION_PROCESSOR;
+import static org.opensearch.neuralsearch.processor.explain.ExplanationResponse.ExplanationType.NORMALIZATION_PROCESSOR;
 
+/**
+ * Processor to add explanation details to search response
+ */
 @Getter
 @AllArgsConstructor
-public class ExplainResponseProcessor implements SearchResponseProcessor {
+public class ExplanationResponseProcessor implements SearchResponseProcessor {
 
-    public static final String TYPE = "explain_response_processor";
+    public static final String TYPE = "explanation_response_processor";
 
     private final String description;
     private final String tag;
@@ -46,10 +49,10 @@ public class ExplainResponseProcessor implements SearchResponseProcessor {
         if (Objects.isNull(requestContext) || (Objects.isNull(requestContext.getAttribute(EXPLAIN_RESPONSE_KEY)))) {
             return response;
         }
-        ProcessorExplainDto processorExplainDto = (ProcessorExplainDto) requestContext.getAttribute(EXPLAIN_RESPONSE_KEY);
-        Map<ProcessorExplainDto.ExplanationType, Object> explainPayload = processorExplainDto.getExplainPayload();
+        ExplanationResponse explanationResponse = (ExplanationResponse) requestContext.getAttribute(EXPLAIN_RESPONSE_KEY);
+        Map<ExplanationResponse.ExplanationType, Object> explainPayload = explanationResponse.getExplainPayload();
         if (explainPayload.containsKey(NORMALIZATION_PROCESSOR)) {
-            Explanation processorExplanation = processorExplainDto.getExplanation();
+            Explanation processorExplanation = explanationResponse.getExplanation();
             if (Objects.isNull(processorExplanation)) {
                 return response;
             }
@@ -62,7 +65,7 @@ public class ExplainResponseProcessor implements SearchResponseProcessor {
             for (int i = 0; i < searchHitsArray.length; i++) {
                 SearchHit searchHit = searchHitsArray[i];
                 SearchShardTarget searchShardTarget = searchHit.getShard();
-                SearchShard searchShard = SearchShard.create(searchShardTarget);
+                SearchShard searchShard = SearchShard.createSearchShard(searchShardTarget);
                 searchHitsByShard.computeIfAbsent(searchShard, k -> new ArrayList<>()).add(i);
                 explainsByShardCount.putIfAbsent(searchShard, -1);
             }
@@ -73,7 +76,7 @@ public class ExplainResponseProcessor implements SearchResponseProcessor {
                     List<CombinedExplainDetails>>) explainPayload.get(NORMALIZATION_PROCESSOR);
 
                 for (SearchHit searchHit : searchHitsArray) {
-                    SearchShard searchShard = SearchShard.create(searchHit.getShard());
+                    SearchShard searchShard = SearchShard.createSearchShard(searchHit.getShard());
                     int explanationIndexByShard = explainsByShardCount.get(searchShard) + 1;
                     CombinedExplainDetails combinedExplainDetail = combinedExplainDetails.get(searchShard).get(explanationIndexByShard);
                     Explanation normalizedExplanation = Explanation.match(

@@ -85,11 +85,7 @@ public class CompoundTopDocs {
     public CompoundTopDocs(final QuerySearchResult querySearchResult) {
         final TopDocs topDocs = querySearchResult.topDocs().topDocs;
         final SearchShardTarget searchShardTarget = querySearchResult.getSearchShardTarget();
-        SearchShard searchShard = new SearchShard(
-            searchShardTarget.getIndex(),
-            searchShardTarget.getShardId().id(),
-            searchShardTarget.getNodeId()
-        );
+        SearchShard searchShard = SearchShard.createSearchShard(searchShardTarget);
         boolean isSortEnabled = false;
         if (topDocs instanceof TopFieldDocs) {
             isSortEnabled = true;
