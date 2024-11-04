@@ -10,8 +10,8 @@ package org.opensearch.neuralsearch.processor.explain;
  * @param value
  * @param description
  */
-public record ExplainDetails(int docId, float value, String description) {
-    public ExplainDetails(float value, String description) {
+public record ExplanationDetails(int docId, float value, String description) {
+    public ExplanationDetails(float value, String description) {
         this(-1, value, description);
     }
 }

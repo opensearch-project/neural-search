@@ -66,9 +66,9 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
      */
     @Override
     public <Result extends SearchPhaseResult> void process(
-            final SearchPhaseResults<Result> searchPhaseResult,
-            final SearchPhaseContext searchPhaseContext,
-            final PipelineProcessingContext requestContext
+        final SearchPhaseResults<Result> searchPhaseResult,
+        final SearchPhaseContext searchPhaseContext,
+        final PipelineProcessingContext requestContext
     ) {
         prepareAndExecuteNormalizationWorkflow(searchPhaseResult, searchPhaseContext, Optional.ofNullable(requestContext));
     }

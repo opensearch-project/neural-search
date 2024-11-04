@@ -26,9 +26,9 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechniq
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.explain.CombinedExplainDetails;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
-import org.opensearch.neuralsearch.processor.explain.ExplainDetails;
+import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
-import org.opensearch.neuralsearch.processor.explain.ExplanationResponse;
+import org.opensearch.neuralsearch.processor.explain.ExplanationPayload;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.search.SearchHit;
@@ -42,7 +42,7 @@ import lombok.extern.log4j.Log4j2;
 
 import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLAIN_RESPONSE_KEY;
 import static org.opensearch.neuralsearch.processor.combination.ScoreCombiner.MAX_SCORE_WHEN_NO_HITS_FOUND;
-import static org.opensearch.neuralsearch.processor.explain.ExplainUtils.topLevelExpalantionForCombinedScore;
+import static org.opensearch.neuralsearch.processor.explain.ExplainationUtils.topLevelExpalantionForCombinedScore;
 import static org.opensearch.neuralsearch.search.util.HybridSearchSortUtil.evaluateSortCriteria;
 
 /**
@@ -123,11 +123,11 @@ public class NormalizationProcessorWorkflow {
 
             Sort sortForQuery = evaluateSortCriteria(request.getQuerySearchResults(), queryTopDocs);
 
-            Map<DocIdAtSearchShard, ExplainDetails> normalizationExplain = scoreNormalizer.explain(
+            Map<DocIdAtSearchShard, ExplanationDetails> normalizationExplain = scoreNormalizer.explain(
                 queryTopDocs,
                 (ExplainableTechnique) request.getNormalizationTechnique()
             );
-            Map<SearchShard, List<ExplainDetails>> combinationExplain = scoreCombiner.explain(
+            Map<SearchShard, List<ExplanationDetails>> combinationExplain = scoreCombiner.explain(
                 queryTopDocs,
                 request.getCombinationTechnique(),
                 sortForQuery
@@ -135,24 +135,24 @@ public class NormalizationProcessorWorkflow {
             Map<SearchShard, List<CombinedExplainDetails>> combinedExplain = new HashMap<>();
 
             combinationExplain.forEach((searchShard, explainDetails) -> {
-                for (ExplainDetails explainDetail : explainDetails) {
+                for (ExplanationDetails explainDetail : explainDetails) {
                     DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(explainDetail.docId(), searchShard);
-                    ExplainDetails normalizedExplainDetails = normalizationExplain.get(docIdAtSearchShard);
+                    ExplanationDetails normalizedExplanationDetails = normalizationExplain.get(docIdAtSearchShard);
                     CombinedExplainDetails combinedExplainDetails = CombinedExplainDetails.builder()
-                        .normalizationExplain(normalizedExplainDetails)
+                        .normalizationExplain(normalizedExplanationDetails)
                         .combinationExplain(explainDetail)
                         .build();
                     combinedExplain.computeIfAbsent(searchShard, k -> new ArrayList<>()).add(combinedExplainDetails);
                 }
             });
 
-            ExplanationResponse explanationResponse = ExplanationResponse.builder()
+            ExplanationPayload explanationPayload = ExplanationPayload.builder()
                 .explanation(topLevelExplanationForTechniques)
-                .explainPayload(Map.of(ExplanationResponse.ExplanationType.NORMALIZATION_PROCESSOR, combinedExplain))
+                .explainPayload(Map.of(ExplanationPayload.PayloadType.NORMALIZATION_PROCESSOR, combinedExplain))
                 .build();
             // store explain object to pipeline context
             PipelineProcessingContext pipelineProcessingContext = request.getPipelineProcessingContext();
-            pipelineProcessingContext.setAttribute(EXPLAIN_RESPONSE_KEY, explanationResponse);
+            pipelineProcessingContext.setAttribute(EXPLAIN_RESPONSE_KEY, explanationPayload);
         }
 
     }

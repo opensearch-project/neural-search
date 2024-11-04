@@ -17,7 +17,7 @@ import static org.opensearch.neuralsearch.processor.combination.ScoreCombination
 /**
  * Utility class for explain functionality
  */
-public class ExplainUtils {
+public class ExplainationUtils {
 
     /**
      * Creates map of DocIdAtQueryPhase to String containing source and normalized scores
@@ -25,16 +25,16 @@ public class ExplainUtils {
      * @param sourceScores map of DocIdAtQueryPhase to source scores
      * @return map of DocIdAtQueryPhase to String containing source and normalized scores
      */
-    public static Map<DocIdAtSearchShard, ExplainDetails> getDocIdAtQueryForNormalization(
+    public static Map<DocIdAtSearchShard, ExplanationDetails> getDocIdAtQueryForNormalization(
         final Map<DocIdAtSearchShard, List<Float>> normalizedScores,
         final Map<DocIdAtSearchShard, List<Float>> sourceScores
     ) {
-        Map<DocIdAtSearchShard, ExplainDetails> explain = sourceScores.entrySet()
+        Map<DocIdAtSearchShard, ExplanationDetails> explain = sourceScores.entrySet()
             .stream()
             .collect(Collectors.toMap(Map.Entry::getKey, entry -> {
                 List<Float> srcScores = entry.getValue();
                 List<Float> normScores = normalizedScores.get(entry.getKey());
-                return new ExplainDetails(
+                return new ExplanationDetails(
                     normScores.stream().reduce(0.0f, Float::max),
                     String.format(Locale.ROOT, "source scores: %s normalized to scores: %s", srcScores, normScores)
                 );
@@ -49,13 +49,13 @@ public class ExplainUtils {
      * @param normalizedScoresPerDoc
      * @return
      */
-    public static ExplainDetails getScoreCombinationExplainDetailsForDocument(
+    public static ExplanationDetails getScoreCombinationExplainDetailsForDocument(
         final Integer docId,
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
         final float[] normalizedScoresPerDoc
     ) {
         float combinedScore = combinedNormalizedScoresByDocId.get(docId);
-        return new ExplainDetails(
+        return new ExplanationDetails(
             docId,
             combinedScore,
             String.format(

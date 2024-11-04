@@ -17,11 +17,11 @@ import java.util.Map;
 @AllArgsConstructor
 @Builder
 @Getter
-public class ExplanationResponse {
-    Explanation explanation;
-    Map<ExplanationType, Object> explainPayload;
+public class ExplanationPayload {
+    private final Explanation explanation;
+    private final Map<PayloadType, Object> explainPayload;
 
-    public enum ExplanationType {
+    public enum PayloadType {
         NORMALIZATION_PROCESSOR
     }
 }

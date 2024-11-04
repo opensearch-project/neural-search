@@ -10,7 +10,7 @@ import org.apache.lucene.search.Explanation;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.neuralsearch.processor.explain.CombinedExplainDetails;
-import org.opensearch.neuralsearch.processor.explain.ExplanationResponse;
+import org.opensearch.neuralsearch.processor.explain.ExplanationPayload;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.SearchShardTarget;
@@ -24,7 +24,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLAIN_RESPONSE_KEY;
-import static org.opensearch.neuralsearch.processor.explain.ExplanationResponse.ExplanationType.NORMALIZATION_PROCESSOR;
+import static org.opensearch.neuralsearch.processor.explain.ExplanationPayload.PayloadType.NORMALIZATION_PROCESSOR;
 
 /**
  * Processor to add explanation details to search response
@@ -40,19 +40,21 @@ public class ExplanationResponseProcessor implements SearchResponseProcessor {
     private final boolean ignoreFailure;
 
     @Override
-    public SearchResponse processResponse(SearchRequest request, SearchResponse response) throws Exception {
+    public SearchResponse processResponse(SearchRequest request, SearchResponse response) {
         return processResponse(request, response, null);
     }
 
     @Override
     public SearchResponse processResponse(SearchRequest request, SearchResponse response, PipelineProcessingContext requestContext) {
-        if (Objects.isNull(requestContext) || (Objects.isNull(requestContext.getAttribute(EXPLAIN_RESPONSE_KEY)))) {
+        if (Objects.isNull(requestContext)
+            || (Objects.isNull(requestContext.getAttribute(EXPLAIN_RESPONSE_KEY)))
+            || requestContext.getAttribute(EXPLAIN_RESPONSE_KEY) instanceof ExplanationPayload == false) {
             return response;
         }
-        ExplanationResponse explanationResponse = (ExplanationResponse) requestContext.getAttribute(EXPLAIN_RESPONSE_KEY);
-        Map<ExplanationResponse.ExplanationType, Object> explainPayload = explanationResponse.getExplainPayload();
+        ExplanationPayload explanationPayload = (ExplanationPayload) requestContext.getAttribute(EXPLAIN_RESPONSE_KEY);
+        Map<ExplanationPayload.PayloadType, Object> explainPayload = explanationPayload.getExplainPayload();
         if (explainPayload.containsKey(NORMALIZATION_PROCESSOR)) {
-            Explanation processorExplanation = explanationResponse.getExplanation();
+            Explanation processorExplanation = explanationPayload.getExplanation();
             if (Objects.isNull(processorExplanation)) {
                 return response;
             }

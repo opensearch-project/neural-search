@@ -17,10 +17,10 @@ import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import lombok.ToString;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
-import org.opensearch.neuralsearch.processor.explain.ExplainDetails;
+import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 
-import static org.opensearch.neuralsearch.processor.explain.ExplainUtils.getDocIdAtQueryForNormalization;
+import static org.opensearch.neuralsearch.processor.explain.ExplainationUtils.getDocIdAtQueryForNormalization;
 
 /**
  * Abstracts normalization of scores based on L2 method
@@ -64,7 +64,7 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
     }
 
     @Override
-    public Map<DocIdAtSearchShard, ExplainDetails> explain(List<CompoundTopDocs> queryTopDocs) {
+    public Map<DocIdAtSearchShard, ExplanationDetails> explain(List<CompoundTopDocs> queryTopDocs) {
         Map<DocIdAtSearchShard, List<Float>> normalizedScores = new HashMap<>();
         Map<DocIdAtSearchShard, List<Float>> sourceScores = new HashMap<>();
         List<Float> normsPerSubquery = getL2Norm(queryTopDocs);

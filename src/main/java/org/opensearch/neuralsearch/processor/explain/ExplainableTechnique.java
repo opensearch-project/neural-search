@@ -28,7 +28,7 @@ public interface ExplainableTechnique {
      * @param queryTopDocs collection of CompoundTopDocs for each shard result
      * @return map of document per shard and corresponding explanation object
      */
-    default Map<DocIdAtSearchShard, ExplainDetails> explain(final List<CompoundTopDocs> queryTopDocs) {
+    default Map<DocIdAtSearchShard, ExplanationDetails> explain(final List<CompoundTopDocs> queryTopDocs) {
         return Map.of();
     }
 }

@@ -15,6 +15,6 @@ import lombok.Getter;
 @Builder
 @Getter
 public class CombinedExplainDetails {
-    private ExplainDetails normalizationExplain;
-    private ExplainDetails combinationExplain;
+    private ExplanationDetails normalizationExplain;
+    private ExplanationDetails combinationExplain;
 }

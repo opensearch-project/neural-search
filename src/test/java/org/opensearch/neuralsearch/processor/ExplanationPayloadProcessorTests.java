@@ -16,8 +16,8 @@ import org.opensearch.action.search.ShardSearchFailure;
 import org.opensearch.core.index.Index;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.neuralsearch.processor.explain.CombinedExplainDetails;
-import org.opensearch.neuralsearch.processor.explain.ExplainDetails;
-import org.opensearch.neuralsearch.processor.explain.ExplanationResponse;
+import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
+import org.opensearch.neuralsearch.processor.explain.ExplanationPayload;
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
@@ -38,7 +38,7 @@ import java.util.TreeMap;
 import static org.mockito.Mockito.mock;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 
-public class ExplanationResponseProcessorTests extends OpenSearchTestCase {
+public class ExplanationPayloadProcessorTests extends OpenSearchTestCase {
     private static final String PROCESSOR_TAG = "mockTag";
     private static final String DESCRIPTION = "mockDescription";
 
@@ -130,27 +130,27 @@ public class ExplanationResponseProcessorTests extends OpenSearchTestCase {
             SearchShard.createSearchShard(searchHitArray[0].getShard()),
             List.of(
                 CombinedExplainDetails.builder()
-                    .normalizationExplain(new ExplainDetails(1.0f, "source scores: [1.0] normalized to scores: [0.5]"))
-                    .combinationExplain(new ExplainDetails(0.5f, "normalized scores: [0.5] combined to a final score: 0.5"))
+                    .normalizationExplain(new ExplanationDetails(1.0f, "source scores: [1.0] normalized to scores: [0.5]"))
+                    .combinationExplain(new ExplanationDetails(0.5f, "normalized scores: [0.5] combined to a final score: 0.5"))
                     .build()
             ),
             SearchShard.createSearchShard(searchHitArray[1].getShard()),
             List.of(
                 CombinedExplainDetails.builder()
-                    .normalizationExplain(new ExplainDetails(0.5f, "source scores: [0.5] normalized to scores: [0.25]"))
-                    .combinationExplain(new ExplainDetails(0.25f, "normalized scores: [0.25] combined to a final score: 0.25"))
+                    .normalizationExplain(new ExplanationDetails(0.5f, "source scores: [0.5] normalized to scores: [0.25]"))
+                    .combinationExplain(new ExplanationDetails(0.25f, "normalized scores: [0.25] combined to a final score: 0.25"))
                     .build()
             )
         );
-        Map<ExplanationResponse.ExplanationType, Object> explainPayload = Map.of(
-            ExplanationResponse.ExplanationType.NORMALIZATION_PROCESSOR,
+        Map<ExplanationPayload.PayloadType, Object> explainPayload = Map.of(
+            ExplanationPayload.PayloadType.NORMALIZATION_PROCESSOR,
             combinedExplainDetails
         );
-        ExplanationResponse explanationResponse = ExplanationResponse.builder()
+        ExplanationPayload explanationPayload = ExplanationPayload.builder()
             .explanation(generalExplanation)
             .explainPayload(explainPayload)
             .build();
-        pipelineProcessingContext.setAttribute(org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLAIN_RESPONSE_KEY, explanationResponse);
+        pipelineProcessingContext.setAttribute(org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLAIN_RESPONSE_KEY, explanationPayload);
 
         // Act
         SearchResponse processedResponse = explanationResponseProcessor.processResponse(
@@ -216,27 +216,27 @@ public class ExplanationResponseProcessorTests extends OpenSearchTestCase {
             SearchShard.createSearchShard(searchHitArray[0].getShard()),
             List.of(
                 CombinedExplainDetails.builder()
-                    .normalizationExplain(new ExplainDetails(1.0f, "source scores: [1.0] normalized to scores: [0.5]"))
-                    .combinationExplain(new ExplainDetails(0.5f, "normalized scores: [0.5] combined to a final score: 0.5"))
+                    .normalizationExplain(new ExplanationDetails(1.0f, "source scores: [1.0] normalized to scores: [0.5]"))
+                    .combinationExplain(new ExplanationDetails(0.5f, "normalized scores: [0.5] combined to a final score: 0.5"))
                     .build()
             ),
             SearchShard.createSearchShard(searchHitArray[1].getShard()),
             List.of(
                 CombinedExplainDetails.builder()
-                    .normalizationExplain(new ExplainDetails(0.5f, "source scores: [0.5] normalized to scores: [0.25]"))
-                    .combinationExplain(new ExplainDetails(0.25f, "normalized scores: [0.25] combined to a final score: 0.25"))
+                    .normalizationExplain(new ExplanationDetails(0.5f, "source scores: [0.5] normalized to scores: [0.25]"))
+                    .combinationExplain(new ExplanationDetails(0.25f, "normalized scores: [0.25] combined to a final score: 0.25"))
                     .build()
             )
         );
-        Map<ExplanationResponse.ExplanationType, Object> explainPayload = Map.of(
-            ExplanationResponse.ExplanationType.NORMALIZATION_PROCESSOR,
+        Map<ExplanationPayload.PayloadType, Object> explainPayload = Map.of(
+            ExplanationPayload.PayloadType.NORMALIZATION_PROCESSOR,
             combinedExplainDetails
         );
-        ExplanationResponse explanationResponse = ExplanationResponse.builder()
+        ExplanationPayload explanationPayload = ExplanationPayload.builder()
             .explanation(generalExplanation)
             .explainPayload(explainPayload)
             .build();
-        pipelineProcessingContext.setAttribute(org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLAIN_RESPONSE_KEY, explanationResponse);
+        pipelineProcessingContext.setAttribute(org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLAIN_RESPONSE_KEY, explanationPayload);
 
         // Act
         SearchResponse processedResponse = explanationResponseProcessor.processResponse(
@@ -300,27 +300,27 @@ public class ExplanationResponseProcessorTests extends OpenSearchTestCase {
             SearchShard.createSearchShard(searchHitArray[0].getShard()),
             List.of(
                 CombinedExplainDetails.builder()
-                    .normalizationExplain(new ExplainDetails(1.0f, "source scores: [1.0] normalized to scores: [0.5]"))
-                    .combinationExplain(new ExplainDetails(0.5f, "normalized scores: [0.5] combined to a final score: 0.5"))
+                    .normalizationExplain(new ExplanationDetails(1.0f, "source scores: [1.0] normalized to scores: [0.5]"))
+                    .combinationExplain(new ExplanationDetails(0.5f, "normalized scores: [0.5] combined to a final score: 0.5"))
                     .build()
             ),
             SearchShard.createSearchShard(searchHitArray[1].getShard()),
             List.of(
                 CombinedExplainDetails.builder()
-                    .normalizationExplain(new ExplainDetails(0.5f, "source scores: [0.5] normalized to scores: [0.25]"))
-                    .combinationExplain(new ExplainDetails(0.25f, "normalized scores: [0.25] combined to a final score: 0.25"))
+                    .normalizationExplain(new ExplanationDetails(0.5f, "source scores: [0.5] normalized to scores: [0.25]"))
+                    .combinationExplain(new ExplanationDetails(0.25f, "normalized scores: [0.25] combined to a final score: 0.25"))
                     .build()
             )
         );
-        Map<ExplanationResponse.ExplanationType, Object> explainPayload = Map.of(
-            ExplanationResponse.ExplanationType.NORMALIZATION_PROCESSOR,
+        Map<ExplanationPayload.PayloadType, Object> explainPayload = Map.of(
+            ExplanationPayload.PayloadType.NORMALIZATION_PROCESSOR,
             combinedExplainDetails
         );
-        ExplanationResponse explanationResponse = ExplanationResponse.builder()
+        ExplanationPayload explanationPayload = ExplanationPayload.builder()
             .explanation(generalExplanation)
             .explainPayload(explainPayload)
             .build();
-        pipelineProcessingContext.setAttribute(org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLAIN_RESPONSE_KEY, explanationResponse);
+        pipelineProcessingContext.setAttribute(org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLAIN_RESPONSE_KEY, explanationPayload);
 
         // Act
         SearchResponse processedResponse = explanationResponseProcessor.processResponse(

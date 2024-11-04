@@ -12,7 +12,7 @@ import lombok.ToString;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 
 import static org.opensearch.neuralsearch.processor.combination.ScoreCombinationUtil.PARAM_NAME_WEIGHTS;
-import static org.opensearch.neuralsearch.processor.explain.ExplainUtils.describeCombinationTechnique;
+import static org.opensearch.neuralsearch.processor.explain.ExplainationUtils.describeCombinationTechnique;
 
 /**
  * Abstracts combination of scores based on harmonic mean method

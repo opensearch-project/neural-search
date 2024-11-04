@@ -10,7 +10,7 @@ import java.util.Objects;
 
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
-import org.opensearch.neuralsearch.processor.explain.ExplainDetails;
+import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 
 public class ScoreNormalizer {
@@ -30,7 +30,14 @@ public class ScoreNormalizer {
         return queryTopDocs.stream().filter(Objects::nonNull).anyMatch(topDocs -> topDocs.getTopDocs().size() > 0);
     }
 
-    public Map<DocIdAtSearchShard, ExplainDetails> explain(
+    /**
+     * Explain normalized scores based on input normalization technique. Does not mutate input object.
+     * @param queryTopDocs original query results from multiple shards and multiple sub-queries
+     * @param queryTopDocs
+     * @param scoreNormalizationTechnique
+     * @return map of doc id to explanation details
+     */
+    public Map<DocIdAtSearchShard, ExplanationDetails> explain(
         final List<CompoundTopDocs> queryTopDocs,
         final ExplainableTechnique scoreNormalizationTechnique
     ) {

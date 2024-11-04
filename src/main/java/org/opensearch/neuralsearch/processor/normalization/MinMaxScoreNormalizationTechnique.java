@@ -20,10 +20,10 @@ import com.google.common.primitives.Floats;
 
 import lombok.ToString;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
-import org.opensearch.neuralsearch.processor.explain.ExplainDetails;
+import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 
-import static org.opensearch.neuralsearch.processor.explain.ExplainUtils.getDocIdAtQueryForNormalization;
+import static org.opensearch.neuralsearch.processor.explain.ExplainationUtils.getDocIdAtQueryForNormalization;
 
 /**
  * Abstracts normalization of scores based on min-max method
@@ -44,19 +44,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
      */
     @Override
     public void normalize(final List<CompoundTopDocs> queryTopDocs) {
-        int numOfSubqueries = queryTopDocs.stream()
-            .filter(Objects::nonNull)
-            .filter(topDocs -> topDocs.getTopDocs().size() > 0)
-            .findAny()
-            .get()
-            .getTopDocs()
-            .size();
-        // get min scores for each sub query
-        float[] minScoresPerSubquery = getMinScores(queryTopDocs, numOfSubqueries);
-
-        // get max scores for each sub query
-        float[] maxScoresPerSubquery = getMaxScores(queryTopDocs, numOfSubqueries);
-
+        MinMaxScores minMaxScores = getMinMaxScoresResult(queryTopDocs);
         // do normalization using actual score and min and max scores for corresponding sub query
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
             if (Objects.isNull(compoundQueryTopDocs)) {
@@ -66,10 +54,23 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
             for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
                 TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
-                    scoreDoc.score = normalizeSingleScore(scoreDoc.score, minScoresPerSubquery[j], maxScoresPerSubquery[j]);
+                    scoreDoc.score = normalizeSingleScore(
+                        scoreDoc.score,
+                        minMaxScores.minScoresPerSubquery()[j],
+                        minMaxScores.maxScoresPerSubquery()[j]
+                    );
                 }
             }
         }
+    }
+
+    private MinMaxScores getMinMaxScoresResult(final List<CompoundTopDocs> queryTopDocs) {
+        int numOfSubqueries = getNumOfSubqueries(queryTopDocs);
+        // get min scores for each sub query
+        float[] minScoresPerSubquery = getMinScores(queryTopDocs, numOfSubqueries);
+        // get max scores for each sub query
+        float[] maxScoresPerSubquery = getMaxScores(queryTopDocs, numOfSubqueries);
+        return new MinMaxScores(minScoresPerSubquery, maxScoresPerSubquery);
     }
 
     @Override
@@ -78,23 +79,11 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
     }
 
     @Override
-    public Map<DocIdAtSearchShard, ExplainDetails> explain(final List<CompoundTopDocs> queryTopDocs) {
+    public Map<DocIdAtSearchShard, ExplanationDetails> explain(final List<CompoundTopDocs> queryTopDocs) {
+        MinMaxScores minMaxScores = getMinMaxScoresResult(queryTopDocs);
+
         Map<DocIdAtSearchShard, List<Float>> normalizedScores = new HashMap<>();
         Map<DocIdAtSearchShard, List<Float>> sourceScores = new HashMap<>();
-
-        int numOfSubqueries = queryTopDocs.stream()
-            .filter(Objects::nonNull)
-            .filter(topDocs -> !topDocs.getTopDocs().isEmpty())
-            .findAny()
-            .get()
-            .getTopDocs()
-            .size();
-        // get min scores for each sub query
-        float[] minScoresPerSubquery = getMinScores(queryTopDocs, numOfSubqueries);
-
-        // get max scores for each sub query
-        float[] maxScoresPerSubquery = getMaxScores(queryTopDocs, numOfSubqueries);
-
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
             if (Objects.isNull(compoundQueryTopDocs)) {
                 continue;
@@ -104,15 +93,28 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                 TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
                     DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(scoreDoc.doc, compoundQueryTopDocs.getSearchShard());
-                    float normalizedScore = normalizeSingleScore(scoreDoc.score, minScoresPerSubquery[j], maxScoresPerSubquery[j]);
+                    float normalizedScore = normalizeSingleScore(
+                        scoreDoc.score,
+                        minMaxScores.minScoresPerSubquery()[j],
+                        minMaxScores.maxScoresPerSubquery()[j]
+                    );
                     normalizedScores.computeIfAbsent(docIdAtSearchShard, k -> new ArrayList<>()).add(normalizedScore);
                     sourceScores.computeIfAbsent(docIdAtSearchShard, k -> new ArrayList<>()).add(scoreDoc.score);
                     scoreDoc.score = normalizedScore;
                 }
             }
         }
-
         return getDocIdAtQueryForNormalization(normalizedScores, sourceScores);
+    }
+
+    private int getNumOfSubqueries(final List<CompoundTopDocs> queryTopDocs) {
+        return queryTopDocs.stream()
+            .filter(Objects::nonNull)
+            .filter(topDocs -> !topDocs.getTopDocs().isEmpty())
+            .findAny()
+            .get()
+            .getTopDocs()
+            .size();
     }
 
     private float[] getMaxScores(final List<CompoundTopDocs> queryTopDocs, final int numOfSubqueries) {
@@ -164,5 +166,11 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         }
         float normalizedScore = (score - minScore) / (maxScore - minScore);
         return normalizedScore == 0.0f ? MIN_SCORE : normalizedScore;
+    }
+
+    /**
+     * Result class to hold min and max scores for each sub query
+     */
+    private record MinMaxScores(float[] minScoresPerSubquery, float[] maxScoresPerSubquery) {
     }
 }
