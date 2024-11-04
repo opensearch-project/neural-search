@@ -639,6 +639,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
 
             HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
             hybridQueryBuilder.add(QueryBuilders.existsQuery(TEST_TEXT_FIELD_NAME_1));
+            // hybridQueryBuilder.paginationDepth(10);
 
             Map<String, Object> searchResponseAsMap = search(
                 alias,
@@ -845,7 +846,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
             testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
-            testHybridQuery_whenFromIsGreaterThanZeroAndPaginationDepthIsNotSent_thenFail(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+            testHybridQuery_whenFromIsGreaterThanZeroAndPaginationDepthIsNotSent_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
             testHybridQuery_whenFromIsGreaterThanTotalResultCount_thenFail(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
             testHybridQuery_whenPaginationDepthIsOutOfRange_thenFail(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
         } finally {
@@ -860,7 +861,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
             testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
-            testHybridQuery_whenFromIsGreaterThanZeroAndPaginationDepthIsNotSent_thenFail(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+            testHybridQuery_whenFromIsGreaterThanZeroAndPaginationDepthIsNotSent_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
             testHybridQuery_whenFromIsGreaterThanTotalResultCount_thenFail(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
             testHybridQuery_whenPaginationDepthIsOutOfRange_thenFail(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
         } finally {
@@ -875,7 +876,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
             testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME);
-            testHybridQuery_whenFromIsGreaterThanZeroAndPaginationDepthIsNotSent_thenFail(TEST_MULTI_DOC_INDEX_NAME);
+            testHybridQuery_whenFromIsGreaterThanZeroAndPaginationDepthIsNotSent_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME);
             testHybridQuery_whenFromIsGreaterThanTotalResultCount_thenFail(TEST_MULTI_DOC_INDEX_NAME);
             testHybridQuery_whenPaginationDepthIsOutOfRange_thenFail(TEST_MULTI_DOC_INDEX_NAME);
         } finally {
@@ -890,7 +891,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
             testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME);
-            testHybridQuery_whenFromIsGreaterThanZeroAndPaginationDepthIsNotSent_thenFail(TEST_MULTI_DOC_INDEX_NAME);
+            testHybridQuery_whenFromIsGreaterThanZeroAndPaginationDepthIsNotSent_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME);
             testHybridQuery_whenFromIsGreaterThanTotalResultCount_thenFail(TEST_MULTI_DOC_INDEX_NAME);
             testHybridQuery_whenPaginationDepthIsOutOfRange_thenFail(TEST_MULTI_DOC_INDEX_NAME);
         } finally {
@@ -927,31 +928,30 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    public void testHybridQuery_whenFromIsGreaterThanZeroAndPaginationDepthIsNotSent_thenFail(String indexName) {
+    public void testHybridQuery_whenFromIsGreaterThanZeroAndPaginationDepthIsNotSent_thenSuccessful(String indexName) {
         HybridQueryBuilder hybridQueryBuilderOnlyMatchAll = new HybridQueryBuilder();
         hybridQueryBuilderOnlyMatchAll.add(new MatchAllQueryBuilder());
 
-        ResponseException responseException = assertThrows(
-            ResponseException.class,
-            () -> search(
-                indexName,
-                hybridQueryBuilderOnlyMatchAll,
-                null,
-                10,
-                Map.of("search_pipeline", SEARCH_PIPELINE),
-                null,
-                null,
-                null,
-                false,
-                null,
-                2
-            )
+        Map<String, Object> searchResponseAsMap = search(
+            indexName,
+            hybridQueryBuilderOnlyMatchAll,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            2
         );
 
-        org.hamcrest.MatcherAssert.assertThat(
-            responseException.getMessage(),
-            allOf(containsString("pagination_depth is missing in the search request"))
-        );
+        assertEquals(2, getHitCount(searchResponseAsMap));
+        Map<String, Object> total = getTotalHits(searchResponseAsMap);
+        assertNotNull(total.get("value"));
+        assertEquals(4, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
 
     @SneakyThrows

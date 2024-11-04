@@ -55,8 +55,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     private final List<QueryBuilder> queries = new ArrayList<>();
 
     private String fieldName;
-    private Integer paginationDepth;
+    private Integer paginationDepth = null;
     static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
+    private final static int DEFAULT_PAGINATION_DEPTH = 10;
     private static final int LOWER_BOUND_OF_PAGINATION_DEPTH = 1;
     private static final int UPPER_BOUND_OF_PAGINATION_DEPTH = 10000;
 
@@ -108,7 +109,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             queryBuilder.toXContent(builder, params);
         }
         builder.endArray();
-        builder.field(DEPTH_FIELD.getPreferredName(), paginationDepth);
+        if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
+            builder.field(DEPTH_FIELD.getPreferredName(), paginationDepth == null ? DEFAULT_PAGINATION_DEPTH : paginationDepth);
+        }
         printBoostAndQueryName(builder);
         builder.endObject();
     }
@@ -159,6 +162,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * @throws IOException
      */
     public static HybridQueryBuilder fromXContent(XContentParser parser) throws IOException {
+        log.info("fromXContent called");
         float boost = AbstractQueryBuilder.DEFAULT_BOOST;
 
         Integer paginationDepth = null;

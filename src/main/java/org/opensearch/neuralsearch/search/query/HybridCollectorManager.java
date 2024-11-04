@@ -485,16 +485,16 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     private static int getSubqueryResultsRetrievalSize(final SearchContext searchContext) {
         HybridQuery hybridQuery = getHybridQueryFromAbstractQuery(searchContext.query());
         Integer paginationDepth = hybridQuery.getPaginationDepth();
-        // Pagination is expected to work only pagination_depth is provided to hold the reference of search result.
-        if (searchContext.from() > 0 && (Objects.isNull(paginationDepth))) {
-            throw new IllegalArgumentException(String.format(Locale.ROOT, "pagination_depth is missing in the search request"));
-        }
-        if (paginationDepth != null) {
-            return paginationDepth;
-        } else {
-            // Switch to from+size retrieval size when pagination_depth is null.
+
+        // Switch to from+size retrieval size when pagination_depth is null.
+        if (searchContext.from() == 0) {
             return searchContext.from() + searchContext.size();
         }
+        // Pagination is expected to work only pagination_depth is provided to hold the reference of search result.
+        if (Objects.isNull(paginationDepth)) {
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "pagination_depth is missing in the search request"));
+        }
+        return paginationDepth;
     }
 
     private static HybridQuery getHybridQueryFromAbstractQuery(Query query) {
