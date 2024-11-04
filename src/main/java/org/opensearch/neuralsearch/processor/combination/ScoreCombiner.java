@@ -31,6 +31,7 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.processor.SearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
+import org.opensearch.neuralsearch.processor.dto.CombineScoresDto;
 
 /**
  * Abstracts combination of scores in query search results.
@@ -74,7 +75,6 @@ public class ScoreCombiner {
         Sort sort = combineScoresDTO.getSort();
         combineScoresDTO.getQueryTopDocs()
             .forEach(compoundQueryTopDocs -> combineShardScores(scoreCombinationTechnique, compoundQueryTopDocs, sort));
-
     }
 
     private void combineShardScores(

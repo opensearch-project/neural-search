@@ -48,6 +48,9 @@ public final class HybridQuery extends Query implements Iterable<Query> {
         if (subQueries.isEmpty()) {
             throw new IllegalArgumentException("collection of queries must not be empty");
         }
+        if (paginationDepth != null && paginationDepth == 0) {
+            throw new IllegalArgumentException("pagination depth must not be zero");
+        }
         if (Objects.isNull(filterQueries) || filterQueries.isEmpty()) {
             this.subQueries = new ArrayList<>(subQueries);
         } else {

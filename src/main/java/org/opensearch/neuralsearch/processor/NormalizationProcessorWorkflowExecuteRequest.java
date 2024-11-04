@@ -29,5 +29,5 @@ public class NormalizationProcessorWorkflowExecuteRequest {
     final ScoreCombinationTechnique combinationTechnique;
     boolean explain;
     final PipelineProcessingContext pipelineProcessingContext;
-    int fromValueForSingleShard = -1;
+    int fromValueForSingleShard;
 }

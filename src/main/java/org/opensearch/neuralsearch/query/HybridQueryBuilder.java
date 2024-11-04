@@ -35,6 +35,8 @@ import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.log4j.Log4j2;
 
+import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery;
+
 /**
  * Class abstract creation of a Query type "hybrid". Hybrid query will allow execution of multiple sub-queries and
  * collects score for each of those sub-query.
@@ -53,14 +55,17 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     private final List<QueryBuilder> queries = new ArrayList<>();
 
     private String fieldName;
-    private int paginationDepth;
-
+    private Integer paginationDepth;
     static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
+    private static final int LOWER_BOUND_OF_PAGINATION_DEPTH = 1;
+    private static final int UPPER_BOUND_OF_PAGINATION_DEPTH = 10000;
 
     public HybridQueryBuilder(StreamInput in) throws IOException {
         super(in);
         queries.addAll(readQueries(in));
-        paginationDepth = in.readInt();
+        if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
+            paginationDepth = in.readOptionalInt();
+        }
     }
 
     /**
@@ -71,7 +76,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     @Override
     protected void doWriteTo(StreamOutput out) throws IOException {
         writeQueries(out, queries);
-        out.writeInt(paginationDepth);
+        if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
+            out.writeOptionalInt(paginationDepth);
+        }
     }
 
     /**
@@ -154,7 +161,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     public static HybridQueryBuilder fromXContent(XContentParser parser) throws IOException {
         float boost = AbstractQueryBuilder.DEFAULT_BOOST;
 
-        int paginationDepth = 0;
+        Integer paginationDepth = null;
         final List<QueryBuilder> queries = new ArrayList<>();
         String queryName = null;
 
@@ -224,7 +231,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         HybridQueryBuilder compoundQueryBuilder = new HybridQueryBuilder();
         compoundQueryBuilder.queryName(queryName);
         compoundQueryBuilder.boost(boost);
-        compoundQueryBuilder.paginationDepth(paginationDepth);
+        if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
+            validatePaginationDepth(paginationDepth);
+            compoundQueryBuilder.paginationDepth(paginationDepth);
+        }
         for (QueryBuilder query : queries) {
             compoundQueryBuilder.add(query);
         }
@@ -244,7 +254,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         if (changed) {
             newBuilder.queryName(queryName);
             newBuilder.boost(boost);
-            newBuilder.paginationDepth(paginationDepth);
+            if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
+                newBuilder.paginationDepth(paginationDepth);
+            }
             return newBuilder;
         } else {
             return this;
@@ -267,7 +279,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         EqualsBuilder equalsBuilder = new EqualsBuilder();
         equalsBuilder.append(fieldName, obj.fieldName);
         equalsBuilder.append(queries, obj.queries);
-        equalsBuilder.append(paginationDepth, obj.paginationDepth);
+        if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
+            equalsBuilder.append(paginationDepth, obj.paginationDepth);
+        }
         return equalsBuilder.isEquals();
     }
 
@@ -306,6 +320,15 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             }
         }).filter(Objects::nonNull).collect(Collectors.toList());
         return queries;
+    }
+
+    private static void validatePaginationDepth(Integer paginationDepth) {
+        if (paginationDepth != null
+            && (paginationDepth < LOWER_BOUND_OF_PAGINATION_DEPTH || paginationDepth > UPPER_BOUND_OF_PAGINATION_DEPTH)) {
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "Pagination depth should lie in the range of 1-1000. Received: %s", paginationDepth)
+            );
+        }
     }
 
     /**

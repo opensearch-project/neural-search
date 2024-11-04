@@ -74,7 +74,6 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     @Nullable
     private final FieldDoc after;
     private final SearchContext searchContext;
-    private static final int DEFAULT_PAGINATION_DEPTH = 10;
 
     /**
      * Create new instance of HybridCollectorManager depending on the concurrent search beeing enabled or disabled.
@@ -93,7 +92,14 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         if (searchContext.sort() != null) {
             validateSortCriteria(searchContext, searchContext.trackScores());
         }
+
         boolean isSingleShard = searchContext.numberOfShards() == 1;
+        // In case of single shard, it can happen that fetch phase might execute before normalization phase. Moreover, The pagination logic
+        // lies in the fetch phase.
+        // If the fetch phase gets executed before the normalization phase, then the result will be not paginated as per normalized score.
+        // Therefore, to avoid it we will update from value in search context to 0. This will stop fetch phase to trim results prematurely.
+        // Later in the normalization phase we will update QuerySearchResult object with the right from value, to handle the effective
+        // trimming of results.
         if (isSingleShard && searchContext.from() > 0) {
             searchContext.from(0);
         }
@@ -477,34 +483,30 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
      * @return results size to collected
      */
     private static int getSubqueryResultsRetrievalSize(final SearchContext searchContext) {
-        int paginationDepth;
-        HybridQuery hybridQuery;
-        Query query = searchContext.query();
-        if (query instanceof BooleanQuery) {
-            BooleanQuery booleanQuery = (BooleanQuery) query;
-            hybridQuery = (HybridQuery) booleanQuery.clauses().get(0).getQuery();
-            paginationDepth = hybridQuery.getPaginationDepth();
-        } else {
-            hybridQuery = (HybridQuery) query;
-            paginationDepth = hybridQuery.getPaginationDepth();
+        HybridQuery hybridQuery = getHybridQueryFromAbstractQuery(searchContext.query());
+        Integer paginationDepth = hybridQuery.getPaginationDepth();
+        // Pagination is expected to work only pagination_depth is provided to hold the reference of search result.
+        if (searchContext.from() > 0 && (Objects.isNull(paginationDepth))) {
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "pagination_depth is missing in the search request"));
         }
-
-        if (paginationDepth != 0) {
-            validatePaginationDepth(paginationDepth);
+        if (paginationDepth != null) {
             return paginationDepth;
-        } else if (searchContext.from() > 0 && paginationDepth == 0) {
-            return DEFAULT_PAGINATION_DEPTH;
         } else {
+            // Switch to from+size retrieval size when pagination_depth is null.
             return searchContext.from() + searchContext.size();
         }
     }
 
-    private static void validatePaginationDepth(int depth) {
-        if (depth < 0 || depth > 10000) {
-            throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "Pagination depth should lie in the range of 1-1000. Received: %s", depth)
-            );
+    private static HybridQuery getHybridQueryFromAbstractQuery(Query query) {
+        HybridQuery hybridQuery;
+        // In case of nested fields and alias filter, hybrid query is wrapped under bool query and lies in the first clause.
+        if (query instanceof BooleanQuery) {
+            BooleanQuery booleanQuery = (BooleanQuery) query;
+            hybridQuery = (HybridQuery) booleanQuery.clauses().get(0).getQuery();
+        } else {
+            hybridQuery = (HybridQuery) query;
         }
+        return hybridQuery;
     }
 
     /**

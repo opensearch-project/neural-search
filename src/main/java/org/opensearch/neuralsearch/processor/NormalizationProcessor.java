@@ -16,6 +16,7 @@ import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.action.search.SearchPhaseName;
 import org.opensearch.action.search.SearchPhaseResults;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.dto.NormalizationExecuteDto;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.search.SearchPhaseResult;
 import org.opensearch.search.fetch.FetchSearchResult;
