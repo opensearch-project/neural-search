@@ -11,12 +11,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import org.opensearch.common.CheckedConsumer;
-import org.opensearch.common.Nullable;
+import org.opensearch.common.cache.Cache;
+import org.opensearch.common.cache.CacheBuilder;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.ml.client.MachineLearningNodeClient;
@@ -46,46 +46,181 @@ import lombok.extern.log4j.Log4j2;
 @RequiredArgsConstructor
 @Log4j2
 public class MLCommonsClientAccessor {
-    private static final List<String> TARGET_RESPONSE_FILTERS = List.of("sentence_embedding");
-    private final MachineLearningNodeClient mlClient;
-    private final Map<String, Boolean> modelAsymmetryCache = new ConcurrentHashMap<>();
 
     /**
-     * Wrapper around {@link #inferenceSentences} that expected a single input text and produces a single floating
-     * point vector as a response.
-     *
-     * @param modelId {@link String}
-     * @param inputText {@link List} of {@link String} on which inference needs to happen
-     * @param listener {@link ActionListener} which will be called when prediction is completed or errored out
+     * Inference parameters for calls to the MLCommons client.
      */
-    public void inferenceSentence(
-        @NonNull final String modelId,
-        @NonNull final String inputText,
-        @NonNull final ActionListener<List<Float>> listener
-    ) {
-        inferenceSentence(modelId, inputText, null, listener);
+    public static class InferenceRequest {
+
+        private static final List<String> DEFAULT_TARGET_RESPONSE_FILTERS = List.of("sentence_embedding");
+
+        private final String modelId;
+        private final List<String> inputTexts;
+        private final MLAlgoParams mlAlgoParams;
+        private final List<String> targetResponseFilters;
+        private final Map<String, String> inputObjects;
+        private final String queryText;
+
+        public InferenceRequest(
+            @NonNull String modelId,
+            List<String> inputTexts,
+            MLAlgoParams mlAlgoParams,
+            List<String> targetResponseFilters,
+            Map<String, String> inputObjects,
+            String queryText
+        ) {
+            this.modelId = modelId;
+            this.inputTexts = inputTexts;
+            this.mlAlgoParams = mlAlgoParams;
+            this.targetResponseFilters = targetResponseFilters == null ? DEFAULT_TARGET_RESPONSE_FILTERS : targetResponseFilters;
+            this.inputObjects = inputObjects;
+            this.queryText = queryText;
+        }
+
+        public String getModelId() {
+            return modelId;
+        }
+
+        public List<String> getInputTexts() {
+            return inputTexts;
+        }
+
+        public MLAlgoParams getMlAlgoParams() {
+            return mlAlgoParams;
+        }
+
+        public List<String> getTargetResponseFilters() {
+            return targetResponseFilters;
+        }
+
+        public Map<String, String> getInputObjects() {
+            return inputObjects;
+        }
+
+        public String getQueryText() {
+            return queryText;
+        }
+
+        /**
+         * Builder for {@link InferenceRequest}. Supports fluent construction of the request object.
+         */
+        public static class Builder {
+
+            private final String modelId;
+            private List<String> inputTexts;
+            private MLAlgoParams mlAlgoParams;
+            private List<String> targetResponseFilters;
+            private Map<String, String> inputObjects;
+            private String queryText;
+
+            /**
+             * @param modelId the model id to use for inference
+             */
+            public Builder(String modelId) {
+                this.modelId = modelId;
+            }
+
+            /**
+             * @param inputTexts a {@link List} of input texts to use for inference
+             * @return this builder
+             */
+            public Builder inputTexts(List<String> inputTexts) {
+                this.inputTexts = inputTexts;
+                return this;
+            }
+
+            /**
+             * @param inputText an input text to add to the list of input texts. Repeated calls will add
+             *                  more input texts.
+             * @return this builder
+             */
+            public Builder inputText(String inputText) {
+                if (this.inputTexts != null) {
+                    this.inputTexts.add(inputText);
+                } else {
+                    this.inputTexts = new ArrayList<>();
+                    this.inputTexts.add(inputText);
+                }
+                return this;
+            }
+
+            /**
+             * @param mlAlgoParams the {@link MLAlgoParams} to use for inference.
+             * @return this builder
+             */
+            public Builder mlAlgoParams(MLAlgoParams mlAlgoParams) {
+                this.mlAlgoParams = mlAlgoParams;
+                return this;
+            }
+
+            /**
+             * @param targetResponseFilters a {@link List} of target response filters to use for
+             *                              inference
+             * @return this builder
+             */
+            public Builder targetResponseFilters(List<String> targetResponseFilters) {
+                this.targetResponseFilters = targetResponseFilters;
+                return this;
+            }
+
+            /**
+             * @param inputObjects {@link Map} of {@link String}, {@link String} on which inference needs
+             *                     to happen
+             * @return this builder
+             */
+            public Builder inputObjects(Map<String, String> inputObjects) {
+                this.inputObjects = inputObjects;
+                return this;
+            }
+
+            /**
+             * @param queryText the query text to use for similarity inference
+             * @return this builder
+             */
+            public Builder queryText(String queryText) {
+                this.queryText = queryText;
+                return this;
+            }
+
+            /**
+             * @return a new {@link InferenceRequest} object with the parameters set in this builder
+             */
+            public InferenceRequest build() {
+                return new InferenceRequest(modelId, inputTexts, mlAlgoParams, targetResponseFilters, inputObjects, queryText);
+            }
+
+        }
     }
 
+    private final MachineLearningNodeClient mlClient;
+    private final Cache<String, Boolean> modelAsymmetryCache = CacheBuilder.<String, Boolean>builder().setMaximumWeight(10_000).build();
+
     /**
-     * Wrapper around {@link #inferenceSentences} that expected a single input text and produces a single floating
-     * point vector as a response. Supports passing {@link MLAlgoParams} to the inference. If the model is
-     * asymmetric, passing a
-     * {@link org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters} is
-     * mandatory. This method will check whether the model being used is asymmetric and correctly handle the
-     * parameter, so it's okay to always pass the parameter (even if the model is symmetric).
+     * Wrapper around {@link #inferenceSentencesMap} that expects a single input text and produces a
+     * single floating point vector as a response.
+     * <p>
+     * If the model is asymmetric, the {@link InferenceRequest} must contain an
+     * {@link
+     * org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters} s
+     * {@link MLAlgoParams}. This method will check whether the model being used is asymmetric and
+     * correctly handle the parameter, so it's okay to always pass the parameter (even if the model is
+     * symmetric).
      *
-     * @param modelId {@link String}
-     * @param inputText {@link List} of {@link String} on which inference needs to happen
-     * @param mlAlgoParams {@link MLAlgoParams} which will be used to run the inference
-     * @param listener {@link ActionListener} which will be called when prediction is completed or errored out
+     * @param inferenceRequest {@link InferenceRequest} containing the modelId and other parameters.
+     * @param listener         {@link ActionListener} which will be called when prediction is
+     *                         completed or errored out
      */
-    public void inferenceSentence(
-        @NonNull final String modelId,
-        @NonNull final String inputText,
-        @Nullable final MLAlgoParams mlAlgoParams,
-        @NonNull final ActionListener<List<Float>> listener
-    ) {
-        inferenceSentences(TARGET_RESPONSE_FILTERS, modelId, List.of(inputText), mlAlgoParams, ActionListener.wrap(response -> {
+    public void inferenceSentence(@NonNull final InferenceRequest inferenceRequest, @NonNull final ActionListener<List<Float>> listener) {
+        if (inferenceRequest.inputTexts.size() != 1) {
+            listener.onFailure(
+                new IllegalArgumentException(
+                    "Unexpected number of input texts. Expected 1 input text, but got [" + inferenceRequest.inputTexts.size() + "]"
+                )
+            );
+            return;
+        }
+
+        inferenceSentences(inferenceRequest, ActionListener.wrap(response -> {
             if (response.size() != 1) {
                 listener.onFailure(
                     new IllegalStateException(
@@ -95,111 +230,57 @@ public class MLCommonsClientAccessor {
                 return;
             }
 
-            listener.onResponse(response.get(0));
+            listener.onResponse(response.getFirst());
         }, listener::onFailure));
     }
 
     /**
      * Abstraction to call predict function of api of MLClient with default targetResponse filters. It
-     * uses the custom model provided as modelId and run the {@link FunctionName#TEXT_EMBEDDING}. The
+     * uses the custom model provided as modelId and runs the {@link FunctionName#TEXT_EMBEDDING}. The
      * return will be sent using the actionListener which will have a {@link List} of {@link List} of
      * {@link Float} in the order of inputText. We are not making this function generic enough to take
      * any function or TaskType as currently we need to run only TextEmbedding tasks only.
+     * <p>
+     * If the model is asymmetric, the {@link InferenceRequest} must contain an
+     * {@link
+     * org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters} as
+     * {@link MLAlgoParams}. This method will check whether the model being used is asymmetric and
+     * correctly handle the parameter, so it's okay to always pass the parameter (even if the model is
+     * symmetric).
      *
-     * @param modelId   {@link String}
-     * @param inputText {@link List} of {@link String} on which inference needs to happen
-     * @param listener  {@link ActionListener} which will be called when prediction is completed or
-     *                  errored out
+     * @param inferenceRequest {@link InferenceRequest} containing the modelId and other parameters.
+     * @param listener         {@link ActionListener} which will be called when prediction is
+     *                         completed or errored out
      */
     public void inferenceSentences(
-        @NonNull final String modelId,
-        @NonNull final List<String> inputText,
+        @NonNull final InferenceRequest inferenceRequest,
         @NonNull final ActionListener<List<List<Float>>> listener
     ) {
-        inferenceSentences(TARGET_RESPONSE_FILTERS, modelId, inputText, null, listener);
-    }
-
-    /**
-     * Abstraction to call predict function of api of MLClient with default targetResponse filters. It
-     * uses the custom model provided as modelId and run the {@link FunctionName#TEXT_EMBEDDING}. The
-     * return will be sent using the actionListener which will have a {@link List} of {@link List} of
-     * {@link Float} in the order of inputText. We are not making this function generic enough to take
-     * any function or TaskType as currently we need to run only TextEmbedding tasks only. Supports
-     * passing {@link MLAlgoParams} to the inference. If the model is asymmetric, passing a
-     * {@link org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters}
-     * is mandatory. This method will check whether the model being used is asymmetric and correctly
-     * handle the parameter, so it's okay to always pass the parameter (even if the model is symmetric).
-     *
-     * @param modelId {@link String}
-     * @param inputText {@link List} of {@link String} on which inference needs to happen
-     * @param mlAlgoParams {@link MLAlgoParams} which will be used to run the inference
-     * @param listener {@link ActionListener} which will be called when prediction is completed or
-     */
-    public void inferenceSentences(
-        @NonNull final String modelId,
-        @NonNull final List<String> inputText,
-        @Nullable final MLAlgoParams mlAlgoParams,
-        @NonNull final ActionListener<List<List<Float>>> listener
-    ) {
-        inferenceSentences(TARGET_RESPONSE_FILTERS, modelId, inputText, mlAlgoParams, listener);
-    }
-
-    /**
-     * Abstraction to call predict function of api of MLClient with provided targetResponse filters.
-     * It uses the custom model provided as modelId and run the {@link FunctionName#TEXT_EMBEDDING}.
-     * The return will be sent using the actionListener which will have a {@link List} of {@link List}
-     * of {@link Float} in the order of inputText. We are not making this function generic enough to
-     * take any function or TaskType as currently we need to run only TextEmbedding tasks only.
-     *
-     * @param targetResponseFilters {@link List} of {@link String} which filters out the responses
-     * @param modelId               {@link String}
-     * @param inputText             {@link List} of {@link String} on which inference needs to happen
-     * @param listener              {@link ActionListener} which will be called when prediction is
-     *                              completed or errored out.
-     */
-    public void inferenceSentences(
-        @NonNull final List<String> targetResponseFilters,
-        @NonNull final String modelId,
-        @NonNull final List<String> inputText,
-        @NonNull final ActionListener<List<List<Float>>> listener
-    ) {
-        inferenceSentences(targetResponseFilters, modelId, inputText, null, listener);
-    }
-
-    /**
-     * Abstraction to call predict function of api of MLClient with provided targetResponse filters.
-     * It uses the custom model provided as modelId and run the {@link FunctionName#TEXT_EMBEDDING}.
-     * The return will be sent using the actionListener which will have a {@link List} of {@link List}
-     * of {@link Float} in the order of inputText. We are not making this function generic enough to
-     * take any function or TaskType as currently we need to run only TextEmbedding tasks only. Supports
-     * passing {@link MLAlgoParams} to the inference. If the model is asymmetric, passing a
-     * {@link org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters}
-     * is mandatory. This method will check whether the model being used is asymmetric and correctly
-     * handle the parameter, so it's okay to always pass the parameter (even if the model is symmetric).
-     *
-     * @param targetResponseFilters {@link List} of {@link String} which filters out the responses
-     * @param modelId               {@link String}
-     * @param inputText             {@link List} of {@link String} on which inference needs to happen
-     * @param mlAlgoParams          {@link MLAlgoParams} which will be used to run the inference
-     * @param listener              {@link ActionListener} which will be called when prediction is
-     *                              completed or errored out.
-     */
-    public void inferenceSentences(
-        @NonNull final List<String> targetResponseFilters,
-        @NonNull final String modelId,
-        @NonNull final List<String> inputText,
-        @Nullable final MLAlgoParams mlAlgoParams,
-        @NonNull final ActionListener<List<List<Float>>> listener
-    ) {
-        retryableInferenceSentencesWithVectorResult(targetResponseFilters, modelId, inputText, mlAlgoParams, 0, listener);
+        if (inferenceRequest.inputTexts.isEmpty()) {
+            listener.onFailure(new IllegalArgumentException("inputTexts must be provided"));
+            return;
+        }
+        retryableInferenceSentencesWithVectorResult(
+            inferenceRequest.targetResponseFilters,
+            inferenceRequest.modelId,
+            inferenceRequest.inputTexts,
+            inferenceRequest.mlAlgoParams,
+            0,
+            listener
+        );
     }
 
     public void inferenceSentencesWithMapResult(
-        @NonNull final String modelId,
-        @NonNull final List<String> inputText,
+        @NonNull InferenceRequest inferenceRequest,
         @NonNull final ActionListener<List<Map<String, ?>>> listener
     ) {
-        retryableInferenceSentencesWithMapResult(modelId, inputText, null, 0, listener);
+        retryableInferenceSentencesWithMapResult(
+            inferenceRequest.modelId,
+            inferenceRequest.inputTexts,
+            inferenceRequest.mlAlgoParams,
+            0,
+            listener
+        );
     }
 
     /**
@@ -207,45 +288,35 @@ public class MLCommonsClientAccessor {
      * It uses the custom model provided as modelId and run the {@link FunctionName#TEXT_EMBEDDING}.
      * The return will be sent using the actionListener which will have a list of floats in the order
      * of inputText.
+     * <p>
+     * If the model is asymmetric, the {@link InferenceRequest} must contain an
+     * {@link
+     * org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters} as
+     * {@link MLAlgoParams}. This method will check whether the model being used is asymmetric and
+     * correctly handle the parameter, so it's okay to always pass the parameter (even if the model is
+     * symmetric).
      *
-     * @param modelId      {@link String}
-     * @param inputObjects {@link Map} of {@link String}, {@link String} on which inference needs to
-     *                     happen
-     * @param listener     {@link ActionListener} which will be called when prediction is completed or
-     *                     errored out.
+     * @param inferenceRequest {@link InferenceRequest} containing the modelId and other parameters.
+     *                         Must contain inputObjects.
+     * @param listener         {@link ActionListener} which will be called when prediction is
+     *                         completed or errored out.
      */
-    public void inferenceSentences(
-        @NonNull final String modelId,
-        @NonNull final Map<String, String> inputObjects,
+    public void inferenceSentencesMap(
+        @NonNull final InferenceRequest inferenceRequest,
         @NonNull final ActionListener<List<Float>> listener
     ) {
-        inferenceSentences(modelId, inputObjects, null, listener);
-    }
-
-    /**
-     * Abstraction to call predict function of api of MLClient with provided targetResponse filters.
-     * It uses the custom model provided as modelId and run the {@link FunctionName#TEXT_EMBEDDING}.
-     * The return will be sent using the actionListener which will have a list of floats in the order
-     * of inputText. Supports passing {@link MLAlgoParams} to the inference. If the model is asymmetric,
-     * passing a
-     * {@link org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters}
-     * is mandatory. This method will check whether the model being used is asymmetric and correctly
-     * handle the parameter, so it's okay to always pass the parameter (even if the model is symmetric).
-     *
-     * @param modelId      {@link String}
-     * @param inputObjects {@link Map} of {@link String}, {@link String} on which inference needs to
-     *                     happen
-     * @param mlAlgoParams {@link MLAlgoParams} which will be used to run the inference
-     * @param listener     {@link ActionListener} which will be called when prediction is completed or
-     *                     errored out.
-     */
-    public void inferenceSentences(
-        @NonNull final String modelId,
-        @NonNull final Map<String, String> inputObjects,
-        @Nullable final MLAlgoParams mlAlgoParams,
-        @NonNull final ActionListener<List<Float>> listener
-    ) {
-        retryableInferenceSentencesWithSingleVectorResult(TARGET_RESPONSE_FILTERS, modelId, inputObjects, mlAlgoParams, 0, listener);
+        if (inferenceRequest.inputObjects == null) {
+            listener.onFailure(new IllegalArgumentException("inputObjects must be provided"));
+            return;
+        }
+        retryableInferenceSentencesWithSingleVectorResult(
+            inferenceRequest.targetResponseFilters,
+            inferenceRequest.modelId,
+            inferenceRequest.inputObjects,
+            inferenceRequest.mlAlgoParams,
+            0,
+            listener
+        );
     }
 
     /**
@@ -254,18 +325,22 @@ public class MLCommonsClientAccessor {
      * actionListener as a list of floats representing the similarity scores of the texts w.r.t. the
      * query text, in the order of the input texts.
      *
-     * @param modelId   {@link String} ML-Commons Model Id
-     * @param queryText {@link String} The query to compare all the inputText to
-     * @param inputText {@link List} of {@link String} The texts to compare to the query
-     * @param listener  {@link ActionListener} receives the result of the inference
+     * @param inferenceRequest {@link InferenceRequest} containing the modelId and other parameters.
+     *                         Must contain queryText.
+     * @param listener         {@link ActionListener} receives the result of the inference
      */
-    public void inferenceSimilarity(
-        @NonNull final String modelId,
-        @NonNull final String queryText,
-        @NonNull final List<String> inputText,
-        @NonNull final ActionListener<List<Float>> listener
-    ) {
-        retryableInferenceSimilarityWithVectorResult(modelId, queryText, inputText, 0, listener);
+    public void inferenceSimilarity(@NonNull final InferenceRequest inferenceRequest, @NonNull final ActionListener<List<Float>> listener) {
+        if (inferenceRequest.queryText == null) {
+            listener.onFailure(new IllegalArgumentException("queryText must be provided"));
+            return;
+        }
+        retryableInferenceSimilarityWithVectorResult(
+            inferenceRequest.modelId,
+            inferenceRequest.queryText,
+            inferenceRequest.inputTexts,
+            0,
+            listener
+        );
     }
 
     private void retryableInferenceSentencesWithMapResult(
@@ -329,30 +404,29 @@ public class MLCommonsClientAccessor {
     }
 
     /**
-     * Check if the model is asymmetric and then run the prediction. Model asymmetry is a concept
-     * that is specific to TextEmbeddingModelConfig. If the model is not a TextEmbeddingModel, then
-     * this check is not applicable.
-     *
+     * Check if the model is asymmetric and then run the prediction. Model asymmetry is a concept that
+     * is specific to TextEmbeddingModelConfig. If the model is not a TextEmbeddingModel, then this
+     * check is not applicable.
+     * <p>
      * The asymmetry of a model is static for a given model. To avoid repeated checks for the same
      * model, we cache the model asymmetry status. Non-TextEmbeddingModels are cached as false.
      *
-     * @param modelId    The model id to check
-     * @param onFailure The action to take if the model cannot be retrieved
+     * @param modelId       The model id to check
+     * @param onFailure     The action to take if the model cannot be retrieved
      * @param runPrediction The action to take if the model is successfully retrieved
      */
     private void checkModelAsymmetryAndThenPredict(String modelId, Consumer<Exception> onFailure, Consumer<Boolean> runPrediction) {
         CheckedConsumer<MLModel, ? extends Exception> checkModelAsymmetryListener = model -> {
             MLModelConfig modelConfig = model.getModelConfig();
-            if (!(modelConfig instanceof TextEmbeddingModelConfig)) {
-                modelAsymmetryCache.putIfAbsent(modelId, false);
+            if (!(modelConfig instanceof TextEmbeddingModelConfig textEmbeddingModelConfig)) {
+                modelAsymmetryCache.computeIfAbsent(modelId, k -> false);
                 return;
             }
-            final TextEmbeddingModelConfig textEmbeddingModelConfig = (TextEmbeddingModelConfig) modelConfig;
             final boolean isAsymmetricModel = textEmbeddingModelConfig.getPassagePrefix() != null
                 || textEmbeddingModelConfig.getQueryPrefix() != null;
-            modelAsymmetryCache.putIfAbsent(modelId, isAsymmetricModel);
+            modelAsymmetryCache.computeIfAbsent(modelId, k -> isAsymmetricModel);
         };
-        if (modelAsymmetryCache.containsKey(modelId)) {
+        if (modelAsymmetryCache.get(modelId) != null) {
             runPrediction.accept(modelAsymmetryCache.get(modelId));
         } else {
             mlClient.getModel(modelId, ActionListener.<MLModel>wrap(mlModel -> {

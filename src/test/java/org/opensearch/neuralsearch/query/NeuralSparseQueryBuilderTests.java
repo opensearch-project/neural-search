@@ -623,10 +623,10 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         Map<String, Float> expectedMap = Map.of("1", 1f, "2", 2f);
         MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
         doAnswer(invocation -> {
-            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(1);
             listener.onResponse(List.of(Map.of("response", List.of(expectedMap))));
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), any(), any());
+        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), any());
         NeuralSparseQueryBuilder.initialize(mlCommonsClientAccessor);
 
         final CountDownLatch inProgressLatch = new CountDownLatch(1);
