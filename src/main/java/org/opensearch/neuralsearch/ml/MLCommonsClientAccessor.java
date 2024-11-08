@@ -50,7 +50,7 @@ import lombok.extern.log4j.Log4j2;
 @Log4j2
 public class MLCommonsClientAccessor {
 
-    public static final int MAXIMUM_CACHE_ENTRIES = 10_000;
+    private static final int MAXIMUM_CACHE_ENTRIES = 10_000;
 
     /**
      * Inference parameters for calls to the MLCommons client.
