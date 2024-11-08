@@ -63,8 +63,6 @@ import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.index.remote.RemoteStoreEnums;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.index.shard.SearchOperationListener;
-import org.opensearch.knn.index.mapper.KNNMappingConfig;
-import org.opensearch.knn.index.mapper.KNNVectorFieldType;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.search.SearchShardTarget;
@@ -80,7 +78,6 @@ import org.opensearch.search.query.QuerySearchResult;
 import org.opensearch.search.query.ReduceableSearchResult;
 
 public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
-    private static final String VECTOR_FIELD_NAME = "vectorField";
     private static final String TEXT_FIELD_NAME = "field";
     private static final String TEST_DOC_TEXT1 = "Hello world";
     private static final String TEST_DOC_TEXT2 = "Hi to this place";
@@ -94,12 +91,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
     public void testQueryType_whenQueryIsHybrid_thenCallHybridDocCollector() {
         HybridQueryPhaseSearcher hybridQueryPhaseSearcher = spy(new HybridQueryPhaseSearcher());
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
-        KNNVectorFieldType mockKNNVectorField = mock(KNNVectorFieldType.class);
-        KNNMappingConfig mockKNNMappingConfig = mock(KNNMappingConfig.class);
-        when(mockKNNVectorField.getKnnMappingConfig()).thenReturn(mockKNNMappingConfig);
         when(mockQueryShardContext.index()).thenReturn(dummyIndex);
-        when(mockKNNVectorField.getKnnMappingConfig().getDimension()).thenReturn(4);
-        when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
         MapperService mapperService = createMapperService();
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) mapperService.fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
@@ -153,8 +145,11 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
 
-        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT1);
-        queryBuilder.add(termSubQuery);
+        // Add multiple term queries to simulate a complex hybrid query
+        TermQueryBuilder termSubQuery1 = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT1);
+        TermQueryBuilder termSubQuery2 = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT2);
+        queryBuilder.add(termSubQuery1);
+        queryBuilder.add(termSubQuery2);
 
         Query query = queryBuilder.toQuery(mockQueryShardContext);
         when(searchContext.query()).thenReturn(query);
@@ -826,12 +821,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
     public void testAggregations_whenMetricAggregation_thenSuccessful() {
         HybridQueryPhaseSearcher hybridQueryPhaseSearcher = spy(new HybridQueryPhaseSearcher());
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
-        KNNVectorFieldType mockKNNVectorField = mock(KNNVectorFieldType.class);
-        KNNMappingConfig mockKNNMappingConfig = mock(KNNMappingConfig.class);
-        when(mockKNNVectorField.getKnnMappingConfig()).thenReturn(mockKNNMappingConfig);
         when(mockQueryShardContext.index()).thenReturn(dummyIndex);
-        when(mockKNNVectorField.getKnnMappingConfig().getDimension()).thenReturn(4);
-        when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
         MapperService mapperService = createMapperService();
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) mapperService.fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
@@ -886,8 +876,11 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
 
-        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT1);
-        queryBuilder.add(termSubQuery);
+        // Add multiple queries to simulate a complex hybrid query
+        TermQueryBuilder termSubQuery1 = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT1);
+        TermQueryBuilder termSubQuery2 = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT2);
+        queryBuilder.add(termSubQuery1);
+        queryBuilder.add(termSubQuery2);
 
         Query query = queryBuilder.toQuery(mockQueryShardContext);
         when(searchContext.query()).thenReturn(query);
