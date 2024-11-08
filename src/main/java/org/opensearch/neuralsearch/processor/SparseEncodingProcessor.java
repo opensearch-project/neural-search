@@ -50,7 +50,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         BiConsumer<IngestDocument, Exception> handler
     ) {
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(
-            new InferenceRequest.Builder(this.modelId).inputTexts(inferenceList).build(),
+            InferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
             ActionListener.wrap(resultMaps -> {
                 setVectorFieldsToDocument(ingestDocument, ProcessMap, TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps));
                 handler.accept(ingestDocument, null);
@@ -61,7 +61,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
     @Override
     public void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException) {
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(
-            new InferenceRequest.Builder(this.modelId).inputTexts(inferenceList).build(),
+            InferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
             ActionListener.wrap(resultMaps -> handler.accept(TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps)), onException)
         );
     }

@@ -74,7 +74,9 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
         List<?> ctxList = (List<?>) ctxObj;
         List<String> contexts = ctxList.stream().map(str -> (String) str).collect(Collectors.toList());
         mlCommonsClientAccessor.inferenceSimilarity(
-            new InferenceRequest.Builder(modelId).queryText((String) rerankingContext.get(QueryContextSourceFetcher.QUERY_TEXT_FIELD))
+            InferenceRequest.builder()
+                .modelId(modelId)
+                .queryText((String) rerankingContext.get(QueryContextSourceFetcher.QUERY_TEXT_FIELD))
                 .inputTexts(contexts)
                 .build(),
             listener

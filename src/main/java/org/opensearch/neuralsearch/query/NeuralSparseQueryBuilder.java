@@ -342,7 +342,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         // it splits the tokens using a threshold defined by a ratio of the maximum score of tokens, updating the token set
         // accordingly.
         return ((client, actionListener) -> ML_CLIENT.inferenceSentencesWithMapResult(
-            new InferenceRequest.Builder(modelId()).inputTexts(List.of(queryText)).build(),
+            InferenceRequest.builder().modelId(modelId()).inputTexts(List.of(queryText)).build(),
             ActionListener.wrap(mapResultList -> {
                 Map<String, Float> queryTokens = TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList).get(0);
                 if (Objects.nonNull(twoPhaseSharedQueryToken)) {

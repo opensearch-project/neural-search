@@ -14,6 +14,9 @@ import java.util.Map;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import lombok.Builder;
+import lombok.Getter;
+import lombok.Singular;
 import org.opensearch.common.CheckedConsumer;
 import org.opensearch.common.cache.Cache;
 import org.opensearch.common.cache.CacheBuilder;
@@ -47,19 +50,24 @@ import lombok.extern.log4j.Log4j2;
 @Log4j2
 public class MLCommonsClientAccessor {
 
+    public static final int MAXIMUM_CACHE_ENTRIES = 10_000;
+
     /**
      * Inference parameters for calls to the MLCommons client.
      */
+    @Getter
+    @Builder
     public static class InferenceRequest {
 
         private static final List<String> DEFAULT_TARGET_RESPONSE_FILTERS = List.of("sentence_embedding");
 
-        private final String modelId;
-        private final List<String> inputTexts;
-        private final MLAlgoParams mlAlgoParams;
-        private final List<String> targetResponseFilters;
-        private final Map<String, String> inputObjects;
-        private final String queryText;
+        private final String modelId; // required
+        @Singular
+        private List<String> inputTexts;
+        private MLAlgoParams mlAlgoParams;
+        private List<String> targetResponseFilters;
+        private Map<String, String> inputObjects;
+        private String queryText;
 
         public InferenceRequest(
             @NonNull String modelId,
@@ -76,124 +84,12 @@ public class MLCommonsClientAccessor {
             this.inputObjects = inputObjects;
             this.queryText = queryText;
         }
-
-        public String getModelId() {
-            return modelId;
-        }
-
-        public List<String> getInputTexts() {
-            return inputTexts;
-        }
-
-        public MLAlgoParams getMlAlgoParams() {
-            return mlAlgoParams;
-        }
-
-        public List<String> getTargetResponseFilters() {
-            return targetResponseFilters;
-        }
-
-        public Map<String, String> getInputObjects() {
-            return inputObjects;
-        }
-
-        public String getQueryText() {
-            return queryText;
-        }
-
-        /**
-         * Builder for {@link InferenceRequest}. Supports fluent construction of the request object.
-         */
-        public static class Builder {
-
-            private final String modelId;
-            private List<String> inputTexts;
-            private MLAlgoParams mlAlgoParams;
-            private List<String> targetResponseFilters;
-            private Map<String, String> inputObjects;
-            private String queryText;
-
-            /**
-             * @param modelId the model id to use for inference
-             */
-            public Builder(String modelId) {
-                this.modelId = modelId;
-            }
-
-            /**
-             * @param inputTexts a {@link List} of input texts to use for inference
-             * @return this builder
-             */
-            public Builder inputTexts(List<String> inputTexts) {
-                this.inputTexts = inputTexts;
-                return this;
-            }
-
-            /**
-             * @param inputText an input text to add to the list of input texts. Repeated calls will add
-             *                  more input texts.
-             * @return this builder
-             */
-            public Builder inputText(String inputText) {
-                if (this.inputTexts != null) {
-                    this.inputTexts.add(inputText);
-                } else {
-                    this.inputTexts = new ArrayList<>();
-                    this.inputTexts.add(inputText);
-                }
-                return this;
-            }
-
-            /**
-             * @param mlAlgoParams the {@link MLAlgoParams} to use for inference.
-             * @return this builder
-             */
-            public Builder mlAlgoParams(MLAlgoParams mlAlgoParams) {
-                this.mlAlgoParams = mlAlgoParams;
-                return this;
-            }
-
-            /**
-             * @param targetResponseFilters a {@link List} of target response filters to use for
-             *                              inference
-             * @return this builder
-             */
-            public Builder targetResponseFilters(List<String> targetResponseFilters) {
-                this.targetResponseFilters = targetResponseFilters;
-                return this;
-            }
-
-            /**
-             * @param inputObjects {@link Map} of {@link String}, {@link String} on which inference needs
-             *                     to happen
-             * @return this builder
-             */
-            public Builder inputObjects(Map<String, String> inputObjects) {
-                this.inputObjects = inputObjects;
-                return this;
-            }
-
-            /**
-             * @param queryText the query text to use for similarity inference
-             * @return this builder
-             */
-            public Builder queryText(String queryText) {
-                this.queryText = queryText;
-                return this;
-            }
-
-            /**
-             * @return a new {@link InferenceRequest} object with the parameters set in this builder
-             */
-            public InferenceRequest build() {
-                return new InferenceRequest(modelId, inputTexts, mlAlgoParams, targetResponseFilters, inputObjects, queryText);
-            }
-
-        }
     }
 
     private final MachineLearningNodeClient mlClient;
-    private final Cache<String, Boolean> modelAsymmetryCache = CacheBuilder.<String, Boolean>builder().setMaximumWeight(10_000).build();
+    private final Cache<String, Boolean> modelAsymmetryCache = CacheBuilder.<String, Boolean>builder()
+        .setMaximumWeight(MAXIMUM_CACHE_ENTRIES)
+        .build();
 
     /**
      * Wrapper around {@link #inferenceSentencesMap} that expects a single input text and produces a

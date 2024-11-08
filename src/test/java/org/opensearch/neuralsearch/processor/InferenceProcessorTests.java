@@ -246,7 +246,7 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
         void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException) {
             // use to verify if doBatchExecute is called from InferenceProcessor
             clientAccessor.inferenceSentences(
-                new InferenceRequest.Builder(MODEL_ID).inputTexts(inferenceList).build(),
+                InferenceRequest.builder().modelId(MODEL_ID).inputTexts(inferenceList).build(),
                 ActionListener.wrap(results -> {}, ex -> {})
             );
             allInferenceInputs.add(inferenceList);

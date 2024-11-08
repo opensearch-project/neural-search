@@ -67,7 +67,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(false);
 
         accessor.inferenceSentence(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).inputText(TestCommonConstants.SENTENCES_LIST.get(0)).build(),
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputText(TestCommonConstants.SENTENCES_LIST.get(0)).build(),
             singleSentenceResultListener
         );
 
@@ -101,7 +101,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(false);
 
         accessor.inferenceSentences(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
             resultListener
         );
 
@@ -122,7 +122,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(false);
 
         accessor.inferenceSentences(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
             resultListener
         );
 
@@ -142,7 +142,9 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(false);
 
         accessor.inferenceSentences(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST)
+            InferenceRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .inputTexts(TestCommonConstants.SENTENCES_LIST)
                 .targetResponseFilters(TestCommonConstants.TARGET_RESPONSE_FILTERS)
                 .build(),
             resultListener
@@ -168,7 +170,9 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(false);
 
         accessor.inferenceSentences(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST)
+            InferenceRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .inputTexts(TestCommonConstants.SENTENCES_LIST)
                 .targetResponseFilters(TestCommonConstants.TARGET_RESPONSE_FILTERS)
                 .build(),
             resultListener
@@ -190,7 +194,9 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(false);
 
         accessor.inferenceSentences(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).targetResponseFilters(TestCommonConstants.TARGET_RESPONSE_FILTERS)
+            InferenceRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .targetResponseFilters(TestCommonConstants.TARGET_RESPONSE_FILTERS)
                 .inputTexts(TestCommonConstants.SENTENCES_LIST)
                 .build(),
             resultListener
@@ -211,7 +217,9 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(true);
 
         accessor.inferenceSentence(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).inputText(TestCommonConstants.SENTENCES_LIST.get(0))
+            InferenceRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .inputText(TestCommonConstants.SENTENCES_LIST.get(0))
                 .mlAlgoParams(AsymmetricTextEmbeddingParameters.builder().embeddingContentType(EmbeddingContentType.PASSAGE).build())
                 .build(),
             singleSentenceResultListener
@@ -238,7 +246,9 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(exception);
 
         accessor.inferenceSentence(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).inputText(TestCommonConstants.SENTENCES_LIST.get(0))
+            InferenceRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .inputText(TestCommonConstants.SENTENCES_LIST.get(0))
                 .mlAlgoParams(AsymmetricTextEmbeddingParameters.builder().embeddingContentType(EmbeddingContentType.PASSAGE).build())
                 .build(),
             singleSentenceResultListener
@@ -269,7 +279,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(false);
 
         accessor.inferenceSentencesWithMapResult(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
             resultListener
         );
 
@@ -291,7 +301,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(false);
 
         accessor.inferenceSentencesWithMapResult(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
             resultListener
         );
 
@@ -321,7 +331,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(false);
 
         accessor.inferenceSentencesWithMapResult(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
             resultListener
         );
 
@@ -354,7 +364,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(false);
 
         accessor.inferenceSentencesWithMapResult(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
             resultListener
         );
 
@@ -379,7 +389,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(false);
 
         accessor.inferenceSentencesWithMapResult(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
             resultListener
         );
 
@@ -400,7 +410,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(false);
 
         accessor.inferenceSentencesWithMapResult(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
             resultListener
         );
 
@@ -420,7 +430,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(false);
 
         accessor.inferenceSentencesMap(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).inputObjects(TestCommonConstants.SENTENCES_MAP).build(),
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputObjects(TestCommonConstants.SENTENCES_MAP).build(),
             singleSentenceResultListener
         );
 
@@ -441,7 +451,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(false);
 
         accessor.inferenceSentencesMap(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).inputObjects(TestCommonConstants.SENTENCES_MAP).build(),
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputObjects(TestCommonConstants.SENTENCES_MAP).build(),
             singleSentenceResultListener
         );
 
@@ -465,7 +475,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(false);
 
         accessor.inferenceSentencesMap(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).inputObjects(TestCommonConstants.SENTENCES_MAP).build(),
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputObjects(TestCommonConstants.SENTENCES_MAP).build(),
             singleSentenceResultListener
         );
 
@@ -485,7 +495,9 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(false);
 
         accessor.inferenceSimilarity(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).queryText("is it sunny")
+            InferenceRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .queryText("is it sunny")
                 .inputTexts(List.of("it is sunny today", "roses are red"))
                 .build(),
             singleSentenceResultListener
@@ -508,7 +520,9 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(false);
 
         accessor.inferenceSimilarity(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).queryText("is it sunny")
+            InferenceRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .queryText("is it sunny")
                 .inputTexts(List.of("it is sunny today", "roses are red"))
                 .build(),
             singleSentenceResultListener
@@ -534,7 +548,9 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         setupMocksForTextEmbeddingModelAsymmetryCheck(false);
 
         accessor.inferenceSimilarity(
-            new InferenceRequest.Builder(TestCommonConstants.MODEL_ID).queryText("is it sunny")
+            InferenceRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .queryText("is it sunny")
                 .inputTexts(List.of("it is sunny today", "roses are red"))
                 .build(),
             singleSentenceResultListener
