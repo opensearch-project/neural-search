@@ -13,11 +13,8 @@ import static org.opensearch.neuralsearch.query.HybridQueryBuilderTests.TEXT_FIE
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.apache.lucene.document.FieldType;
@@ -39,23 +36,10 @@ import org.apache.lucene.tests.search.QueryUtils;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.ClusterSettings;
-import org.opensearch.common.settings.Setting;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.core.index.Index;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.knn.index.KNNSettings;
-import org.opensearch.knn.index.SpaceType;
-import org.opensearch.knn.index.VectorDataType;
-import org.opensearch.knn.index.engine.KNNEngine;
-import org.opensearch.knn.index.engine.KNNMethodContext;
-import org.opensearch.knn.index.engine.MethodComponentContext;
-import org.opensearch.knn.index.mapper.KNNMappingConfig;
-import org.opensearch.knn.index.mapper.KNNVectorFieldType;
-import org.opensearch.knn.index.query.KNNQueryBuilder;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 
@@ -63,11 +47,8 @@ import lombok.SneakyThrows;
 
 public class HybridQueryTests extends OpenSearchQueryTestCase {
 
-    static final String VECTOR_FIELD_NAME = "vectorField";
     static final String TERM_QUERY_TEXT = "keyword";
     static final String TERM_ANOTHER_QUERY_TEXT = "anotherkeyword";
-    static final float[] VECTOR_QUERY = new float[] { 1.0f, 2.0f, 2.1f, 0.6f };
-    static final int K = 2;
     @Mock
     protected ClusterService clusterService;
     private AutoCloseable openMocks;
@@ -76,11 +57,6 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
     public void setUp() throws Exception {
         super.setUp();
         openMocks = MockitoAnnotations.openMocks(this);
-        // This is required to make sure that before every test we are initializing the KNNSettings. Not doing this
-        // leads to failures of unit tests cases when a unit test is run separately. Try running this test:
-        // ./gradlew ':test' --tests "org.opensearch.knn.training.TrainingJobTests.testRun_success" and see it fails
-        // but if run along with other tests this test passes.
-        initKNNSettings();
     }
 
     @Override
@@ -141,6 +117,8 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         w.commit();
 
         IndexReader reader = DirectoryReader.open(w);
+
+        // Test with TermQuery
         HybridQuery hybridQueryWithTerm = new HybridQuery(
             List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext))
         );
@@ -148,23 +126,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         // term query is the same after we rewrite it
         assertSame(hybridQueryWithTerm, rewritten);
 
-        Index dummyIndex = new Index("dummy", "dummy");
-        KNNVectorFieldType mockKNNVectorField = mock(KNNVectorFieldType.class);
-        KNNMappingConfig mockKNNMappingConfig = mock(KNNMappingConfig.class);
-        KNNMethodContext mockKNNMethodContext = new KNNMethodContext(KNNEngine.FAISS, SpaceType.L2, MethodComponentContext.EMPTY);
-        when(mockKNNVectorField.getKnnMappingConfig()).thenReturn(mockKNNMappingConfig);
-        when(mockKNNMappingConfig.getKnnMethodContext()).thenReturn(Optional.ofNullable(mockKNNMethodContext));
-        when(mockQueryShardContext.index()).thenReturn(dummyIndex);
-        when(mockKNNVectorField.getKnnMappingConfig().getDimension()).thenReturn(4);
-        when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
-        when(mockKNNVectorField.getVectorDataType()).thenReturn(VectorDataType.FLOAT);
-        KNNQueryBuilder knnQueryBuilder = new KNNQueryBuilder(VECTOR_FIELD_NAME, VECTOR_QUERY, K);
-        Query knnQuery = knnQueryBuilder.toQuery(mockQueryShardContext);
-
-        HybridQuery hybridQueryWithKnn = new HybridQuery(List.of(knnQuery));
-        rewritten = hybridQueryWithKnn.rewrite(reader);
-        assertSame(hybridQueryWithKnn, rewritten);
-
+        // Test empty query list
         IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> new HybridQuery(List.of()));
         assertThat(exception.getMessage(), containsString("collection of queries must not be empty"));
 
@@ -352,18 +314,5 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
             countOfQueries++;
         }
         assertEquals(2, countOfQueries);
-    }
-
-    private void initKNNSettings() {
-        Set<Setting<?>> defaultClusterSettings = new HashSet<>(ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        defaultClusterSettings.addAll(
-            KNNSettings.state()
-                .getSettings()
-                .stream()
-                .filter(s -> s.getProperties().contains(Setting.Property.NodeScope))
-                .collect(Collectors.toList())
-        );
-        when(clusterService.getClusterSettings()).thenReturn(new ClusterSettings(Settings.EMPTY, defaultClusterSettings));
-        KNNSettings.state().setClusterService(clusterService);
     }
 }

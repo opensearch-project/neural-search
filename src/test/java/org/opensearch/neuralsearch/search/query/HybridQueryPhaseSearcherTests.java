@@ -78,7 +78,6 @@ import org.opensearch.search.query.QuerySearchResult;
 import org.opensearch.search.query.ReduceableSearchResult;
 
 public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
-    private static final String VECTOR_FIELD_NAME = "vectorField";
     private static final String TEXT_FIELD_NAME = "field";
     private static final String TEST_DOC_TEXT1 = "Hello world";
     private static final String TEST_DOC_TEXT2 = "Hi to this place";
