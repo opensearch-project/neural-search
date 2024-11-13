@@ -20,7 +20,7 @@ import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 
-import static org.opensearch.neuralsearch.processor.explain.ExplainationUtils.getDocIdAtQueryForNormalization;
+import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.getDocIdAtQueryForNormalization;
 
 /**
  * Abstracts normalization of scores based on L2 method
@@ -60,13 +60,12 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
 
     @Override
     public String describe() {
-        return String.format(Locale.ROOT, "normalization [%s]", TECHNIQUE_NAME);
+        return String.format(Locale.ROOT, "%s", TECHNIQUE_NAME);
     }
 
     @Override
     public Map<DocIdAtSearchShard, ExplanationDetails> explain(List<CompoundTopDocs> queryTopDocs) {
         Map<DocIdAtSearchShard, List<Float>> normalizedScores = new HashMap<>();
-        Map<DocIdAtSearchShard, List<Float>> sourceScores = new HashMap<>();
         List<Float> normsPerSubquery = getL2Norm(queryTopDocs);
 
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
@@ -80,12 +79,11 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
                     DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(scoreDoc.doc, compoundQueryTopDocs.getSearchShard());
                     float normalizedScore = normalizeSingleScore(scoreDoc.score, normsPerSubquery.get(j));
                     normalizedScores.computeIfAbsent(docIdAtSearchShard, k -> new ArrayList<>()).add(normalizedScore);
-                    sourceScores.computeIfAbsent(docIdAtSearchShard, k -> new ArrayList<>()).add(scoreDoc.score);
                     scoreDoc.score = normalizedScore;
                 }
             }
         }
-        return getDocIdAtQueryForNormalization(normalizedScores, sourceScores);
+        return getDocIdAtQueryForNormalization(normalizedScores, this);
     }
 
     private List<Float> getL2Norm(final List<CompoundTopDocs> queryTopDocs) {

@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.Objects;
@@ -16,6 +17,7 @@ import java.util.LinkedHashSet;
 
 import java.util.stream.Collectors;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.ScoreDoc;
@@ -27,9 +29,8 @@ import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.processor.SearchShard;
+import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
-
-import static org.opensearch.neuralsearch.processor.explain.ExplainationUtils.getScoreCombinationExplainDetailsForDocument;
 
 /**
  * Abstracts combination of scores in query search results.
@@ -360,10 +361,14 @@ public class ScoreCombiner {
 
         List<ExplanationDetails> listOfExplanations = sortedDocsIds.stream()
             .map(
-                docId -> getScoreCombinationExplainDetailsForDocument(
+                docId -> new ExplanationDetails(
                     docId,
-                    combinedNormalizedScoresByDocId,
-                    normalizedScoresPerDoc.get(docId)
+                    List.of(
+                        Pair.of(
+                            combinedNormalizedScoresByDocId.get(docId),
+                            String.format(Locale.ROOT, "%s combination of:", ((ExplainableTechnique) scoreCombinationTechnique).describe())
+                        )
+                    )
                 )
             )
             .toList();

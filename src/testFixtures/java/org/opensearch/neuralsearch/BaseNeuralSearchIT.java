@@ -866,6 +866,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return scores;
     }
 
+    protected List<Map<String, Object>> getListOfValues(Map<String, Object> searchResponseAsMap, String key) {
+        return (List<Map<String, Object>>) searchResponseAsMap.get(key);
+    }
+
     /**
      * Create a k-NN index from a list of KNNFieldConfigs
      *

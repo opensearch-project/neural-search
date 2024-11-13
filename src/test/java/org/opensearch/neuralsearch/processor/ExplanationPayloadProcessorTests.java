@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.processor;
 
 import lombok.SneakyThrows;
 import org.apache.commons.lang3.Range;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TotalHits;
@@ -15,7 +16,7 @@ import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.ShardSearchFailure;
 import org.opensearch.core.index.Index;
 import org.opensearch.core.index.shard.ShardId;
-import org.opensearch.neuralsearch.processor.explain.CombinedExplainDetails;
+import org.opensearch.neuralsearch.processor.explain.CombinedExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplanationPayload;
 import org.opensearch.search.DocValueFormat;
@@ -85,72 +86,20 @@ public class ExplanationPayloadProcessorTests extends OpenSearchTestCase {
         // Setup
         ExplanationResponseProcessor explanationResponseProcessor = new ExplanationResponseProcessor(DESCRIPTION, PROCESSOR_TAG, false);
         SearchRequest searchRequest = mock(SearchRequest.class);
-
-        int numResponses = 1;
-        int numIndices = 2;
-        Iterator<Map.Entry<String, Index[]>> indicesIterator = randomRealisticIndices(numIndices, numResponses).entrySet().iterator();
-        Map.Entry<String, Index[]> entry = indicesIterator.next();
-        String clusterAlias = entry.getKey();
-        Index[] indices = entry.getValue();
-
-        int requestedSize = 2;
-        PriorityQueue<SearchHit> priorityQueue = new PriorityQueue<>(new SearchHitComparator(null));
-        TotalHits.Relation totalHitsRelation = randomFrom(TotalHits.Relation.values());
-        TotalHits totalHits = new TotalHits(randomLongBetween(0, 1000), totalHitsRelation);
-
-        final int numDocs = totalHits.value >= requestedSize ? requestedSize : (int) totalHits.value;
-        int scoreFactor = randomIntBetween(1, numResponses);
-        float maxScore = numDocs * scoreFactor;
-
-        SearchHit[] searchHitArray = randomSearchHitArray(
-            numDocs,
-            numResponses,
-            clusterAlias,
-            indices,
-            maxScore,
-            scoreFactor,
-            null,
-            priorityQueue
-        );
-        for (SearchHit searchHit : searchHitArray) {
-            Explanation explanation = Explanation.match(1.0f, "base scores from subqueries:", Explanation.match(1.0f, "field1:[0 TO 100]"));
-            searchHit.explanation(explanation);
-        }
-
-        SearchHits searchHits = new SearchHits(searchHitArray, new TotalHits(numResponses, TotalHits.Relation.EQUAL_TO), 1.0f);
-
+        float maxScore = 1.0f;
+        SearchHits searchHits = getSearchHits(maxScore);
         SearchResponse searchResponse = getSearchResponse(searchHits);
-
         PipelineProcessingContext pipelineProcessingContext = new PipelineProcessingContext();
-        Explanation generalExplanation = Explanation.match(
-            maxScore,
-            "combined score with techniques: normalization [l2], combination [arithmetic_mean] with optional parameters [[]]"
-        );
-        Map<SearchShard, List<CombinedExplainDetails>> combinedExplainDetails = Map.of(
-            SearchShard.createSearchShard(searchHitArray[0].getShard()),
-            List.of(
-                CombinedExplainDetails.builder()
-                    .normalizationExplain(new ExplanationDetails(1.0f, "source scores: [1.0] normalized to scores: [0.5]"))
-                    .combinationExplain(new ExplanationDetails(0.5f, "normalized scores: [0.5] combined to a final score: 0.5"))
-                    .build()
-            ),
-            SearchShard.createSearchShard(searchHitArray[1].getShard()),
-            List.of(
-                CombinedExplainDetails.builder()
-                    .normalizationExplain(new ExplanationDetails(0.5f, "source scores: [0.5] normalized to scores: [0.25]"))
-                    .combinationExplain(new ExplanationDetails(0.25f, "normalized scores: [0.25] combined to a final score: 0.25"))
-                    .build()
-            )
-        );
+        Map<SearchShard, List<CombinedExplanationDetails>> combinedExplainDetails = getCombinedExplainDetails(searchHits);
         Map<ExplanationPayload.PayloadType, Object> explainPayload = Map.of(
             ExplanationPayload.PayloadType.NORMALIZATION_PROCESSOR,
             combinedExplainDetails
         );
-        ExplanationPayload explanationPayload = ExplanationPayload.builder()
-            .explanation(generalExplanation)
-            .explainPayload(explainPayload)
-            .build();
-        pipelineProcessingContext.setAttribute(org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLAIN_RESPONSE_KEY, explanationPayload);
+        ExplanationPayload explanationPayload = ExplanationPayload.builder().explainPayload(explainPayload).build();
+        pipelineProcessingContext.setAttribute(
+            org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY,
+            explanationPayload
+        );
 
         // Act
         SearchResponse processedResponse = explanationResponseProcessor.processResponse(
@@ -169,74 +118,32 @@ public class ExplanationPayloadProcessorTests extends OpenSearchTestCase {
         ExplanationResponseProcessor explanationResponseProcessor = new ExplanationResponseProcessor(DESCRIPTION, PROCESSOR_TAG, false);
         SearchRequest searchRequest = mock(SearchRequest.class);
 
-        int numResponses = 1;
-        int numIndices = 2;
-        Iterator<Map.Entry<String, Index[]>> indicesIterator = randomRealisticIndices(numIndices, numResponses).entrySet().iterator();
-        Map.Entry<String, Index[]> entry = indicesIterator.next();
-        String clusterAlias = entry.getKey();
-        Index[] indices = entry.getValue();
+        float maxScore = 1.0f;
+        SearchHits searchHitsWithoutSorting = getSearchHits(maxScore);
+        for (SearchHit searchHit : searchHitsWithoutSorting.getHits()) {
+            Explanation explanation = Explanation.match(1.0f, "combined score of:", Explanation.match(1.0f, "field1:[0 TO 100]"));
+            searchHit.explanation(explanation);
+        }
+        TotalHits.Relation totalHitsRelation = randomFrom(TotalHits.Relation.values());
+        TotalHits totalHits = new TotalHits(randomLongBetween(0, 1000), totalHitsRelation);
         final SortField[] sortFields = new SortField[] {
             new SortField("random-text-field-1", SortField.Type.INT, randomBoolean()),
             new SortField("random-text-field-2", SortField.Type.STRING, randomBoolean()) };
-
-        int requestedSize = 2;
-        PriorityQueue<SearchHit> priorityQueue = new PriorityQueue<>(new SearchHitComparator(sortFields));
-        TotalHits.Relation totalHitsRelation = randomFrom(TotalHits.Relation.values());
-        TotalHits totalHits = new TotalHits(randomLongBetween(0, 1000), totalHitsRelation);
-
-        final int numDocs = totalHits.value >= requestedSize ? requestedSize : (int) totalHits.value;
-        int scoreFactor = randomIntBetween(1, numResponses);
-        float maxScore = Float.NaN;
-
-        SearchHit[] searchHitArray = randomSearchHitArray(
-            numDocs,
-            numResponses,
-            clusterAlias,
-            indices,
-            maxScore,
-            scoreFactor,
-            sortFields,
-            priorityQueue
-        );
-        for (SearchHit searchHit : searchHitArray) {
-            Explanation explanation = Explanation.match(1.0f, "base scores from subqueries:", Explanation.match(1.0f, "field1:[0 TO 100]"));
-            searchHit.explanation(explanation);
-        }
-
-        SearchHits searchHits = new SearchHits(searchHitArray, totalHits, maxScore, sortFields, null, null);
+        SearchHits searchHits = new SearchHits(searchHitsWithoutSorting.getHits(), totalHits, maxScore, sortFields, null, null);
 
         SearchResponse searchResponse = getSearchResponse(searchHits);
 
         PipelineProcessingContext pipelineProcessingContext = new PipelineProcessingContext();
-        Explanation generalExplanation = Explanation.match(
-            maxScore,
-            "combined score with techniques: normalization [l2], combination [arithmetic_mean] with optional parameters [[]]"
-        );
-        Map<SearchShard, List<CombinedExplainDetails>> combinedExplainDetails = Map.of(
-            SearchShard.createSearchShard(searchHitArray[0].getShard()),
-            List.of(
-                CombinedExplainDetails.builder()
-                    .normalizationExplain(new ExplanationDetails(1.0f, "source scores: [1.0] normalized to scores: [0.5]"))
-                    .combinationExplain(new ExplanationDetails(0.5f, "normalized scores: [0.5] combined to a final score: 0.5"))
-                    .build()
-            ),
-            SearchShard.createSearchShard(searchHitArray[1].getShard()),
-            List.of(
-                CombinedExplainDetails.builder()
-                    .normalizationExplain(new ExplanationDetails(0.5f, "source scores: [0.5] normalized to scores: [0.25]"))
-                    .combinationExplain(new ExplanationDetails(0.25f, "normalized scores: [0.25] combined to a final score: 0.25"))
-                    .build()
-            )
-        );
+        Map<SearchShard, List<CombinedExplanationDetails>> combinedExplainDetails = getCombinedExplainDetails(searchHits);
         Map<ExplanationPayload.PayloadType, Object> explainPayload = Map.of(
             ExplanationPayload.PayloadType.NORMALIZATION_PROCESSOR,
             combinedExplainDetails
         );
-        ExplanationPayload explanationPayload = ExplanationPayload.builder()
-            .explanation(generalExplanation)
-            .explainPayload(explainPayload)
-            .build();
-        pipelineProcessingContext.setAttribute(org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLAIN_RESPONSE_KEY, explanationPayload);
+        ExplanationPayload explanationPayload = ExplanationPayload.builder().explainPayload(explainPayload).build();
+        pipelineProcessingContext.setAttribute(
+            org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY,
+            explanationPayload
+        );
 
         // Act
         SearchResponse processedResponse = explanationResponseProcessor.processResponse(
@@ -255,72 +162,24 @@ public class ExplanationPayloadProcessorTests extends OpenSearchTestCase {
         ExplanationResponseProcessor explanationResponseProcessor = new ExplanationResponseProcessor(DESCRIPTION, PROCESSOR_TAG, false);
         SearchRequest searchRequest = mock(SearchRequest.class);
 
-        int numResponses = 1;
-        int numIndices = 2;
-        Iterator<Map.Entry<String, Index[]>> indicesIterator = randomRealisticIndices(numIndices, numResponses).entrySet().iterator();
-        Map.Entry<String, Index[]> entry = indicesIterator.next();
-        String clusterAlias = entry.getKey();
-        Index[] indices = entry.getValue();
-        final SortField[] sortFields = new SortField[] { SortField.FIELD_SCORE };
+        float maxScore = 1.0f;
 
-        int requestedSize = 2;
-        PriorityQueue<SearchHit> priorityQueue = new PriorityQueue<>(new SearchHitComparator(sortFields));
-        TotalHits.Relation totalHitsRelation = randomFrom(TotalHits.Relation.values());
-        TotalHits totalHits = new TotalHits(randomLongBetween(0, 1000), totalHitsRelation);
-
-        final int numDocs = totalHits.value >= requestedSize ? requestedSize : (int) totalHits.value;
-        int scoreFactor = randomIntBetween(1, numResponses);
-        float maxScore = Float.NaN;
-
-        SearchHit[] searchHitArray = randomSearchHitArray(
-            numDocs,
-            numResponses,
-            clusterAlias,
-            indices,
-            maxScore,
-            scoreFactor,
-            sortFields,
-            priorityQueue
-        );
-        for (SearchHit searchHit : searchHitArray) {
-            Explanation explanation = Explanation.match(1.0f, "base scores from subqueries:", Explanation.match(1.0f, "field1:[0 TO 100]"));
-            searchHit.explanation(explanation);
-        }
-
-        SearchHits searchHits = new SearchHits(searchHitArray, totalHits, maxScore, sortFields, null, null);
+        SearchHits searchHits = getSearchHits(maxScore);
 
         SearchResponse searchResponse = getSearchResponse(searchHits);
 
         PipelineProcessingContext pipelineProcessingContext = new PipelineProcessingContext();
-        Explanation generalExplanation = Explanation.match(
-            maxScore,
-            "combined score with techniques: normalization [l2], combination [arithmetic_mean] with optional parameters [[]]"
-        );
-        Map<SearchShard, List<CombinedExplainDetails>> combinedExplainDetails = Map.of(
-            SearchShard.createSearchShard(searchHitArray[0].getShard()),
-            List.of(
-                CombinedExplainDetails.builder()
-                    .normalizationExplain(new ExplanationDetails(1.0f, "source scores: [1.0] normalized to scores: [0.5]"))
-                    .combinationExplain(new ExplanationDetails(0.5f, "normalized scores: [0.5] combined to a final score: 0.5"))
-                    .build()
-            ),
-            SearchShard.createSearchShard(searchHitArray[1].getShard()),
-            List.of(
-                CombinedExplainDetails.builder()
-                    .normalizationExplain(new ExplanationDetails(0.5f, "source scores: [0.5] normalized to scores: [0.25]"))
-                    .combinationExplain(new ExplanationDetails(0.25f, "normalized scores: [0.25] combined to a final score: 0.25"))
-                    .build()
-            )
-        );
+
+        Map<SearchShard, List<CombinedExplanationDetails>> combinedExplainDetails = getCombinedExplainDetails(searchHits);
         Map<ExplanationPayload.PayloadType, Object> explainPayload = Map.of(
             ExplanationPayload.PayloadType.NORMALIZATION_PROCESSOR,
             combinedExplainDetails
         );
-        ExplanationPayload explanationPayload = ExplanationPayload.builder()
-            .explanation(generalExplanation)
-            .explainPayload(explainPayload)
-            .build();
-        pipelineProcessingContext.setAttribute(org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLAIN_RESPONSE_KEY, explanationPayload);
+        ExplanationPayload explanationPayload = ExplanationPayload.builder().explainPayload(explainPayload).build();
+        pipelineProcessingContext.setAttribute(
+            org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY,
+            explanationPayload
+        );
 
         // Act
         SearchResponse processedResponse = explanationResponseProcessor.processResponse(
@@ -331,6 +190,41 @@ public class ExplanationPayloadProcessorTests extends OpenSearchTestCase {
 
         // Assert
         assertOnExplanationResults(processedResponse, maxScore);
+    }
+
+    private static SearchHits getSearchHits(float maxScore) {
+        int numResponses = 1;
+        int numIndices = 2;
+        Iterator<Map.Entry<String, Index[]>> indicesIterator = randomRealisticIndices(numIndices, numResponses).entrySet().iterator();
+        Map.Entry<String, Index[]> entry = indicesIterator.next();
+        String clusterAlias = entry.getKey();
+        Index[] indices = entry.getValue();
+
+        int requestedSize = 2;
+        PriorityQueue<SearchHit> priorityQueue = new PriorityQueue<>(new SearchHitComparator(null));
+        TotalHits.Relation totalHitsRelation = randomFrom(TotalHits.Relation.values());
+        TotalHits totalHits = new TotalHits(randomLongBetween(0, 1000), totalHitsRelation);
+
+        final int numDocs = totalHits.value >= requestedSize ? requestedSize : (int) totalHits.value;
+        int scoreFactor = randomIntBetween(1, numResponses);
+
+        SearchHit[] searchHitArray = randomSearchHitArray(
+            numDocs,
+            numResponses,
+            clusterAlias,
+            indices,
+            maxScore,
+            scoreFactor,
+            null,
+            priorityQueue
+        );
+        for (SearchHit searchHit : searchHitArray) {
+            Explanation explanation = Explanation.match(1.0f, "combined score of:", Explanation.match(1.0f, "field1:[0 TO 100]"));
+            searchHit.explanation(explanation);
+        }
+
+        SearchHits searchHits = new SearchHits(searchHitArray, new TotalHits(numResponses, TotalHits.Relation.EQUAL_TO), maxScore);
+        return searchHits;
     }
 
     private static SearchResponse getSearchResponse(SearchHits searchHits) {
@@ -356,45 +250,67 @@ public class ExplanationPayloadProcessorTests extends OpenSearchTestCase {
         return searchResponse;
     }
 
+    private static Map<SearchShard, List<CombinedExplanationDetails>> getCombinedExplainDetails(SearchHits searchHits) {
+        Map<SearchShard, List<CombinedExplanationDetails>> combinedExplainDetails = Map.of(
+            SearchShard.createSearchShard(searchHits.getHits()[0].getShard()),
+            List.of(
+                CombinedExplanationDetails.builder()
+                    .normalizationExplanations(new ExplanationDetails(List.of(Pair.of(1.0f, "min_max normalization of:"))))
+                    .combinationExplanations(new ExplanationDetails(List.of(Pair.of(0.5f, "arithmetic_mean combination of:"))))
+                    .build()
+            ),
+            SearchShard.createSearchShard(searchHits.getHits()[1].getShard()),
+            List.of(
+                CombinedExplanationDetails.builder()
+                    .normalizationExplanations(new ExplanationDetails(List.of(Pair.of(0.5f, "min_max normalization of:"))))
+                    .combinationExplanations(new ExplanationDetails(List.of(Pair.of(0.25f, "arithmetic_mean combination of:"))))
+                    .build()
+            )
+        );
+        return combinedExplainDetails;
+    }
+
     private static void assertOnExplanationResults(SearchResponse processedResponse, float maxScore) {
         assertNotNull(processedResponse);
-        Explanation explanationHit1 = processedResponse.getHits().getHits()[0].getExplanation();
-        assertNotNull(explanationHit1);
-        assertEquals(
-            "combined score with techniques: normalization [l2], combination [arithmetic_mean] with optional parameters [[]]",
-            explanationHit1.getDescription()
-        );
-        assertEquals(maxScore, (float) explanationHit1.getValue(), DELTA_FOR_SCORE_ASSERTION);
+        Explanation hit1TopLevelExplanation = processedResponse.getHits().getHits()[0].getExplanation();
+        assertNotNull(hit1TopLevelExplanation);
+        assertEquals("arithmetic_mean combination of:", hit1TopLevelExplanation.getDescription());
+        assertEquals(maxScore, (float) hit1TopLevelExplanation.getValue(), DELTA_FOR_SCORE_ASSERTION);
 
-        Explanation[] detailsHit1 = explanationHit1.getDetails();
-        assertEquals(3, detailsHit1.length);
-        assertEquals("source scores: [1.0] normalized to scores: [0.5]", detailsHit1[0].getDescription());
-        assertEquals(1.0f, (float) detailsHit1[0].getValue(), DELTA_FOR_SCORE_ASSERTION);
+        Explanation[] hit1SecondLevelDetails = hit1TopLevelExplanation.getDetails();
+        assertEquals(1, hit1SecondLevelDetails.length);
+        assertEquals("min_max normalization of:", hit1SecondLevelDetails[0].getDescription());
+        assertEquals(1.0f, (float) hit1SecondLevelDetails[0].getValue(), DELTA_FOR_SCORE_ASSERTION);
 
-        assertEquals("normalized scores: [0.5] combined to a final score: 0.5", detailsHit1[1].getDescription());
-        assertEquals(0.5f, (float) detailsHit1[1].getValue(), DELTA_FOR_SCORE_ASSERTION);
+        assertNotNull(hit1SecondLevelDetails[0].getDetails());
+        assertEquals(1, hit1SecondLevelDetails[0].getDetails().length);
+        Explanation hit1ShardLevelExplanation = hit1SecondLevelDetails[0].getDetails()[0];
 
-        assertEquals("base scores from subqueries:", detailsHit1[2].getDescription());
-        assertEquals(1.0f, (float) detailsHit1[2].getValue(), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(1.0f, (float) hit1ShardLevelExplanation.getValue(), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("field1:[0 TO 100]", hit1ShardLevelExplanation.getDescription());
+
+        Explanation hit2TopLevelExplanation = processedResponse.getHits().getHits()[1].getExplanation();
+        assertNotNull(hit2TopLevelExplanation);
+        assertEquals("arithmetic_mean combination of:", hit2TopLevelExplanation.getDescription());
+        assertEquals(0.0f, (float) hit2TopLevelExplanation.getValue(), DELTA_FOR_SCORE_ASSERTION);
+
+        Explanation[] hit2SecondLevelDetails = hit2TopLevelExplanation.getDetails();
+        assertEquals(1, hit2SecondLevelDetails.length);
+        assertEquals("min_max normalization of:", hit2SecondLevelDetails[0].getDescription());
+        assertEquals(.5f, (float) hit2SecondLevelDetails[0].getValue(), DELTA_FOR_SCORE_ASSERTION);
+
+        assertNotNull(hit2SecondLevelDetails[0].getDetails());
+        assertEquals(1, hit2SecondLevelDetails[0].getDetails().length);
+        Explanation hit2ShardLevelExplanation = hit2SecondLevelDetails[0].getDetails()[0];
+
+        assertEquals(1.0f, (float) hit2ShardLevelExplanation.getValue(), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("field1:[0 TO 100]", hit2ShardLevelExplanation.getDescription());
 
         Explanation explanationHit2 = processedResponse.getHits().getHits()[1].getExplanation();
         assertNotNull(explanationHit2);
-        assertEquals(
-            "combined score with techniques: normalization [l2], combination [arithmetic_mean] with optional parameters [[]]",
-            explanationHit2.getDescription()
-        );
+        assertEquals("arithmetic_mean combination of:", explanationHit2.getDescription());
         assertTrue(Range.of(0.0f, maxScore).contains((float) explanationHit2.getValue()));
 
-        Explanation[] detailsHit2 = explanationHit2.getDetails();
-        assertEquals(3, detailsHit2.length);
-        assertEquals("source scores: [0.5] normalized to scores: [0.25]", detailsHit2[0].getDescription());
-        assertEquals(.5f, (float) detailsHit2[0].getValue(), DELTA_FOR_SCORE_ASSERTION);
-
-        assertEquals("normalized scores: [0.25] combined to a final score: 0.25", detailsHit2[1].getDescription());
-        assertEquals(.25f, (float) detailsHit2[1].getValue(), DELTA_FOR_SCORE_ASSERTION);
-
-        assertEquals("base scores from subqueries:", detailsHit2[2].getDescription());
-        assertEquals(1.0f, (float) detailsHit2[2].getValue(), DELTA_FOR_SCORE_ASSERTION);
     }
 
     private static Map<String, Index[]> randomRealisticIndices(int numIndices, int numClusters) {

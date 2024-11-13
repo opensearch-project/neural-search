@@ -352,17 +352,17 @@ public class TestUtils {
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
 
-    private static List<Map<String, Object>> getNestedHits(Map<String, Object> searchResponseAsMap) {
+    public static List<Map<String, Object>> getNestedHits(Map<String, Object> searchResponseAsMap) {
         Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
         return (List<Map<String, Object>>) hitsMap.get("hits");
     }
 
-    private static Map<String, Object> getTotalHits(Map<String, Object> searchResponseAsMap) {
+    public static Map<String, Object> getTotalHits(Map<String, Object> searchResponseAsMap) {
         Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
         return (Map<String, Object>) hitsMap.get("total");
     }
 
-    private static Optional<Float> getMaxScore(Map<String, Object> searchResponseAsMap) {
+    public static Optional<Float> getMaxScore(Map<String, Object> searchResponseAsMap) {
         Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
         return hitsMap.get("max_score") == null ? Optional.empty() : Optional.of(((Double) hitsMap.get("max_score")).floatValue());
     }

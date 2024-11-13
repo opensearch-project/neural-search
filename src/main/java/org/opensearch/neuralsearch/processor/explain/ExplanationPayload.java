@@ -7,7 +7,6 @@ package org.opensearch.neuralsearch.processor.explain;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-import org.apache.lucene.search.Explanation;
 
 import java.util.Map;
 
@@ -18,7 +17,6 @@ import java.util.Map;
 @Builder
 @Getter
 public class ExplanationPayload {
-    private final Explanation explanation;
     private final Map<PayloadType, Object> explainPayload;
 
     public enum PayloadType {

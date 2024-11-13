@@ -9,7 +9,8 @@ import lombok.Getter;
 import org.apache.lucene.search.Explanation;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
-import org.opensearch.neuralsearch.processor.explain.CombinedExplainDetails;
+import org.opensearch.neuralsearch.processor.explain.CombinedExplanationDetails;
+import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplanationPayload;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
@@ -23,7 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLAIN_RESPONSE_KEY;
+import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY;
 import static org.opensearch.neuralsearch.processor.explain.ExplanationPayload.PayloadType.NORMALIZATION_PROCESSOR;
 
 /**
@@ -45,19 +46,19 @@ public class ExplanationResponseProcessor implements SearchResponseProcessor {
     }
 
     @Override
-    public SearchResponse processResponse(SearchRequest request, SearchResponse response, PipelineProcessingContext requestContext) {
+    public SearchResponse processResponse(
+        final SearchRequest request,
+        final SearchResponse response,
+        final PipelineProcessingContext requestContext
+    ) {
         if (Objects.isNull(requestContext)
-            || (Objects.isNull(requestContext.getAttribute(EXPLAIN_RESPONSE_KEY)))
-            || requestContext.getAttribute(EXPLAIN_RESPONSE_KEY) instanceof ExplanationPayload == false) {
+            || (Objects.isNull(requestContext.getAttribute(EXPLANATION_RESPONSE_KEY)))
+            || requestContext.getAttribute(EXPLANATION_RESPONSE_KEY) instanceof ExplanationPayload == false) {
             return response;
         }
-        ExplanationPayload explanationPayload = (ExplanationPayload) requestContext.getAttribute(EXPLAIN_RESPONSE_KEY);
+        ExplanationPayload explanationPayload = (ExplanationPayload) requestContext.getAttribute(EXPLANATION_RESPONSE_KEY);
         Map<ExplanationPayload.PayloadType, Object> explainPayload = explanationPayload.getExplainPayload();
         if (explainPayload.containsKey(NORMALIZATION_PROCESSOR)) {
-            Explanation processorExplanation = explanationPayload.getExplanation();
-            if (Objects.isNull(processorExplanation)) {
-                return response;
-            }
             SearchHits searchHits = response.getHits();
             SearchHit[] searchHitsArray = searchHits.getHits();
             // create a map of searchShard and list of indexes of search hit objects in search hits array
@@ -73,29 +74,33 @@ public class ExplanationResponseProcessor implements SearchResponseProcessor {
             }
             if (explainPayload.get(NORMALIZATION_PROCESSOR) instanceof Map<?, ?>) {
                 @SuppressWarnings("unchecked")
-                Map<SearchShard, List<CombinedExplainDetails>> combinedExplainDetails = (Map<
+                Map<SearchShard, List<CombinedExplanationDetails>> combinedExplainDetails = (Map<
                     SearchShard,
-                    List<CombinedExplainDetails>>) explainPayload.get(NORMALIZATION_PROCESSOR);
+                    List<CombinedExplanationDetails>>) explainPayload.get(NORMALIZATION_PROCESSOR);
 
                 for (SearchHit searchHit : searchHitsArray) {
                     SearchShard searchShard = SearchShard.createSearchShard(searchHit.getShard());
                     int explanationIndexByShard = explainsByShardCount.get(searchShard) + 1;
-                    CombinedExplainDetails combinedExplainDetail = combinedExplainDetails.get(searchShard).get(explanationIndexByShard);
-                    Explanation normalizedExplanation = Explanation.match(
-                        combinedExplainDetail.getNormalizationExplain().value(),
-                        combinedExplainDetail.getNormalizationExplain().description()
-                    );
-                    Explanation combinedExplanation = Explanation.match(
-                        combinedExplainDetail.getCombinationExplain().value(),
-                        combinedExplainDetail.getCombinationExplain().description()
-                    );
-
+                    CombinedExplanationDetails combinedExplainDetail = combinedExplainDetails.get(searchShard).get(explanationIndexByShard);
+                    Explanation queryLevelExplanation = searchHit.getExplanation();
+                    ExplanationDetails normalizationExplanation = combinedExplainDetail.getNormalizationExplanations();
+                    ExplanationDetails combinationExplanation = combinedExplainDetail.getCombinationExplanations();
+                    Explanation[] normalizedExplanation = new Explanation[queryLevelExplanation.getDetails().length];
+                    for (int i = 0; i < queryLevelExplanation.getDetails().length; i++) {
+                        normalizedExplanation[i] = Explanation.match(
+                            // normalized score
+                            normalizationExplanation.scoreDetails().get(i).getKey(),
+                            // description of normalized score
+                            normalizationExplanation.scoreDetails().get(i).getValue(),
+                            // shard level details
+                            queryLevelExplanation.getDetails()[i]
+                        );
+                    }
                     Explanation finalExplanation = Explanation.match(
                         searchHit.getScore(),
-                        processorExplanation.getDescription(),
-                        normalizedExplanation,
-                        combinedExplanation,
-                        searchHit.getExplanation()
+                        // combination level explanation is always a single detail
+                        combinationExplanation.scoreDetails().get(0).getValue(),
+                        normalizedExplanation
                     );
                     searchHit.explanation(finalExplanation);
                     explainsByShardCount.put(searchShard, explanationIndexByShard);

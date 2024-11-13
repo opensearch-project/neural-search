@@ -14,7 +14,7 @@ import lombok.Getter;
 @AllArgsConstructor
 @Builder
 @Getter
-public class CombinedExplainDetails {
-    private ExplanationDetails normalizationExplain;
-    private ExplanationDetails combinationExplain;
+public class CombinedExplanationDetails {
+    private ExplanationDetails normalizationExplanations;
+    private ExplanationDetails combinationExplanations;
 }

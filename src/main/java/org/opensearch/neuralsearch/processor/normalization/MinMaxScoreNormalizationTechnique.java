@@ -23,7 +23,7 @@ import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 
-import static org.opensearch.neuralsearch.processor.explain.ExplainationUtils.getDocIdAtQueryForNormalization;
+import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.getDocIdAtQueryForNormalization;
 
 /**
  * Abstracts normalization of scores based on min-max method
@@ -75,7 +75,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
 
     @Override
     public String describe() {
-        return String.format(Locale.ROOT, "normalization [%s]", TECHNIQUE_NAME);
+        return String.format(Locale.ROOT, "%s", TECHNIQUE_NAME);
     }
 
     @Override
@@ -83,7 +83,6 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         MinMaxScores minMaxScores = getMinMaxScoresResult(queryTopDocs);
 
         Map<DocIdAtSearchShard, List<Float>> normalizedScores = new HashMap<>();
-        Map<DocIdAtSearchShard, List<Float>> sourceScores = new HashMap<>();
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
             if (Objects.isNull(compoundQueryTopDocs)) {
                 continue;
@@ -99,12 +98,11 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                         minMaxScores.maxScoresPerSubquery()[j]
                     );
                     normalizedScores.computeIfAbsent(docIdAtSearchShard, k -> new ArrayList<>()).add(normalizedScore);
-                    sourceScores.computeIfAbsent(docIdAtSearchShard, k -> new ArrayList<>()).add(scoreDoc.score);
                     scoreDoc.score = normalizedScore;
                 }
             }
         }
-        return getDocIdAtQueryForNormalization(normalizedScores, sourceScores);
+        return getDocIdAtQueryForNormalization(normalizedScores, this);
     }
 
     private int getNumOfSubqueries(final List<CompoundTopDocs> queryTopDocs) {

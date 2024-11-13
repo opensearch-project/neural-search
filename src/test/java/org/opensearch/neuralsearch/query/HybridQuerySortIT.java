@@ -23,7 +23,6 @@ import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getNestedHi
 import static org.opensearch.neuralsearch.util.TestUtils.assertHitResultsFromQueryWhenSortIsEnabled;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
-import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 import org.opensearch.search.sort.SortOrder;
 import org.opensearch.search.sort.SortBuilder;
 import org.opensearch.search.sort.SortBuilders;
@@ -575,77 +574,75 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
             Map<String, Object> explanationForHit1 = (Map<String, Object>) searchHit1.get("_explanation");
             assertNotNull(explanationForHit1);
             assertNull(searchHit1.get("_score"));
-            String expectedGeneralCombineScoreDescription =
-                "combined score with techniques: normalization [min_max], combination [arithmetic_mean] with optional parameter [weights]: []";
+            String expectedGeneralCombineScoreDescription = "arithmetic_mean combination of:";
             assertEquals(expectedGeneralCombineScoreDescription, explanationForHit1.get("description"));
-            List<Map<String, Object>> hit1Details = (List<Map<String, Object>>) explanationForHit1.get("details");
-            assertEquals(3, hit1Details.size());
+            List<Map<String, Object>> hit1Details = getListOfValues(explanationForHit1, "details");
+            assertEquals(2, hit1Details.size());
             Map<String, Object> hit1DetailsForHit1 = hit1Details.get(0);
             assertEquals(1.0, hit1DetailsForHit1.get("value"));
-            assertTrue(
-                ((String) hit1DetailsForHit1.get("description")).matches(
-                    "source scores: \\[0.4700036, 1.0\\] normalized to scores: \\[1.0, 1.0\\]"
-                )
+            assertEquals("min_max normalization of:", hit1DetailsForHit1.get("description"));
+            List<Map<String, Object>> hit1DetailsForHit1Details = getListOfValues(hit1DetailsForHit1, "details");
+            assertEquals(1, hit1DetailsForHit1Details.size());
+
+            Map<String, Object> hit1DetailsForHit1DetailsForHit1 = hit1DetailsForHit1Details.get(0);
+            assertEquals("weight(name:mission in 0) [PerFieldSimilarity], result of:", hit1DetailsForHit1DetailsForHit1.get("description"));
+            assertTrue((double) hit1DetailsForHit1DetailsForHit1.get("value") > 0.0f);
+            assertEquals(1, getListOfValues(hit1DetailsForHit1DetailsForHit1, "details").size());
+
+            Map<String, Object> hit1DetailsForHit1DetailsForHit1DetailsForHit1 = getListOfValues(
+                hit1DetailsForHit1DetailsForHit1,
+                "details"
+            ).get(0);
+            assertEquals(
+                "score(freq=1.0), computed as boost * idf * tf from:",
+                hit1DetailsForHit1DetailsForHit1DetailsForHit1.get("description")
             );
-            assertEquals(0, ((List) hit1DetailsForHit1.get("details")).size());
+            assertTrue((double) hit1DetailsForHit1DetailsForHit1DetailsForHit1.get("value") > 0.0f);
+            assertEquals(3, getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").size());
 
-            Map<String, Object> hit1DetailsForHit2 = hit1Details.get(1);
-            assertEquals(0.666, (double) hit1DetailsForHit2.get("value"), DELTA_FOR_SCORE_ASSERTION);
-            assertEquals("normalized scores: [1.0, 0.0, 1.0] combined to a final score: 0.6666667", hit1DetailsForHit2.get("description"));
-            assertEquals(0, ((List) hit1DetailsForHit2.get("details")).size());
+            assertEquals("boost", getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(0).get("description"));
+            assertTrue((double) getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(0).get("value") > 0.0f);
+            assertEquals(
+                "idf, computed as log(1 + (N - n + 0.5) / (n + 0.5)) from:",
+                getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(1).get("description")
+            );
+            assertTrue((double) getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(1).get("value") > 0.0f);
+            assertEquals(
+                "tf, computed as freq / (freq + k1 * (1 - b + b * dl / avgdl)) from:",
+                getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(2).get("description")
+            );
+            assertTrue((double) getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(2).get("value") > 0.0f);
 
-            Map<String, Object> hit1DetailsForHit3 = hit1Details.get(2);
-            double actualHit1ScoreHit3 = ((double) hit1DetailsForHit3.get("value"));
-            assertTrue(actualHit1ScoreHit3 > 0.0);
-            assertEquals("base scores from subqueries:", hit1DetailsForHit3.get("description"));
-            assertEquals(2, ((List) hit1DetailsForHit3.get("details")).size());
-
-            Map<String, Object> hit1SubDetailsForHit3 = (Map<String, Object>) ((List) hit1DetailsForHit3.get("details")).get(0);
-            assertEquals(0.47, ((double) hit1SubDetailsForHit3.get("value")), DELTA_FOR_SCORE_ASSERTION);
-            assertEquals("weight(name:mission in 0) [PerFieldSimilarity], result of:", hit1SubDetailsForHit3.get("description"));
-            assertEquals(1, ((List) hit1SubDetailsForHit3.get("details")).size());
-
-            Map<String, Object> hit2SubDetailsForHit3 = (Map<String, Object>) ((List) hit1DetailsForHit3.get("details")).get(1);
-            assertEquals(1.0f, ((double) hit2SubDetailsForHit3.get("value")), DELTA_FOR_SCORE_ASSERTION);
-            assertEquals("stock:[20 TO 400]", hit2SubDetailsForHit3.get("description"));
-            assertEquals(0, ((List) hit2SubDetailsForHit3.get("details")).size());
             // hit 4
             Map<String, Object> searchHit4 = nestedHits.get(3);
             Map<String, Object> explanationForHit4 = (Map<String, Object>) searchHit4.get("_explanation");
             assertNotNull(explanationForHit4);
             assertNull(searchHit4.get("_score"));
             assertEquals(expectedGeneralCombineScoreDescription, explanationForHit4.get("description"));
-            List<Map<String, Object>> hit4Details = (List<Map<String, Object>>) explanationForHit4.get("details");
-            assertEquals(3, hit4Details.size());
+            List<Map<String, Object>> hit4Details = getListOfValues(explanationForHit4, "details");
+            assertEquals(2, hit4Details.size());
             Map<String, Object> hit1DetailsForHit4 = hit4Details.get(0);
             assertEquals(1.0, hit1DetailsForHit4.get("value"));
-            assertTrue(
-                ((String) hit1DetailsForHit4.get("description")).matches(
-                    "source scores: \\[0.9808291, 1.0\\] normalized to scores: \\[1.0, 1.0\\]"
-                )
+            assertEquals("min_max normalization of:", hit1DetailsForHit4.get("description"));
+            assertEquals(1, ((List) hit1DetailsForHit4.get("details")).size());
+            List<Map<String, Object>> hit1DetailsForHit4Details = getListOfValues(hit1DetailsForHit4, "details");
+            assertEquals(1, hit1DetailsForHit4Details.size());
+
+            Map<String, Object> hit1DetailsForHit1DetailsForHit4 = hit1DetailsForHit4Details.get(0);
+            assertEquals("weight(name:part in 0) [PerFieldSimilarity], result of:", hit1DetailsForHit1DetailsForHit4.get("description"));
+            assertTrue((double) hit1DetailsForHit1DetailsForHit4.get("value") > 0.0f);
+            assertEquals(1, getListOfValues(hit1DetailsForHit1DetailsForHit4, "details").size());
+
+            Map<String, Object> hit1DetailsForHit1DetailsForHit1DetailsForHit4 = getListOfValues(
+                hit1DetailsForHit1DetailsForHit4,
+                "details"
+            ).get(0);
+            assertEquals(
+                "score(freq=1.0), computed as boost * idf * tf from:",
+                hit1DetailsForHit1DetailsForHit1DetailsForHit4.get("description")
             );
-            assertEquals(0, ((List) hit1DetailsForHit4.get("details")).size());
-
-            Map<String, Object> hit2DetailsForHit4 = hit4Details.get(1);
-            assertEquals(0.666, (double) hit2DetailsForHit4.get("value"), DELTA_FOR_SCORE_ASSERTION);
-            assertEquals("normalized scores: [0.0, 1.0, 1.0] combined to a final score: 0.6666667", hit2DetailsForHit4.get("description"));
-            assertEquals(0, ((List) hit2DetailsForHit4.get("details")).size());
-
-            Map<String, Object> hit3DetailsForHit4 = hit4Details.get(2);
-            double actualHit3ScoreHit4 = ((double) hit3DetailsForHit4.get("value"));
-            assertTrue(actualHit3ScoreHit4 > 0.0);
-            assertEquals("base scores from subqueries:", hit3DetailsForHit4.get("description"));
-            assertEquals(2, ((List) hit3DetailsForHit4.get("details")).size());
-
-            Map<String, Object> hit1SubDetailsForHit4 = (Map<String, Object>) ((List) hit3DetailsForHit4.get("details")).get(0);
-            assertEquals(0.98, ((double) hit1SubDetailsForHit4.get("value")), DELTA_FOR_SCORE_ASSERTION);
-            assertEquals("weight(name:part in 0) [PerFieldSimilarity], result of:", hit1SubDetailsForHit4.get("description"));
-            assertEquals(1, ((List) hit1SubDetailsForHit4.get("details")).size());
-
-            Map<String, Object> hit2SubDetailsForHit4 = (Map<String, Object>) ((List) hit3DetailsForHit4.get("details")).get(1);
-            assertEquals(1.0f, ((double) hit2SubDetailsForHit4.get("value")), DELTA_FOR_SCORE_ASSERTION);
-            assertEquals("stock:[20 TO 400]", hit2SubDetailsForHit4.get("description"));
-            assertEquals(0, ((List) hit2SubDetailsForHit4.get("details")).size());
+            assertTrue((double) hit1DetailsForHit1DetailsForHit1DetailsForHit4.get("value") > 0.0f);
+            assertEquals(3, getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit4, "details").size());
 
             // hit 6
             Map<String, Object> searchHit6 = nestedHits.get(5);
@@ -653,28 +650,19 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
             assertNotNull(explanationForHit6);
             assertNull(searchHit6.get("_score"));
             assertEquals(expectedGeneralCombineScoreDescription, explanationForHit6.get("description"));
-            List<Map<String, Object>> hit6Details = (List<Map<String, Object>>) explanationForHit6.get("details");
-            assertEquals(3, hit6Details.size());
+            List<Map<String, Object>> hit6Details = getListOfValues(explanationForHit6, "details");
+            assertEquals(1, hit6Details.size());
             Map<String, Object> hit1DetailsForHit6 = hit6Details.get(0);
             assertEquals(1.0, hit1DetailsForHit6.get("value"));
-            assertEquals("source scores: [1.0] normalized to scores: [1.0]", hit1DetailsForHit6.get("description"));
-            assertEquals(0, ((List) hit1DetailsForHit6.get("details")).size());
+            assertEquals("min_max normalization of:", hit1DetailsForHit6.get("description"));
+            assertEquals(1, ((List) hit1DetailsForHit6.get("details")).size());
+            List<Map<String, Object>> hit1DetailsForHit6Details = getListOfValues(hit1DetailsForHit6, "details");
+            assertEquals(1, hit1DetailsForHit6Details.size());
 
-            Map<String, Object> hit2DetailsForHit6 = hit6Details.get(1);
-            assertEquals(0.333, (double) hit2DetailsForHit6.get("value"), DELTA_FOR_SCORE_ASSERTION);
-            assertEquals("normalized scores: [0.0, 0.0, 1.0] combined to a final score: 0.33333334", hit2DetailsForHit6.get("description"));
-            assertEquals(0, ((List) hit2DetailsForHit6.get("details")).size());
-
-            Map<String, Object> hit3DetailsForHit6 = hit6Details.get(2);
-            double actualHit3ScoreHit6 = ((double) hit3DetailsForHit6.get("value"));
-            assertTrue(actualHit3ScoreHit6 > 0.0);
-            assertEquals("base scores from subqueries:", hit3DetailsForHit6.get("description"));
-            assertEquals(1, ((List) hit3DetailsForHit6.get("details")).size());
-
-            Map<String, Object> hit1SubDetailsForHit6 = (Map<String, Object>) ((List) hit3DetailsForHit6.get("details")).get(0);
-            assertEquals(1.0, ((double) hit1SubDetailsForHit6.get("value")), DELTA_FOR_SCORE_ASSERTION);
-            assertEquals("stock:[20 TO 400]", hit1SubDetailsForHit6.get("description"));
-            assertEquals(0, ((List) hit1SubDetailsForHit6.get("details")).size());
+            Map<String, Object> hit1DetailsForHit1DetailsForHit6 = hit1DetailsForHit6Details.get(0);
+            assertEquals("weight(name:part in 0) [PerFieldSimilarity], result of:", hit1DetailsForHit1DetailsForHit4.get("description"));
+            assertTrue((double) hit1DetailsForHit1DetailsForHit6.get("value") > 0.0f);
+            assertEquals(0, getListOfValues(hit1DetailsForHit1DetailsForHit6, "details").size());
         } finally {
             wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
         }

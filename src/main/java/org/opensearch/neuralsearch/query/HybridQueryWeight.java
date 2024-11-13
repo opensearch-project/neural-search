@@ -164,7 +164,7 @@ public final class HybridQueryWeight extends Weight {
             }
         }
         if (match) {
-            final String desc = "base scores from subqueries:";
+            final String desc = "combined score of:";
             return Explanation.match(max, desc, subsOnMatch);
         } else {
             return Explanation.noMatch("no matching clause", subsOnNoMatch);

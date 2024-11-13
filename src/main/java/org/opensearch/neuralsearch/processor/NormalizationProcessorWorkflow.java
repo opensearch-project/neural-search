@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch.processor;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -14,7 +13,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.Sort;
@@ -24,7 +22,7 @@ import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.processor.combination.CombineScoresDto;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
-import org.opensearch.neuralsearch.processor.explain.CombinedExplainDetails;
+import org.opensearch.neuralsearch.processor.explain.CombinedExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
@@ -40,9 +38,8 @@ import org.opensearch.search.query.QuerySearchResult;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
-import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLAIN_RESPONSE_KEY;
+import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY;
 import static org.opensearch.neuralsearch.processor.combination.ScoreCombiner.MAX_SCORE_WHEN_NO_HITS_FOUND;
-import static org.opensearch.neuralsearch.processor.explain.ExplainationUtils.topLevelExpalantionForCombinedScore;
 import static org.opensearch.neuralsearch.search.util.HybridSearchSortUtil.evaluateSortCriteria;
 
 /**
@@ -113,16 +110,9 @@ public class NormalizationProcessorWorkflow {
         if (!request.isExplain()) {
             return;
         }
-        Explanation topLevelExplanationForTechniques = topLevelExpalantionForCombinedScore(
-            (ExplainableTechnique) request.getNormalizationTechnique(),
-            (ExplainableTechnique) request.getCombinationTechnique()
-        );
-
         // build final result object with all explain related information
         if (Objects.nonNull(request.getPipelineProcessingContext())) {
-
             Sort sortForQuery = evaluateSortCriteria(request.getQuerySearchResults(), queryTopDocs);
-
             Map<DocIdAtSearchShard, ExplanationDetails> normalizationExplain = scoreNormalizer.explain(
                 queryTopDocs,
                 (ExplainableTechnique) request.getNormalizationTechnique()
@@ -132,27 +122,22 @@ public class NormalizationProcessorWorkflow {
                 request.getCombinationTechnique(),
                 sortForQuery
             );
-            Map<SearchShard, List<CombinedExplainDetails>> combinedExplain = new HashMap<>();
-
-            combinationExplain.forEach((searchShard, explainDetails) -> {
-                for (ExplanationDetails explainDetail : explainDetails) {
-                    DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(explainDetail.docId(), searchShard);
-                    ExplanationDetails normalizedExplanationDetails = normalizationExplain.get(docIdAtSearchShard);
-                    CombinedExplainDetails combinedExplainDetails = CombinedExplainDetails.builder()
-                        .normalizationExplain(normalizedExplanationDetails)
-                        .combinationExplain(explainDetail)
+            Map<SearchShard, List<CombinedExplanationDetails>> combinedExplanations = combinationExplain.entrySet()
+                .stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().stream().map(explainDetail -> {
+                    DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(explainDetail.docId(), entry.getKey());
+                    return CombinedExplanationDetails.builder()
+                        .normalizationExplanations(normalizationExplain.get(docIdAtSearchShard))
+                        .combinationExplanations(explainDetail)
                         .build();
-                    combinedExplain.computeIfAbsent(searchShard, k -> new ArrayList<>()).add(combinedExplainDetails);
-                }
-            });
+                }).collect(Collectors.toList())));
 
             ExplanationPayload explanationPayload = ExplanationPayload.builder()
-                .explanation(topLevelExplanationForTechniques)
-                .explainPayload(Map.of(ExplanationPayload.PayloadType.NORMALIZATION_PROCESSOR, combinedExplain))
+                .explainPayload(Map.of(ExplanationPayload.PayloadType.NORMALIZATION_PROCESSOR, combinedExplanations))
                 .build();
             // store explain object to pipeline context
             PipelineProcessingContext pipelineProcessingContext = request.getPipelineProcessingContext();
-            pipelineProcessingContext.setAttribute(EXPLAIN_RESPONSE_KEY, explanationPayload);
+            pipelineProcessingContext.setAttribute(EXPLANATION_RESPONSE_KEY, explanationPayload);
         }
 
     }

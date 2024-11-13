@@ -82,7 +82,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     private NormalizationProcessorWorkflow normalizationProcessorWorkflow;
     private final ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
     private final ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();
-    public static final String EXPLAIN_RESPONSE_KEY = "explain_response";
+    public static final String EXPLANATION_RESPONSE_KEY = "explanation_response";
 
     @Override
     public Collection<Object> createComponents(
