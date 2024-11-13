@@ -4,12 +4,19 @@
  */
 package org.opensearch.neuralsearch.processor;
 
+import lombok.AllArgsConstructor;
+import lombok.Value;
 import org.opensearch.search.SearchShardTarget;
 
 /**
  * DTO class to store index, shardId and nodeId for a search shard.
  */
-public record SearchShard(String index, int shardId, String nodeId) {
+@Value
+@AllArgsConstructor
+public class SearchShard {
+    String index;
+    int shardId;
+    String nodeId;
 
     /**
      * Create SearchShard from SearchShardTarget

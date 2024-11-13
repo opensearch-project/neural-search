@@ -89,9 +89,9 @@ public class ExplanationResponseProcessor implements SearchResponseProcessor {
                     for (int i = 0; i < queryLevelExplanation.getDetails().length; i++) {
                         normalizedExplanation[i] = Explanation.match(
                             // normalized score
-                            normalizationExplanation.scoreDetails().get(i).getKey(),
+                            normalizationExplanation.getScoreDetails().get(i).getKey(),
                             // description of normalized score
-                            normalizationExplanation.scoreDetails().get(i).getValue(),
+                            normalizationExplanation.getScoreDetails().get(i).getValue(),
                             // shard level details
                             queryLevelExplanation.getDetails()[i]
                         );
@@ -99,7 +99,7 @@ public class ExplanationResponseProcessor implements SearchResponseProcessor {
                     Explanation finalExplanation = Explanation.match(
                         searchHit.getScore(),
                         // combination level explanation is always a single detail
-                        combinationExplanation.scoreDetails().get(0).getValue(),
+                        combinationExplanation.getScoreDetails().get(0).getValue(),
                         normalizedExplanation
                     );
                     searchHit.explanation(finalExplanation);

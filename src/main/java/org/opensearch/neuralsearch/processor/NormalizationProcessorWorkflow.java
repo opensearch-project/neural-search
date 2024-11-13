@@ -125,7 +125,7 @@ public class NormalizationProcessorWorkflow {
             Map<SearchShard, List<CombinedExplanationDetails>> combinedExplanations = combinationExplain.entrySet()
                 .stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().stream().map(explainDetail -> {
-                    DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(explainDetail.docId(), entry.getKey());
+                    DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(explainDetail.getDocId(), entry.getKey());
                     return CombinedExplanationDetails.builder()
                         .normalizationExplanations(normalizationExplain.get(docIdAtSearchShard))
                         .combinationExplanations(explainDetail)
