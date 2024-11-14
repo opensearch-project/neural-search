@@ -14,6 +14,7 @@ import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.processor.pruning.PruningType;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 
 import lombok.extern.log4j.Log4j2;
@@ -27,6 +28,8 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
 
     public static final String TYPE = "sparse_encoding";
     public static final String LIST_TYPE_NESTED_MAP_KEY = "sparse_encoding";
+    private final PruningType pruningType;
+    private final float pruneRatio;
 
     public SparseEncodingProcessor(
         String tag,
@@ -34,11 +37,15 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         int batchSize,
         String modelId,
         Map<String, Object> fieldMap,
+        PruningType pruningType,
+        float pruneRatio,
         MLCommonsClientAccessor clientAccessor,
         Environment environment,
         ClusterService clusterService
     ) {
         super(tag, description, batchSize, TYPE, LIST_TYPE_NESTED_MAP_KEY, modelId, fieldMap, clientAccessor, environment, clusterService);
+        this.pruningType = pruningType;
+        this.pruneRatio = pruneRatio;
     }
 
     @Override
@@ -49,7 +56,8 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         BiConsumer<IngestDocument, Exception> handler
     ) {
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(this.modelId, inferenceList, ActionListener.wrap(resultMaps -> {
-            setVectorFieldsToDocument(ingestDocument, ProcessMap, TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps));
+            List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps, pruningType, pruneRatio);
+            setVectorFieldsToDocument(ingestDocument, ProcessMap, sparseVectors);
             handler.accept(ingestDocument, null);
         }, e -> { handler.accept(null, e); }));
     }
@@ -59,7 +67,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(
             this.modelId,
             inferenceList,
-            ActionListener.wrap(resultMaps -> handler.accept(TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps)), onException)
+            ActionListener.wrap(resultMaps -> handler.accept(TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps, pruningType, pruneRatio)), onException)
         );
     }
 }
