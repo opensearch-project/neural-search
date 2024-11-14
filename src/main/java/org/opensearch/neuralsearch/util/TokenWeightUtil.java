@@ -4,8 +4,8 @@
  */
 package org.opensearch.neuralsearch.util;
 
-import org.opensearch.neuralsearch.processor.pruning.PruneUtils;
-import org.opensearch.neuralsearch.processor.pruning.PruningType;
+import org.opensearch.neuralsearch.util.pruning.PruneUtils;
+import org.opensearch.neuralsearch.util.pruning.PruningType;
 
 import java.util.ArrayList;
 import java.util.HashMap;

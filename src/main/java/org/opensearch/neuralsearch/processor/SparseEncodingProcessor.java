@@ -14,7 +14,7 @@ import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
-import org.opensearch.neuralsearch.processor.pruning.PruningType;
+import org.opensearch.neuralsearch.util.pruning.PruningType;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 
 import lombok.extern.log4j.Log4j2;
@@ -67,7 +67,10 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(
             this.modelId,
             inferenceList,
-            ActionListener.wrap(resultMaps -> handler.accept(TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps, pruningType, pruneRatio)), onException)
+            ActionListener.wrap(
+                resultMaps -> handler.accept(TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps, pruningType, pruneRatio)),
+                onException
+            )
         );
     }
 }
