@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
@@ -33,6 +34,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.createRandomVector;
 import static org.opensearch.neuralsearch.util.TestUtils.getMaxScore;
 import static org.opensearch.neuralsearch.util.TestUtils.getNestedHits;
 import static org.opensearch.neuralsearch.util.TestUtils.getTotalHits;
+import static org.opensearch.neuralsearch.util.TestUtils.getValueByKey;
 
 public class HybridQueryExplainIT extends BaseNeuralSearchIT {
     private static final String TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME = "test-hybrid-vector-doc-field-index";
@@ -49,12 +51,16 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
     private static final String TEST_KNN_VECTOR_FIELD_NAME_1 = "test-knn-vector-1";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_2 = "test-knn-vector-2";
     private static final String TEST_TEXT_FIELD_NAME_1 = "test-text-field-1";
+    private static final String TEST_TEXT_FIELD_NAME_2 = "test-text-field-2";
     private static final String TEST_NESTED_TYPE_FIELD_NAME_1 = "user";
-    public static final String NORMALIZATION_TECHNIQUE_L2 = "l2";
+    private static final String NORMALIZATION_TECHNIQUE_L2 = "l2";
+    private static final int MAX_NUMBER_OF_DOCS_IN_LARGE_INDEX = 2_000;
     private final float[] testVector1 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector2 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector3 = createRandomVector(TEST_DIMENSION);
     private static final String SEARCH_PIPELINE = "phase-results-hybrid-pipeline";
+
+    static final Supplier<float[]> TEST_VECTOR_SUPPLIER = () -> new float[768];
 
     @Before
     public void setUp() throws Exception {
@@ -114,7 +120,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
 
             // explain
             Map<String, Object> searchHit1 = hitsNestedList.get(0);
-            Map<String, Object> topLevelExplanationsHit1 = (Map<String, Object>) searchHit1.get("_explanation");
+            Map<String, Object> topLevelExplanationsHit1 = getValueByKey(searchHit1, "_explanation");
             assertNotNull(topLevelExplanationsHit1);
             assertEquals((double) searchHit1.get("_score"), (double) topLevelExplanationsHit1.get("value"), DELTA_FOR_SCORE_ASSERTION);
             String expectedTopLevelDescription = "arithmetic_mean combination of:";
@@ -133,7 +139,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
 
             // search hit 2
             Map<String, Object> searchHit2 = hitsNestedList.get(1);
-            Map<String, Object> topLevelExplanationsHit2 = (Map<String, Object>) searchHit2.get("_explanation");
+            Map<String, Object> topLevelExplanationsHit2 = getValueByKey(searchHit2, "_explanation");
             assertNotNull(topLevelExplanationsHit2);
             assertEquals((double) searchHit2.get("_score"), (double) topLevelExplanationsHit2.get("value"), DELTA_FOR_SCORE_ASSERTION);
 
@@ -158,7 +164,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
 
             // search hit 3
             Map<String, Object> searchHit3 = hitsNestedList.get(1);
-            Map<String, Object> topLevelExplanationsHit3 = (Map<String, Object>) searchHit3.get("_explanation");
+            Map<String, Object> topLevelExplanationsHit3 = getValueByKey(searchHit3, "_explanation");
             assertNotNull(topLevelExplanationsHit3);
             assertEquals((double) searchHit2.get("_score"), (double) topLevelExplanationsHit3.get("value"), DELTA_FOR_SCORE_ASSERTION);
 
@@ -228,7 +234,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             // explain, hit 1
             List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
             Map<String, Object> searchHit1 = hitsNestedList.get(0);
-            Map<String, Object> explanationForHit1 = (Map<String, Object>) searchHit1.get("_explanation");
+            Map<String, Object> explanationForHit1 = getValueByKey(searchHit1, "_explanation");
             assertNotNull(explanationForHit1);
             assertEquals((double) searchHit1.get("_score"), (double) explanationForHit1.get("value"), DELTA_FOR_SCORE_ASSERTION);
             String expectedTopLevelDescription = "arithmetic_mean, weights [0.3, 0.7] combination of:";
@@ -258,7 +264,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
 
             // hit 2
             Map<String, Object> searchHit2 = hitsNestedList.get(1);
-            Map<String, Object> explanationForHit2 = (Map<String, Object>) searchHit2.get("_explanation");
+            Map<String, Object> explanationForHit2 = getValueByKey(searchHit2, "_explanation");
             assertNotNull(explanationForHit2);
             assertEquals((double) searchHit2.get("_score"), (double) explanationForHit2.get("value"), DELTA_FOR_SCORE_ASSERTION);
 
@@ -278,7 +284,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
 
             // hit 3
             Map<String, Object> searchHit3 = hitsNestedList.get(2);
-            Map<String, Object> explanationForHit3 = (Map<String, Object>) searchHit3.get("_explanation");
+            Map<String, Object> explanationForHit3 = getValueByKey(searchHit3, "_explanation");
             assertNotNull(explanationForHit3);
             assertEquals((double) searchHit3.get("_score"), (double) explanationForHit3.get("value"), DELTA_FOR_SCORE_ASSERTION);
 
@@ -298,7 +304,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
 
             // hit 4
             Map<String, Object> searchHit4 = hitsNestedList.get(3);
-            Map<String, Object> explanationForHit4 = (Map<String, Object>) searchHit4.get("_explanation");
+            Map<String, Object> explanationForHit4 = getValueByKey(searchHit4, "_explanation");
             assertNotNull(explanationForHit4);
             assertEquals((double) searchHit4.get("_score"), (double) explanationForHit4.get("value"), DELTA_FOR_SCORE_ASSERTION);
 
@@ -367,7 +373,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
 
             // explain
             Map<String, Object> searchHit1 = hitsNestedList.get(0);
-            Map<String, Object> topLevelExplanationsHit1 = (Map<String, Object>) searchHit1.get("_explanation");
+            Map<String, Object> topLevelExplanationsHit1 = getValueByKey(searchHit1, "_explanation");
             assertNotNull(topLevelExplanationsHit1);
             assertEquals(0.754f, (double) topLevelExplanationsHit1.get("value"), DELTA_FOR_SCORE_ASSERTION);
             String expectedTopLevelDescription = "combined score of:";
@@ -409,7 +415,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
 
             // search hit 2
             Map<String, Object> searchHit2 = hitsNestedList.get(1);
-            Map<String, Object> topLevelExplanationsHit2 = (Map<String, Object>) searchHit2.get("_explanation");
+            Map<String, Object> topLevelExplanationsHit2 = getValueByKey(searchHit2, "_explanation");
             assertNotNull(topLevelExplanationsHit2);
             assertEquals(0.287f, (double) topLevelExplanationsHit2.get("value"), DELTA_FOR_SCORE_ASSERTION);
 
@@ -434,7 +440,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
 
             // search hit 3
             Map<String, Object> searchHit3 = hitsNestedList.get(1);
-            Map<String, Object> topLevelExplanationsHit3 = (Map<String, Object>) searchHit3.get("_explanation");
+            Map<String, Object> topLevelExplanationsHit3 = getValueByKey(searchHit3, "_explanation");
             assertNotNull(topLevelExplanationsHit3);
             assertEquals(0.287f, (double) topLevelExplanationsHit3.get("value"), DELTA_FOR_SCORE_ASSERTION);
 
@@ -476,7 +482,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
                 TEST_LARGE_DOCS_INDEX_NAME,
                 hybridQueryBuilder,
                 null,
-                1000,
+                MAX_NUMBER_OF_DOCS_IN_LARGE_INDEX,
                 Map.of("search_pipeline", SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
             );
 
@@ -497,7 +503,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
                 assertTrue("Score should be positive", score > 0.0);
 
                 // Basic explanation structure checks
-                Map<String, Object> explanation = (Map<String, Object>) hit.get("_explanation");
+                Map<String, Object> explanation = getValueByKey(hit, "_explanation");
                 assertNotNull(explanation);
                 assertEquals("arithmetic_mean combination of:", explanation.get("description"));
                 Map<String, Object> hitDetailsForHit = getListOfValues(explanation, "details").get(0);
@@ -507,6 +513,66 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
                 assertTrue((double) subQueryDetailsForHit.get("value") > 0.0f);
                 assertFalse(subQueryDetailsForHit.get("description").toString().isEmpty());
                 assertEquals(1, getListOfValues(subQueryDetailsForHit, "details").size());
+            }
+            // Verify scores are properly ordered
+            List<Double> scores = new ArrayList<>();
+            for (Map<String, Object> hit : hitsNestedList) {
+                scores.add((Double) hit.get("_score"));
+            }
+            assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(i -> scores.get(i) < scores.get(i + 1)));
+        } finally {
+            wipeOfTestResources(TEST_LARGE_DOCS_INDEX_NAME, null, null, SEARCH_PIPELINE);
+        }
+    }
+
+    @SneakyThrows
+    public void testSpecificQueryTypes_whenMultiMatchAndKnn_thenSuccessful() {
+        try {
+            initializeIndexIfNotExist(TEST_LARGE_DOCS_INDEX_NAME);
+            // create search pipeline with both normalization processor and explain response processor
+            createSearchPipeline(SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), true);
+
+            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+            hybridQueryBuilder.add(QueryBuilders.multiMatchQuery(TEST_QUERY_TEXT3, TEST_TEXT_FIELD_NAME_1, TEST_TEXT_FIELD_NAME_2));
+            hybridQueryBuilder.add(
+                KNNQueryBuilder.builder().k(10).fieldName(TEST_KNN_VECTOR_FIELD_NAME_1).vector(TEST_VECTOR_SUPPLIER.get()).build()
+            );
+
+            Map<String, Object> searchResponseAsMap = search(
+                TEST_LARGE_DOCS_INDEX_NAME,
+                hybridQueryBuilder,
+                null,
+                MAX_NUMBER_OF_DOCS_IN_LARGE_INDEX,
+                Map.of("search_pipeline", SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
+            );
+
+            List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
+            assertNotNull(hitsNestedList);
+            assertFalse(hitsNestedList.isEmpty());
+
+            // Verify total hits
+            Map<String, Object> total = getTotalHits(searchResponseAsMap);
+            assertNotNull(total.get("value"));
+            assertTrue((int) total.get("value") > 0);
+            assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+
+            // Sanity checks for each hit's explanation
+            for (Map<String, Object> hit : hitsNestedList) {
+                // Verify score is positive
+                double score = (double) hit.get("_score");
+                assertTrue("Score should be positive", score > 0.0);
+
+                // Basic explanation structure checks
+                Map<String, Object> explanation = getValueByKey(hit, "_explanation");
+                assertNotNull(explanation);
+                assertEquals("arithmetic_mean combination of:", explanation.get("description"));
+                Map<String, Object> hitDetailsForHit = getListOfValues(explanation, "details").get(0);
+                assertTrue((double) hitDetailsForHit.get("value") > 0.0f);
+                assertEquals("min_max normalization of:", hitDetailsForHit.get("description"));
+                Map<String, Object> subQueryDetailsForHit = getListOfValues(hitDetailsForHit, "details").get(0);
+                assertTrue((double) subQueryDetailsForHit.get("value") > 0.0f);
+                assertFalse(subQueryDetailsForHit.get("description").toString().isEmpty());
+                assertNotNull(getListOfValues(subQueryDetailsForHit, "details"));
             }
             // Verify scores are properly ordered
             List<Double> scores = new ArrayList<>();
@@ -591,8 +657,8 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
                 )
             );
 
-            // Index 1000 documents
-            for (int i = 0; i < 1000; i++) {
+            // Index large number of documents
+            for (int i = 0; i < MAX_NUMBER_OF_DOCS_IN_LARGE_INDEX; i++) {
                 String docText;
                 if (i % 5 == 0) {
                     docText = TEST_DOC_TEXT1;  // "Hello world"
@@ -616,7 +682,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
                     Collections.singletonList(docText)
                 );
             }
-            assertEquals(1000, getDocCount(TEST_LARGE_DOCS_INDEX_NAME));
+            assertEquals(MAX_NUMBER_OF_DOCS_IN_LARGE_INDEX, getDocCount(TEST_LARGE_DOCS_INDEX_NAME));
         }
     }
 

@@ -9,8 +9,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getNestedHits;
-import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getTotalHits;
 import static org.opensearch.test.OpenSearchTestCase.randomFloat;
 
 import java.util.ArrayList;
@@ -381,6 +379,13 @@ public class TestUtils {
         String modelId = (String) textEmbeddingProcessor.get("model_id");
         assertNotNull(modelId);
         return modelId;
+    }
+
+    @SuppressWarnings("unchecked")
+    public static <T> T getValueByKey(Map<String, Object> map, String key) {
+        assertNotNull(map);
+        Object value = map.get(key);
+        return (T) value;
     }
 
     public static String generateModelId() {
