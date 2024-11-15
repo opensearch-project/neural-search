@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -106,6 +107,10 @@ public class NormalizationProcessorWorkflow {
         updateOriginalFetchResults(request.getQuerySearchResults(), request.getFetchSearchResultOptional(), unprocessedDocIds);
     }
 
+    /**
+     * Collects explanations from normalization and combination techniques and save thme into pipeline context. Later that
+     * information will be read by the response processor to add it to search response
+     */
     private void explain(NormalizationProcessorWorkflowExecuteRequest request, List<CompoundTopDocs> queryTopDocs) {
         if (!request.isExplain()) {
             return;
@@ -122,15 +127,19 @@ public class NormalizationProcessorWorkflow {
                 request.getCombinationTechnique(),
                 sortForQuery
             );
-            Map<SearchShard, List<CombinedExplanationDetails>> combinedExplanations = combinationExplain.entrySet()
-                .stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().stream().map(explainDetail -> {
+            Map<SearchShard, List<CombinedExplanationDetails>> combinedExplanations = new HashMap<>();
+            for (Map.Entry<SearchShard, List<ExplanationDetails>> entry : combinationExplain.entrySet()) {
+                List<CombinedExplanationDetails> combinedDetailsList = new ArrayList<>();
+                for (ExplanationDetails explainDetail : entry.getValue()) {
                     DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(explainDetail.getDocId(), entry.getKey());
-                    return CombinedExplanationDetails.builder()
+                    CombinedExplanationDetails combinedDetail = CombinedExplanationDetails.builder()
                         .normalizationExplanations(normalizationExplain.get(docIdAtSearchShard))
                         .combinationExplanations(explainDetail)
                         .build();
-                }).collect(Collectors.toList())));
+                    combinedDetailsList.add(combinedDetail);
+                }
+                combinedExplanations.put(entry.getKey(), combinedDetailsList);
+            }
 
             ExplanationPayload explanationPayload = ExplanationPayload.builder()
                 .explainPayload(Map.of(ExplanationPayload.PayloadType.NORMALIZATION_PROCESSOR, combinedExplanations))
@@ -139,7 +148,6 @@ public class NormalizationProcessorWorkflow {
             PipelineProcessingContext pipelineProcessingContext = request.getPipelineProcessingContext();
             pipelineProcessingContext.setAttribute(EXPLANATION_RESPONSE_KEY, explanationPayload);
         }
-
     }
 
     /**

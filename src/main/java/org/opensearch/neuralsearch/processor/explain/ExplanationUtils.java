@@ -6,12 +6,13 @@ package org.opensearch.neuralsearch.processor.explain;
 
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 /**
  * Utility class for explain functionality
@@ -27,15 +28,17 @@ public class ExplanationUtils {
         final Map<DocIdAtSearchShard, List<Float>> normalizedScores,
         final ExplainableTechnique technique
     ) {
-        Map<DocIdAtSearchShard, ExplanationDetails> explain = normalizedScores.entrySet()
-            .stream()
-            .collect(Collectors.toMap(Map.Entry::getKey, entry -> {
-                List<Float> normScores = normalizedScores.get(entry.getKey());
-                List<Pair<Float, String>> explanations = normScores.stream()
-                    .map(score -> Pair.of(score, String.format(Locale.ROOT, "%s normalization of:", technique.describe())))
-                    .collect(Collectors.toList());
-                return new ExplanationDetails(explanations);
-            }));
+        Map<DocIdAtSearchShard, ExplanationDetails> explain = new HashMap<>();
+        for (Map.Entry<DocIdAtSearchShard, List<Float>> entry : normalizedScores.entrySet()) {
+            List<Float> normScores = normalizedScores.get(entry.getKey());
+            List<Pair<Float, String>> explanations = new ArrayList<>();
+            for (float score : normScores) {
+                String description = String.format(Locale.ROOT, "%s normalization of:", technique.describe());
+                explanations.add(Pair.of(score, description));
+            }
+            explain.put(entry.getKey(), new ExplanationDetails(explanations));
+        }
+
         return explain;
     }
 

@@ -359,19 +359,19 @@ public class ScoreCombiner {
         // sort combined scores as per sorting criteria - either score desc or field sorting
         Collection<Integer> sortedDocsIds = getSortedDocsIds(compoundQueryTopDocs, sort, combinedNormalizedScoresByDocId);
 
-        List<ExplanationDetails> listOfExplanations = sortedDocsIds.stream()
-            .map(
-                docId -> new ExplanationDetails(
-                    docId,
-                    List.of(
-                        Pair.of(
-                            combinedNormalizedScoresByDocId.get(docId),
-                            String.format(Locale.ROOT, "%s combination of:", ((ExplainableTechnique) scoreCombinationTechnique).describe())
-                        )
-                    )
-                )
-            )
-            .toList();
+        List<ExplanationDetails> listOfExplanations = new ArrayList<>();
+        String combinationDescription = String.format(
+            Locale.ROOT,
+            "%s combination of:",
+            ((ExplainableTechnique) scoreCombinationTechnique).describe()
+        );
+        for (int docId : sortedDocsIds) {
+            ExplanationDetails explanation = new ExplanationDetails(
+                docId,
+                List.of(Pair.of(combinedNormalizedScoresByDocId.get(docId), combinationDescription))
+            );
+            listOfExplanations.add(explanation);
+        }
         return listOfExplanations;
     }
 

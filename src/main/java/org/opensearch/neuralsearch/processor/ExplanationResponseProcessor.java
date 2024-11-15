@@ -40,11 +40,17 @@ public class ExplanationResponseProcessor implements SearchResponseProcessor {
     private final String tag;
     private final boolean ignoreFailure;
 
+    /**
+     * Add explanation details to search response if it is present in request context
+     */
     @Override
     public SearchResponse processResponse(SearchRequest request, SearchResponse response) {
         return processResponse(request, response, null);
     }
 
+    /**
+     * Combines explanation from processor with search hits level explanations and adds it to search response
+     */
     @Override
     public SearchResponse processResponse(
         final SearchRequest request,
@@ -56,15 +62,20 @@ public class ExplanationResponseProcessor implements SearchResponseProcessor {
             || requestContext.getAttribute(EXPLANATION_RESPONSE_KEY) instanceof ExplanationPayload == false) {
             return response;
         }
+        // Extract explanation payload from context
         ExplanationPayload explanationPayload = (ExplanationPayload) requestContext.getAttribute(EXPLANATION_RESPONSE_KEY);
         Map<ExplanationPayload.PayloadType, Object> explainPayload = explanationPayload.getExplainPayload();
         if (explainPayload.containsKey(NORMALIZATION_PROCESSOR)) {
+            // for score normalization, processor level explanations will be sorted in scope of each shard,
+            // and we are merging both into a single sorted list
             SearchHits searchHits = response.getHits();
             SearchHit[] searchHitsArray = searchHits.getHits();
             // create a map of searchShard and list of indexes of search hit objects in search hits array
             // the list will keep original order of sorting as per final search results
             Map<SearchShard, List<Integer>> searchHitsByShard = new HashMap<>();
+            // we keep index for each shard, where index is a position in searchHitsByShard list
             Map<SearchShard, Integer> explainsByShardCount = new HashMap<>();
+            // Build initial shard mappings
             for (int i = 0; i < searchHitsArray.length; i++) {
                 SearchHit searchHit = searchHitsArray[i];
                 SearchShardTarget searchShardTarget = searchHit.getShard();
@@ -72,19 +83,22 @@ public class ExplanationResponseProcessor implements SearchResponseProcessor {
                 searchHitsByShard.computeIfAbsent(searchShard, k -> new ArrayList<>()).add(i);
                 explainsByShardCount.putIfAbsent(searchShard, -1);
             }
+            // Process normalization details if available in correct format
             if (explainPayload.get(NORMALIZATION_PROCESSOR) instanceof Map<?, ?>) {
                 @SuppressWarnings("unchecked")
                 Map<SearchShard, List<CombinedExplanationDetails>> combinedExplainDetails = (Map<
                     SearchShard,
                     List<CombinedExplanationDetails>>) explainPayload.get(NORMALIZATION_PROCESSOR);
-
+                // Process each search hit to add processor level explanations
                 for (SearchHit searchHit : searchHitsArray) {
                     SearchShard searchShard = SearchShard.createSearchShard(searchHit.getShard());
                     int explanationIndexByShard = explainsByShardCount.get(searchShard) + 1;
                     CombinedExplanationDetails combinedExplainDetail = combinedExplainDetails.get(searchShard).get(explanationIndexByShard);
+                    // Extract various explanation components
                     Explanation queryLevelExplanation = searchHit.getExplanation();
                     ExplanationDetails normalizationExplanation = combinedExplainDetail.getNormalizationExplanations();
                     ExplanationDetails combinationExplanation = combinedExplainDetail.getCombinationExplanations();
+                    // Create normalized explanations for each detail
                     Explanation[] normalizedExplanation = new Explanation[queryLevelExplanation.getDetails().length];
                     for (int i = 0; i < queryLevelExplanation.getDetails().length; i++) {
                         normalizedExplanation[i] = Explanation.match(
@@ -96,6 +110,7 @@ public class ExplanationResponseProcessor implements SearchResponseProcessor {
                             queryLevelExplanation.getDetails()[i]
                         );
                     }
+                    // Create and set final explanation combining all components
                     Explanation finalExplanation = Explanation.match(
                         searchHit.getScore(),
                         // combination level explanation is always a single detail

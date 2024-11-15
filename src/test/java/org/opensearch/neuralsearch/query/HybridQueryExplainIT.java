@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.IntStream;
@@ -37,6 +38,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
     private static final String TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME = "test-hybrid-vector-doc-field-index";
     private static final String TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME = "test-hybrid-multi-doc-nested-fields-index";
     private static final String TEST_MULTI_DOC_INDEX_NAME = "test-hybrid-multi-doc-index";
+    private static final String TEST_LARGE_DOCS_INDEX_NAME = "test-hybrid-large-docs-index";
 
     private static final String TEST_QUERY_TEXT3 = "hello";
     private static final String TEST_QUERY_TEXT4 = "place";
@@ -460,6 +462,64 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
+    public void testExplain_whenLargeNumberOfDocuments_thenSuccessful() {
+        try {
+            initializeIndexIfNotExist(TEST_LARGE_DOCS_INDEX_NAME);
+            // create search pipeline with both normalization processor and explain response processor
+            createSearchPipeline(SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), true);
+
+            TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+            hybridQueryBuilder.add(termQueryBuilder);
+
+            Map<String, Object> searchResponseAsMap = search(
+                TEST_LARGE_DOCS_INDEX_NAME,
+                hybridQueryBuilder,
+                null,
+                1000,
+                Map.of("search_pipeline", SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
+            );
+
+            List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
+            assertNotNull(hitsNestedList);
+            assertFalse(hitsNestedList.isEmpty());
+
+            // Verify total hits
+            Map<String, Object> total = getTotalHits(searchResponseAsMap);
+            assertNotNull(total.get("value"));
+            assertTrue((int) total.get("value") > 0);
+            assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+
+            // Sanity checks for each hit's explanation
+            for (Map<String, Object> hit : hitsNestedList) {
+                // Verify score is positive
+                double score = (double) hit.get("_score");
+                assertTrue("Score should be positive", score > 0.0);
+
+                // Basic explanation structure checks
+                Map<String, Object> explanation = (Map<String, Object>) hit.get("_explanation");
+                assertNotNull(explanation);
+                assertEquals("arithmetic_mean combination of:", explanation.get("description"));
+                Map<String, Object> hitDetailsForHit = getListOfValues(explanation, "details").get(0);
+                assertTrue((double) hitDetailsForHit.get("value") > 0.0f);
+                assertEquals("min_max normalization of:", hitDetailsForHit.get("description"));
+                Map<String, Object> subQueryDetailsForHit = getListOfValues(hitDetailsForHit, "details").get(0);
+                assertTrue((double) subQueryDetailsForHit.get("value") > 0.0f);
+                assertFalse(subQueryDetailsForHit.get("description").toString().isEmpty());
+                assertEquals(1, getListOfValues(subQueryDetailsForHit, "details").size());
+            }
+            // Verify scores are properly ordered
+            List<Double> scores = new ArrayList<>();
+            for (Map<String, Object> hit : hitsNestedList) {
+                scores.add((Double) hit.get("_score"));
+            }
+            assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(i -> scores.get(i) < scores.get(i + 1)));
+        } finally {
+            wipeOfTestResources(TEST_LARGE_DOCS_INDEX_NAME, null, null, SEARCH_PIPELINE);
+        }
+    }
+
+    @SneakyThrows
     private void initializeIndexIfNotExist(String indexName) {
         if (TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME)) {
             prepareKnnIndex(
@@ -520,6 +580,43 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
                 ""
             );
             addDocsToIndex(TEST_MULTI_DOC_INDEX_NAME);
+        }
+
+        if (TEST_LARGE_DOCS_INDEX_NAME.equals(indexName) && !indexExists(TEST_LARGE_DOCS_INDEX_NAME)) {
+            prepareKnnIndex(
+                TEST_LARGE_DOCS_INDEX_NAME,
+                List.of(
+                    new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE),
+                    new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_2, TEST_DIMENSION, TEST_SPACE_TYPE)
+                )
+            );
+
+            // Index 1000 documents
+            for (int i = 0; i < 1000; i++) {
+                String docText;
+                if (i % 5 == 0) {
+                    docText = TEST_DOC_TEXT1;  // "Hello world"
+                } else if (i % 7 == 0) {
+                    docText = TEST_DOC_TEXT2;  // "Hi to this place"
+                } else if (i % 11 == 0) {
+                    docText = TEST_DOC_TEXT3;  // "We would like to welcome everyone"
+                } else {
+                    docText = String.format(Locale.ROOT, "Document %d with random content", i);
+                }
+
+                addKnnDoc(
+                    TEST_LARGE_DOCS_INDEX_NAME,
+                    String.valueOf(i),
+                    List.of(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_KNN_VECTOR_FIELD_NAME_2),
+                    List.of(
+                        Floats.asList(createRandomVector(TEST_DIMENSION)).toArray(),
+                        Floats.asList(createRandomVector(TEST_DIMENSION)).toArray()
+                    ),
+                    Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+                    Collections.singletonList(docText)
+                );
+            }
+            assertEquals(1000, getDocCount(TEST_LARGE_DOCS_INDEX_NAME));
         }
     }
 

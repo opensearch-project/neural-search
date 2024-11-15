@@ -21,6 +21,7 @@ public class ExplanationDetails {
     List<Pair<Float, String>> scoreDetails;
 
     public ExplanationDetails(List<Pair<Float, String>> scoreDetails) {
+        // pass docId as -1 to match docId in SearchHit https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/search/SearchHit.java#L170
         this(-1, scoreDetails);
     }
 }
