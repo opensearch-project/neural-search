@@ -9,7 +9,7 @@ import org.apache.commons.lang.StringUtils;
 /**
  * Enum representing different types of pruning methods for sparse vectors
  */
-public enum PruningType {
+public enum PruneType {
     NONE("none"),
     TOP_K("top_k"),
     ALPHA_MASS("alpha_mass"),
@@ -18,7 +18,7 @@ public enum PruningType {
 
     private final String value;
 
-    PruningType(String value) {
+    PruneType(String value) {
         this.value = value;
     }
 
@@ -27,15 +27,15 @@ public enum PruningType {
     }
 
     /**
-     * Get PruningType from string value
+     * Get PruneType from string value
      *
      * @param value string representation of pruning type
-     * @return corresponding PruningType enum
+     * @return corresponding PruneType enum
      * @throws IllegalArgumentException if value doesn't match any pruning type
      */
-    public static PruningType fromString(String value) {
+    public static PruneType fromString(String value) {
         if (StringUtils.isEmpty(value)) return NONE;
-        for (PruningType type : PruningType.values()) {
+        for (PruneType type : PruneType.values()) {
             if (type.value.equals(value)) {
                 return type;
             }

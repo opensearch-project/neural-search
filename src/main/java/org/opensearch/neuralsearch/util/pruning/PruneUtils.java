@@ -122,13 +122,13 @@ public class PruneUtils {
     /**
      * Prunes a sparse vector using the specified pruning type and ratio.
      *
-     * @param pruningType The type of pruning strategy to use
+     * @param pruneType The type of pruning strategy to use
      * @param pruneRatio The ratio or threshold for pruning
      * @param sparseVector The input sparse vector as a map of string keys to float values
      * @return A new map containing the pruned sparse vector
      */
-    public static Map<String, Float> pruningSparseVector(PruningType pruningType, float pruneRatio, Map<String, Float> sparseVector) {
-        if (Objects.isNull(pruningType) || Objects.isNull(pruneRatio)) throw new IllegalArgumentException(
+    public static Map<String, Float> pruningSparseVector(PruneType pruneType, float pruneRatio, Map<String, Float> sparseVector) {
+        if (Objects.isNull(pruneType) || Objects.isNull(pruneRatio)) throw new IllegalArgumentException(
             "Prune type and prune ratio must be provided"
         );
 
@@ -138,7 +138,7 @@ public class PruneUtils {
             }
         }
 
-        switch (pruningType) {
+        switch (pruneType) {
             case TOP_K:
                 return pruningByTopK(sparseVector, (int) pruneRatio);
             case ALPHA_MASS:
@@ -155,17 +155,17 @@ public class PruneUtils {
     /**
      * Validates whether a prune ratio is valid for a given pruning type.
      *
-     * @param pruningType The type of pruning strategy
+     * @param pruneType The type of pruning strategy
      * @param pruneRatio The ratio or threshold to validate
      * @return true if the ratio is valid for the given pruning type, false otherwise
      * @throws IllegalArgumentException if pruning type is null
      */
-    public static boolean isValidPruneRatio(PruningType pruningType, float pruneRatio) {
-        if (pruningType == null) {
+    public static boolean isValidPruneRatio(PruneType pruneType, float pruneRatio) {
+        if (pruneType == null) {
             throw new IllegalArgumentException("Pruning type cannot be null");
         }
 
-        switch (pruningType) {
+        switch (pruneType) {
             case TOP_K:
                 return pruneRatio > 0 && pruneRatio == Math.floor(pruneRatio);
             case ALPHA_MASS:

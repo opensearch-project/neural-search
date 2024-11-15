@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.util;
 import java.util.List;
 import java.util.Map;
 
+import org.opensearch.neuralsearch.util.pruning.PruneType;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class TokenWeightUtilTests extends OpenSearchTestCase {
@@ -103,5 +104,37 @@ public class TokenWeightUtilTests extends OpenSearchTestCase {
         Map<String, ?> mockData = Map.of("hello", 1.f, "world", "world");
         List<Map<String, ?>> inputData = List.of(Map.of("response", List.of(mockData)));
         expectThrows(IllegalArgumentException.class, () -> TokenWeightUtil.fetchListOfTokenWeightMap(inputData));
+    }
+
+    public void testFetchListOfTokenWeightMap_invokeWithPrune() {
+        /*
+          [{
+              "response": [
+                {"hello": 1.0, "world": 2.0}
+              ]
+          }]
+        */
+        List<Map<String, ?>> inputData = List.of(Map.of("response", List.of(MOCK_DATA)));
+        assertEquals(TokenWeightUtil.fetchListOfTokenWeightMap(inputData, PruneType.MAX_RATIO, 0.8f), List.of(Map.of("world", 2f)));
+    }
+
+    public void testFetchListOfTokenWeightMap_invokeWithPrune_MultipleObjectsInMultipleResponse() {
+
+        /*
+          [{
+              "response": [
+                {"hello": 1.0, "world": 2.0}
+              ]
+          },{
+              "response": [
+                {"hello": 1.0, "world": 2.0}
+              ]
+          }]
+        */
+        List<Map<String, ?>> inputData = List.of(Map.of("response", List.of(MOCK_DATA)), Map.of("response", List.of(MOCK_DATA)));
+        assertEquals(
+            TokenWeightUtil.fetchListOfTokenWeightMap(inputData, PruneType.TOP_K, 1f),
+            List.of(Map.of("world", 2f), Map.of("world", 2f))
+        );
     }
 }

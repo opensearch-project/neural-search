@@ -4,8 +4,8 @@
  */
 package org.opensearch.neuralsearch.util;
 
+import org.opensearch.neuralsearch.util.pruning.PruneType;
 import org.opensearch.neuralsearch.util.pruning.PruneUtils;
-import org.opensearch.neuralsearch.util.pruning.PruningType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -49,7 +49,7 @@ public class TokenWeightUtil {
      */
     public static List<Map<String, Float>> fetchListOfTokenWeightMap(
         List<Map<String, ?>> mapResultList,
-        PruningType pruningType,
+        PruneType pruneType,
         float pruneRatio
     ) {
         if (null == mapResultList || mapResultList.isEmpty()) {
@@ -66,15 +66,15 @@ public class TokenWeightUtil {
             results.addAll((List<?>) map.get("response"));
         }
         return results.stream()
-            .map(uncastedMap -> TokenWeightUtil.buildTokenWeightMap(uncastedMap, pruningType, pruneRatio))
+            .map(uncastedMap -> TokenWeightUtil.buildTokenWeightMap(uncastedMap, pruneType, pruneRatio))
             .collect(Collectors.toList());
     }
 
     public static List<Map<String, Float>> fetchListOfTokenWeightMap(List<Map<String, ?>> mapResultList) {
-        return TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList, PruningType.NONE, 0f);
+        return TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList, PruneType.NONE, 0f);
     }
 
-    private static Map<String, Float> buildTokenWeightMap(Object uncastedMap, PruningType pruningType, float pruneRatio) {
+    private static Map<String, Float> buildTokenWeightMap(Object uncastedMap, PruneType pruneType, float pruneRatio) {
         if (!Map.class.isAssignableFrom(uncastedMap.getClass())) {
             throw new IllegalArgumentException("The expected inference result is a Map with String keys and Float values.");
         }
@@ -85,6 +85,6 @@ public class TokenWeightUtil {
             }
             result.put((String) entry.getKey(), ((Number) entry.getValue()).floatValue());
         }
-        return PruneUtils.pruningSparseVector(pruningType, pruneRatio, result);
+        return PruneUtils.pruningSparseVector(pruneType, pruneRatio, result);
     }
 }

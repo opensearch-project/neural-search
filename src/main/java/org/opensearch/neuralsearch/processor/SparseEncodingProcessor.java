@@ -9,12 +9,13 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
+import lombok.Getter;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
-import org.opensearch.neuralsearch.util.pruning.PruningType;
+import org.opensearch.neuralsearch.util.pruning.PruneType;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 
 import lombok.extern.log4j.Log4j2;
@@ -28,7 +29,9 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
 
     public static final String TYPE = "sparse_encoding";
     public static final String LIST_TYPE_NESTED_MAP_KEY = "sparse_encoding";
-    private final PruningType pruningType;
+    @Getter
+    private final PruneType pruneType;
+    @Getter
     private final float pruneRatio;
 
     public SparseEncodingProcessor(
@@ -37,14 +40,14 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         int batchSize,
         String modelId,
         Map<String, Object> fieldMap,
-        PruningType pruningType,
+        PruneType pruneType,
         float pruneRatio,
         MLCommonsClientAccessor clientAccessor,
         Environment environment,
         ClusterService clusterService
     ) {
         super(tag, description, batchSize, TYPE, LIST_TYPE_NESTED_MAP_KEY, modelId, fieldMap, clientAccessor, environment, clusterService);
-        this.pruningType = pruningType;
+        this.pruneType = pruneType;
         this.pruneRatio = pruneRatio;
     }
 
@@ -56,7 +59,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         BiConsumer<IngestDocument, Exception> handler
     ) {
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(this.modelId, inferenceList, ActionListener.wrap(resultMaps -> {
-            List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps, pruningType, pruneRatio);
+            List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps, pruneType, pruneRatio);
             setVectorFieldsToDocument(ingestDocument, ProcessMap, sparseVectors);
             handler.accept(ingestDocument, null);
         }, e -> { handler.accept(null, e); }));
@@ -68,7 +71,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
             this.modelId,
             inferenceList,
             ActionListener.wrap(
-                resultMaps -> handler.accept(TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps, pruningType, pruneRatio)),
+                resultMaps -> handler.accept(TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps, pruneType, pruneRatio)),
                 onException
             )
         );
