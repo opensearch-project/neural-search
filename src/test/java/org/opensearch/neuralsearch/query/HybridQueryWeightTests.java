@@ -19,6 +19,7 @@ import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.DocIdSetIterator;
+import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Matches;
 import org.apache.lucene.search.MatchesIterator;
@@ -146,7 +147,7 @@ public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
-    public void testExplain_whenCallExplain_thenFail() {
+    public void testExplain_whenCallExplain_thenSuccessful() {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
@@ -171,7 +172,8 @@ public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
         assertNotNull(weight);
 
         LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
-        expectThrows(UnsupportedOperationException.class, () -> weight.explain(leafReaderContext, docId));
+        Explanation explanation = weight.explain(leafReaderContext, docId);
+        assertNotNull(explanation);
 
         w.close();
         reader.close();

@@ -48,6 +48,8 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
+import org.opensearch.neuralsearch.processor.NormalizationProcessor;
+import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 import org.opensearch.search.sort.SortBuilder;
@@ -864,6 +866,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return scores;
     }
 
+    protected List<Map<String, Object>> getListOfValues(Map<String, Object> searchResponseAsMap, String key) {
+        return (List<Map<String, Object>>) searchResponseAsMap.get(key);
+    }
+
     /**
      * Create a k-NN index from a list of KNNFieldConfigs
      *
@@ -1168,10 +1174,23 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         String combinationMethod,
         final Map<String, String> combinationParams
     ) {
+        createSearchPipeline(pipelineId, normalizationMethod, combinationMethod, combinationParams, false);
+    }
+
+    @SneakyThrows
+    protected void createSearchPipeline(
+        final String pipelineId,
+        final String normalizationMethod,
+        final String combinationMethod,
+        final Map<String, String> combinationParams,
+        boolean addExplainResponseProcessor
+    ) {
         StringBuilder stringBuilderForContentBody = new StringBuilder();
         stringBuilderForContentBody.append("{\"description\": \"Post processor pipeline\",")
             .append("\"phase_results_processors\": [{ ")
-            .append("\"normalization-processor\": {")
+            .append("\"")
+            .append(NormalizationProcessor.TYPE)
+            .append("\": {")
             .append("\"normalization\": {")
             .append("\"technique\": \"%s\"")
             .append("},")
@@ -1184,7 +1203,15 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             }
             stringBuilderForContentBody.append(" }");
         }
-        stringBuilderForContentBody.append("}").append("}}]}");
+        stringBuilderForContentBody.append("}").append("}}]");
+        if (addExplainResponseProcessor) {
+            stringBuilderForContentBody.append(", \"response_processors\": [ ")
+                .append("{\"")
+                .append(ExplanationResponseProcessor.TYPE)
+                .append("\": {}}")
+                .append("]");
+        }
+        stringBuilderForContentBody.append("}");
         makeRequest(
             client(),
             "PUT",
