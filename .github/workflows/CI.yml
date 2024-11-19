@@ -57,6 +57,7 @@ jobs:
           su `id -un 1000` -c "./gradlew check"
 
       - name: Upload Coverage Report
+        if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -129,6 +130,7 @@ jobs:
           su `id -un 1000` -c "./gradlew precommit --parallel"
 
       - name: Upload Coverage Report
+        if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
