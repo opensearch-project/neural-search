@@ -1,10 +1,6 @@
 {
-  "name": "tokenize-idf-0915",
-  "version": "1.0.0",
-  "function_name": "SPARSE_TOKENIZE",
-  "description": "test model",
-  "model_format": "TORCH_SCRIPT",
+  "name": "amazon/neural-sparse/opensearch-neural-sparse-tokenizer-v1",
+  "version": "1.0.1",
   "model_group_id": "%s",
-  "model_content_hash_value": "b345e9e943b62c405a8dd227ef2c46c84c5ff0a0b71b584be9132b37bce91a9a",
-  "url": "https://github.com/opensearch-project/ml-commons/raw/main/ml-algorithms/src/test/resources/org/opensearch/ml/engine/algorithms/sparse_encoding/sparse_demo.zip"
+  "model_format": "TORCH_SCRIPT"
 }
