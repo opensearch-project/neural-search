@@ -1,15 +1,10 @@
+---
 coverage:
-  # displays different colors depending on below, between, or above the range
-  range: 50..90
+  precision: 2
+  round: down
+  range: '70...90'
   status:
     project:
-      enabled: yes
       default:
         target: auto
-        # allows 5% coverage reduction without failing
         threshold: 5%
-    patch: yes
-    changes: yes
-
-# disable comments in PRs
-comment: yes
