@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.util.pruning;
+package org.opensearch.neuralsearch.util.prune;
 
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.test.OpenSearchTestCase;
@@ -12,7 +12,7 @@ import java.util.Map;
 
 public class PruneUtilsTests extends OpenSearchTestCase {
 
-    public void testPruningByTopK() {
+    public void testPruneByTopK() {
         Map<String, Float> input = new HashMap<>();
         input.put("a", 5.0f);
         input.put("b", 3.0f);
@@ -20,7 +20,7 @@ public class PruneUtilsTests extends OpenSearchTestCase {
         input.put("d", 1.0f);
 
         // Test without pruned entries
-        Tuple<Map<String, Float>, Map<String, Float>> result = PruneUtils.pruningSparseVector(PruneType.TOP_K, 2, input, false);
+        Tuple<Map<String, Float>, Map<String, Float>> result = PruneUtils.pruneSparseVector(PruneType.TOP_K, 2, input, false);
 
         assertEquals(2, result.v1().size());
         assertNull(result.v2());
@@ -30,7 +30,7 @@ public class PruneUtilsTests extends OpenSearchTestCase {
         assertEquals(4.0f, result.v1().get("c"), 0.001);
 
         // Test with pruned entries
-        result = PruneUtils.pruningSparseVector(PruneType.TOP_K, 2, input, true);
+        result = PruneUtils.pruneSparseVector(PruneType.TOP_K, 2, input, true);
 
         assertEquals(2, result.v1().size());
         assertEquals(2, result.v2().size());
@@ -38,7 +38,7 @@ public class PruneUtilsTests extends OpenSearchTestCase {
         assertTrue(result.v2().containsKey("d"));
     }
 
-    public void testPruningByMaxRatio() {
+    public void testPruneByMaxRatio() {
         Map<String, Float> input = new HashMap<>();
         input.put("a", 10.0f);
         input.put("b", 8.0f);
@@ -46,7 +46,7 @@ public class PruneUtilsTests extends OpenSearchTestCase {
         input.put("d", 2.0f);
 
         // Test without pruned entries
-        Tuple<Map<String, Float>, Map<String, Float>> result = PruneUtils.pruningSparseVector(PruneType.MAX_RATIO, 0.7f, input, false);
+        Tuple<Map<String, Float>, Map<String, Float>> result = PruneUtils.pruneSparseVector(PruneType.MAX_RATIO, 0.7f, input, false);
 
         assertEquals(2, result.v1().size());
         assertNull(result.v2());
@@ -54,7 +54,7 @@ public class PruneUtilsTests extends OpenSearchTestCase {
         assertTrue(result.v1().containsKey("b")); // 8.0/10.0 = 0.8 >= 0.7
 
         // Test with pruned entries
-        result = PruneUtils.pruningSparseVector(PruneType.MAX_RATIO, 0.7f, input, true);
+        result = PruneUtils.pruneSparseVector(PruneType.MAX_RATIO, 0.7f, input, true);
 
         assertEquals(2, result.v1().size());
         assertEquals(2, result.v2().size());
@@ -62,7 +62,7 @@ public class PruneUtilsTests extends OpenSearchTestCase {
         assertTrue(result.v2().containsKey("d"));
     }
 
-    public void testPruningByValue() {
+    public void testPruneByValue() {
         Map<String, Float> input = new HashMap<>();
         input.put("a", 5.0f);
         input.put("b", 3.0f);
@@ -70,7 +70,7 @@ public class PruneUtilsTests extends OpenSearchTestCase {
         input.put("d", 1.0f);
 
         // Test without pruned entries
-        Tuple<Map<String, Float>, Map<String, Float>> result = PruneUtils.pruningSparseVector(PruneType.ABS_VALUE, 3.0f, input, false);
+        Tuple<Map<String, Float>, Map<String, Float>> result = PruneUtils.pruneSparseVector(PruneType.ABS_VALUE, 3.0f, input, false);
 
         assertEquals(2, result.v1().size());
         assertNull(result.v2());
@@ -78,7 +78,7 @@ public class PruneUtilsTests extends OpenSearchTestCase {
         assertTrue(result.v1().containsKey("b"));
 
         // Test with pruned entries
-        result = PruneUtils.pruningSparseVector(PruneType.ABS_VALUE, 3.0f, input, true);
+        result = PruneUtils.pruneSparseVector(PruneType.ABS_VALUE, 3.0f, input, true);
 
         assertEquals(2, result.v1().size());
         assertEquals(2, result.v2().size());
@@ -86,7 +86,7 @@ public class PruneUtilsTests extends OpenSearchTestCase {
         assertTrue(result.v2().containsKey("d"));
     }
 
-    public void testPruningByAlphaMass() {
+    public void testPruneByAlphaMass() {
         Map<String, Float> input = new HashMap<>();
         input.put("a", 10.0f);
         input.put("b", 6.0f);
@@ -94,7 +94,7 @@ public class PruneUtilsTests extends OpenSearchTestCase {
         input.put("d", 1.0f);
 
         // Test without pruned entries
-        Tuple<Map<String, Float>, Map<String, Float>> result = PruneUtils.pruningSparseVector(PruneType.ALPHA_MASS, 0.8f, input, false);
+        Tuple<Map<String, Float>, Map<String, Float>> result = PruneUtils.pruneSparseVector(PruneType.ALPHA_MASS, 0.8f, input, false);
 
         assertEquals(2, result.v1().size());
         assertNull(result.v2());
@@ -102,7 +102,7 @@ public class PruneUtilsTests extends OpenSearchTestCase {
         assertTrue(result.v1().containsKey("b"));
 
         // Test with pruned entries
-        result = PruneUtils.pruningSparseVector(PruneType.ALPHA_MASS, 0.8f, input, true);
+        result = PruneUtils.pruneSparseVector(PruneType.ALPHA_MASS, 0.8f, input, true);
 
         assertEquals(2, result.v1().size());
         assertEquals(2, result.v2().size());
@@ -113,23 +113,23 @@ public class PruneUtilsTests extends OpenSearchTestCase {
     public void testEmptyInput() {
         Map<String, Float> input = new HashMap<>();
 
-        Tuple<Map<String, Float>, Map<String, Float>> result = PruneUtils.pruningSparseVector(PruneType.TOP_K, 5, input, false);
+        Tuple<Map<String, Float>, Map<String, Float>> result = PruneUtils.pruneSparseVector(PruneType.TOP_K, 5, input, false);
         assertTrue(result.v1().isEmpty());
         assertNull(result.v2());
 
-        result = PruneUtils.pruningSparseVector(PruneType.MAX_RATIO, 0.5f, input, false);
+        result = PruneUtils.pruneSparseVector(PruneType.MAX_RATIO, 0.5f, input, false);
         assertTrue(result.v1().isEmpty());
         assertNull(result.v2());
 
-        result = PruneUtils.pruningSparseVector(PruneType.ALPHA_MASS, 0.5f, input, false);
+        result = PruneUtils.pruneSparseVector(PruneType.ALPHA_MASS, 0.5f, input, false);
         assertTrue(result.v1().isEmpty());
         assertNull(result.v2());
 
-        result = PruneUtils.pruningSparseVector(PruneType.ABS_VALUE, 0.5f, input, false);
+        result = PruneUtils.pruneSparseVector(PruneType.ABS_VALUE, 0.5f, input, false);
         assertTrue(result.v1().isEmpty());
         assertNull(result.v2());
 
-        result = PruneUtils.pruningSparseVector(PruneType.TOP_K, 5, input, true);
+        result = PruneUtils.pruneSparseVector(PruneType.TOP_K, 5, input, true);
         assertTrue(result.v1().isEmpty());
         assertTrue(result.v2().isEmpty());
     }
@@ -142,25 +142,25 @@ public class PruneUtilsTests extends OpenSearchTestCase {
 
         IllegalArgumentException exception = assertThrows(
             IllegalArgumentException.class,
-            () -> PruneUtils.pruningSparseVector(PruneType.TOP_K, 2, input, false)
+            () -> PruneUtils.pruneSparseVector(PruneType.TOP_K, 2, input, false)
         );
         assertEquals("Pruned values must be positive", exception.getMessage());
     }
 
-    public void testInvalidPruningType() {
+    public void testInvalidPruneType() {
         Map<String, Float> input = new HashMap<>();
         input.put("a", 1.0f);
         input.put("b", 2.0f);
 
         IllegalArgumentException exception1 = assertThrows(
             IllegalArgumentException.class,
-            () -> PruneUtils.pruningSparseVector(null, 2, input, false)
+            () -> PruneUtils.pruneSparseVector(null, 2, input, false)
         );
         assertEquals(exception1.getMessage(), "Prune type and prune ratio must be provided");
 
         IllegalArgumentException exception2 = assertThrows(
             IllegalArgumentException.class,
-            () -> PruneUtils.pruningSparseVector(null, 2, input, true)
+            () -> PruneUtils.pruneSparseVector(null, 2, input, true)
         );
         assertEquals(exception2.getMessage(), "Prune type and prune ratio must be provided");
     }
@@ -168,7 +168,7 @@ public class PruneUtilsTests extends OpenSearchTestCase {
     public void testNullSparseVector() {
         IllegalArgumentException exception = assertThrows(
             IllegalArgumentException.class,
-            () -> PruneUtils.pruningSparseVector(PruneType.TOP_K, 2, null, false)
+            () -> PruneUtils.pruneSparseVector(PruneType.TOP_K, 2, null, false)
         );
         assertEquals(exception.getMessage(), "Sparse vector must be provided");
     }
@@ -210,6 +210,6 @@ public class PruneUtilsTests extends OpenSearchTestCase {
 
     public void testIsValidPruneRatioWithNullType() {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> PruneUtils.isValidPruneRatio(null, 1.0f));
-        assertEquals("Pruning type cannot be null", exception.getMessage());
+        assertEquals("Prune type cannot be null", exception.getMessage());
     }
 }

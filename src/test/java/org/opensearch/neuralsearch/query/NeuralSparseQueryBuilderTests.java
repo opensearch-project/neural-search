@@ -52,7 +52,7 @@ import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
-import org.opensearch.neuralsearch.util.pruning.PruneType;
+import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.test.OpenSearchTestCase;
 
 import lombok.SneakyThrows;

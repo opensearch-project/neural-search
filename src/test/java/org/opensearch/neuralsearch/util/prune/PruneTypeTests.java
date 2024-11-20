@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.util.pruning;
+package org.opensearch.neuralsearch.util.prune;
 
 import org.opensearch.test.OpenSearchTestCase;
 
@@ -25,6 +25,6 @@ public class PruneTypeTests extends OpenSearchTestCase {
         assertEquals(PruneType.ABS_VALUE, PruneType.fromString("abs_value"));
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> PruneType.fromString("test_value"));
-        assertEquals("Unknown pruning type: test_value", exception.getMessage());
+        assertEquals("Unknown prune type: test_value", exception.getMessage());
     }
 }

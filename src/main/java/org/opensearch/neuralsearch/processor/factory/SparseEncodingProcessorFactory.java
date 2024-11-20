@@ -21,8 +21,8 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 
 import lombok.extern.log4j.Log4j2;
-import org.opensearch.neuralsearch.util.pruning.PruneUtils;
-import org.opensearch.neuralsearch.util.pruning.PruneType;
+import org.opensearch.neuralsearch.util.prune.PruneUtils;
+import org.opensearch.neuralsearch.util.prune.PruneType;
 
 /**
  * Factory for sparse encoding ingest processor for ingestion pipeline. Instantiates processor based on user provided input.

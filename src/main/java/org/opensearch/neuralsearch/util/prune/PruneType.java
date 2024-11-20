@@ -2,12 +2,12 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.util.pruning;
+package org.opensearch.neuralsearch.util.prune;
 
 import org.apache.commons.lang.StringUtils;
 
 /**
- * Enum representing different types of pruning methods for sparse vectors
+ * Enum representing different types of prune methods for sparse vectors
  */
 public enum PruneType {
     NONE("none"),
@@ -29,9 +29,9 @@ public enum PruneType {
     /**
      * Get PruneType from string value
      *
-     * @param value string representation of pruning type
+     * @param value string representation of prune type
      * @return corresponding PruneType enum
-     * @throws IllegalArgumentException if value doesn't match any pruning type
+     * @throws IllegalArgumentException if value doesn't match any prune type
      */
     public static PruneType fromString(String value) {
         if (StringUtils.isEmpty(value)) return NONE;
@@ -40,6 +40,6 @@ public enum PruneType {
                 return type;
             }
         }
-        throw new IllegalArgumentException("Unknown pruning type: " + value);
+        throw new IllegalArgumentException("Unknown prune type: " + value);
     }
 }

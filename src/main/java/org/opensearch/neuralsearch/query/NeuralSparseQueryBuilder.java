@@ -47,8 +47,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.Accessors;
-import org.opensearch.neuralsearch.util.pruning.PruneType;
-import org.opensearch.neuralsearch.util.pruning.PruneUtils;
+import org.opensearch.neuralsearch.util.prune.PruneType;
+import org.opensearch.neuralsearch.util.prune.PruneUtils;
 
 /**
  * SparseEncodingQueryBuilder is responsible for handling "neural_sparse" query types. It uses an ML NEURAL_SPARSE model
@@ -146,7 +146,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             Map<String, Float> tokens = queryTokensSupplier.get();
             // Splitting tokens based on a threshold value: tokens greater than the threshold are stored in v1,
             // while those less than or equal to the threshold are stored in v2.
-            Tuple<Map<String, Float>, Map<String, Float>> splitTokens = PruneUtils.pruningSparseVector(pruneType, pruneRatio, tokens, true);
+            Tuple<Map<String, Float>, Map<String, Float>> splitTokens = PruneUtils.pruneSparseVector(pruneType, pruneRatio, tokens, true);
             this.queryTokensSupplier(() -> splitTokens.v1());
             copy.queryTokensSupplier(() -> splitTokens.v2());
         } else {
@@ -348,7 +348,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             ActionListener.wrap(mapResultList -> {
                 Map<String, Float> queryTokens = TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList).get(0);
                 if (Objects.nonNull(twoPhaseSharedQueryToken)) {
-                    Tuple<Map<String, Float>, Map<String, Float>> splitQueryTokens = PruneUtils.pruningSparseVector(
+                    Tuple<Map<String, Float>, Map<String, Float>> splitQueryTokens = PruneUtils.pruneSparseVector(
                         twoPhasePruneType,
                         twoPhasePruneRatio,
                         queryTokens,

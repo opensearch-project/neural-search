@@ -51,7 +51,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
 import lombok.SneakyThrows;
-import org.opensearch.neuralsearch.util.pruning.PruneType;
+import org.opensearch.neuralsearch.util.prune.PruneType;
 
 public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
     @Mock
@@ -275,7 +275,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
     }
 
     @SuppressWarnings("unchecked")
-    public void testExecute_withPruningConfig_successful() {
+    public void testExecute_withPruneConfig_successful() {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         sourceAndMetadata.put("key1", "value1");
@@ -317,7 +317,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         assertEquals(0.4f, second.get("low"), 0.001f);
     }
 
-    public void test_batchExecute_withPruning_successful() {
+    public void test_batchExecute_withPrune_successful() {
         SparseEncodingProcessor processor = createInstance(PruneType.MAX_RATIO, 0.5f);
 
         List<Map<String, ?>> mockMLResponse = Collections.singletonList(

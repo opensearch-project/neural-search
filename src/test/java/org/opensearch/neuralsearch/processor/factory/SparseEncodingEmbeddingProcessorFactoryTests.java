@@ -8,8 +8,8 @@ import static org.mockito.Mockito.mock;
 import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.MODEL_ID_FIELD;
 import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.FIELD_MAP_FIELD;
 import static org.opensearch.neuralsearch.processor.SparseEncodingProcessor.TYPE;
-import static org.opensearch.neuralsearch.util.pruning.PruneUtils.PRUNE_TYPE_FIELD;
-import static org.opensearch.neuralsearch.util.pruning.PruneUtils.PRUNE_RATIO_FIELD;
+import static org.opensearch.neuralsearch.util.prune.PruneUtils.PRUNE_TYPE_FIELD;
+import static org.opensearch.neuralsearch.util.prune.PruneUtils.PRUNE_RATIO_FIELD;
 
 import lombok.SneakyThrows;
 import org.junit.Before;
@@ -18,7 +18,7 @@ import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
-import org.opensearch.neuralsearch.util.pruning.PruneType;
+import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.HashMap;
@@ -134,7 +134,7 @@ public class SparseEncodingEmbeddingProcessorFactoryTests extends OpenSearchTest
             IllegalArgumentException.class,
             () -> sparseEncodingProcessorFactory.create(Map.of(), PROCESSOR_TAG, DESCRIPTION, config)
         );
-        assertEquals("Unknown pruning type: invalid_prune_type", exception.getMessage());
+        assertEquals("Unknown prune type: invalid_prune_type", exception.getMessage());
     }
 
     @SneakyThrows

@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.util.pruning;
+package org.opensearch.neuralsearch.util.prune;
 
 import org.opensearch.common.collect.Tuple;
 
@@ -15,8 +15,8 @@ import java.util.Objects;
 import java.util.PriorityQueue;
 
 /**
- * Utility class providing methods for pruning sparse vectors using different strategies.
- * Pruning helps reduce the dimensionality of sparse vectors by removing less significant elements
+ * Utility class providing methods for prune sparse vectors using different strategies.
+ * Prune helps reduce the dimensionality of sparse vectors by removing less significant elements
  * based on various criteria.
  */
 public class PruneUtils {
@@ -31,7 +31,7 @@ public class PruneUtils {
      * @param requiresPrunedEntries Whether to return pruned entries
      * @return A tuple containing two maps: the first with top K elements, the second with remaining elements (or null)
      */
-    private static Tuple<Map<String, Float>, Map<String, Float>> pruningByTopK(
+    private static Tuple<Map<String, Float>, Map<String, Float>> pruneByTopK(
         Map<String, Float> sparseVector,
         int k,
         boolean requiresPrunedEntries
@@ -71,7 +71,7 @@ public class PruneUtils {
      * @return A tuple containing two maps: the first with elements meeting the ratio threshold,
      *         the second with elements below the threshold (or null)
      */
-    private static Tuple<Map<String, Float>, Map<String, Float>> pruningByMaxRatio(
+    private static Tuple<Map<String, Float>, Map<String, Float>> pruneByMaxRatio(
         Map<String, Float> sparseVector,
         float ratio,
         boolean requiresPrunedEntries
@@ -101,7 +101,7 @@ public class PruneUtils {
      * @return A tuple containing two maps: the first with elements above the threshold,
      *         the second with elements below the threshold (or null)
      */
-    private static Tuple<Map<String, Float>, Map<String, Float>> pruningByValue(
+    private static Tuple<Map<String, Float>, Map<String, Float>> pruneByValue(
         Map<String, Float> sparseVector,
         float thresh,
         boolean requiresPrunedEntries
@@ -130,7 +130,7 @@ public class PruneUtils {
      * @return A tuple containing two maps: the first with elements meeting the alpha mass threshold,
      *         the second with remaining elements (or null)
      */
-    private static Tuple<Map<String, Float>, Map<String, Float>> pruningByAlphaMass(
+    private static Tuple<Map<String, Float>, Map<String, Float>> pruneByAlphaMass(
         Map<String, Float> sparseVector,
         float alpha,
         boolean requiresPrunedEntries
@@ -159,16 +159,16 @@ public class PruneUtils {
     }
 
     /**
-     * Prunes a sparse vector using the specified pruning type and ratio.
+     * Prunes a sparse vector using the specified prune type and ratio.
      *
-     * @param pruneType The type of pruning strategy to use
-     * @param pruneRatio The ratio or threshold for pruning
+     * @param pruneType The type of prune strategy to use
+     * @param pruneRatio The ratio or threshold for prune
      * @param sparseVector The input sparse vector as a map of string keys to float values
      * @param requiresPrunedEntries Whether to return pruned entries
      * @return A tuple containing two maps: the first with high-scoring elements,
      *         the second with low-scoring elements (or null if requiresPrunedEntries is false)
      */
-    public static Tuple<Map<String, Float>, Map<String, Float>> pruningSparseVector(
+    public static Tuple<Map<String, Float>, Map<String, Float>> pruneSparseVector(
         PruneType pruneType,
         float pruneRatio,
         Map<String, Float> sparseVector,
@@ -190,29 +190,29 @@ public class PruneUtils {
 
         switch (pruneType) {
             case TOP_K:
-                return pruningByTopK(sparseVector, (int) pruneRatio, requiresPrunedEntries);
+                return pruneByTopK(sparseVector, (int) pruneRatio, requiresPrunedEntries);
             case ALPHA_MASS:
-                return pruningByAlphaMass(sparseVector, pruneRatio, requiresPrunedEntries);
+                return pruneByAlphaMass(sparseVector, pruneRatio, requiresPrunedEntries);
             case MAX_RATIO:
-                return pruningByMaxRatio(sparseVector, pruneRatio, requiresPrunedEntries);
+                return pruneByMaxRatio(sparseVector, pruneRatio, requiresPrunedEntries);
             case ABS_VALUE:
-                return pruningByValue(sparseVector, pruneRatio, requiresPrunedEntries);
+                return pruneByValue(sparseVector, pruneRatio, requiresPrunedEntries);
             default:
                 return new Tuple<>(new HashMap<>(sparseVector), requiresPrunedEntries ? new HashMap<>() : null);
         }
     }
 
     /**
-     * Validates whether a prune ratio is valid for a given pruning type.
+     * Validates whether a prune ratio is valid for a given prune type.
      *
-     * @param pruneType The type of pruning strategy
+     * @param pruneType The type of prune strategy
      * @param pruneRatio The ratio or threshold to validate
-     * @return true if the ratio is valid for the given pruning type, false otherwise
-     * @throws IllegalArgumentException if pruning type is null
+     * @return true if the ratio is valid for the given prune type, false otherwise
+     * @throws IllegalArgumentException if prune type is null
      */
     public static boolean isValidPruneRatio(PruneType pruneType, float pruneRatio) {
         if (pruneType == null) {
-            throw new IllegalArgumentException("Pruning type cannot be null");
+            throw new IllegalArgumentException("Prune type cannot be null");
         }
 
         switch (pruneType) {

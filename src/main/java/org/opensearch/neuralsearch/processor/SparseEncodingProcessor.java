@@ -15,11 +15,11 @@ import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
-import org.opensearch.neuralsearch.util.pruning.PruneType;
+import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 
 import lombok.extern.log4j.Log4j2;
-import org.opensearch.neuralsearch.util.pruning.PruneUtils;
+import org.opensearch.neuralsearch.util.prune.PruneUtils;
 
 /**
  * This processor is used for user input data text sparse encoding processing, model_id can be used to indicate which model user use,
@@ -62,7 +62,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(this.modelId, inferenceList, ActionListener.wrap(resultMaps -> {
             List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps);
             sparseVectors = sparseVectors.stream()
-                .map(vector -> PruneUtils.pruningSparseVector(pruneType, pruneRatio, vector, false).v1())
+                .map(vector -> PruneUtils.pruneSparseVector(pruneType, pruneRatio, vector, false).v1())
                 .toList();
             setVectorFieldsToDocument(ingestDocument, ProcessMap, sparseVectors);
             handler.accept(ingestDocument, null);
@@ -74,7 +74,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(this.modelId, inferenceList, ActionListener.wrap(resultMaps -> {
             List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps);
             sparseVectors = sparseVectors.stream()
-                .map(vector -> PruneUtils.pruningSparseVector(pruneType, pruneRatio, vector, false).v1())
+                .map(vector -> PruneUtils.pruneSparseVector(pruneType, pruneRatio, vector, false).v1())
                 .toList();
             handler.accept(sparseVectors);
         }, onException));
