@@ -19,6 +19,7 @@ import org.opensearch.neuralsearch.util.pruning.PruneType;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.util.pruning.PruneUtils;
 
 /**
  * This processor is used for user input data text sparse encoding processing, model_id can be used to indicate which model user use,
@@ -59,7 +60,10 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         BiConsumer<IngestDocument, Exception> handler
     ) {
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(this.modelId, inferenceList, ActionListener.wrap(resultMaps -> {
-            List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps, pruneType, pruneRatio);
+            List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps);
+            sparseVectors = sparseVectors.stream()
+                .map(vector -> PruneUtils.pruningSparseVector(pruneType, pruneRatio, vector, false).v1())
+                .toList();
             setVectorFieldsToDocument(ingestDocument, ProcessMap, sparseVectors);
             handler.accept(ingestDocument, null);
         }, e -> { handler.accept(null, e); }));
@@ -67,13 +71,12 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
 
     @Override
     public void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException) {
-        mlCommonsClientAccessor.inferenceSentencesWithMapResult(
-            this.modelId,
-            inferenceList,
-            ActionListener.wrap(
-                resultMaps -> handler.accept(TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps, pruneType, pruneRatio)),
-                onException
-            )
-        );
+        mlCommonsClientAccessor.inferenceSentencesWithMapResult(this.modelId, inferenceList, ActionListener.wrap(resultMaps -> {
+            List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps);
+            sparseVectors = sparseVectors.stream()
+                .map(vector -> PruneUtils.pruningSparseVector(pruneType, pruneRatio, vector, false).v1())
+                .toList();
+            handler.accept(sparseVectors);
+        }, onException));
     }
 }

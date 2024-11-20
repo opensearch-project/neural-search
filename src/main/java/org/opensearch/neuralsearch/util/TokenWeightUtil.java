@@ -4,9 +4,6 @@
  */
 package org.opensearch.neuralsearch.util;
 
-import org.opensearch.neuralsearch.util.pruning.PruneType;
-import org.opensearch.neuralsearch.util.pruning.PruneUtils;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -47,11 +44,7 @@ public class TokenWeightUtil {
      *
      * @param mapResultList {@link Map} which is the response from {@link org.opensearch.neuralsearch.ml.MLCommonsClientAccessor}
      */
-    public static List<Map<String, Float>> fetchListOfTokenWeightMap(
-        List<Map<String, ?>> mapResultList,
-        PruneType pruneType,
-        float pruneRatio
-    ) {
+    public static List<Map<String, Float>> fetchListOfTokenWeightMap(List<Map<String, ?>> mapResultList) {
         if (null == mapResultList || mapResultList.isEmpty()) {
             throw new IllegalArgumentException("The inference result can not be null or empty.");
         }
@@ -65,16 +58,10 @@ public class TokenWeightUtil {
             }
             results.addAll((List<?>) map.get("response"));
         }
-        return results.stream()
-            .map(uncastedMap -> TokenWeightUtil.buildTokenWeightMap(uncastedMap, pruneType, pruneRatio))
-            .collect(Collectors.toList());
+        return results.stream().map(TokenWeightUtil::buildTokenWeightMap).collect(Collectors.toList());
     }
 
-    public static List<Map<String, Float>> fetchListOfTokenWeightMap(List<Map<String, ?>> mapResultList) {
-        return TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList, PruneType.NONE, 0f);
-    }
-
-    private static Map<String, Float> buildTokenWeightMap(Object uncastedMap, PruneType pruneType, float pruneRatio) {
+    private static Map<String, Float> buildTokenWeightMap(Object uncastedMap) {
         if (!Map.class.isAssignableFrom(uncastedMap.getClass())) {
             throw new IllegalArgumentException("The expected inference result is a Map with String keys and Float values.");
         }
@@ -85,6 +72,6 @@ public class TokenWeightUtil {
             }
             result.put((String) entry.getKey(), ((Number) entry.getValue()).floatValue());
         }
-        return PruneUtils.pruningSparseVector(pruneType, pruneRatio, result);
+        return result;
     }
 }

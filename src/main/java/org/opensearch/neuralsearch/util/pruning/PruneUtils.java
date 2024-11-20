@@ -4,6 +4,8 @@
  */
 package org.opensearch.neuralsearch.util.pruning;
 
+import org.opensearch.common.collect.Tuple;
+
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -26,9 +28,14 @@ public class PruneUtils {
      *
      * @param sparseVector The input sparse vector as a map of string keys to float values
      * @param k The number of top elements to keep
-     * @return A new map containing only the top K elements
+     * @param requiresPrunedEntries Whether to return pruned entries
+     * @return A tuple containing two maps: the first with top K elements, the second with remaining elements (or null)
      */
-    private static Map<String, Float> pruningByTopK(Map<String, Float> sparseVector, int k) {
+    private static Tuple<Map<String, Float>, Map<String, Float>> pruningByTopK(
+        Map<String, Float> sparseVector,
+        int k,
+        boolean requiresPrunedEntries
+    ) {
         PriorityQueue<Map.Entry<String, Float>> pq = new PriorityQueue<>((a, b) -> Float.compare(a.getValue(), b.getValue()));
 
         for (Map.Entry<String, Float> entry : sparseVector.entrySet()) {
@@ -40,13 +47,18 @@ public class PruneUtils {
             }
         }
 
-        Map<String, Float> result = new HashMap<>();
+        Map<String, Float> highScores = new HashMap<>();
+        Map<String, Float> lowScores = requiresPrunedEntries ? new HashMap<>(sparseVector) : null;
+
         while (!pq.isEmpty()) {
             Map.Entry<String, Float> entry = pq.poll();
-            result.put(entry.getKey(), entry.getValue());
+            highScores.put(entry.getKey(), entry.getValue());
+            if (requiresPrunedEntries) {
+                lowScores.remove(entry.getKey());
+            }
         }
 
-        return result;
+        return new Tuple<>(highScores, lowScores);
     }
 
     /**
@@ -55,21 +67,29 @@ public class PruneUtils {
      *
      * @param sparseVector The input sparse vector as a map of string keys to float values
      * @param ratio The minimum ratio relative to the maximum value for elements to be kept
-     * @return A new map containing only elements meeting the ratio threshold
+     * @param requiresPrunedEntries Whether to return pruned entries
+     * @return A tuple containing two maps: the first with elements meeting the ratio threshold,
+     *         the second with elements below the threshold (or null)
      */
-    private static Map<String, Float> pruningByMaxRatio(Map<String, Float> sparseVector, float ratio) {
+    private static Tuple<Map<String, Float>, Map<String, Float>> pruningByMaxRatio(
+        Map<String, Float> sparseVector,
+        float ratio,
+        boolean requiresPrunedEntries
+    ) {
         float maxValue = sparseVector.values().stream().max(Float::compareTo).orElse(0f);
 
-        Map<String, Float> result = new HashMap<>();
-        for (Map.Entry<String, Float> entry : sparseVector.entrySet()) {
-            float currentRatio = entry.getValue() / maxValue;
+        Map<String, Float> highScores = new HashMap<>();
+        Map<String, Float> lowScores = requiresPrunedEntries ? new HashMap<>() : null;
 
-            if (currentRatio >= ratio) {
-                result.put(entry.getKey(), entry.getValue());
+        for (Map.Entry<String, Float> entry : sparseVector.entrySet()) {
+            if (entry.getValue() >= ratio * maxValue) {
+                highScores.put(entry.getKey(), entry.getValue());
+            } else if (requiresPrunedEntries) {
+                lowScores.put(entry.getKey(), entry.getValue());
             }
         }
 
-        return result;
+        return new Tuple<>(highScores, lowScores);
     }
 
     /**
@@ -77,17 +97,27 @@ public class PruneUtils {
      *
      * @param sparseVector The input sparse vector as a map of string keys to float values
      * @param thresh The minimum absolute value for elements to be kept
-     * @return A new map containing only elements meeting the threshold
+     * @param requiresPrunedEntries Whether to return pruned entries
+     * @return A tuple containing two maps: the first with elements above the threshold,
+     *         the second with elements below the threshold (or null)
      */
-    private static Map<String, Float> pruningByValue(Map<String, Float> sparseVector, float thresh) {
-        Map<String, Float> result = new HashMap<>(sparseVector);
+    private static Tuple<Map<String, Float>, Map<String, Float>> pruningByValue(
+        Map<String, Float> sparseVector,
+        float thresh,
+        boolean requiresPrunedEntries
+    ) {
+        Map<String, Float> highScores = new HashMap<>();
+        Map<String, Float> lowScores = requiresPrunedEntries ? new HashMap<>() : null;
+
         for (Map.Entry<String, Float> entry : sparseVector.entrySet()) {
-            if (entry.getValue() < thresh) {
-                result.remove(entry.getKey());
+            if (entry.getValue() >= thresh) {
+                highScores.put(entry.getKey(), entry.getValue());
+            } else if (requiresPrunedEntries) {
+                lowScores.put(entry.getKey(), entry.getValue());
             }
         }
 
-        return result;
+        return new Tuple<>(highScores, lowScores);
     }
 
     /**
@@ -96,27 +126,36 @@ public class PruneUtils {
      *
      * @param sparseVector The input sparse vector as a map of string keys to float values
      * @param alpha The minimum ratio relative to the total sum for elements to be kept
-     * @return A new map containing only elements meeting the ratio threshold
+     * @param requiresPrunedEntries Whether to return pruned entries
+     * @return A tuple containing two maps: the first with elements meeting the alpha mass threshold,
+     *         the second with remaining elements (or null)
      */
-    private static Map<String, Float> pruningByAlphaMass(Map<String, Float> sparseVector, float alpha) {
+    private static Tuple<Map<String, Float>, Map<String, Float>> pruningByAlphaMass(
+        Map<String, Float> sparseVector,
+        float alpha,
+        boolean requiresPrunedEntries
+    ) {
         List<Map.Entry<String, Float>> sortedEntries = new ArrayList<>(sparseVector.entrySet());
         sortedEntries.sort(Map.Entry.comparingByValue(Comparator.reverseOrder()));
 
         float sum = (float) sparseVector.values().stream().mapToDouble(Float::doubleValue).sum();
         float topSum = 0f;
 
-        Map<String, Float> result = new HashMap<>();
+        Map<String, Float> highScores = new HashMap<>();
+        Map<String, Float> lowScores = requiresPrunedEntries ? new HashMap<>() : null;
+
         for (Map.Entry<String, Float> entry : sortedEntries) {
             float value = entry.getValue();
             topSum += value;
-            result.put(entry.getKey(), value);
 
-            if (topSum / sum >= alpha) {
-                break;
+            if (topSum <= alpha * sum) {
+                highScores.put(entry.getKey(), value);
+            } else if (requiresPrunedEntries) {
+                lowScores.put(entry.getKey(), value);
             }
         }
 
-        return result;
+        return new Tuple<>(highScores, lowScores);
     }
 
     /**
@@ -125,12 +164,23 @@ public class PruneUtils {
      * @param pruneType The type of pruning strategy to use
      * @param pruneRatio The ratio or threshold for pruning
      * @param sparseVector The input sparse vector as a map of string keys to float values
-     * @return A new map containing the pruned sparse vector
+     * @param requiresPrunedEntries Whether to return pruned entries
+     * @return A tuple containing two maps: the first with high-scoring elements,
+     *         the second with low-scoring elements (or null if requiresPrunedEntries is false)
      */
-    public static Map<String, Float> pruningSparseVector(PruneType pruneType, float pruneRatio, Map<String, Float> sparseVector) {
-        if (Objects.isNull(pruneType) || Objects.isNull(pruneRatio)) throw new IllegalArgumentException(
-            "Prune type and prune ratio must be provided"
-        );
+    public static Tuple<Map<String, Float>, Map<String, Float>> pruningSparseVector(
+        PruneType pruneType,
+        float pruneRatio,
+        Map<String, Float> sparseVector,
+        boolean requiresPrunedEntries
+    ) {
+        if (Objects.isNull(pruneType) || Objects.isNull(pruneRatio)) {
+            throw new IllegalArgumentException("Prune type and prune ratio must be provided");
+        }
+
+        if (Objects.isNull(sparseVector)) {
+            throw new IllegalArgumentException("Sparse vector must be provided");
+        }
 
         for (Map.Entry<String, Float> entry : sparseVector.entrySet()) {
             if (entry.getValue() <= 0) {
@@ -140,15 +190,15 @@ public class PruneUtils {
 
         switch (pruneType) {
             case TOP_K:
-                return pruningByTopK(sparseVector, (int) pruneRatio);
+                return pruningByTopK(sparseVector, (int) pruneRatio, requiresPrunedEntries);
             case ALPHA_MASS:
-                return pruningByAlphaMass(sparseVector, pruneRatio);
+                return pruningByAlphaMass(sparseVector, pruneRatio, requiresPrunedEntries);
             case MAX_RATIO:
-                return pruningByMaxRatio(sparseVector, pruneRatio);
+                return pruningByMaxRatio(sparseVector, pruneRatio, requiresPrunedEntries);
             case ABS_VALUE:
-                return pruningByValue(sparseVector, pruneRatio);
+                return pruningByValue(sparseVector, pruneRatio, requiresPrunedEntries);
             default:
-                return sparseVector;
+                return new Tuple<>(new HashMap<>(sparseVector), requiresPrunedEntries ? new HashMap<>() : null);
         }
     }
 
@@ -170,9 +220,9 @@ public class PruneUtils {
                 return pruneRatio > 0 && pruneRatio == Math.floor(pruneRatio);
             case ALPHA_MASS:
             case MAX_RATIO:
-                return pruneRatio > 0 && pruneRatio < 1;
+                return pruneRatio >= 0 && pruneRatio < 1;
             case ABS_VALUE:
-                return pruneRatio > 0;
+                return pruneRatio >= 0;
             default:
                 return true;
         }

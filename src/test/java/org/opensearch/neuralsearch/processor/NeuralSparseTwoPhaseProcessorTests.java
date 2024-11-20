@@ -6,7 +6,6 @@ package org.opensearch.neuralsearch.processor;
 
 import lombok.SneakyThrows;
 import org.opensearch.action.search.SearchRequest;
-import org.opensearch.common.collect.Tuple;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
@@ -28,7 +27,7 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
     public void testFactory_whenCreateDefaultPipeline_thenSuccess() throws Exception {
         NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
         NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory);
-        assertEquals(0.3f, processor.getRatio(), 1e-3);
+        assertEquals(0.3f, processor.getPruneRatio(), 1e-3);
         assertEquals(4.0f, processor.getWindowExpansion(), 1e-3);
         assertEquals(10000, processor.getMaxWindowSize());
 
@@ -40,7 +39,7 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
             Collections.emptyMap(),
             null
         );
-        assertEquals(0.4f, defaultProcessor.getRatio(), 1e-3);
+        assertEquals(0.4f, defaultProcessor.getPruneRatio(), 1e-3);
         assertEquals(5.0f, defaultProcessor.getWindowExpansion(), 1e-3);
         assertEquals(10000, defaultProcessor.getMaxWindowSize());
     }
@@ -138,32 +137,6 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 400.0f, 100);
         SearchRequest returnRequest = processor.processRequest(searchRequest);
         assertNull(returnRequest.source().rescores());
-    }
-
-    @SneakyThrows
-    public void testGetSplitSetOnceByScoreThreshold() {
-        Map<String, Float> queryTokens = new HashMap<>();
-        for (int i = 0; i < 10; i++) {
-            queryTokens.put(String.valueOf(i), (float) i);
-        }
-        Tuple<Map<String, Float>, Map<String, Float>> splitQueryTokens = NeuralSparseTwoPhaseProcessor
-            .splitQueryTokensByRatioedMaxScoreAsThreshold(queryTokens, 0.4f);
-        assertNotNull(splitQueryTokens);
-        Map<String, Float> upSet = splitQueryTokens.v1();
-        Map<String, Float> downSet = splitQueryTokens.v2();
-        assertNotNull(upSet);
-        assertEquals(6, upSet.size());
-        assertNotNull(downSet);
-        assertEquals(4, downSet.size());
-    }
-
-    @SneakyThrows
-    public void testGetSplitSetOnceByScoreThreshold_whenNullQueryToken_thenThrowException() {
-        Map<String, Float> queryTokens = null;
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> NeuralSparseTwoPhaseProcessor.splitQueryTokensByRatioedMaxScoreAsThreshold(queryTokens, 0.4f)
-        );
     }
 
     public void testType() throws Exception {
