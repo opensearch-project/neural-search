@@ -9,7 +9,6 @@ import com.google.common.collect.Multimap;
 import lombok.Getter;
 import lombok.Setter;
 import org.opensearch.action.search.SearchRequest;
-import org.opensearch.common.collect.Tuple;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.ingest.ConfigurationUtils;
@@ -23,11 +22,9 @@ import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.rescore.QueryRescorerBuilder;
 import org.opensearch.search.rescore.RescorerBuilder;
 
-import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 /**
  * A SearchRequestProcessor to generate two-phase NeuralSparseQueryBuilder,
