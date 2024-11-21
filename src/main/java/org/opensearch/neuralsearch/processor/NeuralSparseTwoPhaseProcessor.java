@@ -222,7 +222,12 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
                 );
             }
             if (!PruneUtils.isValidPruneRatio(pruneType, pruneRatio)) throw new IllegalArgumentException(
-                "Illegal prune_ratio " + pruneRatio + " for prune_type: " + pruneType.getValue()
+                "Illegal prune_ratio "
+                    + pruneRatio
+                    + " for prune_type: "
+                    + pruneType.getValue()
+                    + ". "
+                    + PruneUtils.getValidPruneRatioDescription(pruneType)
             );
 
             return new NeuralSparseTwoPhaseProcessor(

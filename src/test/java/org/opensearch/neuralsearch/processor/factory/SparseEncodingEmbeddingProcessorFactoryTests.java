@@ -149,7 +149,7 @@ public class SparseEncodingEmbeddingProcessorFactoryTests extends OpenSearchTest
             IllegalArgumentException.class,
             () -> sparseEncodingProcessorFactory.create(Map.of(), PROCESSOR_TAG, DESCRIPTION, config)
         );
-        assertEquals("Illegal prune_ratio 0.2 for prune_type: top_k", exception.getMessage());
+        assertEquals("Illegal prune_ratio 0.2 for prune_type: top_k. prune_ratio should be positive integer.", exception.getMessage());
     }
 
     @SneakyThrows

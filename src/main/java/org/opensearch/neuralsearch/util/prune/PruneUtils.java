@@ -227,4 +227,28 @@ public class PruneUtils {
                 return true;
         }
     }
+
+    /**
+     * Get description of valid prune ratio for a given prune type.
+     *
+     * @param pruneType The type of prune strategy
+     * @throws IllegalArgumentException if prune type is null
+     */
+    public static String getValidPruneRatioDescription(PruneType pruneType) {
+        if (pruneType == null) {
+            throw new IllegalArgumentException("Prune type cannot be null");
+        }
+
+        switch (pruneType) {
+            case TOP_K:
+                return "prune_ratio should be positive integer.";
+            case MAX_RATIO:
+            case ALPHA_MASS:
+                return "prune_ratio should be in the range [0, 1).";
+            case ABS_VALUE:
+                return "prune_ratio should be non-negative.";
+            default:
+                return "";
+        }
+    }
 }

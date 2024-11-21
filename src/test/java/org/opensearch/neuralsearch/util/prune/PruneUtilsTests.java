@@ -212,4 +212,18 @@ public class PruneUtilsTests extends OpenSearchTestCase {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> PruneUtils.isValidPruneRatio(null, 1.0f));
         assertEquals("Prune type cannot be null", exception.getMessage());
     }
+
+    public void testGetValidPruneRatioDescription() {
+        assertEquals("prune_ratio should be positive integer.", PruneUtils.getValidPruneRatioDescription(PruneType.TOP_K));
+        assertEquals("prune_ratio should be in the range [0, 1).", PruneUtils.getValidPruneRatioDescription(PruneType.MAX_RATIO));
+        assertEquals("prune_ratio should be in the range [0, 1).", PruneUtils.getValidPruneRatioDescription(PruneType.ALPHA_MASS));
+        assertEquals("prune_ratio should be non-negative.", PruneUtils.getValidPruneRatioDescription(PruneType.ABS_VALUE));
+        assertEquals("", PruneUtils.getValidPruneRatioDescription(PruneType.NONE));
+
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> PruneUtils.getValidPruneRatioDescription(null)
+        );
+        assertEquals(exception.getMessage(), "Prune type cannot be null");
+    }
 }

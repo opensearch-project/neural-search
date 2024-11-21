@@ -52,7 +52,12 @@ public class SparseEncodingProcessorFactory extends AbstractBatchingProcessor.Fa
             // readDoubleProperty will throw exception if value is not present
             pruneRatio = readDoubleProperty(TYPE, tag, config, PruneUtils.PRUNE_RATIO_FIELD).floatValue();
             if (!PruneUtils.isValidPruneRatio(pruneType, pruneRatio)) throw new IllegalArgumentException(
-                "Illegal prune_ratio " + pruneRatio + " for prune_type: " + pruneType.getValue()
+                "Illegal prune_ratio "
+                    + pruneRatio
+                    + " for prune_type: "
+                    + pruneType.getValue()
+                    + ". "
+                    + PruneUtils.getValidPruneRatioDescription(pruneType)
             );
         } else {
             // if we don't have prune type, then prune ratio field must not have value
