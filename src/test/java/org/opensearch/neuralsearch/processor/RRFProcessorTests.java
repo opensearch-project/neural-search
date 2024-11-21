@@ -96,19 +96,19 @@ public class RRFProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testProcessWithNullSearchPhaseResult() {
+    public void testProcess_whenNullSearchPhaseResult_thenSkipWorkflow() {
         rrfProcessor.process(null, mockSearchPhaseContext);
         verify(mockNormalizationWorkflow, never()).execute(any());
     }
 
     @SneakyThrows
-    public void testProcessWithNonQueryPhaseResultConsumer() {
+    public void testProcess_whenNonQueryPhaseResultConsumer_thenSkipWorkflow() {
         rrfProcessor.process(mockSearchPhaseResults, mockSearchPhaseContext);
         verify(mockNormalizationWorkflow, never()).execute(any());
     }
 
     @SneakyThrows
-    public void testProcessWithValidHybridInput() {
+    public void testProcess_whenValidHybridInput_thenSucceed() {
         QuerySearchResult result = createQuerySearchResult(true);
         AtomicArray<SearchPhaseResult> atomicArray = new AtomicArray<>(1);
         atomicArray.set(0, result);
@@ -121,7 +121,7 @@ public class RRFProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testProcessWithValidNonHybridInput() {
+    public void testProcess_whenValidNonHybridInput_thenSucceed() {
         QuerySearchResult result = createQuerySearchResult(false);
         AtomicArray<SearchPhaseResult> atomicArray = new AtomicArray<>(1);
         atomicArray.set(0, result);
