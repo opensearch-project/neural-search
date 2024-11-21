@@ -26,14 +26,14 @@ import java.util.Map;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_USER_AGENT;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 
-public class RRFSearchIT extends BaseNeuralSearchIT {
+public class RRFProcessorIT extends BaseNeuralSearchIT {
 
     private int currentDoc = 1;
     private static final String RRF_INDEX_NAME = "rrf-index";
     private static final String RRF_SEARCH_PIPELINE = "rrf-search-pipeline";
 
     @SneakyThrows
-    public void testRRF() {
+    public void testRRF_whenValidInput_thenSucceed() {
         String modelId = prepareModel();
         String ingestPipelineName = "rrf-ingest-pipeline";
         createPipelineProcessor(modelId, ingestPipelineName, ProcessorType.TEXT_EMBEDDING);
@@ -63,7 +63,7 @@ public class RRFSearchIT extends BaseNeuralSearchIT {
         indexMappings = indexMappings.substring(1, indexMappings.length() - 1);
         String indexName = "rrf-index";
         createIndex(indexName, indexSettings, indexMappings, null);
-        addRRFDocuments();
+        addDocuments();
         createDefaultRRFSearchPipeline();
 
         Map<String, Object> results = searchRRF(modelId);
@@ -76,22 +76,22 @@ public class RRFSearchIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    private void addRRFDocuments() {
-        addRRFDocument(
+    private void addDocuments() {
+        addDocument(
             "A West Virginia university women 's basketball team , officials , and a small gathering of fans are in a West Virginia arena .",
             "4319130149.jpg"
         );
-        addRRFDocument("A wild animal races across an uncut field with a minimal amount of trees .", "1775029934.jpg");
-        addRRFDocument(
+        addDocument("A wild animal races across an uncut field with a minimal amount of trees .", "1775029934.jpg");
+        addDocument(
             "People line the stands which advertise Freemont 's orthopedics , a cowboy rides a light brown bucking bronco .",
             "2664027527.jpg"
         );
-        addRRFDocument("A man who is riding a wild horse in the rodeo is very near to falling off .", "4427058951.jpg");
-        addRRFDocument("A rodeo cowboy , wearing a cowboy hat , is being thrown off of a wild white horse .", "2691147709.jpg");
+        addDocument("A man who is riding a wild horse in the rodeo is very near to falling off .", "4427058951.jpg");
+        addDocument("A rodeo cowboy , wearing a cowboy hat , is being thrown off of a wild white horse .", "2691147709.jpg");
     }
 
     @SneakyThrows
-    private void addRRFDocument(String description, String imageText) {
+    private void addDocument(String description, String imageText) {
         addDocument(RRF_INDEX_NAME, String.valueOf(currentDoc++), "text", description, "image_text", imageText);
     }
 
@@ -105,9 +105,6 @@ public class RRFSearchIT extends BaseNeuralSearchIT {
             .startObject("score-ranker-processor")
             .startObject("combination")
             .field("technique", "rrf")
-            .startObject("parameters")
-            .field("rank_constant", 60)
-            .endObject()
             .endObject()
             .endObject()
             .endObject()
@@ -159,13 +156,11 @@ public class RRFSearchIT extends BaseNeuralSearchIT {
             .endObject();
 
         Request request = new Request("GET", "/" + RRF_INDEX_NAME + "/_search?timeout=1000s&search_pipeline=" + RRF_SEARCH_PIPELINE);
-        logger.info("Sorting request  " + builder);
         request.setJsonEntity(builder.toString());
         Response response = client().performRequest(request);
         assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
 
         String responseBody = EntityUtils.toString(response.getEntity());
-        logger.info("Response  " + responseBody);
         return XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
     }
 }
