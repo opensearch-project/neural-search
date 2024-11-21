@@ -159,20 +159,18 @@ public class PruneUtils {
     }
 
     /**
-     * Prunes a sparse vector using the specified prune type and ratio.
+     * Split a sparse vector using the specified prune type and ratio.
      *
-     * @param pruneType The type of prune strategy to use
-     * @param pruneRatio The ratio or threshold for prune
+     * @param pruneType    The type of prune strategy to use
+     * @param pruneRatio   The ratio or threshold for prune
      * @param sparseVector The input sparse vector as a map of string keys to float values
-     * @param requiresPrunedEntries Whether to return pruned entries
      * @return A tuple containing two maps: the first with high-scoring elements,
-     *         the second with low-scoring elements (or null if requiresPrunedEntries is false)
+     * the second with low-scoring elements (or null if requiresPrunedEntries is false)
      */
-    public static Tuple<Map<String, Float>, Map<String, Float>> pruneSparseVector(
+    public static Tuple<Map<String, Float>, Map<String, Float>> splitSparseVector(
         PruneType pruneType,
         float pruneRatio,
-        Map<String, Float> sparseVector,
-        boolean requiresPrunedEntries
+        Map<String, Float> sparseVector
     ) {
         if (Objects.isNull(pruneType) || Objects.isNull(pruneRatio)) {
             throw new IllegalArgumentException("Prune type and prune ratio must be provided");
@@ -190,15 +188,52 @@ public class PruneUtils {
 
         switch (pruneType) {
             case TOP_K:
-                return pruneByTopK(sparseVector, (int) pruneRatio, requiresPrunedEntries);
+                return pruneByTopK(sparseVector, (int) pruneRatio, true);
             case ALPHA_MASS:
-                return pruneByAlphaMass(sparseVector, pruneRatio, requiresPrunedEntries);
+                return pruneByAlphaMass(sparseVector, pruneRatio, true);
             case MAX_RATIO:
-                return pruneByMaxRatio(sparseVector, pruneRatio, requiresPrunedEntries);
+                return pruneByMaxRatio(sparseVector, pruneRatio, true);
             case ABS_VALUE:
-                return pruneByValue(sparseVector, pruneRatio, requiresPrunedEntries);
+                return pruneByValue(sparseVector, pruneRatio, true);
             default:
-                return new Tuple<>(new HashMap<>(sparseVector), requiresPrunedEntries ? new HashMap<>() : null);
+                return new Tuple<>(new HashMap<>(sparseVector), new HashMap<>());
+        }
+    }
+
+    /**
+     * Prune a sparse vector using the specified prune type and ratio.
+     *
+     * @param pruneType    The type of prune strategy to use
+     * @param pruneRatio   The ratio or threshold for prune
+     * @param sparseVector The input sparse vector as a map of string keys to float values
+     * @return A map with high-scoring elements
+     */
+    public static Map<String, Float> pruneSparseVector(PruneType pruneType, float pruneRatio, Map<String, Float> sparseVector) {
+        if (Objects.isNull(pruneType) || Objects.isNull(pruneRatio)) {
+            throw new IllegalArgumentException("Prune type and prune ratio must be provided");
+        }
+
+        if (Objects.isNull(sparseVector)) {
+            throw new IllegalArgumentException("Sparse vector must be provided");
+        }
+
+        for (Map.Entry<String, Float> entry : sparseVector.entrySet()) {
+            if (entry.getValue() <= 0) {
+                throw new IllegalArgumentException("Pruned values must be positive");
+            }
+        }
+
+        switch (pruneType) {
+            case TOP_K:
+                return pruneByTopK(sparseVector, (int) pruneRatio, false).v1();
+            case ALPHA_MASS:
+                return pruneByAlphaMass(sparseVector, pruneRatio, false).v1();
+            case MAX_RATIO:
+                return pruneByMaxRatio(sparseVector, pruneRatio, false).v1();
+            case ABS_VALUE:
+                return pruneByValue(sparseVector, pruneRatio, false).v1();
+            default:
+                return sparseVector;
         }
     }
 

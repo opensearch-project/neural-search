@@ -146,7 +146,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             Map<String, Float> tokens = queryTokensSupplier.get();
             // Splitting tokens based on a threshold value: tokens greater than the threshold are stored in v1,
             // while those less than or equal to the threshold are stored in v2.
-            Tuple<Map<String, Float>, Map<String, Float>> splitTokens = PruneUtils.pruneSparseVector(pruneType, pruneRatio, tokens, true);
+            Tuple<Map<String, Float>, Map<String, Float>> splitTokens = PruneUtils.splitSparseVector(pruneType, pruneRatio, tokens);
             this.queryTokensSupplier(() -> splitTokens.v1());
             copy.queryTokensSupplier(() -> splitTokens.v2());
         } else {
@@ -348,11 +348,10 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             ActionListener.wrap(mapResultList -> {
                 Map<String, Float> queryTokens = TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList).get(0);
                 if (Objects.nonNull(twoPhaseSharedQueryToken)) {
-                    Tuple<Map<String, Float>, Map<String, Float>> splitQueryTokens = PruneUtils.pruneSparseVector(
+                    Tuple<Map<String, Float>, Map<String, Float>> splitQueryTokens = PruneUtils.splitSparseVector(
                         twoPhasePruneType,
                         twoPhasePruneRatio,
-                        queryTokens,
-                        true
+                        queryTokens
                     );
                     setOnce.set(splitQueryTokens.v1());
                     twoPhaseSharedQueryToken = splitQueryTokens.v2();

@@ -19,23 +19,22 @@ public class PruneUtilsTests extends OpenSearchTestCase {
         input.put("c", 4.0f);
         input.put("d", 1.0f);
 
-        // Test without pruned entries
-        Tuple<Map<String, Float>, Map<String, Float>> result = PruneUtils.pruneSparseVector(PruneType.TOP_K, 2, input, false);
+        // Test prune
+        Map<String, Float> result = PruneUtils.pruneSparseVector(PruneType.TOP_K, 2, input);
 
-        assertEquals(2, result.v1().size());
-        assertNull(result.v2());
-        assertTrue(result.v1().containsKey("a"));
-        assertTrue(result.v1().containsKey("c"));
-        assertEquals(5.0f, result.v1().get("a"), 0.001);
-        assertEquals(4.0f, result.v1().get("c"), 0.001);
+        assertEquals(2, result.size());
+        assertEquals(5.0f, result.get("a"), 0.001);
+        assertEquals(4.0f, result.get("c"), 0.001);
 
-        // Test with pruned entries
-        result = PruneUtils.pruneSparseVector(PruneType.TOP_K, 2, input, true);
+        // Test split
+        Tuple<Map<String, Float>, Map<String, Float>> tupleResult = PruneUtils.splitSparseVector(PruneType.TOP_K, 2, input);
 
-        assertEquals(2, result.v1().size());
-        assertEquals(2, result.v2().size());
-        assertTrue(result.v2().containsKey("b"));
-        assertTrue(result.v2().containsKey("d"));
+        assertEquals(2, tupleResult.v1().size());
+        assertEquals(2, tupleResult.v2().size());
+        assertEquals(5.0f, tupleResult.v1().get("a"), 0.001);
+        assertEquals(4.0f, tupleResult.v1().get("c"), 0.001);
+        assertEquals(3.0f, tupleResult.v2().get("b"), 0.001);
+        assertEquals(1.0f, tupleResult.v2().get("d"), 0.001);
     }
 
     public void testPruneByMaxRatio() {
@@ -45,21 +44,22 @@ public class PruneUtilsTests extends OpenSearchTestCase {
         input.put("c", 5.0f);
         input.put("d", 2.0f);
 
-        // Test without pruned entries
-        Tuple<Map<String, Float>, Map<String, Float>> result = PruneUtils.pruneSparseVector(PruneType.MAX_RATIO, 0.7f, input, false);
+        // Test prune
+        Map<String, Float> result = PruneUtils.pruneSparseVector(PruneType.MAX_RATIO, 0.7f, input);
 
-        assertEquals(2, result.v1().size());
-        assertNull(result.v2());
-        assertTrue(result.v1().containsKey("a")); // 10.0/10.0 = 1.0 >= 0.7
-        assertTrue(result.v1().containsKey("b")); // 8.0/10.0 = 0.8 >= 0.7
+        assertEquals(2, result.size());
+        assertEquals(10.0f, result.get("a"), 0.001);
+        assertEquals(8.0f, result.get("b"), 0.001);
 
-        // Test with pruned entries
-        result = PruneUtils.pruneSparseVector(PruneType.MAX_RATIO, 0.7f, input, true);
+        // Test split
+        Tuple<Map<String, Float>, Map<String, Float>> tupleResult = PruneUtils.splitSparseVector(PruneType.MAX_RATIO, 0.7f, input);
 
-        assertEquals(2, result.v1().size());
-        assertEquals(2, result.v2().size());
-        assertTrue(result.v2().containsKey("c"));
-        assertTrue(result.v2().containsKey("d"));
+        assertEquals(2, tupleResult.v1().size());
+        assertEquals(2, tupleResult.v2().size());
+        assertEquals(10.0f, tupleResult.v1().get("a"), 0.001);
+        assertEquals(8.0f, tupleResult.v1().get("b"), 0.001);
+        assertEquals(5.0f, tupleResult.v2().get("c"), 0.001);
+        assertEquals(2.0f, tupleResult.v2().get("d"), 0.001);
     }
 
     public void testPruneByValue() {
@@ -69,21 +69,22 @@ public class PruneUtilsTests extends OpenSearchTestCase {
         input.put("c", 2.0f);
         input.put("d", 1.0f);
 
-        // Test without pruned entries
-        Tuple<Map<String, Float>, Map<String, Float>> result = PruneUtils.pruneSparseVector(PruneType.ABS_VALUE, 3.0f, input, false);
+        // Test prune
+        Map<String, Float> result = PruneUtils.pruneSparseVector(PruneType.ABS_VALUE, 3.0f, input);
 
-        assertEquals(2, result.v1().size());
-        assertNull(result.v2());
-        assertTrue(result.v1().containsKey("a"));
-        assertTrue(result.v1().containsKey("b"));
+        assertEquals(2, result.size());
+        assertEquals(5.0f, result.get("a"), 0.001);
+        assertEquals(3.0f, result.get("b"), 0.001);
 
-        // Test with pruned entries
-        result = PruneUtils.pruneSparseVector(PruneType.ABS_VALUE, 3.0f, input, true);
+        // Test split
+        Tuple<Map<String, Float>, Map<String, Float>> tupleResult = PruneUtils.splitSparseVector(PruneType.ABS_VALUE, 3.0f, input);
 
-        assertEquals(2, result.v1().size());
-        assertEquals(2, result.v2().size());
-        assertTrue(result.v2().containsKey("c"));
-        assertTrue(result.v2().containsKey("d"));
+        assertEquals(2, tupleResult.v1().size());
+        assertEquals(2, tupleResult.v2().size());
+        assertEquals(5.0f, tupleResult.v1().get("a"), 0.001);
+        assertEquals(3.0f, tupleResult.v1().get("b"), 0.001);
+        assertEquals(2.0f, tupleResult.v2().get("c"), 0.001);
+        assertEquals(1.0f, tupleResult.v2().get("d"), 0.001);
     }
 
     public void testPruneByAlphaMass() {
@@ -93,45 +94,35 @@ public class PruneUtilsTests extends OpenSearchTestCase {
         input.put("c", 3.0f);
         input.put("d", 1.0f);
 
-        // Test without pruned entries
-        Tuple<Map<String, Float>, Map<String, Float>> result = PruneUtils.pruneSparseVector(PruneType.ALPHA_MASS, 0.8f, input, false);
+        // Test prune
+        Map<String, Float> result = PruneUtils.pruneSparseVector(PruneType.ALPHA_MASS, 0.8f, input);
 
-        assertEquals(2, result.v1().size());
-        assertNull(result.v2());
-        assertTrue(result.v1().containsKey("a"));
-        assertTrue(result.v1().containsKey("b"));
+        assertEquals(2, result.size());
+        assertEquals(10.0f, result.get("a"), 0.001);
+        assertEquals(6.0f, result.get("b"), 0.001);
 
-        // Test with pruned entries
-        result = PruneUtils.pruneSparseVector(PruneType.ALPHA_MASS, 0.8f, input, true);
+        // Test split
+        Tuple<Map<String, Float>, Map<String, Float>> tupleResult = PruneUtils.splitSparseVector(PruneType.ALPHA_MASS, 0.8f, input);
 
-        assertEquals(2, result.v1().size());
-        assertEquals(2, result.v2().size());
-        assertTrue(result.v2().containsKey("c"));
-        assertTrue(result.v2().containsKey("d"));
+        assertEquals(2, tupleResult.v1().size());
+        assertEquals(2, tupleResult.v2().size());
+        assertEquals(10.0f, tupleResult.v1().get("a"), 0.001);
+        assertEquals(6.0f, tupleResult.v1().get("b"), 0.001);
+        assertEquals(3.0f, tupleResult.v2().get("c"), 0.001);
+        assertEquals(1.0f, tupleResult.v2().get("d"), 0.001);
     }
 
     public void testEmptyInput() {
         Map<String, Float> input = new HashMap<>();
 
-        Tuple<Map<String, Float>, Map<String, Float>> result = PruneUtils.pruneSparseVector(PruneType.TOP_K, 5, input, false);
-        assertTrue(result.v1().isEmpty());
-        assertNull(result.v2());
+        // Test prune
+        Map<String, Float> result = PruneUtils.pruneSparseVector(PruneType.TOP_K, 5, input);
+        assertTrue(result.isEmpty());
 
-        result = PruneUtils.pruneSparseVector(PruneType.MAX_RATIO, 0.5f, input, false);
-        assertTrue(result.v1().isEmpty());
-        assertNull(result.v2());
-
-        result = PruneUtils.pruneSparseVector(PruneType.ALPHA_MASS, 0.5f, input, false);
-        assertTrue(result.v1().isEmpty());
-        assertNull(result.v2());
-
-        result = PruneUtils.pruneSparseVector(PruneType.ABS_VALUE, 0.5f, input, false);
-        assertTrue(result.v1().isEmpty());
-        assertNull(result.v2());
-
-        result = PruneUtils.pruneSparseVector(PruneType.TOP_K, 5, input, true);
-        assertTrue(result.v1().isEmpty());
-        assertTrue(result.v2().isEmpty());
+        // Test split
+        Tuple<Map<String, Float>, Map<String, Float>> tupleResult = PruneUtils.splitSparseVector(PruneType.TOP_K, 5, input);
+        assertTrue(tupleResult.v1().isEmpty());
+        assertTrue(tupleResult.v2().isEmpty());
     }
 
     public void testNegativeValues() {
@@ -140,11 +131,19 @@ public class PruneUtilsTests extends OpenSearchTestCase {
         input.put("b", 3.0f);
         input.put("c", 4.0f);
 
-        IllegalArgumentException exception = assertThrows(
+        // Test prune
+        IllegalArgumentException exception1 = assertThrows(
             IllegalArgumentException.class,
-            () -> PruneUtils.pruneSparseVector(PruneType.TOP_K, 2, input, false)
+            () -> PruneUtils.pruneSparseVector(PruneType.TOP_K, 2, input)
         );
-        assertEquals("Pruned values must be positive", exception.getMessage());
+        assertEquals("Pruned values must be positive", exception1.getMessage());
+
+        // Test split
+        IllegalArgumentException exception2 = assertThrows(
+            IllegalArgumentException.class,
+            () -> PruneUtils.splitSparseVector(PruneType.TOP_K, 2, input)
+        );
+        assertEquals("Pruned values must be positive", exception2.getMessage());
     }
 
     public void testInvalidPruneType() {
@@ -152,25 +151,45 @@ public class PruneUtilsTests extends OpenSearchTestCase {
         input.put("a", 1.0f);
         input.put("b", 2.0f);
 
+        // Test prune
         IllegalArgumentException exception1 = assertThrows(
             IllegalArgumentException.class,
-            () -> PruneUtils.pruneSparseVector(null, 2, input, false)
+            () -> PruneUtils.splitSparseVector(null, 2, input)
         );
         assertEquals(exception1.getMessage(), "Prune type and prune ratio must be provided");
 
         IllegalArgumentException exception2 = assertThrows(
             IllegalArgumentException.class,
-            () -> PruneUtils.pruneSparseVector(null, 2, input, true)
+            () -> PruneUtils.splitSparseVector(null, 2, input)
         );
         assertEquals(exception2.getMessage(), "Prune type and prune ratio must be provided");
+
+        // Test split
+        IllegalArgumentException exception3 = assertThrows(
+            IllegalArgumentException.class,
+            () -> PruneUtils.splitSparseVector(null, 2, input)
+        );
+        assertEquals(exception3.getMessage(), "Prune type and prune ratio must be provided");
+
+        IllegalArgumentException exception4 = assertThrows(
+            IllegalArgumentException.class,
+            () -> PruneUtils.splitSparseVector(null, 2, input)
+        );
+        assertEquals(exception4.getMessage(), "Prune type and prune ratio must be provided");
     }
 
     public void testNullSparseVector() {
-        IllegalArgumentException exception = assertThrows(
+        IllegalArgumentException exception1 = assertThrows(
             IllegalArgumentException.class,
-            () -> PruneUtils.pruneSparseVector(PruneType.TOP_K, 2, null, false)
+            () -> PruneUtils.splitSparseVector(PruneType.TOP_K, 2, null)
         );
-        assertEquals(exception.getMessage(), "Sparse vector must be provided");
+        assertEquals(exception1.getMessage(), "Sparse vector must be provided");
+
+        IllegalArgumentException exception2 = assertThrows(
+            IllegalArgumentException.class,
+            () -> PruneUtils.splitSparseVector(PruneType.TOP_K, 2, null)
+        );
+        assertEquals(exception2.getMessage(), "Sparse vector must be provided");
     }
 
     public void testIsValidPruneRatio() {
