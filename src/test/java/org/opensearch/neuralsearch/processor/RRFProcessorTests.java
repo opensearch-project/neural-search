@@ -60,24 +60,20 @@ public class RRFProcessorTests extends OpenSearchTestCase {
     private QueryPhaseResultConsumer mockQueryPhaseResultConsumer;
 
     private RRFProcessor rrfProcessor;
+    private static final String TAG = "tag";
+    private static final String DESCRIPTION = "description";
 
     @Before
     @SneakyThrows
     public void setUp() {
         super.setUp();
         MockitoAnnotations.openMocks(this);
-        rrfProcessor = new RRFProcessor(
-            "tag",
-            "description",
-            mockNormalizationTechnique,
-            mockCombinationTechnique,
-            mockNormalizationWorkflow
-        );
+        rrfProcessor = new RRFProcessor(TAG, DESCRIPTION, mockNormalizationTechnique, mockCombinationTechnique, mockNormalizationWorkflow);
     }
 
     @SneakyThrows
     public void testGetType() {
-        assertEquals("score-ranker-processor", rrfProcessor.getType());
+        assertEquals(RRFProcessor.TYPE, rrfProcessor.getType());
     }
 
     @SneakyThrows
@@ -135,12 +131,12 @@ public class RRFProcessorTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testGetTag() {
-        assertEquals("tag", rrfProcessor.getTag());
+        assertEquals(TAG, rrfProcessor.getTag());
     }
 
     @SneakyThrows
     public void testGetDescription() {
-        assertEquals("description", rrfProcessor.getDescription());
+        assertEquals(DESCRIPTION, rrfProcessor.getDescription());
     }
 
     @SneakyThrows
