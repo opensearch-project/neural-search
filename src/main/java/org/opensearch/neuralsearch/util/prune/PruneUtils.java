@@ -165,7 +165,7 @@ public class PruneUtils {
      * @param pruneRatio   The ratio or threshold for prune
      * @param sparseVector The input sparse vector as a map of string keys to float values
      * @return A tuple containing two maps: the first with high-scoring elements,
-     * the second with low-scoring elements (or null if requiresPrunedEntries is false)
+     * the second with low-scoring elements
      */
     public static Tuple<Map<String, Float>, Map<String, Float>> splitSparseVector(
         PruneType pruneType,
