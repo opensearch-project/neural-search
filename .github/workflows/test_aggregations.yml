@@ -10,9 +10,6 @@ on:
     branches:
       - "*"
       - "feature/**"
-env:
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-
 jobs:
   Get-CI-Image-Tag:
     uses: opensearch-project/opensearch-build/.github/workflows/get-ci-image-tag.yml@main
@@ -33,16 +30,20 @@ jobs:
       # this image tag is subject to change as more dependencies and updates will arrive over time
       image: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-version-linux }}
       # need to switch to root so that github actions can install runner binary on container without permission issues.
-      options: --user root
+      options: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-options }}
 
 
     steps:
+      - name: Run start commands
+        run: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-command }}
+
       - name: Checkout neural-search
-        uses: actions/checkout@v1
+        uses: actions/checkout@v4
 
       - name: Setup Java ${{ matrix.java }}
-        uses: actions/setup-java@v1
+        uses: actions/setup-java@v4
         with:
+          distribution: 'temurin'
           java-version: ${{ matrix.java }}
 
       - name: Run tests
@@ -61,11 +62,12 @@ jobs:
 
     steps:
       - name: Checkout neural-search
-        uses: actions/checkout@v1
+        uses: actions/checkout@v4
 
       - name: Setup Java ${{ matrix.java }}
-        uses: actions/setup-java@v1
+        uses: actions/setup-java@v4
         with:
+          distribution: 'temurin'
           java-version: ${{ matrix.java }}
 
       - name: Run tests
