@@ -50,6 +50,7 @@ import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
@@ -754,6 +755,69 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
         HybridQueryBuilder hybridQueryBuilder = HybridQueryBuilder.fromXContent(contentParser);
         assertNotNull(hybridQueryBuilder);
+    }
+
+    @SneakyThrows
+    public void testBuild_whenValidParameters_thenCreateQuery() {
+        String queryText = "test query";
+        String modelId = "test_model";
+        String fieldName = "rank_features";
+
+        // Create mock context
+        QueryShardContext context = mock(QueryShardContext.class);
+        MappedFieldType fieldType = mock(MappedFieldType.class);
+        when(context.fieldMapper(fieldName)).thenReturn(fieldType);
+        when(fieldType.typeName()).thenReturn("rank_features");
+
+        // Create HybridQueryBuilder instance (no spy since it's final)
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
+        neuralSparseQueryBuilder.fieldName(fieldName)
+            .queryText(queryText)
+            .modelId(modelId)
+            .queryTokensSupplier(() -> Map.of("token1", 1.0f, "token2", 0.5f));
+        HybridQueryBuilder builder = new HybridQueryBuilder().add(neuralSparseQueryBuilder);
+
+        // Build query
+        Query query = builder.toQuery(context);
+
+        // Verify
+        assertNotNull("Query should not be null", query);
+        assertTrue("Should be HybridQuery", query instanceof HybridQuery);
+    }
+
+    @SneakyThrows
+    public void testDoEquals_whenSameParameters_thenEqual() {
+        // Create neural queries
+        NeuralQueryBuilder neuralQueryBuilder1 = new NeuralQueryBuilder().queryText("test").modelId("test_model");
+
+        NeuralQueryBuilder neuralQueryBuilder2 = new NeuralQueryBuilder().queryText("test").modelId("test_model");
+
+        // Create neural sparse queries with queryTokensSupplier
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder1 = new NeuralSparseQueryBuilder().fieldName("test_field")
+            .queryText("test")
+            .modelId("test_model")
+            .queryTokensSupplier(() -> Map.of("token1", 1.0f));
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder2 = new NeuralSparseQueryBuilder().fieldName("test_field")
+            .queryText("test")
+            .modelId("test_model")
+            .queryTokensSupplier(() -> Map.of("token1", 1.0f));
+
+        // Create builders
+        HybridQueryBuilder builder1 = new HybridQueryBuilder().add(neuralQueryBuilder1).add(neuralSparseQueryBuilder1);
+
+        HybridQueryBuilder builder2 = new HybridQueryBuilder().add(neuralQueryBuilder2).add(neuralSparseQueryBuilder2);
+
+        // Verify
+        assertTrue("Builders should be equal", builder1.equals(builder2));
+        assertEquals("Hash codes should match", builder1.hashCode(), builder2.hashCode());
+    }
+
+    public void testValidate_whenInvalidParameters_thenThrowException() {
+        // Test null query builder
+        HybridQueryBuilder builderWithNull = new HybridQueryBuilder();
+        IllegalArgumentException nullException = assertThrows(IllegalArgumentException.class, () -> builderWithNull.add(null));
+        assertEquals("inner hybrid query clause cannot be null", nullException.getMessage());
     }
 
     public void testVisit() {
