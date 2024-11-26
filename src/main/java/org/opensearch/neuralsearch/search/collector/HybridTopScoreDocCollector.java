@@ -108,11 +108,20 @@ public class HybridTopScoreDocCollector implements HybridSearchCollector {
                 }
                 // Increment total hit count which represents unique doc found on the shard
                 totalHits++;
+                hitsThresholdChecker.incrementHitCount();
                 for (int i = 0; i < subScoresByQuery.length; i++) {
                     float score = subScoresByQuery[i];
                     // if score is 0.0 there is no hits for that sub-query
                     if (score == 0) {
                         continue;
+                    }
+                    if (hitsThresholdChecker.isThresholdReached() && totalHitsRelation == TotalHits.Relation.EQUAL_TO) {
+                        log.info(
+                            "hit count threshold reached: total hits={}, threshold={}, action=updating_results",
+                            totalHits,
+                            hitsThresholdChecker.getTotalHitsThreshold()
+                        );
+                        totalHitsRelation = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;
                     }
                     collectedHitsPerSubQuery[i]++;
                     PriorityQueue<ScoreDoc> pq = compoundScores[i];
