@@ -123,7 +123,6 @@ public class RRFProcessor implements SearchPhaseResultsProcessor {
             && isHybridQueryStartStopElement(searchPhaseResult.queryResult().topDocs().topDocs.scoreDocs[0]);
     }
 
-    @VisibleForTesting
     <Result extends SearchPhaseResult> List<QuerySearchResult> getQueryPhaseSearchResults(final SearchPhaseResults<Result> results) {
         return results.getAtomicArray()
             .asList()
