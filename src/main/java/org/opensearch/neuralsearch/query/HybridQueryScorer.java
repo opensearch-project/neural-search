@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.query;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.search.DisiPriorityQueue;
@@ -30,7 +31,7 @@ import java.util.Objects;
  * corresponds to order of sub-queries in an input Hybrid query.
  */
 @Log4j2
-public final class HybridQueryScorer extends Scorer {
+public class HybridQueryScorer extends Scorer {
 
     // score for each of sub-query in this hybrid query
     @Getter
@@ -100,7 +101,8 @@ public final class HybridQueryScorer extends Scorer {
         return score(getSubMatches());
     }
 
-    private float score(DisiWrapper topList) throws IOException {
+    @VisibleForTesting
+    float score(DisiWrapper topList) throws IOException {
         float totalScore = 0.0f;
         for (DisiWrapper disiWrapper = topList; disiWrapper != null; disiWrapper = disiWrapper.next) {
             // check if this doc has match in the subQuery. If not, add score as 0.0 and continue
@@ -187,7 +189,12 @@ public final class HybridQueryScorer extends Scorer {
      */
     public float[] hybridScores() throws IOException {
         float[] scores = new float[numSubqueries];
-        DisiWrapper topList = subScorersPQ.topList();
+        // retrieves sub-matches using DisjunctionDisiScorer's two-phase iteration process.
+        // while the two-phase iterator can efficiently skip blocks of document IDs during matching,
+        // the DisiWrapper (obtained from subScorersPQ.topList()) ensures sequential document ID iteration.
+        // this is necessary for maintaining correct scoring order.
+        DisiWrapper topList = getSubMatches();
+
         for (HybridDisiWrapper disiWrapper = (HybridDisiWrapper) topList; disiWrapper != null; disiWrapper =
             (HybridDisiWrapper) disiWrapper.next) {
             // check if this doc has match in the subQuery. If not, add score as 0.0 and continue
