@@ -26,8 +26,12 @@ import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
     private static final String PIPELINE_NAME = "nlp-hybrid-pipeline";
     private static final String PIPELINE1_NAME = "nlp-hybrid-1-pipeline";
+    private static final String PIPELINE_RRF_NAME = "nlp-hybrid-rrf-pipeline";
+    private static final String PIPELINE1_RRF_NAME = "nlp-hybrid-rrf-1-pipeline";
     private static final String SEARCH_PIPELINE_NAME = "nlp-search-pipeline";
     private static final String SEARCH_PIPELINE1_NAME = "nlp-search-1-pipeline";
+    private static final String SEARCH_PIPELINE_RRF_NAME = "nlp-search-rrf-pipeline";
+    private static final String SEARCH_PIPELINE1_RRF_NAME = "nlp-search-rrf-1-pipeline";
     private static final String TEST_FIELD = "passage_text";
     private static final String TEXT_1 = "Hello world";
     private static final String TEXT_2 = "Hi planet";
@@ -41,17 +45,31 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
     // Create Text Embedding Processor, Ingestion Pipeline, add document and search pipeline with normalization processor
     // Validate process , pipeline and document count in restart-upgrade scenario
     public void testNormalizationProcessor_whenIndexWithMultipleShards_E2EFlow() throws Exception {
-        validateNormalizationProcessor("processor/IndexMappingMultipleShard.json", PIPELINE_NAME, SEARCH_PIPELINE_NAME);
+        validateProcessor("processor/IndexMappingMultipleShard.json", PIPELINE_NAME, SEARCH_PIPELINE_NAME, false);
     }
 
     // Test restart-upgrade normalization processor when index with single shard
     // Create Text Embedding Processor, Ingestion Pipeline, add document and search pipeline with normalization processor
     // Validate process , pipeline and document count in restart-upgrade scenario
     public void testNormalizationProcessor_whenIndexWithSingleShard_E2EFlow() throws Exception {
-        validateNormalizationProcessor("processor/IndexMappingSingleShard.json", PIPELINE1_NAME, SEARCH_PIPELINE1_NAME);
+        validateProcessor("processor/IndexMappingSingleShard.json", PIPELINE1_NAME, SEARCH_PIPELINE1_NAME, false);
     }
 
-    private void validateNormalizationProcessor(final String fileName, final String pipelineName, final String searchPipelineName)
+    // Test restart-upgrade rrf processor when index with multiple shards
+    // Create Text Embedding Processor, Ingestion Pipeline, add document and search pipeline with rrf processor
+    // Validate process , pipeline and document count in restart-upgrade scenario
+    public void testRRFProcessor_whenIndexWithMultipleShards_E2EFlow() throws Exception {
+        validateProcessor("processor/IndexMappingMultipleShard.json", PIPELINE_RRF_NAME, SEARCH_PIPELINE_RRF_NAME, true);
+    }
+
+    // Test restart-upgrade rrf processor when index with single shard
+    // Create Text Embedding Processor, Ingestion Pipeline, add document and search pipeline with rrf processor
+    // Validate process , pipeline and document count in restart-upgrade scenario
+    public void testRRFProcessor_whenIndexWithSingleShard_E2EFlow() throws Exception {
+        validateProcessor("processor/IndexMappingSingleShard.json", PIPELINE1_RRF_NAME, SEARCH_PIPELINE1_RRF_NAME, true);
+    }
+
+    private void validateProcessor(final String fileName, final String pipelineName, final String searchPipelineName, boolean isRRF)
         throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         if (isRunningAgainstOldCluster()) {
@@ -64,7 +82,11 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
                 pipelineName
             );
             addDocuments(getIndexNameForTest(), true);
-            createSearchPipeline(searchPipelineName);
+            if (isRRF) {
+                createRRFSearchPipeline(searchPipelineName);
+            } else {
+                createSearchPipeline(searchPipelineName);
+            }
         } else {
             String modelId = null;
             try {

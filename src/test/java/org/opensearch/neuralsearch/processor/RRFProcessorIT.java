@@ -36,7 +36,7 @@ public class RRFProcessorIT extends BaseNeuralSearchIT {
                 Collections.singletonList(new KNNFieldConfig("passage_embedding", RRF_DIMENSION, TEST_SPACE_TYPE))
             );
             addDocuments();
-            createDefaultRRFSearchPipeline();
+            createRRFSearchPipeline(RRF_SEARCH_PIPELINE);
 
             HybridQueryBuilder hybridQueryBuilder = getHybridQueryBuilder();
 
