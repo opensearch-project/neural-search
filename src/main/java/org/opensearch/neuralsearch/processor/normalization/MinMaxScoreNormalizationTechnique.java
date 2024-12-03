@@ -12,6 +12,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
@@ -58,8 +60,8 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
                     scoreDoc.score = normalizeSingleScore(
                         scoreDoc.score,
-                        minMaxScores.minScoresPerSubquery()[j],
-                        minMaxScores.maxScoresPerSubquery()[j]
+                        minMaxScores.getMinScoresPerSubquery()[j],
+                        minMaxScores.getMaxScoresPerSubquery()[j]
                     );
                 }
             }
@@ -96,8 +98,8 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                     DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(scoreDoc.doc, compoundQueryTopDocs.getSearchShard());
                     float normalizedScore = normalizeSingleScore(
                         scoreDoc.score,
-                        minMaxScores.minScoresPerSubquery()[j],
-                        minMaxScores.maxScoresPerSubquery()[j]
+                        minMaxScores.getMinScoresPerSubquery()[j],
+                        minMaxScores.getMaxScoresPerSubquery()[j]
                     );
                     normalizedScores.computeIfAbsent(docIdAtSearchShard, k -> new ArrayList<>()).add(normalizedScore);
                     scoreDoc.score = normalizedScore;
@@ -171,6 +173,10 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
     /**
      * Result class to hold min and max scores for each sub query
      */
-    private record MinMaxScores(float[] minScoresPerSubquery, float[] maxScoresPerSubquery) {
+    @AllArgsConstructor
+    @Getter
+    private class MinMaxScores {
+        float[] minScoresPerSubquery;
+        float[] maxScoresPerSubquery;
     }
 }

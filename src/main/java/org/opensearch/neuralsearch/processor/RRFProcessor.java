@@ -13,6 +13,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 import lombok.Getter;
+import org.opensearch.ml.repackage.com.google.common.annotations.VisibleForTesting;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.search.fetch.FetchSearchResult;
@@ -99,7 +100,8 @@ public class RRFProcessor implements SearchPhaseResultsProcessor {
         return false;
     }
 
-    private <Result extends SearchPhaseResult> boolean shouldSkipProcessor(SearchPhaseResults<Result> searchPhaseResult) {
+    @VisibleForTesting
+    <Result extends SearchPhaseResult> boolean shouldSkipProcessor(SearchPhaseResults<Result> searchPhaseResult) {
         if (Objects.isNull(searchPhaseResult) || !(searchPhaseResult instanceof QueryPhaseResultConsumer queryPhaseResultConsumer)) {
             return true;
         }
@@ -112,7 +114,8 @@ public class RRFProcessor implements SearchPhaseResultsProcessor {
      * @param searchPhaseResult
      * @return true if results are from hybrid query
      */
-    private boolean isHybridQuery(final SearchPhaseResult searchPhaseResult) {
+    @VisibleForTesting
+    boolean isHybridQuery(final SearchPhaseResult searchPhaseResult) {
         // check for delimiter at the end of the score docs.
         return Objects.nonNull(searchPhaseResult.queryResult())
             && Objects.nonNull(searchPhaseResult.queryResult().topDocs())
@@ -121,9 +124,7 @@ public class RRFProcessor implements SearchPhaseResultsProcessor {
             && isHybridQueryStartStopElement(searchPhaseResult.queryResult().topDocs().topDocs.scoreDocs[0]);
     }
 
-    private <Result extends SearchPhaseResult> List<QuerySearchResult> getQueryPhaseSearchResults(
-        final SearchPhaseResults<Result> results
-    ) {
+    <Result extends SearchPhaseResult> List<QuerySearchResult> getQueryPhaseSearchResults(final SearchPhaseResults<Result> results) {
         return results.getAtomicArray()
             .asList()
             .stream()
@@ -131,7 +132,8 @@ public class RRFProcessor implements SearchPhaseResultsProcessor {
             .collect(Collectors.toList());
     }
 
-    private <Result extends SearchPhaseResult> Optional<FetchSearchResult> getFetchSearchResults(
+    @VisibleForTesting
+    <Result extends SearchPhaseResult> Optional<FetchSearchResult> getFetchSearchResults(
         final SearchPhaseResults<Result> searchPhaseResults
     ) {
         Optional<Result> optionalFirstSearchPhaseResult = searchPhaseResults.getAtomicArray().asList().stream().findFirst();
