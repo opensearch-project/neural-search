@@ -91,6 +91,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     );
     private static final Set<RestStatus> SUCCESS_STATUSES = Set.of(RestStatus.CREATED, RestStatus.OK);
     protected static final String CONCURRENT_SEGMENT_SEARCH_ENABLED = "search.concurrent_segment_search.enabled";
+    protected static final String RRF_SEARCH_PIPELINE = "rrf-search-pipeline";
 
     protected final ClassLoader classLoader = this.getClass().getClassLoader();
 
@@ -1467,5 +1468,32 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING,
         TEXT_IMAGE_EMBEDDING,
         SPARSE_ENCODING
+    }
+
+    @SneakyThrows
+    protected void createDefaultRRFSearchPipeline() {
+        String requestBody = XContentFactory.jsonBuilder()
+            .startObject()
+            .field("description", "Post processor for hybrid search")
+            .startArray("phase_results_processors")
+            .startObject()
+            .startObject("score-ranker-processor")
+            .startObject("combination")
+            .field("technique", "rrf")
+            .endObject()
+            .endObject()
+            .endObject()
+            .endArray()
+            .endObject()
+            .toString();
+
+        makeRequest(
+            client(),
+            "PUT",
+            String.format(LOCALE, "/_search/pipeline/%s", RRF_SEARCH_PIPELINE),
+            null,
+            toHttpEntity(String.format(LOCALE, requestBody)),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
     }
 }
