@@ -33,13 +33,13 @@ public class PruneUtils {
      */
     private static Tuple<Map<String, Float>, Map<String, Float>> pruneByTopK(
         Map<String, Float> sparseVector,
-        int k,
+        float k,
         boolean requiresPrunedEntries
     ) {
         PriorityQueue<Map.Entry<String, Float>> pq = new PriorityQueue<>((a, b) -> Float.compare(a.getValue(), b.getValue()));
 
         for (Map.Entry<String, Float> entry : sparseVector.entrySet()) {
-            if (pq.size() < k) {
+            if (pq.size() < (int) k) {
                 pq.offer(entry);
             } else if (entry.getValue() > pq.peek().getValue()) {
                 pq.poll();
@@ -172,8 +172,8 @@ public class PruneUtils {
         float pruneRatio,
         Map<String, Float> sparseVector
     ) {
-        if (Objects.isNull(pruneType) || Objects.isNull(pruneRatio)) {
-            throw new IllegalArgumentException("Prune type and prune ratio must be provided");
+        if (Objects.isNull(pruneType)) {
+            throw new IllegalArgumentException("Prune type must be provided");
         }
 
         if (Objects.isNull(sparseVector)) {
@@ -188,7 +188,7 @@ public class PruneUtils {
 
         switch (pruneType) {
             case TOP_K:
-                return pruneByTopK(sparseVector, (int) pruneRatio, true);
+                return pruneByTopK(sparseVector, pruneRatio, true);
             case ALPHA_MASS:
                 return pruneByAlphaMass(sparseVector, pruneRatio, true);
             case MAX_RATIO:
@@ -208,9 +208,13 @@ public class PruneUtils {
      * @param sparseVector The input sparse vector as a map of string keys to float values
      * @return A map with high-scoring elements
      */
-    public static Map<String, Float> pruneSparseVector(PruneType pruneType, float pruneRatio, Map<String, Float> sparseVector) {
-        if (Objects.isNull(pruneType) || Objects.isNull(pruneRatio)) {
-            throw new IllegalArgumentException("Prune type and prune ratio must be provided");
+    public static Map<String, Float> pruneSparseVector(
+        final PruneType pruneType,
+        final float pruneRatio,
+        final Map<String, Float> sparseVector
+    ) {
+        if (Objects.isNull(pruneType)) {
+            throw new IllegalArgumentException("Prune type must be provided");
         }
 
         if (Objects.isNull(sparseVector)) {
@@ -225,7 +229,7 @@ public class PruneUtils {
 
         switch (pruneType) {
             case TOP_K:
-                return pruneByTopK(sparseVector, (int) pruneRatio, false).v1();
+                return pruneByTopK(sparseVector, pruneRatio, false).v1();
             case ALPHA_MASS:
                 return pruneByAlphaMass(sparseVector, pruneRatio, false).v1();
             case MAX_RATIO:
@@ -245,7 +249,7 @@ public class PruneUtils {
      * @return true if the ratio is valid for the given prune type, false otherwise
      * @throws IllegalArgumentException if prune type is null
      */
-    public static boolean isValidPruneRatio(PruneType pruneType, float pruneRatio) {
+    public static boolean isValidPruneRatio(final PruneType pruneType, final float pruneRatio) {
         if (pruneType == null) {
             throw new IllegalArgumentException("Prune type cannot be null");
         }
@@ -269,7 +273,7 @@ public class PruneUtils {
      * @param pruneType The type of prune strategy
      * @throws IllegalArgumentException if prune type is null
      */
-    public static String getValidPruneRatioDescription(PruneType pruneType) {
+    public static String getValidPruneRatioDescription(final PruneType pruneType) {
         if (pruneType == null) {
             throw new IllegalArgumentException("Prune type cannot be null");
         }
@@ -283,7 +287,7 @@ public class PruneUtils {
             case ABS_VALUE:
                 return "prune_ratio should be non-negative.";
             default:
-                return "";
+                return "prune_ratio field is not supported when prune_type is none";
         }
     }
 }

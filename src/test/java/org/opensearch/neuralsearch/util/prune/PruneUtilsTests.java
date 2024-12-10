@@ -183,26 +183,14 @@ public class PruneUtilsTests extends OpenSearchTestCase {
             IllegalArgumentException.class,
             () -> PruneUtils.pruneSparseVector(null, 2, input)
         );
-        assertEquals(exception1.getMessage(), "Prune type and prune ratio must be provided");
-
-        IllegalArgumentException exception2 = assertThrows(
-            IllegalArgumentException.class,
-            () -> PruneUtils.pruneSparseVector(null, 2, input)
-        );
-        assertEquals(exception2.getMessage(), "Prune type and prune ratio must be provided");
+        assertEquals(exception1.getMessage(), "Prune type must be provided");
 
         // Test split
-        IllegalArgumentException exception3 = assertThrows(
+        IllegalArgumentException exception2 = assertThrows(
             IllegalArgumentException.class,
             () -> PruneUtils.splitSparseVector(null, 2, input)
         );
-        assertEquals(exception3.getMessage(), "Prune type and prune ratio must be provided");
-
-        IllegalArgumentException exception4 = assertThrows(
-            IllegalArgumentException.class,
-            () -> PruneUtils.splitSparseVector(null, 2, input)
-        );
-        assertEquals(exception4.getMessage(), "Prune type and prune ratio must be provided");
+        assertEquals(exception2.getMessage(), "Prune type must be provided");
     }
 
     public void testNullSparseVector() {
@@ -264,7 +252,10 @@ public class PruneUtilsTests extends OpenSearchTestCase {
         assertEquals("prune_ratio should be in the range [0, 1).", PruneUtils.getValidPruneRatioDescription(PruneType.MAX_RATIO));
         assertEquals("prune_ratio should be in the range [0, 1).", PruneUtils.getValidPruneRatioDescription(PruneType.ALPHA_MASS));
         assertEquals("prune_ratio should be non-negative.", PruneUtils.getValidPruneRatioDescription(PruneType.ABS_VALUE));
-        assertEquals("", PruneUtils.getValidPruneRatioDescription(PruneType.NONE));
+        assertEquals(
+            "prune_ratio field is not supported when prune_type is none",
+            PruneUtils.getValidPruneRatioDescription(PruneType.NONE)
+        );
 
         IllegalArgumentException exception = assertThrows(
             IllegalArgumentException.class,

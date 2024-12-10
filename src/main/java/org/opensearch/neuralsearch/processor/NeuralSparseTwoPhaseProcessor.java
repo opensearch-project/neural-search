@@ -221,14 +221,17 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
                     twoPhaseConfigMap.getOrDefault(PruneUtils.PRUNE_TYPE_FIELD, pruneType.getValue()).toString()
                 );
             }
-            if (!PruneUtils.isValidPruneRatio(pruneType, pruneRatio)) throw new IllegalArgumentException(
-                "Illegal prune_ratio "
-                    + pruneRatio
-                    + " for prune_type: "
-                    + pruneType.getValue()
-                    + ". "
-                    + PruneUtils.getValidPruneRatioDescription(pruneType)
-            );
+            if (!PruneUtils.isValidPruneRatio(pruneType, pruneRatio)) {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "Illegal prune_ratio %f for prune_type: %s. %s",
+                        pruneRatio,
+                        pruneType.getValue(),
+                        PruneUtils.getValidPruneRatioDescription(pruneType)
+                    )
+                );
+            }
 
             return new NeuralSparseTwoPhaseProcessor(
                 tag,

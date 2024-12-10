@@ -6,6 +6,8 @@ package org.opensearch.neuralsearch.util.prune;
 
 import org.apache.commons.lang.StringUtils;
 
+import java.util.Locale;
+
 /**
  * Enum representing different types of prune methods for sparse vectors
  */
@@ -33,13 +35,13 @@ public enum PruneType {
      * @return corresponding PruneType enum
      * @throws IllegalArgumentException if value doesn't match any prune type
      */
-    public static PruneType fromString(String value) {
+    public static PruneType fromString(final String value) {
         if (StringUtils.isEmpty(value)) return NONE;
         for (PruneType type : PruneType.values()) {
             if (type.value.equals(value)) {
                 return type;
             }
         }
-        throw new IllegalArgumentException("Unknown prune type: " + value);
+        throw new IllegalArgumentException(String.format(Locale.ROOT, "Unknown prune type: %s", value));
     }
 }

@@ -12,6 +12,7 @@ import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.MODEL
 import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.FIELD_MAP_FIELD;
 import static org.opensearch.neuralsearch.processor.SparseEncodingProcessor.TYPE;
 
+import java.util.Locale;
 import java.util.Map;
 
 import org.opensearch.cluster.service.ClusterService;
@@ -51,19 +52,20 @@ public class SparseEncodingProcessorFactory extends AbstractBatchingProcessor.Fa
             // if we have prune type, then prune ratio field must have value
             // readDoubleProperty will throw exception if value is not present
             pruneRatio = readDoubleProperty(TYPE, tag, config, PruneUtils.PRUNE_RATIO_FIELD).floatValue();
-            if (!PruneUtils.isValidPruneRatio(pruneType, pruneRatio)) throw new IllegalArgumentException(
-                "Illegal prune_ratio "
-                    + pruneRatio
-                    + " for prune_type: "
-                    + pruneType.getValue()
-                    + ". "
-                    + PruneUtils.getValidPruneRatioDescription(pruneType)
-            );
-        } else {
-            // if we don't have prune type, then prune ratio field must not have value
-            if (config.containsKey(PruneUtils.PRUNE_RATIO_FIELD)) {
-                throw new IllegalArgumentException("prune_ratio field is not supported when prune_type is not provided");
+            if (!PruneUtils.isValidPruneRatio(pruneType, pruneRatio)) {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "Illegal prune_ratio %f for prune_type: %s. %s",
+                        pruneRatio,
+                        pruneType.getValue(),
+                        PruneUtils.getValidPruneRatioDescription(pruneType)
+                    )
+                );
             }
+        } else if (config.containsKey(PruneUtils.PRUNE_RATIO_FIELD)) {
+            // if we don't have prune type, then prune ratio field must not have value
+            throw new IllegalArgumentException("prune_ratio field is not supported when prune_type is not provided");
         }
 
         return new SparseEncodingProcessor(
