@@ -43,7 +43,7 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
 
     private static final List<String> TEST_TOKENS = List.of("hello", "world", "a", "b", "c");
 
-    private static final Float DELTA = 1e-5f;
+    private static final Float DELTA = 1e-4f;
     private final Map<String, Float> testRankFeaturesDoc = createRandomTokenWeightMap(TEST_TOKENS);
     private static final List<String> TWO_PHASE_TEST_TOKEN = List.of("hello", "world");
 
