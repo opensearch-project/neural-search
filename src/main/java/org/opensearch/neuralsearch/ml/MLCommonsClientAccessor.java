@@ -52,7 +52,7 @@ public class MLCommonsClientAccessor {
     public void inferenceSentence(
         @NonNull final String modelId,
         @NonNull final String inputText,
-        @NonNull final ActionListener<List<Float>> listener
+        @NonNull final ActionListener<List<Number>> listener
     ) {
         inferenceSentences(TARGET_RESPONSE_FILTERS, modelId, List.of(inputText), ActionListener.wrap(response -> {
             if (response.size() != 1) {
@@ -82,7 +82,7 @@ public class MLCommonsClientAccessor {
     public void inferenceSentences(
         @NonNull final String modelId,
         @NonNull final List<String> inputText,
-        @NonNull final ActionListener<List<List<Float>>> listener
+        @NonNull final ActionListener<List<List<Number>>> listener
     ) {
         inferenceSentences(TARGET_RESPONSE_FILTERS, modelId, inputText, listener);
     }
@@ -103,7 +103,7 @@ public class MLCommonsClientAccessor {
         @NonNull final List<String> targetResponseFilters,
         @NonNull final String modelId,
         @NonNull final List<String> inputText,
-        @NonNull final ActionListener<List<List<Float>>> listener
+        @NonNull final ActionListener<List<List<Number>>> listener
     ) {
         retryableInferenceSentencesWithVectorResult(targetResponseFilters, modelId, inputText, 0, listener);
     }
@@ -128,7 +128,7 @@ public class MLCommonsClientAccessor {
     public void inferenceSentences(
         @NonNull final String modelId,
         @NonNull final Map<String, String> inputObjects,
-        @NonNull final ActionListener<List<Float>> listener
+        @NonNull final ActionListener<List<Number>> listener
     ) {
         retryableInferenceSentencesWithSingleVectorResult(TARGET_RESPONSE_FILTERS, modelId, inputObjects, 0, listener);
     }
@@ -177,11 +177,11 @@ public class MLCommonsClientAccessor {
         final String modelId,
         final List<String> inputText,
         final int retryTime,
-        final ActionListener<List<List<Float>>> listener
+        final ActionListener<List<List<Number>>> listener
     ) {
         MLInput mlInput = createMLTextInput(targetResponseFilters, inputText);
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
-            final List<List<Float>> vector = buildVectorFromResponse(mlOutput);
+            final List<List<Number>> vector = buildVectorFromResponse(mlOutput);
             listener.onResponse(vector);
         }, e -> {
             if (RetryUtil.shouldRetry(e, retryTime)) {
@@ -202,7 +202,8 @@ public class MLCommonsClientAccessor {
     ) {
         MLInput mlInput = createMLTextPairsInput(queryText, inputText);
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
-            final List<Float> scores = buildVectorFromResponse(mlOutput).stream().map(v -> v.get(0)).collect(Collectors.toList());
+            final List<List<Float>> tensors = buildVectorFromResponse(mlOutput);
+            final List<Float> scores = tensors.stream().map(v -> v.get(0)).collect(Collectors.toList());
             listener.onResponse(scores);
         }, e -> {
             if (RetryUtil.shouldRetry(e, retryTime)) {
@@ -224,14 +225,14 @@ public class MLCommonsClientAccessor {
         return new MLInput(FunctionName.TEXT_SIMILARITY, null, inputDataset);
     }
 
-    private List<List<Float>> buildVectorFromResponse(MLOutput mlOutput) {
-        final List<List<Float>> vector = new ArrayList<>();
+    private <T extends Number> List<List<T>> buildVectorFromResponse(MLOutput mlOutput) {
+        final List<List<T>> vector = new ArrayList<>();
         final ModelTensorOutput modelTensorOutput = (ModelTensorOutput) mlOutput;
         final List<ModelTensors> tensorOutputList = modelTensorOutput.getMlModelOutputs();
         for (final ModelTensors tensors : tensorOutputList) {
             final List<ModelTensor> tensorsList = tensors.getMlModelTensors();
             for (final ModelTensor tensor : tensorsList) {
-                vector.add(Arrays.stream(tensor.getData()).map(value -> (Float) value).collect(Collectors.toList()));
+                vector.add(Arrays.stream(tensor.getData()).map(value -> (T) value).collect(Collectors.toList()));
             }
         }
         return vector;
@@ -255,8 +256,8 @@ public class MLCommonsClientAccessor {
         return resultMaps;
     }
 
-    private List<Float> buildSingleVectorFromResponse(final MLOutput mlOutput) {
-        final List<List<Float>> vector = buildVectorFromResponse(mlOutput);
+    private <T extends Number> List<T> buildSingleVectorFromResponse(final MLOutput mlOutput) {
+        final List<List<T>> vector = buildVectorFromResponse(mlOutput);
         return vector.isEmpty() ? new ArrayList<>() : vector.get(0);
     }
 
@@ -265,11 +266,11 @@ public class MLCommonsClientAccessor {
         final String modelId,
         final Map<String, String> inputObjects,
         final int retryTime,
-        final ActionListener<List<Float>> listener
+        final ActionListener<List<Number>> listener
     ) {
         MLInput mlInput = createMLMultimodalInput(targetResponseFilters, inputObjects);
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
-            final List<Float> vector = buildSingleVectorFromResponse(mlOutput);
+            final List<Number> vector = buildSingleVectorFromResponse(mlOutput);
             log.debug("Inference Response for input sentence is : {} ", vector);
             listener.onResponse(vector);
         }, e -> {

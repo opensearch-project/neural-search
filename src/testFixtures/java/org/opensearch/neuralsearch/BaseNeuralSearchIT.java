@@ -268,7 +268,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         List<Object> output = (List<Object>) result.get("output");
         assertEquals(1, output.size());
         Map<String, Object> map = (Map<String, Object>) output.get(0);
-        List<Float> data = ((List<Double>) map.get("data")).stream().map(Double::floatValue).collect(Collectors.toList());
+        List<Number> data = ((List<Double>) map.get("data")).stream().map(Double::floatValue).collect(Collectors.toList());
         return vectorAsListToArray(data);
     }
 

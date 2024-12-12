@@ -124,7 +124,7 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
 
     }
 
-    private void setVectorFieldsToDocument(final IngestDocument ingestDocument, final List<Float> vectors) {
+    private void setVectorFieldsToDocument(final IngestDocument ingestDocument, final List<Number> vectors) {
         Objects.requireNonNull(vectors, "embedding failed, inference returns null result!");
         log.debug("Text embedding result fetched, starting build vector output!");
         Map<String, Object> textEmbeddingResult = buildTextEmbeddingResult(this.embedding, vectors);
@@ -164,7 +164,7 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
 
     @SuppressWarnings({ "unchecked" })
     @VisibleForTesting
-    Map<String, Object> buildTextEmbeddingResult(final String knnKey, List<Float> modelTensorList) {
+    Map<String, Object> buildTextEmbeddingResult(final String knnKey, List<Number> modelTensorList) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put(knnKey, modelTensorList);
         return result;
