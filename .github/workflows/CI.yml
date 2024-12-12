@@ -6,8 +6,7 @@ on:
     branches:
       - "*"
       - "feature/**"
-  pull_request_target:
-    types: [opened, synchronize, reopened]
+  pull_request:
     branches:
       - "*"
       - "feature/**"
@@ -39,12 +38,6 @@ jobs:
         run: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-command }}
 
       - uses: actions/checkout@v4
-        if: github.event_name == 'push' || github.event_name == 'schedule'
-
-      - uses: actions/checkout@v4
-        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup Java ${{ matrix.java }}
         uses: actions/setup-java@v4
@@ -74,12 +67,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        if: github.event_name == 'push' || github.event_name == 'schedule'
-
-      - uses: actions/checkout@v4
-        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup Java ${{ matrix.java }}
         uses: actions/setup-java@v4
@@ -112,12 +99,6 @@ jobs:
         run: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-command }}
 
       - uses: actions/checkout@v4
-        if: github.event_name == 'push' || github.event_name == 'schedule'
-
-      - uses: actions/checkout@v4
-        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup Java ${{ matrix.java }}
         uses: actions/setup-java@v4
@@ -147,12 +128,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        if: github.event_name == 'push' || github.event_name == 'schedule'
-
-      - uses: actions/checkout@v4
-        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup Java ${{ matrix.java }}
         uses: actions/setup-java@v4
