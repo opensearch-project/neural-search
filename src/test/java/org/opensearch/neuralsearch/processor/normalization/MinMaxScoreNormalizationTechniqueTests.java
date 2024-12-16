@@ -10,6 +10,7 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
+import org.opensearch.neuralsearch.processor.SearchShard;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 
 /**
@@ -17,6 +18,7 @@ import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
  */
 public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     private static final float DELTA_FOR_ASSERTION = 0.0001f;
+    private static final SearchShard SEARCH_SHARD = new SearchShard("my_index", 0, "12345678");
 
     public void testNormalization_whenResultFromOneShardOneSubQuery_thenSuccessful() {
         MinMaxScoreNormalizationTechnique normalizationTechnique = new MinMaxScoreNormalizationTechnique();
@@ -29,7 +31,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
                         new ScoreDoc[] { new ScoreDoc(2, 0.5f), new ScoreDoc(4, 0.2f) }
                     )
                 ),
-                false
+                false,
+                SEARCH_SHARD
             )
         );
         normalizationTechnique.normalize(compoundTopDocs);
@@ -42,7 +45,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
                     new ScoreDoc[] { new ScoreDoc(2, 1.0f), new ScoreDoc(4, 0.001f) }
                 )
             ),
-            false
+            false,
+            SEARCH_SHARD
         );
         assertNotNull(compoundTopDocs);
         assertEquals(1, compoundTopDocs.size());
@@ -69,7 +73,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
                         new ScoreDoc[] { new ScoreDoc(3, 0.9f), new ScoreDoc(4, 0.7f), new ScoreDoc(2, 0.1f) }
                     )
                 ),
-                false
+                false,
+                SEARCH_SHARD
             )
         );
         normalizationTechnique.normalize(compoundTopDocs);
@@ -87,7 +92,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
                     new ScoreDoc[] { new ScoreDoc(3, 1.0f), new ScoreDoc(4, 0.75f), new ScoreDoc(2, 0.001f) }
                 )
             ),
-            false
+            false,
+            SEARCH_SHARD
         );
         assertNotNull(compoundTopDocs);
         assertEquals(1, compoundTopDocs.size());
@@ -113,7 +119,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
                         new ScoreDoc[] { new ScoreDoc(3, 0.9f), new ScoreDoc(4, 0.7f), new ScoreDoc(2, 0.1f) }
                     )
                 ),
-                false
+                false,
+                SEARCH_SHARD
             ),
             new CompoundTopDocs(
                 new TotalHits(2, TotalHits.Relation.EQUAL_TO),
@@ -124,7 +131,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
                         new ScoreDoc[] { new ScoreDoc(7, 2.9f), new ScoreDoc(9, 0.7f) }
                     )
                 ),
-                false
+                false,
+                SEARCH_SHARD
             )
         );
         normalizationTechnique.normalize(compoundTopDocs);
@@ -142,7 +150,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
                     new ScoreDoc[] { new ScoreDoc(3, 1.0f), new ScoreDoc(4, 0.75f), new ScoreDoc(2, 0.001f) }
                 )
             ),
-            false
+            false,
+            SEARCH_SHARD
         );
 
         CompoundTopDocs expectedCompoundDocsShard2 = new CompoundTopDocs(
@@ -154,7 +163,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
                     new ScoreDoc[] { new ScoreDoc(7, 1.0f), new ScoreDoc(9, 0.001f) }
                 )
             ),
-            false
+            false,
+            SEARCH_SHARD
         );
 
         assertNotNull(compoundTopDocs);

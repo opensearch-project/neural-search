@@ -21,6 +21,8 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.search.SearchShardTarget;
+import org.opensearch.search.query.QuerySearchResult;
 
 /**
  * Class stores collection of TopDocs for each sub query from hybrid query. Collection of results is at shard level. We do store
@@ -37,15 +39,23 @@ public class CompoundTopDocs {
     private List<TopDocs> topDocs;
     @Setter
     private List<ScoreDoc> scoreDocs;
+    @Getter
+    private SearchShard searchShard;
 
-    public CompoundTopDocs(final TotalHits totalHits, final List<TopDocs> topDocs, final boolean isSortEnabled) {
-        initialize(totalHits, topDocs, isSortEnabled);
+    public CompoundTopDocs(
+        final TotalHits totalHits,
+        final List<TopDocs> topDocs,
+        final boolean isSortEnabled,
+        final SearchShard searchShard
+    ) {
+        initialize(totalHits, topDocs, isSortEnabled, searchShard);
     }
 
-    private void initialize(TotalHits totalHits, List<TopDocs> topDocs, boolean isSortEnabled) {
+    private void initialize(TotalHits totalHits, List<TopDocs> topDocs, boolean isSortEnabled, SearchShard searchShard) {
         this.totalHits = totalHits;
         this.topDocs = topDocs;
         scoreDocs = cloneLargestScoreDocs(topDocs, isSortEnabled);
+        this.searchShard = searchShard;
     }
 
     /**
@@ -72,14 +82,17 @@ public class CompoundTopDocs {
      *  6, 0.15
      *  0, 9549511920.4881596047
      */
-    public CompoundTopDocs(final TopDocs topDocs) {
+    public CompoundTopDocs(final QuerySearchResult querySearchResult) {
+        final TopDocs topDocs = querySearchResult.topDocs().topDocs;
+        final SearchShardTarget searchShardTarget = querySearchResult.getSearchShardTarget();
+        SearchShard searchShard = SearchShard.createSearchShard(searchShardTarget);
         boolean isSortEnabled = false;
         if (topDocs instanceof TopFieldDocs) {
             isSortEnabled = true;
         }
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         if (Objects.isNull(scoreDocs) || scoreDocs.length < 2) {
-            initialize(topDocs.totalHits, new ArrayList<>(), isSortEnabled);
+            initialize(topDocs.totalHits, new ArrayList<>(), isSortEnabled, searchShard);
             return;
         }
         // skipping first two elements, it's a start-stop element and delimiter for first series
@@ -103,7 +116,7 @@ public class CompoundTopDocs {
                 scoreDocList.add(scoreDoc);
             }
         }
-        initialize(topDocs.totalHits, topDocsList, isSortEnabled);
+        initialize(topDocs.totalHits, topDocsList, isSortEnabled, searchShard);
     }
 
     private List<ScoreDoc> cloneLargestScoreDocs(final List<TopDocs> docs, boolean isSortEnabled) {
