@@ -19,6 +19,8 @@ import org.opensearch.test.OpenSearchTestCase;
 
 public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
 
+    private static final SearchShard SEARCH_SHARD = new SearchShard("my_index", 0, "12345678");
+
     public void testEmptyResults_whenEmptyResultsAndDefaultMethod_thenNoProcessing() {
         ScoreCombiner scoreCombiner = new ScoreCombiner();
         scoreCombiner.combineScores(
@@ -46,7 +48,8 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
                         new ScoreDoc[] { new ScoreDoc(3, 1.0f), new ScoreDoc(5, 0.001f) }
                     )
                 ),
-                false
+                false,
+                SEARCH_SHARD
             ),
             new CompoundTopDocs(
                 new TotalHits(4, TotalHits.Relation.EQUAL_TO),
@@ -57,7 +60,8 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
                         new ScoreDoc[] { new ScoreDoc(2, 0.9f), new ScoreDoc(4, 0.6f), new ScoreDoc(7, 0.5f), new ScoreDoc(9, 0.01f) }
                     )
                 ),
-                false
+                false,
+                SEARCH_SHARD
             ),
             new CompoundTopDocs(
                 new TotalHits(0, TotalHits.Relation.EQUAL_TO),
@@ -65,7 +69,8 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
                     new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
                     new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0])
                 ),
-                false
+                false,
+                SEARCH_SHARD
             )
         );
 

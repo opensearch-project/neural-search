@@ -20,6 +20,7 @@ import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTec
 import org.opensearch.search.SearchPhaseResult;
 import org.opensearch.search.fetch.FetchSearchResult;
 import org.opensearch.search.internal.SearchContext;
+import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.query.QuerySearchResult;
 
@@ -43,7 +44,7 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
 
     /**
      * Method abstracts functional aspect of score normalization and score combination. Exact methods for each processing stage
-     * are set as part of class constructor
+     * are set as part of class constructor. This method is called when there is no pipeline context
      * @param searchPhaseResult {@link SearchPhaseResults} DTO that has query search results. Results will be mutated as part of this method execution
      * @param searchPhaseContext {@link SearchContext}
      */
@@ -52,13 +53,48 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
         final SearchPhaseResults<Result> searchPhaseResult,
         final SearchPhaseContext searchPhaseContext
     ) {
+        prepareAndExecuteNormalizationWorkflow(searchPhaseResult, searchPhaseContext, Optional.empty());
+    }
+
+    /**
+     * Method abstracts functional aspect of score normalization and score combination. Exact methods for each processing stage
+     * are set as part of class constructor
+     * @param searchPhaseResult {@link SearchPhaseResults} DTO that has query search results. Results will be mutated as part of this method execution
+     * @param searchPhaseContext {@link SearchContext}
+     * @param requestContext {@link PipelineProcessingContext} processing context of search pipeline
+     * @param <Result>
+     */
+    @Override
+    public <Result extends SearchPhaseResult> void process(
+        final SearchPhaseResults<Result> searchPhaseResult,
+        final SearchPhaseContext searchPhaseContext,
+        final PipelineProcessingContext requestContext
+    ) {
+        prepareAndExecuteNormalizationWorkflow(searchPhaseResult, searchPhaseContext, Optional.ofNullable(requestContext));
+    }
+
+    private <Result extends SearchPhaseResult> void prepareAndExecuteNormalizationWorkflow(
+        SearchPhaseResults<Result> searchPhaseResult,
+        SearchPhaseContext searchPhaseContext,
+        Optional<PipelineProcessingContext> requestContextOptional
+    ) {
         if (shouldSkipProcessor(searchPhaseResult)) {
             log.debug("Query results are not compatible with normalization processor");
             return;
         }
         List<QuerySearchResult> querySearchResults = getQueryPhaseSearchResults(searchPhaseResult);
         Optional<FetchSearchResult> fetchSearchResult = getFetchSearchResults(searchPhaseResult);
-        normalizationWorkflow.execute(querySearchResults, fetchSearchResult, normalizationTechnique, combinationTechnique);
+        boolean explain = Objects.nonNull(searchPhaseContext.getRequest().source().explain())
+            && searchPhaseContext.getRequest().source().explain();
+        NormalizationProcessorWorkflowExecuteRequest request = NormalizationProcessorWorkflowExecuteRequest.builder()
+            .querySearchResults(querySearchResults)
+            .fetchSearchResultOptional(fetchSearchResult)
+            .normalizationTechnique(normalizationTechnique)
+            .combinationTechnique(combinationTechnique)
+            .explain(explain)
+            .pipelineProcessingContext(requestContextOptional.orElse(null))
+            .build();
+        normalizationWorkflow.execute(request);
     }
 
     @Override
