@@ -18,6 +18,7 @@ import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MODEL_ID_FIEL
 /**
  * A util class which holds the logic to determine the min version supported by the request parameters
  */
+
 public final class MinClusterVersionUtil {
 
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_11_0;
