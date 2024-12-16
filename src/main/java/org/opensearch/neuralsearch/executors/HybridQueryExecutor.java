@@ -60,6 +60,7 @@ public final class HybridQueryExecutor {
         taskExecutor = new TaskExecutor(threadPool.executor(HYBRID_QUERY_EXEC_THREAD_POOL_NAME));
     }
 
+    
     /**
      * Return TaskExecutor Wrapper that helps runs tasks concurrently
      * @return TaskExecutor instance to help run search tasks in parallel
