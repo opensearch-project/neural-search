@@ -140,16 +140,35 @@ public final class HybridQueryWeight extends Weight {
     }
 
     /**
-     * Explain is not supported for hybrid query
-     *
+     * Returns a shard level {@link Explanation} that describes how the weight and scoring are calculated.
      * @param context the readers context to create the {@link Explanation} for.
-     * @param doc     the document's id relative to the given context's reader
-     * @return
+     * @param doc the document's id relative to the given context's reader
+     * @return shard level {@link Explanation}, each sub-query explanation is a single nested element
      * @throws IOException
      */
     @Override
     public Explanation explain(LeafReaderContext context, int doc) throws IOException {
-        throw new UnsupportedOperationException("Explain is not supported");
+        boolean match = false;
+        double max = 0;
+        List<Explanation> subsOnNoMatch = new ArrayList<>();
+        List<Explanation> subsOnMatch = new ArrayList<>();
+        for (Weight wt : weights) {
+            Explanation e = wt.explain(context, doc);
+            if (e.isMatch()) {
+                match = true;
+                double score = e.getValue().doubleValue();
+                subsOnMatch.add(e);
+                max = Math.max(max, score);
+            } else if (!match) {
+                subsOnNoMatch.add(e);
+            }
+        }
+        if (match) {
+            final String desc = "combined score of:";
+            return Explanation.match(max, desc, subsOnMatch);
+        } else {
+            return Explanation.noMatch("no matching clause", subsOnNoMatch);
+        }
     }
 
     @RequiredArgsConstructor
