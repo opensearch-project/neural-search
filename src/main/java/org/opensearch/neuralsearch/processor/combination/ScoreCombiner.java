@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.Objects;
@@ -16,6 +17,7 @@ import java.util.LinkedHashSet;
 
 import java.util.stream.Collectors;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.ScoreDoc;
@@ -26,6 +28,9 @@ import org.apache.lucene.search.SortField;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.processor.SearchShard;
+import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
+import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 
 /**
  * Abstracts combination of scores in query search results.
@@ -96,14 +101,9 @@ public class ScoreCombiner {
 
         // - sort documents by scores and take first "max number" of docs
         // create a collection of doc ids that are sorted by their combined scores
-        Collection<Integer> sortedDocsIds;
-        if (sort != null) {
-            sortedDocsIds = getSortedDocIdsBySortCriteria(getTopFieldDocs(sort, topDocsPerSubQuery), sort);
-        } else {
-            sortedDocsIds = getSortedDocIds(combinedNormalizedScoresByDocId);
-        }
+        Collection<Integer> sortedDocsIds = getSortedDocsIds(compoundQueryTopDocs, sort, combinedNormalizedScoresByDocId);
 
-        // - update query search results with normalized scores
+        // - update query search results with combined scores
         updateQueryTopDocsWithCombinedScores(
             compoundQueryTopDocs,
             topDocsPerSubQuery,
@@ -317,5 +317,76 @@ public class ScoreCombiner {
             totalHits = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;
         }
         return new TotalHits(maxHits, totalHits);
+    }
+
+    /**
+     * Explain the score combination technique for each document in the given queryTopDocs.
+     * @param queryTopDocs
+     * @param combinationTechnique
+     * @param sort
+     * @return a map of SearchShard and List of ExplainationDetails for each document
+     */
+    public Map<SearchShard, List<ExplanationDetails>> explain(
+        final List<CompoundTopDocs> queryTopDocs,
+        final ScoreCombinationTechnique combinationTechnique,
+        final Sort sort
+    ) {
+        // In case of duplicate keys, keep the first value
+        Map<SearchShard, List<ExplanationDetails>> explanations = new HashMap<>();
+        for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
+            explanations.putIfAbsent(
+                compoundQueryTopDocs.getSearchShard(),
+                explainByShard(combinationTechnique, compoundQueryTopDocs, sort)
+            );
+        }
+        return explanations;
+    }
+
+    private List<ExplanationDetails> explainByShard(
+        final ScoreCombinationTechnique scoreCombinationTechnique,
+        final CompoundTopDocs compoundQueryTopDocs,
+        final Sort sort
+    ) {
+        if (Objects.isNull(compoundQueryTopDocs) || compoundQueryTopDocs.getTotalHits().value == 0) {
+            return List.of();
+        }
+        // create map of normalized scores results returned from the single shard
+        Map<Integer, float[]> normalizedScoresPerDoc = getNormalizedScoresPerDocument(compoundQueryTopDocs.getTopDocs());
+        // combine scores
+        Map<Integer, Float> combinedNormalizedScoresByDocId = normalizedScoresPerDoc.entrySet()
+            .stream()
+            .collect(Collectors.toMap(Map.Entry::getKey, entry -> scoreCombinationTechnique.combine(entry.getValue())));
+        // sort combined scores as per sorting criteria - either score desc or field sorting
+        Collection<Integer> sortedDocsIds = getSortedDocsIds(compoundQueryTopDocs, sort, combinedNormalizedScoresByDocId);
+
+        List<ExplanationDetails> listOfExplanations = new ArrayList<>();
+        String combinationDescription = String.format(
+            Locale.ROOT,
+            "%s combination of:",
+            ((ExplainableTechnique) scoreCombinationTechnique).describe()
+        );
+        for (int docId : sortedDocsIds) {
+            ExplanationDetails explanation = new ExplanationDetails(
+                docId,
+                List.of(Pair.of(combinedNormalizedScoresByDocId.get(docId), combinationDescription))
+            );
+            listOfExplanations.add(explanation);
+        }
+        return listOfExplanations;
+    }
+
+    private Collection<Integer> getSortedDocsIds(
+        final CompoundTopDocs compoundQueryTopDocs,
+        final Sort sort,
+        final Map<Integer, Float> combinedNormalizedScoresByDocId
+    ) {
+        Collection<Integer> sortedDocsIds;
+        if (sort != null) {
+            List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
+            sortedDocsIds = getSortedDocIdsBySortCriteria(getTopFieldDocs(sort, topDocsPerSubQuery), sort);
+        } else {
+            sortedDocsIds = getSortedDocIds(combinedNormalizedScoresByDocId);
+        }
+        return sortedDocsIds;
     }
 }

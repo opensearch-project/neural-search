@@ -9,15 +9,18 @@ import java.util.Map;
 import java.util.Set;
 
 import lombok.ToString;
+import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
+
+import static org.opensearch.neuralsearch.processor.combination.ScoreCombinationUtil.PARAM_NAME_WEIGHTS;
+import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.describeCombinationTechnique;
 
 /**
  * Abstracts combination of scores based on arithmetic mean method
  */
 @ToString(onlyExplicitlyIncluded = true)
-public class ArithmeticMeanScoreCombinationTechnique implements ScoreCombinationTechnique {
+public class ArithmeticMeanScoreCombinationTechnique implements ScoreCombinationTechnique, ExplainableTechnique {
     @ToString.Include
     public static final String TECHNIQUE_NAME = "arithmetic_mean";
-    public static final String PARAM_NAME_WEIGHTS = "weights";
     private static final Set<String> SUPPORTED_PARAMS = Set.of(PARAM_NAME_WEIGHTS);
     private static final Float ZERO_SCORE = 0.0f;
     private final List<Float> weights;
@@ -53,5 +56,10 @@ public class ArithmeticMeanScoreCombinationTechnique implements ScoreCombination
             return ZERO_SCORE;
         }
         return combinedScore / sumOfWeights;
+    }
+
+    @Override
+    public String describe() {
+        return describeCombinationTechnique(TECHNIQUE_NAME, weights);
     }
 }

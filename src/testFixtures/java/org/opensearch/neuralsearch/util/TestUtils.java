@@ -9,8 +9,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getNestedHits;
-import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getTotalHits;
 import static org.opensearch.test.OpenSearchTestCase.randomFloat;
 
 import java.util.ArrayList;
@@ -352,17 +350,17 @@ public class TestUtils {
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
 
-    private static List<Map<String, Object>> getNestedHits(Map<String, Object> searchResponseAsMap) {
+    public static List<Map<String, Object>> getNestedHits(Map<String, Object> searchResponseAsMap) {
         Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
         return (List<Map<String, Object>>) hitsMap.get("hits");
     }
 
-    private static Map<String, Object> getTotalHits(Map<String, Object> searchResponseAsMap) {
+    public static Map<String, Object> getTotalHits(Map<String, Object> searchResponseAsMap) {
         Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
         return (Map<String, Object>) hitsMap.get("total");
     }
 
-    private static Optional<Float> getMaxScore(Map<String, Object> searchResponseAsMap) {
+    public static Optional<Float> getMaxScore(Map<String, Object> searchResponseAsMap) {
         Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
         return hitsMap.get("max_score") == null ? Optional.empty() : Optional.of(((Double) hitsMap.get("max_score")).floatValue());
     }
@@ -381,6 +379,13 @@ public class TestUtils {
         String modelId = (String) textEmbeddingProcessor.get("model_id");
         assertNotNull(modelId);
         return modelId;
+    }
+
+    @SuppressWarnings("unchecked")
+    public static <T> T getValueByKey(Map<String, Object> map, String key) {
+        assertNotNull(map);
+        Object value = map.get(key);
+        return (T) value;
     }
 
     public static String generateModelId() {

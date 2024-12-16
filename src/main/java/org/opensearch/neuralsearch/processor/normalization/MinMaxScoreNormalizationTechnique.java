@@ -4,8 +4,12 @@
  */
 package org.opensearch.neuralsearch.processor.normalization;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 
 import org.apache.lucene.search.ScoreDoc;
@@ -15,12 +19,17 @@ import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import com.google.common.primitives.Floats;
 
 import lombok.ToString;
+import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
+import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
+import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
+
+import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.getDocIdAtQueryForNormalization;
 
 /**
  * Abstracts normalization of scores based on min-max method
  */
 @ToString(onlyExplicitlyIncluded = true)
-public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTechnique {
+public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTechnique, ExplainableTechnique {
     @ToString.Include
     public static final String TECHNIQUE_NAME = "min_max";
     private static final float MIN_SCORE = 0.001f;
@@ -35,19 +44,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
      */
     @Override
     public void normalize(final List<CompoundTopDocs> queryTopDocs) {
-        int numOfSubqueries = queryTopDocs.stream()
-            .filter(Objects::nonNull)
-            .filter(topDocs -> topDocs.getTopDocs().size() > 0)
-            .findAny()
-            .get()
-            .getTopDocs()
-            .size();
-        // get min scores for each sub query
-        float[] minScoresPerSubquery = getMinScores(queryTopDocs, numOfSubqueries);
-
-        // get max scores for each sub query
-        float[] maxScoresPerSubquery = getMaxScores(queryTopDocs, numOfSubqueries);
-
+        MinMaxScores minMaxScores = getMinMaxScoresResult(queryTopDocs);
         // do normalization using actual score and min and max scores for corresponding sub query
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
             if (Objects.isNull(compoundQueryTopDocs)) {
@@ -57,10 +54,65 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
             for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
                 TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
-                    scoreDoc.score = normalizeSingleScore(scoreDoc.score, minScoresPerSubquery[j], maxScoresPerSubquery[j]);
+                    scoreDoc.score = normalizeSingleScore(
+                        scoreDoc.score,
+                        minMaxScores.minScoresPerSubquery()[j],
+                        minMaxScores.maxScoresPerSubquery()[j]
+                    );
                 }
             }
         }
+    }
+
+    private MinMaxScores getMinMaxScoresResult(final List<CompoundTopDocs> queryTopDocs) {
+        int numOfSubqueries = getNumOfSubqueries(queryTopDocs);
+        // get min scores for each sub query
+        float[] minScoresPerSubquery = getMinScores(queryTopDocs, numOfSubqueries);
+        // get max scores for each sub query
+        float[] maxScoresPerSubquery = getMaxScores(queryTopDocs, numOfSubqueries);
+        return new MinMaxScores(minScoresPerSubquery, maxScoresPerSubquery);
+    }
+
+    @Override
+    public String describe() {
+        return String.format(Locale.ROOT, "%s", TECHNIQUE_NAME);
+    }
+
+    @Override
+    public Map<DocIdAtSearchShard, ExplanationDetails> explain(final List<CompoundTopDocs> queryTopDocs) {
+        MinMaxScores minMaxScores = getMinMaxScoresResult(queryTopDocs);
+
+        Map<DocIdAtSearchShard, List<Float>> normalizedScores = new HashMap<>();
+        for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
+            if (Objects.isNull(compoundQueryTopDocs)) {
+                continue;
+            }
+            List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
+            for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
+                TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
+                for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
+                    DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(scoreDoc.doc, compoundQueryTopDocs.getSearchShard());
+                    float normalizedScore = normalizeSingleScore(
+                        scoreDoc.score,
+                        minMaxScores.minScoresPerSubquery()[j],
+                        minMaxScores.maxScoresPerSubquery()[j]
+                    );
+                    normalizedScores.computeIfAbsent(docIdAtSearchShard, k -> new ArrayList<>()).add(normalizedScore);
+                    scoreDoc.score = normalizedScore;
+                }
+            }
+        }
+        return getDocIdAtQueryForNormalization(normalizedScores, this);
+    }
+
+    private int getNumOfSubqueries(final List<CompoundTopDocs> queryTopDocs) {
+        return queryTopDocs.stream()
+            .filter(Objects::nonNull)
+            .filter(topDocs -> !topDocs.getTopDocs().isEmpty())
+            .findAny()
+            .get()
+            .getTopDocs()
+            .size();
     }
 
     private float[] getMaxScores(final List<CompoundTopDocs> queryTopDocs, final int numOfSubqueries) {
@@ -112,5 +164,11 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         }
         float normalizedScore = (score - minScore) / (maxScore - minScore);
         return normalizedScore == 0.0f ? MIN_SCORE : normalizedScore;
+    }
+
+    /**
+     * Result class to hold min and max scores for each sub query
+     */
+    private record MinMaxScores(float[] minScoresPerSubquery, float[] maxScoresPerSubquery) {
     }
 }
