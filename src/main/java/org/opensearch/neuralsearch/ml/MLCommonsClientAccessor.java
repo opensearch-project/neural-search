@@ -35,7 +35,6 @@ import lombok.extern.log4j.Log4j2;
 /**
  * This class will act as an abstraction on the MLCommons client for accessing the ML Capabilities
  */
-
 @RequiredArgsConstructor
 @Log4j2
 public class MLCommonsClientAccessor {
