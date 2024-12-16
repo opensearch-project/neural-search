@@ -21,6 +21,7 @@ import org.opensearch.threadpool.ThreadPool;
  * by twice allocated processor count since most of the operation from hybrid search is expected to be
  * short-lived thread. This will help us to achieve optimal parallelization and reasonable throughput.
  */
+
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class HybridQueryExecutor {
     private static final String HYBRID_QUERY_EXEC_THREAD_POOL_NAME = "_plugin_neural_search_hybrid_query_executor";
