@@ -21,6 +21,7 @@ public class VectorUtil {
      * @param vectorAsList {@link List} of {@link Float}'s representing the vector
      * @return array of floats produced from input list
      */
+    
     public static float[] vectorAsListToArray(List<Float> vectorAsList) {
         float[] vector = new float[vectorAsList.size()];
         for (int i = 0; i < vectorAsList.size(); i++) {
