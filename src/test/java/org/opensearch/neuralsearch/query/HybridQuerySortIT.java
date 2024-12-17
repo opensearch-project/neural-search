@@ -21,6 +21,8 @@ import org.opensearch.index.query.RangeQueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getNestedHits;
 import static org.opensearch.neuralsearch.util.TestUtils.assertHitResultsFromQueryWhenSortIsEnabled;
+import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
+import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
 import org.opensearch.search.sort.SortOrder;
 import org.opensearch.search.sort.SortBuilder;
 import org.opensearch.search.sort.SortBuilders;
@@ -528,6 +530,141 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
         } finally {
             wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
             updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+        }
+    }
+
+    @SneakyThrows
+    public void testExplainAndSort_whenIndexWithMultipleShards_thenSuccessful() {
+        try {
+            // Setup
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+
+            initializeIndexIfNotExists(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+            createSearchPipeline(SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), true);
+            // Assert
+            // scores for search hits
+            HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
+                "mission",
+                "part",
+                LTE_OF_RANGE_IN_HYBRID_QUERY,
+                GTE_OF_RANGE_IN_HYBRID_QUERY
+            );
+
+            Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
+            fieldSortOrderMap.put("stock", SortOrder.DESC);
+
+            Map<String, Object> searchResponseAsMap = search(
+                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+                hybridQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE, "explain", Boolean.TRUE.toString()),
+                null,
+                null,
+                createSortBuilders(fieldSortOrderMap, false),
+                false,
+                null,
+                0
+            );
+            List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6, 6);
+            assertStockValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, LARGEST_STOCK_VALUE_IN_QUERY_RESULT, true, true);
+
+            // explain
+            Map<String, Object> searchHit1 = nestedHits.get(0);
+            Map<String, Object> explanationForHit1 = (Map<String, Object>) searchHit1.get("_explanation");
+            assertNotNull(explanationForHit1);
+            assertNull(searchHit1.get("_score"));
+            String expectedGeneralCombineScoreDescription = "arithmetic_mean combination of:";
+            assertEquals(expectedGeneralCombineScoreDescription, explanationForHit1.get("description"));
+            List<Map<String, Object>> hit1Details = getListOfValues(explanationForHit1, "details");
+            assertEquals(2, hit1Details.size());
+            Map<String, Object> hit1DetailsForHit1 = hit1Details.get(0);
+            assertEquals(1.0, hit1DetailsForHit1.get("value"));
+            assertEquals("min_max normalization of:", hit1DetailsForHit1.get("description"));
+            List<Map<String, Object>> hit1DetailsForHit1Details = getListOfValues(hit1DetailsForHit1, "details");
+            assertEquals(1, hit1DetailsForHit1Details.size());
+
+            Map<String, Object> hit1DetailsForHit1DetailsForHit1 = hit1DetailsForHit1Details.get(0);
+            assertEquals("weight(name:mission in 0) [PerFieldSimilarity], result of:", hit1DetailsForHit1DetailsForHit1.get("description"));
+            assertTrue((double) hit1DetailsForHit1DetailsForHit1.get("value") > 0.0f);
+            assertEquals(1, getListOfValues(hit1DetailsForHit1DetailsForHit1, "details").size());
+
+            Map<String, Object> hit1DetailsForHit1DetailsForHit1DetailsForHit1 = getListOfValues(
+                hit1DetailsForHit1DetailsForHit1,
+                "details"
+            ).get(0);
+            assertEquals(
+                "score(freq=1.0), computed as boost * idf * tf from:",
+                hit1DetailsForHit1DetailsForHit1DetailsForHit1.get("description")
+            );
+            assertTrue((double) hit1DetailsForHit1DetailsForHit1DetailsForHit1.get("value") > 0.0f);
+            assertEquals(3, getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").size());
+
+            assertEquals("boost", getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(0).get("description"));
+            assertTrue((double) getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(0).get("value") > 0.0f);
+            assertEquals(
+                "idf, computed as log(1 + (N - n + 0.5) / (n + 0.5)) from:",
+                getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(1).get("description")
+            );
+            assertTrue((double) getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(1).get("value") > 0.0f);
+            assertEquals(
+                "tf, computed as freq / (freq + k1 * (1 - b + b * dl / avgdl)) from:",
+                getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(2).get("description")
+            );
+            assertTrue((double) getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(2).get("value") > 0.0f);
+
+            // hit 4
+            Map<String, Object> searchHit4 = nestedHits.get(3);
+            Map<String, Object> explanationForHit4 = (Map<String, Object>) searchHit4.get("_explanation");
+            assertNotNull(explanationForHit4);
+            assertNull(searchHit4.get("_score"));
+            assertEquals(expectedGeneralCombineScoreDescription, explanationForHit4.get("description"));
+            List<Map<String, Object>> hit4Details = getListOfValues(explanationForHit4, "details");
+            assertEquals(2, hit4Details.size());
+            Map<String, Object> hit1DetailsForHit4 = hit4Details.get(0);
+            assertEquals(1.0, hit1DetailsForHit4.get("value"));
+            assertEquals("min_max normalization of:", hit1DetailsForHit4.get("description"));
+            assertEquals(1, ((List) hit1DetailsForHit4.get("details")).size());
+            List<Map<String, Object>> hit1DetailsForHit4Details = getListOfValues(hit1DetailsForHit4, "details");
+            assertEquals(1, hit1DetailsForHit4Details.size());
+
+            Map<String, Object> hit1DetailsForHit1DetailsForHit4 = hit1DetailsForHit4Details.get(0);
+            assertEquals("weight(name:part in 0) [PerFieldSimilarity], result of:", hit1DetailsForHit1DetailsForHit4.get("description"));
+            assertTrue((double) hit1DetailsForHit1DetailsForHit4.get("value") > 0.0f);
+            assertEquals(1, getListOfValues(hit1DetailsForHit1DetailsForHit4, "details").size());
+
+            Map<String, Object> hit1DetailsForHit1DetailsForHit1DetailsForHit4 = getListOfValues(
+                hit1DetailsForHit1DetailsForHit4,
+                "details"
+            ).get(0);
+            assertEquals(
+                "score(freq=1.0), computed as boost * idf * tf from:",
+                hit1DetailsForHit1DetailsForHit1DetailsForHit4.get("description")
+            );
+            assertTrue((double) hit1DetailsForHit1DetailsForHit1DetailsForHit4.get("value") > 0.0f);
+            assertEquals(3, getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit4, "details").size());
+
+            // hit 6
+            Map<String, Object> searchHit6 = nestedHits.get(5);
+            Map<String, Object> explanationForHit6 = (Map<String, Object>) searchHit6.get("_explanation");
+            assertNotNull(explanationForHit6);
+            assertNull(searchHit6.get("_score"));
+            assertEquals(expectedGeneralCombineScoreDescription, explanationForHit6.get("description"));
+            List<Map<String, Object>> hit6Details = getListOfValues(explanationForHit6, "details");
+            assertEquals(1, hit6Details.size());
+            Map<String, Object> hit1DetailsForHit6 = hit6Details.get(0);
+            assertEquals(1.0, hit1DetailsForHit6.get("value"));
+            assertEquals("min_max normalization of:", hit1DetailsForHit6.get("description"));
+            assertEquals(1, ((List) hit1DetailsForHit6.get("details")).size());
+            List<Map<String, Object>> hit1DetailsForHit6Details = getListOfValues(hit1DetailsForHit6, "details");
+            assertEquals(1, hit1DetailsForHit6Details.size());
+
+            Map<String, Object> hit1DetailsForHit1DetailsForHit6 = hit1DetailsForHit6Details.get(0);
+            assertEquals("weight(name:part in 0) [PerFieldSimilarity], result of:", hit1DetailsForHit1DetailsForHit4.get("description"));
+            assertTrue((double) hit1DetailsForHit1DetailsForHit6.get("value") > 0.0f);
+            assertEquals(0, getListOfValues(hit1DetailsForHit1DetailsForHit6, "details").size());
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
         }
     }
 

@@ -11,6 +11,7 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
+import org.opensearch.neuralsearch.processor.SearchShard;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 
 /**
@@ -18,6 +19,7 @@ import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
  */
 public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     private static final float DELTA_FOR_ASSERTION = 0.0001f;
+    private static final SearchShard SEARCH_SHARD = new SearchShard("my_index", 0, "12345678");
 
     public void testNormalization_whenResultFromOneShardOneSubQuery_thenSuccessful() {
         L2ScoreNormalizationTechnique normalizationTechnique = new L2ScoreNormalizationTechnique();
@@ -31,7 +33,8 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
                         new ScoreDoc[] { new ScoreDoc(2, scores[0]), new ScoreDoc(4, scores[1]) }
                     )
                 ),
-                false
+                false,
+                SEARCH_SHARD
             )
         );
         normalizationTechnique.normalize(compoundTopDocs);
@@ -46,7 +49,8 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
                         new ScoreDoc(4, l2Norm(scores[1], Arrays.asList(scores))) }
                 )
             ),
-            false
+            false,
+            SEARCH_SHARD
         );
         assertNotNull(compoundTopDocs);
         assertEquals(1, compoundTopDocs.size());
@@ -78,7 +82,8 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
                             new ScoreDoc(2, scoresQuery2[2]) }
                     )
                 ),
-                false
+                false,
+                SEARCH_SHARD
             )
         );
         normalizationTechnique.normalize(compoundTopDocs);
@@ -101,7 +106,8 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
                         new ScoreDoc(2, l2Norm(scoresQuery2[2], Arrays.asList(scoresQuery2))) }
                 )
             ),
-            false
+            false,
+            SEARCH_SHARD
         );
         assertNotNull(compoundTopDocs);
         assertEquals(1, compoundTopDocs.size());
@@ -133,7 +139,8 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
                             new ScoreDoc(2, scoresShard1and2Query3[2]) }
                     )
                 ),
-                false
+                false,
+                SEARCH_SHARD
             ),
             new CompoundTopDocs(
                 new TotalHits(4, TotalHits.Relation.EQUAL_TO),
@@ -152,7 +159,8 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
                             new ScoreDoc(15, scoresShard1and2Query3[6]) }
                     )
                 ),
-                false
+                false,
+                SEARCH_SHARD
             )
         );
         normalizationTechnique.normalize(compoundTopDocs);
@@ -175,7 +183,8 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
                         new ScoreDoc(2, l2Norm(scoresShard1and2Query3[2], Arrays.asList(scoresShard1and2Query3))) }
                 )
             ),
-            false
+            false,
+            SEARCH_SHARD
         );
 
         CompoundTopDocs expectedCompoundDocsShard2 = new CompoundTopDocs(
@@ -197,7 +206,8 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
                         new ScoreDoc(15, l2Norm(scoresShard1and2Query3[6], Arrays.asList(scoresShard1and2Query3))) }
                 )
             ),
-            false
+            false,
+            SEARCH_SHARD
         );
 
         assertNotNull(compoundTopDocs);
