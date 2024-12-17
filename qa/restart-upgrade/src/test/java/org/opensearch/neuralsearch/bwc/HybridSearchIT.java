@@ -12,6 +12,9 @@ import java.util.List;
 import java.util.Map;
 
 import org.opensearch.index.query.MatchQueryBuilder;
+
+import static org.opensearch.knn.index.query.KNNQueryBuilder.EXPAND_NESTED_FIELD;
+import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersion;
 import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
@@ -71,9 +74,9 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
                 modelId = getModelId(getIngestionPipeline(pipelineName), TEXT_EMBEDDING_PROCESSOR);
                 loadModel(modelId);
                 addDocuments(getIndexNameForTest(), false);
-                HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null);
+                HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null, null);
                 validateTestIndex(getIndexNameForTest(), searchPipelineName, hybridQueryBuilder);
-                hybridQueryBuilder = getQueryBuilder(modelId, Map.of("ef_search", 100), RescoreContext.getDefault());
+                hybridQueryBuilder = getQueryBuilder(modelId, Boolean.FALSE, Map.of("ef_search", 100), RescoreContext.getDefault());
                 validateTestIndex(getIndexNameForTest(), searchPipelineName, hybridQueryBuilder);
             } finally {
                 wipeOfTestResources(getIndexNameForTest(), pipelineName, modelId, searchPipelineName);
@@ -115,12 +118,23 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         }
     }
 
-    private HybridQueryBuilder getQueryBuilder(final String modelId, Map<String, ?> methodParameters, RescoreContext rescoreContext) {
+    private HybridQueryBuilder getQueryBuilder(
+        final String modelId,
+        final Boolean expandNestedDocs,
+        final Map<String, ?> methodParameters,
+        final RescoreContext rescoreContext
+    ) {
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
         neuralQueryBuilder.fieldName("passage_embedding");
         neuralQueryBuilder.modelId(modelId);
         neuralQueryBuilder.queryText(QUERY);
         neuralQueryBuilder.k(5);
+        if (expandNestedDocs != null) {
+            neuralQueryBuilder.expandNested(expandNestedDocs);
+        }
+        if (isClusterOnOrAfterMinReqVersion(EXPAND_NESTED_FIELD.getPreferredName()) && expandNestedDocs != null) {
+            neuralQueryBuilder.expandNested(expandNestedDocs);
+        }
         if (methodParameters != null) {
             neuralQueryBuilder.methodParameters(methodParameters);
         }
