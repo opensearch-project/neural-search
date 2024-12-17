@@ -37,6 +37,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor.InferenceRequest;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 
@@ -341,8 +342,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         // it splits the tokens using a threshold defined by a ratio of the maximum score of tokens, updating the token set
         // accordingly.
         return ((client, actionListener) -> ML_CLIENT.inferenceSentencesWithMapResult(
-            modelId(),
-            List.of(queryText),
+            InferenceRequest.builder().modelId(modelId()).inputTexts(List.of(queryText)).build(),
             ActionListener.wrap(mapResultList -> {
                 Map<String, Float> queryTokens = TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList).get(0);
                 if (Objects.nonNull(twoPhaseSharedQueryToken)) {

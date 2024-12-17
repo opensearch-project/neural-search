@@ -25,6 +25,7 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import com.google.common.annotations.VisibleForTesting;
 
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor.InferenceRequest;
 import org.opensearch.neuralsearch.util.ProcessorDocumentUtils;
 
 /**
@@ -113,10 +114,13 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
             if (inferenceMap.isEmpty()) {
                 handler.accept(ingestDocument, null);
             } else {
-                mlCommonsClientAccessor.inferenceSentences(this.modelId, inferenceMap, ActionListener.wrap(vectors -> {
-                    setVectorFieldsToDocument(ingestDocument, vectors);
-                    handler.accept(ingestDocument, null);
-                }, e -> { handler.accept(null, e); }));
+                mlCommonsClientAccessor.inferenceSentencesMap(
+                    InferenceRequest.builder().modelId(this.modelId).inputObjects(inferenceMap).build(),
+                    ActionListener.wrap(vectors -> {
+                        setVectorFieldsToDocument(ingestDocument, vectors);
+                        handler.accept(ingestDocument, null);
+                    }, e -> { handler.accept(null, e); })
+                );
             }
         } catch (Exception e) {
             handler.accept(null, e);

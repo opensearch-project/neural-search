@@ -14,6 +14,7 @@ import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor.InferenceRequest;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 
 import lombok.extern.log4j.Log4j2;
@@ -48,17 +49,19 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         List<String> inferenceList,
         BiConsumer<IngestDocument, Exception> handler
     ) {
-        mlCommonsClientAccessor.inferenceSentencesWithMapResult(this.modelId, inferenceList, ActionListener.wrap(resultMaps -> {
-            setVectorFieldsToDocument(ingestDocument, ProcessMap, TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps));
-            handler.accept(ingestDocument, null);
-        }, e -> { handler.accept(null, e); }));
+        mlCommonsClientAccessor.inferenceSentencesWithMapResult(
+            InferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
+            ActionListener.wrap(resultMaps -> {
+                setVectorFieldsToDocument(ingestDocument, ProcessMap, TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps));
+                handler.accept(ingestDocument, null);
+            }, e -> { handler.accept(null, e); })
+        );
     }
 
     @Override
     public void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException) {
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(
-            this.modelId,
-            inferenceList,
+            InferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
             ActionListener.wrap(resultMaps -> handler.accept(TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps)), onException)
         );
     }

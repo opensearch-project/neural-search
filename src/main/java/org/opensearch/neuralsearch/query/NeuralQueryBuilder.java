@@ -44,6 +44,8 @@ import org.opensearch.knn.index.query.parser.MethodParametersParser;
 import org.opensearch.knn.index.query.parser.RescoreParser;
 import org.opensearch.knn.index.query.rescore.RescoreContext;
 import org.opensearch.neuralsearch.common.MinClusterVersionUtil;
+import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
+import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters.EmbeddingContentType;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -55,11 +57,12 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor.InferenceRequest;
 
 /**
- * NeuralQueryBuilder is responsible for producing "neural" query types. A "neural" query type is a wrapper around a
- * k-NN vector query. It uses a ML language model to produce a dense vector from a query string that is then used as
- * the query vector for the k-NN search.
+ * NeuralQueryBuilder is responsible for producing "neural" query types. A "neural" query type is a
+ * wrapper around a k-NN vector query. It uses a ML language model to produce a dense vector from a
+ * query string that is then used as the query vector for the k-NN search.
  */
 
 @Log4j2
@@ -84,6 +87,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     static final ParseField K_FIELD = new ParseField("k");
 
     private static final int DEFAULT_K = 10;
+    private static final AsymmetricTextEmbeddingParameters QUERY_PARAMETERS = AsymmetricTextEmbeddingParameters.builder()
+        .embeddingContentType(EmbeddingContentType.QUERY)
+        .build();
 
     private static MLCommonsClientAccessor ML_CLIENT;
 
@@ -333,10 +339,13 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             inferenceInput.put(INPUT_IMAGE, queryImage());
         }
         queryRewriteContext.registerAsyncAction(
-            ((client, actionListener) -> ML_CLIENT.inferenceSentences(modelId(), inferenceInput, ActionListener.wrap(floatList -> {
-                vectorSetOnce.set(vectorAsListToArray(floatList));
-                actionListener.onResponse(null);
-            }, actionListener::onFailure)))
+            ((client, actionListener) -> ML_CLIENT.inferenceSentencesMap(
+                InferenceRequest.builder().modelId(modelId()).inputObjects(inferenceInput).mlAlgoParams(QUERY_PARAMETERS).build(),
+                ActionListener.wrap(floatList -> {
+                    vectorSetOnce.set(vectorAsListToArray(floatList));
+                    actionListener.onResponse(null);
+                }, actionListener::onFailure)
+            ))
         );
         return new NeuralQueryBuilder(
             fieldName(),
@@ -361,8 +370,12 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
 
     @Override
     protected boolean doEquals(NeuralQueryBuilder obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
         EqualsBuilder equalsBuilder = new EqualsBuilder();
         equalsBuilder.append(fieldName, obj.fieldName);
         equalsBuilder.append(queryText, obj.queryText);

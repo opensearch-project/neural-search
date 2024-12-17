@@ -23,13 +23,18 @@ import org.mockito.MockitoAnnotations;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.ml.client.MachineLearningNodeClient;
+import org.opensearch.ml.common.MLModel;
 import org.opensearch.ml.common.input.MLInput;
+import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
+import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters.EmbeddingContentType;
+import org.opensearch.ml.common.model.TextEmbeddingModelConfig;
 import org.opensearch.ml.common.output.MLOutput;
 import org.opensearch.ml.common.output.model.MLResultDataType;
 import org.opensearch.ml.common.output.model.ModelTensor;
 import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
 import org.opensearch.neuralsearch.constants.TestCommonConstants;
+import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor.InferenceRequest;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.transport.NodeNotConnectedException;
 
@@ -59,13 +64,30 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             actionListener.onResponse(createModelTensorOutput(TestCommonConstants.PREDICT_VECTOR_ARRAY));
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        setupMocksForTextEmbeddingModelAsymmetryCheck(false);
 
-        accessor.inferenceSentence(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_LIST.get(0), singleSentenceResultListener);
+        accessor.inferenceSentence(
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputText(TestCommonConstants.SENTENCES_LIST.get(0)).build(),
+            singleSentenceResultListener
+        );
 
         Mockito.verify(client)
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         Mockito.verify(singleSentenceResultListener).onResponse(vector);
         Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
+    }
+
+    private void setupMocksForTextEmbeddingModelAsymmetryCheck(boolean isAsymmetric) {
+        MLModel modelMock = mock(MLModel.class);
+        TextEmbeddingModelConfig textEmbeddingModelConfigMock = mock(TextEmbeddingModelConfig.class);
+        Mockito.when(textEmbeddingModelConfigMock.getPassagePrefix()).thenReturn(isAsymmetric ? "passage: " : null);
+        Mockito.when(textEmbeddingModelConfigMock.getQueryPrefix()).thenReturn(isAsymmetric ? "query: " : null);
+        Mockito.when(modelMock.getModelConfig()).thenReturn(textEmbeddingModelConfigMock);
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(1);
+            actionListener.onResponse(modelMock);
+            return null;
+        }).when(client).getModel(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(ActionListener.class));
     }
 
     public void testInferenceSentences_whenValidInputThenSuccess() {
@@ -76,7 +98,12 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             actionListener.onResponse(createModelTensorOutput(TestCommonConstants.PREDICT_VECTOR_ARRAY));
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        accessor.inferenceSentences(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_LIST, resultListener);
+        setupMocksForTextEmbeddingModelAsymmetryCheck(false);
+
+        accessor.inferenceSentences(
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
+            resultListener
+        );
 
         Mockito.verify(client)
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -92,7 +119,12 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             actionListener.onResponse(createModelTensorOutput(new Float[] {}));
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        accessor.inferenceSentences(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_LIST, resultListener);
+        setupMocksForTextEmbeddingModelAsymmetryCheck(false);
+
+        accessor.inferenceSentences(
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
+            resultListener
+        );
 
         Mockito.verify(client)
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -107,10 +139,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             actionListener.onFailure(exception);
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        setupMocksForTextEmbeddingModelAsymmetryCheck(false);
+
         accessor.inferenceSentences(
-            TestCommonConstants.TARGET_RESPONSE_FILTERS,
-            TestCommonConstants.MODEL_ID,
-            TestCommonConstants.SENTENCES_LIST,
+            InferenceRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .inputTexts(TestCommonConstants.SENTENCES_LIST)
+                .targetResponseFilters(TestCommonConstants.TARGET_RESPONSE_FILTERS)
+                .build(),
             resultListener
         );
 
@@ -130,10 +166,15 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             actionListener.onFailure(nodeNodeConnectedException);
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        setupMocksForTextEmbeddingModelAsymmetryCheck(false);
+
         accessor.inferenceSentences(
-            TestCommonConstants.TARGET_RESPONSE_FILTERS,
-            TestCommonConstants.MODEL_ID,
-            TestCommonConstants.SENTENCES_LIST,
+            InferenceRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .inputTexts(TestCommonConstants.SENTENCES_LIST)
+                .targetResponseFilters(TestCommonConstants.TARGET_RESPONSE_FILTERS)
+                .build(),
             resultListener
         );
 
@@ -149,16 +190,81 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             actionListener.onFailure(illegalStateException);
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        setupMocksForTextEmbeddingModelAsymmetryCheck(false);
+
         accessor.inferenceSentences(
-            TestCommonConstants.TARGET_RESPONSE_FILTERS,
-            TestCommonConstants.MODEL_ID,
-            TestCommonConstants.SENTENCES_LIST,
+            InferenceRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .targetResponseFilters(TestCommonConstants.TARGET_RESPONSE_FILTERS)
+                .inputTexts(TestCommonConstants.SENTENCES_LIST)
+                .build(),
             resultListener
         );
 
         Mockito.verify(client, times(1))
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         Mockito.verify(resultListener).onFailure(illegalStateException);
+    }
+
+    public void testInferenceSentences_whenModelAsymmetric_thenSuccess() {
+        final List<Float> vector = new ArrayList<>(List.of(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createModelTensorOutput(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        setupMocksForTextEmbeddingModelAsymmetryCheck(true);
+
+        accessor.inferenceSentence(
+            InferenceRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .inputText(TestCommonConstants.SENTENCES_LIST.get(0))
+                .mlAlgoParams(AsymmetricTextEmbeddingParameters.builder().embeddingContentType(EmbeddingContentType.PASSAGE).build())
+                .build(),
+            singleSentenceResultListener
+        );
+
+        Mockito.verify(client)
+            .predict(
+                Mockito.eq(TestCommonConstants.MODEL_ID),
+                Mockito.argThat((MLInput input) -> input.getParameters() != null),
+                Mockito.isA(ActionListener.class)
+            );
+        Mockito.verify(singleSentenceResultListener).onResponse(vector);
+        Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
+    }
+
+    public void testInferenceSentences_whenGetModelException_thenFailure() {
+        final List<Float> vector = new ArrayList<>(List.of(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createModelTensorOutput(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        RuntimeException exception = new RuntimeException("Bam!");
+        setupMocksForTextEmbeddingModelAsymmetryCheck(exception);
+
+        accessor.inferenceSentence(
+            InferenceRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .inputText(TestCommonConstants.SENTENCES_LIST.get(0))
+                .mlAlgoParams(AsymmetricTextEmbeddingParameters.builder().embeddingContentType(EmbeddingContentType.PASSAGE).build())
+                .build(),
+            singleSentenceResultListener
+        );
+
+        Mockito.verify(client).getModel(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(ActionListener.class));
+        Mockito.verify(singleSentenceResultListener).onFailure(exception);
+        Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
+    }
+
+    private void setupMocksForTextEmbeddingModelAsymmetryCheck(Exception exception) {
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(1);
+            actionListener.onFailure(exception);
+            return null;
+        }).when(client).getModel(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(ActionListener.class));
     }
 
     public void testInferenceSentencesWithMapResult_whenValidInput_thenSuccess() {
@@ -169,7 +275,13 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             actionListener.onResponse(createModelTensorOutput(map));
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        accessor.inferenceSentencesWithMapResult(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_LIST, resultListener);
+
+        setupMocksForTextEmbeddingModelAsymmetryCheck(false);
+
+        accessor.inferenceSentencesWithMapResult(
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
+            resultListener
+        );
 
         Mockito.verify(client)
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -185,7 +297,13 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             actionListener.onResponse(modelTensorOutput);
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        accessor.inferenceSentencesWithMapResult(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_LIST, resultListener);
+
+        setupMocksForTextEmbeddingModelAsymmetryCheck(false);
+
+        accessor.inferenceSentencesWithMapResult(
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
+            resultListener
+        );
 
         Mockito.verify(client)
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -209,7 +327,13 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             actionListener.onResponse(modelTensorOutput);
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        accessor.inferenceSentencesWithMapResult(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_LIST, resultListener);
+
+        setupMocksForTextEmbeddingModelAsymmetryCheck(false);
+
+        accessor.inferenceSentencesWithMapResult(
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
+            resultListener
+        );
 
         Mockito.verify(client)
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -236,7 +360,13 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             actionListener.onResponse(modelTensorOutput);
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        accessor.inferenceSentencesWithMapResult(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_LIST, resultListener);
+
+        setupMocksForTextEmbeddingModelAsymmetryCheck(false);
+
+        accessor.inferenceSentencesWithMapResult(
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
+            resultListener
+        );
 
         Mockito.verify(client)
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -255,7 +385,13 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
-        accessor.inferenceSentencesWithMapResult(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_LIST, resultListener);
+
+        setupMocksForTextEmbeddingModelAsymmetryCheck(false);
+
+        accessor.inferenceSentencesWithMapResult(
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
+            resultListener
+        );
 
         Mockito.verify(client, times(4))
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -270,7 +406,13 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
-        accessor.inferenceSentencesWithMapResult(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_LIST, resultListener);
+
+        setupMocksForTextEmbeddingModelAsymmetryCheck(false);
+
+        accessor.inferenceSentencesWithMapResult(
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputTexts(TestCommonConstants.SENTENCES_LIST).build(),
+            resultListener
+        );
 
         Mockito.verify(client, times(1))
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -285,7 +427,12 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
 
-        accessor.inferenceSentences(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_MAP, singleSentenceResultListener);
+        setupMocksForTextEmbeddingModelAsymmetryCheck(false);
+
+        accessor.inferenceSentencesMap(
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputObjects(TestCommonConstants.SENTENCES_MAP).build(),
+            singleSentenceResultListener
+        );
 
         Mockito.verify(client)
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -300,7 +447,13 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             actionListener.onFailure(exception);
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        accessor.inferenceSentences(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_MAP, singleSentenceResultListener);
+
+        setupMocksForTextEmbeddingModelAsymmetryCheck(false);
+
+        accessor.inferenceSentencesMap(
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputObjects(TestCommonConstants.SENTENCES_MAP).build(),
+            singleSentenceResultListener
+        );
 
         Mockito.verify(client)
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -308,7 +461,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
     }
 
-    public void testInferenceSentencesMultimodal_whenNodeNotConnectedException_thenRetryThreeTimes() {
+    public void testInferenceSentencesMapMultimodal_whenNodeNotConnectedException_thenRetryThreeTimes() {
         final NodeNotConnectedException nodeNodeConnectedException = new NodeNotConnectedException(
             mock(DiscoveryNode.class),
             "Node not connected"
@@ -318,7 +471,13 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             actionListener.onFailure(nodeNodeConnectedException);
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        accessor.inferenceSentences(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_MAP, singleSentenceResultListener);
+
+        setupMocksForTextEmbeddingModelAsymmetryCheck(false);
+
+        accessor.inferenceSentencesMap(
+            InferenceRequest.builder().modelId(TestCommonConstants.MODEL_ID).inputObjects(TestCommonConstants.SENTENCES_MAP).build(),
+            singleSentenceResultListener
+        );
 
         Mockito.verify(client, times(4))
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -333,10 +492,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
 
+        setupMocksForTextEmbeddingModelAsymmetryCheck(false);
+
         accessor.inferenceSimilarity(
-            TestCommonConstants.MODEL_ID,
-            "is it sunny",
-            List.of("it is sunny today", "roses are red"),
+            InferenceRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .queryText("is it sunny")
+                .inputTexts(List.of("it is sunny today", "roses are red"))
+                .build(),
             singleSentenceResultListener
         );
 
@@ -354,10 +517,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
 
+        setupMocksForTextEmbeddingModelAsymmetryCheck(false);
+
         accessor.inferenceSimilarity(
-            TestCommonConstants.MODEL_ID,
-            "is it sunny",
-            List.of("it is sunny today", "roses are red"),
+            InferenceRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .queryText("is it sunny")
+                .inputTexts(List.of("it is sunny today", "roses are red"))
+                .build(),
             singleSentenceResultListener
         );
 
@@ -378,10 +545,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
 
+        setupMocksForTextEmbeddingModelAsymmetryCheck(false);
+
         accessor.inferenceSimilarity(
-            TestCommonConstants.MODEL_ID,
-            "is it sunny",
-            List.of("it is sunny today", "roses are red"),
+            InferenceRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .queryText("is it sunny")
+                .inputTexts(List.of("it is sunny today", "roses are red"))
+                .build(),
             singleSentenceResultListener
         );
 

@@ -13,19 +13,27 @@ import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.IngestDocument;
+import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
+import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters.EmbeddingContentType;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor.InferenceRequest;
 
 /**
- * This processor is used for user input data text embedding processing, model_id can be used to indicate which model user use,
- * and field_map can be used to indicate which fields needs text embedding and the corresponding keys for the text embedding results.
+ * This processor is used for user input data text embedding processing, model_id can be used to
+ * indicate which model user use, and field_map can be used to indicate which fields needs text
+ * embedding and the corresponding keys for the text embedding results.
  */
 @Log4j2
 public final class TextEmbeddingProcessor extends InferenceProcessor {
 
     public static final String TYPE = "text_embedding";
     public static final String LIST_TYPE_NESTED_MAP_KEY = "knn";
+
+    private static final AsymmetricTextEmbeddingParameters PASSAGE_PARAMETERS = AsymmetricTextEmbeddingParameters.builder()
+        .embeddingContentType(EmbeddingContentType.PASSAGE)
+        .build();
 
     public TextEmbeddingProcessor(
         String tag,
@@ -47,14 +55,20 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
         List<String> inferenceList,
         BiConsumer<IngestDocument, Exception> handler
     ) {
-        mlCommonsClientAccessor.inferenceSentences(this.modelId, inferenceList, ActionListener.wrap(vectors -> {
-            setVectorFieldsToDocument(ingestDocument, ProcessMap, vectors);
-            handler.accept(ingestDocument, null);
-        }, e -> { handler.accept(null, e); }));
+        mlCommonsClientAccessor.inferenceSentences(
+            InferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).mlAlgoParams(PASSAGE_PARAMETERS).build(),
+            ActionListener.wrap(vectors -> {
+                setVectorFieldsToDocument(ingestDocument, ProcessMap, vectors);
+                handler.accept(ingestDocument, null);
+            }, e -> { handler.accept(null, e); })
+        );
     }
 
     @Override
     public void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException) {
-        mlCommonsClientAccessor.inferenceSentences(this.modelId, inferenceList, ActionListener.wrap(handler::accept, onException));
+        mlCommonsClientAccessor.inferenceSentences(
+            InferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).mlAlgoParams(PASSAGE_PARAMETERS).build(),
+            ActionListener.wrap(handler::accept, onException)
+        );
     }
 }

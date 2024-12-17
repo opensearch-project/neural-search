@@ -1,0 +1,21 @@
+{
+  "title": "This is a good day",
+  "description": "daily logging",
+  "favor_list": [
+    "test",
+    "hello",
+    "mock"
+  ],
+  "favorites": {
+    "game": "overwatch",
+    "movie": null
+  },
+  "nested_passages": [
+    {
+      "text": "hello"
+    },
+    {
+      "text": "world"
+    }
+  ]
+}
