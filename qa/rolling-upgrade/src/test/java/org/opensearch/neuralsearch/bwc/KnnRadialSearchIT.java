@@ -88,6 +88,7 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
             null,
             null,
             null,
+            null,
             null
         );
         Map<String, Object> responseWithMinScore = search(getIndexNameForTest(), neuralQueryBuilderWithMinScoreQuery, 1);
@@ -100,6 +101,7 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
             modelId,
             null,
             100000f,
+            null,
             null,
             null,
             null,
