@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.query;
 
+import static org.opensearch.knn.index.query.KNNQueryBuilder.EXPAND_NESTED_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.FILTER_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.MAX_DISTANCE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.METHOD_PARAMS_FIELD;
@@ -98,6 +99,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     private Integer k = null;
     private Float maxDistance = null;
     private Float minScore = null;
+    private Boolean expandNested;
     @VisibleForTesting
     @Getter(AccessLevel.PACKAGE)
     @Setter(AccessLevel.PACKAGE)
@@ -132,6 +134,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             this.maxDistance = in.readOptionalFloat();
             this.minScore = in.readOptionalFloat();
         }
+        if (isClusterOnOrAfterMinReqVersion(EXPAND_NESTED_FIELD.getPreferredName())) {
+            this.expandNested = in.readOptionalBoolean();
+        }
         if (isClusterOnOrAfterMinReqVersion(METHOD_PARAMS_FIELD.getPreferredName())) {
             this.methodParameters = MethodParametersParser.streamInput(in, MinClusterVersionUtil::isClusterOnOrAfterMinReqVersion);
         }
@@ -158,6 +163,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             out.writeOptionalFloat(this.maxDistance);
             out.writeOptionalFloat(this.minScore);
         }
+        if (isClusterOnOrAfterMinReqVersion(EXPAND_NESTED_FIELD.getPreferredName())) {
+            out.writeOptionalBoolean(this.expandNested);
+        }
         if (isClusterOnOrAfterMinReqVersion(METHOD_PARAMS_FIELD.getPreferredName())) {
             MethodParametersParser.streamOutput(out, methodParameters, MinClusterVersionUtil::isClusterOnOrAfterMinReqVersion);
         }
@@ -183,6 +191,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         }
         if (Objects.nonNull(minScore)) {
             xContentBuilder.field(MIN_SCORE_FIELD.getPreferredName(), minScore);
+        }
+        if (Objects.nonNull(expandNested)) {
+            xContentBuilder.field(EXPAND_NESTED_FIELD.getPreferredName(), expandNested);
         }
         if (Objects.nonNull(methodParameters)) {
             MethodParametersParser.doXContent(xContentBuilder, methodParameters);
@@ -274,6 +285,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                     neuralQueryBuilder.maxDistance(parser.floatValue());
                 } else if (MIN_SCORE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     neuralQueryBuilder.minScore(parser.floatValue());
+                } else if (EXPAND_NESTED_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    neuralQueryBuilder.expandNested(parser.booleanValue());
                 } else {
                     throw new ParsingException(
                         parser.getTokenLocation(),
@@ -318,6 +331,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 .filter(filter())
                 .maxDistance(maxDistance)
                 .minScore(minScore)
+                .expandNested(expandNested)
                 .k(k)
                 .methodParameters(methodParameters)
                 .rescoreContext(rescoreContext)
@@ -346,6 +360,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             k(),
             maxDistance(),
             minScore(),
+            expandNested(),
             vectorSetOnce::get,
             filter(),
             methodParameters(),
