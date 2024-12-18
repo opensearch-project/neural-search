@@ -1472,7 +1472,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     @SneakyThrows
     protected void createDefaultRRFSearchPipeline() {
-        String requestBody = XContentFactory.jsonBuilder()
+        createRRFSearchPipeline(RRF_SEARCH_PIPELINE, false);
+    }
+
+    @SneakyThrows
+    protected void createRRFSearchPipeline(final String pipelineName, boolean addExplainResponseProcessor) {
+        XContentBuilder builder = XContentFactory.jsonBuilder()
             .startObject()
             .field("description", "Post processor for hybrid search")
             .startArray("phase_results_processors")
@@ -1483,14 +1488,23 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             .endObject()
             .endObject()
             .endObject()
-            .endArray()
-            .endObject()
-            .toString();
+            .endArray();
+
+        if (addExplainResponseProcessor) {
+            builder.startArray("response_processors")
+                .startObject()
+                .startObject("explanation_response_processor")
+                .endObject()
+                .endObject()
+                .endArray();
+        }
+
+        String requestBody = builder.endObject().toString();
 
         makeRequest(
             client(),
             "PUT",
-            String.format(LOCALE, "/_search/pipeline/%s", RRF_SEARCH_PIPELINE),
+            String.format(LOCALE, "/_search/pipeline/%s", pipelineName),
             null,
             toHttpEntity(String.format(LOCALE, requestBody)),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))

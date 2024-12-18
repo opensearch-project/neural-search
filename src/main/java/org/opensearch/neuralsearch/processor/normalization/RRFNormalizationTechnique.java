@@ -6,27 +6,34 @@ package org.opensearch.neuralsearch.processor.normalization;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.stream.IntStream;
 
 import org.apache.commons.lang3.Range;
 import org.apache.commons.lang3.math.NumberUtils;
-import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.TopDocs;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import lombok.ToString;
 import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
+import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
+import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
+import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
+
+import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.getDocIdAtQueryForNormalization;
 
 /**
  * Abstracts calculation of rank scores for each document returned as part of
  * reciprocal rank fusion. Rank scores are summed across subqueries in combination classes.
  */
 @ToString(onlyExplicitlyIncluded = true)
-public class RRFNormalizationTechnique implements ScoreNormalizationTechnique {
+public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, ExplainableTechnique {
     @ToString.Include
     public static final String TECHNIQUE_NAME = "rrf";
     public static final int DEFAULT_RANK_CONSTANT = 60;
@@ -58,21 +65,49 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique {
     public void normalize(final NormalizeScoresDTO normalizeScoresDTO) {
         final List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
-            if (Objects.isNull(compoundQueryTopDocs)) {
-                continue;
-            }
-            List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
-            for (TopDocs topDocs : topDocsPerSubQuery) {
-                int docsCountPerSubQuery = topDocs.scoreDocs.length;
-                ScoreDoc[] scoreDocs = topDocs.scoreDocs;
-                for (int j = 0; j < docsCountPerSubQuery; j++) {
-                    // using big decimal approach to minimize error caused by floating point ops
-                    // score = 1.f / (float) (rankConstant + j + 1))
-                    scoreDocs[j].score = BigDecimal.ONE.divide(BigDecimal.valueOf(rankConstant + j + 1), 10, RoundingMode.HALF_UP)
-                        .floatValue();
-                }
-            }
+            processTopDocs(compoundQueryTopDocs, (docId, score) -> {});
         }
+    }
+
+    @Override
+    public String describe() {
+        return String.format(Locale.ROOT, "%s, rank_constant %s", TECHNIQUE_NAME, rankConstant);
+    }
+
+    @Override
+    public Map<DocIdAtSearchShard, ExplanationDetails> explain(List<CompoundTopDocs> queryTopDocs) {
+        Map<DocIdAtSearchShard, List<Float>> normalizedScores = new HashMap<>();
+
+        for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
+            processTopDocs(
+                compoundQueryTopDocs,
+                (docId, score) -> normalizedScores.computeIfAbsent(docId, k -> new ArrayList<>()).add(score)
+            );
+        }
+
+        return getDocIdAtQueryForNormalization(normalizedScores, this);
+    }
+
+    private void processTopDocs(CompoundTopDocs compoundQueryTopDocs, BiConsumer<DocIdAtSearchShard, Float> scoreProcessor) {
+        if (Objects.isNull(compoundQueryTopDocs)) {
+            return;
+        }
+
+        compoundQueryTopDocs.getTopDocs().forEach(topDocs -> {
+            IntStream.range(0, topDocs.scoreDocs.length).forEach(position -> {
+                float normalizedScore = calculateNormalizedScore(position);
+                DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(
+                    topDocs.scoreDocs[position].doc,
+                    compoundQueryTopDocs.getSearchShard()
+                );
+                scoreProcessor.accept(docIdAtSearchShard, normalizedScore);
+                topDocs.scoreDocs[position].score = normalizedScore;
+            });
+        });
+    }
+
+    private float calculateNormalizedScore(int position) {
+        return BigDecimal.ONE.divide(BigDecimal.valueOf(rankConstant + position + 1), 10, RoundingMode.HALF_UP).floatValue();
     }
 
     private int getRankConstant(final Map<String, Object> params) {
@@ -96,7 +131,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique {
         }
     }
 
-    public static int getParamAsInteger(final Map<String, Object> parameters, final String fieldName) {
+    private static int getParamAsInteger(final Map<String, Object> parameters, final String fieldName) {
         try {
             return NumberUtils.createInteger(String.valueOf(parameters.get(fieldName)));
         } catch (NumberFormatException e) {
