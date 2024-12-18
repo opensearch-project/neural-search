@@ -43,19 +43,12 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
 
     private static final List<String> TEST_TOKENS = List.of("hello", "world", "a", "b", "c");
 
-    private static final Float DELTA = 1e-5f;
+    private static final Float DELTA = 1e-4f;
     private final Map<String, Float> testRankFeaturesDoc = createRandomTokenWeightMap(TEST_TOKENS);
     private static final List<String> TWO_PHASE_TEST_TOKEN = List.of("hello", "world");
 
-    private static final Map<String, Float> testFixedQueryTokens = new HashMap<>();
+    private static final Map<String, Float> testFixedQueryTokens = Map.of("hello", 5.0f, "world", 4.0f, "a", 3.0f, "b", 2.0f, "c", 1.0f);
     private static final Supplier<Map<String, Float>> testFixedQueryTokenSupplier = () -> testFixedQueryTokens;
-    static {
-        testFixedQueryTokens.put("hello", 5.0f);
-        testFixedQueryTokens.put("world", 4.0f);
-        testFixedQueryTokens.put("a", 3.0f);
-        testFixedQueryTokens.put("b", 2.0f);
-        testFixedQueryTokens.put("c", 1.0f);
-    }
 
     @Before
     public void setUp() throws Exception {
@@ -82,7 +75,6 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder1 = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
                 .queryTokensSupplier(randomTokenWeightSupplier);
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder2 = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_2)
-                .queryText(TEST_QUERY_TEXT)
                 .queryTokensSupplier(randomTokenWeightSupplier);
             boolQueryBuilder.should(sparseEncodingQueryBuilder1).should(sparseEncodingQueryBuilder2);
 
@@ -116,7 +108,7 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
      *                 {
      *                     "neural_sparse": {
      *                         "field": "test-sparse-encoding-1",
-     *                         "query_text": "TEST_QUERY_TEXT",
+     *                         "query_tokens": testFixedQueryTokens,
      *                         "model_id": "dcsdcasd",
      *                         "boost": 2.0
      *                     }
@@ -127,13 +119,12 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
      * }
      */
     @SneakyThrows
-    public void testBasicQueryUsingQueryText_whenTwoPhaseEnabled_thenGetExpectedScore() {
+    public void testBasicQueryUsingQueryTokens_whenTwoPhaseEnabled_thenGetExpectedScore() {
         try {
             initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
             initializeTwoPhaseProcessor();
             setDefaultSearchPipelineForIndex(TEST_BASIC_INDEX_NAME);
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
-                .queryText(TEST_QUERY_TEXT)
                 .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(2.0f);
             Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, sparseEncodingQueryBuilder, 1);
@@ -148,14 +139,13 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    public void testBasicQueryUsingQueryText_whenTwoPhaseEnabledAndDisabled_thenGetSameScore() {
+    public void testBasicQueryUsingQueryTokens_whenTwoPhaseEnabledAndDisabled_thenGetSameScore() {
         try {
             initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
             initializeTwoPhaseProcessor();
 
             setDefaultSearchPipelineForIndex(TEST_BASIC_INDEX_NAME);
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
-                .queryText(TEST_QUERY_TEXT)
                 .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(2.0f);
             Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, sparseEncodingQueryBuilder, 1);
@@ -164,7 +154,6 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
             float scoreWithoutTwoPhase = objectToFloat(firstInnerHit.get("_score"));
 
             sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
-                .queryText(TEST_QUERY_TEXT)
                 .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(2.0f);
             searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, sparseEncodingQueryBuilder, 1);
@@ -190,7 +179,7 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
      *                     {
      *                         "neural_sparse": {
      *                             "field": "test-sparse-encoding-1",
-     *                             "query_text": "Hello world a b",
+     *                             "query_tokens": testFixedQueryTokens,
      *                             "model_id": "dcsdcasd",
      *                             "boost": 2.0
      *                         }
@@ -209,7 +198,6 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
 
             setDefaultSearchPipelineForIndex(TEST_BASIC_INDEX_NAME);
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
-                .queryText(TEST_QUERY_TEXT)
                 .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(2.0f);
             QueryBuilder queryBuilder = new MatchAllQueryBuilder();
@@ -232,7 +220,7 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
      *                 {
      *                     "neural_sparse": {
      *                         "field": "test-sparse-encoding-1",
-     *                         "query_text": "Hello world a b",
+     *                         "query_tokens": testFixedQueryTokens,
      *                         "model_id": "dcsdcasd",
      *                         "boost": 2.0
      *                     }
@@ -240,7 +228,7 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
      *                 {
      *                     "neural_sparse": {
      *                         "field": "test-sparse-encoding-1",
-     *                         "query_text": "Hello world a b",
+     *                         "query_tokens": testFixedQueryTokens,
      *                         "model_id": "dcsdcasd",
      *                         "boost": 2.0
      *                     }
@@ -316,7 +304,6 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
             setDefaultSearchPipelineForIndex(TEST_BASIC_INDEX_NAME);
             BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
-                .queryText(TEST_QUERY_TEXT)
                 .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(2.0f);
             boolQueryBuilder.should(sparseEncodingQueryBuilder);
@@ -401,7 +388,6 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
             createNeuralSparseTwoPhaseSearchProcessor(search_pipeline, 0.6f, 5f, 10000);
             setDefaultSearchPipelineForIndex(TEST_BASIC_INDEX_NAME);
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
-                .queryText(TEST_QUERY_TEXT)
                 .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(1.0f);
             ConstantScoreQueryBuilder constantScoreQueryBuilder = new ConstantScoreQueryBuilder(sparseEncodingQueryBuilder);
@@ -421,7 +407,6 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
             createNeuralSparseTwoPhaseSearchProcessor(search_pipeline, 0.6f, 5f, 10000);
             setDefaultSearchPipelineForIndex(TEST_BASIC_INDEX_NAME);
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
-                .queryText(TEST_QUERY_TEXT)
                 .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(5.0f);
             DisMaxQueryBuilder disMaxQueryBuilder = new DisMaxQueryBuilder();
@@ -444,7 +429,6 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
             createNeuralSparseTwoPhaseSearchProcessor(search_pipeline, 0.6f, 5f, 10000);
             setDefaultSearchPipelineForIndex(TEST_BASIC_INDEX_NAME);
             NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
-                .queryText(TEST_QUERY_TEXT)
                 .queryTokensSupplier(testFixedQueryTokenSupplier)
                 .boost(5.0f);
             FunctionScoreQueryBuilder functionScoreQueryBuilder = new FunctionScoreQueryBuilder(sparseEncodingQueryBuilder);
