@@ -132,9 +132,6 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         if (expandNestedDocs != null) {
             neuralQueryBuilder.expandNested(expandNestedDocs);
         }
-        if (isClusterOnOrAfterMinReqVersion(EXPAND_NESTED_FIELD.getPreferredName()) && expandNestedDocs != null) {
-            neuralQueryBuilder.expandNested(expandNestedDocs);
-        }
         if (methodParameters != null) {
             neuralQueryBuilder.methodParameters(methodParameters);
         }
