@@ -11,6 +11,7 @@ import static org.mockito.Mockito.mock;
 import static org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS;
 import static org.opensearch.index.query.AbstractQueryBuilder.BOOST_FIELD;
 import static org.opensearch.index.query.AbstractQueryBuilder.NAME_FIELD;
+import static org.opensearch.knn.index.query.KNNQueryBuilder.EXPAND_NESTED_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.FILTER_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.MAX_DISTANCE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.MIN_SCORE_FIELD;
@@ -202,6 +203,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
                 "k": int,
                 "boost": 10.0,
                 "_name": "something",
+                "expandNestedDocs": true
               }
           }
         */
@@ -215,6 +217,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
             .field(K_FIELD.getPreferredName(), K)
             .field(BOOST_FIELD.getPreferredName(), BOOST)
             .field(NAME_FIELD.getPreferredName(), QUERY_NAME)
+            .field(EXPAND_NESTED_FIELD.getPreferredName(), Boolean.TRUE)
             .endObject()
             .endObject();
 
@@ -229,6 +232,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(K, neuralQueryBuilder.k());
         assertEquals(BOOST, neuralQueryBuilder.boost(), 0.0);
         assertEquals(QUERY_NAME, neuralQueryBuilder.queryName());
+        assertEquals(Boolean.TRUE, neuralQueryBuilder.expandNested());
     }
 
     @SneakyThrows
@@ -428,6 +432,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
             .modelId(MODEL_ID)
             .queryText(QUERY_TEXT)
             .k(K)
+            .expandNested(Boolean.TRUE)
             .filter(TEST_FILTER);
 
         XContentBuilder builder = XContentFactory.jsonBuilder();
@@ -454,6 +459,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(MODEL_ID, secondInnerMap.get(MODEL_ID_FIELD.getPreferredName()));
         assertEquals(QUERY_TEXT, secondInnerMap.get(QUERY_TEXT_FIELD.getPreferredName()));
         assertEquals(K, secondInnerMap.get(K_FIELD.getPreferredName()));
+        assertEquals(Boolean.TRUE, secondInnerMap.get(EXPAND_NESTED_FIELD.getPreferredName()));
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder();
         assertEquals(
             xContentBuilderToMap(TEST_FILTER.toXContent(xContentBuilder, EMPTY_PARAMS)),
@@ -718,6 +724,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
             .queryImage(IMAGE_TEXT)
             .modelId(MODEL_ID)
             .k(K)
+            .expandNested(Boolean.TRUE)
             .vectorSupplier(nullSupplier);
         QueryBuilder queryBuilder = neuralQueryBuilder.doRewrite(null);
         assertEquals(neuralQueryBuilder, queryBuilder);
@@ -729,6 +736,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
             .queryImage(IMAGE_TEXT)
             .modelId(MODEL_ID)
             .k(K)
+            .expandNested(Boolean.TRUE)
             .methodParameters(Map.of("ef_search", 100))
             .rescoreContext(RescoreContext.getDefault())
             .vectorSupplier(TEST_VECTOR_SUPPLIER);
@@ -739,6 +747,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
             .methodParameters(neuralQueryBuilder.methodParameters())
             .rescoreContext(neuralQueryBuilder.rescoreContext())
             .vector(TEST_VECTOR_SUPPLIER.get())
+            .expandNested(Boolean.TRUE)
             .build();
 
         QueryBuilder queryBuilder = neuralQueryBuilder.doRewrite(null);
