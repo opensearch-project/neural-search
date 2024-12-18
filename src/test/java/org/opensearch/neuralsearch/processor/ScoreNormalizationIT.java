@@ -85,7 +85,20 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
 
             HybridQueryBuilder hybridQueryBuilderArithmeticMean = new HybridQueryBuilder();
             hybridQueryBuilderArithmeticMean.add(
-                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null, null, null, null, null)
+                new NeuralQueryBuilder(
+                    TEST_KNN_VECTOR_FIELD_NAME_1,
+                    TEST_DOC_TEXT1,
+                    "",
+                    modelId,
+                    5,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+                )
             );
             hybridQueryBuilderArithmeticMean.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
@@ -110,7 +123,20 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
 
             HybridQueryBuilder hybridQueryBuilderHarmonicMean = new HybridQueryBuilder();
             hybridQueryBuilderHarmonicMean.add(
-                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null, null, null, null, null)
+                new NeuralQueryBuilder(
+                    TEST_KNN_VECTOR_FIELD_NAME_1,
+                    TEST_DOC_TEXT1,
+                    "",
+                    modelId,
+                    5,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+                )
             );
             hybridQueryBuilderHarmonicMean.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
@@ -135,7 +161,20 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
 
             HybridQueryBuilder hybridQueryBuilderGeometricMean = new HybridQueryBuilder();
             hybridQueryBuilderGeometricMean.add(
-                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null, null, null, null, null)
+                new NeuralQueryBuilder(
+                    TEST_KNN_VECTOR_FIELD_NAME_1,
+                    TEST_DOC_TEXT1,
+                    "",
+                    modelId,
+                    5,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+                )
             );
             hybridQueryBuilderGeometricMean.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
@@ -185,7 +224,20 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
 
             HybridQueryBuilder hybridQueryBuilderArithmeticMean = new HybridQueryBuilder();
             hybridQueryBuilderArithmeticMean.add(
-                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null, null, null, null, null)
+                new NeuralQueryBuilder(
+                    TEST_KNN_VECTOR_FIELD_NAME_1,
+                    TEST_DOC_TEXT1,
+                    "",
+                    modelId,
+                    5,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+                )
             );
             hybridQueryBuilderArithmeticMean.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
@@ -210,7 +262,20 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
 
             HybridQueryBuilder hybridQueryBuilderHarmonicMean = new HybridQueryBuilder();
             hybridQueryBuilderHarmonicMean.add(
-                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null, null, null, null, null)
+                new NeuralQueryBuilder(
+                    TEST_KNN_VECTOR_FIELD_NAME_1,
+                    TEST_DOC_TEXT1,
+                    "",
+                    modelId,
+                    5,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+                )
             );
             hybridQueryBuilderHarmonicMean.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
@@ -235,7 +300,20 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
 
             HybridQueryBuilder hybridQueryBuilderGeometricMean = new HybridQueryBuilder();
             hybridQueryBuilderGeometricMean.add(
-                new NeuralQueryBuilder(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DOC_TEXT1, "", modelId, 5, null, null, null, null, null, null)
+                new NeuralQueryBuilder(
+                    TEST_KNN_VECTOR_FIELD_NAME_1,
+                    TEST_DOC_TEXT1,
+                    "",
+                    modelId,
+                    5,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+                )
             );
             hybridQueryBuilderGeometricMean.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 

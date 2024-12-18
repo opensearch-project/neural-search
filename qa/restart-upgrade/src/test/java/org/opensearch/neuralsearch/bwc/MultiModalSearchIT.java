@@ -64,6 +64,7 @@ public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
             null,
             null,
             null,
+            null,
             null
         );
         Map<String, Object> response = search(getIndexNameForTest(), neuralQueryBuilder, 1);
