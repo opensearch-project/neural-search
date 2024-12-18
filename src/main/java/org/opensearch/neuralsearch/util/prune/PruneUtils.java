@@ -53,7 +53,7 @@ public class PruneUtils {
         while (!pq.isEmpty()) {
             Map.Entry<String, Float> entry = pq.poll();
             highScores.put(entry.getKey(), entry.getValue());
-            if (requiresPrunedEntries) {
+            if (Objects.nonNull(lowScores)) {
                 lowScores.remove(entry.getKey());
             }
         }
@@ -84,7 +84,7 @@ public class PruneUtils {
         for (Map.Entry<String, Float> entry : sparseVector.entrySet()) {
             if (entry.getValue() >= ratio * maxValue) {
                 highScores.put(entry.getKey(), entry.getValue());
-            } else if (requiresPrunedEntries) {
+            } else if (Objects.nonNull(lowScores)) {
                 lowScores.put(entry.getKey(), entry.getValue());
             }
         }
@@ -112,7 +112,7 @@ public class PruneUtils {
         for (Map.Entry<String, Float> entry : sparseVector.entrySet()) {
             if (entry.getValue() >= thresh) {
                 highScores.put(entry.getKey(), entry.getValue());
-            } else if (requiresPrunedEntries) {
+            } else if (Objects.nonNull(lowScores)) {
                 lowScores.put(entry.getKey(), entry.getValue());
             }
         }
@@ -150,7 +150,7 @@ public class PruneUtils {
 
             if (topSum <= alpha * sum) {
                 highScores.put(entry.getKey(), value);
-            } else if (requiresPrunedEntries) {
+            } else if (Objects.nonNull(lowScores)) {
                 lowScores.put(entry.getKey(), value);
             }
         }
