@@ -11,7 +11,7 @@ import org.opensearch.client.Request;
 import org.opensearch.client.Response;
 import org.opensearch.neuralsearch.OpenSearchSecureRestTestCase;
 import org.opensearch.rest.RestRequest;
-
+import java.io;
 import java.io.IOException;
 
 import static org.opensearch.neuralsearch.executors.HybridQueryExecutor.getThreadPoolName;
