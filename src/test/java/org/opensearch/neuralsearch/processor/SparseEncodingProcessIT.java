@@ -18,6 +18,7 @@ import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 import com.google.common.collect.ImmutableList;
+import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 
 public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
 
@@ -39,6 +40,35 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
             createSparseEncodingIndex();
             ingestDocument();
             assertEquals(1, getDocCount(INDEX_NAME));
+
+            NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
+            neuralSparseQueryBuilder.fieldName("title_sparse");
+            neuralSparseQueryBuilder.queryTokensSupplier(() -> Map.of("good", 1.0f, "a", 2.0f));
+            Map<String, Object> searchResponse = search(INDEX_NAME, neuralSparseQueryBuilder, 2);
+            assertFalse(searchResponse.isEmpty());
+            double maxScore = (Double) ((Map) searchResponse.get("hits")).get("max_score");
+            assertEquals(4.4433594, maxScore, 1e-3);
+        } finally {
+            wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
+        }
+    }
+
+    public void testSparseEncodingProcessorWithPrune() throws Exception {
+        String modelId = null;
+        try {
+            modelId = prepareSparseEncodingModel();
+            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING_PRUNE);
+            createSparseEncodingIndex();
+            ingestDocument();
+            assertEquals(1, getDocCount(INDEX_NAME));
+
+            NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
+            neuralSparseQueryBuilder.fieldName("title_sparse");
+            neuralSparseQueryBuilder.queryTokensSupplier(() -> Map.of("good", 1.0f, "a", 2.0f));
+            Map<String, Object> searchResponse = search(INDEX_NAME, neuralSparseQueryBuilder, 2);
+            assertFalse(searchResponse.isEmpty());
+            double maxScore = (Double) ((Map) searchResponse.get("hits")).get("max_score");
+            assertEquals(3.640625, maxScore, 1e-3);
         } finally {
             wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
         }

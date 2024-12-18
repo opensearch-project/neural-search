@@ -52,6 +52,7 @@ import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
+import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.test.OpenSearchTestCase;
 
 import lombok.SneakyThrows;
@@ -647,6 +648,44 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         assertNotNull(queryBuilder.queryTokensSupplier());
         assertTrue(inProgressLatch.await(5, TimeUnit.SECONDS));
         assertEquals(expectedMap, queryBuilder.queryTokensSupplier().get());
+    }
+
+    @SneakyThrows
+    public void testRewrite_whenQueryTokensSupplierNull_andPruneSet_thenSuceessPrune() {
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .twoPhaseSharedQueryToken(Map.of())
+            .twoPhasePruneRatio(3.0f)
+            .twoPhasePruneType(PruneType.ABS_VALUE);
+        Map<String, Float> expectedMap = Map.of("1", 1f, "2", 5f);
+        MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
+        doAnswer(invocation -> {
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            listener.onResponse(List.of(Map.of("response", List.of(expectedMap))));
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), any(), any());
+        NeuralSparseQueryBuilder.initialize(mlCommonsClientAccessor);
+
+        final CountDownLatch inProgressLatch = new CountDownLatch(1);
+        QueryRewriteContext queryRewriteContext = mock(QueryRewriteContext.class);
+        doAnswer(invocation -> {
+            BiConsumer<Client, ActionListener<?>> biConsumer = invocation.getArgument(0);
+            biConsumer.accept(
+                null,
+                ActionListener.wrap(
+                    response -> inProgressLatch.countDown(),
+                    err -> fail("Failed to set query tokens supplier: " + err.getMessage())
+                )
+            );
+            return null;
+        }).when(queryRewriteContext).registerAsyncAction(any());
+
+        NeuralSparseQueryBuilder queryBuilder = (NeuralSparseQueryBuilder) sparseEncodingQueryBuilder.doRewrite(queryRewriteContext);
+        assertNotNull(queryBuilder.queryTokensSupplier());
+        assertTrue(inProgressLatch.await(5, TimeUnit.SECONDS));
+        assertEquals(Map.of("2", 5f), queryBuilder.queryTokensSupplier().get());
+        assertEquals(Map.of("1", 1f), queryBuilder.twoPhaseSharedQueryToken());
     }
 
     @SneakyThrows
