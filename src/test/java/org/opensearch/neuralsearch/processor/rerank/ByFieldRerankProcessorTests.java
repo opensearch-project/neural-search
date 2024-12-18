@@ -869,7 +869,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         ArgumentCaptor<Exception> argumentCaptor = ArgumentCaptor.forClass(Exception.class);
         verify(listener, times(1)).onFailure(argumentCaptor.capture());
 
-        assertEquals("There is no source field to be able to perform rerank on hit [" + 1 + "]", argumentCaptor.getValue().getMessage());
+        assertEquals("There is no source field to be able to perform rerank on hit [" + 2 + "]", argumentCaptor.getValue().getMessage());
         assert (argumentCaptor.getValue() instanceof IllegalArgumentException);
     }
 
@@ -907,7 +907,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         ArgumentCaptor<Exception> argumentCaptor = ArgumentCaptor.forClass(Exception.class);
         verify(listener, times(1)).onFailure(argumentCaptor.capture());
 
-        assertEquals("The field to rerank by is not found at hit [" + 1 + "]", argumentCaptor.getValue().getMessage());
+        assertEquals("The field to rerank by is not found at hit [" + 2 + "]", argumentCaptor.getValue().getMessage());
         assert (argumentCaptor.getValue() instanceof IllegalArgumentException);
     }
 
@@ -947,7 +947,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         ArgumentCaptor<Exception> argumentCaptor = ArgumentCaptor.forClass(Exception.class);
         verify(listener, times(1)).onFailure(argumentCaptor.capture());
 
-        assertEquals("The field to rerank by is not found at hit [" + 1 + "]", argumentCaptor.getValue().getMessage());
+        assertEquals("The field to rerank by is not found at hit [" + 2 + "]", argumentCaptor.getValue().getMessage());
         assert (argumentCaptor.getValue() instanceof IllegalArgumentException);
     }
 
@@ -985,7 +985,10 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         ArgumentCaptor<Exception> argumentCaptor = ArgumentCaptor.forClass(Exception.class);
         verify(listener, times(1)).onFailure(argumentCaptor.capture());
 
-        assertEquals("The field mapping to rerank by [hello world] is not Numerical", argumentCaptor.getValue().getMessage());
+        assertEquals(
+            "The field mapping to rerank by [hello world] is not Numerical, instead of type [java.lang.String]",
+            argumentCaptor.getValue().getMessage()
+        );
         assert (argumentCaptor.getValue() instanceof IllegalArgumentException);
 
     }
