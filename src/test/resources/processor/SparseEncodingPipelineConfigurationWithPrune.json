@@ -4,7 +4,6 @@
     {
       "sparse_encoding": {
         "model_id": "%s",
-        "batch_size": "%d",
         "prune_type": "max_ratio",
         "prune_ratio": 0.8,
         "field_map": {
