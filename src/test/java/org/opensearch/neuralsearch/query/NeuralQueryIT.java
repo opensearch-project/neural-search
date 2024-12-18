@@ -113,6 +113,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 null,
                 null,
                 null,
+                null,
                 null
             );
 
@@ -131,6 +132,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 TEST_IMAGE_TEXT,
                 modelId,
                 1,
+                null,
                 null,
                 null,
                 null,
@@ -164,6 +166,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 null,
                 null,
                 null,
+                null,
                 null
             );
 
@@ -191,6 +194,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 null,
                 null,
                 0.01f,
+                null,
                 null,
                 null,
                 null,
@@ -245,6 +249,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 "",
                 modelId,
                 1,
+                null,
                 null,
                 null,
                 null,
@@ -329,6 +334,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 null,
                 null,
                 null,
+                null,
                 null
             );
             NeuralQueryBuilder neuralQueryBuilder2 = new NeuralQueryBuilder(
@@ -337,6 +343,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 "",
                 modelId,
                 1,
+                null,
                 null,
                 null,
                 null,
@@ -366,6 +373,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 "",
                 modelId,
                 1,
+                null,
                 null,
                 null,
                 null,
@@ -428,6 +436,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 null,
                 null,
                 null,
+                null,
                 null
             );
 
@@ -475,6 +484,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 "",
                 modelId,
                 1,
+                null,
                 null,
                 null,
                 null,
