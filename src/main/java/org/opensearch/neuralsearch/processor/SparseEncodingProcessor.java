@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import lombok.Getter;
 import org.opensearch.cluster.service.ClusterService;
@@ -63,7 +64,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
             List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps)
                 .stream()
                 .map(vector -> PruneUtils.pruneSparseVector(pruneType, pruneRatio, vector))
-                .toList();
+                .collect(Collectors.toList());
             setVectorFieldsToDocument(ingestDocument, ProcessMap, sparseVectors);
             handler.accept(ingestDocument, null);
         }, e -> { handler.accept(null, e); }));
@@ -75,7 +76,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
             List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps)
                 .stream()
                 .map(vector -> PruneUtils.pruneSparseVector(pruneType, pruneRatio, vector))
-                .toList();
+                .collect(Collectors.toList());
             handler.accept(sparseVectors);
         }, onException));
     }
