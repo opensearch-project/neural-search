@@ -45,7 +45,8 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
                     .rewrite(mockQueryShardContext)
                     .toQuery(mockQueryShardContext),
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext)
-            )
+            ),
+            null
         );
         SearchContext searchContext = mock(SearchContext.class);
 

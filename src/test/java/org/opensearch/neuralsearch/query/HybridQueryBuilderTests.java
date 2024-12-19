@@ -53,6 +53,7 @@ import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.MatchAllQueryBuilder;
+import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
@@ -404,6 +405,167 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
+    public void testFromXContent_whenQueriesCountIsGreaterThanFive_thenFail() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startArray("queries")
+            .startObject()
+            .startObject(NeuralQueryBuilder.NAME)
+            .startObject(VECTOR_FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .field(K_FIELD.getPreferredName(), K)
+            .field(BOOST_FIELD.getPreferredName(), BOOST)
+            .endObject()
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject(TermQueryBuilder.NAME)
+            .field(TEXT_FIELD_NAME, TERM_QUERY_TEXT)
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject(MatchQueryBuilder.NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject(TermQueryBuilder.NAME)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject(MatchAllQueryBuilder.NAME)
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject(TermQueryBuilder.NAME)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .endObject()
+            .endObject()
+            .endArray()
+            .endObject();
+
+        NamedXContentRegistry namedXContentRegistry = new NamedXContentRegistry(
+            List.of(
+                new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(TermQueryBuilder.NAME), TermQueryBuilder::fromXContent),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(NeuralQueryBuilder.NAME),
+                    NeuralQueryBuilder::fromXContent
+                ),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(HybridQueryBuilder.NAME),
+                    HybridQueryBuilder::fromXContent
+                ),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(MatchAllQueryBuilder.NAME),
+                    MatchAllQueryBuilder::fromXContent
+                ),
+                new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(MatchQueryBuilder.NAME), MatchQueryBuilder::fromXContent)
+            )
+        );
+        XContentParser contentParser = createParser(
+            namedXContentRegistry,
+            xContentBuilder.contentType().xContent(),
+            BytesReference.bytes(xContentBuilder)
+        );
+        contentParser.nextToken();
+        ParsingException exception = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(contentParser));
+        assertThat(exception.getMessage(), containsString("Number of sub-queries exceeds maximum supported by [hybrid] query"));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenPaginationDepthIsInvalid_thenFail() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .field("pagination_depth", -1)
+            .startArray("queries")
+            .startObject()
+            .startObject(NeuralQueryBuilder.NAME)
+            .startObject(VECTOR_FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .field(K_FIELD.getPreferredName(), K)
+            .field(BOOST_FIELD.getPreferredName(), BOOST)
+            .endObject()
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject(TermQueryBuilder.NAME)
+            .field(TEXT_FIELD_NAME, TERM_QUERY_TEXT)
+            .endObject()
+            .endObject()
+            .endArray()
+            .endObject();
+
+        NamedXContentRegistry namedXContentRegistry = new NamedXContentRegistry(
+            List.of(
+                new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(TermQueryBuilder.NAME), TermQueryBuilder::fromXContent),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(NeuralQueryBuilder.NAME),
+                    NeuralQueryBuilder::fromXContent
+                ),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(HybridQueryBuilder.NAME),
+                    HybridQueryBuilder::fromXContent
+                )
+            )
+        );
+        XContentParser contentParser = createParser(
+            namedXContentRegistry,
+            xContentBuilder.contentType().xContent(),
+            BytesReference.bytes(xContentBuilder)
+        );
+        contentParser.nextToken();
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> HybridQueryBuilder.fromXContent(contentParser)
+        );
+        assertThat(exception.getMessage(), containsString("Pagination depth should lie in the range of 1-1000. Received: -1"));
+
+        XContentBuilder xContentBuilder1 = XContentFactory.jsonBuilder()
+            .startObject()
+            .field("pagination_depth", 10001)
+            .startArray("queries")
+            .startObject()
+            .startObject(NeuralQueryBuilder.NAME)
+            .startObject(VECTOR_FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .field(K_FIELD.getPreferredName(), K)
+            .field(BOOST_FIELD.getPreferredName(), BOOST)
+            .endObject()
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject(TermQueryBuilder.NAME)
+            .field(TEXT_FIELD_NAME, TERM_QUERY_TEXT)
+            .endObject()
+            .endObject()
+            .endArray()
+            .endObject();
+
+        XContentParser contentParser1 = createParser(
+            namedXContentRegistry,
+            xContentBuilder1.contentType().xContent(),
+            BytesReference.bytes(xContentBuilder1)
+        );
+        contentParser1.nextToken();
+        IllegalArgumentException exception1 = expectThrows(
+            IllegalArgumentException.class,
+            () -> HybridQueryBuilder.fromXContent(contentParser1)
+        );
+        assertThat(exception1.getMessage(), containsString("Pagination depth should lie in the range of 1-1000. Received: 10001"));
+    }
+
+    @SneakyThrows
     public void testToXContent_whenIncomingJsonIsCorrect_thenSuccessful() {
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
         Index dummyIndex = new Index("dummy", "dummy");
@@ -526,6 +688,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     public void testHashAndEquals_whenSubQueriesDifferent_thenReturnNotEqual() {
+        setUpClusterService();
         String modelId = "testModelId";
         String fieldName = "fieldTwo";
         String queryText = "query text";
@@ -614,6 +777,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testRewrite_whenMultipleSubQueries_thenReturnBuilderForEachSubQuery() {
+        setUpClusterService();
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
             .queryText(QUERY_TEXT)

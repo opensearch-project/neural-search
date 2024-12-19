@@ -12,6 +12,7 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -19,6 +20,8 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.action.OriginalIndices;
+import org.opensearch.action.search.SearchPhaseContext;
+import org.opensearch.action.search.SearchRequest;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.neuralsearch.util.TestUtils;
@@ -35,6 +38,7 @@ import org.opensearch.search.query.QuerySearchResult;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
+    private static final String INDEX_NAME = "normalization-index";
 
     public void testSearchResultTypes_whenResultsOfHybridSearch_thenDoNormalizationCombination() {
         NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
@@ -72,12 +76,18 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
             querySearchResults.add(querySearchResult);
         }
 
-        normalizationProcessorWorkflow.execute(
-            querySearchResults,
-            Optional.empty(),
-            ScoreNormalizationFactory.DEFAULT_METHOD,
-            ScoreCombinationFactory.DEFAULT_METHOD
-        );
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
+        SearchRequest searchRequest = new SearchRequest(INDEX_NAME);
+        searchRequest.source().from(0);
+        when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+        NormalizationProcessorWorkflowExecuteRequest normalizationExecuteDTO = NormalizationProcessorWorkflowExecuteRequest.builder()
+            .querySearchResults(querySearchResults)
+            .fetchSearchResultOptional(Optional.empty())
+            .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+            .combinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+            .build();
+
+        normalizationProcessorWorkflow.execute(normalizationExecuteDTO);
 
         TestUtils.assertQueryResultScores(querySearchResults);
     }
@@ -114,12 +124,18 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
             querySearchResults.add(querySearchResult);
         }
 
-        normalizationProcessorWorkflow.execute(
-            querySearchResults,
-            Optional.empty(),
-            ScoreNormalizationFactory.DEFAULT_METHOD,
-            ScoreCombinationFactory.DEFAULT_METHOD
-        );
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
+        SearchRequest searchRequest = new SearchRequest(INDEX_NAME);
+        searchRequest.source().from(0);
+        when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+        NormalizationProcessorWorkflowExecuteRequest normalizationExecuteDto = NormalizationProcessorWorkflowExecuteRequest.builder()
+            .querySearchResults(querySearchResults)
+            .fetchSearchResultOptional(Optional.empty())
+            .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+            .combinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+            .build();
+
+        normalizationProcessorWorkflow.execute(normalizationExecuteDto);
 
         TestUtils.assertQueryResultScoresWithNoMatches(querySearchResults);
     }
@@ -173,12 +189,17 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
         SearchHits searchHits = new SearchHits(searchHitArray, new TotalHits(7, TotalHits.Relation.EQUAL_TO), 10);
         fetchSearchResult.hits(searchHits);
 
-        normalizationProcessorWorkflow.execute(
-            querySearchResults,
-            Optional.of(fetchSearchResult),
-            ScoreNormalizationFactory.DEFAULT_METHOD,
-            ScoreCombinationFactory.DEFAULT_METHOD
-        );
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
+        SearchRequest searchRequest = new SearchRequest(INDEX_NAME);
+        searchRequest.source().from(0);
+        when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+        NormalizationProcessorWorkflowExecuteRequest normalizationExecuteDto = NormalizationProcessorWorkflowExecuteRequest.builder()
+            .querySearchResults(querySearchResults)
+            .fetchSearchResultOptional(Optional.of(fetchSearchResult))
+            .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+            .combinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+            .build();
+        normalizationProcessorWorkflow.execute(normalizationExecuteDto);
 
         TestUtils.assertQueryResultScores(querySearchResults);
         TestUtils.assertFetchResultScores(fetchSearchResult, 4);
@@ -233,12 +254,17 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
         SearchHits searchHits = new SearchHits(searchHitArray, new TotalHits(7, TotalHits.Relation.EQUAL_TO), 10);
         fetchSearchResult.hits(searchHits);
 
-        normalizationProcessorWorkflow.execute(
-            querySearchResults,
-            Optional.of(fetchSearchResult),
-            ScoreNormalizationFactory.DEFAULT_METHOD,
-            ScoreCombinationFactory.DEFAULT_METHOD
-        );
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
+        SearchRequest searchRequest = new SearchRequest(INDEX_NAME);
+        searchRequest.source().from(0);
+        when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+        NormalizationProcessorWorkflowExecuteRequest normalizationExecuteDto = NormalizationProcessorWorkflowExecuteRequest.builder()
+            .querySearchResults(querySearchResults)
+            .fetchSearchResultOptional(Optional.of(fetchSearchResult))
+            .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+            .combinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+            .build();
+        normalizationProcessorWorkflow.execute(normalizationExecuteDto);
 
         TestUtils.assertQueryResultScores(querySearchResults);
         TestUtils.assertFetchResultScores(fetchSearchResult, 4);
@@ -285,15 +311,18 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
         SearchHits searchHits = getSearchHits();
         fetchSearchResult.hits(searchHits);
 
-        expectThrows(
-            IllegalStateException.class,
-            () -> normalizationProcessorWorkflow.execute(
-                querySearchResults,
-                Optional.of(fetchSearchResult),
-                ScoreNormalizationFactory.DEFAULT_METHOD,
-                ScoreCombinationFactory.DEFAULT_METHOD
-            )
-        );
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
+        SearchRequest searchRequest = new SearchRequest(INDEX_NAME);
+        searchRequest.source().from(0);
+        when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+        NormalizationProcessorWorkflowExecuteRequest normalizationExecuteDto = NormalizationProcessorWorkflowExecuteRequest.builder()
+            .querySearchResults(querySearchResults)
+            .fetchSearchResultOptional(Optional.of(fetchSearchResult))
+            .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+            .combinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+            .build();
+
+        expectThrows(IllegalStateException.class, () -> normalizationProcessorWorkflow.execute(normalizationExecuteDto));
     }
 
     public void testFetchResultsAndCache_whenOneShardAndMultipleNodesAndMismatchResults_thenSuccessful() {
@@ -337,15 +366,83 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
         SearchHits searchHits = getSearchHits();
         fetchSearchResult.hits(searchHits);
 
-        normalizationProcessorWorkflow.execute(
-            querySearchResults,
-            Optional.of(fetchSearchResult),
-            ScoreNormalizationFactory.DEFAULT_METHOD,
-            ScoreCombinationFactory.DEFAULT_METHOD
-        );
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
+        SearchRequest searchRequest = new SearchRequest(INDEX_NAME);
+        searchRequest.source().from(0);
+        when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+
+        NormalizationProcessorWorkflowExecuteRequest normalizationExecuteDto = NormalizationProcessorWorkflowExecuteRequest.builder()
+            .querySearchResults(querySearchResults)
+            .fetchSearchResultOptional(Optional.of(fetchSearchResult))
+            .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+            .combinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+            .build();
+
+        normalizationProcessorWorkflow.execute(normalizationExecuteDto);
 
         TestUtils.assertQueryResultScores(querySearchResults);
         TestUtils.assertFetchResultScores(fetchSearchResult, 4);
+    }
+
+    public void testNormalization_whenFromIsGreaterThanResultsSize_thenFail() {
+        NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+        );
+
+        List<QuerySearchResult> querySearchResults = new ArrayList<>();
+        for (int shardId = 0; shardId < 4; shardId++) {
+            SearchShardTarget searchShardTarget = new SearchShardTarget(
+                "node",
+                new ShardId("index", "uuid", shardId),
+                null,
+                OriginalIndices.NONE
+            );
+            QuerySearchResult querySearchResult = new QuerySearchResult();
+            querySearchResult.topDocs(
+                new TopDocsAndMaxScore(
+                    new TopDocs(
+                        new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] {
+                            createStartStopElementForHybridSearchResults(0),
+                            createDelimiterElementForHybridSearchResults(0),
+                            new ScoreDoc(0, 0.5f),
+                            new ScoreDoc(2, 0.3f),
+                            new ScoreDoc(4, 0.25f),
+                            new ScoreDoc(10, 0.2f),
+                            createStartStopElementForHybridSearchResults(0) }
+                    ),
+                    0.5f
+                ),
+                null
+            );
+            querySearchResult.setSearchShardTarget(searchShardTarget);
+            querySearchResult.setShardIndex(shardId);
+            // requested page is out of bound for the total number of results
+            querySearchResult.from(17);
+            querySearchResults.add(querySearchResult);
+        }
+
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
+        SearchRequest searchRequest = new SearchRequest(INDEX_NAME);
+        searchRequest.source().from(17);
+        when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+
+        NormalizationProcessorWorkflowExecuteRequest normalizationExecuteDto = NormalizationProcessorWorkflowExecuteRequest.builder()
+            .querySearchResults(querySearchResults)
+            .fetchSearchResultOptional(Optional.empty())
+            .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+            .combinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+            .build();
+
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> normalizationProcessorWorkflow.execute(normalizationExecuteDto)
+        );
+
+        assertEquals(
+            String.format(Locale.ROOT, "Reached end of search result, increase pagination_depth value to see more results"),
+            illegalArgumentException.getMessage()
+        );
     }
 
     private static SearchHits getSearchHits() {

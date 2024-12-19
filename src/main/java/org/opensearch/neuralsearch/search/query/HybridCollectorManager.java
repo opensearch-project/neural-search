@@ -8,6 +8,7 @@ import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.CollectorManager;
 import org.apache.lucene.search.Weight;
@@ -22,6 +23,7 @@ import org.apache.lucene.search.FieldDoc;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.lucene.search.FilteredCollector;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
+import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 import org.opensearch.neuralsearch.search.collector.HybridSearchCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopFieldDocSortCollector;
@@ -80,12 +82,26 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
      * @throws IOException
      */
     public static CollectorManager createHybridCollectorManager(final SearchContext searchContext) throws IOException {
+        if (searchContext.scrollContext() != null) {
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "Scroll operation is not supported in hybrid query"));
+        }
         final IndexReader reader = searchContext.searcher().getIndexReader();
         final int totalNumDocs = Math.max(0, reader.numDocs());
-        int numDocs = Math.min(searchContext.from() + searchContext.size(), totalNumDocs);
+        int numDocs = Math.min(getSubqueryResultsRetrievalSize(searchContext), totalNumDocs);
         int trackTotalHitsUpTo = searchContext.trackTotalHitsUpTo();
         if (searchContext.sort() != null) {
             validateSortCriteria(searchContext, searchContext.trackScores());
+        }
+
+        boolean isSingleShard = searchContext.numberOfShards() == 1;
+        // In case of single shard, it can happen that fetch phase might execute before normalization phase. Moreover, The pagination logic
+        // lies in the fetch phase.
+        // If the fetch phase gets executed before the normalization phase, then the result will be not paginated as per normalized score.
+        // Therefore, to avoid it we will update from value in search context to 0. This will stop fetch phase to trim results prematurely.
+        // Later in the normalization phase we will update QuerySearchResult object with the right from value, to handle the effective
+        // trimming of results.
+        if (isSingleShard && searchContext.from() > 0) {
+            searchContext.from(0);
         }
 
         Weight filteringWeight = null;
@@ -459,6 +475,38 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 r.reduce(result);
             }
         };
+    }
+
+    /**
+     * Get maximum subquery results count to be collected from each shard.
+     * @param searchContext search context that contains pagination depth
+     * @return results size to collected
+     */
+    private static int getSubqueryResultsRetrievalSize(final SearchContext searchContext) {
+        HybridQuery hybridQuery = getHybridQueryFromAbstractQuery(searchContext.query());
+        Integer paginationDepth = hybridQuery.getPaginationDepth();
+
+        // Switch to from+size retrieval size when pagination_depth is null.
+        if (searchContext.from() == 0) {
+            return searchContext.from() + searchContext.size();
+        }
+        // Pagination is expected to work only pagination_depth is provided to hold the reference of search result.
+        if (Objects.isNull(paginationDepth)) {
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "pagination_depth is missing in the search request"));
+        }
+        return paginationDepth;
+    }
+
+    private static HybridQuery getHybridQueryFromAbstractQuery(Query query) {
+        HybridQuery hybridQuery;
+        // In case of nested fields and alias filter, hybrid query is wrapped under bool query and lies in the first clause.
+        if (query instanceof BooleanQuery) {
+            BooleanQuery booleanQuery = (BooleanQuery) query;
+            hybridQuery = (HybridQuery) booleanQuery.clauses().get(0).getQuery();
+        } else {
+            hybridQuery = (HybridQuery) query;
+        }
+        return hybridQuery;
     }
 
     /**

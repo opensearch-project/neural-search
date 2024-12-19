@@ -5,7 +5,7 @@
 package org.opensearch.neuralsearch.processor;
 
 import java.util.Collections;
-import org.opensearch.neuralsearch.processor.combination.CombineScoresDto;
+import org.opensearch.neuralsearch.processor.dto.CombineScoresDto;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 
 import java.util.List;

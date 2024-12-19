@@ -2,9 +2,10 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.processor.combination;
+package org.opensearch.neuralsearch.processor.dto;
 
 import java.util.List;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -12,6 +13,7 @@ import lombok.NonNull;
 import org.apache.lucene.search.Sort;
 import org.opensearch.common.Nullable;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.search.query.QuerySearchResult;
 
 /**
@@ -29,4 +31,6 @@ public class CombineScoresDto {
     private List<QuerySearchResult> querySearchResults;
     @Nullable
     private Sort sort;
+    private int fromValueForSingleShard;
+    private boolean isFetchResultsPresent;
 }
