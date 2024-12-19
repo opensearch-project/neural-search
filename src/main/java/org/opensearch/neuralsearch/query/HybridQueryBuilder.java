@@ -59,7 +59,6 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
     private final static int DEFAULT_PAGINATION_DEPTH = 10;
     private static final int LOWER_BOUND_OF_PAGINATION_DEPTH = 1;
-    private static final int UPPER_BOUND_OF_PAGINATION_DEPTH = 10000;
 
     public HybridQueryBuilder(StreamInput in) throws IOException {
         super(in);
@@ -128,6 +127,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         if (queryCollection.isEmpty()) {
             return Queries.newMatchNoDocsQuery(String.format(Locale.ROOT, "no clauses for %s query", NAME));
         }
+        validatePaginationDepth(paginationDepth, queryShardContext);
         return new HybridQuery(queryCollection, paginationDepth);
     }
 
@@ -236,7 +236,6 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         compoundQueryBuilder.queryName(queryName);
         compoundQueryBuilder.boost(boost);
         if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
-            validatePaginationDepth(paginationDepth);
             compoundQueryBuilder.paginationDepth(paginationDepth);
         }
         for (QueryBuilder query : queries) {
@@ -326,9 +325,14 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         return queries;
     }
 
-    private static void validatePaginationDepth(Integer paginationDepth) {
-        if (paginationDepth != null
-            && (paginationDepth < LOWER_BOUND_OF_PAGINATION_DEPTH || paginationDepth > UPPER_BOUND_OF_PAGINATION_DEPTH)) {
+    private static void validatePaginationDepth(Integer paginationDepth, QueryShardContext queryShardContext) {
+        if (Objects.isNull(paginationDepth)) {
+            return;
+        }
+        // compare pagination depth with OpenSearch setting index.max_result_window
+        // see https://opensearch.org/docs/latest/install-and-configure/configuring-opensearch/index-settings/
+        int maxResultWindowIndexSetting = queryShardContext.getIndexSettings().getMaxResultWindow();
+        if (paginationDepth < LOWER_BOUND_OF_PAGINATION_DEPTH || paginationDepth > maxResultWindowIndexSetting) {
             throw new IllegalArgumentException(
                 String.format(Locale.ROOT, "Pagination depth should lie in the range of 1-1000. Received: %s", paginationDepth)
             );
