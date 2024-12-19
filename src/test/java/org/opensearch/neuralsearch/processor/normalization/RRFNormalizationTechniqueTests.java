@@ -30,8 +30,13 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     private static final SearchShard SEARCH_SHARD = new SearchShard("my_index", 0, "12345678");
 
     public void testDescribe() {
+        // verify with default values for parameters
         RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
-        assertEquals("rrf, rank_constant 60", normalizationTechnique.describe());
+        assertEquals("rrf, rank_constant [60]", normalizationTechnique.describe());
+
+        // verify when parameter values are set
+        normalizationTechnique = new RRFNormalizationTechnique(Map.of("rank_constant", 25), scoreNormalizationUtil);
+        assertEquals("rrf, rank_constant [25]", normalizationTechnique.describe());
     }
 
     public void testNormalization_whenResultFromOneShardOneSubQuery_thenSuccessful() {

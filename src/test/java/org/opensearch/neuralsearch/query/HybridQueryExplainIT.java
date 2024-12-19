@@ -633,7 +633,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             // two sub-queries meaning we do have two detail objects with separate query level details
             Map<String, Object> hit1DetailsForHit1 = hit1Details.get(0);
             assertTrue((double) hit1DetailsForHit1.get("value") > DELTA_FOR_SCORE_ASSERTION);
-            assertEquals("rrf, rank_constant 60 normalization of:", hit1DetailsForHit1.get("description"));
+            assertEquals("rrf, rank_constant [60] normalization of:", hit1DetailsForHit1.get("description"));
             assertEquals(1, ((List) hit1DetailsForHit1.get("details")).size());
 
             Map<String, Object> explanationsHit1 = getListOfValues(hit1DetailsForHit1, "details").get(0);
@@ -643,7 +643,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
 
             Map<String, Object> hit1DetailsForHit2 = hit1Details.get(1);
             assertTrue((double) hit1DetailsForHit2.get("value") > 0.0f);
-            assertEquals("rrf, rank_constant 60 normalization of:", hit1DetailsForHit2.get("description"));
+            assertEquals("rrf, rank_constant [60] normalization of:", hit1DetailsForHit2.get("description"));
             assertEquals(1, ((List) hit1DetailsForHit2.get("details")).size());
 
             Map<String, Object> explanationsHit2 = getListOfValues(hit1DetailsForHit2, "details").get(0);
@@ -663,12 +663,12 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
 
             Map<String, Object> hit2DetailsForHit1 = hit2Details.get(0);
             assertTrue((double) hit2DetailsForHit1.get("value") > DELTA_FOR_SCORE_ASSERTION);
-            assertEquals("rrf, rank_constant 60 normalization of:", hit2DetailsForHit1.get("description"));
+            assertEquals("rrf, rank_constant [60] normalization of:", hit2DetailsForHit1.get("description"));
             assertEquals(1, ((List) hit2DetailsForHit1.get("details")).size());
 
             Map<String, Object> hit2DetailsForHit2 = hit2Details.get(1);
             assertTrue((double) hit2DetailsForHit2.get("value") > DELTA_FOR_SCORE_ASSERTION);
-            assertEquals("rrf, rank_constant 60 normalization of:", hit2DetailsForHit2.get("description"));
+            assertEquals("rrf, rank_constant [60] normalization of:", hit2DetailsForHit2.get("description"));
             assertEquals(1, ((List) hit2DetailsForHit2.get("details")).size());
 
             // hit 3
@@ -683,7 +683,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
 
             Map<String, Object> hit3DetailsForHit1 = hit3Details.get(0);
             assertTrue((double) hit3DetailsForHit1.get("value") > .0f);
-            assertEquals("rrf, rank_constant 60 normalization of:", hit3DetailsForHit1.get("description"));
+            assertEquals("rrf, rank_constant [60] normalization of:", hit3DetailsForHit1.get("description"));
             assertEquals(1, ((List) hit3DetailsForHit1.get("details")).size());
 
             Map<String, Object> explanationsHit3 = getListOfValues(hit3DetailsForHit1, "details").get(0);
@@ -703,7 +703,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
 
             Map<String, Object> hit4DetailsForHit1 = hit4Details.get(0);
             assertTrue((double) hit4DetailsForHit1.get("value") > DELTA_FOR_SCORE_ASSERTION);
-            assertEquals("rrf, rank_constant 60 normalization of:", hit4DetailsForHit1.get("description"));
+            assertEquals("rrf, rank_constant [60] normalization of:", hit4DetailsForHit1.get("description"));
             assertEquals(1, ((List) hit4DetailsForHit1.get("details")).size());
 
             Map<String, Object> explanationsHit4 = getListOfValues(hit4DetailsForHit1, "details").get(0);

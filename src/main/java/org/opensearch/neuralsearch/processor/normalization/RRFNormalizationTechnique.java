@@ -71,7 +71,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
 
     @Override
     public String describe() {
-        return String.format(Locale.ROOT, "%s, rank_constant %s", TECHNIQUE_NAME, rankConstant);
+        return String.format(Locale.ROOT, "%s, rank_constant [%s]", TECHNIQUE_NAME, rankConstant);
     }
 
     @Override
