@@ -9,6 +9,7 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.junit.Before;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.action.OriginalIndices;
@@ -111,6 +112,10 @@ public class RRFProcessorTests extends OpenSearchTestCase {
 
         when(mockQueryPhaseResultConsumer.getAtomicArray()).thenReturn(atomicArray);
 
+        SearchRequest searchRequest = new SearchRequest();
+        searchRequest.source(new SearchSourceBuilder());
+        when(mockSearchPhaseContext.getRequest()).thenReturn(searchRequest);
+
         rrfProcessor.process(mockQueryPhaseResultConsumer, mockSearchPhaseContext);
 
         verify(mockNormalizationWorkflow).execute(any(NormalizationProcessorWorkflowExecuteRequest.class));
@@ -175,6 +180,34 @@ public class RRFProcessorTests extends OpenSearchTestCase {
 
         Optional<FetchSearchResult> result = rrfProcessor.getFetchSearchResults(mockQueryPhaseResultConsumer);
         assertFalse(result.isPresent());
+    }
+
+    @SneakyThrows
+    public void testProcess_whenExplainIsTrue_thenExplanationIsAdded() {
+        QuerySearchResult result = createQuerySearchResult(true);
+        AtomicArray<SearchPhaseResult> atomicArray = new AtomicArray<>(1);
+        atomicArray.set(0, result);
+
+        when(mockQueryPhaseResultConsumer.getAtomicArray()).thenReturn(atomicArray);
+
+        SearchRequest searchRequest = new SearchRequest();
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+        sourceBuilder.explain(true);
+        searchRequest.source(sourceBuilder);
+        when(mockSearchPhaseContext.getRequest()).thenReturn(searchRequest);
+
+        rrfProcessor.process(mockQueryPhaseResultConsumer, mockSearchPhaseContext);
+
+        // Capture the actual request
+        ArgumentCaptor<NormalizationProcessorWorkflowExecuteRequest> requestCaptor = ArgumentCaptor.forClass(
+            NormalizationProcessorWorkflowExecuteRequest.class
+        );
+        verify(mockNormalizationWorkflow).execute(requestCaptor.capture());
+
+        // Verify the captured request
+        NormalizationProcessorWorkflowExecuteRequest capturedRequest = requestCaptor.getValue();
+        assertTrue(capturedRequest.isExplain());
+        assertNull(capturedRequest.getPipelineProcessingContext());
     }
 
     private QuerySearchResult createQuerySearchResult(boolean isHybrid) {

@@ -10,10 +10,14 @@ import org.apache.lucene.search.TotalHits;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 import org.opensearch.neuralsearch.processor.SearchShard;
+import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
+import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -24,6 +28,16 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     static final int RANK_CONSTANT = 60;
     private ScoreNormalizationUtil scoreNormalizationUtil = new ScoreNormalizationUtil();
     private static final SearchShard SEARCH_SHARD = new SearchShard("my_index", 0, "12345678");
+
+    public void testDescribe() {
+        // verify with default values for parameters
+        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
+        assertEquals("rrf, rank_constant [60]", normalizationTechnique.describe());
+
+        // verify when parameter values are set
+        normalizationTechnique = new RRFNormalizationTechnique(Map.of("rank_constant", 25), scoreNormalizationUtil);
+        assertEquals("rrf, rank_constant [25]", normalizationTechnique.describe());
+    }
 
     public void testNormalization_whenResultFromOneShardOneSubQuery_thenSuccessful() {
         RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
@@ -224,6 +238,27 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         }
     }
 
+    public void testExplainWithEmptyAndNullList() {
+        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
+        normalizationTechnique.explain(List.of());
+
+        List<CompoundTopDocs> compoundTopDocs = new ArrayList<>();
+        compoundTopDocs.add(null);
+        normalizationTechnique.explain(compoundTopDocs);
+    }
+
+    public void testExplainWithSingleTopDocs() {
+        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
+        CompoundTopDocs topDocs = createCompoundTopDocs(new float[] { 0.8f }, 1);
+        List<CompoundTopDocs> queryTopDocs = Collections.singletonList(topDocs);
+
+        Map<DocIdAtSearchShard, ExplanationDetails> explanation = normalizationTechnique.explain(queryTopDocs);
+
+        assertNotNull(explanation);
+        assertEquals(1, explanation.size());
+        assertTrue(explanation.containsKey(new DocIdAtSearchShard(0, new SearchShard("test_index", 0, "uuid"))));
+    }
+
     private float rrfNorm(int rank) {
         // 1.0f / (float) (rank + RANK_CONSTANT + 1);
         return BigDecimal.ONE.divide(BigDecimal.valueOf(rank + RANK_CONSTANT + 1), 10, RoundingMode.HALF_UP).floatValue();
@@ -238,5 +273,24 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
             assertEquals(expected.scoreDocs[i].doc, actual.scoreDocs[i].doc);
             assertEquals(expected.scoreDocs[i].shardIndex, actual.scoreDocs[i].shardIndex);
         }
+    }
+
+    private CompoundTopDocs createCompoundTopDocs(float[] scores, int size) {
+        ScoreDoc[] scoreDocs = new ScoreDoc[size];
+        for (int i = 0; i < size; i++) {
+            scoreDocs[i] = new ScoreDoc(i, scores[i]);
+        }
+        TopDocs singleTopDocs = new TopDocs(new TotalHits(size, TotalHits.Relation.EQUAL_TO), scoreDocs);
+
+        List<TopDocs> topDocsList = Collections.singletonList(singleTopDocs);
+        TopDocs topDocs = new TopDocs(new TotalHits(size, TotalHits.Relation.EQUAL_TO), scoreDocs);
+        SearchShard searchShard = new SearchShard("test_index", 0, "uuid");
+
+        return new CompoundTopDocs(
+            new TotalHits(size, TotalHits.Relation.EQUAL_TO),
+            topDocsList,
+            false, // isSortEnabled
+            searchShard
+        );
     }
 }

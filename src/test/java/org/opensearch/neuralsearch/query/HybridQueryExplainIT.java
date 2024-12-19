@@ -58,7 +58,8 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
     private final float[] testVector1 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector2 = createRandomVector(TEST_DIMENSION);
     private final float[] testVector3 = createRandomVector(TEST_DIMENSION);
-    private static final String SEARCH_PIPELINE = "phase-results-hybrid-pipeline";
+    private static final String NORMALIZATION_SEARCH_PIPELINE = "normalization-search-pipeline";
+    private static final String RRF_SEARCH_PIPELINE = "rrf-search-pipeline";
 
     static final Supplier<float[]> TEST_VECTOR_SUPPLIER = () -> new float[768];
 
@@ -78,7 +79,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
         try {
             initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
             // create search pipeline with both normalization processor and explain response processor
-            createSearchPipeline(SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), true);
+            createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), true);
 
             TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
             TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
@@ -95,7 +96,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
                 hybridQueryBuilderNeuralThenTerm,
                 null,
                 10,
-                Map.of("search_pipeline", SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
+                Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
             );
             // Assert
             // search hits
@@ -187,7 +188,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             assertEquals("score(freq=1.0), computed as boost * idf * tf from:", explanationsHit3Details.get("description"));
             assertEquals(3, getListOfValues(explanationsHit3Details, "details").size());
         } finally {
-            wipeOfTestResources(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, null, null, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, null, null, NORMALIZATION_SEARCH_PIPELINE);
         }
     }
 
@@ -196,7 +197,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
         try {
             initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
             createSearchPipeline(
-                SEARCH_PIPELINE,
+                NORMALIZATION_SEARCH_PIPELINE,
                 NORMALIZATION_TECHNIQUE_L2,
                 DEFAULT_COMBINATION_METHOD,
                 Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.7f })),
@@ -217,7 +218,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
                 hybridQueryBuilder,
                 null,
                 10,
-                Map.of("search_pipeline", SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
+                Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
             );
             // Assert
             // basic sanity check for search hits
@@ -322,7 +323,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             assertEquals(0, getListOfValues(explanationsHit4, "details").size());
             assertTrue((double) explanationsHit4.get("value") > 0.0f);
         } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME, null, null, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME, null, null, NORMALIZATION_SEARCH_PIPELINE);
         }
     }
 
@@ -331,7 +332,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
         try {
             initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
             // create search pipeline with normalization processor, no explanation response processor
-            createSearchPipeline(SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), false);
+            createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), false);
 
             TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
             TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
@@ -348,7 +349,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
                 hybridQueryBuilderNeuralThenTerm,
                 null,
                 10,
-                Map.of("search_pipeline", SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
+                Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
             );
             // Assert
             // search hits
@@ -463,7 +464,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             assertEquals("boost", explanationsHit3Details.get("description"));
             assertEquals(0, getListOfValues(explanationsHit3Details, "details").size());
         } finally {
-            wipeOfTestResources(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, null, null, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, null, null, NORMALIZATION_SEARCH_PIPELINE);
         }
     }
 
@@ -472,7 +473,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
         try {
             initializeIndexIfNotExist(TEST_LARGE_DOCS_INDEX_NAME);
             // create search pipeline with both normalization processor and explain response processor
-            createSearchPipeline(SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), true);
+            createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), true);
 
             TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
             HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
@@ -483,7 +484,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
                 hybridQueryBuilder,
                 null,
                 MAX_NUMBER_OF_DOCS_IN_LARGE_INDEX,
-                Map.of("search_pipeline", SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
+                Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
             );
 
             List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
@@ -521,7 +522,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             }
             assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(i -> scores.get(i) < scores.get(i + 1)));
         } finally {
-            wipeOfTestResources(TEST_LARGE_DOCS_INDEX_NAME, null, null, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_LARGE_DOCS_INDEX_NAME, null, null, NORMALIZATION_SEARCH_PIPELINE);
         }
     }
 
@@ -530,7 +531,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
         try {
             initializeIndexIfNotExist(TEST_LARGE_DOCS_INDEX_NAME);
             // create search pipeline with both normalization processor and explain response processor
-            createSearchPipeline(SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), true);
+            createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), true);
 
             HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
             hybridQueryBuilder.add(QueryBuilders.multiMatchQuery(TEST_QUERY_TEXT3, TEST_TEXT_FIELD_NAME_1, TEST_TEXT_FIELD_NAME_2));
@@ -543,7 +544,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
                 hybridQueryBuilder,
                 null,
                 MAX_NUMBER_OF_DOCS_IN_LARGE_INDEX,
-                Map.of("search_pipeline", SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
+                Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
             );
 
             List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
@@ -581,7 +582,136 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             }
             assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(i -> scores.get(i) < scores.get(i + 1)));
         } finally {
-            wipeOfTestResources(TEST_LARGE_DOCS_INDEX_NAME, null, null, SEARCH_PIPELINE);
+            wipeOfTestResources(TEST_LARGE_DOCS_INDEX_NAME, null, null, NORMALIZATION_SEARCH_PIPELINE);
+        }
+    }
+
+    @SneakyThrows
+    public void testExplain_whenRRFProcessor_thenSuccessful() {
+        try {
+            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
+            createRRFSearchPipeline(RRF_SEARCH_PIPELINE, true);
+
+            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+            KNNQueryBuilder knnQueryBuilder = KNNQueryBuilder.builder()
+                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+                .vector(createRandomVector(TEST_DIMENSION))
+                .k(10)
+                .build();
+            hybridQueryBuilder.add(QueryBuilders.existsQuery(TEST_TEXT_FIELD_NAME_1));
+            hybridQueryBuilder.add(knnQueryBuilder);
+
+            Map<String, Object> searchResponseAsMap = search(
+                TEST_MULTI_DOC_INDEX_NAME,
+                hybridQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", RRF_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
+            );
+            // Assert
+            // basic sanity check for search hits
+            assertEquals(4, getHitCount(searchResponseAsMap));
+            assertTrue(getMaxScore(searchResponseAsMap).isPresent());
+            float actualMaxScore = getMaxScore(searchResponseAsMap).get();
+            assertTrue(actualMaxScore > 0);
+            Map<String, Object> total = getTotalHits(searchResponseAsMap);
+            assertNotNull(total.get("value"));
+            assertEquals(4, total.get("value"));
+            assertNotNull(total.get("relation"));
+            assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+
+            // explain, hit 1
+            List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
+            Map<String, Object> searchHit1 = hitsNestedList.get(0);
+            Map<String, Object> explanationForHit1 = getValueByKey(searchHit1, "_explanation");
+            assertNotNull(explanationForHit1);
+            assertEquals((double) searchHit1.get("_score"), (double) explanationForHit1.get("value"), DELTA_FOR_SCORE_ASSERTION);
+            String expectedTopLevelDescription = "rrf combination of:";
+            assertEquals(expectedTopLevelDescription, explanationForHit1.get("description"));
+            List<Map<String, Object>> hit1Details = getListOfValues(explanationForHit1, "details");
+            assertEquals(2, hit1Details.size());
+            // two sub-queries meaning we do have two detail objects with separate query level details
+            Map<String, Object> hit1DetailsForHit1 = hit1Details.get(0);
+            assertTrue((double) hit1DetailsForHit1.get("value") > DELTA_FOR_SCORE_ASSERTION);
+            assertEquals("rrf, rank_constant [60] normalization of:", hit1DetailsForHit1.get("description"));
+            assertEquals(1, ((List) hit1DetailsForHit1.get("details")).size());
+
+            Map<String, Object> explanationsHit1 = getListOfValues(hit1DetailsForHit1, "details").get(0);
+            assertEquals("ConstantScore(FieldExistsQuery [field=test-text-field-1])", explanationsHit1.get("description"));
+            assertTrue((double) explanationsHit1.get("value") > 0.5f);
+            assertEquals(0, ((List) explanationsHit1.get("details")).size());
+
+            Map<String, Object> hit1DetailsForHit2 = hit1Details.get(1);
+            assertTrue((double) hit1DetailsForHit2.get("value") > 0.0f);
+            assertEquals("rrf, rank_constant [60] normalization of:", hit1DetailsForHit2.get("description"));
+            assertEquals(1, ((List) hit1DetailsForHit2.get("details")).size());
+
+            Map<String, Object> explanationsHit2 = getListOfValues(hit1DetailsForHit2, "details").get(0);
+            assertEquals("within top 10", explanationsHit2.get("description"));
+            assertTrue((double) explanationsHit2.get("value") > 0.0f);
+            assertEquals(0, ((List) explanationsHit2.get("details")).size());
+
+            // hit 2
+            Map<String, Object> searchHit2 = hitsNestedList.get(1);
+            Map<String, Object> explanationForHit2 = getValueByKey(searchHit2, "_explanation");
+            assertNotNull(explanationForHit2);
+            assertEquals((double) searchHit2.get("_score"), (double) explanationForHit2.get("value"), DELTA_FOR_SCORE_ASSERTION);
+
+            assertEquals(expectedTopLevelDescription, explanationForHit2.get("description"));
+            List<Map<String, Object>> hit2Details = getListOfValues(explanationForHit2, "details");
+            assertEquals(2, hit2Details.size());
+
+            Map<String, Object> hit2DetailsForHit1 = hit2Details.get(0);
+            assertTrue((double) hit2DetailsForHit1.get("value") > DELTA_FOR_SCORE_ASSERTION);
+            assertEquals("rrf, rank_constant [60] normalization of:", hit2DetailsForHit1.get("description"));
+            assertEquals(1, ((List) hit2DetailsForHit1.get("details")).size());
+
+            Map<String, Object> hit2DetailsForHit2 = hit2Details.get(1);
+            assertTrue((double) hit2DetailsForHit2.get("value") > DELTA_FOR_SCORE_ASSERTION);
+            assertEquals("rrf, rank_constant [60] normalization of:", hit2DetailsForHit2.get("description"));
+            assertEquals(1, ((List) hit2DetailsForHit2.get("details")).size());
+
+            // hit 3
+            Map<String, Object> searchHit3 = hitsNestedList.get(2);
+            Map<String, Object> explanationForHit3 = getValueByKey(searchHit3, "_explanation");
+            assertNotNull(explanationForHit3);
+            assertEquals((double) searchHit3.get("_score"), (double) explanationForHit3.get("value"), DELTA_FOR_SCORE_ASSERTION);
+
+            assertEquals(expectedTopLevelDescription, explanationForHit3.get("description"));
+            List<Map<String, Object>> hit3Details = getListOfValues(explanationForHit3, "details");
+            assertEquals(1, hit3Details.size());
+
+            Map<String, Object> hit3DetailsForHit1 = hit3Details.get(0);
+            assertTrue((double) hit3DetailsForHit1.get("value") > .0f);
+            assertEquals("rrf, rank_constant [60] normalization of:", hit3DetailsForHit1.get("description"));
+            assertEquals(1, ((List) hit3DetailsForHit1.get("details")).size());
+
+            Map<String, Object> explanationsHit3 = getListOfValues(hit3DetailsForHit1, "details").get(0);
+            assertEquals("within top 10", explanationsHit3.get("description"));
+            assertEquals(0, getListOfValues(explanationsHit3, "details").size());
+            assertTrue((double) explanationsHit3.get("value") > 0.0f);
+
+            // hit 4
+            Map<String, Object> searchHit4 = hitsNestedList.get(3);
+            Map<String, Object> explanationForHit4 = getValueByKey(searchHit4, "_explanation");
+            assertNotNull(explanationForHit4);
+            assertEquals((double) searchHit4.get("_score"), (double) explanationForHit4.get("value"), DELTA_FOR_SCORE_ASSERTION);
+
+            assertEquals(expectedTopLevelDescription, explanationForHit4.get("description"));
+            List<Map<String, Object>> hit4Details = getListOfValues(explanationForHit4, "details");
+            assertEquals(1, hit4Details.size());
+
+            Map<String, Object> hit4DetailsForHit1 = hit4Details.get(0);
+            assertTrue((double) hit4DetailsForHit1.get("value") > DELTA_FOR_SCORE_ASSERTION);
+            assertEquals("rrf, rank_constant [60] normalization of:", hit4DetailsForHit1.get("description"));
+            assertEquals(1, ((List) hit4DetailsForHit1.get("details")).size());
+
+            Map<String, Object> explanationsHit4 = getListOfValues(hit4DetailsForHit1, "details").get(0);
+            assertEquals("ConstantScore(FieldExistsQuery [field=test-text-field-1])", explanationsHit4.get("description"));
+            assertEquals(0, getListOfValues(explanationsHit4, "details").size());
+            assertTrue((double) explanationsHit4.get("value") > 0.0f);
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME, null, null, RRF_SEARCH_PIPELINE);
         }
     }
 
