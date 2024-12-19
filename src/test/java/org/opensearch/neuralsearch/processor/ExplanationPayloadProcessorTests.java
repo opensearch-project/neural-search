@@ -125,7 +125,7 @@ public class ExplanationPayloadProcessorTests extends OpenSearchTestCase {
             searchHit.explanation(explanation);
         }
         TotalHits.Relation totalHitsRelation = randomFrom(TotalHits.Relation.values());
-        TotalHits totalHits = new TotalHits(randomLongBetween(0, 1000), totalHitsRelation);
+        TotalHits totalHits = new TotalHits(randomLongBetween(1, 1000), totalHitsRelation);
         final SortField[] sortFields = new SortField[] {
             new SortField("random-text-field-1", SortField.Type.INT, randomBoolean()),
             new SortField("random-text-field-2", SortField.Type.STRING, randomBoolean()) };
@@ -203,7 +203,7 @@ public class ExplanationPayloadProcessorTests extends OpenSearchTestCase {
         int requestedSize = 2;
         PriorityQueue<SearchHit> priorityQueue = new PriorityQueue<>(new SearchHitComparator(null));
         TotalHits.Relation totalHitsRelation = randomFrom(TotalHits.Relation.values());
-        TotalHits totalHits = new TotalHits(randomLongBetween(0, 1000), totalHitsRelation);
+        TotalHits totalHits = new TotalHits(randomLongBetween(1, 1000), totalHitsRelation);
 
         final int numDocs = totalHits.value >= requestedSize ? requestedSize : (int) totalHits.value;
         int scoreFactor = randomIntBetween(1, numResponses);
