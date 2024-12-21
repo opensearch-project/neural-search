@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Implement pruning for neural sparse ingestion pipeline and two phase search processor ([#988](https://github.com/opensearch-project/neural-search/pull/988))
 ### Bug Fixes
 -  Address inconsistent scoring in hybrid query results ([#998](https://github.com/opensearch-project/neural-search/pull/998))
+-  Fix bug where ingested document has list of nested objects ([#1038](https://github.com/opensearch-project/neural-search/pull/1038))
 ### Infrastructure
 ### Documentation
 ### Maintenance
