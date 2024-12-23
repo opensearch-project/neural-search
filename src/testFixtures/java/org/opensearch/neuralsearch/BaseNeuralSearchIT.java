@@ -1580,7 +1580,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         if (addExplainResponseProcessor) {
             builder.startArray("response_processors")
                 .startObject()
-                .startObject("explanation_response_processor")
+                .startObject("hybrid_score_explanation")
                 .endObject()
                 .endObject()
                 .endArray();
