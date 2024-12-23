@@ -12,11 +12,12 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
-import org.opensearch.ml.repackage.com.google.common.annotations.VisibleForTesting;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.search.fetch.FetchSearchResult;
+import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.query.QuerySearchResult;
 
 import org.opensearch.action.search.QueryPhaseResultConsumer;
@@ -25,7 +26,6 @@ import org.opensearch.action.search.SearchPhaseName;
 import org.opensearch.action.search.SearchPhaseResults;
 import org.opensearch.search.SearchPhaseResult;
 import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -39,7 +39,7 @@ import lombok.extern.log4j.Log4j2;
  */
 @Log4j2
 @AllArgsConstructor
-public class RRFProcessor implements SearchPhaseResultsProcessor {
+public class RRFProcessor extends AbstractScoreHybridizationProcessor {
     public static final String TYPE = "score-ranker-processor";
 
     @Getter
@@ -57,9 +57,10 @@ public class RRFProcessor implements SearchPhaseResultsProcessor {
      * @param searchPhaseContext {@link SearchContext}
      */
     @Override
-    public <Result extends SearchPhaseResult> void process(
-        final SearchPhaseResults<Result> searchPhaseResult,
-        final SearchPhaseContext searchPhaseContext
+    <Result extends SearchPhaseResult> void hybridizeScores(
+        SearchPhaseResults<Result> searchPhaseResult,
+        SearchPhaseContext searchPhaseContext,
+        Optional<PipelineProcessingContext> requestContextOptional
     ) {
         if (shouldSkipProcessor(searchPhaseResult)) {
             log.debug("Query results are not compatible with RRF processor");
@@ -67,7 +68,8 @@ public class RRFProcessor implements SearchPhaseResultsProcessor {
         }
         List<QuerySearchResult> querySearchResults = getQueryPhaseSearchResults(searchPhaseResult);
         Optional<FetchSearchResult> fetchSearchResult = getFetchSearchResults(searchPhaseResult);
-
+        boolean explain = Objects.nonNull(searchPhaseContext.getRequest().source().explain())
+            && searchPhaseContext.getRequest().source().explain();
         // make data transfer object to pass in, execute will get object with 4 or 5 fields, depending
         // on coming from NormalizationProcessor or RRFProcessor
         NormalizationProcessorWorkflowExecuteRequest normalizationExecuteDTO = NormalizationProcessorWorkflowExecuteRequest.builder()
@@ -75,7 +77,8 @@ public class RRFProcessor implements SearchPhaseResultsProcessor {
             .fetchSearchResultOptional(fetchSearchResult)
             .normalizationTechnique(normalizationTechnique)
             .combinationTechnique(combinationTechnique)
-            .explain(false)
+            .explain(explain)
+            .pipelineProcessingContext(requestContextOptional.orElse(null))
             .build();
         normalizationWorkflow.execute(normalizationExecuteDTO);
     }
