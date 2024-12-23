@@ -14,7 +14,6 @@ import java.util.Optional;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
-import org.opensearch.ml.repackage.com.google.common.annotations.VisibleForTesting;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.search.fetch.FetchSearchResult;
