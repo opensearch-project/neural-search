@@ -19,9 +19,7 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechniq
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.search.SearchPhaseResult;
 import org.opensearch.search.fetch.FetchSearchResult;
-import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
-import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.query.QuerySearchResult;
 
 import lombok.AllArgsConstructor;
@@ -33,7 +31,7 @@ import lombok.extern.log4j.Log4j2;
  */
 @Log4j2
 @AllArgsConstructor
-public class NormalizationProcessor implements SearchPhaseResultsProcessor {
+public class NormalizationProcessor extends AbstractScoreHybridizationProcessor {
     public static final String TYPE = "normalization-processor";
 
     private final String tag;
@@ -42,38 +40,8 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
     private final ScoreCombinationTechnique combinationTechnique;
     private final NormalizationProcessorWorkflow normalizationWorkflow;
 
-    /**
-     * Method abstracts functional aspect of score normalization and score combination. Exact methods for each processing stage
-     * are set as part of class constructor. This method is called when there is no pipeline context
-     * @param searchPhaseResult {@link SearchPhaseResults} DTO that has query search results. Results will be mutated as part of this method execution
-     * @param searchPhaseContext {@link SearchContext}
-     */
     @Override
-    public <Result extends SearchPhaseResult> void process(
-        final SearchPhaseResults<Result> searchPhaseResult,
-        final SearchPhaseContext searchPhaseContext
-    ) {
-        prepareAndExecuteNormalizationWorkflow(searchPhaseResult, searchPhaseContext, Optional.empty());
-    }
-
-    /**
-     * Method abstracts functional aspect of score normalization and score combination. Exact methods for each processing stage
-     * are set as part of class constructor
-     * @param searchPhaseResult {@link SearchPhaseResults} DTO that has query search results. Results will be mutated as part of this method execution
-     * @param searchPhaseContext {@link SearchContext}
-     * @param requestContext {@link PipelineProcessingContext} processing context of search pipeline
-     * @param <Result>
-     */
-    @Override
-    public <Result extends SearchPhaseResult> void process(
-        final SearchPhaseResults<Result> searchPhaseResult,
-        final SearchPhaseContext searchPhaseContext,
-        final PipelineProcessingContext requestContext
-    ) {
-        prepareAndExecuteNormalizationWorkflow(searchPhaseResult, searchPhaseContext, Optional.ofNullable(requestContext));
-    }
-
-    private <Result extends SearchPhaseResult> void prepareAndExecuteNormalizationWorkflow(
+    <Result extends SearchPhaseResult> void hybridizeScores(
         SearchPhaseResults<Result> searchPhaseResult,
         SearchPhaseContext searchPhaseContext,
         Optional<PipelineProcessingContext> requestContextOptional
