@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.search;
+package org.opensearch.neuralsearch.search.collector;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -24,6 +24,7 @@ import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.FieldDoc;
+import org.apache.lucene.search.FieldValueHitQueue;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.Sort;
@@ -35,14 +36,13 @@ import org.apache.lucene.tests.analysis.MockAnalyzer;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.query.HybridQueryScorer;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
-import org.opensearch.neuralsearch.search.collector.HybridTopFieldDocSortCollector;
-import org.opensearch.neuralsearch.search.collector.PagingFieldCollector;
-import org.opensearch.neuralsearch.search.collector.SimpleFieldCollector;
+import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
 public class HybridTopFieldDocSortCollectorTests extends OpenSearchQueryTestCase {
     static final String TEXT_FIELD_NAME = "field";
@@ -127,8 +127,13 @@ public class HybridTopFieldDocSortCollectorTests extends OpenSearchQueryTestCase
         DocIdSetIterator iterator = hybridQueryScorer.iterator();
 
         int doc = iterator.nextDoc();
+        assertNull(hybridTopFieldDocSortCollector.getFieldValueLeafTrackers());
         while (doc != DocIdSetIterator.NO_MORE_DOCS) {
             leafCollector.collect(doc);
+            FieldValueHitQueue.Entry[] fieldValueLeafTrackers = hybridTopFieldDocSortCollector.getFieldValueLeafTrackers();
+            assertNotNull(fieldValueLeafTrackers);
+            assertEquals(1, fieldValueLeafTrackers.length);
+            assertEquals(doc, fieldValueLeafTrackers[0].doc);
             doc = iterator.nextDoc();
         }
 

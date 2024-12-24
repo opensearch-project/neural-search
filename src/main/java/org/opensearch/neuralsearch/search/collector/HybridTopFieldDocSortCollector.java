@@ -9,6 +9,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Locale;
 import java.util.ArrayList;
+
+import com.google.common.annotations.VisibleForTesting;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.log4j.Log4j2;
@@ -45,7 +48,9 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
     private FieldDoc after;
     private FieldComparator<?> firstComparator;
     // bottom would be set to null per shard.
-    private FieldValueHitQueue.Entry bottom;
+    @Getter(AccessLevel.PACKAGE)
+    @VisibleForTesting
+    private FieldValueHitQueue.Entry fieldValueLeafTrackers[];
     @Getter
     private int totalHits;
     protected int docBase;
@@ -203,7 +208,7 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
                 comparators[subQueryNumber].copy(slot, doc);
                 add(slot, doc, compoundScores[subQueryNumber], subQueryNumber, score);
                 if (queueFull[subQueryNumber]) {
-                    comparators[subQueryNumber].setBottom(bottom.slot);
+                    comparators[subQueryNumber].setBottom(fieldValueLeafTrackers[subQueryNumber].slot);
                 }
             } else {
                 queueFull[subQueryNumber] = true;
@@ -216,9 +221,9 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
         protected void collectCompetitiveHit(int doc, int subQueryNumber) throws IOException {
             // This hit is competitive - replace bottom element in queue & adjustTop
             if (numHits > 0) {
-                comparators[subQueryNumber].copy(bottom.slot, doc);
-                updateBottom(doc, compoundScores[subQueryNumber]);
-                comparators[subQueryNumber].setBottom(bottom.slot);
+                comparators[subQueryNumber].copy(fieldValueLeafTrackers[subQueryNumber].slot, doc);
+                updateBottom(doc, compoundScores[subQueryNumber], subQueryNumber);
+                comparators[subQueryNumber].setBottom(fieldValueLeafTrackers[subQueryNumber].slot);
             }
         }
 
@@ -253,6 +258,9 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
                 for (int i = 0; i < numberOfSubQueries; i++) {
                     initializeLeafFieldComparators(context, i);
                 }
+            }
+            if (Objects.isNull(fieldValueLeafTrackers)) {
+                fieldValueLeafTrackers = new FieldValueHitQueue.Entry[numberOfSubQueries];
             }
             if (initializeLeafComparatorsPerSegmentOnce) {
                 for (int i = 0; i < numberOfSubQueries; i++) {
@@ -369,7 +377,7 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
     private void add(int slot, int doc, FieldValueHitQueue<FieldValueHitQueue.Entry> compoundScore, int subQueryNumber, float score) {
         FieldValueHitQueue.Entry bottomEntry = new FieldValueHitQueue.Entry(slot, docBase + doc);
         bottomEntry.score = score;
-        bottom = compoundScore.add(bottomEntry);
+        fieldValueLeafTrackers[subQueryNumber] = compoundScore.add(bottomEntry);
         // The queue is full either when totalHits == numHits (in SimpleFieldCollector), in which case
         // slot = totalHits - 1, or when hitsCollected == numHits (in PagingFieldCollector this is hits
         // on the current page) and slot = hitsCollected - 1.
@@ -381,9 +389,9 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
         queueFull[subQueryNumber] = isQueueFull;
     }
 
-    private void updateBottom(int doc, FieldValueHitQueue<FieldValueHitQueue.Entry> compoundScore) {
-        bottom.doc = docBase + doc;
-        bottom = compoundScore.updateTop();
+    private void updateBottom(int doc, FieldValueHitQueue<FieldValueHitQueue.Entry> compoundScore, int subQueryIndex) {
+        fieldValueLeafTrackers[subQueryIndex].doc = docBase + doc;
+        fieldValueLeafTrackers[subQueryIndex] = compoundScore.updateTop();
     }
 
     private boolean canEarlyTerminate(Sort searchSort, Sort indexSort) {
