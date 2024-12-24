@@ -241,31 +241,6 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         verify(handler).accept(any(IngestDocument.class), isNull());
     }
 
-    public void testExecute_SimpleTypeWithEmptyStringValue_throwIllegalArgumentException() {
-        Map<String, Object> sourceAndMetadata = new HashMap<>();
-        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
-        sourceAndMetadata.put("key1", "    ");
-        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig();
-
-        BiConsumer handler = mock(BiConsumer.class);
-        processor.execute(ingestDocument, handler);
-        verify(handler).accept(isNull(), any(IllegalArgumentException.class));
-    }
-
-    public void testExecute_listHasEmptyStringValue_throwIllegalArgumentException() {
-        List<String> list1 = ImmutableList.of("", "test2", "test3");
-        Map<String, Object> sourceAndMetadata = new HashMap<>();
-        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
-        sourceAndMetadata.put("key1", list1);
-        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig();
-
-        BiConsumer handler = mock(BiConsumer.class);
-        processor.execute(ingestDocument, handler);
-        verify(handler).accept(isNull(), any(IllegalArgumentException.class));
-    }
-
     public void testExecute_listHasNonStringValue_throwIllegalArgumentException() {
         List<Integer> list2 = ImmutableList.of(1, 2, 3);
         Map<String, Object> sourceAndMetadata = new HashMap<>();
@@ -539,20 +514,6 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
     public void testExecute_mapHasNonStringValue_throwIllegalArgumentException() {
         Map<String, String> map1 = ImmutableMap.of("test1", "test2");
         Map<String, Double> map2 = ImmutableMap.of("test3", 209.3D);
-        Map<String, Object> sourceAndMetadata = new HashMap<>();
-        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
-        sourceAndMetadata.put("key1", map1);
-        sourceAndMetadata.put("key2", map2);
-        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextEmbeddingProcessor processor = createInstanceWithLevel2MapConfig();
-        BiConsumer handler = mock(BiConsumer.class);
-        processor.execute(ingestDocument, handler);
-        verify(handler).accept(isNull(), any(IllegalArgumentException.class));
-    }
-
-    public void testExecute_mapHasEmptyStringValue_throwIllegalArgumentException() {
-        Map<String, String> map1 = ImmutableMap.of("test1", "test2");
-        Map<String, String> map2 = ImmutableMap.of("test3", "   ");
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         sourceAndMetadata.put("key1", map1);

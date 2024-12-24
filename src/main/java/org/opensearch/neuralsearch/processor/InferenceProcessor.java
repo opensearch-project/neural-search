@@ -391,7 +391,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
             indexName,
             clusterService,
             environment,
-            false
+            true
         );
     }
 
