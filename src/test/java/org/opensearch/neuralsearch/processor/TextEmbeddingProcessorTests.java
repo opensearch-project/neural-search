@@ -28,6 +28,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.junit.Before;
 import org.mockito.ArgumentCaptor;
@@ -783,6 +784,79 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         assertTrue(nestedObj.get(0).containsKey("textFieldNotForEmbedding"));
         assertTrue(nestedObj.get(1).containsKey("vectorField"));
         assertNotNull(nestedObj.get(1).get("vectorField"));
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testBuildVectorOutput_withPlainString_EmptyString_skipped() {
+        Map<String, Object> config = createPlainStringConfiguration();
+        IngestDocument ingestDocument = createPlainIngestDocument();
+        Map<String, Object> sourceAndMetadata = ingestDocument.getSourceAndMetadata();
+        sourceAndMetadata.put("oriKey1", StringUtils.EMPTY);
+
+        TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
+        Map<String, Object> knnMap = processor.buildMapWithTargetKeys(ingestDocument);
+        List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(6, 100, 0.0f, 1.0f);
+        processor.setVectorFieldsToDocument(ingestDocument, knnMap, modelTensorList);
+
+        /** IngestDocument
+         * "oriKey1": "",
+         * "oriKey2": "oriValue2",
+         * "oriKey3": "oriValue3",
+         * "oriKey4": "oriValue4",
+         * "oriKey5": "oriValue5",
+         * "oriKey6": [
+         *     "oriValue6",
+         *     "oriValue7"
+         * ]
+         *
+         */
+        assertEquals(11, sourceAndMetadata.size());
+        assertFalse(sourceAndMetadata.containsKey("oriKey1_knn"));
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testBuildVectorOutput_withNestedField_EmptyString_skipped() {
+        Map<String, Object> config = createNestedMapConfiguration();
+        IngestDocument ingestDocument = createNestedMapIngestDocument();
+        Map<String, Object> favorites = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("favorites");
+        Map<String, Object> favorite = (Map<String, Object>) favorites.get("favorite");
+        favorite.put("movie", StringUtils.EMPTY);
+
+        TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
+        Map<String, Object> knnMap = processor.buildMapWithTargetKeys(ingestDocument);
+        List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(1, 100, 0.0f, 1.0f);
+        processor.buildNLPResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
+
+        /**
+         * "favorites": {
+         *      "favorite": {
+         *          "movie": "",
+         *          "actor": "Charlie Chaplin",
+         *          "games" : {
+         *              "adventure": {
+         *                  "action": "overwatch",
+         *                  "rpg": "elden ring"
+         *              }
+         *          }
+         *      }
+         * }
+         */
+        Map<String, Object> favoritesMap = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("favorites");
+        assertNotNull(favoritesMap);
+        Map<String, Object> favoriteMap = (Map<String, Object>) favoritesMap.get("favorite");
+        assertNotNull(favoriteMap);
+
+        Map<String, Object> favoriteGames = (Map<String, Object>) favoriteMap.get("games");
+        assertNotNull(favoriteGames);
+        Map<String, Object> adventure = (Map<String, Object>) favoriteGames.get("adventure");
+        List<Float> adventureKnnVector = (List<Float>) adventure.get("with_action_knn");
+        assertNotNull(adventureKnnVector);
+        assertEquals(100, adventureKnnVector.size());
+        for (float vector : adventureKnnVector) {
+            assertTrue(vector >= 0.0f && vector <= 1.0f);
+        }
+
+        assertFalse(favoriteMap.containsKey("favorite_movie_knn"));
     }
 
     public void test_updateDocument_appendVectorFieldsToDocument_successful() {
