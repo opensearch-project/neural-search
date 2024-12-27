@@ -66,28 +66,6 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
         verify(clientAccessor, never()).inferenceSentences(anyString(), anyList(), any());
     }
 
-    public void test_batchExecuteWithEmpty_allFailedValidation() {
-        final int docCount = 2;
-        TestInferenceProcessor processor = new TestInferenceProcessor(createMockVectorResult(), BATCH_SIZE, null);
-        List<IngestDocumentWrapper> wrapperList = createIngestDocumentWrappers(docCount);
-        wrapperList.get(0).getIngestDocument().setFieldValue("key1", Arrays.asList("", "value1"));
-        wrapperList.get(1).getIngestDocument().setFieldValue("key1", Arrays.asList("", "value1"));
-        Consumer resultHandler = mock(Consumer.class);
-        processor.batchExecute(wrapperList, resultHandler);
-        ArgumentCaptor<List<IngestDocumentWrapper>> captor = ArgumentCaptor.forClass(List.class);
-        verify(resultHandler).accept(captor.capture());
-        assertEquals(docCount, captor.getValue().size());
-        for (int i = 0; i < docCount; ++i) {
-            assertNotNull(captor.getValue().get(i).getException());
-            assertEquals(
-                "list type field [key1] has empty string, cannot process it",
-                captor.getValue().get(i).getException().getMessage()
-            );
-            assertEquals(wrapperList.get(i).getIngestDocument(), captor.getValue().get(i).getIngestDocument());
-        }
-        verify(clientAccessor, never()).inferenceSentences(anyString(), anyList(), any());
-    }
-
     public void test_batchExecuteWithNull_allFailedValidation() {
         final int docCount = 2;
         TestInferenceProcessor processor = new TestInferenceProcessor(createMockVectorResult(), BATCH_SIZE, null);
@@ -105,27 +83,6 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
             assertEquals(wrapperList.get(i).getIngestDocument(), captor.getValue().get(i).getIngestDocument());
         }
         verify(clientAccessor, never()).inferenceSentences(anyString(), anyList(), any());
-    }
-
-    public void test_batchExecute_partialFailedValidation() {
-        final int docCount = 2;
-        TestInferenceProcessor processor = new TestInferenceProcessor(createMockVectorResult(), BATCH_SIZE, null);
-        List<IngestDocumentWrapper> wrapperList = createIngestDocumentWrappers(docCount);
-        wrapperList.get(0).getIngestDocument().setFieldValue("key1", Arrays.asList("", "value1"));
-        wrapperList.get(1).getIngestDocument().setFieldValue("key1", Arrays.asList("value3", "value4"));
-        Consumer resultHandler = mock(Consumer.class);
-        processor.batchExecute(wrapperList, resultHandler);
-        ArgumentCaptor<List<IngestDocumentWrapper>> captor = ArgumentCaptor.forClass(List.class);
-        verify(resultHandler).accept(captor.capture());
-        assertEquals(docCount, captor.getValue().size());
-        assertNotNull(captor.getValue().get(0).getException());
-        assertNull(captor.getValue().get(1).getException());
-        for (int i = 0; i < docCount; ++i) {
-            assertEquals(wrapperList.get(i).getIngestDocument(), captor.getValue().get(i).getIngestDocument());
-        }
-        ArgumentCaptor<List<String>> inferenceTextCaptor = ArgumentCaptor.forClass(List.class);
-        verify(clientAccessor).inferenceSentences(anyString(), inferenceTextCaptor.capture(), any());
-        assertEquals(2, inferenceTextCaptor.getValue().size());
     }
 
     public void test_batchExecute_happyCase() {

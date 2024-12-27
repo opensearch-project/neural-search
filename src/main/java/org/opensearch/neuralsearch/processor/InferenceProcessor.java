@@ -307,7 +307,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
                 buildNestedMap(originalKey, targetKey, sourceAndMetadataMap, treeRes);
                 mapWithProcessorKeys.put(originalKey, treeRes.get(originalKey));
             } else {
-                mapWithProcessorKeys.put(String.valueOf(targetKey), sourceAndMetadataMap.get(originalKey));
+                mapWithProcessorKeys.put(String.valueOf(targetKey), normalizeSourceValue(sourceAndMetadataMap.get(originalKey)));
             }
         }
         return mapWithProcessorKeys;
@@ -333,7 +333,10 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
             } else if (sourceAndMetadataMap.get(parentKey) instanceof List) {
                 for (Map.Entry<String, Object> nestedFieldMapEntry : ((Map<String, Object>) processorKey).entrySet()) {
                     List<Map<String, Object>> list = (List<Map<String, Object>>) sourceAndMetadataMap.get(parentKey);
-                    List<Object> listOfStrings = list.stream().map(x -> x.get(nestedFieldMapEntry.getKey())).collect(Collectors.toList());
+                    List<Object> listOfStrings = list.stream().map(x -> {
+                        Object nestedSourceValue = x.get(nestedFieldMapEntry.getKey());
+                        return normalizeSourceValue(nestedSourceValue);
+                    }).collect(Collectors.toList());
                     Map<String, Object> map = new LinkedHashMap<>();
                     map.put(nestedFieldMapEntry.getKey(), listOfStrings);
                     buildNestedMap(nestedFieldMapEntry.getKey(), nestedFieldMapEntry.getValue(), map, next);
@@ -341,9 +344,21 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
             }
             treeRes.merge(parentKey, next, REMAPPING_FUNCTION);
         } else {
+            Object parentValue = sourceAndMetadataMap.get(parentKey);
             String key = String.valueOf(processorKey);
-            treeRes.put(key, sourceAndMetadataMap.get(parentKey));
+            treeRes.put(key, normalizeSourceValue(parentValue));
         }
+    }
+
+    private boolean isBlankString(Object object) {
+        return object instanceof String && StringUtils.isBlank((String) object);
+    }
+
+    private Object normalizeSourceValue(Object value) {
+        if (isBlankString(value)) {
+            return null;
+        }
+        return value;
     }
 
     /**
@@ -376,7 +391,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
             indexName,
             clusterService,
             environment,
-            false
+            true
         );
     }
 
