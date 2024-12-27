@@ -23,6 +23,7 @@ import java.util.Optional;
 
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getScoreFromSourceMap;
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getValueFromSource;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.isNumeric;
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.mappingExistsInSource;
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.removeTargetFieldFromSource;
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.validateRerankCriteria;
@@ -113,7 +114,6 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
         final ActionListener<List<Float>> listener
     ) {
         SearchHit[] searchHits = response.getHits().getHits();
-
         SearchHitValidator searchHitValidator = this::byFieldSearchHitValidator;
 
         if (!validateRerankCriteria(searchHits, searchHitValidator, listener)) {
@@ -177,9 +177,9 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
 
         Optional<Object> val = getValueFromSource(sourceMap, targetField);
 
-        if (!(val.get() instanceof Number)) {
+        if (!(isNumeric(val.get()))) {
             // Strictly get the type of value removing the prefix of getClass() having a value is guaranteed so no NPE check
-            String typeOfMapping = val.get().getClass().toString().replace("class ", "");
+            String typeOfMapping = val.get().getClass().getSimpleName();
             log.error(
                 String.format(
                     Locale.ROOT,
