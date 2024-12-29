@@ -61,7 +61,11 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
     protected static final String CHILD_LEVEL_2_TEXT_FIELD_VALUE = "text_field_value";
     protected static final String CHILD_LEVEL_2_KNN_FIELD = "test3_knn";
     protected static final String CHILD_1_TEXT_FIELD = "child_1_text_field";
+    protected static final String CHILD_2_TEXT_FIELD = "child_2_text_field";
+    protected static final String CHILD_3_TEXT_FIELD = "child_3_text_field";
     protected static final String TEXT_VALUE_1 = "text_value";
+    protected static final String TEXT_VALUE_2 = "text_value2";
+    protected static final String TEXT_VALUE_3 = "text_value3";
     protected static final String TEXT_FIELD_2 = "abc";
     @Mock
     private MLCommonsClientAccessor mlCommonsClientAccessor;
@@ -493,15 +497,24 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         /*
         modeling following document:
           parent: [
-           child_level_1:
-               child_level_1_text_field: "text_value",
-           child_level_1:
-               child_level_1_text_field: "text_value",
+           {
+               child_level_1:
+                   child_1_text_field: "text_value",
+           },
+           {
+               child_level_1:
+                   child_1_text_field: "text_value",
+                   child_2_text_field: "text_value2",
+                   child_3_text_field: "text_value3",
+           }
+
           ]
         */
         Map<String, Object> child1Level2 = buildObjMapWithSingleField(CHILD_1_TEXT_FIELD, TEXT_VALUE_1);
         Map<String, Object> child1Level1 = buildObjMapWithSingleField(CHILD_FIELD_LEVEL_1, child1Level2);
         Map<String, Object> child2Level2 = buildObjMapWithSingleField(CHILD_1_TEXT_FIELD, TEXT_VALUE_1);
+        child2Level2.put(CHILD_2_TEXT_FIELD, TEXT_VALUE_2);
+        child2Level2.put(CHILD_3_TEXT_FIELD, TEXT_VALUE_3);
         Map<String, Object> child2Level1 = buildObjMapWithSingleField(CHILD_FIELD_LEVEL_1, child2Level2);
         Map<String, Object> sourceAndMetadata = Map.of(
             PARENT_FIELD,
@@ -544,7 +557,6 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
 
         for (Map<String, Object> childActual : parentAfterProcessor) {
             Map<String, Object> childLevel1Actual = (Map<String, Object>) childActual.get(CHILD_FIELD_LEVEL_1);
-            assertEquals(2, childLevel1Actual.size());
             assertEquals(TEXT_VALUE_1, childLevel1Actual.get(CHILD_1_TEXT_FIELD));
             assertNotNull(childLevel1Actual.get(CHILD_FIELD_LEVEL_2));
             Map<String, Object> childLevel2Actual = (Map<String, Object>) childLevel1Actual.get(CHILD_FIELD_LEVEL_2);
