@@ -469,8 +469,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
             .queryText(QUERY_TEXT)
             .modelId(MODEL_ID)
-            .k(K)
-            .vectorSupplier(TEST_VECTOR_SUPPLIER);
+            .k(K);
 
         original.add(neuralQueryBuilder);
 
