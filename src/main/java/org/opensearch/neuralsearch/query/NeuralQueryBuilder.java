@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
 
+import lombok.Builder;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
@@ -67,6 +68,7 @@ import lombok.extern.log4j.Log4j2;
 @Getter
 @Setter
 @Accessors(chain = true, fluent = true)
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder> implements ModelInferenceQueryBuilder {

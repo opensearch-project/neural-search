@@ -425,6 +425,66 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         expectThrows(ParsingException.class, () -> NeuralQueryBuilder.fromXContent(contentParser));
     }
 
+    @SneakyThrows
+    public void testToBuilder_whenBuiltWithDefaults_thenBuildSuccessfully() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": "string",
+                "query_image": "string",
+                "model_id": "string",
+                "k": int
+              }
+          }
+        */
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .k(K)
+            .build();
+
+        assertEquals(FIELD_NAME, neuralQueryBuilder.fieldName());
+        assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
+        assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
+        assertEquals(K, neuralQueryBuilder.k());
+    }
+
+    @SneakyThrows
+    public void testToBuilder_whenBuiltWithOptionals_thenBuildSuccessfully() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": "string",
+                "model_id": "string",
+                "k": int,
+                "boost": 10.0,
+                "_name": "something",
+                "expandNestedDocs": true
+              }
+          }
+        */
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .queryImage(IMAGE_TEXT)
+            .modelId(MODEL_ID)
+            .k(K)
+            .expandNested(Boolean.TRUE)
+            .build()
+            .boost(BOOST)
+            .queryName(QUERY_NAME);
+
+        assertEquals(FIELD_NAME, neuralQueryBuilder.fieldName());
+        assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
+        assertEquals(IMAGE_TEXT, neuralQueryBuilder.queryImage());
+        assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
+        assertEquals(K, neuralQueryBuilder.k());
+        assertEquals(BOOST, neuralQueryBuilder.boost(), 0.0);
+        assertEquals(QUERY_NAME, neuralQueryBuilder.queryName());
+        assertEquals(Boolean.TRUE, neuralQueryBuilder.expandNested());
+    }
+
     @SuppressWarnings("unchecked")
     @SneakyThrows
     public void testToXContent() {
