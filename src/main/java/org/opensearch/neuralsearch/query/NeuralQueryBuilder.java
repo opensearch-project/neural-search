@@ -23,7 +23,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
 
-import lombok.Builder;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
@@ -32,6 +31,7 @@ import org.opensearch.common.SetOnce;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.ParsingException;
+import org.opensearch.core.common.Strings;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
@@ -68,9 +68,8 @@ import lombok.extern.log4j.Log4j2;
 @Getter
 @Setter
 @Accessors(chain = true, fluent = true)
-@Builder(toBuilder = true)
-@NoArgsConstructor
-@AllArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder> implements ModelInferenceQueryBuilder {
 
     public static final String NAME = "neural";
@@ -109,6 +108,130 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     private QueryBuilder filter;
     private Map<String, ?> methodParameters;
     private RescoreContext rescoreContext;
+
+    /**
+     * A custom builder class to enforce valid Neural Query Builder instance by validating the required fields are initialized
+     */
+    public static class Builder {
+        private String fieldName;
+        private String queryText;
+        private String queryImage;
+        private String modelId;
+        private Integer k = null;
+        private Float maxDistance = null;
+        private Float minScore = null;
+        private Boolean expandNested;
+        private Supplier<float[]> vectorSupplier;
+        private QueryBuilder filter;
+        private Map<String, ?> methodParameters;
+        private RescoreContext rescoreContext;
+        private String queryName;
+        private float boost = DEFAULT_BOOST;
+
+        public Builder() {}
+
+        public Builder fieldName(String fieldName) {
+            this.fieldName = fieldName;
+            return this;
+        }
+
+        public Builder queryText(String queryText) {
+            this.queryText = queryText;
+            return this;
+        }
+
+        public Builder queryImage(String queryImage) {
+            this.queryImage = queryImage;
+            return this;
+        }
+
+        public Builder modelId(String modelId) {
+            this.modelId = modelId;
+            return this;
+        }
+
+        public Builder k(Integer k) {
+            this.k = k;
+            return this;
+        }
+
+        public Builder maxDistance(Float maxDistance) {
+            this.maxDistance = maxDistance;
+            return this;
+        }
+
+        public Builder minScore(Float minScore) {
+            this.minScore = minScore;
+            return this;
+        }
+
+        public Builder expandNested(Boolean expandNested) {
+            this.expandNested = expandNested;
+            return this;
+        }
+
+        public Builder vectorSupplier(Supplier<float[]> vectorSupplier) {
+            this.vectorSupplier = vectorSupplier;
+            return this;
+        }
+
+        public Builder filter(QueryBuilder filter) {
+            this.filter = filter;
+            return this;
+        }
+
+        public Builder methodParameters(Map<String, ?> methodParameters) {
+            this.methodParameters = methodParameters;
+            return this;
+        }
+
+        public Builder queryName(String queryName) {
+            this.queryName = queryName;
+            return this;
+        }
+
+        public Builder boost(float boost) {
+            this.boost = boost;
+            return this;
+        }
+
+        public Builder rescoreContext(RescoreContext rescoreContext) {
+            this.rescoreContext = rescoreContext;
+            return this;
+        }
+
+        public NeuralQueryBuilder build() {
+            validate();
+            int k = this.k == null ? 0 : this.k;
+            return new NeuralQueryBuilder(
+                fieldName,
+                queryText,
+                queryImage,
+                modelId,
+                k,
+                maxDistance,
+                minScore,
+                expandNested,
+                vectorSupplier,
+                filter,
+                methodParameters,
+                rescoreContext
+            ).boost(boost).queryName(queryName);
+        }
+
+        private void validate() {
+            if (Strings.isNullOrEmpty(fieldName)) {
+                throw new IllegalArgumentException("Field name must be provided for neural query");
+            }
+            if (Strings.isNullOrEmpty(queryText) && Strings.isNullOrEmpty(queryImage)) {
+                throw new IllegalArgumentException("Either query text or image text must be provided for neural query");
+            }
+        }
+    }
+
+    public static NeuralQueryBuilder.Builder builder() {
+        return new NeuralQueryBuilder.Builder();
+    }
 
     /**
      * Constructor from stream input
