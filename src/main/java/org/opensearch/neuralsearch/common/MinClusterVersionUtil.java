@@ -22,6 +22,7 @@ public final class MinClusterVersionUtil {
 
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_11_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_RADIAL_SEARCH = Version.V_2_14_0;
+    private static final Version MINIMAL_SUPPORTED_VERSION_PAGINATION_IN_HYBRID_QUERY = Version.V_2_19_0;
 
     // Note this minimal version will act as a override
     private static final Map<String, Version> MINIMAL_VERSION_NEURAL = ImmutableMap.<String, Version>builder()
@@ -36,6 +37,10 @@ public final class MinClusterVersionUtil {
 
     public static boolean isClusterOnOrAfterMinReqVersionForRadialSearch() {
         return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_RADIAL_SEARCH);
+    }
+
+    public static boolean isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery() {
+        return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_PAGINATION_IN_HYBRID_QUERY);
     }
 
     public static boolean isClusterOnOrAfterMinReqVersion(String key) {
