@@ -117,8 +117,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     public NeuralQueryBuilder(StreamInput in) throws IOException {
         super(in);
         this.fieldName = in.readString();
-        this.queryText = in.readString();
-        this.queryImage = in.readString();
+        this.queryText = in.readOptionalString();
+        this.queryImage = in.readOptionalString();
         // If cluster version is on or after 2.11 then default model Id support is enabled
         if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
             this.modelId = in.readOptionalString();
@@ -147,8 +147,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     @Override
     protected void doWriteTo(StreamOutput out) throws IOException {
         out.writeString(this.fieldName);
-        out.writeString(this.queryText);
-        out.writeString(this.queryImage);
+        out.writeOptionalString(this.queryText);
+        out.writeOptionalString(this.queryImage);
         // If cluster version is on or after 2.11 then default model Id support is enabled
         if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
             out.writeOptionalString(this.modelId);
