@@ -31,7 +31,6 @@ import org.opensearch.common.SetOnce;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.Strings;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
@@ -201,8 +200,12 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         }
 
         public NeuralQueryBuilder build() {
-            validate();
-            int k = this.k == null ? 0 : this.k;
+            validateQueryParameters(fieldName, queryText, queryImage);
+            int k = this.k == null ? DEFAULT_K : this.k;
+            boolean queryTypeIsProvided = validateKNNQueryType(k, maxDistance, minScore);
+            if (queryTypeIsProvided == false) {
+                k = DEFAULT_K;
+            }
             return new NeuralQueryBuilder(
                 fieldName,
                 queryText,
@@ -219,14 +222,6 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             ).boost(boost).queryName(queryName);
         }
 
-        private void validate() {
-            if (Strings.isNullOrEmpty(fieldName)) {
-                throw new IllegalArgumentException("Field name must be provided for neural query");
-            }
-            if (Strings.isNullOrEmpty(queryText) && Strings.isNullOrEmpty(queryImage)) {
-                throw new IllegalArgumentException("Either query text or image text must be provided for neural query");
-            }
-        }
     }
 
     public static NeuralQueryBuilder.Builder builder() {
@@ -371,15 +366,16 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                     + "]"
             );
         }
-        if (StringUtils.isBlank(neuralQueryBuilder.queryText()) && StringUtils.isBlank(neuralQueryBuilder.queryImage())) {
-            throw new IllegalArgumentException("Either query text or image text must be provided for neural query");
-        }
-        requireValue(neuralQueryBuilder.fieldName(), "Field name must be provided for neural query");
+        validateQueryParameters(neuralQueryBuilder.fieldName(), neuralQueryBuilder.queryText(), neuralQueryBuilder.queryImage());
         if (!isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
             requireValue(neuralQueryBuilder.modelId(), "Model ID must be provided for neural query");
         }
 
-        boolean queryTypeIsProvided = validateKNNQueryType(neuralQueryBuilder);
+        boolean queryTypeIsProvided = validateKNNQueryType(
+            neuralQueryBuilder.k(),
+            neuralQueryBuilder.maxDistance(),
+            neuralQueryBuilder.minScore()
+        );
         if (queryTypeIsProvided == false) {
             neuralQueryBuilder.k(DEFAULT_K);
         }
@@ -522,15 +518,22 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         return NAME;
     }
 
-    private static boolean validateKNNQueryType(NeuralQueryBuilder neuralQueryBuilder) {
+    private static void validateQueryParameters(String fieldName, String queryText, String queryImage) {
+        if (StringUtils.isBlank(queryText) && StringUtils.isBlank(queryImage)) {
+            throw new IllegalArgumentException("Either query text or image text must be provided for neural query");
+        }
+        requireValue(fieldName, "Field name must be provided for neural query");
+    }
+
+    private static boolean validateKNNQueryType(Integer k, Float maxDistance, Float minScore) {
         int queryCount = 0;
-        if (neuralQueryBuilder.k() != null) {
+        if (k != null) {
             queryCount++;
         }
-        if (neuralQueryBuilder.maxDistance() != null) {
+        if (maxDistance != null) {
             queryCount++;
         }
-        if (neuralQueryBuilder.minScore() != null) {
+        if (minScore != null) {
             queryCount++;
         }
         if (queryCount > 1) {
