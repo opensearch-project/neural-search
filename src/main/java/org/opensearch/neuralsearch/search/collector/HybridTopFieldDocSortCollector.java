@@ -47,7 +47,7 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
     @Nullable
     private FieldDoc after;
     private FieldComparator<?> firstComparator;
-    // bottom would be set to null per shard.
+    // the array stores bottom elements of the min heap of sorted hits for each sub query
     @Getter(AccessLevel.PACKAGE)
     @VisibleForTesting
     private FieldValueHitQueue.Entry fieldValueLeafTrackers[];
@@ -70,6 +70,7 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
     @Getter
     protected float maxScore = 0.0f;
     protected int[] collectedHits;
+    private boolean needsInitialization = true;
 
     // searchSortPartOfIndexSort is used to evaluate whether to perform index sort or not.
     private Boolean searchSortPartOfIndexSort = null;
@@ -250,7 +251,7 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
         The method initializes once per search request.
          */
         protected void initializePriorityQueuesWithComparators(LeafReaderContext context, int numberOfSubQueries) throws IOException {
-            if (compoundScores == null) {
+            if (needsInitialization) {
                 compoundScores = new FieldValueHitQueue[numberOfSubQueries];
                 comparators = new LeafFieldComparator[numberOfSubQueries];
                 queueFull = new boolean[numberOfSubQueries];
@@ -258,9 +259,8 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
                 for (int i = 0; i < numberOfSubQueries; i++) {
                     initializeLeafFieldComparators(context, i);
                 }
-            }
-            if (Objects.isNull(fieldValueLeafTrackers)) {
                 fieldValueLeafTrackers = new FieldValueHitQueue.Entry[numberOfSubQueries];
+                needsInitialization = false;
             }
             if (initializeLeafComparatorsPerSegmentOnce) {
                 for (int i = 0; i < numberOfSubQueries; i++) {
