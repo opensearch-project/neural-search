@@ -93,11 +93,7 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
                 .filter(clause -> BooleanClause.Occur.FILTER == clause.getOccur())
                 .map(BooleanClause::getQuery)
                 .collect(Collectors.toList());
-            HybridQuery hybridQueryWithFilter = new HybridQuery(
-                hybridQuery.getSubQueries(),
-                filterQueries,
-                hybridQuery.getPaginationDepth()
-            );
+            HybridQuery hybridQueryWithFilter = new HybridQuery(hybridQuery.getSubQueries(), filterQueries, hybridQuery.getQueryContext());
             return hybridQueryWithFilter;
         }
         return query;

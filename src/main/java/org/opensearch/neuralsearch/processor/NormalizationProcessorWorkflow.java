@@ -322,14 +322,14 @@ public class NormalizationProcessorWorkflow {
         int trimmedLengthOfSearchHits = topDocs.scoreDocs.length - fromValueForSingleShard;
         // iterate over the normalized/combined scores, that solves (1) and (3)
         SearchHit[] updatedSearchHitArray = new SearchHit[trimmedLengthOfSearchHits];
-        for (int i = fromValueForSingleShard; i < topDocs.scoreDocs.length; i++) {
+        for (int i = 0; i < trimmedLengthOfSearchHits; i++) {
             // Read topDocs after the desired from length
-            ScoreDoc scoreDoc = topDocs.scoreDocs[i];
+            ScoreDoc scoreDoc = topDocs.scoreDocs[i + fromValueForSingleShard];
             // get fetched hit content by doc_id
             SearchHit searchHit = docIdToSearchHit.get(scoreDoc.doc);
             // update score to normalized/combined value (3)
             searchHit.score(scoreDoc.score);
-            updatedSearchHitArray[i - fromValueForSingleShard] = searchHit;
+            updatedSearchHitArray[i] = searchHit;
         }
         SearchHits updatedSearchHits = new SearchHits(
             updatedSearchHitArray,

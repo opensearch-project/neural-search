@@ -18,6 +18,7 @@ import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.remote.RemoteStoreEnums;
 import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.query.HybridQueryContext;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.search.internal.SearchContext;
 
@@ -54,7 +55,7 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
                     .toQuery(mockQueryShardContext),
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext)
             ),
-            10
+            new HybridQueryContext(10)
         );
         SearchContext searchContext = mock(SearchContext.class);
 
