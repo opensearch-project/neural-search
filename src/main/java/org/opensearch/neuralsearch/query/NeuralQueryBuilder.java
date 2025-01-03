@@ -201,7 +201,6 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
 
         public NeuralQueryBuilder build() {
             validateQueryParameters(fieldName, queryText, queryImage);
-            int k = this.k == null ? DEFAULT_K : this.k;
             boolean queryTypeIsProvided = validateKNNQueryType(k, maxDistance, minScore);
             if (queryTypeIsProvided == false) {
                 k = DEFAULT_K;
