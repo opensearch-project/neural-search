@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.search;
+package org.opensearch.neuralsearch.search.collector;
 
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.LeafCollector;
@@ -46,7 +46,7 @@ import org.opensearch.neuralsearch.query.HybridQueryScorer;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 
 import lombok.SneakyThrows;
-import org.opensearch.neuralsearch.search.collector.HybridTopScoreDocCollector;
+import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
 public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
 
