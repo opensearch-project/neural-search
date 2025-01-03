@@ -77,37 +77,25 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
         assertEquals(numberOfDocs, docCount);
         loadModel(modelId);
 
-        NeuralQueryBuilder neuralQueryBuilderWithMinScoreQuery = new NeuralQueryBuilder(
-            "passage_embedding",
-            text,
-            imageText,
-            modelId,
-            null,
-            null,
-            0.01f,
-            null,
-            null,
-            null,
-            null,
-            null
-        );
+        NeuralQueryBuilder neuralQueryBuilderWithMinScoreQuery = NeuralQueryBuilder.builder()
+            .fieldName("passage_embedding")
+            .queryText(text)
+            .queryImage(imageText)
+            .modelId(modelId)
+            .minScore(0.01f)
+            .build();
+
         Map<String, Object> responseWithMinScore = search(getIndexNameForTest(), neuralQueryBuilderWithMinScoreQuery, 1);
         assertNotNull(responseWithMinScore);
 
-        NeuralQueryBuilder neuralQueryBuilderWithMaxDistanceQuery = new NeuralQueryBuilder(
-            "passage_embedding",
-            text,
-            imageText,
-            modelId,
-            null,
-            100000f,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null
-        );
+        NeuralQueryBuilder neuralQueryBuilderWithMaxDistanceQuery = NeuralQueryBuilder.builder()
+            .fieldName("passage_embedding")
+            .queryText(text)
+            .queryImage(imageText)
+            .modelId(modelId)
+            .maxDistance(100000f)
+            .build();
+
         Map<String, Object> responseWithMaxScore = search(getIndexNameForTest(), neuralQueryBuilderWithMaxDistanceQuery, 1);
         assertNotNull(responseWithMaxScore);
     }

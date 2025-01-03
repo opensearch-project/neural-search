@@ -109,7 +109,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     private RescoreContext rescoreContext;
 
     /**
-     * A custom builder class to enforce valid Neural Query Builder instance by validating the required fields are initialized
+     * A custom builder class to enforce valid Neural Query Builder instantiation
      */
     public static class Builder {
         private String fieldName;
