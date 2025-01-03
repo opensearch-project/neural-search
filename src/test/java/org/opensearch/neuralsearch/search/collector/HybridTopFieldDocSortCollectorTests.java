@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.search;
+package org.opensearch.neuralsearch.search.collector;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -24,8 +24,10 @@ import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.FieldDoc;
+import org.apache.lucene.search.FieldValueHitQueue;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopFieldDocs;
@@ -35,14 +37,14 @@ import org.apache.lucene.tests.analysis.MockAnalyzer;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+
+import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.query.HybridQueryScorer;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
-import org.opensearch.neuralsearch.search.collector.HybridTopFieldDocSortCollector;
-import org.opensearch.neuralsearch.search.collector.PagingFieldCollector;
-import org.opensearch.neuralsearch.search.collector.SimpleFieldCollector;
+import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
 public class HybridTopFieldDocSortCollectorTests extends OpenSearchQueryTestCase {
     static final String TEXT_FIELD_NAME = "field";
@@ -127,8 +129,13 @@ public class HybridTopFieldDocSortCollectorTests extends OpenSearchQueryTestCase
         DocIdSetIterator iterator = hybridQueryScorer.iterator();
 
         int doc = iterator.nextDoc();
+        assertNull(hybridTopFieldDocSortCollector.getFieldValueLeafTrackers());
         while (doc != DocIdSetIterator.NO_MORE_DOCS) {
             leafCollector.collect(doc);
+            FieldValueHitQueue.Entry[] fieldValueLeafTrackers = hybridTopFieldDocSortCollector.getFieldValueLeafTrackers();
+            assertNotNull(fieldValueLeafTrackers);
+            assertEquals(1, fieldValueLeafTrackers.length);
+            assertEquals(doc, fieldValueLeafTrackers[0].doc);
             doc = iterator.nextDoc();
         }
 
@@ -242,5 +249,71 @@ public class HybridTopFieldDocSortCollectorTests extends OpenSearchQueryTestCase
         w.close();
         reader.close();
         directory.close();
+    }
+
+    public void testMultipleSubQueriesFieldValueLeafTrackers() throws Exception {
+        final Directory directory = newDirectory();
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+
+        // Create test documents
+        List<Document> documents = new ArrayList<>();
+        Document document1 = new Document();
+        document1.add(new NumericDocValuesField("_id", 0)); // Use 0-based doc IDs
+        document1.add(new IntField(INT_FIELD_NAME, 100, Field.Store.YES));
+        document1.add(new TextField(TEXT_FIELD_NAME, FIELD_1_VALUE, Field.Store.YES));
+        documents.add(document1);
+
+        Document document2 = new Document();
+        document2.add(new NumericDocValuesField("_id", 1)); // Use 0-based doc IDs
+        document2.add(new IntField(INT_FIELD_NAME, 200, Field.Store.YES));
+        document2.add(new TextField(TEXT_FIELD_NAME, FIELD_2_VALUE, Field.Store.YES));
+        documents.add(document2);
+
+        w.addDocuments(documents);
+        w.commit();
+
+        DirectoryReader reader = DirectoryReader.open(w);
+        LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
+
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+
+        // Setup collector
+        SortField sortField = new SortField(DOC_FIELD_NAME, SortField.Type.DOC);
+        HybridTopFieldDocSortCollector collector = new SimpleFieldCollector(
+            NUM_DOCS,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
+            new Sort(sortField)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+        LeafCollector leafCollector = collector.getLeafCollector(leafReaderContext);
+
+        // Create scorers with proper doc IDs (0-based)
+        int[] docIdsForQuery = new int[] { 0, 1 }; // Use 0-based doc IDs
+        final List<Float> scores = Arrays.asList(1.0f, 2.0f); // Fixed scores for predictability
+
+        // Create two scorers for two sub-queries
+        Scorer scorer1 = scorer(docIdsForQuery, scores, fakeWeight(QueryBuilders.matchAllQuery().toQuery(mockQueryShardContext)));
+        Scorer scorer2 = scorer(docIdsForQuery, scores, fakeWeight(QueryBuilders.matchAllQuery().toQuery(mockQueryShardContext)));
+
+        HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(weight, Arrays.asList(scorer1, scorer2));
+
+        leafCollector.setScorer(hybridQueryScorer);
+
+        // Collect docs
+        DocIdSetIterator iterator = hybridQueryScorer.iterator();
+        int doc = iterator.nextDoc();
+        while (doc != DocIdSetIterator.NO_MORE_DOCS) {
+            leafCollector.collect(doc);
+            FieldValueHitQueue.Entry[] fieldValueLeafTrackers = collector.getFieldValueLeafTrackers();
+            assertNotNull(fieldValueLeafTrackers);
+            assertEquals(2, fieldValueLeafTrackers.length);
+            doc = iterator.nextDoc();
+        }
+
+        IOUtils.close(reader, w, directory);
     }
 }
