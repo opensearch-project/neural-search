@@ -137,7 +137,6 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
     @Override
     public void execute(IngestDocument ingestDocument, BiConsumer<IngestDocument, Exception> handler) {
         try {
-            preprocessIngestDocument(ingestDocument);
             validateEmbeddingFieldsValue(ingestDocument);
             Map<String, Object> processMap = buildMapWithTargetKeys(ingestDocument);
             List<String> inferenceList = createInferenceList(processMap);
@@ -149,15 +148,6 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         } catch (Exception e) {
             handler.accept(null, e);
         }
-    }
-
-    @VisibleForTesting
-    void preprocessIngestDocument(IngestDocument ingestDocument) {
-        if (ingestDocument == null || ingestDocument.getSourceAndMetadata() == null) return;
-        Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
-        Map<String, Object> unflattened = ProcessorDocumentUtils.unflattenJson(sourceAndMetadataMap);
-        unflattened.forEach(ingestDocument::setFieldValue);
-        sourceAndMetadataMap.keySet().removeIf(key -> key.contains("."));
     }
 
     /**
@@ -254,14 +244,12 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         for (IngestDocumentWrapper ingestDocumentWrapper : ingestDocumentWrappers) {
             Map<String, Object> processMap = null;
             List<String> inferenceList = null;
-            IngestDocument ingestDocument = ingestDocumentWrapper.getIngestDocument();
             try {
-                preprocessIngestDocument(ingestDocument);
-                validateEmbeddingFieldsValue(ingestDocument);
-                processMap = buildMapWithTargetKeys(ingestDocument);
+                validateEmbeddingFieldsValue(ingestDocumentWrapper.getIngestDocument());
+                processMap = buildMapWithTargetKeys(ingestDocumentWrapper.getIngestDocument());
                 inferenceList = createInferenceList(processMap);
             } catch (Exception e) {
-                ingestDocumentWrapper.update(ingestDocument, e);
+                ingestDocumentWrapper.update(ingestDocumentWrapper.getIngestDocument(), e);
             } finally {
                 dataForInferences.add(new DataForInference(ingestDocumentWrapper, processMap, inferenceList));
             }
@@ -319,7 +307,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
                 buildNestedMap(originalKey, targetKey, sourceAndMetadataMap, treeRes);
                 mapWithProcessorKeys.put(originalKey, treeRes.get(originalKey));
             } else {
-                mapWithProcessorKeys.put(String.valueOf(targetKey), normalizeSourceValue(sourceAndMetadataMap.get(originalKey)));
+                mapWithProcessorKeys.put(String.valueOf(targetKey), sourceAndMetadataMap.get(originalKey));
             }
         }
         return mapWithProcessorKeys;
@@ -345,33 +333,17 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
             } else if (sourceAndMetadataMap.get(parentKey) instanceof List) {
                 for (Map.Entry<String, Object> nestedFieldMapEntry : ((Map<String, Object>) processorKey).entrySet()) {
                     List<Map<String, Object>> list = (List<Map<String, Object>>) sourceAndMetadataMap.get(parentKey);
-                    Pair<String, Object> processedNestedKey = processNestedKey(nestedFieldMapEntry);
-                    List<Object> listOfStrings = list.stream().map(x -> {
-                        Object nestedSourceValue = x.get(processedNestedKey.getKey());
-                        return normalizeSourceValue(nestedSourceValue);
-                    }).collect(Collectors.toList());
+                    List<Object> listOfStrings = list.stream().map(x -> x.get(nestedFieldMapEntry.getKey())).collect(Collectors.toList());
                     Map<String, Object> map = new LinkedHashMap<>();
-                    map.put(processedNestedKey.getKey(), listOfStrings);
-                    buildNestedMap(processedNestedKey.getKey(), processedNestedKey.getValue(), map, next);
+                    map.put(nestedFieldMapEntry.getKey(), listOfStrings);
+                    buildNestedMap(nestedFieldMapEntry.getKey(), nestedFieldMapEntry.getValue(), map, next);
                 }
             }
             treeRes.merge(parentKey, next, REMAPPING_FUNCTION);
         } else {
-            Object parentValue = sourceAndMetadataMap.get(parentKey);
             String key = String.valueOf(processorKey);
-            treeRes.put(key, normalizeSourceValue(parentValue));
+            treeRes.put(key, sourceAndMetadataMap.get(parentKey));
         }
-    }
-
-    private boolean isBlankString(Object object) {
-        return object instanceof String && StringUtils.isBlank((String) object);
-    }
-
-    private Object normalizeSourceValue(Object value) {
-        if (isBlankString(value)) {
-            return null;
-        }
-        return value;
     }
 
     /**
@@ -400,11 +372,11 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         ProcessorDocumentUtils.validateMapTypeValue(
             FIELD_MAP_FIELD,
             sourceAndMetadataMap,
-            ProcessorDocumentUtils.unflattenJson(fieldMap),
+            fieldMap,
             indexName,
             clusterService,
             environment,
-            true
+            false
         );
     }
 

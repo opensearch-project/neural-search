@@ -4,18 +4,9 @@
  */
 package org.opensearch.neuralsearch.processor;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Map;
 
-import com.google.common.collect.ImmutableList;
-import org.apache.hc.core5.http.HttpHeaders;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.hc.core5.http.message.BasicHeader;
 import org.junit.Before;
-import org.opensearch.client.Response;
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
