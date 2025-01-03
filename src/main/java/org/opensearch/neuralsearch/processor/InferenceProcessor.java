@@ -307,7 +307,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
                 buildNestedMap(originalKey, targetKey, sourceAndMetadataMap, treeRes);
                 mapWithProcessorKeys.put(originalKey, treeRes.get(originalKey));
             } else {
-                mapWithProcessorKeys.put(String.valueOf(targetKey), sourceAndMetadataMap.get(originalKey));
+                mapWithProcessorKeys.put(String.valueOf(targetKey), normalizeSourceValue(sourceAndMetadataMap.get(originalKey)));
             }
         }
         return mapWithProcessorKeys;
@@ -333,7 +333,10 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
             } else if (sourceAndMetadataMap.get(parentKey) instanceof List) {
                 for (Map.Entry<String, Object> nestedFieldMapEntry : ((Map<String, Object>) processorKey).entrySet()) {
                     List<Map<String, Object>> list = (List<Map<String, Object>>) sourceAndMetadataMap.get(parentKey);
-                    List<Object> listOfStrings = list.stream().map(x -> x.get(nestedFieldMapEntry.getKey())).collect(Collectors.toList());
+                    List<Object> listOfStrings = list.stream().map(x -> {
+                        Object nestedSourceValue = x.get(nestedFieldMapEntry.getKey());
+                        return normalizeSourceValue(nestedSourceValue);
+                    }).collect(Collectors.toList());
                     Map<String, Object> map = new LinkedHashMap<>();
                     map.put(nestedFieldMapEntry.getKey(), listOfStrings);
                     buildNestedMap(nestedFieldMapEntry.getKey(), nestedFieldMapEntry.getValue(), map, next);
@@ -341,9 +344,21 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
             }
             treeRes.merge(parentKey, next, REMAPPING_FUNCTION);
         } else {
+            Object parentValue = sourceAndMetadataMap.get(parentKey);
             String key = String.valueOf(processorKey);
-            treeRes.put(key, sourceAndMetadataMap.get(parentKey));
+            treeRes.put(key, normalizeSourceValue(parentValue));
         }
+    }
+
+    private boolean isBlankString(Object object) {
+        return object instanceof String && StringUtils.isBlank((String) object);
+    }
+
+    private Object normalizeSourceValue(Object value) {
+        if (isBlankString(value)) {
+            return null;
+        }
+        return value;
     }
 
     /**
@@ -376,7 +391,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
             indexName,
             clusterService,
             environment,
-            false
+            true
         );
     }
 
@@ -419,23 +434,26 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         if (sourceValue instanceof Map) {
             for (Map.Entry<String, Object> inputNestedMapEntry : ((Map<String, Object>) sourceValue).entrySet()) {
                 if (sourceAndMetadataMap.get(processorKey) instanceof List) {
-                    // build nlp output for list of nested objects
-                    Iterator<Object> inputNestedMapValueIt = ((List<Object>) inputNestedMapEntry.getValue()).iterator();
-                    for (Map<String, Object> nestedElement : (List<Map<String, Object>>) sourceAndMetadataMap.get(processorKey)) {
-                        // Only fill in when value is not null
-                        if (inputNestedMapValueIt.hasNext() && inputNestedMapValueIt.next() != null) {
-                            nestedElement.put(inputNestedMapEntry.getKey(), results.get(indexWrapper.index++));
-                        }
+                    if (inputNestedMapEntry.getValue() instanceof List) {
+                        processMapEntryValue(
+                            results,
+                            indexWrapper,
+                            (List<Map<String, Object>>) sourceAndMetadataMap.get(processorKey),
+                            inputNestedMapEntry.getKey(),
+                            (List<Object>) inputNestedMapEntry.getValue()
+                        );
+                    } else if (inputNestedMapEntry.getValue() instanceof Map) {
+                        processMapEntryValue(
+                            results,
+                            indexWrapper,
+                            (List<Map<String, Object>>) sourceAndMetadataMap.get(processorKey),
+                            inputNestedMapEntry.getKey(),
+                            inputNestedMapEntry.getValue()
+                        );
                     }
                 } else {
                     Pair<String, Object> processedNestedKey = processNestedKey(inputNestedMapEntry);
-                    Map<String, Object> sourceMap;
-                    if (sourceAndMetadataMap.get(processorKey) == null) {
-                        sourceMap = new HashMap<>();
-                        sourceAndMetadataMap.put(processorKey, sourceMap);
-                    } else {
-                        sourceMap = (Map<String, Object>) sourceAndMetadataMap.get(processorKey);
-                    }
+                    Map<String, Object> sourceMap = getSourceMapBySourceAndMetadataMap(processorKey, sourceAndMetadataMap);
                     putNLPResultToSourceMapForMapType(
                         processedNestedKey.getKey(),
                         processedNestedKey.getValue(),
@@ -454,6 +472,97 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
                 REMAPPING_FUNCTION
             );
         }
+    }
+
+    private void processMapEntryValue(
+        List<?> results,
+        IndexWrapper indexWrapper,
+        List<Map<String, Object>> sourceAndMetadataMapValueInList,
+        String inputNestedMapEntryKey,
+        List<Object> inputNestedMapEntryValue
+    ) {
+        // build nlp output for object in sourceValue which is list type
+        Iterator<Object> inputNestedMapValueIt = inputNestedMapEntryValue.iterator();
+        for (Map<String, Object> nestedElement : sourceAndMetadataMapValueInList) {
+            // Only fill in when value is not null
+            if (inputNestedMapValueIt.hasNext() && inputNestedMapValueIt.next() != null) {
+                nestedElement.put(inputNestedMapEntryKey, results.get(indexWrapper.index++));
+            }
+        }
+    }
+
+    private void processMapEntryValue(
+        List<?> results,
+        IndexWrapper indexWrapper,
+        List<Map<String, Object>> sourceAndMetadataMapValueInList,
+        String inputNestedMapEntryKey,
+        Object inputNestedMapEntryValue
+    ) {
+        // build nlp output for object in sourceValue which is map type
+        Iterator<Map<String, Object>> iterator = sourceAndMetadataMapValueInList.iterator();
+        IntStream.range(0, sourceAndMetadataMapValueInList.size()).forEach(index -> {
+            Map<String, Object> nestedElement = iterator.next();
+            putNLPResultToSingleSourceMapInList(
+                inputNestedMapEntryKey,
+                inputNestedMapEntryValue,
+                results,
+                indexWrapper,
+                nestedElement,
+                index
+            );
+        });
+    }
+
+    /**
+     * Put nlp result to single source element, which is in a list field of source document
+     * Such source element is in map type
+     *
+     * @param processorKey
+     * @param sourceValue
+     * @param results
+     * @param indexWrapper
+     * @param sourceAndMetadataMap
+     * @param nestedElementIndex index of the element in the list field of source document
+     */
+    @SuppressWarnings("unchecked")
+    private void putNLPResultToSingleSourceMapInList(
+        String processorKey,
+        Object sourceValue,
+        List<?> results,
+        IndexWrapper indexWrapper,
+        Map<String, Object> sourceAndMetadataMap,
+        int nestedElementIndex
+    ) {
+        if (processorKey == null || sourceAndMetadataMap == null || sourceValue == null) return;
+        if (sourceValue instanceof Map) {
+            for (Map.Entry<String, Object> inputNestedMapEntry : ((Map<String, Object>) sourceValue).entrySet()) {
+                Pair<String, Object> processedNestedKey = processNestedKey(inputNestedMapEntry);
+                Map<String, Object> sourceMap = getSourceMapBySourceAndMetadataMap(processorKey, sourceAndMetadataMap);
+                putNLPResultToSingleSourceMapInList(
+                    processedNestedKey.getKey(),
+                    processedNestedKey.getValue(),
+                    results,
+                    indexWrapper,
+                    sourceMap,
+                    nestedElementIndex
+                );
+            }
+        } else {
+            if (sourceValue instanceof List && ((List<Object>) sourceValue).get(nestedElementIndex) != null) {
+                sourceAndMetadataMap.merge(processorKey, results.get(indexWrapper.index++), REMAPPING_FUNCTION);
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getSourceMapBySourceAndMetadataMap(String processorKey, Map<String, Object> sourceAndMetadataMap) {
+        Map<String, Object> sourceMap = new HashMap<>();
+        if (sourceAndMetadataMap.get(processorKey) == null) {
+            sourceAndMetadataMap.put(processorKey, sourceMap);
+        } else {
+            sourceMap = (Map<String, Object>) sourceAndMetadataMap.get(processorKey);
+        }
+        return sourceMap;
     }
 
     private List<Map<String, Object>> buildNLPResultForListType(List<String> sourceValue, List<?> results, IndexWrapper indexWrapper) {
