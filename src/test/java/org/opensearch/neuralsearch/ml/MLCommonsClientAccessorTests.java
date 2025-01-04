@@ -120,7 +120,37 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         Mockito.verifyNoMoreInteractions(resultListener);
     }
 
-    public void testInferenceSentences_whenNodeNotConnectedException_thenRetry_3Times() {
+    public void testInferenceSimilarity_whenNodeNotConnectedException_ThenRetry() {
+        final NodeNotConnectedException nodeNodeConnectedException = new NodeNotConnectedException(
+            mock(DiscoveryNode.class),
+            "Node not connected"
+        );
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onFailure(nodeNodeConnectedException);
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSimilarity(
+            TestCommonConstants.MODEL_ID,
+            "is it sunny",
+            List.of("it is sunny today", "roses are red"),
+            singleSentenceResultListener
+        );
+
+        // Verify client.predict is called 4 times (1 initial + 3 retries)
+        Mockito.verify(client, times(4))
+            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        // Verify failure is propagated to the listener after all retries
+        Mockito.verify(singleSentenceResultListener).onFailure(nodeNodeConnectedException);
+
+        // Ensure no additional interactions with the listener
+        Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
+    }
+
+    public void testInferenceSentences_whenExceptionFromMLClient_thenRetry_thenFailure() {
         final NodeNotConnectedException nodeNodeConnectedException = new NodeNotConnectedException(
             mock(DiscoveryNode.class),
             "Node not connected"
@@ -293,18 +323,28 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
     }
 
-    public void testInferenceMultimodal_whenExceptionFromMLClient_thenFailure() {
-        final RuntimeException exception = new RuntimeException();
+    public void testInferenceMultimodal_whenExceptionFromMLClient_thenRetry_thenFailure() {
+        final NodeNotConnectedException nodeNodeConnectedException = new NodeNotConnectedException(
+            mock(DiscoveryNode.class),
+            "Node not connected"
+        );
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
-            actionListener.onFailure(exception);
+            actionListener.onFailure(nodeNodeConnectedException);
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
         accessor.inferenceSentences(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_MAP, singleSentenceResultListener);
 
-        Mockito.verify(client)
+        // Verify client.predict is called 4 times (1 initial + 3 retries)
+        Mockito.verify(client, times(4))
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        Mockito.verify(singleSentenceResultListener).onFailure(exception);
+
+        // Verify failure is propagated to the listener after retries
+        Mockito.verify(singleSentenceResultListener).onFailure(nodeNodeConnectedException);
+
+        // Verify no further interactions with the listener
         Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
     }
 
@@ -365,29 +405,6 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         Mockito.verify(singleSentenceResultListener).onFailure(exception);
         Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
-    }
-
-    public void testInferenceSimilarity_whenNodeNotConnectedException_ThenTryThreeTimes() {
-        final NodeNotConnectedException nodeNodeConnectedException = new NodeNotConnectedException(
-            mock(DiscoveryNode.class),
-            "Node not connected"
-        );
-        Mockito.doAnswer(invocation -> {
-            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
-            actionListener.onFailure(nodeNodeConnectedException);
-            return null;
-        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-
-        accessor.inferenceSimilarity(
-            TestCommonConstants.MODEL_ID,
-            "is it sunny",
-            List.of("it is sunny today", "roses are red"),
-            singleSentenceResultListener
-        );
-
-        Mockito.verify(client, times(4))
-            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        Mockito.verify(singleSentenceResultListener).onFailure(nodeNodeConnectedException);
     }
 
     private ModelTensorOutput createModelTensorOutput(final Float[] output) {

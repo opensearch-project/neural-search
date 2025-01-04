@@ -162,14 +162,14 @@ public class MLCommonsClientAccessor {
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
             final List<Map<String, ?>> result = buildMapResultFromResponse(mlOutput);
             listener.onResponse(result);
-        }, e -> {
-            if (RetryUtil.shouldRetry(e, retryTime)) {
-                final int retryTimeAdd = retryTime + 1;
-                retryableInferenceSentencesWithMapResult(modelId, inputText, retryTimeAdd, listener);
-            } else {
-                listener.onFailure(e);
-            }
-        }));
+        },
+            e -> RetryUtil.handleRetryOrFailure(
+                e,
+                retryTime,
+                () -> retryableInferenceSentencesWithMapResult(modelId, inputText, retryTime + 1, listener),
+                listener
+            )
+        ));
     }
 
     private void retryableInferenceSentencesWithVectorResult(
@@ -183,14 +183,14 @@ public class MLCommonsClientAccessor {
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
             final List<List<Float>> vector = buildVectorFromResponse(mlOutput);
             listener.onResponse(vector);
-        }, e -> {
-            if (RetryUtil.shouldRetry(e, retryTime)) {
-                final int retryTimeAdd = retryTime + 1;
-                retryableInferenceSentencesWithVectorResult(targetResponseFilters, modelId, inputText, retryTimeAdd, listener);
-            } else {
-                listener.onFailure(e);
-            }
-        }));
+        },
+            e -> RetryUtil.handleRetryOrFailure(
+                e,
+                retryTime,
+                () -> retryableInferenceSentencesWithVectorResult(targetResponseFilters, modelId, inputText, retryTime + 1, listener),
+                listener
+            )
+        ));
     }
 
     private void retryableInferenceSimilarityWithVectorResult(
@@ -204,13 +204,14 @@ public class MLCommonsClientAccessor {
         mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
             final List<Float> scores = buildVectorFromResponse(mlOutput).stream().map(v -> v.get(0)).collect(Collectors.toList());
             listener.onResponse(scores);
-        }, e -> {
-            if (RetryUtil.shouldRetry(e, retryTime)) {
-                retryableInferenceSimilarityWithVectorResult(modelId, queryText, inputText, retryTime + 1, listener);
-            } else {
-                listener.onFailure(e);
-            }
-        }));
+        },
+            e -> RetryUtil.handleRetryOrFailure(
+                e,
+                retryTime,
+                () -> retryableInferenceSimilarityWithVectorResult(modelId, queryText, inputText, retryTime + 1, listener),
+                listener
+            )
+        ));
     }
 
     private MLInput createMLTextInput(final List<String> targetResponseFilters, List<String> inputText) {
@@ -272,14 +273,20 @@ public class MLCommonsClientAccessor {
             final List<Float> vector = buildSingleVectorFromResponse(mlOutput);
             log.debug("Inference Response for input sentence is : {} ", vector);
             listener.onResponse(vector);
-        }, e -> {
-            if (RetryUtil.shouldRetry(e, retryTime)) {
-                final int retryTimeAdd = retryTime + 1;
-                retryableInferenceSentencesWithSingleVectorResult(targetResponseFilters, modelId, inputObjects, retryTimeAdd, listener);
-            } else {
-                listener.onFailure(e);
-            }
-        }));
+        },
+            e -> RetryUtil.handleRetryOrFailure(
+                e,
+                retryTime,
+                () -> retryableInferenceSentencesWithSingleVectorResult(
+                    targetResponseFilters,
+                    modelId,
+                    inputObjects,
+                    retryTime + 1,
+                    listener
+                ),
+                listener
+            )
+        ));
     }
 
     private MLInput createMLMultimodalInput(final List<String> targetResponseFilters, final Map<String, String> input) {
