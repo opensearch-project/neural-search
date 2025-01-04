@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.processor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
+import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.search.fetch.FetchSearchResult;
@@ -29,4 +30,5 @@ public class NormalizationProcessorWorkflowExecuteRequest {
     final ScoreCombinationTechnique combinationTechnique;
     boolean explain;
     final PipelineProcessingContext pipelineProcessingContext;
+    final SearchPhaseContext searchPhaseContext;
 }

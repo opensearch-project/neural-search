@@ -29,4 +29,5 @@ public class CombineScoresDto {
     private List<QuerySearchResult> querySearchResults;
     @Nullable
     private Sort sort;
+    private int fromValueForSingleShard;
 }
