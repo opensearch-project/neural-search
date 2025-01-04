@@ -13,8 +13,6 @@ import java.util.Map;
 
 import org.opensearch.index.query.MatchQueryBuilder;
 
-import static org.opensearch.knn.index.query.KNNQueryBuilder.EXPAND_NESTED_FIELD;
-import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersion;
 import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
