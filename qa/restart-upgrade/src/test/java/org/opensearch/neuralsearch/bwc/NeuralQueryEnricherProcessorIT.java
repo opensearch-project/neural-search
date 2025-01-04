@@ -76,8 +76,14 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
 
     public void testNeuralQueryEnricherProcessor_NeuralSearch_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-        NeuralQueryBuilder neuralQueryBuilderWithoutModelId = new NeuralQueryBuilder().fieldName(TEST_ENCODING_FIELD).queryText(TEXT_1);
-        NeuralQueryBuilder neuralQueryBuilderWithModelId = new NeuralQueryBuilder().fieldName(TEST_ENCODING_FIELD).queryText(TEXT_1);
+        NeuralQueryBuilder neuralQueryBuilderWithoutModelId = NeuralQueryBuilder.builder()
+            .fieldName(TEST_ENCODING_FIELD)
+            .queryText(TEXT_1)
+            .build();
+        NeuralQueryBuilder neuralQueryBuilderWithModelId = NeuralQueryBuilder.builder()
+            .fieldName(TEST_ENCODING_FIELD)
+            .queryText(TEXT_1)
+            .build();
 
         if (isRunningAgainstOldCluster()) {
             String modelId = uploadTextEmbeddingModel();

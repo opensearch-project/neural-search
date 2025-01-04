@@ -51,37 +51,25 @@ public class KnnRadialSearchIT extends AbstractRestartUpgradeRestTestCase {
     }
 
     private void validateIndexQuery(final String modelId) {
-        NeuralQueryBuilder neuralQueryBuilderWithMinScoreQuery = new NeuralQueryBuilder(
-            "passage_embedding",
-            TEXT,
-            TEST_IMAGE_TEXT,
-            modelId,
-            null,
-            null,
-            0.01f,
-            null,
-            null,
-            null,
-            null,
-            null
-        );
+        NeuralQueryBuilder neuralQueryBuilderWithMinScoreQuery = NeuralQueryBuilder.builder()
+            .fieldName("passage_embedding")
+            .queryText(TEXT)
+            .queryImage(TEST_IMAGE_TEXT)
+            .modelId(modelId)
+            .minScore(0.01f)
+            .build();
+
         Map<String, Object> responseWithMinScoreQuery = search(getIndexNameForTest(), neuralQueryBuilderWithMinScoreQuery, 1);
         assertNotNull(responseWithMinScoreQuery);
 
-        NeuralQueryBuilder neuralQueryBuilderWithMaxDistanceQuery = new NeuralQueryBuilder(
-            "passage_embedding",
-            TEXT,
-            TEST_IMAGE_TEXT,
-            modelId,
-            null,
-            100000f,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null
-        );
+        NeuralQueryBuilder neuralQueryBuilderWithMaxDistanceQuery = NeuralQueryBuilder.builder()
+            .fieldName("passage_embedding")
+            .queryText(TEXT)
+            .queryImage(TEST_IMAGE_TEXT)
+            .modelId(modelId)
+            .minScore(100000f)
+            .build();
+
         Map<String, Object> responseWithMaxDistanceQuery = search(getIndexNameForTest(), neuralQueryBuilderWithMaxDistanceQuery, 1);
         assertNotNull(responseWithMaxDistanceQuery);
     }

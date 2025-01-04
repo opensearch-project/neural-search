@@ -76,20 +76,14 @@ public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
         loadModel(modelId);
-        NeuralQueryBuilder neuralQueryBuilderWithKQuery = new NeuralQueryBuilder(
-            "passage_embedding",
-            text,
-            imageText,
-            modelId,
-            1,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null
-        );
+        NeuralQueryBuilder neuralQueryBuilderWithKQuery = NeuralQueryBuilder.builder()
+            .fieldName("passage_embedding")
+            .queryText(text)
+            .queryImage(imageText)
+            .modelId(modelId)
+            .k(1)
+            .build();
+
         Map<String, Object> responseWithKQuery = search(getIndexNameForTest(), neuralQueryBuilderWithKQuery, 1);
         assertNotNull(responseWithKQuery);
     }

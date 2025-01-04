@@ -13,8 +13,6 @@ import java.util.Map;
 
 import org.opensearch.index.query.MatchQueryBuilder;
 
-import static org.opensearch.knn.index.query.KNNQueryBuilder.EXPAND_NESTED_FIELD;
-import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersion;
 import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
@@ -124,11 +122,12 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         final Map<String, ?> methodParameters,
         final RescoreContext rescoreContext
     ) {
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
-        neuralQueryBuilder.fieldName("passage_embedding");
-        neuralQueryBuilder.modelId(modelId);
-        neuralQueryBuilder.queryText(QUERY);
-        neuralQueryBuilder.k(5);
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName("passage_embedding")
+            .modelId(modelId)
+            .queryText(QUERY)
+            .k(5)
+            .build();
         if (expandNestedDocs != null) {
             neuralQueryBuilder.expandNested(expandNestedDocs);
         }

@@ -54,10 +54,11 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
             createSearchRequestProcessor(modelId, search_pipeline);
             createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
             updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
-            NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
-            neuralQueryBuilder.fieldName(TEST_KNN_VECTOR_FIELD_NAME_1);
-            neuralQueryBuilder.queryText("Hello World");
-            neuralQueryBuilder.k(1);
+            NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+                .queryText("Hello World")
+                .k(1)
+                .build();
             Map<String, Object> response = search(index, neuralQueryBuilder, 2);
             assertFalse(response.isEmpty());
         } finally {
@@ -112,10 +113,11 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
             createSearchRequestProcessor(modelId, search_pipeline);
             createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
             updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
-            NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
-            neuralQueryBuilder.fieldName(TEST_KNN_VECTOR_FIELD_NAME_1);
-            neuralQueryBuilder.queryText("Hello World");
-            neuralQueryBuilder.k(1);
+            NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+                .queryText("Hello World")
+                .k(1)
+                .build();
             HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
             hybridQueryBuilder.add(neuralQueryBuilder);
             Map<String, Object> response = search(index, hybridQueryBuilder, 2);

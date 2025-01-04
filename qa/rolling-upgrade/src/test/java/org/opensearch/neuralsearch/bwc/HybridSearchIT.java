@@ -128,11 +128,12 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
         final Map<String, ?> methodParameters,
         final RescoreContext rescoreContextForNeuralQuery
     ) {
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
-        neuralQueryBuilder.fieldName(VECTOR_EMBEDDING_FIELD);
-        neuralQueryBuilder.modelId(modelId);
-        neuralQueryBuilder.queryText(QUERY);
-        neuralQueryBuilder.k(5);
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(VECTOR_EMBEDDING_FIELD)
+            .modelId(modelId)
+            .queryText(QUERY)
+            .k(5)
+            .build();
         if (expandNestedDocs != null) {
             neuralQueryBuilder.expandNested(expandNestedDocs);
         }

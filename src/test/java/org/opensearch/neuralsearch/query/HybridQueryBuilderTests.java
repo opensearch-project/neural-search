@@ -131,11 +131,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         when(mockKNNVectorField.getVectorDataType()).thenReturn(VectorDataType.FLOAT);
         when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
 
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(VECTOR_FIELD_NAME)
             .queryText(QUERY_TEXT)
             .modelId(MODEL_ID)
             .k(K)
-            .vectorSupplier(TEST_VECTOR_SUPPLIER);
+            .vectorSupplier(TEST_VECTOR_SUPPLIER)
+            .build();
 
         queryBuilder.add(neuralQueryBuilder);
         Query queryOnlyNeural = queryBuilder.doToQuery(mockQueryShardContext);
@@ -164,11 +166,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         when(mockKNNVectorField.getVectorDataType()).thenReturn(VectorDataType.FLOAT);
         when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
 
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(VECTOR_FIELD_NAME)
             .queryText(QUERY_TEXT)
             .modelId(MODEL_ID)
             .k(K)
-            .vectorSupplier(TEST_VECTOR_SUPPLIER);
+            .vectorSupplier(TEST_VECTOR_SUPPLIER)
+            .build();
 
         queryBuilder.add(neuralQueryBuilder);
 
@@ -415,12 +419,14 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         when(mockKNNVectorField.getKnnMappingConfig().getDimension()).thenReturn(4);
         when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
 
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(VECTOR_FIELD_NAME)
             .queryText(QUERY_TEXT)
             .modelId(MODEL_ID)
             .k(K)
             .vectorSupplier(TEST_VECTOR_SUPPLIER)
-            .filter(TEST_FILTER);
+            .filter(TEST_FILTER)
+            .build();
 
         queryBuilder.add(neuralQueryBuilder);
 
@@ -466,11 +472,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     public void testStreams_whenWrittingToStream_thenSuccessful() {
         setUpClusterService();
         HybridQueryBuilder original = new HybridQueryBuilder();
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(VECTOR_FIELD_NAME)
             .queryText(QUERY_TEXT)
             .modelId(MODEL_ID)
             .k(K)
-            .vectorSupplier(TEST_VECTOR_SUPPLIER);
+            .vectorSupplier(TEST_VECTOR_SUPPLIER)
+            .build();
 
         original.add(neuralQueryBuilder);
 
@@ -498,23 +506,27 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     public void testHashAndEquals_whenSameOrIdenticalObject_thenReturnEqual() {
         HybridQueryBuilder hybridQueryBuilderBaseline = new HybridQueryBuilder();
         hybridQueryBuilderBaseline.add(
-            new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
+            NeuralQueryBuilder.builder()
+                .fieldName(VECTOR_FIELD_NAME)
                 .queryText(QUERY_TEXT)
                 .modelId(MODEL_ID)
                 .k(K)
                 .vectorSupplier(TEST_VECTOR_SUPPLIER)
                 .filter(TEST_FILTER)
+                .build()
         );
         hybridQueryBuilderBaseline.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
 
         HybridQueryBuilder hybridQueryBuilderBaselineCopy = new HybridQueryBuilder();
         hybridQueryBuilderBaselineCopy.add(
-            new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
+            NeuralQueryBuilder.builder()
+                .fieldName(VECTOR_FIELD_NAME)
                 .queryText(QUERY_TEXT)
                 .modelId(MODEL_ID)
                 .k(K)
                 .vectorSupplier(TEST_VECTOR_SUPPLIER)
                 .filter(TEST_FILTER)
+                .build()
         );
         hybridQueryBuilderBaselineCopy.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
 
@@ -533,66 +545,78 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
         HybridQueryBuilder hybridQueryBuilderBaseline = new HybridQueryBuilder();
         hybridQueryBuilderBaseline.add(
-            new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
+            NeuralQueryBuilder.builder()
+                .fieldName(VECTOR_FIELD_NAME)
                 .queryText(QUERY_TEXT)
                 .modelId(MODEL_ID)
                 .k(K)
                 .vectorSupplier(TEST_VECTOR_SUPPLIER)
                 .filter(TEST_FILTER)
+                .build()
         );
         hybridQueryBuilderBaseline.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
 
         HybridQueryBuilder hybridQueryBuilderOnlyOneSubQuery = new HybridQueryBuilder();
         hybridQueryBuilderOnlyOneSubQuery.add(
-            new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
+            NeuralQueryBuilder.builder()
+                .fieldName(VECTOR_FIELD_NAME)
                 .queryText(QUERY_TEXT)
                 .modelId(MODEL_ID)
                 .k(K)
                 .vectorSupplier(TEST_VECTOR_SUPPLIER)
                 .filter(TEST_FILTER)
+                .build()
         );
 
         HybridQueryBuilder hybridQueryBuilderOnlyDifferentModelId = new HybridQueryBuilder();
         hybridQueryBuilderOnlyDifferentModelId.add(
-            new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
+            NeuralQueryBuilder.builder()
+                .fieldName(VECTOR_FIELD_NAME)
                 .queryText(QUERY_TEXT)
                 .modelId(modelId)
                 .k(K)
                 .vectorSupplier(TEST_VECTOR_SUPPLIER)
                 .filter(TEST_FILTER)
+                .build()
         );
         hybridQueryBuilderBaseline.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
 
         HybridQueryBuilder hybridQueryBuilderOnlyDifferentFieldName = new HybridQueryBuilder();
         hybridQueryBuilderOnlyDifferentFieldName.add(
-            new NeuralQueryBuilder().fieldName(fieldName)
+            NeuralQueryBuilder.builder()
+                .fieldName(fieldName)
                 .queryText(QUERY_TEXT)
                 .modelId(MODEL_ID)
                 .k(K)
                 .vectorSupplier(TEST_VECTOR_SUPPLIER)
                 .filter(TEST_FILTER)
+                .build()
         );
         hybridQueryBuilderOnlyDifferentFieldName.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
 
         HybridQueryBuilder hybridQueryBuilderOnlyDifferentQuery = new HybridQueryBuilder();
         hybridQueryBuilderOnlyDifferentQuery.add(
-            new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
+            NeuralQueryBuilder.builder()
+                .fieldName(VECTOR_FIELD_NAME)
                 .queryText(queryText)
                 .modelId(MODEL_ID)
                 .k(K)
                 .vectorSupplier(TEST_VECTOR_SUPPLIER)
                 .filter(TEST_FILTER)
+                .build()
         );
         hybridQueryBuilderOnlyDifferentQuery.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
 
         HybridQueryBuilder hybridQueryBuilderOnlyDifferentTermValue = new HybridQueryBuilder();
         hybridQueryBuilderOnlyDifferentTermValue.add(
-            new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
+            NeuralQueryBuilder.builder()
+                .fieldName(VECTOR_FIELD_NAME)
                 .queryText(QUERY_TEXT)
                 .modelId(MODEL_ID)
                 .k(K)
                 .vectorSupplier(TEST_VECTOR_SUPPLIER)
                 .filter(TEST_FILTER)
+                .build()
         );
         hybridQueryBuilderOnlyDifferentTermValue.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, termText));
 
@@ -615,11 +639,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testRewrite_whenMultipleSubQueries_thenReturnBuilderForEachSubQuery() {
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(VECTOR_FIELD_NAME)
             .queryText(QUERY_TEXT)
             .modelId(MODEL_ID)
             .k(K)
-            .vectorSupplier(TEST_VECTOR_SUPPLIER);
+            .vectorSupplier(TEST_VECTOR_SUPPLIER)
+            .build();
 
         queryBuilder.add(neuralQueryBuilder);
 
@@ -789,9 +815,17 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testDoEquals_whenSameParameters_thenEqual() {
         // Create neural queries
-        NeuralQueryBuilder neuralQueryBuilder1 = new NeuralQueryBuilder().queryText("test").modelId("test_model");
+        NeuralQueryBuilder neuralQueryBuilder1 = NeuralQueryBuilder.builder()
+            .fieldName("test")
+            .queryText("test")
+            .modelId("test_model")
+            .build();
 
-        NeuralQueryBuilder neuralQueryBuilder2 = new NeuralQueryBuilder().queryText("test").modelId("test_model");
+        NeuralQueryBuilder neuralQueryBuilder2 = NeuralQueryBuilder.builder()
+            .fieldName("test")
+            .queryText("test")
+            .modelId("test_model")
+            .build();
 
         // Create neural sparse queries with queryTokensSupplier
         NeuralSparseQueryBuilder neuralSparseQueryBuilder1 = new NeuralSparseQueryBuilder().fieldName("test_field")
@@ -822,7 +856,9 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     public void testVisit() {
-        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(new NeuralQueryBuilder()).add(new NeuralSparseQueryBuilder());
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(
+            NeuralQueryBuilder.builder().fieldName("test").queryText("test").build()
+        ).add(new NeuralSparseQueryBuilder());
         List<QueryBuilder> visitedQueries = new ArrayList<>();
         hybridQueryBuilder.visit(createTestVisitor(visitedQueries));
         assertEquals(3, visitedQueries.size());

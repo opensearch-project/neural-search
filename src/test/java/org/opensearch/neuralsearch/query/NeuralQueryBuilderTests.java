@@ -425,15 +425,106 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         expectThrows(ParsingException.class, () -> NeuralQueryBuilder.fromXContent(contentParser));
     }
 
+    @SneakyThrows
+    public void testBuilderInstantiation_whenBuiltWithRequiredFields_thenBuildSuccessfully() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": "string",
+                "query_image": "string",
+                "model_id": "string",
+                "k": int
+              }
+          }
+        */
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder().fieldName(FIELD_NAME).queryText(QUERY_TEXT).build();
+
+        assertEquals(FIELD_NAME, neuralQueryBuilder.fieldName());
+        assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
+    }
+
+    @SneakyThrows
+    public void testBuilderInstantiation_whenBuiltWithOptionalFields_thenBuildSuccessfully() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": "string",
+                "model_id": "string",
+                "k": int,
+                "boost": 10.0,
+                "_name": "something",
+                "expandNestedDocs": true
+              }
+          }
+        */
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .queryImage(IMAGE_TEXT)
+            .modelId(MODEL_ID)
+            .k(K)
+            .expandNested(Boolean.TRUE)
+            .boost(BOOST)
+            .queryName(QUERY_NAME)
+            .build();
+
+        assertEquals(FIELD_NAME, neuralQueryBuilder.fieldName());
+        assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
+        assertEquals(IMAGE_TEXT, neuralQueryBuilder.queryImage());
+        assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
+        assertEquals(K, neuralQueryBuilder.k());
+        assertEquals(BOOST, neuralQueryBuilder.boost(), 0.0);
+        assertEquals(QUERY_NAME, neuralQueryBuilder.queryName());
+        assertEquals(Boolean.TRUE, neuralQueryBuilder.expandNested());
+    }
+
+    @SneakyThrows
+    public void testBuilderInstantiation_whenMissingFieldName_thenFail() {
+        /*
+          {
+              null : {
+                "query_text": "string",
+                "model_id": "string",
+                "k": int
+              }
+          }
+        */
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> NeuralQueryBuilder.builder().queryText(QUERY_TEXT).modelId(MODEL_ID).k(K).build()
+        );
+        assertEquals("Field name must be provided for neural query", exception.getMessage());
+    }
+
+    @SneakyThrows
+    public void testBuilderInstantiation_whenMissingBothQueryTextAndQueryImage_thenFail() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "model_id": "string",
+                "k": int
+              }
+          }
+        */
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> NeuralQueryBuilder.builder().fieldName(FIELD_NAME).modelId(MODEL_ID).k(K).build()
+        );
+        assertEquals("Either query text or image text must be provided for neural query", exception.getMessage());
+    }
+
     @SuppressWarnings("unchecked")
     @SneakyThrows
     public void testToXContent() {
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(FIELD_NAME)
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
             .modelId(MODEL_ID)
             .queryText(QUERY_TEXT)
             .k(K)
             .expandNested(Boolean.TRUE)
-            .filter(TEST_FILTER);
+            .filter(TEST_FILTER)
+            .build();
 
         XContentBuilder builder = XContentFactory.jsonBuilder();
         builder = neuralQueryBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
@@ -477,15 +568,16 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
 
     @SneakyThrows
     private void testStreams() {
-        NeuralQueryBuilder original = new NeuralQueryBuilder();
-        original.fieldName(FIELD_NAME);
-        original.queryText(QUERY_TEXT);
-        original.queryImage(IMAGE_TEXT);
-        original.modelId(MODEL_ID);
-        original.k(K);
-        original.boost(BOOST);
-        original.queryName(QUERY_NAME);
-        original.filter(TEST_FILTER);
+        NeuralQueryBuilder original = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .queryImage(IMAGE_TEXT)
+            .modelId(MODEL_ID)
+            .k(K)
+            .boost(BOOST)
+            .queryName(QUERY_NAME)
+            .filter(TEST_FILTER)
+            .build();
 
         BytesStreamOutput streamOutput = new BytesStreamOutput();
         original.writeTo(streamOutput);
@@ -519,101 +611,123 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         QueryBuilder filter1 = new MatchAllQueryBuilder();
         QueryBuilder filter2 = new MatchNoneQueryBuilder();
 
-        NeuralQueryBuilder neuralQueryBuilder_baseline = new NeuralQueryBuilder().fieldName(fieldName1)
+        NeuralQueryBuilder neuralQueryBuilder_baseline = NeuralQueryBuilder.builder()
+            .fieldName(fieldName1)
             .queryText(queryText1)
             .queryImage(imageText1)
             .modelId(modelId1)
             .k(k1)
             .boost(boost1)
             .queryName(queryName1)
-            .filter(filter1);
+            .filter(filter1)
+            .build();
 
         // Identical to neuralQueryBuilder_baseline
-        NeuralQueryBuilder neuralQueryBuilder_baselineCopy = new NeuralQueryBuilder().fieldName(fieldName1)
+        NeuralQueryBuilder neuralQueryBuilder_baselineCopy = NeuralQueryBuilder.builder()
+            .fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId1)
             .k(k1)
             .boost(boost1)
             .queryName(queryName1)
-            .filter(filter1);
+            .filter(filter1)
+            .build();
 
         // Identical to neuralQueryBuilder_baseline except default boost and query name
-        NeuralQueryBuilder neuralQueryBuilder_defaultBoostAndQueryName = new NeuralQueryBuilder().fieldName(fieldName1)
+        NeuralQueryBuilder neuralQueryBuilder_defaultBoostAndQueryName = NeuralQueryBuilder.builder()
+            .fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId1)
             .k(k1)
-            .filter(filter1);
+            .filter(filter1)
+            .build();
 
         // Identical to neuralQueryBuilder_baseline except diff field name
-        NeuralQueryBuilder neuralQueryBuilder_diffFieldName = new NeuralQueryBuilder().fieldName(fieldName2)
+        NeuralQueryBuilder neuralQueryBuilder_diffFieldName = NeuralQueryBuilder.builder()
+            .fieldName(fieldName2)
             .queryText(queryText1)
             .modelId(modelId1)
             .k(k1)
             .boost(boost1)
             .queryName(queryName1)
-            .filter(filter1);
+            .filter(filter1)
+            .build();
 
         // Identical to neuralQueryBuilder_baseline except diff query text
-        NeuralQueryBuilder neuralQueryBuilder_diffQueryText = new NeuralQueryBuilder().fieldName(fieldName1)
+        NeuralQueryBuilder neuralQueryBuilder_diffQueryText = NeuralQueryBuilder.builder()
+            .fieldName(fieldName1)
             .queryText(queryText2)
             .modelId(modelId1)
             .k(k1)
             .boost(boost1)
             .queryName(queryName1)
-            .filter(filter1);
+            .filter(filter1)
+            .build();
 
         // Identical to neuralQueryBuilder_baseline except diff model ID
-        NeuralQueryBuilder neuralQueryBuilder_diffModelId = new NeuralQueryBuilder().fieldName(fieldName1)
+        NeuralQueryBuilder neuralQueryBuilder_diffModelId = NeuralQueryBuilder.builder()
+            .fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId2)
             .k(k1)
             .boost(boost1)
             .queryName(queryName1)
-            .filter(filter1);
+            .filter(filter1)
+            .build();
 
         // Identical to neuralQueryBuilder_baseline except diff k
-        NeuralQueryBuilder neuralQueryBuilder_diffK = new NeuralQueryBuilder().fieldName(fieldName1)
+        NeuralQueryBuilder neuralQueryBuilder_diffK = NeuralQueryBuilder.builder()
+            .fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId1)
             .k(k2)
             .boost(boost1)
             .queryName(queryName1)
-            .filter(filter1);
+            .filter(filter1)
+            .build();
 
         // Identical to neuralQueryBuilder_baseline except diff boost
-        NeuralQueryBuilder neuralQueryBuilder_diffBoost = new NeuralQueryBuilder().fieldName(fieldName1)
+        NeuralQueryBuilder neuralQueryBuilder_diffBoost = NeuralQueryBuilder.builder()
+            .fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId1)
             .k(k1)
             .boost(boost2)
             .queryName(queryName1)
-            .filter(filter1);
+            .filter(filter1)
+            .build();
 
         // Identical to neuralQueryBuilder_baseline except diff query name
-        NeuralQueryBuilder neuralQueryBuilder_diffQueryName = new NeuralQueryBuilder().fieldName(fieldName1)
+        NeuralQueryBuilder neuralQueryBuilder_diffQueryName = NeuralQueryBuilder.builder()
+            .fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId1)
             .k(k1)
             .boost(boost1)
             .queryName(queryName2)
-            .filter(filter1);
+            .filter(filter1)
+            .build();
 
         // Identical to neuralQueryBuilder_baseline except no filter
-        NeuralQueryBuilder neuralQueryBuilder_noFilter = new NeuralQueryBuilder().fieldName(fieldName1)
-            .queryText(queryText1)
-            .modelId(modelId1)
-            .k(k1)
-            .boost(boost1)
-            .queryName(queryName2);
-
-        // Identical to neuralQueryBuilder_baseline except no filter
-        NeuralQueryBuilder neuralQueryBuilder_diffFilter = new NeuralQueryBuilder().fieldName(fieldName1)
+        NeuralQueryBuilder neuralQueryBuilder_noFilter = NeuralQueryBuilder.builder()
+            .fieldName(fieldName1)
             .queryText(queryText1)
             .modelId(modelId1)
             .k(k1)
             .boost(boost1)
             .queryName(queryName2)
-            .filter(filter2);
+            .build();
+
+        // Identical to neuralQueryBuilder_baseline except no filter
+        NeuralQueryBuilder neuralQueryBuilder_diffFilter = NeuralQueryBuilder.builder()
+            .fieldName(fieldName1)
+            .queryText(queryText1)
+            .modelId(modelId1)
+            .k(k1)
+            .boost(boost1)
+            .queryName(queryName2)
+            .filter(filter2)
+            .build();
 
         assertEquals(neuralQueryBuilder_baseline, neuralQueryBuilder_baseline);
         assertEquals(neuralQueryBuilder_baseline.hashCode(), neuralQueryBuilder_baseline.hashCode());
@@ -651,7 +765,12 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testRewrite_whenVectorSupplierNull_thenSetVectorSupplier() {
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(FIELD_NAME).queryText(QUERY_TEXT).modelId(MODEL_ID).k(K);
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .k(K)
+            .build();
         List<Float> expectedVector = Arrays.asList(1.0f, 2.0f, 3.0f, 4.0f, 5.0f);
         MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
         doAnswer(invocation -> {
@@ -683,11 +802,13 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testRewrite_whenVectorSupplierNullAndQueryTextAndImageTextSet_thenSetVectorSupplier() {
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(FIELD_NAME)
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
             .queryText(QUERY_TEXT)
             .queryImage(IMAGE_TEXT)
             .modelId(MODEL_ID)
-            .k(K);
+            .k(K)
+            .build();
         List<Float> expectedVector = Arrays.asList(1.0f, 2.0f, 3.0f, 4.0f, 5.0f);
         MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
         doAnswer(invocation -> {
@@ -719,19 +840,22 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
 
     public void testRewrite_whenVectorNull_thenReturnCopy() {
         Supplier<float[]> nullSupplier = () -> null;
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(FIELD_NAME)
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
             .queryText(QUERY_TEXT)
             .queryImage(IMAGE_TEXT)
             .modelId(MODEL_ID)
             .k(K)
             .expandNested(Boolean.TRUE)
-            .vectorSupplier(nullSupplier);
+            .vectorSupplier(nullSupplier)
+            .build();
         QueryBuilder queryBuilder = neuralQueryBuilder.doRewrite(null);
         assertEquals(neuralQueryBuilder, queryBuilder);
     }
 
     public void testRewrite_whenVectorSupplierAndVectorSet_thenReturnKNNQueryBuilder() {
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(FIELD_NAME)
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
             .queryText(QUERY_TEXT)
             .queryImage(IMAGE_TEXT)
             .modelId(MODEL_ID)
@@ -739,7 +863,8 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
             .expandNested(Boolean.TRUE)
             .methodParameters(Map.of("ef_search", 100))
             .rescoreContext(RescoreContext.getDefault())
-            .vectorSupplier(TEST_VECTOR_SUPPLIER);
+            .vectorSupplier(TEST_VECTOR_SUPPLIER)
+            .build();
 
         KNNQueryBuilder expected = KNNQueryBuilder.builder()
             .k(K)
@@ -755,12 +880,14 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
     }
 
     public void testRewrite_whenFilterSet_thenKNNQueryBuilderFilterSet() {
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(FIELD_NAME)
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
             .queryText(QUERY_TEXT)
             .modelId(MODEL_ID)
             .k(K)
             .vectorSupplier(TEST_VECTOR_SUPPLIER)
-            .filter(TEST_FILTER);
+            .filter(TEST_FILTER)
+            .build();
         QueryBuilder queryBuilder = neuralQueryBuilder.doRewrite(null);
         assertTrue(queryBuilder instanceof KNNQueryBuilder);
         KNNQueryBuilder knnQueryBuilder = (KNNQueryBuilder) queryBuilder;
@@ -768,12 +895,14 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
     }
 
     public void testQueryCreation_whenCreateQueryWithDoToQuery_thenFail() {
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(FIELD_NAME)
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
             .queryText(QUERY_TEXT)
             .modelId(MODEL_ID)
             .k(K)
             .vectorSupplier(TEST_VECTOR_SUPPLIER)
-            .filter(TEST_FILTER);
+            .filter(TEST_FILTER)
+            .build();
         QueryShardContext queryShardContext = mock(QueryShardContext.class);
         UnsupportedOperationException exception = expectThrows(
             UnsupportedOperationException.class,
