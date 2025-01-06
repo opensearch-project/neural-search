@@ -494,7 +494,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     }
 
     /**
-     * Extract hybrid query from generic query object retrieved from search context
+     * Unwraps a HybridQuery from either a direct query or a nested BooleanQuery
      */
     private static HybridQuery extractHybridQueryFromAbstractQuery(Query query) {
         HybridQuery hybridQuery;

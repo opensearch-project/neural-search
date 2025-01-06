@@ -4,13 +4,16 @@
  */
 package org.opensearch.neuralsearch.query;
 
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.NonNull;
 
-@AllArgsConstructor
+/**
+ * Class that holds the low level information of hybrid query in the form of context
+ */
 @Builder
 @Getter
 public class HybridQueryContext {
+    @NonNull
     private int paginationDepth;
 }

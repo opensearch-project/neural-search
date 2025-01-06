@@ -94,7 +94,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
         TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
-        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), new HybridQueryContext(10));
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
 
         when(searchContext.query()).thenReturn(hybridQuery);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
@@ -125,7 +126,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
         TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
-        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), new HybridQueryContext(10));
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
 
         when(searchContext.query()).thenReturn(hybridQuery);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
@@ -156,7 +158,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
         TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
-        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), new HybridQueryContext(10));
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
 
         QueryBuilder postFilterQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, "world");
         ParsedQuery parsedQuery = new ParsedQuery(postFilterQuery.toQuery(mockQueryShardContext));
@@ -200,7 +203,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
         TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
-        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), new HybridQueryContext(10));
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
 
         QueryBuilder postFilterQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, "world");
         Query pfQuery = postFilterQuery.toQuery(mockQueryShardContext);
@@ -243,10 +247,11 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
 
         HybridQuery hybridQueryWithTerm = new HybridQuery(
             List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1).toQuery(mockQueryShardContext)),
-            new HybridQueryContext(10)
+            hybridQueryContext
         );
         when(searchContext.query()).thenReturn(hybridQueryWithTerm);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
@@ -347,7 +352,9 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
         TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
-        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), new HybridQueryContext(10));
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+
+        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
 
         when(searchContext.query()).thenReturn(hybridQuery);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
@@ -384,7 +391,9 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
         TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
-        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), new HybridQueryContext(10));
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+
+        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
 
         when(searchContext.query()).thenReturn(hybridQuery);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
@@ -414,10 +423,11 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
 
         HybridQuery hybridQueryWithMatchAll = new HybridQuery(
             List.of(QueryBuilders.matchAllQuery().toQuery(mockQueryShardContext)),
-            new HybridQueryContext(10)
+            hybridQueryContext
         );
         when(searchContext.query()).thenReturn(hybridQueryWithMatchAll);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
@@ -510,13 +520,14 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
 
         HybridQuery hybridQueryWithTerm = new HybridQuery(
             List.of(
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1).toQuery(mockQueryShardContext),
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY2).toQuery(mockQueryShardContext)
             ),
-            new HybridQueryContext(10)
+            hybridQueryContext
         );
         when(searchContext.query()).thenReturn(hybridQueryWithTerm);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
@@ -601,10 +612,11 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
 
         HybridQuery hybridQueryWithTerm = new HybridQuery(
             List.of(QueryBuilders.matchAllQuery().toQuery(mockQueryShardContext)),
-            new HybridQueryContext(10)
+            hybridQueryContext
         );
         when(searchContext.query()).thenReturn(hybridQueryWithTerm);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
@@ -729,13 +741,14 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
 
         HybridQuery hybridQueryWithTerm = new HybridQuery(
             List.of(
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1).toQuery(mockQueryShardContext),
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY2).toQuery(mockQueryShardContext)
             ),
-            new HybridQueryContext(10)
+            hybridQueryContext
         );
         when(searchContext.query()).thenReturn(hybridQueryWithTerm);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
@@ -847,6 +860,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
 
         HybridQuery hybridQueryWithTerm = new HybridQuery(
             List.of(
@@ -854,7 +868,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY2).toQuery(mockQueryShardContext),
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY3).toQuery(mockQueryShardContext)
             ),
-            new HybridQueryContext(10)
+            hybridQueryContext
         );
         when(searchContext.query()).thenReturn(hybridQueryWithTerm);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
@@ -992,13 +1006,14 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
 
         HybridQuery hybridQueryWithTerm = new HybridQuery(
             List.of(
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1).toQuery(mockQueryShardContext),
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY2).toQuery(mockQueryShardContext)
             ),
-            new HybridQueryContext(10)
+            hybridQueryContext
         );
         when(searchContext.query()).thenReturn(hybridQueryWithTerm);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
@@ -1064,8 +1079,10 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
         TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+
         // pagination_depth=10
-        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), new HybridQueryContext(10));
+        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
 
         when(searchContext.query()).thenReturn(hybridQuery);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
@@ -1098,7 +1115,9 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
         TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
-        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), new HybridQueryContext(10));
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+
+        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
 
         when(searchContext.query()).thenReturn(hybridQuery);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);

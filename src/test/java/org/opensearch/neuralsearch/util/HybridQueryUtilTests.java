@@ -43,6 +43,7 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
 
         HybridQuery query = new HybridQuery(
             List.of(
@@ -55,7 +56,7 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
                     .toQuery(mockQueryShardContext),
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext)
             ),
-            new HybridQueryContext(10)
+            hybridQueryContext
         );
         SearchContext searchContext = mock(SearchContext.class);
 
