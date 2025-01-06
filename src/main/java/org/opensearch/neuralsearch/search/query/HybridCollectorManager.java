@@ -483,7 +483,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
      * @return results size to collected
      */
     private static int getSubqueryResultsRetrievalSize(final SearchContext searchContext) {
-        HybridQuery hybridQuery = extractHybridQueryFromAbstractQuery(searchContext.query());
+        HybridQuery hybridQuery = unwrapHybridQuery(searchContext.query());
         int paginationDepth = hybridQuery.getQueryContext().getPaginationDepth();
 
         // Switch to from+size retrieval size during standard hybrid query execution.
@@ -496,7 +496,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     /**
      * Unwraps a HybridQuery from either a direct query or a nested BooleanQuery
      */
-    private static HybridQuery extractHybridQueryFromAbstractQuery(Query query) {
+    private static HybridQuery unwrapHybridQuery(Query query) {
         HybridQuery hybridQuery;
         // In case of nested fields and alias filter, hybrid query is wrapped under bool query and lies in the first clause.
         if (query instanceof BooleanQuery) {
