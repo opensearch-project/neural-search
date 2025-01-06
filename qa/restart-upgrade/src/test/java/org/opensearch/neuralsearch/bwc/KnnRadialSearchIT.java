@@ -67,7 +67,7 @@ public class KnnRadialSearchIT extends AbstractRestartUpgradeRestTestCase {
             .queryText(TEXT)
             .queryImage(TEST_IMAGE_TEXT)
             .modelId(modelId)
-            .minScore(100000f)
+            .maxDistance(100000f)
             .build();
 
         Map<String, Object> responseWithMaxDistanceQuery = search(getIndexNameForTest(), neuralQueryBuilderWithMaxDistanceQuery, 1);
