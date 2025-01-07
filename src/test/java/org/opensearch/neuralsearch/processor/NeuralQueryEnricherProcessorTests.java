@@ -38,7 +38,7 @@ public class NeuralQueryEnricherProcessorTests extends OpenSearchTestCase {
 
     public void testProcessRequest_whenVisitingQueryBuilder_thenSuccess() throws Exception {
         NeuralQueryEnricherProcessor.Factory factory = new NeuralQueryEnricherProcessor.Factory();
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder().fieldName("field_name").queryText("query_text").build();
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.source(new SearchSourceBuilder().query(neuralQueryBuilder));
         NeuralQueryEnricherProcessor processor = createTestProcessor(factory);
