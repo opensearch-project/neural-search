@@ -250,6 +250,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             HybridQueryBuilder hybridQueryBuilderL2Norm = new HybridQueryBuilder();
             hybridQueryBuilderL2Norm.add(
                 NeuralQueryBuilder.builder().fieldName(TEST_KNN_VECTOR_FIELD_NAME_1).queryText(TEST_DOC_TEXT1).modelId(modelId).k(5).build()
+
             );
             hybridQueryBuilderL2Norm.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
@@ -300,6 +301,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             HybridQueryBuilder hybridQueryBuilderDefaultNorm = new HybridQueryBuilder();
             hybridQueryBuilderDefaultNorm.add(
                 NeuralQueryBuilder.builder().fieldName(TEST_KNN_VECTOR_FIELD_NAME_1).queryText(TEST_DOC_TEXT1).modelId(modelId).k(5).build()
+
             );
             hybridQueryBuilderDefaultNorm.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 
@@ -325,6 +327,7 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             HybridQueryBuilder hybridQueryBuilderL2Norm = new HybridQueryBuilder();
             hybridQueryBuilderL2Norm.add(
                 NeuralQueryBuilder.builder().fieldName(TEST_KNN_VECTOR_FIELD_NAME_1).queryText(TEST_DOC_TEXT1).modelId(modelId).k(5).build()
+
             );
             hybridQueryBuilderL2Norm.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
 

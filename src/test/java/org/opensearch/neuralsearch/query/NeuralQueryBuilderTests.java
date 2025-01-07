@@ -572,6 +572,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         NeuralQueryBuilder original = NeuralQueryBuilder.builder()
             .fieldName(FIELD_NAME)
             .queryText(QUERY_TEXT)
+            .queryImage(IMAGE_TEXT)
             .modelId(MODEL_ID)
             .k(K)
             .boost(BOOST)

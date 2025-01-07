@@ -139,6 +139,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
                 .modelId(modelId)
                 .k(5)
                 .build();
+
             TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
 
             HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();

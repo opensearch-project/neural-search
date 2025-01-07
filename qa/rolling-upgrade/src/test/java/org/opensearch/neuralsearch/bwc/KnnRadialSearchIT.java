@@ -95,6 +95,7 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
             .modelId(modelId)
             .maxDistance(100000f)
             .build();
+
         Map<String, Object> responseWithMaxScore = search(getIndexNameForTest(), neuralQueryBuilderWithMaxDistanceQuery, 1);
         assertNotNull(responseWithMaxScore);
     }
