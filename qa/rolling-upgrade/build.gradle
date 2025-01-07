@@ -71,47 +71,6 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.plugin_bwc_version', ext.neural_search_bwc_version
     systemProperty 'tests.skip_delete_model_index', 'true'
 
-    //Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT, NeuralQueryEnricherProcessorIT tests from neural search version 2.9 and 2.10
-    // because these features were released in 2.11 version.
-    if (versionsBelow2_11.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.*"
-        }
-    }
-
-    // Excluding the tests because we introduce these features in 2.13
-    if (versionsBelow2_13.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.TextChunkingProcessorIT.*"
-        }
-    }
-
-    // Excluding the k-NN radial search and batch ingestion tests because we introduce these features in 2.14
-    if (versionsBelow2_14.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.KnnRadialSearchIT.*"
-        }
-    }
-
-    // Excluding the neural sparse two phase processor test because we introduce this feature in 2.15
-    if (versionsBelow2_15.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseTwoPhaseProcessorIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchWithRescoreIT.*"
-        }
-    }
-
-    // Excluding the batching processor tests because we introduce this feature in 2.16
-    if (versionsBelow2_16.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.BatchIngestionIT.*"
-        }
-    }
-
     nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
     nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
     systemProperty 'tests.security.manager', 'false'
@@ -137,48 +96,6 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.skip_delete_model_index', 'true'
     systemProperty 'tests.plugin_bwc_version', ext.neural_search_bwc_version
 
-    //Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT, NeuralQueryEnricherProcessorIT tests from neural search version 2.9 and 2.10
-    // because these features were released in 2.11 version.
-    if (versionsBelow2_11.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.*"
-        }
-    }
-
-    // Excluding the tests because we introduce these features in 2.13
-    if (versionsBelow2_13.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.TextChunkingProcessorIT.*"
-        }
-    }
-
-    // Excluding the k-NN radial search and batch ingestion tests because we introduce these features in 2.14
-    if (versionsBelow2_14.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.KnnRadialSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.BatchIngestionIT.*"
-        }
-    }
-
-    // Excluding the neural sparse two phase processor test because we introduce this feature in 2.15
-    if (versionsBelow2_15.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseTwoPhaseProcessorIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchWithRescoreIT.*"
-        }
-    }
-
-    // Excluding the batching processor tests because we introduce this feature in 2.16
-    if (versionsBelow2_16.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.BatchIngestionIT.*"
-        }
-    }
-
     nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
     nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
     systemProperty 'tests.security.manager', 'false'
@@ -202,48 +119,6 @@ task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.rest.first_round', 'false'
     systemProperty 'tests.skip_delete_model_index', 'true'
     systemProperty 'tests.plugin_bwc_version', ext.neural_search_bwc_version
-
-    // Excluding MultiModalSearchIT, HybridSearchIT, NeuralSparseSearchIT, NeuralQueryEnricherProcessorIT tests from neural search version 2.9 and 2.10
-    // because these features were released in 2.11 version.
-    if (versionsBelow2_11.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.*"
-        }
-    }
-
-    // Excluding the tests because we introduce these features in 2.13
-    if (versionsBelow2_13.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.TextChunkingProcessorIT.*"
-        }
-    }
-
-    // Excluding the k-NN radial search and batch ingestion tests because we introduce these features in 2.14
-    if (versionsBelow2_14.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.KnnRadialSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.BatchIngestionIT.*"
-        }
-    }
-
-    // Excluding the neural sparse two phase processor test because we introduce this feature in 2.15
-    if (versionsBelow2_15.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseTwoPhaseProcessorIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchWithRescoreIT.*"
-        }
-    }
-
-    // Excluding the batching processor tests because we introduce this feature in 2.16
-    if (versionsBelow2_16.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.BatchIngestionIT.*"
-        }
-    }
 
     nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
     nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
