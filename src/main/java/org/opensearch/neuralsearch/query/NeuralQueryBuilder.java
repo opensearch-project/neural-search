@@ -67,8 +67,8 @@ import lombok.extern.log4j.Log4j2;
 @Getter
 @Setter
 @Accessors(chain = true, fluent = true)
-@NoArgsConstructor
-@AllArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder> implements ModelInferenceQueryBuilder {
 
     public static final String NAME = "neural";
@@ -107,6 +107,125 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     private QueryBuilder filter;
     private Map<String, ?> methodParameters;
     private RescoreContext rescoreContext;
+
+    /**
+     * A custom builder class to enforce valid Neural Query Builder instantiation
+     */
+    public static class Builder {
+        private String fieldName;
+        private String queryText;
+        private String queryImage;
+        private String modelId;
+        private Integer k = null;
+        private Float maxDistance = null;
+        private Float minScore = null;
+        private Boolean expandNested;
+        private Supplier<float[]> vectorSupplier;
+        private QueryBuilder filter;
+        private Map<String, ?> methodParameters;
+        private RescoreContext rescoreContext;
+        private String queryName;
+        private float boost = DEFAULT_BOOST;
+
+        public Builder() {}
+
+        public Builder fieldName(String fieldName) {
+            this.fieldName = fieldName;
+            return this;
+        }
+
+        public Builder queryText(String queryText) {
+            this.queryText = queryText;
+            return this;
+        }
+
+        public Builder queryImage(String queryImage) {
+            this.queryImage = queryImage;
+            return this;
+        }
+
+        public Builder modelId(String modelId) {
+            this.modelId = modelId;
+            return this;
+        }
+
+        public Builder k(Integer k) {
+            this.k = k;
+            return this;
+        }
+
+        public Builder maxDistance(Float maxDistance) {
+            this.maxDistance = maxDistance;
+            return this;
+        }
+
+        public Builder minScore(Float minScore) {
+            this.minScore = minScore;
+            return this;
+        }
+
+        public Builder expandNested(Boolean expandNested) {
+            this.expandNested = expandNested;
+            return this;
+        }
+
+        public Builder vectorSupplier(Supplier<float[]> vectorSupplier) {
+            this.vectorSupplier = vectorSupplier;
+            return this;
+        }
+
+        public Builder filter(QueryBuilder filter) {
+            this.filter = filter;
+            return this;
+        }
+
+        public Builder methodParameters(Map<String, ?> methodParameters) {
+            this.methodParameters = methodParameters;
+            return this;
+        }
+
+        public Builder queryName(String queryName) {
+            this.queryName = queryName;
+            return this;
+        }
+
+        public Builder boost(float boost) {
+            this.boost = boost;
+            return this;
+        }
+
+        public Builder rescoreContext(RescoreContext rescoreContext) {
+            this.rescoreContext = rescoreContext;
+            return this;
+        }
+
+        public NeuralQueryBuilder build() {
+            validateQueryParameters(fieldName, queryText, queryImage);
+            boolean queryTypeIsProvided = validateKNNQueryType(k, maxDistance, minScore);
+            if (queryTypeIsProvided == false) {
+                k = DEFAULT_K;
+            }
+            return new NeuralQueryBuilder(
+                fieldName,
+                queryText,
+                queryImage,
+                modelId,
+                k,
+                maxDistance,
+                minScore,
+                expandNested,
+                vectorSupplier,
+                filter,
+                methodParameters,
+                rescoreContext
+            ).boost(boost).queryName(queryName);
+        }
+
+    }
+
+    public static NeuralQueryBuilder.Builder builder() {
+        return new NeuralQueryBuilder.Builder();
+    }
 
     /**
      * Constructor from stream input
@@ -246,15 +365,16 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                     + "]"
             );
         }
-        if (StringUtils.isBlank(neuralQueryBuilder.queryText()) && StringUtils.isBlank(neuralQueryBuilder.queryImage())) {
-            throw new IllegalArgumentException("Either query text or image text must be provided for neural query");
-        }
-        requireValue(neuralQueryBuilder.fieldName(), "Field name must be provided for neural query");
+        validateQueryParameters(neuralQueryBuilder.fieldName(), neuralQueryBuilder.queryText(), neuralQueryBuilder.queryImage());
         if (!isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
             requireValue(neuralQueryBuilder.modelId(), "Model ID must be provided for neural query");
         }
 
-        boolean queryTypeIsProvided = validateKNNQueryType(neuralQueryBuilder);
+        boolean queryTypeIsProvided = validateKNNQueryType(
+            neuralQueryBuilder.k(),
+            neuralQueryBuilder.maxDistance(),
+            neuralQueryBuilder.minScore()
+        );
         if (queryTypeIsProvided == false) {
             neuralQueryBuilder.k(DEFAULT_K);
         }
@@ -397,15 +517,22 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         return NAME;
     }
 
-    private static boolean validateKNNQueryType(NeuralQueryBuilder neuralQueryBuilder) {
+    private static void validateQueryParameters(String fieldName, String queryText, String queryImage) {
+        if (StringUtils.isBlank(queryText) && StringUtils.isBlank(queryImage)) {
+            throw new IllegalArgumentException("Either query text or image text must be provided for neural query");
+        }
+        requireValue(fieldName, "Field name must be provided for neural query");
+    }
+
+    private static boolean validateKNNQueryType(Integer k, Float maxDistance, Float minScore) {
         int queryCount = 0;
-        if (neuralQueryBuilder.k() != null) {
+        if (k != null) {
             queryCount++;
         }
-        if (neuralQueryBuilder.maxDistance() != null) {
+        if (maxDistance != null) {
             queryCount++;
         }
-        if (neuralQueryBuilder.minScore() != null) {
+        if (minScore != null) {
             queryCount++;
         }
         if (queryCount > 1) {

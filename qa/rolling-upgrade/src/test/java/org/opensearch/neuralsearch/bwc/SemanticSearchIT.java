@@ -71,11 +71,12 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
         loadModel(modelId);
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
-        neuralQueryBuilder.fieldName("passage_embedding");
-        neuralQueryBuilder.modelId(modelId);
-        neuralQueryBuilder.queryText(text);
-        neuralQueryBuilder.k(1);
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName("passage_embedding")
+            .modelId(modelId)
+            .queryText(text)
+            .k(1)
+            .build();
         Map<String, Object> response = search(getIndexNameForTest(), neuralQueryBuilder, 1);
         assertNotNull(response);
     }
