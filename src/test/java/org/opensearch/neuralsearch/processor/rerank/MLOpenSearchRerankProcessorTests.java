@@ -102,8 +102,12 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
 
     private void setupParams(Map<String, Object> params) {
         SearchSourceBuilder ssb = new SearchSourceBuilder();
-        NeuralQueryBuilder nqb = new NeuralQueryBuilder();
-        nqb.fieldName("embedding").k(3).modelId("embedding_id").queryText("Question about dolphins");
+        NeuralQueryBuilder nqb = NeuralQueryBuilder.builder()
+            .fieldName("embedding")
+            .k(3)
+            .modelId("embedding_id")
+            .queryText("Question about dolphins")
+            .build();
         ssb.query(nqb);
         List<SearchExtBuilder> exts = List.of(
             new RerankSearchExtBuilder(new HashMap<>(Map.of(QueryContextSourceFetcher.NAME, new HashMap<>(params))))

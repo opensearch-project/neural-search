@@ -16,9 +16,11 @@ public class NeuralSearchQueryVisitorTests extends OpenSearchTestCase {
 
     public void testAccept_whenNeuralQueryBuilderWithoutModelId_thenSetModelId() {
         String modelId = "bdcvjkcdjvkddcjxdjsc";
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
-        neuralQueryBuilder.fieldName("passage_text");
-        neuralQueryBuilder.k(768);
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName("passage_text")
+            .queryText("query_text")
+            .k(768)
+            .build();
 
         NeuralSearchQueryVisitor neuralSearchQueryVisitor = new NeuralSearchQueryVisitor(modelId, null);
         neuralSearchQueryVisitor.accept(neuralQueryBuilder);
@@ -29,9 +31,11 @@ public class NeuralSearchQueryVisitorTests extends OpenSearchTestCase {
     public void testAccept_whenNeuralQueryBuilderWithoutFieldModelId_thenSetFieldModelId() {
         Map<String, Object> neuralInfoMap = new HashMap<>();
         neuralInfoMap.put("passage_text", "bdcvjkcdjvkddcjxdjsc");
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
-        neuralQueryBuilder.fieldName("passage_text");
-        neuralQueryBuilder.k(768);
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName("passage_text")
+            .queryText("query_text")
+            .k(768)
+            .build();
 
         NeuralSearchQueryVisitor neuralSearchQueryVisitor = new NeuralSearchQueryVisitor(null, neuralInfoMap);
         neuralSearchQueryVisitor.accept(neuralQueryBuilder);
@@ -76,7 +80,7 @@ public class NeuralSearchQueryVisitorTests extends OpenSearchTestCase {
     }
 
     public void testAccept_whenNullValuesInVisitor_thenFail() {
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder().fieldName("passage_text").queryText("query_text").build();
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
         NeuralSearchQueryVisitor neuralSearchQueryVisitor = new NeuralSearchQueryVisitor(null, null);
 
