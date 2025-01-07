@@ -9,11 +9,12 @@ import com.google.common.collect.Multimap;
 import lombok.Getter;
 import lombok.Setter;
 import org.opensearch.action.search.SearchRequest;
-import org.opensearch.common.collect.Tuple;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.ingest.ConfigurationUtils;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.util.prune.PruneType;
+import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.pipeline.AbstractProcessor;
 import org.opensearch.search.pipeline.Processor;
@@ -21,11 +22,9 @@ import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.rescore.QueryRescorerBuilder;
 import org.opensearch.search.rescore.RescorerBuilder;
 
-import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 /**
  * A SearchRequestProcessor to generate two-phase NeuralSparseQueryBuilder,
@@ -37,41 +36,37 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
 
     public static final String TYPE = "neural_sparse_two_phase_processor";
     private boolean enabled;
-    private float ratio;
+    private float pruneRatio;
+    private PruneType pruneType;
     private float windowExpansion;
     private int maxWindowSize;
     private static final String PARAMETER_KEY = "two_phase_parameter";
-    private static final String RATIO_KEY = "prune_ratio";
     private static final String ENABLE_KEY = "enabled";
     private static final String EXPANSION_KEY = "expansion_rate";
     private static final String MAX_WINDOW_SIZE_KEY = "max_window_size";
     private static final boolean DEFAULT_ENABLED = true;
     private static final float DEFAULT_RATIO = 0.4f;
+    private static final PruneType DEFAULT_PRUNE_TYPE = PruneType.MAX_RATIO;
     private static final float DEFAULT_WINDOW_EXPANSION = 5.0f;
     private static final int DEFAULT_MAX_WINDOW_SIZE = 10000;
     private static final int DEFAULT_BASE_QUERY_SIZE = 10;
     private static final int MAX_WINDOWS_SIZE_LOWER_BOUND = 50;
     private static final float WINDOW_EXPANSION_LOWER_BOUND = 1.0f;
-    private static final float RATIO_LOWER_BOUND = 0f;
-    private static final float RATIO_UPPER_BOUND = 1f;
 
     protected NeuralSparseTwoPhaseProcessor(
         String tag,
         String description,
         boolean ignoreFailure,
         boolean enabled,
-        float ratio,
+        float pruneRatio,
+        PruneType pruneType,
         float windowExpansion,
         int maxWindowSize
     ) {
         super(tag, description, ignoreFailure);
         this.enabled = enabled;
-        if (ratio < RATIO_LOWER_BOUND || ratio > RATIO_UPPER_BOUND) {
-            throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "The two_phase_parameter.prune_ratio must be within [0, 1]. Received: %f", ratio)
-            );
-        }
-        this.ratio = ratio;
+        this.pruneRatio = pruneRatio;
+        this.pruneType = pruneType;
         if (windowExpansion < WINDOW_EXPANSION_LOWER_BOUND) {
             throw new IllegalArgumentException(
                 String.format(Locale.ROOT, "The two_phase_parameter.expansion_rate must >= 1.0. Received: %f", windowExpansion)
@@ -93,7 +88,7 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
      */
     @Override
     public SearchRequest processRequest(final SearchRequest request) {
-        if (!enabled || ratio == 0f) {
+        if (!enabled || pruneRatio == 0f) {
             return request;
         }
         QueryBuilder queryBuilder = request.source().query();
@@ -115,43 +110,6 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
     @Override
     public String getType() {
         return TYPE;
-    }
-
-    /**
-     * Based on ratio, split a Map into two map by the value.
-     *
-     * @param queryTokens    the queryTokens map, key is the token String, value is the score.
-     * @param thresholdRatio The ratio that control how tokens map be split.
-     * @return A tuple has two element, { token map whose value above threshold, token map whose value below threshold }
-     */
-    public static Tuple<Map<String, Float>, Map<String, Float>> splitQueryTokensByRatioedMaxScoreAsThreshold(
-        final Map<String, Float> queryTokens,
-        final float thresholdRatio
-    ) {
-        if (Objects.isNull(queryTokens)) {
-            throw new IllegalArgumentException("Query tokens cannot be null or empty.");
-        }
-        float max = 0f;
-        for (Float value : queryTokens.values()) {
-            max = Math.max(value, max);
-        }
-        float threshold = max * thresholdRatio;
-
-        Map<Boolean, Map<String, Float>> queryTokensByScore = queryTokens.entrySet()
-            .stream()
-            .collect(
-                Collectors.partitioningBy(entry -> entry.getValue() >= threshold, Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
-            );
-
-        Map<String, Float> highScoreTokens = queryTokensByScore.get(Boolean.TRUE);
-        Map<String, Float> lowScoreTokens = queryTokensByScore.get(Boolean.FALSE);
-        if (Objects.isNull(highScoreTokens)) {
-            highScoreTokens = Collections.emptyMap();
-        }
-        if (Objects.isNull(lowScoreTokens)) {
-            lowScoreTokens = Collections.emptyMap();
-        }
-        return Tuple.tuple(highScoreTokens, lowScoreTokens);
     }
 
     private QueryBuilder getNestedQueryBuilderFromNeuralSparseQueryBuilderMap(
@@ -201,7 +159,10 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
              *     - Docs besides TopDocs: Score = HighScoreToken's score
              *     - Final TopDocs: Score = HighScoreToken's score + LowScoreToken's score
              */
-            NeuralSparseQueryBuilder modifiedQueryBuilder = neuralSparseQueryBuilder.getCopyNeuralSparseQueryBuilderForTwoPhase(ratio);
+            NeuralSparseQueryBuilder modifiedQueryBuilder = neuralSparseQueryBuilder.getCopyNeuralSparseQueryBuilderForTwoPhase(
+                pruneRatio,
+                pruneType
+            );
             result.put(modifiedQueryBuilder, updatedBoost);
         }
         // We only support BoostQuery, BooleanQuery and NeuralSparseQuery now. For other compound query type which are not support now, will
@@ -248,16 +209,40 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
             boolean enabled = ConfigurationUtils.readBooleanProperty(TYPE, tag, config, ENABLE_KEY, DEFAULT_ENABLED);
             Map<String, Object> twoPhaseConfigMap = ConfigurationUtils.readOptionalMap(TYPE, tag, config, PARAMETER_KEY);
 
-            float ratio = DEFAULT_RATIO;
+            float pruneRatio = DEFAULT_RATIO;
             float windowExpansion = DEFAULT_WINDOW_EXPANSION;
             int maxWindowSize = DEFAULT_MAX_WINDOW_SIZE;
+            PruneType pruneType = DEFAULT_PRUNE_TYPE;
             if (Objects.nonNull(twoPhaseConfigMap)) {
-                ratio = ((Number) twoPhaseConfigMap.getOrDefault(RATIO_KEY, ratio)).floatValue();
+                pruneRatio = ((Number) twoPhaseConfigMap.getOrDefault(PruneUtils.PRUNE_RATIO_FIELD, pruneRatio)).floatValue();
                 windowExpansion = ((Number) twoPhaseConfigMap.getOrDefault(EXPANSION_KEY, windowExpansion)).floatValue();
                 maxWindowSize = ((Number) twoPhaseConfigMap.getOrDefault(MAX_WINDOW_SIZE_KEY, maxWindowSize)).intValue();
+                pruneType = PruneType.fromString(
+                    twoPhaseConfigMap.getOrDefault(PruneUtils.PRUNE_TYPE_FIELD, pruneType.getValue()).toString()
+                );
+            }
+            if (!PruneUtils.isValidPruneRatio(pruneType, pruneRatio)) {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "Illegal prune_ratio %f for prune_type: %s. %s",
+                        pruneRatio,
+                        pruneType.getValue(),
+                        PruneUtils.getValidPruneRatioDescription(pruneType)
+                    )
+                );
             }
 
-            return new NeuralSparseTwoPhaseProcessor(tag, description, ignoreFailure, enabled, ratio, windowExpansion, maxWindowSize);
+            return new NeuralSparseTwoPhaseProcessor(
+                tag,
+                description,
+                ignoreFailure,
+                enabled,
+                pruneRatio,
+                pruneType,
+                windowExpansion,
+                maxWindowSize
+            );
         }
     }
 

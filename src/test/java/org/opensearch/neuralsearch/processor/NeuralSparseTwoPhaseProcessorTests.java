@@ -6,10 +6,11 @@ package org.opensearch.neuralsearch.processor;
 
 import lombok.SneakyThrows;
 import org.opensearch.action.search.SearchRequest;
-import org.opensearch.common.collect.Tuple;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.util.prune.PruneType;
+import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.rescore.QueryRescorerBuilder;
 import org.opensearch.test.OpenSearchTestCase;
@@ -20,7 +21,6 @@ import java.util.Map;
 
 public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
     static final private String PARAMETER_KEY = "two_phase_parameter";
-    static final private String RATIO_KEY = "prune_ratio";
     static final private String ENABLE_KEY = "enabled";
     static final private String EXPANSION_KEY = "expansion_rate";
     static final private String MAX_WINDOW_SIZE_KEY = "max_window_size";
@@ -28,9 +28,10 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
     public void testFactory_whenCreateDefaultPipeline_thenSuccess() throws Exception {
         NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
         NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory);
-        assertEquals(0.3f, processor.getRatio(), 1e-3);
+        assertEquals(0.3f, processor.getPruneRatio(), 1e-3);
         assertEquals(4.0f, processor.getWindowExpansion(), 1e-3);
         assertEquals(10000, processor.getMaxWindowSize());
+        assertEquals(PruneType.MAX_RATIO, processor.getPruneType());
 
         NeuralSparseTwoPhaseProcessor defaultProcessor = factory.create(
             Collections.emptyMap(),
@@ -40,14 +41,26 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
             Collections.emptyMap(),
             null
         );
-        assertEquals(0.4f, defaultProcessor.getRatio(), 1e-3);
+        assertEquals(0.4f, defaultProcessor.getPruneRatio(), 1e-3);
         assertEquals(5.0f, defaultProcessor.getWindowExpansion(), 1e-3);
         assertEquals(10000, defaultProcessor.getMaxWindowSize());
+        assertEquals(PruneType.MAX_RATIO, processor.getPruneType());
+    }
+
+    public void testFactory_whenCreatePipelineWithCustomPruneType_thenSuccess() throws Exception {
+        NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
+        NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 5f, "top_k", true, 5f, 1000);
+        assertEquals(5f, processor.getPruneRatio(), 1e-6);
+        assertEquals(PruneType.TOP_K, processor.getPruneType());
     }
 
     public void testFactory_whenRatioOutOfRange_thenThrowException() {
         NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
         expectThrows(IllegalArgumentException.class, () -> createTestProcessor(factory, 1.1f, true, 5.0f, 10000));
+        expectThrows(IllegalArgumentException.class, () -> createTestProcessor(factory, 1.1f, "max_ratio", true, 5.0f, 10000));
+        expectThrows(IllegalArgumentException.class, () -> createTestProcessor(factory, 0f, "top_k", true, 5.0f, 10000));
+        expectThrows(IllegalArgumentException.class, () -> createTestProcessor(factory, 1.1f, "alpha_mass", true, 5.0f, 10000));
+        expectThrows(IllegalArgumentException.class, () -> createTestProcessor(factory, -1f, "abs_value", true, 5.0f, 10000));
     }
 
     public void testFactory_whenWindowExpansionOutOfRange_thenThrowException() {
@@ -70,6 +83,19 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         processor.processRequest(searchRequest);
         NeuralSparseQueryBuilder queryBuilder = (NeuralSparseQueryBuilder) searchRequest.source().query();
         assertEquals(queryBuilder.twoPhasePruneRatio(), 0.5f, 1e-3);
+        assertNotNull(searchRequest.source().rescores());
+    }
+
+    public void testProcessRequest_whenUseCustomPruneType_thenSuccess() throws Exception {
+        NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
+        NeuralSparseQueryBuilder neuralQueryBuilder = new NeuralSparseQueryBuilder();
+        SearchRequest searchRequest = new SearchRequest();
+        searchRequest.source(new SearchSourceBuilder().query(neuralQueryBuilder));
+        NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, "alpha_mass", true, 4.0f, 10000);
+        processor.processRequest(searchRequest);
+        NeuralSparseQueryBuilder queryBuilder = (NeuralSparseQueryBuilder) searchRequest.source().query();
+        assertEquals(queryBuilder.twoPhasePruneRatio(), 0.5f, 1e-3);
+        assertEquals(queryBuilder.twoPhasePruneType(), PruneType.ALPHA_MASS);
         assertNotNull(searchRequest.source().rescores());
     }
 
@@ -140,32 +166,6 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         assertNull(returnRequest.source().rescores());
     }
 
-    @SneakyThrows
-    public void testGetSplitSetOnceByScoreThreshold() {
-        Map<String, Float> queryTokens = new HashMap<>();
-        for (int i = 0; i < 10; i++) {
-            queryTokens.put(String.valueOf(i), (float) i);
-        }
-        Tuple<Map<String, Float>, Map<String, Float>> splitQueryTokens = NeuralSparseTwoPhaseProcessor
-            .splitQueryTokensByRatioedMaxScoreAsThreshold(queryTokens, 0.4f);
-        assertNotNull(splitQueryTokens);
-        Map<String, Float> upSet = splitQueryTokens.v1();
-        Map<String, Float> downSet = splitQueryTokens.v2();
-        assertNotNull(upSet);
-        assertEquals(6, upSet.size());
-        assertNotNull(downSet);
-        assertEquals(4, downSet.size());
-    }
-
-    @SneakyThrows
-    public void testGetSplitSetOnceByScoreThreshold_whenNullQueryToken_thenThrowException() {
-        Map<String, Float> queryTokens = null;
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> NeuralSparseTwoPhaseProcessor.splitQueryTokensByRatioedMaxScoreAsThreshold(queryTokens, 0.4f)
-        );
-    }
-
     public void testType() throws Exception {
         NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
         NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory);
@@ -182,9 +182,28 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         Map<String, Object> configMap = new HashMap<>();
         configMap.put(ENABLE_KEY, enabled);
         Map<String, Object> twoPhaseParaMap = new HashMap<>();
-        twoPhaseParaMap.put(RATIO_KEY, ratio);
+        twoPhaseParaMap.put(PruneUtils.PRUNE_RATIO_FIELD, ratio);
         twoPhaseParaMap.put(EXPANSION_KEY, expand);
         twoPhaseParaMap.put(MAX_WINDOW_SIZE_KEY, max_window);
+        configMap.put(PARAMETER_KEY, twoPhaseParaMap);
+        return factory.create(Collections.emptyMap(), null, null, false, configMap, null);
+    }
+
+    private NeuralSparseTwoPhaseProcessor createTestProcessor(
+        NeuralSparseTwoPhaseProcessor.Factory factory,
+        float ratio,
+        String type,
+        boolean enabled,
+        float expand,
+        int max_window
+    ) throws Exception {
+        Map<String, Object> configMap = new HashMap<>();
+        configMap.put(ENABLE_KEY, enabled);
+        Map<String, Object> twoPhaseParaMap = new HashMap<>();
+        twoPhaseParaMap.put(PruneUtils.PRUNE_RATIO_FIELD, ratio);
+        twoPhaseParaMap.put(EXPANSION_KEY, expand);
+        twoPhaseParaMap.put(MAX_WINDOW_SIZE_KEY, max_window);
+        twoPhaseParaMap.put(PruneUtils.PRUNE_TYPE_FIELD, type);
         configMap.put(PARAMETER_KEY, twoPhaseParaMap);
         return factory.create(Collections.emptyMap(), null, null, false, configMap, null);
     }
@@ -193,7 +212,7 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         Map<String, Object> configMap = new HashMap<>();
         configMap.put(ENABLE_KEY, true);
         Map<String, Object> twoPhaseParaMap = new HashMap<>();
-        twoPhaseParaMap.put(RATIO_KEY, 0.3f);
+        twoPhaseParaMap.put(PruneUtils.PRUNE_RATIO_FIELD, 0.3f);
         twoPhaseParaMap.put(EXPANSION_KEY, 4.0f);
         twoPhaseParaMap.put(MAX_WINDOW_SIZE_KEY, 10000);
         configMap.put(PARAMETER_KEY, twoPhaseParaMap);

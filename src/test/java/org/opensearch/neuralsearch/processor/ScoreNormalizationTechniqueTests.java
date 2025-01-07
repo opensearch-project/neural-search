@@ -18,6 +18,8 @@ import lombok.SneakyThrows;
 
 public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
 
+    private static final SearchShard SEARCH_SHARD = new SearchShard("my_index", 0, "12345678");
+
     public void testEmptyResults_whenEmptyResultsAndDefaultMethod_thenNoProcessing() {
         ScoreNormalizer scoreNormalizationMethod = new ScoreNormalizer();
         scoreNormalizationMethod.normalizeScores(List.of(), ScoreNormalizationFactory.DEFAULT_METHOD);
@@ -30,7 +32,8 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
             new CompoundTopDocs(
                 new TotalHits(1, TotalHits.Relation.EQUAL_TO),
                 List.of(new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(1, 2.0f) })),
-                false
+                false,
+                SEARCH_SHARD
             )
         );
         scoreNormalizationMethod.normalizeScores(queryTopDocs, ScoreNormalizationFactory.DEFAULT_METHOD);
@@ -61,7 +64,8 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
                         new ScoreDoc[] { new ScoreDoc(1, 10.0f), new ScoreDoc(2, 2.5f), new ScoreDoc(4, 0.1f) }
                     )
                 ),
-                false
+                false,
+                SEARCH_SHARD
             )
         );
         scoreNormalizationMethod.normalizeScores(queryTopDocs, ScoreNormalizationFactory.DEFAULT_METHOD);
@@ -98,7 +102,8 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
                         new ScoreDoc[] { new ScoreDoc(3, 0.8f), new ScoreDoc(5, 0.5f) }
                     )
                 ),
-                false
+                false,
+                SEARCH_SHARD
             )
         );
         scoreNormalizationMethod.normalizeScores(queryTopDocs, ScoreNormalizationFactory.DEFAULT_METHOD);
@@ -147,7 +152,8 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
                         new ScoreDoc[] { new ScoreDoc(3, 0.8f), new ScoreDoc(5, 0.5f) }
                     )
                 ),
-                false
+                false,
+                SEARCH_SHARD
             ),
             new CompoundTopDocs(
                 new TotalHits(4, TotalHits.Relation.EQUAL_TO),
@@ -158,7 +164,8 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
                         new ScoreDoc[] { new ScoreDoc(2, 2.2f), new ScoreDoc(4, 1.8f), new ScoreDoc(7, 0.9f), new ScoreDoc(9, 0.01f) }
                     )
                 ),
-                false
+                false,
+                SEARCH_SHARD
             ),
             new CompoundTopDocs(
                 new TotalHits(0, TotalHits.Relation.EQUAL_TO),
@@ -166,7 +173,8 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
                     new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
                     new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0])
                 ),
-                false
+                false,
+                SEARCH_SHARD
             )
         );
         scoreNormalizationMethod.normalizeScores(queryTopDocs, ScoreNormalizationFactory.DEFAULT_METHOD);

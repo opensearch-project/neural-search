@@ -4,12 +4,12 @@
  */
 package org.opensearch.neuralsearch.processor.combination;
 
-import static org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique.PARAM_NAME_WEIGHTS;
-
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+
+import static org.opensearch.neuralsearch.processor.combination.ScoreCombinationUtil.PARAM_NAME_WEIGHTS;
 
 public class HarmonicMeanScoreCombinationTechniqueTests extends BaseScoreCombinationTechniqueTests {
 
