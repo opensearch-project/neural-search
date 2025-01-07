@@ -51,11 +51,12 @@ public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
     private void validateTestIndex(final String modelId) throws Exception {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(2, docCount);
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
-        neuralQueryBuilder.fieldName("passage_embedding");
-        neuralQueryBuilder.modelId(modelId);
-        neuralQueryBuilder.queryText(TEXT);
-        neuralQueryBuilder.k(1);
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName("passage_embedding")
+            .queryText(TEXT)
+            .modelId(modelId)
+            .k(1)
+            .build();
         Map<String, Object> response = search(getIndexNameForTest(), neuralQueryBuilder, 1);
         assertNotNull(response);
     }

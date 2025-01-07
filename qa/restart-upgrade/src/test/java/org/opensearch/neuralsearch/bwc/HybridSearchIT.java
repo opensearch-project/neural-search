@@ -122,11 +122,12 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         final Map<String, ?> methodParameters,
         final RescoreContext rescoreContext
     ) {
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
-        neuralQueryBuilder.fieldName("passage_embedding");
-        neuralQueryBuilder.modelId(modelId);
-        neuralQueryBuilder.queryText(QUERY);
-        neuralQueryBuilder.k(5);
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName("passage_embedding")
+            .modelId(modelId)
+            .queryText(QUERY)
+            .k(5)
+            .build();
         if (expandNestedDocs != null) {
             neuralQueryBuilder.expandNested(expandNestedDocs);
         }
