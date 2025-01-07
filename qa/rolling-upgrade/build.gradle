@@ -101,6 +101,7 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
     if (versionsBelow2_15.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseTwoPhaseProcessorIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchWithRescoreIT.*"
         }
     }
 
@@ -167,6 +168,7 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
     if (versionsBelow2_15.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseTwoPhaseProcessorIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchWithRescoreIT.*"
         }
     }
 
@@ -232,6 +234,7 @@ task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
     if (versionsBelow2_15.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseTwoPhaseProcessorIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchWithRescoreIT.*"
         }
     }
 
@@ -297,6 +300,7 @@ task testRollingUpgrade(type: StandaloneRestIntegTestTask) {
     if (versionsBelow2_15.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseTwoPhaseProcessorIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchWithRescoreIT.*"
         }
     }
 
