@@ -3,8 +3,7 @@
   "processors": [
     {
       "sparse_encoding": {
-        "model_id": "%s",
-        "batch_size": "%d",
+        "model_id": "%s",{{batch_size}}
         "field_map": {
           "passage_text": "passage_embedding"
         }
