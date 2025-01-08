@@ -17,7 +17,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
-import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.message.BasicHeader;
@@ -70,7 +69,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
             modelId = uploadTextEmbeddingModel();
             loadModel(modelId);
             createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
-            createTextEmbeddingIndex();
+            createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
             ingestDocument(INDEX_NAME, INGEST_DOC1, null);
             assertEquals(1, getDocCount(INDEX_NAME));
         } finally {
@@ -292,14 +291,6 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
     private String uploadTextEmbeddingModel() throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
         return registerModelGroupAndUploadModel(requestBody);
-    }
-
-    private void createTextEmbeddingIndex() throws Exception {
-        createIndexWithConfiguration(
-            INDEX_NAME,
-            Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
-            PIPELINE_NAME
-        );
     }
 
     private void ingestBatchDocumentWithBulk(String idPrefix, int docCount, Set<Integer> failedIds, Set<Integer> droppedIds)

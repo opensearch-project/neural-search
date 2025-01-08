@@ -1346,7 +1346,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     /**
-     *  Ingest a document to index with optional id
+     * Ingest a document to index with optional id
      * @param indexName name of the index
      * @param ingestDocument
      * @param id nullable optional id
