@@ -4,11 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor;
 
-import com.google.common.collect.ImmutableList;
 import lombok.SneakyThrows;
-import org.apache.http.HttpHeaders;
-import org.apache.http.message.BasicHeader;
-import org.apache.http.util.EntityUtils;
 import org.junit.Before;
 
 import java.net.URL;
@@ -19,9 +15,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import org.opensearch.client.Response;
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
@@ -73,7 +66,9 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         try {
             createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
             createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
-            ingestDocument(TEST_DOCUMENT);
+
+            String document = getDocumentFromFilePath(TEST_DOCUMENT);
+            ingestDocument(INDEX_NAME, document);
 
             List<String> expectedPassages = new ArrayList<>();
             expectedPassages.add("This is an example document to be chunked. The document ");
@@ -90,7 +85,9 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         try {
             createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_LETTER_TOKENIZER_NAME);
             createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_LETTER_TOKENIZER_NAME);
-            ingestDocument(TEST_DOCUMENT);
+
+            String document = getDocumentFromFilePath(TEST_DOCUMENT);
+            ingestDocument(INDEX_NAME, document);
 
             List<String> expectedPassages = new ArrayList<>();
             expectedPassages.add("This is an example document to be chunked. The document ");
@@ -107,7 +104,9 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         try {
             createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME);
             createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME);
-            ingestDocument(TEST_DOCUMENT);
+
+            String document = getDocumentFromFilePath(TEST_DOCUMENT);
+            ingestDocument(INDEX_NAME, document);
 
             List<String> expectedPassages = new ArrayList<>();
             expectedPassages.add("This is an example document to be chunked. The document ");
@@ -124,7 +123,10 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         try {
             createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
             createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
-            Exception exception = assertThrows(Exception.class, () -> ingestDocument(TEST_LONG_DOCUMENT));
+            Exception exception = assertThrows(Exception.class, () -> {
+                String document = getDocumentFromFilePath(TEST_LONG_DOCUMENT);
+                ingestDocument(INDEX_NAME, document);
+            });
             // max_token_count is 100 by index settings
             assert (exception.getMessage()
                 .contains("The number of tokens produced by calling _analyze has exceeded the allowed maximum of [100]."));
@@ -139,7 +141,9 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         try {
             createPipelineProcessor(DELIMITER_PIPELINE_NAME);
             createTextChunkingIndex(INDEX_NAME, DELIMITER_PIPELINE_NAME);
-            ingestDocument(TEST_DOCUMENT);
+
+            String document = getDocumentFromFilePath(TEST_DOCUMENT);
+            ingestDocument(INDEX_NAME, document);
 
             List<String> expectedPassages = new ArrayList<>();
             expectedPassages.add("This is an example document to be chunked.");
@@ -157,7 +161,9 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         try {
             createPipelineProcessor(CASCADE_PIPELINE_NAME);
             createTextChunkingIndex(INDEX_NAME, CASCADE_PIPELINE_NAME);
-            ingestDocument(TEST_DOCUMENT);
+
+            String document = getDocumentFromFilePath(TEST_DOCUMENT);
+            ingestDocument(INDEX_NAME, document);
 
             List<String> expectedPassages = new ArrayList<>();
             expectedPassages.add("This is an example document to be chunked.");
@@ -173,6 +179,23 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
             validateIndexIngestResults(INDEX_NAME, INTERMEDIATE_FIELD, expectedPassages);
         } finally {
             wipeOfTestResources(INDEX_NAME, CASCADE_PIPELINE_NAME, null, null);
+        }
+    }
+
+    public void testTextChunkingProcessor_withFixedTokenLengthAlgorithmStandardTokenizer_whenReindexingDocument_thenSuccessful()
+        throws Exception {
+        try {
+            String fromIndexName = "test-reindex-from";
+            createIndexWithConfiguration(fromIndexName, "{ \"settings\": { \"number_of_shards\": 1, \"number_of_replicas\": 0 } }", null);
+            String document = getDocumentFromFilePath(TEST_DOCUMENT);
+            ingestDocument(fromIndexName, document);
+
+            createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
+            createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
+            reindex(fromIndexName, INDEX_NAME);
+            assertEquals(1, getDocCount(INDEX_NAME));
+        } finally {
+            wipeOfTestResources(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME, null, null);
         }
     }
 
@@ -205,23 +228,9 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         createIndexWithConfiguration(indexName, Files.readString(Path.of(indexSettingsURLPath.toURI())), pipelineName);
     }
 
-    private void ingestDocument(String documentPath) throws Exception {
-        URL documentURLPath = classLoader.getResource(documentPath);
+    private String getDocumentFromFilePath(String filePath) throws Exception {
+        URL documentURLPath = classLoader.getResource(filePath);
         Objects.requireNonNull(documentURLPath);
-        String document = Files.readString(Path.of(documentURLPath.toURI()));
-        Response response = makeRequest(
-            client(),
-            "POST",
-            INDEX_NAME + "/_doc?refresh",
-            null,
-            toHttpEntity(document),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
-        );
-        Map<String, Object> map = XContentHelper.convertToMap(
-            XContentType.JSON.xContent(),
-            EntityUtils.toString(response.getEntity()),
-            false
-        );
-        assertEquals("created", map.get("result"));
+        return Files.readString(Path.of(documentURLPath.toURI()));
     }
 }
