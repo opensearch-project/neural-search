@@ -296,6 +296,30 @@ public class ProcessorDocumentUtils {
         }
     }
 
+    /**
+     * Validate if field name is in correct format, which is either "a", or "a.b.c".
+     * If field name is like "..a..b", "a..b", "a.b..", it should be invalid.
+     * This is done via checking if a string contains empty segments when split by dots.
+     *
+     * @param input the string to check
+     * @throws IllegalArgumentException if the input is null or has invalid dot usage
+     */
+    private static void validateFieldName(String input) {
+        if (StringUtils.isBlank(input)) {
+            throw new IllegalArgumentException("Field name cannot be null or empty");
+        }
+
+        // Use split with -1 limit to preserve trailing empty strings
+        String[] segments = input.split("\\.", -1);
+
+        // Check if any segment is empty
+        for (String segment : segments) {
+            if (StringUtils.isBlank(segment)) {
+                throw new IllegalArgumentException(String.format(Locale.ROOT, "Field name '%s' contains invalid dot usage", input));
+            }
+        }
+    }
+
     // Helper classes to maintain state during iteration
     private static class ProcessJsonObjectItem {
         String key;
