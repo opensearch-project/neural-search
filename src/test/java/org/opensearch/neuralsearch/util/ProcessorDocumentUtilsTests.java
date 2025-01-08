@@ -18,6 +18,10 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.anyString;
@@ -37,7 +41,7 @@ public class ProcessorDocumentUtilsTests extends OpenSearchQueryTestCase {
         MockitoAnnotations.openMocks(this);
     }
 
-    public void test_with_different_configurations() throws URISyntaxException, IOException {
+    public void testValidateMapTypeValue_withDifferentConfigurations_thenSuccess() throws URISyntaxException, IOException {
         Settings settings = Settings.builder().put("index.mapping.depth.limit", 20).build();
         when(clusterService.state().metadata().index(anyString()).getSettings()).thenReturn(settings);
         String processorDocumentTestJson = Files.readString(
@@ -80,4 +84,144 @@ public class ProcessorDocumentUtilsTests extends OpenSearchQueryTestCase {
         }
     }
 
+    public void testUnflatten_withSimpleDotNotation_thenSuccess() {
+        Map<String, Object> input = Map.of("a.b", "c");
+
+        Map<String, Object> nested = Map.of("b", "c");
+        Map<String, Object> expected = Map.of("a", nested);
+
+        Map<String, Object> result = ProcessorDocumentUtils.unflattenJson(input);
+        assertEquals(expected, result);
+    }
+
+    public void testUnflatten_withSimpleNoDot_thenSuccess() {
+        Map<String, Object> nestedA = Map.of("b", "c");
+        Map<String, Object> input = Map.of("a", nestedA);
+
+        Map<String, Object> result = ProcessorDocumentUtils.unflattenJson(input);
+        assertEquals(input, result);
+    }
+
+    public void testUnflatten_withMultipleDotNotation_thenSuccess() {
+        Map<String, Object> input = Map.of("a.b.c", "d", "a.b.e", "f", "x.y", "z");
+
+        Map<String, Object> nestedAB = Map.of("c", "d", "e", "f");
+        Map<String, Object> nestedA = Map.of("b", nestedAB);
+        Map<String, Object> nestedX = Map.of("y", "z");
+
+        Map<String, Object> expected = Map.of("a", nestedA, "x", nestedX);
+
+        Map<String, Object> result = ProcessorDocumentUtils.unflattenJson(input);
+        assertEquals(expected, result);
+    }
+
+    public void testUnflatten_withList_thenSuccess() {
+        Map<String, Object> map1 = Map.of("b.c", "d");
+        Map<String, Object> map2 = Map.of("b.c", "e");
+        List<Map<String, Object>> list = Arrays.asList(map1, map2);
+        Map<String, Object> input = Map.of("a", list);
+
+        Map<String, Object> nestedB1 = Map.of("c", "d");
+        Map<String, Object> expectedMap1 = Map.of("b", nestedB1);
+        Map<String, Object> nestedB2 = Map.of("c", "e");
+        Map<String, Object> expectedMap2 = Map.of("b", nestedB2);
+
+        List<Map<String, Object>> expectedList = Arrays.asList(expectedMap1, expectedMap2);
+
+        Map<String, Object> expected = Map.of("a", expectedList);
+
+        Map<String, Object> result = ProcessorDocumentUtils.unflattenJson(input);
+        assertEquals(expected, result);
+    }
+
+    public void testUnflatten_withMixedContent_thenSuccess() {
+        Map<String, Object> input = Map.of("a.b", "c", "d", "e", "f.g.h", "i");
+
+        Map<String, Object> nestedA = Map.of("b", "c");
+        Map<String, Object> nestedG = Map.of("h", "i");
+        Map<String, Object> nestedF = Map.of("g", nestedG);
+        Map<String, Object> expected = Map.of("a", nestedA, "d", "e", "f", nestedF);
+
+        Map<String, Object> result = ProcessorDocumentUtils.unflattenJson(input);
+        assertEquals(expected, result);
+    }
+
+    public void testUnflatten_wthEmptyMap_thenSuccess() {
+        Map<String, Object> result = ProcessorDocumentUtils.unflattenJson(Map.of());
+        assertTrue(result.isEmpty());
+    }
+
+    public void testUnflatten_withNullValue_thenSuccess() {
+        Map<String, Object> input = new HashMap<>();
+        input.put("a.b", null);
+        Map<String, Object> nested = new HashMap<>();
+        nested.put("b", null);
+        Map<String, Object> expected = Map.of("a", nested);
+
+        Map<String, Object> result = ProcessorDocumentUtils.unflattenJson(input);
+        assertEquals(expected, result);
+    }
+
+    public void testUnflatten_withNestedListWithMultipleLevels_thenSuccess() {
+        Map<String, Object> map1 = Map.of("b.c.d", "e");
+        Map<String, Object> map2 = Map.of("b.c.f", "g");
+        List<Map<String, Object>> outerList = Arrays.asList(map1, map2);
+
+        Map<String, Object> input = Map.of("a", outerList);
+
+        Map<String, Object> nestedC1 = Map.of("d", "e");
+        Map<String, Object> nestedB1 = Map.of("c", nestedC1);
+        Map<String, Object> expectedMap1 = Map.of("b", nestedB1);
+        Map<String, Object> nestedC2 = Map.of("f", "g");
+        Map<String, Object> nestedB2 = Map.of("c", nestedC2);
+        Map<String, Object> expectedMap2 = Map.of("b", nestedB2);
+        List<Map<String, Object>> expectedOuterList = Arrays.asList(expectedMap1, expectedMap2);
+
+        Map<String, Object> expected = Map.of("a", expectedOuterList);
+
+        Map<String, Object> result = ProcessorDocumentUtils.unflattenJson(input);
+        assertEquals(expected, result);
+    }
+
+    public void testUnflatten_withNullInput_thenFail() {
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> ProcessorDocumentUtils.unflattenJson(null)
+        );
+
+        assertEquals("originalJsonMap cannot be null", illegalArgumentException.getMessage());
+    }
+
+    public void testUnflatten_withSimpleField_withLeadingDots_thenFail() {
+        String fieldName = ".a.b.c";
+        Map<String, Object> input = Map.of(fieldName, "d");
+        testUnflatten_withInvalidUsageOfDots_thenFail(fieldName, input);
+    }
+
+    public void testUnflatten_withSimpleField_withInBetweenMultiDots_thenFail() {
+        String fieldName = "a..b.c";
+        Map<String, Object> input = Map.of(fieldName, "d");
+        testUnflatten_withInvalidUsageOfDots_thenFail(fieldName, input);
+    }
+
+    public void testUnflatten_withSimpleField_withTrailingDots_thenFail() {
+        String fieldName = "a.b.c.";
+        Map<String, Object> input = Map.of(fieldName, "d");
+        testUnflatten_withInvalidUsageOfDots_thenFail(fieldName, input);
+    }
+
+    public void testUnflatten_withNestedField_withTrailingDots_thenFail() {
+        String fieldName = "b.c.d.";
+        Map<String, Object> input = Map.of("a", Map.of(fieldName, "e"));
+        testUnflatten_withInvalidUsageOfDots_thenFail(fieldName, input);
+    }
+
+    private void testUnflatten_withInvalidUsageOfDots_thenFail(String fieldName, Map<String, Object> input) {
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> ProcessorDocumentUtils.unflattenJson(input)
+        );
+        assert (illegalArgumentException.getMessage()
+            .contains(String.format(Locale.ROOT, "Field name '%s' contains invalid dot usage", fieldName)));
+    }
 }
