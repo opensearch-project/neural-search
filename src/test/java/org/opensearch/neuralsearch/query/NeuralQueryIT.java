@@ -102,20 +102,12 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         try {
             initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
             modelId = prepareModel();
-            NeuralQueryBuilder neuralQueryBuilderTextQuery = new NeuralQueryBuilder(
-                TEST_KNN_VECTOR_FIELD_NAME_1,
-                TEST_QUERY_TEXT,
-                "",
-                modelId,
-                1,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-            );
+            NeuralQueryBuilder neuralQueryBuilderTextQuery = NeuralQueryBuilder.builder()
+                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+                .queryText(TEST_QUERY_TEXT)
+                .modelId(modelId)
+                .k(1)
+                .build();
 
             final float boost = 2.0f;
             neuralQueryBuilderTextQuery.boost(boost);
@@ -126,20 +118,16 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
             float expectedScore = 2 * computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
             assertEquals(expectedScore, objectToFloat(firstInnerHitTextQuery.get("_score")), DELTA_FOR_SCORE_ASSERTION);
 
-            NeuralQueryBuilder neuralQueryBuilderMultimodalQuery = new NeuralQueryBuilder(
-                TEST_KNN_VECTOR_FIELD_NAME_1,
-                TEST_QUERY_TEXT,
-                TEST_IMAGE_TEXT,
-                modelId,
-                1,
-                null,
-                null,
-                null,
-                null,
-                null,
-                Map.of("ef_search", 10),
-                RescoreContext.getDefault()
-            );
+            NeuralQueryBuilder neuralQueryBuilderMultimodalQuery = NeuralQueryBuilder.builder()
+                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+                .queryText(TEST_QUERY_TEXT)
+                .queryImage(TEST_IMAGE_TEXT)
+                .modelId(modelId)
+                .k(1)
+                .methodParameters(Map.of("ef_search", 10))
+                .rescoreContext(RescoreContext.getDefault())
+                .build();
+
             Map<String, Object> searchResponseAsMapMultimodalQuery = search(TEST_BASIC_INDEX_NAME, neuralQueryBuilderMultimodalQuery, 1);
             Map<String, Object> firstInnerHitMultimodalQuery = getFirstInnerHit(searchResponseAsMapMultimodalQuery);
 
@@ -155,20 +143,12 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
             // Context: https://github.com/opensearch-project/neural-search/pull/697#discussion_r1571549776
 
             // Test radial search max distance query
-            NeuralQueryBuilder neuralQueryWithMaxDistanceBuilder = new NeuralQueryBuilder(
-                TEST_KNN_VECTOR_FIELD_NAME_1,
-                TEST_QUERY_TEXT,
-                "",
-                modelId,
-                null,
-                100.0f,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-            );
+            NeuralQueryBuilder neuralQueryWithMaxDistanceBuilder = NeuralQueryBuilder.builder()
+                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+                .queryText(TEST_QUERY_TEXT)
+                .modelId(modelId)
+                .maxDistance(100.0f)
+                .build();
 
             Map<String, Object> searchResponseAsMapWithMaxDistanceQuery = search(
                 TEST_BASIC_INDEX_NAME,
@@ -186,20 +166,12 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
             );
 
             // Test radial search min score query
-            NeuralQueryBuilder neuralQueryWithMinScoreBuilder = new NeuralQueryBuilder(
-                TEST_KNN_VECTOR_FIELD_NAME_1,
-                TEST_QUERY_TEXT,
-                "",
-                modelId,
-                null,
-                null,
-                0.01f,
-                null,
-                null,
-                null,
-                null,
-                null
-            );
+            NeuralQueryBuilder neuralQueryWithMinScoreBuilder = NeuralQueryBuilder.builder()
+                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+                .queryText(TEST_QUERY_TEXT)
+                .modelId(modelId)
+                .minScore(0.01f)
+                .build();
 
             Map<String, Object> searchResponseAsMapWithMinScoreQuery = search(TEST_BASIC_INDEX_NAME, neuralQueryWithMinScoreBuilder, 1);
             Map<String, Object> firstInnerHitWithMinScoreQuery = getFirstInnerHit(searchResponseAsMapWithMinScoreQuery);
@@ -243,20 +215,12 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
             initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
             modelId = prepareModel();
             MatchAllQueryBuilder matchAllQueryBuilder = new MatchAllQueryBuilder();
-            NeuralQueryBuilder rescoreNeuralQueryBuilder = new NeuralQueryBuilder(
-                TEST_KNN_VECTOR_FIELD_NAME_1,
-                TEST_QUERY_TEXT,
-                "",
-                modelId,
-                1,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-            );
+            NeuralQueryBuilder rescoreNeuralQueryBuilder = NeuralQueryBuilder.builder()
+                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+                .queryText(TEST_QUERY_TEXT)
+                .modelId(modelId)
+                .k(1)
+                .build();
 
             Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, matchAllQueryBuilder, rescoreNeuralQueryBuilder, 1);
             Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
@@ -323,34 +287,19 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
             modelId = prepareModel();
             // verify two neural queries wrapped into bool
             BoolQueryBuilder boolQueryBuilderTwoNeuralQueries = new BoolQueryBuilder();
-            NeuralQueryBuilder neuralQueryBuilder1 = new NeuralQueryBuilder(
-                TEST_KNN_VECTOR_FIELD_NAME_1,
-                TEST_QUERY_TEXT,
-                "",
-                modelId,
-                1,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-            );
-            NeuralQueryBuilder neuralQueryBuilder2 = new NeuralQueryBuilder(
-                TEST_KNN_VECTOR_FIELD_NAME_2,
-                TEST_QUERY_TEXT,
-                "",
-                modelId,
-                1,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-            );
+            NeuralQueryBuilder neuralQueryBuilder1 = NeuralQueryBuilder.builder()
+                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+                .queryText(TEST_QUERY_TEXT)
+                .modelId(modelId)
+                .k(1)
+                .build();
+
+            NeuralQueryBuilder neuralQueryBuilder2 = NeuralQueryBuilder.builder()
+                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_2)
+                .queryText(TEST_QUERY_TEXT)
+                .modelId(modelId)
+                .k(1)
+                .build();
 
             boolQueryBuilderTwoNeuralQueries.should(neuralQueryBuilder1).should(neuralQueryBuilder2);
 
@@ -367,20 +316,12 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
 
             // verify bool with one neural and one bm25 query
             BoolQueryBuilder boolQueryBuilderMixOfNeuralAndBM25 = new BoolQueryBuilder();
-            NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
-                TEST_KNN_VECTOR_FIELD_NAME_1,
-                TEST_QUERY_TEXT,
-                "",
-                modelId,
-                1,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-            );
+            NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+                .queryText(TEST_QUERY_TEXT)
+                .modelId(modelId)
+                .k(1)
+                .build();
 
             MatchQueryBuilder matchQueryBuilder = new MatchQueryBuilder(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
 
@@ -425,20 +366,12 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         try {
             initializeIndexIfNotExist(TEST_NESTED_INDEX_NAME);
             modelId = prepareModel();
-            NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
-                TEST_KNN_VECTOR_FIELD_NAME_NESTED,
-                TEST_QUERY_TEXT,
-                "",
-                modelId,
-                1,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-            );
+            NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_NESTED)
+                .queryText(TEST_QUERY_TEXT)
+                .modelId(modelId)
+                .k(1)
+                .build();
 
             Map<String, Object> searchResponseAsMap = search(TEST_NESTED_INDEX_NAME, neuralQueryBuilder, 1);
             Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
@@ -478,20 +411,14 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         try {
             initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
             modelId = prepareModel();
-            NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
-                TEST_KNN_VECTOR_FIELD_NAME_1,
-                TEST_QUERY_TEXT,
-                "",
-                modelId,
-                1,
-                null,
-                null,
-                null,
-                null,
-                new MatchQueryBuilder("_id", "3"),
-                null,
-                null
-            );
+            NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+                .queryText(TEST_QUERY_TEXT)
+                .modelId(modelId)
+                .k(1)
+                .filter(new MatchQueryBuilder("_id", "3"))
+                .build();
+
             Map<String, Object> searchResponseAsMap = search(TEST_MULTI_DOC_INDEX_NAME, neuralQueryBuilder, 3);
             assertEquals(1, getHitCount(searchResponseAsMap));
             Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);

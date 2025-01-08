@@ -30,7 +30,7 @@ public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
     // Create Text Image Embedding Processor, Ingestion Pipeline and add document
     // Validate process , pipeline and document count in rolling-upgrade scenario
     public void testTextImageEmbeddingProcessor_E2EFlow() throws Exception {
-        waitForClusterHealthGreen(NODES_BWC_CLUSTER);
+        waitForClusterHealthGreen(NODES_BWC_CLUSTER, 90);
         switch (getClusterType()) {
             case OLD:
                 modelId = uploadTextImageEmbeddingModel();
@@ -76,20 +76,14 @@ public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
         loadModel(modelId);
-        NeuralQueryBuilder neuralQueryBuilderWithKQuery = new NeuralQueryBuilder(
-            "passage_embedding",
-            text,
-            imageText,
-            modelId,
-            1,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null
-        );
+        NeuralQueryBuilder neuralQueryBuilderWithKQuery = NeuralQueryBuilder.builder()
+            .fieldName("passage_embedding")
+            .queryText(text)
+            .queryImage(imageText)
+            .modelId(modelId)
+            .k(1)
+            .build();
+
         Map<String, Object> responseWithKQuery = search(getIndexNameForTest(), neuralQueryBuilderWithKQuery, 1);
         assertNotNull(responseWithKQuery);
     }
