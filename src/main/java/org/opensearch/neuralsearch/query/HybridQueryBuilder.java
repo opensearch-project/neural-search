@@ -51,8 +51,6 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
 
     private final List<QueryBuilder> queries = new ArrayList<>();
 
-    private String fieldName;
-
     static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
 
     public HybridQueryBuilder(StreamInput in) throws IOException {
@@ -255,7 +253,6 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             return false;
         }
         EqualsBuilder equalsBuilder = new EqualsBuilder();
-        equalsBuilder.append(fieldName, obj.fieldName);
         equalsBuilder.append(queries, obj.queries);
         return equalsBuilder.isEquals();
     }
