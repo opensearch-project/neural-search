@@ -1282,7 +1282,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     protected void waitForClusterHealthGreen(final String numOfNodes) throws IOException {
         Request waitForGreen = new Request("GET", "/_cluster/health");
         // waitForGreen.addParameter("wait_for_nodes", numOfNodes);
-        // waitForGreen.addParameter("wait_for_status", "green"); asdf
+        // waitForGreen.addParameter("wait_for_status", "green");
         waitForGreen.addParameter("cluster_manager_timeout", "60s");
         waitForGreen.addParameter("timeout", "60s");
         client().performRequest(waitForGreen);
