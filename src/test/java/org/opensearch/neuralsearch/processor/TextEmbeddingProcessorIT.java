@@ -280,14 +280,9 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
             Map<String, Object> searchResponseAsMap = search(INDEX_NAME, queryNestedHighLevel, 2);
             assertNotNull(searchResponseAsMap);
 
-            Map<String, Object> hits = (Map<String, Object>) searchResponseAsMap.get("hits");
-            assertNotNull(hits);
+            assertEquals(1, getHitCount(searchResponseAsMap));
 
-            List<Map<String, Object>> listOfHits = (List<Map<String, Object>>) hits.get("hits");
-            assertNotNull(listOfHits);
-            assertEquals(1, listOfHits.size());
-
-            Map<String, Object> innerHitDetails = listOfHits.getFirst();
+            Map<String, Object> innerHitDetails = getFirstInnerHit(searchResponseAsMap);
             assertEquals("5", innerHitDetails.get("_id"));
         } finally {
             wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
