@@ -25,7 +25,7 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
     // Create Text Embedding Processor, Ingestion Pipeline and add document
     // Validate process , pipeline and document count in rolling-upgrade scenario
     public void testSemanticSearch_E2EFlow() throws Exception {
-        waitForClusterHealthGreen(NODES_BWC_CLUSTER, 90);
+        waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         switch (getClusterType()) {
             case OLD:
                 modelId = uploadTextEmbeddingModel();

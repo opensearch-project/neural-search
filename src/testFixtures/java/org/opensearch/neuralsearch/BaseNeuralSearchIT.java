@@ -1279,18 +1279,13 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     // Method that waits till the health of nodes in the cluster goes green
-    protected void waitForClusterHealthGreen(final String numOfNodes, final int timeoutInSeconds) throws IOException {
+    protected void waitForClusterHealthGreen(final String numOfNodes) throws IOException {
         Request waitForGreen = new Request("GET", "/_cluster/health");
         waitForGreen.addParameter("wait_for_nodes", numOfNodes);
         waitForGreen.addParameter("wait_for_status", "green");
-        waitForGreen.addParameter("cluster_manager_timeout", String.format(LOCALE, "%ds", timeoutInSeconds));
-        waitForGreen.addParameter("timeout", String.format(LOCALE, "%ds", timeoutInSeconds));
+        waitForGreen.addParameter("cluster_manager_timeout", "60s");
+        waitForGreen.addParameter("timeout", "60s");
         client().performRequest(waitForGreen);
-    }
-
-    // Method that waits till the health of nodes in the cluster goes green with default timeout value of 60
-    protected void waitForClusterHealthGreen(final String numOfNodes) throws IOException {
-        waitForClusterHealthGreen(numOfNodes, 60);
     }
 
     /**
