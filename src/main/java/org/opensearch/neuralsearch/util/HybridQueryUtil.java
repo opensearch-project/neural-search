@@ -56,12 +56,18 @@ public class HybridQueryUtil {
         return searchContext.mapperService().hasNested() && new NestedHelper(searchContext.mapperService()).mightMatchNestedDocs(query);
     }
 
-    private static boolean isWrappedHybridQuery(final Query query) {
+    public static boolean isWrappedHybridQuery(final Query query) {
         return query instanceof BooleanQuery
             && ((BooleanQuery) query).clauses().stream().anyMatch(clauseQuery -> clauseQuery.getQuery() instanceof HybridQuery);
     }
 
     public static boolean hasAliasFilter(final Query query, final SearchContext searchContext) {
         return Objects.nonNull(searchContext.aliasFilter());
+    }
+
+    public static boolean isHybridQueryWrappedInBooleanQuery(final SearchContext searchContext, final Query query) {
+        return ((hasAliasFilter(query, searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
+            && isWrappedHybridQuery(query)
+            && !((BooleanQuery) query).clauses().isEmpty());
     }
 }

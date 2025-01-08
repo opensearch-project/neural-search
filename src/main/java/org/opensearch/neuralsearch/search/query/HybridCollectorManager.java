@@ -54,6 +54,7 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createFieldDocStartStopElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createFieldDocDelimiterElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createSortFieldsForDelimiterResults;
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryWrappedInBooleanQuery;
 
 /**
  * Collector manager based on HybridTopScoreDocCollector that allows users to parallelize counting the number of hits.
@@ -483,7 +484,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
      * @return results size to collected
      */
     private static int getSubqueryResultsRetrievalSize(final SearchContext searchContext) {
-        HybridQuery hybridQuery = unwrapHybridQuery(searchContext.query());
+        HybridQuery hybridQuery = unwrapHybridQuery(searchContext);
         int paginationDepth = hybridQuery.getQueryContext().getPaginationDepth();
 
         // Switch to from+size retrieval size during standard hybrid query execution.
@@ -496,10 +497,11 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     /**
      * Unwraps a HybridQuery from either a direct query or a nested BooleanQuery
      */
-    private static HybridQuery unwrapHybridQuery(Query query) {
+    private static HybridQuery unwrapHybridQuery(final SearchContext searchContext) {
         HybridQuery hybridQuery;
+        Query query = searchContext.query();
         // In case of nested fields and alias filter, hybrid query is wrapped under bool query and lies in the first clause.
-        if (query instanceof BooleanQuery) {
+        if (isHybridQueryWrappedInBooleanQuery(searchContext, searchContext.query())) {
             BooleanQuery booleanQuery = (BooleanQuery) query;
             hybridQuery = (HybridQuery) booleanQuery.clauses().get(0).getQuery();
         } else {

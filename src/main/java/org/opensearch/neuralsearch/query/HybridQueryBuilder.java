@@ -59,7 +59,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     private int paginationDepth;
     static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
     private final static int DEFAULT_PAGINATION_DEPTH = 10;
-    private static final int LOWER_BOUND_OF_PAGINATION_DEPTH = 1;
+    private static final int LOWER_BOUND_OF_PAGINATION_DEPTH = 0;
 
     public HybridQueryBuilder(StreamInput in) throws IOException {
         super(in);
@@ -327,8 +327,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     private static void validatePaginationDepth(final int paginationDepth, final QueryShardContext queryShardContext) {
-        if (paginationDepth < LOWER_BOUND_OF_PAGINATION_DEPTH) {
-            throw new IllegalArgumentException(String.format(Locale.ROOT, "pagination_depth should be greater than 0"));
+        if (paginationDepth <= LOWER_BOUND_OF_PAGINATION_DEPTH) {
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "pagination_depth should be greater than %s", LOWER_BOUND_OF_PAGINATION_DEPTH)
+            );
         }
         // compare pagination depth with OpenSearch setting index.max_result_window
         // see https://opensearch.org/docs/latest/install-and-configure/configuring-opensearch/index-settings/
