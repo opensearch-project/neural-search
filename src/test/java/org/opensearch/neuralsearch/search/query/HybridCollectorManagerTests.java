@@ -36,6 +36,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.tests.analysis.MockAnalyzer;
 import org.opensearch.common.lucene.search.FilteredCollector;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
+import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.BoostingQueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
@@ -91,12 +92,14 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
     public void testNewCollector_whenNotConcurrentSearch_thenSuccessful() {
         SearchContext searchContext = mock(SearchContext.class);
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        MapperService mapperService = createMapperService();
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
         TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
         HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
         HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
 
+        when(searchContext.mapperService()).thenReturn(mapperService);
         when(searchContext.query()).thenReturn(hybridQuery);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
         IndexReader indexReader = mock(IndexReader.class);
@@ -129,6 +132,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
         HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
 
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
         when(searchContext.query()).thenReturn(hybridQuery);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
         IndexReader indexReader = mock(IndexReader.class);
@@ -161,6 +166,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
         HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
 
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
         QueryBuilder postFilterQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, "world");
         ParsedQuery parsedQuery = new ParsedQuery(postFilterQuery.toQuery(mockQueryShardContext));
         searchContext.parsedQuery(parsedQuery);
@@ -206,6 +213,9 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
         HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
 
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
+
         QueryBuilder postFilterQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, "world");
         Query pfQuery = postFilterQuery.toQuery(mockQueryShardContext);
         ParsedQuery parsedQuery = new ParsedQuery(pfQuery);
@@ -248,6 +258,9 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
         HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
 
         HybridQuery hybridQueryWithTerm = new HybridQuery(
             List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1).toQuery(mockQueryShardContext)),
@@ -357,6 +370,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
 
         when(searchContext.query()).thenReturn(hybridQuery);
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
         IndexReader indexReader = mock(IndexReader.class);
         when(indexSearcher.getIndexReader()).thenReturn(indexReader);
@@ -396,6 +411,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
 
         when(searchContext.query()).thenReturn(hybridQuery);
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
         IndexReader indexReader = mock(IndexReader.class);
         when(indexSearcher.getIndexReader()).thenReturn(indexReader);
@@ -436,6 +453,9 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         when(indexSearcher.getIndexReader()).thenReturn(indexReader);
         when(searchContext.searcher()).thenReturn(indexSearcher);
         when(searchContext.size()).thenReturn(1);
+
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
 
         Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
         when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
@@ -530,6 +550,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
             hybridQueryContext
         );
         when(searchContext.query()).thenReturn(hybridQueryWithTerm);
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
         IndexReader indexReader = mock(IndexReader.class);
         when(indexReader.numDocs()).thenReturn(3);
@@ -619,6 +641,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
             hybridQueryContext
         );
         when(searchContext.query()).thenReturn(hybridQueryWithTerm);
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
         IndexReader indexReader = mock(IndexReader.class);
         when(indexReader.numDocs()).thenReturn(2);
@@ -751,6 +775,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
             hybridQueryContext
         );
         when(searchContext.query()).thenReturn(hybridQueryWithTerm);
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
         IndexReader indexReader = mock(IndexReader.class);
         when(indexReader.numDocs()).thenReturn(3);
@@ -871,6 +897,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
             hybridQueryContext
         );
         when(searchContext.query()).thenReturn(hybridQueryWithTerm);
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
         IndexReader indexReader = mock(IndexReader.class);
         when(indexReader.numDocs()).thenReturn(2);
@@ -1016,6 +1044,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
             hybridQueryContext
         );
         when(searchContext.query()).thenReturn(hybridQueryWithTerm);
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
         IndexReader indexReader = mock(IndexReader.class);
         when(indexReader.numDocs()).thenReturn(3);
@@ -1085,6 +1115,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
 
         when(searchContext.query()).thenReturn(hybridQuery);
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
         IndexReader indexReader = mock(IndexReader.class);
         when(indexSearcher.getIndexReader()).thenReturn(indexReader);

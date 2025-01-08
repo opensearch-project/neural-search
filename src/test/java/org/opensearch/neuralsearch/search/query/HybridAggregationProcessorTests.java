@@ -15,6 +15,7 @@ import org.apache.lucene.search.TotalHits;
 import org.opensearch.action.OriginalIndices;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
@@ -74,6 +75,8 @@ public class HybridAggregationProcessorTests extends OpenSearchQueryTestCase {
         HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
 
         when(searchContext.query()).thenReturn(hybridQuery);
+        MapperService mapperService = mock(MapperService.class);
+        when(searchContext.mapperService()).thenReturn(mapperService);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
         IndexReader indexReader = mock(IndexReader.class);
         when(indexSearcher.getIndexReader()).thenReturn(indexReader);
@@ -135,6 +138,8 @@ public class HybridAggregationProcessorTests extends OpenSearchQueryTestCase {
         HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
 
         when(searchContext.query()).thenReturn(hybridQuery);
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
         IndexReader indexReader = mock(IndexReader.class);
         when(indexSearcher.getIndexReader()).thenReturn(indexReader);
