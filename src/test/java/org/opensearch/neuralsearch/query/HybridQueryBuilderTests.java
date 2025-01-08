@@ -236,11 +236,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
         when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
 
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(VECTOR_FIELD_NAME)
             .queryText(QUERY_TEXT)
             .modelId(MODEL_ID)
             .k(K)
-            .vectorSupplier(TEST_VECTOR_SUPPLIER);
+            .vectorSupplier(TEST_VECTOR_SUPPLIER)
+            .build();
 
         queryBuilder.add(neuralQueryBuilder);
         IllegalArgumentException exception = expectThrows(
@@ -270,11 +272,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
         when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
 
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(VECTOR_FIELD_NAME)
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(VECTOR_FIELD_NAME)
             .queryText(QUERY_TEXT)
             .modelId(MODEL_ID)
             .k(K)
-            .vectorSupplier(TEST_VECTOR_SUPPLIER);
+            .vectorSupplier(TEST_VECTOR_SUPPLIER)
+            .build();
 
         queryBuilder.add(neuralQueryBuilder);
         IllegalArgumentException exception = expectThrows(
