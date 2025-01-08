@@ -153,9 +153,8 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
 
     @VisibleForTesting
     void preprocessIngestDocument(IngestDocument ingestDocument) {
-        if (ingestDocument == null) return;
+        if (ingestDocument == null || ingestDocument.getSourceAndMetadata() == null) return;
         Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
-        if (sourceAndMetadataMap == null) return;
         Map<String, Object> unflattened = ProcessorDocumentUtils.unflattenJson(sourceAndMetadataMap);
         unflattened.forEach(ingestDocument::setFieldValue);
         sourceAndMetadataMap.keySet().removeIf(key -> key.contains("."));
