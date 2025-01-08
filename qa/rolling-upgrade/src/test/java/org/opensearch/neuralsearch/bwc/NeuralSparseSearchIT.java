@@ -63,6 +63,7 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
+                    loadModel(modelId);
                     validateTestIndexOnUpgrade(totalDocsCountMixed, modelId);
                     addSparseEncodingDoc(
                         getIndexNameForTest(),

@@ -43,6 +43,7 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
+                    loadModel(modelId);
                     validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, TEXT);
                     addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_MIXED, null, null);
                 } else {

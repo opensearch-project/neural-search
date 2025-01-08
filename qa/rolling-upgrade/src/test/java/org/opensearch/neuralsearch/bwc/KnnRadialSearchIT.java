@@ -48,6 +48,7 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
+                    loadModel(modelId);
                     validateIndexQueryOnUpgrade(totalDocsCountMixed, modelId, TEXT, TEST_IMAGE_TEXT);
                     addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_MIXED, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_MIXED);
                 } else {

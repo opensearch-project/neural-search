@@ -47,6 +47,7 @@ public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
                 modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
+                    loadModel(modelId);
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
                     validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, TEXT, TEST_IMAGE_TEXT);
                     addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_MIXED, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_MIXED);

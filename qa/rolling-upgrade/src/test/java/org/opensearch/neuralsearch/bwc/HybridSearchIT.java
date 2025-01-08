@@ -67,6 +67,7 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
+                    loadModel(modelId);
                     HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null, null);
                     QueryBuilder rescorer = QueryBuilders.matchQuery(TEST_FIELD, RESCORE_QUERY).boost(0.3f);
                     validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, hybridQueryBuilder, rescorer);
