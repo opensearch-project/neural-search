@@ -31,4 +31,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Infrastructure
 ### Documentation
 ### Maintenance
+- Fix github CI by adding eclipse dependency in formatting.gradle ([#1079](https://github.com/opensearch-project/neural-search/pull/1079))
 ### Refactoring
