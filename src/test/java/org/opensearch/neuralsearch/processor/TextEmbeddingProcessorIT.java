@@ -70,7 +70,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
             loadModel(modelId);
             createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
             createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
-            ingestDocument(INDEX_NAME, INGEST_DOC1, null);
+            ingestDocument(INDEX_NAME, INGEST_DOC1);
             assertEquals(1, getDocCount(INDEX_NAME));
         } finally {
             wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
@@ -343,7 +343,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         // create a simple index and indexing data into this index.
         String fromIndexName = "test-reindex-from";
         createIndexWithConfiguration(fromIndexName, "{ \"settings\": { \"number_of_shards\": 1, \"number_of_replicas\": 0 } }", null);
-        ingestDocument(fromIndexName, "{ \"text\": \"hello world\" }", null);
+        ingestDocument(fromIndexName, "{ \"text\": \"hello world\" }");
         // create text embedding index for reindex
         String modelId = null;
         try {

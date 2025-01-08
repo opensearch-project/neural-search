@@ -43,7 +43,7 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
             modelId = prepareSparseEncodingModel();
             createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING);
             createIndexWithPipeline(INDEX_NAME, "SparseEncodingIndexMappings.json", PIPELINE_NAME);
-            ingestDocument(INDEX_NAME, INGEST_DOCUMENT, null);
+            ingestDocument(INDEX_NAME, INGEST_DOCUMENT);
             assertEquals(1, getDocCount(INDEX_NAME));
 
             NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
@@ -64,7 +64,7 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
             modelId = prepareSparseEncodingModel();
             createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING_PRUNE);
             createIndexWithPipeline(INDEX_NAME, "SparseEncodingIndexMappings.json", PIPELINE_NAME);
-            ingestDocument(INDEX_NAME, INGEST_DOCUMENT, null);
+            ingestDocument(INDEX_NAME, INGEST_DOCUMENT);
             assertEquals(1, getDocCount(INDEX_NAME));
 
             NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
@@ -83,7 +83,7 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
         // create a simple index and indexing data into this index.
         String fromIndexName = "test-reindex-from";
         createIndexWithConfiguration(fromIndexName, "{ \"settings\": { \"number_of_shards\": 1, \"number_of_replicas\": 0 } }", null);
-        ingestDocument(fromIndexName, "{ \"text\": \"hello world\" }", null);
+        ingestDocument(fromIndexName, "{ \"text\": \"hello world\" }");
         // create text embedding index for reindex
         String modelId = null;
         try {

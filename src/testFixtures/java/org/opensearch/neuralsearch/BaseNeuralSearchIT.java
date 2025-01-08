@@ -1379,6 +1379,16 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     /**
+     * Ingest a document to index using auto generated id
+     * @param indexName name of the index
+     * @param ingestDocument
+     * @throws Exception
+     */
+    protected String ingestDocument(String indexName, String ingestDocument) throws Exception {
+        return ingestDocument(indexName, ingestDocument, null);
+    }
+
+    /**
      * Reindex all documents from one index to another
      * @param fromIndexName
      * @param toIndexName

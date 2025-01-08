@@ -68,7 +68,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
             createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
 
             String document = getDocumentFromFilePath(TEST_DOCUMENT);
-            ingestDocument(INDEX_NAME, document, null);
+            ingestDocument(INDEX_NAME, document);
 
             List<String> expectedPassages = new ArrayList<>();
             expectedPassages.add("This is an example document to be chunked. The document ");
@@ -87,7 +87,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
             createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_LETTER_TOKENIZER_NAME);
 
             String document = getDocumentFromFilePath(TEST_DOCUMENT);
-            ingestDocument(INDEX_NAME, document, null);
+            ingestDocument(INDEX_NAME, document);
 
             List<String> expectedPassages = new ArrayList<>();
             expectedPassages.add("This is an example document to be chunked. The document ");
@@ -106,7 +106,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
             createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME);
 
             String document = getDocumentFromFilePath(TEST_DOCUMENT);
-            ingestDocument(INDEX_NAME, document, null);
+            ingestDocument(INDEX_NAME, document);
 
             List<String> expectedPassages = new ArrayList<>();
             expectedPassages.add("This is an example document to be chunked. The document ");
@@ -125,7 +125,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
             createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
             Exception exception = assertThrows(Exception.class, () -> {
                 String document = getDocumentFromFilePath(TEST_LONG_DOCUMENT);
-                ingestDocument(INDEX_NAME, document, null);
+                ingestDocument(INDEX_NAME, document);
             });
             // max_token_count is 100 by index settings
             assert (exception.getMessage()
@@ -143,7 +143,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
             createTextChunkingIndex(INDEX_NAME, DELIMITER_PIPELINE_NAME);
 
             String document = getDocumentFromFilePath(TEST_DOCUMENT);
-            ingestDocument(INDEX_NAME, document, null);
+            ingestDocument(INDEX_NAME, document);
 
             List<String> expectedPassages = new ArrayList<>();
             expectedPassages.add("This is an example document to be chunked.");
@@ -163,7 +163,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
             createTextChunkingIndex(INDEX_NAME, CASCADE_PIPELINE_NAME);
 
             String document = getDocumentFromFilePath(TEST_DOCUMENT);
-            ingestDocument(INDEX_NAME, document, null);
+            ingestDocument(INDEX_NAME, document);
 
             List<String> expectedPassages = new ArrayList<>();
             expectedPassages.add("This is an example document to be chunked.");
@@ -188,7 +188,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
             String fromIndexName = "test-reindex-from";
             createIndexWithConfiguration(fromIndexName, "{ \"settings\": { \"number_of_shards\": 1, \"number_of_replicas\": 0 } }", null);
             String document = getDocumentFromFilePath(TEST_DOCUMENT);
-            ingestDocument(fromIndexName, document, null);
+            ingestDocument(fromIndexName, document);
 
             createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
             createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);

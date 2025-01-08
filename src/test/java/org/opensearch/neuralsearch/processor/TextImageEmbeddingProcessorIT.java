@@ -48,10 +48,10 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
             createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
             createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
             // verify doc with mapping
-            ingestDocument(INDEX_NAME, INGEST_DOCUMENT, null);
+            ingestDocument(INDEX_NAME, INGEST_DOCUMENT);
             assertEquals(1, getDocCount(INDEX_NAME));
             // verify doc without mapping
-            ingestDocument(INDEX_NAME, INGEST_DOCUMENT_UNMAPPED_FIELDS, null);
+            ingestDocument(INDEX_NAME, INGEST_DOCUMENT_UNMAPPED_FIELDS);
             assertEquals(2, getDocCount(INDEX_NAME));
         } finally {
             wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
@@ -67,7 +67,7 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
         // create a simple index and indexing data into this index.
         String fromIndexName = "test-reindex-from";
         createIndexWithConfiguration(fromIndexName, "{ \"settings\": { \"number_of_shards\": 1, \"number_of_replicas\": 0 } }", null);
-        ingestDocument(fromIndexName, "{ \"text\": \"hello world\" }", null);
+        ingestDocument(fromIndexName, "{ \"text\": \"hello world\" }");
         String modelId = null;
         try {
             modelId = uploadModel();
