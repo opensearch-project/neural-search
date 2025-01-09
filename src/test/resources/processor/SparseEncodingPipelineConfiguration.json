@@ -4,6 +4,7 @@
     {
       "sparse_encoding": {
         "model_id": "%s",
+        "batch_size": "%d",
         "field_map": {
           "title": "title_sparse",
           "favor_list": "favor_list_sparse",
