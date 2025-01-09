@@ -18,6 +18,7 @@ import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.
 import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.INPUT_TEXT;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -25,7 +26,6 @@ import java.util.function.Supplier;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
-import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.apache.lucene.search.Query;
 import org.opensearch.common.SetOnce;
 import org.opensearch.core.ParseField;
@@ -76,8 +76,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     @VisibleForTesting
     static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
 
-    @VisibleForTesting
-    static final ParseField QUERY_IMAGE_FIELD = new ParseField("query_image");
+    public static final ParseField QUERY_IMAGE_FIELD = new ParseField("query_image");
 
     public static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
 
@@ -236,7 +235,16 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     public NeuralQueryBuilder(StreamInput in) throws IOException {
         super(in);
         this.fieldName = in.readString();
-        this.queryText = in.readString();
+        // The query image field was introduced since v2.11.0 through the
+        // https://github.com/opensearch-project/neural-search/pull/359 but at that time we didn't add it to
+        // NeuralQueryBuilder(StreamInput in) and doWriteTo(StreamOutput out) function. The fix will be
+        // introduced in v2.19.0 so we need this check for the backward compatibility.
+        if (isClusterOnOrAfterMinReqVersion(QUERY_IMAGE_FIELD.getPreferredName())) {
+            this.queryText = in.readOptionalString();
+            this.queryImage = in.readOptionalString();
+        } else {
+            this.queryText = in.readString();
+        }
         // If cluster version is on or after 2.11 then default model Id support is enabled
         if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
             this.modelId = in.readOptionalString();
@@ -265,7 +273,16 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     @Override
     protected void doWriteTo(StreamOutput out) throws IOException {
         out.writeString(this.fieldName);
-        out.writeString(this.queryText);
+        // The query image field was introduced since v2.11.0 through the
+        // https://github.com/opensearch-project/neural-search/pull/359 but at that time we didn't add it to
+        // NeuralQueryBuilder(StreamInput in) and doWriteTo(StreamOutput out) function. The fix will be
+        // introduced in v2.19.0 so we need this check for the backward compatibility.
+        if (isClusterOnOrAfterMinReqVersion(QUERY_IMAGE_FIELD.getPreferredName())) {
+            out.writeOptionalString(this.queryText);
+            out.writeOptionalString(this.queryImage);
+        } else {
+            out.writeString(this.queryText);
+        }
         // If cluster version is on or after 2.11 then default model Id support is enabled
         if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
             out.writeOptionalString(this.modelId);
@@ -285,6 +302,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         if (isClusterOnOrAfterMinReqVersion(EXPAND_NESTED_FIELD.getPreferredName())) {
             out.writeOptionalBoolean(this.expandNested);
         }
+
         if (isClusterOnOrAfterMinReqVersion(METHOD_PARAMS_FIELD.getPreferredName())) {
             MethodParametersParser.streamOutput(out, methodParameters, MinClusterVersionUtil::isClusterOnOrAfterMinReqVersion);
         }
@@ -295,7 +313,12 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     protected void doXContent(XContentBuilder xContentBuilder, Params params) throws IOException {
         xContentBuilder.startObject(NAME);
         xContentBuilder.startObject(fieldName);
-        xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
+        if (Objects.nonNull(queryText)) {
+            xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
+        }
+        if (Objects.nonNull(queryImage)) {
+            xContentBuilder.field(QUERY_IMAGE_FIELD.getPreferredName(), queryImage);
+        }
         if (Objects.nonNull(modelId)) {
             xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
         }
@@ -501,15 +524,39 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         EqualsBuilder equalsBuilder = new EqualsBuilder();
         equalsBuilder.append(fieldName, obj.fieldName);
         equalsBuilder.append(queryText, obj.queryText);
+        equalsBuilder.append(queryImage, obj.queryImage);
         equalsBuilder.append(modelId, obj.modelId);
         equalsBuilder.append(k, obj.k);
+        equalsBuilder.append(maxDistance, obj.maxDistance);
+        equalsBuilder.append(minScore, obj.minScore);
+        equalsBuilder.append(expandNested, obj.expandNested);
+        equalsBuilder.append(getVector(vectorSupplier), getVector(obj.vectorSupplier));
         equalsBuilder.append(filter, obj.filter);
+        equalsBuilder.append(methodParameters, obj.methodParameters);
+        equalsBuilder.append(rescoreContext, obj.rescoreContext);
         return equalsBuilder.isEquals();
     }
 
     @Override
     protected int doHashCode() {
-        return new HashCodeBuilder().append(fieldName).append(queryText).append(modelId).append(k).toHashCode();
+        return Objects.hash(
+            fieldName,
+            queryText,
+            queryImage,
+            modelId,
+            k,
+            maxDistance,
+            minScore,
+            expandNested,
+            Arrays.hashCode(getVector(vectorSupplier)),
+            filter,
+            methodParameters,
+            rescoreContext
+        );
+    }
+
+    private float[] getVector(final Supplier<float[]> vectorSupplier) {
+        return Objects.isNull(vectorSupplier) ? null : vectorSupplier.get();
     }
 
     @Override
