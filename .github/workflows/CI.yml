@@ -21,7 +21,7 @@ jobs:
     needs: Get-CI-Image-Tag
     strategy:
       matrix:
-        java: [11, 17, 21]
+        java: [21]
         os: [ubuntu-latest]
 
     name: Gradle Check Linux
@@ -59,7 +59,7 @@ jobs:
   Check-neural-search-windows:
     strategy:
       matrix:
-        java: [11, 17, 21]
+        java: [21]
         os: [windows-latest]
 
     name: Gradle Check Windows
@@ -82,7 +82,7 @@ jobs:
     needs: Get-CI-Image-Tag
     strategy:
       matrix:
-        java: [11, 17, 21]
+        java: [21]
         os: [ubuntu-latest]
 
     name: Pre-commit Linux
@@ -120,7 +120,7 @@ jobs:
   Precommit-neural-search-windows:
     strategy:
       matrix:
-        java: [11, 17, 21]
+        java: [21]
         os: [windows-latest]
 
     name: Pre-commit Windows

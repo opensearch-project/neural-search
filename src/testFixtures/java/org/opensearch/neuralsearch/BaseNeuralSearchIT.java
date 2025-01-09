@@ -1285,13 +1285,18 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     // Method that waits till the health of nodes in the cluster goes green
-    protected void waitForClusterHealthGreen(final String numOfNodes) throws IOException {
+    protected void waitForClusterHealthGreen(final String numOfNodes, final int timeoutInSeconds) throws IOException {
         Request waitForGreen = new Request("GET", "/_cluster/health");
         waitForGreen.addParameter("wait_for_nodes", numOfNodes);
         waitForGreen.addParameter("wait_for_status", "green");
-        waitForGreen.addParameter("cluster_manager_timeout", "60s");
-        waitForGreen.addParameter("timeout", "60s");
+        waitForGreen.addParameter("cluster_manager_timeout", String.format(LOCALE, "%ds", timeoutInSeconds));
+        waitForGreen.addParameter("timeout", String.format(LOCALE, "%ds", timeoutInSeconds));
         client().performRequest(waitForGreen);
+    }
+
+    // Method that waits till the health of nodes in the cluster goes green with default timeout value of 60
+    protected void waitForClusterHealthGreen(final String numOfNodes) throws IOException {
+        waitForClusterHealthGreen(numOfNodes, 60);
     }
 
     /**
@@ -1323,6 +1328,87 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         builder.endObject();
         request.setJsonEntity(builder.toString());
         client().performRequest(request);
+    }
+
+    /**
+     * Create an index with an pipeline with mappings from an index mapping file name
+     * @param indexName
+     * @param indexMappingFileName
+     * @param pipelineName
+     * @throws Exception
+     */
+    protected void createIndexWithPipeline(String indexName, String indexMappingFileName, String pipelineName) throws Exception {
+        createIndexWithConfiguration(
+            indexName,
+            Files.readString(Path.of(classLoader.getResource("processor/" + indexMappingFileName).toURI())),
+            pipelineName
+        );
+    }
+
+    /**
+     * Ingest a document to index with optional id
+     * @param indexName name of the index
+     * @param ingestDocument
+     * @param id nullable optional id
+     * @throws Exception
+     */
+    protected String ingestDocument(String indexName, String ingestDocument, String id) throws Exception {
+        String endpoint;
+        if (StringUtils.isEmpty(id)) {
+            endpoint = indexName + "/_doc?refresh";
+        } else {
+            endpoint = indexName + "/_doc/" + id + "?refresh";
+        }
+        Response response = makeRequest(
+            client(),
+            "POST",
+            endpoint,
+            null,
+            toHttpEntity(ingestDocument),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+        );
+        Map<String, Object> map = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(response.getEntity()),
+            false
+        );
+
+        String result = (String) map.get("result");
+        assertEquals("created", result);
+        return result;
+    }
+
+    /**
+     * Ingest a document to index using auto generated id
+     * @param indexName name of the index
+     * @param ingestDocument
+     * @throws Exception
+     */
+    protected String ingestDocument(String indexName, String ingestDocument) throws Exception {
+        return ingestDocument(indexName, ingestDocument, null);
+    }
+
+    /**
+     * Reindex all documents from one index to another
+     * @param fromIndexName
+     * @param toIndexName
+     * @throws Exception
+     */
+    protected void reindex(String fromIndexName, String toIndexName) throws Exception {
+        Response response = makeRequest(
+            client(),
+            "POST",
+            "/_reindex?refresh",
+            null,
+            toHttpEntity("{\"source\":{\"index\":\"" + fromIndexName + "\"},\"dest\":{\"index\":\"" + toIndexName + "\"}}"),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+        );
+        Map<String, Object> map = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(response.getEntity()),
+            false
+        );
+        assertEquals(0, ((List) map.get("failures")).size());
     }
 
     /**
