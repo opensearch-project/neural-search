@@ -34,7 +34,7 @@ import static org.opensearch.neuralsearch.processor.explain.ExplanationPayload.P
 @AllArgsConstructor
 public class ExplanationResponseProcessor implements SearchResponseProcessor {
 
-    public static final String TYPE = "explanation_response_processor";
+    public static final String TYPE = "hybrid_score_explanation";
 
     private final String description;
     private final String tag;
