@@ -968,7 +968,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
 
             org.hamcrest.MatcherAssert.assertThat(
                 responseException.getMessage(),
-                allOf(containsString("pagination_depth should be less than index.max_result_window setting"))
+                allOf(containsString("pagination_depth should be less than or equal to index.max_result_window setting"))
             );
         } finally {
             wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, null, null, SEARCH_PIPELINE);

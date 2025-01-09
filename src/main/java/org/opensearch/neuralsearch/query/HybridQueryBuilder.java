@@ -337,7 +337,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         int maxResultWindowIndexSetting = queryShardContext.getIndexSettings().getMaxResultWindow();
         if (paginationDepth > maxResultWindowIndexSetting) {
             throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "pagination_depth should be less than index.max_result_window setting")
+                String.format(Locale.ROOT, "pagination_depth should be less than or equal to index.max_result_window setting")
             );
         }
     }

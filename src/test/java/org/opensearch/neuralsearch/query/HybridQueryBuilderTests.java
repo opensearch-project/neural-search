@@ -249,7 +249,10 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             IllegalArgumentException.class,
             () -> queryBuilder.doToQuery(mockQueryShardContext)
         );
-        assertThat(exception.getMessage(), containsString("pagination_depth should be less than index.max_result_window setting"));
+        assertThat(
+            exception.getMessage(),
+            containsString("pagination_depth should be less than or equal to index.max_result_window setting")
+        );
     }
 
     @SneakyThrows
