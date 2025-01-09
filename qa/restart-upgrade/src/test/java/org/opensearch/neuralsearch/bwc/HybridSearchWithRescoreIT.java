@@ -97,7 +97,8 @@ public class HybridSearchWithRescoreIT extends AbstractRestartUpgradeRestTestCas
             .fieldName(VECTOR_EMBEDDING_FIELD)
             .modelId(modelId)
             .queryText(QUERY)
-            .k(5);
+            .k(5)
+            .build();
         if (methodParameters != null) {
             neuralQueryBuilder.methodParameters(methodParameters);
         }
