@@ -113,20 +113,13 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
             );
             assertDoc((Map<String, Object>) getDocById(INDEX_NAME, "4").get("_source"), TEXT_FIELD_VALUE_2, Optional.empty());
 
-            NeuralQueryBuilder neuralQueryBuilderQuery = new NeuralQueryBuilder(
-                LEVEL_1_FIELD + "." + LEVEL_2_FIELD + "." + LEVEL_3_FIELD_CONTAINER + "." + LEVEL_3_FIELD_EMBEDDING,
-                QUERY_TEXT,
-                "",
-                modelId,
-                10,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-            );
+            NeuralQueryBuilder neuralQueryBuilderQuery = NeuralQueryBuilder.builder()
+                .fieldName(LEVEL_1_FIELD + "." + LEVEL_2_FIELD + "." + LEVEL_3_FIELD_CONTAINER + "." + LEVEL_3_FIELD_EMBEDDING)
+                .queryText(QUERY_TEXT)
+                .modelId(modelId)
+                .k(10)
+                .build();
+
             QueryBuilder queryNestedLowerLevel = QueryBuilders.nestedQuery(
                 LEVEL_1_FIELD + "." + LEVEL_2_FIELD,
                 neuralQueryBuilderQuery,
