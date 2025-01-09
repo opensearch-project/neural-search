@@ -55,9 +55,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
 
     private final List<QueryBuilder> queries = new ArrayList<>();
 
-    private String fieldName;
-
     private int paginationDepth;
+
     static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
     private final static int DEFAULT_PAGINATION_DEPTH = 10;
     private static final int LOWER_BOUND_OF_PAGINATION_DEPTH = 0;
@@ -282,7 +281,6 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             return false;
         }
         EqualsBuilder equalsBuilder = new EqualsBuilder();
-        equalsBuilder.append(fieldName, obj.fieldName);
         equalsBuilder.append(queries, obj.queries);
         if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
             equalsBuilder.append(paginationDepth, obj.paginationDepth);
@@ -296,7 +294,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      */
     @Override
     protected int doHashCode() {
-        return Objects.hash(queries);
+        return Objects.hash(queries, paginationDepth);
     }
 
     /**
