@@ -22,6 +22,7 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.IndexSettings;
 import org.opensearch.index.query.AbstractQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
@@ -337,7 +338,11 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         int maxResultWindowIndexSetting = queryShardContext.getIndexSettings().getMaxResultWindow();
         if (paginationDepth > maxResultWindowIndexSetting) {
             throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "pagination_depth should be less than or equal to index.max_result_window setting")
+                String.format(
+                    Locale.ROOT,
+                    "pagination_depth should be less than or equal to %s setting",
+                    IndexSettings.MAX_RESULT_WINDOW_SETTING.getKey()
+                )
             );
         }
     }
