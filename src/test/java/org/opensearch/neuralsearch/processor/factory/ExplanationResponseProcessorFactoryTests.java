@@ -104,7 +104,7 @@ public class ExplanationResponseProcessorFactoryTests extends OpenSearchTestCase
         assertNotNull(responseProcessor);
         assertTrue(responseProcessor instanceof ExplanationResponseProcessor);
         ExplanationResponseProcessor explanationResponseProcessor = (ExplanationResponseProcessor) responseProcessor;
-        assertEquals("explanation_response_processor", explanationResponseProcessor.getType());
+        assertEquals("hybrid_score_explanation", explanationResponseProcessor.getType());
         assertEquals(tag, explanationResponseProcessor.getTag());
         assertEquals(description, explanationResponseProcessor.getDescription());
         assertEquals(ignoreFailure, explanationResponseProcessor.isIgnoreFailure());
