@@ -282,9 +282,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         }
         EqualsBuilder equalsBuilder = new EqualsBuilder();
         equalsBuilder.append(queries, obj.queries);
-        if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
-            equalsBuilder.append(paginationDepth, obj.paginationDepth);
-        }
+        equalsBuilder.append(paginationDepth, obj.paginationDepth);
         return equalsBuilder.isEquals();
     }
 
@@ -294,12 +292,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      */
     @Override
     protected int doHashCode() {
-        List<Object> hashValues = new ArrayList<>();
-        hashValues.add(queries);
-        if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
-            hashValues.add(paginationDepth);
-        }
-        return Objects.hash(hashValues.toArray());
+        return Objects.hash(queries, paginationDepth);
     }
 
     /**
