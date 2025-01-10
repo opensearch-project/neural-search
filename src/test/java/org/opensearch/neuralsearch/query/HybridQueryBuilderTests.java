@@ -595,6 +595,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     public void testHashAndEquals_whenSameOrIdenticalObject_thenReturnEqual() {
+        setUpClusterService();
         HybridQueryBuilder hybridQueryBuilderBaseline = new HybridQueryBuilder();
         hybridQueryBuilderBaseline.add(
             NeuralQueryBuilder.builder()
