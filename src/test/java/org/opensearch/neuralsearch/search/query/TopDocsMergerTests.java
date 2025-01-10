@@ -27,8 +27,6 @@ import org.opensearch.search.sort.SortAndFormats;
 
 public class TopDocsMergerTests extends OpenSearchQueryTestCase {
 
-    private static final float DELTA_FOR_ASSERTION = 0.001f;
-
     @SneakyThrows
     public void testMergeScoreDocs_whenBothTopDocsHasHits_thenSuccessful() {
         TopDocsMerger topDocsMerger = new TopDocsMerger(null);

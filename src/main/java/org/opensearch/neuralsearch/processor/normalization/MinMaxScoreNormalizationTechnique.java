@@ -12,6 +12,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
@@ -19,6 +21,7 @@ import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import com.google.common.primitives.Floats;
 
 import lombok.ToString;
+import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
@@ -43,7 +46,8 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
      * - iterate over each result and update score as per formula above where "score" is raw score returned by Hybrid query
      */
     @Override
-    public void normalize(final List<CompoundTopDocs> queryTopDocs) {
+    public void normalize(final NormalizeScoresDTO normalizeScoresDTO) {
+        final List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
         MinMaxScores minMaxScores = getMinMaxScoresResult(queryTopDocs);
         // do normalization using actual score and min and max scores for corresponding sub query
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
@@ -56,8 +60,8 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
                     scoreDoc.score = normalizeSingleScore(
                         scoreDoc.score,
-                        minMaxScores.minScoresPerSubquery()[j],
-                        minMaxScores.maxScoresPerSubquery()[j]
+                        minMaxScores.getMinScoresPerSubquery()[j],
+                        minMaxScores.getMaxScoresPerSubquery()[j]
                     );
                 }
             }
@@ -94,8 +98,8 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                     DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(scoreDoc.doc, compoundQueryTopDocs.getSearchShard());
                     float normalizedScore = normalizeSingleScore(
                         scoreDoc.score,
-                        minMaxScores.minScoresPerSubquery()[j],
-                        minMaxScores.maxScoresPerSubquery()[j]
+                        minMaxScores.getMinScoresPerSubquery()[j],
+                        minMaxScores.getMaxScoresPerSubquery()[j]
                     );
                     normalizedScores.computeIfAbsent(docIdAtSearchShard, k -> new ArrayList<>()).add(normalizedScore);
                     scoreDoc.score = normalizedScore;
@@ -169,6 +173,10 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
     /**
      * Result class to hold min and max scores for each sub query
      */
-    private record MinMaxScores(float[] minScoresPerSubquery, float[] maxScoresPerSubquery) {
+    @AllArgsConstructor
+    @Getter
+    private class MinMaxScores {
+        float[] minScoresPerSubquery;
+        float[] maxScoresPerSubquery;
     }
 }

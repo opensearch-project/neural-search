@@ -37,9 +37,10 @@ import java.util.PriorityQueue;
 import java.util.TreeMap;
 
 import static org.mockito.Mockito.mock;
+import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_FLOATS_ASSERTION;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 
-public class ExplanationPayloadProcessorTests extends OpenSearchTestCase {
+public class ExplanationResponseProcessorTests extends OpenSearchTestCase {
     private static final String PROCESSOR_TAG = "mockTag";
     private static final String DESCRIPTION = "mockDescription";
 
@@ -190,6 +191,119 @@ public class ExplanationPayloadProcessorTests extends OpenSearchTestCase {
 
         // Assert
         assertOnExplanationResults(processedResponse, maxScore);
+    }
+
+    @SneakyThrows
+    public void testProcessResponse_whenNullSearchHits_thenNoOp() {
+        ExplanationResponseProcessor processor = new ExplanationResponseProcessor(DESCRIPTION, PROCESSOR_TAG, false);
+        SearchRequest searchRequest = mock(SearchRequest.class);
+        SearchResponse searchResponse = getSearchResponse(null);
+        PipelineProcessingContext context = new PipelineProcessingContext();
+
+        SearchResponse processedResponse = processor.processResponse(searchRequest, searchResponse, context);
+        assertEquals(searchResponse, processedResponse);
+    }
+
+    @SneakyThrows
+    public void testProcessResponse_whenEmptySearchHits_thenNoOp() {
+        ExplanationResponseProcessor processor = new ExplanationResponseProcessor(DESCRIPTION, PROCESSOR_TAG, false);
+        SearchRequest searchRequest = mock(SearchRequest.class);
+        SearchHits emptyHits = new SearchHits(new SearchHit[0], new TotalHits(0, TotalHits.Relation.EQUAL_TO), 0.0f);
+        SearchResponse searchResponse = getSearchResponse(emptyHits);
+        PipelineProcessingContext context = new PipelineProcessingContext();
+
+        SearchResponse processedResponse = processor.processResponse(searchRequest, searchResponse, context);
+        assertEquals(searchResponse, processedResponse);
+    }
+
+    @SneakyThrows
+    public void testProcessResponse_whenNullExplanation_thenSkipProcessing() {
+        ExplanationResponseProcessor processor = new ExplanationResponseProcessor(DESCRIPTION, PROCESSOR_TAG, false);
+        SearchRequest searchRequest = mock(SearchRequest.class);
+        SearchHits searchHits = getSearchHits(1.0f);
+        for (SearchHit hit : searchHits.getHits()) {
+            hit.explanation(null);
+        }
+        SearchResponse searchResponse = getSearchResponse(searchHits);
+        PipelineProcessingContext context = new PipelineProcessingContext();
+
+        SearchResponse processedResponse = processor.processResponse(searchRequest, searchResponse, context);
+        assertEquals(searchResponse, processedResponse);
+    }
+
+    @SneakyThrows
+    public void testProcessResponse_whenInvalidExplanationPayload_thenHandleGracefully() {
+        ExplanationResponseProcessor processor = new ExplanationResponseProcessor(DESCRIPTION, PROCESSOR_TAG, false);
+        SearchRequest searchRequest = mock(SearchRequest.class);
+        SearchHits searchHits = getSearchHits(1.0f);
+        SearchResponse searchResponse = getSearchResponse(searchHits);
+        PipelineProcessingContext context = new PipelineProcessingContext();
+
+        // Set invalid payload
+        Map<ExplanationPayload.PayloadType, Object> invalidPayload = Map.of(
+            ExplanationPayload.PayloadType.NORMALIZATION_PROCESSOR,
+            "invalid payload"
+        );
+        ExplanationPayload explanationPayload = ExplanationPayload.builder().explainPayload(invalidPayload).build();
+        context.setAttribute(org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY, explanationPayload);
+
+        SearchResponse processedResponse = processor.processResponse(searchRequest, searchResponse, context);
+        assertNotNull(processedResponse);
+    }
+
+    @SneakyThrows
+    public void testProcessResponse_whenZeroScore_thenProcessCorrectly() {
+        ExplanationResponseProcessor processor = new ExplanationResponseProcessor(DESCRIPTION, PROCESSOR_TAG, false);
+        SearchRequest searchRequest = mock(SearchRequest.class);
+        SearchHits searchHits = getSearchHits(0.0f);
+        SearchResponse searchResponse = getSearchResponse(searchHits);
+        PipelineProcessingContext context = new PipelineProcessingContext();
+
+        Map<SearchShard, List<CombinedExplanationDetails>> combinedExplainDetails = getCombinedExplainDetails(searchHits);
+        Map<ExplanationPayload.PayloadType, Object> explainPayload = Map.of(
+            ExplanationPayload.PayloadType.NORMALIZATION_PROCESSOR,
+            combinedExplainDetails
+        );
+        ExplanationPayload explanationPayload = ExplanationPayload.builder().explainPayload(explainPayload).build();
+        context.setAttribute(org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY, explanationPayload);
+
+        SearchResponse processedResponse = processor.processResponse(searchRequest, searchResponse, context);
+        assertNotNull(processedResponse);
+        assertEquals(0.0f, processedResponse.getHits().getMaxScore(), DELTA_FOR_SCORE_ASSERTION);
+    }
+
+    @SneakyThrows
+    public void testProcessResponse_whenScoreIsNaN_thenExplanationUsesZero() {
+        ExplanationResponseProcessor processor = new ExplanationResponseProcessor(DESCRIPTION, PROCESSOR_TAG, false);
+        SearchRequest searchRequest = mock(SearchRequest.class);
+
+        // Create SearchHits with NaN score
+        SearchHits searchHits = getSearchHits(Float.NaN);
+        SearchResponse searchResponse = getSearchResponse(searchHits);
+        PipelineProcessingContext context = new PipelineProcessingContext();
+
+        // Setup explanation payload
+        Map<SearchShard, List<CombinedExplanationDetails>> combinedExplainDetails = getCombinedExplainDetails(searchHits);
+        Map<ExplanationPayload.PayloadType, Object> explainPayload = Map.of(
+            ExplanationPayload.PayloadType.NORMALIZATION_PROCESSOR,
+            combinedExplainDetails
+        );
+        ExplanationPayload explanationPayload = ExplanationPayload.builder().explainPayload(explainPayload).build();
+        context.setAttribute(org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY, explanationPayload);
+
+        // Process response
+        SearchResponse processedResponse = processor.processResponse(searchRequest, searchResponse, context);
+
+        // Verify results
+        assertNotNull(processedResponse);
+        SearchHit[] hits = processedResponse.getHits().getHits();
+        assertNotNull(hits);
+        assertTrue(hits.length > 0);
+
+        // Verify that the explanation uses 0.0f when input score was NaN
+        Explanation explanation = hits[0].getExplanation();
+        assertNotNull(explanation);
+        assertEquals(0.0f, (float) explanation.getValue(), DELTA_FOR_FLOATS_ASSERTION);
     }
 
     private static SearchHits getSearchHits(float maxScore) {

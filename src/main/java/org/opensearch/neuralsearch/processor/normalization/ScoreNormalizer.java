@@ -12,17 +12,22 @@ import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
+import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 
 public class ScoreNormalizer {
 
     /**
-     * Performs score normalization based on input normalization technique. Mutates input object by updating normalized scores.
-     * @param queryTopDocs original query results from multiple shards and multiple sub-queries
-     * @param scoreNormalizationTechnique exact normalization technique that should be applied
+     * Performs score normalization based on input normalization technique.
+     * Mutates input object by updating normalized scores.
+     * @param normalizeScoresDTO used as data transfer object to pass in queryTopDocs, original query results
+     * from multiple shards and multiple sub-queries, scoreNormalizationTechnique exact normalization technique
+     * that should be applied, and nullable rankConstant that is only used in RRF technique
      */
-    public void normalizeScores(final List<CompoundTopDocs> queryTopDocs, final ScoreNormalizationTechnique scoreNormalizationTechnique) {
+    public void normalizeScores(final NormalizeScoresDTO normalizeScoresDTO) {
+        final List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
+        final ScoreNormalizationTechnique scoreNormalizationTechnique = normalizeScoresDTO.getNormalizationTechnique();
         if (canQueryResultsBeNormalized(queryTopDocs)) {
-            scoreNormalizationTechnique.normalize(queryTopDocs);
+            scoreNormalizationTechnique.normalize(normalizeScoresDTO);
         }
     }
 

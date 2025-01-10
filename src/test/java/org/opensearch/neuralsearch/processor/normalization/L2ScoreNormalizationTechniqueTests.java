@@ -13,9 +13,10 @@ import org.apache.lucene.search.TotalHits;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.processor.SearchShard;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
+import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 
 /**
- * Abstracts normalization of scores based on min-max method
+ * Abstracts normalization of scores based on L2 method
  */
 public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     private static final float DELTA_FOR_ASSERTION = 0.0001f;
@@ -37,7 +38,11 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
                 SEARCH_SHARD
             )
         );
-        normalizationTechnique.normalize(compoundTopDocs);
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(compoundTopDocs)
+            .normalizationTechnique(normalizationTechnique)
+            .build();
+        normalizationTechnique.normalize(normalizeScoresDTO);
 
         CompoundTopDocs expectedCompoundDocs = new CompoundTopDocs(
             new TotalHits(2, TotalHits.Relation.EQUAL_TO),
@@ -86,7 +91,11 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
                 SEARCH_SHARD
             )
         );
-        normalizationTechnique.normalize(compoundTopDocs);
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(compoundTopDocs)
+            .normalizationTechnique(normalizationTechnique)
+            .build();
+        normalizationTechnique.normalize(normalizeScoresDTO);
 
         CompoundTopDocs expectedCompoundDocs = new CompoundTopDocs(
             new TotalHits(3, TotalHits.Relation.EQUAL_TO),
@@ -163,7 +172,11 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
                 SEARCH_SHARD
             )
         );
-        normalizationTechnique.normalize(compoundTopDocs);
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(compoundTopDocs)
+            .normalizationTechnique(normalizationTechnique)
+            .build();
+        normalizationTechnique.normalize(normalizeScoresDTO);
 
         CompoundTopDocs expectedCompoundDocsShard1 = new CompoundTopDocs(
             new TotalHits(3, TotalHits.Relation.EQUAL_TO),

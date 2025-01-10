@@ -21,8 +21,6 @@ import org.opensearch.search.sort.SortAndFormats;
 
 public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
 
-    private static final float DELTA_FOR_ASSERTION = 0.001f;
-
     public void testIncorrectInput_whenScoreDocsAreNullOrNotEnoughElements_thenFail() {
         HybridQueryScoreDocsMerger<ScoreDoc> scoreDocsMerger = new HybridQueryScoreDocsMerger<>();
         TopDocsMerger topDocsMerger = new TopDocsMerger(null);
