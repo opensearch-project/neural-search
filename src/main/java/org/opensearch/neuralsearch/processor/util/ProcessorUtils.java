@@ -47,6 +47,7 @@ public class ProcessorUtils {
      * for each SearchHit follows the correct form as specified by the validator.
      * When just one of the conditions fail (as specified by the validator) the exception will be thrown to the listener.
      * @param searchHits from the SearchResponse
+     * @param validator The given validator used to check every search hit being correct
      * @param listener returns an error to the listener in case on of the conditions fail
      * @return The status indicating that the SearchHits are in correct form to perform the Rerank
      */
@@ -77,6 +78,9 @@ public class ProcessorUtils {
      */
     public static float getScoreFromSourceMap(final Map<String, Object> sourceAsMap, final String targetField) {
         Object val = getValueFromSource(sourceAsMap, targetField).get();
+        if (val instanceof String) {
+            return Float.parseFloat((String) val);
+        }
         return ((Number) val).floatValue();
     }
 
@@ -180,4 +184,29 @@ public class ProcessorUtils {
         return getValueFromSource(sourceAsMap, pathToValue).isPresent();
     }
 
+    /**
+     * @param value Any value to be determined to be numerical
+     * @return whether the value can be turned into a number
+     */
+    public static boolean isNumeric(Object value) {
+        if (value == null) {
+            return false;
+        }
+
+        if (value instanceof Number) {
+            return true;
+        }
+
+        if (value instanceof String) {
+            String string = (String) value;
+            try {
+                Double.parseDouble(string);
+                return true;
+            } catch (NumberFormatException e) {
+                return false;
+            }
+        }
+
+        return false;
+    }
 }
