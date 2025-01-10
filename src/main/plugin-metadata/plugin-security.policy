@@ -4,4 +4,10 @@ grant {
     permission java.lang.RuntimePermission "accessDeclaredMembers";
     permission java.lang.reflect.ReflectPermission "suppressAccessChecks";
     permission java.lang.RuntimePermission "setContextClassLoader";
+
+    permission java.net.SocketPermission "*", "connect,resolve";
+    permission java.lang.RuntimePermission "loadLibrary.*";
+    permission java.lang.RuntimePermission "setContextClassLoader";
+    permission java.util.PropertyPermission "DJL_CACHE_DIR", "read,write";
+    permission java.util.PropertyPermission "java.library.path", "read,write";
 };

@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.plugin;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SEARCH_HYBRID_SEARCH_DISABLED;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER_MAX_DOC_FIELDS;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -24,8 +25,14 @@ import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
+import org.opensearch.index.analysis.PreConfiguredTokenizer;
+import org.opensearch.index.analysis.TokenizerFactory;
+import org.opensearch.indices.analysis.AnalysisModule;
 import org.opensearch.ingest.Processor;
 import org.opensearch.ml.client.MachineLearningNodeClient;
+import org.opensearch.neuralsearch.analysis.DJLUtils;
+import org.opensearch.neuralsearch.analysis.HFTokenizer;
+import org.opensearch.neuralsearch.analysis.HFTokenizerFactory;
 import org.opensearch.neuralsearch.executors.HybridQueryExecutor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
@@ -56,6 +63,7 @@ import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.plugins.ActionPlugin;
+import org.opensearch.plugins.AnalysisPlugin;
 import org.opensearch.plugins.ExtensiblePlugin;
 import org.opensearch.plugins.IngestPlugin;
 import org.opensearch.plugins.Plugin;
@@ -77,7 +85,14 @@ import lombok.extern.log4j.Log4j2;
  * Neural Search plugin class
  */
 @Log4j2
-public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, IngestPlugin, ExtensiblePlugin, SearchPipelinePlugin {
+public class NeuralSearch extends Plugin
+    implements
+        ActionPlugin,
+        SearchPlugin,
+        IngestPlugin,
+        ExtensiblePlugin,
+        SearchPipelinePlugin,
+        AnalysisPlugin {
     private MLCommonsClientAccessor clientAccessor;
     private NormalizationProcessorWorkflow normalizationProcessorWorkflow;
     private final ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
@@ -103,6 +118,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         NeuralSparseQueryBuilder.initialize(clientAccessor);
         HybridQueryExecutor.initialize(threadPool);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
+        DJLUtils.buildDJLCachePath(environment.dataFiles()[0]);
         return List.of(clientAccessor);
     }
 
@@ -199,5 +215,17 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
                 parser -> RerankSearchExtBuilder.parse(parser)
             )
         );
+    }
+
+    @Override
+    public Map<String, AnalysisModule.AnalysisProvider<TokenizerFactory>> getTokenizers() {
+        return Map.of("hf_tokenizer", HFTokenizerFactory::new);
+    }
+
+    @Override
+    public List<PreConfiguredTokenizer> getPreConfiguredTokenizers() {
+        List<PreConfiguredTokenizer> tokenizers = new ArrayList<>();
+        tokenizers.add(PreConfiguredTokenizer.singleton(HFTokenizer.NAME, HFTokenizerFactory::createDefaultTokenizer));
+        return tokenizers;
     }
 }
