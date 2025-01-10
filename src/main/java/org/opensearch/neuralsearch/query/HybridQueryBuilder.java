@@ -294,7 +294,12 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      */
     @Override
     protected int doHashCode() {
-        return Objects.hash(queries, paginationDepth);
+        List<Object> hashValues = new ArrayList<>();
+        hashValues.add(queries);
+        if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
+            hashValues.add(paginationDepth);
+        }
+        return Objects.hash(hashValues.toArray());
     }
 
     /**
@@ -326,7 +331,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     private static void validatePaginationDepth(final int paginationDepth, final QueryShardContext queryShardContext) {
-        if (paginationDepth <= LOWER_BOUND_OF_PAGINATION_DEPTH) {
+        if (paginationDepth < LOWER_BOUND_OF_PAGINATION_DEPTH) {
             throw new IllegalArgumentException(
                 String.format(Locale.ROOT, "pagination_depth should be greater than %s", LOWER_BOUND_OF_PAGINATION_DEPTH)
             );
