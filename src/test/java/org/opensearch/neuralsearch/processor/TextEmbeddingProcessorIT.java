@@ -50,6 +50,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
     private final String INGEST_DOC2 = Files.readString(Path.of(classLoader.getResource("processor/ingest_doc2.json").toURI()));
     private final String INGEST_DOC3 = Files.readString(Path.of(classLoader.getResource("processor/ingest_doc3.json").toURI()));
     private final String INGEST_DOC4 = Files.readString(Path.of(classLoader.getResource("processor/ingest_doc4.json").toURI()));
+    private final String INGEST_DOC5 = Files.readString(Path.of(classLoader.getResource("processor/ingest_doc5.json").toURI()));
     private final String BULK_ITEM_TEMPLATE = Files.readString(
         Path.of(classLoader.getResource("processor/bulk_item_template.json").toURI())
     );
@@ -168,6 +169,23 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         }
     }
 
+    private void assertDocWithLevel2AsList(Map<String, Object> sourceMap) {
+        assertNotNull(sourceMap);
+        assertTrue(sourceMap.containsKey(LEVEL_1_FIELD));
+        assertTrue(sourceMap.get(LEVEL_1_FIELD) instanceof List);
+        List<Map<String, Object>> nestedPassages = (List<Map<String, Object>>) sourceMap.get(LEVEL_1_FIELD);
+        nestedPassages.forEach(nestedPassage -> {
+            assertTrue(nestedPassage.containsKey(LEVEL_2_FIELD));
+            Map<String, Object> level2 = (Map<String, Object>) nestedPassage.get(LEVEL_2_FIELD);
+            Map<String, Object> level3 = (Map<String, Object>) level2.get(LEVEL_3_FIELD_CONTAINER);
+            List<Double> embeddings = (List<Double>) level3.get(LEVEL_3_FIELD_EMBEDDING);
+            assertEquals(768, embeddings.size());
+            for (Double embedding : embeddings) {
+                assertTrue(embedding >= 0.0 && embedding <= 1.0);
+            }
+        });
+    }
+
     public void testTextEmbeddingProcessor_withBatchSizeInProcessor() throws Exception {
         String modelId = null;
         try {
@@ -227,6 +245,44 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
                 );
 
             }
+        } finally {
+            wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testNestedFieldMapping_whenDocumentInListIngested_thenSuccessful() throws Exception {
+        String modelId = null;
+        try {
+            modelId = uploadTextEmbeddingModel();
+            loadModel(modelId);
+            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING);
+            createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
+            ingestDocument(INDEX_NAME, INGEST_DOC5, "5");
+
+            assertDocWithLevel2AsList((Map<String, Object>) getDocById(INDEX_NAME, "5").get("_source"));
+
+            NeuralQueryBuilder neuralQueryBuilderQuery = NeuralQueryBuilder.builder()
+                .fieldName(LEVEL_1_FIELD + "." + LEVEL_2_FIELD + "." + LEVEL_3_FIELD_CONTAINER + "." + LEVEL_3_FIELD_EMBEDDING)
+                .queryText(QUERY_TEXT)
+                .modelId(modelId)
+                .k(10)
+                .build();
+
+            QueryBuilder queryNestedLowerLevel = QueryBuilders.nestedQuery(
+                LEVEL_1_FIELD + "." + LEVEL_2_FIELD,
+                neuralQueryBuilderQuery,
+                ScoreMode.Total
+            );
+            QueryBuilder queryNestedHighLevel = QueryBuilders.nestedQuery(LEVEL_1_FIELD, queryNestedLowerLevel, ScoreMode.Total);
+
+            Map<String, Object> searchResponseAsMap = search(INDEX_NAME, queryNestedHighLevel, 2);
+            assertNotNull(searchResponseAsMap);
+
+            assertEquals(1, getHitCount(searchResponseAsMap));
+
+            Map<String, Object> innerHitDetails = getFirstInnerHit(searchResponseAsMap);
+            assertEquals("5", innerHitDetails.get("_id"));
         } finally {
             wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
         }
