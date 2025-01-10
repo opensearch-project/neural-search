@@ -93,6 +93,7 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
             .combinationTechnique(combinationTechnique)
             .explain(explain)
             .pipelineProcessingContext(requestContextOptional.orElse(null))
+            .searchPhaseContext(searchPhaseContext)
             .build();
         normalizationWorkflow.execute(request);
     }

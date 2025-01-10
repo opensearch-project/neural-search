@@ -29,9 +29,8 @@ import org.opensearch.search.query.QueryPhaseSearcherWrapper;
 
 import lombok.extern.log4j.Log4j2;
 
-import static org.opensearch.neuralsearch.util.HybridQueryUtil.hasAliasFilter;
-import static org.opensearch.neuralsearch.util.HybridQueryUtil.hasNestedFieldOrNestedDocs;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQuery;
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryWrappedInBooleanQuery;
 
 /**
  * Custom search implementation to be used at {@link QueryPhase} for Hybrid Query search. For queries other than Hybrid the
@@ -60,10 +59,6 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             validateQuery(searchContext, query);
             return super.searchWith(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);
         } else {
-            // TODO remove this check after following issue https://github.com/opensearch-project/neural-search/issues/280 gets resolved.
-            if (searchContext.from() != 0) {
-                throw new IllegalArgumentException("In the current OpenSearch version pagination is not supported with hybrid query");
-            }
             Query hybridQuery = extractHybridQuery(searchContext, query);
             QueryPhaseSearcher queryPhaseSearcher = getQueryPhaseSearcher(searchContext);
             queryPhaseSearcher.searchWith(searchContext, searcher, hybridQuery, collectors, hasFilterCollector, hasTimeout);
@@ -78,16 +73,9 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             : defaultQueryPhaseSearcherWithEmptyCollectorContext;
     }
 
-    private static boolean isWrappedHybridQuery(final Query query) {
-        return query instanceof BooleanQuery
-            && ((BooleanQuery) query).clauses().stream().anyMatch(clauseQuery -> clauseQuery.getQuery() instanceof HybridQuery);
-    }
-
     @VisibleForTesting
     protected Query extractHybridQuery(final SearchContext searchContext, final Query query) {
-        if ((hasAliasFilter(query, searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
-            && isWrappedHybridQuery(query)
-            && !((BooleanQuery) query).clauses().isEmpty()) {
+        if (isHybridQueryWrappedInBooleanQuery(searchContext, query)) {
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
             if (!(booleanClauses.get(0).getQuery() instanceof HybridQuery)) {
                 throw new IllegalStateException("cannot process hybrid query due to incorrect structure of top level query");
@@ -97,7 +85,7 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
                 .filter(clause -> BooleanClause.Occur.FILTER == clause.getOccur())
                 .map(BooleanClause::getQuery)
                 .collect(Collectors.toList());
-            HybridQuery hybridQueryWithFilter = new HybridQuery(hybridQuery.getSubQueries(), filterQueries);
+            HybridQuery hybridQueryWithFilter = new HybridQuery(hybridQuery.getSubQueries(), filterQueries, hybridQuery.getQueryContext());
             return hybridQueryWithFilter;
         }
         return query;

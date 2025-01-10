@@ -72,16 +72,19 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
 
         HybridQuery query1 = new HybridQuery(
-            List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext))
+            List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext)),
+            new HybridQueryContext(10)
         );
         HybridQuery query2 = new HybridQuery(
-            List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext))
+            List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext)),
+            new HybridQueryContext(10)
         );
         HybridQuery query3 = new HybridQuery(
             List.of(
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext),
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_ANOTHER_QUERY_TEXT).toQuery(mockQueryShardContext)
-            )
+            ),
+            new HybridQueryContext(10)
         );
         QueryUtils.check(query1);
         QueryUtils.checkEqual(query1, query2);
@@ -96,6 +99,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
             countOfQueries++;
         }
         assertEquals(2, countOfQueries);
+        assertEquals(10, query3.getQueryContext().getPaginationDepth());
     }
 
     @SneakyThrows
@@ -103,6 +107,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        String field1Value = "text1";
 
         Directory directory = newDirectory();
         final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
@@ -120,14 +125,18 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
 
         // Test with TermQuery
         HybridQuery hybridQueryWithTerm = new HybridQuery(
-            List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext))
+            List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext)),
+            new HybridQueryContext(10)
         );
         Query rewritten = hybridQueryWithTerm.rewrite(reader);
         // term query is the same after we rewrite it
         assertSame(hybridQueryWithTerm, rewritten);
 
         // Test empty query list
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> new HybridQuery(List.of()));
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> new HybridQuery(List.of(), new HybridQueryContext(10))
+        );
         assertThat(exception.getMessage(), containsString("collection of queries must not be empty"));
 
         w.close();
@@ -160,7 +169,8 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         IndexSearcher searcher = newSearcher(reader);
 
         HybridQuery query = new HybridQuery(
-            List.of(new TermQuery(new Term(TEXT_FIELD_NAME, field1Value)), new TermQuery(new Term(TEXT_FIELD_NAME, field2Value)))
+            List.of(new TermQuery(new Term(TEXT_FIELD_NAME, field1Value)), new TermQuery(new Term(TEXT_FIELD_NAME, field2Value))),
+            new HybridQueryContext(10)
         );
         // executing search query, getting up to 3 docs in result
         TopDocs hybridQueryResult = searcher.search(query, 3);
@@ -206,7 +216,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         DirectoryReader reader = DirectoryReader.open(w);
         IndexSearcher searcher = newSearcher(reader);
 
-        HybridQuery query = new HybridQuery(List.of(new TermQuery(new Term(TEXT_FIELD_NAME, QUERY_TEXT))));
+        HybridQuery query = new HybridQuery(List.of(new TermQuery(new Term(TEXT_FIELD_NAME, QUERY_TEXT))), new HybridQueryContext(10));
         // executing search query, getting up to 3 docs in result
         TopDocs hybridQueryResult = searcher.search(query, 3);
 
@@ -242,7 +252,8 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         IndexSearcher searcher = newSearcher(reader);
 
         HybridQuery query = new HybridQuery(
-            List.of(new TermQuery(new Term(TEXT_FIELD_NAME, QUERY_TEXT)), new TermQuery(new Term(TEXT_FIELD_NAME, QUERY_TEXT)))
+            List.of(new TermQuery(new Term(TEXT_FIELD_NAME, QUERY_TEXT)), new TermQuery(new Term(TEXT_FIELD_NAME, QUERY_TEXT))),
+            new HybridQueryContext(10)
         );
         // executing search query, getting up to 3 docs in result
         TopDocs hybridQueryResult = searcher.search(query, 3);
@@ -256,8 +267,23 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testWithRandomDocuments_whenNoSubQueries_thenFail() {
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> new HybridQuery(List.of()));
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> new HybridQuery(List.of(), new HybridQueryContext(10))
+        );
         assertThat(exception.getMessage(), containsString("collection of queries must not be empty"));
+    }
+
+    @SneakyThrows
+    public void testWithRandomDocuments_whenPaginationDepthIsZero_thenFail() {
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> new HybridQuery(
+                List.of(new TermQuery(new Term(TEXT_FIELD_NAME, QUERY_TEXT)), new TermQuery(new Term(TEXT_FIELD_NAME, QUERY_TEXT))),
+                new HybridQueryContext(0)
+            )
+        );
+        assertThat(exception.getMessage(), containsString("pagination_depth must not be zero"));
     }
 
     @SneakyThrows
@@ -273,7 +299,8 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
                 new BoolQueryBuilder().should(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT))
                     .should(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_ANOTHER_QUERY_TEXT))
                     .toQuery(mockQueryShardContext)
-            )
+            ),
+            new HybridQueryContext(10)
         );
 
         String queryString = query.toString(TEXT_FIELD_NAME);
@@ -293,7 +320,8 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext),
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_ANOTHER_QUERY_TEXT).toQuery(mockQueryShardContext)
             ),
-            List.of(filter)
+            List.of(filter),
+            new HybridQueryContext(10)
         );
         QueryUtils.check(hybridQuery);
 
