@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import static org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS;
 import static org.opensearch.index.query.AbstractQueryBuilder.BOOST_FIELD;
 import static org.opensearch.index.query.AbstractQueryBuilder.DEFAULT_BOOST;
+import static org.opensearch.index.remote.RemoteStoreEnums.PathType.HASHED_PREFIX;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.FILTER_FIELD;
 import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.K_FIELD;
@@ -33,7 +34,9 @@ import org.apache.lucene.search.TermQuery;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.Version;
+import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.UUIDs;
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Setting;
@@ -50,6 +53,7 @@ import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.IndexSettings;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.MatchAllQueryBuilder;
@@ -57,6 +61,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.index.remote.RemoteStoreEnums;
 import org.opensearch.knn.index.KNNSettings;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.knn.index.VectorDataType;
@@ -119,6 +124,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testDoToQuery_whenOneSubquery_thenBuildSuccessfully() {
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
+        queryBuilder.paginationDepth(10);
         Index dummyIndex = new Index("dummy", "dummy");
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         KNNVectorFieldType mockKNNVectorField = mock(KNNVectorFieldType.class);
@@ -130,6 +136,10 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         when(mockKNNVectorField.getKnnMappingConfig().getDimension()).thenReturn(4);
         when(mockKNNVectorField.getVectorDataType()).thenReturn(VectorDataType.FLOAT);
         when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
+        IndexMetadata indexMetadata = getIndexMetadata();
+        Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(3)).build();
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
+        when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
 
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
             .fieldName(VECTOR_FIELD_NAME)
@@ -154,6 +164,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testDoToQuery_whenMultipleSubqueries_thenBuildSuccessfully() {
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
+        queryBuilder.paginationDepth(10);
         Index dummyIndex = new Index("dummy", "dummy");
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         KNNVectorFieldType mockKNNVectorField = mock(KNNVectorFieldType.class);
@@ -165,6 +176,10 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         when(mockKNNVectorField.getKnnMappingConfig().getDimension()).thenReturn(4);
         when(mockKNNVectorField.getVectorDataType()).thenReturn(VectorDataType.FLOAT);
         when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
+        IndexMetadata indexMetadata = getIndexMetadata();
+        Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(3)).build();
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
+        when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
 
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
             .fieldName(VECTOR_FIELD_NAME)
@@ -199,6 +214,81 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         TermQuery termQuery = (TermQuery) secondQuery;
         assertEquals(TEXT_FIELD_NAME, termQuery.getTerm().field());
         assertEquals(TERM_QUERY_TEXT, termQuery.getTerm().text());
+    }
+
+    @SneakyThrows
+    public void testDoToQuery_whenPaginationDepthIsGreaterThan10000_thenBuildSuccessfully() {
+        HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
+        queryBuilder.paginationDepth(10001);
+        Index dummyIndex = new Index("dummy", "dummy");
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        KNNVectorFieldType mockKNNVectorField = mock(KNNVectorFieldType.class);
+        KNNMappingConfig mockKNNMappingConfig = mock(KNNMappingConfig.class);
+        KNNMethodContext knnMethodContext = new KNNMethodContext(KNNEngine.FAISS, SpaceType.L2, MethodComponentContext.EMPTY);
+        when(mockKNNVectorField.getKnnMappingConfig()).thenReturn(mockKNNMappingConfig);
+        when(mockKNNMappingConfig.getKnnMethodContext()).thenReturn(Optional.of(knnMethodContext));
+        when(mockQueryShardContext.index()).thenReturn(dummyIndex);
+        when(mockKNNVectorField.getKnnMappingConfig().getDimension()).thenReturn(4);
+        when(mockKNNVectorField.getVectorDataType()).thenReturn(VectorDataType.FLOAT);
+        when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
+        IndexMetadata indexMetadata = getIndexMetadata();
+        Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(3)).build();
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
+        when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
+
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(VECTOR_FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .k(K)
+            .vectorSupplier(TEST_VECTOR_SUPPLIER)
+            .build();
+
+        queryBuilder.add(neuralQueryBuilder);
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> queryBuilder.doToQuery(mockQueryShardContext)
+        );
+        assertThat(
+            exception.getMessage(),
+            containsString("pagination_depth should be less than or equal to index.max_result_window setting")
+        );
+    }
+
+    @SneakyThrows
+    public void testDoToQuery_whenPaginationDepthIsLessThanZero_thenBuildSuccessfully() {
+        HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
+        queryBuilder.paginationDepth(-1);
+        Index dummyIndex = new Index("dummy", "dummy");
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        KNNVectorFieldType mockKNNVectorField = mock(KNNVectorFieldType.class);
+        KNNMappingConfig mockKNNMappingConfig = mock(KNNMappingConfig.class);
+        KNNMethodContext knnMethodContext = new KNNMethodContext(KNNEngine.FAISS, SpaceType.L2, MethodComponentContext.EMPTY);
+        when(mockKNNVectorField.getKnnMappingConfig()).thenReturn(mockKNNMappingConfig);
+        when(mockKNNMappingConfig.getKnnMethodContext()).thenReturn(Optional.of(knnMethodContext));
+        when(mockQueryShardContext.index()).thenReturn(dummyIndex);
+        when(mockKNNVectorField.getKnnMappingConfig().getDimension()).thenReturn(4);
+        when(mockKNNVectorField.getVectorDataType()).thenReturn(VectorDataType.FLOAT);
+        when(mockQueryShardContext.fieldMapper(eq(VECTOR_FIELD_NAME))).thenReturn(mockKNNVectorField);
+        IndexMetadata indexMetadata = getIndexMetadata();
+        Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(3)).build();
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
+        when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
+
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(VECTOR_FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .k(K)
+            .vectorSupplier(TEST_VECTOR_SUPPLIER)
+            .build();
+
+        queryBuilder.add(neuralQueryBuilder);
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> queryBuilder.doToQuery(mockQueryShardContext)
+        );
+        assertThat(exception.getMessage(), containsString("pagination_depth should be greater than 0"));
     }
 
     @SneakyThrows
@@ -336,6 +426,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertEquals(2, queryTwoSubQueries.queries().size());
         assertTrue(queryTwoSubQueries.queries().get(0) instanceof NeuralQueryBuilder);
         assertTrue(queryTwoSubQueries.queries().get(1) instanceof TermQueryBuilder);
+        assertEquals(10, queryTwoSubQueries.paginationDepth());
         // verify knn vector query
         NeuralQueryBuilder neuralQueryBuilder = (NeuralQueryBuilder) queryTwoSubQueries.queries().get(0);
         assertEquals(VECTOR_FIELD_NAME, neuralQueryBuilder.fieldName());
@@ -409,6 +500,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testToXContent_whenIncomingJsonIsCorrect_thenSuccessful() {
+        setUpClusterService();
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
         Index dummyIndex = new Index("dummy", "dummy");
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
@@ -537,6 +629,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     public void testHashAndEquals_whenSubQueriesDifferent_thenReturnNotEqual() {
+        setUpClusterService();
         String modelId = "testModelId";
         String fieldName = "fieldTwo";
         String queryText = "query text";
@@ -637,6 +730,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testRewrite_whenMultipleSubQueries_thenReturnBuilderForEachSubQuery() {
+        setUpClusterService();
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
             .fieldName(VECTOR_FIELD_NAME)
@@ -744,6 +838,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testBoost_whenDefaultBoostSet_thenBuildSuccessfully() {
+        setUpClusterService();
         // create query with 6 sub-queries, which is more than current max allowed
         XContentBuilder xContentBuilderWithNonDefaultBoost = XContentFactory.jsonBuilder()
             .startObject()
@@ -794,6 +889,10 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         MappedFieldType fieldType = mock(MappedFieldType.class);
         when(context.fieldMapper(fieldName)).thenReturn(fieldType);
         when(fieldType.typeName()).thenReturn("rank_features");
+        IndexMetadata indexMetadata = getIndexMetadata();
+        Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(3)).build();
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
+        when(context.getIndexSettings()).thenReturn(indexSettings);
 
         // Create HybridQueryBuilder instance (no spy since it's final)
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
@@ -802,6 +901,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             .modelId(modelId)
             .queryTokensSupplier(() -> Map.of("token1", 1.0f, "token2", 0.5f));
         HybridQueryBuilder builder = new HybridQueryBuilder().add(neuralSparseQueryBuilder);
+        builder.paginationDepth(10);
 
         // Build query
         Query query = builder.toQuery(context);
@@ -813,6 +913,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testDoEquals_whenSameParameters_thenEqual() {
+        setUpClusterService();
         // Create neural queries
         NeuralQueryBuilder neuralQueryBuilder1 = NeuralQueryBuilder.builder()
             .fieldName("test")
@@ -893,5 +994,26 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         );
         when(clusterService.getClusterSettings()).thenReturn(new ClusterSettings(Settings.EMPTY, defaultClusterSettings));
         KNNSettings.state().setClusterService(clusterService);
+    }
+
+    private static IndexMetadata getIndexMetadata() {
+        Map<String, String> remoteCustomData = Map.of(
+            RemoteStoreEnums.PathType.NAME,
+            HASHED_PREFIX.name(),
+            RemoteStoreEnums.PathHashAlgorithm.NAME,
+            RemoteStoreEnums.PathHashAlgorithm.FNV_1A_BASE64.name(),
+            IndexMetadata.TRANSLOG_METADATA_KEY,
+            "false"
+        );
+        Settings idxSettings = Settings.builder()
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID())
+            .build();
+        IndexMetadata indexMetadata = new IndexMetadata.Builder("test").settings(idxSettings)
+            .numberOfShards(1)
+            .numberOfReplicas(0)
+            .putCustom(IndexMetadata.REMOTE_STORE_CUSTOM_KEY, remoteCustomData)
+            .build();
+        return indexMetadata;
     }
 }

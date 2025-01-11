@@ -28,6 +28,7 @@ import org.apache.lucene.search.join.ScoreMode;
 import org.junit.Before;
 import org.opensearch.client.ResponseException;
 import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
@@ -793,21 +794,130 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         }
     }
 
-    // TODO remove this test after following issue https://github.com/opensearch-project/neural-search/issues/280 gets resolved.
     @SneakyThrows
-    public void testHybridQuery_whenFromIsSetInSearchRequest_thenFail() {
+    public void testPaginationOnSingleShard_whenConcurrentSearchEnabled_thenSuccessful() {
         try {
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
             initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-            MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
-            HybridQueryBuilder hybridQueryBuilderOnlyTerm = new HybridQueryBuilder();
-            hybridQueryBuilderOnlyTerm.add(matchQueryBuilder);
+            testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, null, null, SEARCH_PIPELINE);
+        }
+    }
 
-            ResponseException exceptionNoNestedTypes = expectThrows(
+    @SneakyThrows
+    public void testPaginationOnSingleShard_whenConcurrentSearchDisabled_thenSuccessful() {
+        try {
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+            testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, null, null, SEARCH_PIPELINE);
+        }
+    }
+
+    @SneakyThrows
+    public void testPaginationOnMultipleShard_whenConcurrentSearchEnabled_thenSuccessful() {
+        try {
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
+            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
+            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+            testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME);
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME, null, null, SEARCH_PIPELINE);
+        }
+    }
+
+    @SneakyThrows
+    public void testPaginationOnMultipleShard_whenConcurrentSearchDisabled_thenSuccessful() {
+        try {
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
+            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+            testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME);
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME, null, null, SEARCH_PIPELINE);
+        }
+    }
+
+    @SneakyThrows
+    public void testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(String indexName) {
+        HybridQueryBuilder hybridQueryBuilderOnlyMatchAll = new HybridQueryBuilder();
+        hybridQueryBuilderOnlyMatchAll.add(new MatchAllQueryBuilder());
+        hybridQueryBuilderOnlyMatchAll.paginationDepth(10);
+
+        Map<String, Object> searchResponseAsMap = search(
+            indexName,
+            hybridQueryBuilderOnlyMatchAll,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            2
+        );
+
+        assertEquals(2, getHitCount(searchResponseAsMap));
+        Map<String, Object> total = getTotalHits(searchResponseAsMap);
+        assertNotNull(total.get("value"));
+        assertEquals(4, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+    }
+
+    @SneakyThrows
+    public void testHybridQuery_whenFromIsGreaterThanZeroAndPaginationDepthIsNotSent_thenSuccessful() {
+        try {
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+            HybridQueryBuilder hybridQueryBuilderOnlyMatchAll = new HybridQueryBuilder();
+            hybridQueryBuilderOnlyMatchAll.add(new MatchAllQueryBuilder());
+
+            Map<String, Object> searchResponseAsMap = search(
+                TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD,
+                hybridQueryBuilderOnlyMatchAll,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null,
+                null,
+                null,
+                false,
+                null,
+                2
+            );
+
+            assertEquals(2, getHitCount(searchResponseAsMap));
+            Map<String, Object> total = getTotalHits(searchResponseAsMap);
+            assertNotNull(total.get("value"));
+            assertEquals(4, total.get("value"));
+            assertNotNull(total.get("relation"));
+            assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, null, null, SEARCH_PIPELINE);
+        }
+    }
+
+    @SneakyThrows
+    public void testHybridQuery_whenFromIsGreaterThanTotalResultCount_thenFail() {
+        try {
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+            HybridQueryBuilder hybridQueryBuilderOnlyMatchAll = new HybridQueryBuilder();
+            hybridQueryBuilderOnlyMatchAll.add(new MatchAllQueryBuilder());
+
+            ResponseException responseException = assertThrows(
                 ResponseException.class,
                 () -> search(
                     TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD,
-                    hybridQueryBuilderOnlyTerm,
+                    hybridQueryBuilderOnlyMatchAll,
                     null,
                     10,
                     Map.of("search_pipeline", SEARCH_PIPELINE),
@@ -816,17 +926,49 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                     null,
                     false,
                     null,
-                    10
+                    5
                 )
-
             );
 
             org.hamcrest.MatcherAssert.assertThat(
-                exceptionNoNestedTypes.getMessage(),
-                allOf(
-                    containsString("In the current OpenSearch version pagination is not supported with hybrid query"),
-                    containsString("illegal_argument_exception")
+                responseException.getMessage(),
+                allOf(containsString("Reached end of search result, increase pagination_depth value to see more results"))
+            );
+        } finally {
+            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, null, null, SEARCH_PIPELINE);
+        }
+    }
+
+    @SneakyThrows
+    public void testHybridQuery_whenPaginationDepthIsOutOfRange_thenFail() {
+        try {
+            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+            HybridQueryBuilder hybridQueryBuilderOnlyMatchAll = new HybridQueryBuilder();
+            hybridQueryBuilderOnlyMatchAll.add(new MatchAllQueryBuilder());
+            hybridQueryBuilderOnlyMatchAll.paginationDepth(100001);
+
+            ResponseException responseException = assertThrows(
+                ResponseException.class,
+                () -> search(
+                    TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD,
+                    hybridQueryBuilderOnlyMatchAll,
+                    null,
+                    10,
+                    Map.of("search_pipeline", SEARCH_PIPELINE),
+                    null,
+                    null,
+                    null,
+                    false,
+                    null,
+                    0
                 )
+            );
+
+            org.hamcrest.MatcherAssert.assertThat(
+                responseException.getMessage(),
+                allOf(containsString("pagination_depth should be less than or equal to index.max_result_window setting"))
             );
         } finally {
             wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, null, null, SEARCH_PIPELINE);
