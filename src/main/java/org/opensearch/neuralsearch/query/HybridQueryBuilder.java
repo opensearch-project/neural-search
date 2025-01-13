@@ -128,9 +128,12 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         if (queryCollection.isEmpty()) {
             return Queries.newMatchNoDocsQuery(String.format(Locale.ROOT, "no clauses for %s query", NAME));
         }
-        validatePaginationDepth(paginationDepth, queryShardContext);
-        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(paginationDepth).build();
-        return new HybridQuery(queryCollection, hybridQueryContext);
+        if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
+            validatePaginationDepth(paginationDepth, queryShardContext);
+            HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(paginationDepth).build();
+            return new HybridQuery(queryCollection, hybridQueryContext);
+        }
+        return new HybridQuery(queryCollection, null);
     }
 
     /**
