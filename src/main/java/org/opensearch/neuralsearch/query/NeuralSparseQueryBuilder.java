@@ -16,10 +16,15 @@ import java.util.function.Supplier;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
+import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
+import org.apache.lucene.analysis.tokenattributes.PayloadAttribute;
 import org.apache.lucene.document.FeatureField;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
+import org.opensearch.OpenSearchException;
 import org.opensearch.Version;
 import org.opensearch.transport.client.Client;
 import org.opensearch.common.SetOnce;
@@ -36,6 +41,7 @@ import org.opensearch.index.query.AbstractQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
+import org.opensearch.neuralsearch.analysis.HFModelTokenizer;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.TextInferenceRequest;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
@@ -75,10 +81,13 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     @VisibleForTesting
     @Deprecated
     static final ParseField MAX_TOKEN_SCORE_FIELD = new ParseField("max_token_score").withAllDeprecated();
+    @VisibleForTesting
+    static final ParseField ANALYZER_FIELD = new ParseField("analyzer");
     private static MLCommonsClientAccessor ML_CLIENT;
     private String fieldName;
     private String queryText;
     private String modelId;
+    private String analyzer;
     private Float maxTokenScore;
     private Supplier<Map<String, Float>> queryTokensSupplier;
     // A field that for neural_sparse_two_phase_processor, if twoPhaseSharedQueryToken is not null,
@@ -94,6 +103,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     private PruneType twoPhasePruneType = PruneType.NONE;
 
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
+    private static final Version MINIMAL_SUPPORTED_VERSION_ANALYZER = Version.V_3_0_0;
 
     public static void initialize(MLCommonsClientAccessor mlClient) {
         NeuralSparseQueryBuilder.ML_CLIENT = mlClient;
@@ -113,6 +123,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             this.modelId = in.readOptionalString();
         } else {
             this.modelId = in.readString();
+        }
+        if (isClusterOnOrAfterMinReqVersionForAnalyzer()) {
+            this.analyzer = in.readOptionalString();
         }
         this.maxTokenScore = in.readOptionalFloat();
         if (in.readBoolean()) {
@@ -141,6 +154,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .queryName(this.queryName)
             .queryText(this.queryText)
             .modelId(this.modelId)
+            .analyzer(this.analyzer)
             .maxTokenScore(this.maxTokenScore)
             .twoPhasePruneRatio(-1f * pruneRatio);
         if (Objects.nonNull(this.queryTokensSupplier)) {
@@ -168,6 +182,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         } else {
             out.writeString(StringUtils.defaultString(this.modelId, StringUtils.EMPTY));
         }
+        if (isClusterOnOrAfterMinReqVersionForAnalyzer()) {
+            out.writeOptionalString(this.analyzer);
+        }
         out.writeOptionalFloat(maxTokenScore);
         if (!Objects.isNull(this.queryTokensSupplier) && !Objects.isNull(this.queryTokensSupplier.get())) {
             out.writeBoolean(true);
@@ -186,6 +203,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         }
         if (Objects.nonNull(modelId)) {
             xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
+        }
+        if (Objects.nonNull(analyzer)) {
+            xContentBuilder.field(ANALYZER_FIELD.getPreferredName(), analyzer);
         }
         if (Objects.nonNull(maxTokenScore)) {
             xContentBuilder.field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), maxTokenScore);
@@ -276,6 +296,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (StringUtils.EMPTY.equals(sparseEncodingQueryBuilder.modelId())) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "%s field can not be empty", MODEL_ID_FIELD.getPreferredName()));
         }
+        if (StringUtils.EMPTY.equals(sparseEncodingQueryBuilder.analyzer())) {
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "%s field can not be empty", ANALYZER_FIELD.getPreferredName()));
+        }
 
         return sparseEncodingQueryBuilder;
     }
@@ -295,6 +318,8 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
                     sparseEncodingQueryBuilder.queryText(parser.text());
                 } else if (MODEL_ID_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     sparseEncodingQueryBuilder.modelId(parser.text());
+                } else if (ANALYZER_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    sparseEncodingQueryBuilder.analyzer(parser.text());
                 } else if (MAX_TOKEN_SCORE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     sparseEncodingQueryBuilder.maxTokenScore(parser.floatValue());
                 } else {
@@ -323,6 +348,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         // 1. It's the queryBuilder built for two-phase, doesn't need any rewrite.
         // 2. It's registerAsyncAction has been registered successful.
         if (Objects.nonNull(queryTokensSupplier)) {
+            return this;
+        }
+        if (Objects.nonNull(analyzer)) {
             return this;
         }
         validateForRewrite(queryText, modelId);
@@ -363,14 +391,36 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         ));
     }
 
+    private Map<String, Float> getQueryTokens(QueryShardContext context) {
+        if (Objects.nonNull(queryTokensSupplier)) {
+            return queryTokensSupplier.get();
+        } else if (Objects.nonNull(analyzer)) {
+            Map<String, Float> queryTokens = new HashMap<>();
+            Analyzer luceneAnalyzer = context.convertToShardContext().getIndexAnalyzers().getAnalyzers().get(this.analyzer);
+            try (TokenStream stream = luceneAnalyzer.tokenStream(fieldName, queryText)) {
+                stream.reset();
+                CharTermAttribute term = stream.addAttribute(CharTermAttribute.class);
+                PayloadAttribute payload = stream.addAttribute(PayloadAttribute.class);
+
+                while (stream.incrementToken()) {
+                    String token = term.toString();
+                    Float weight = Objects.isNull(payload.getPayload()) ? 1 : HFModelTokenizer.bytesToFloat(payload.getPayload().bytes);
+                    queryTokens.put(token, weight);
+                }
+                stream.end();
+            } catch (IOException e) {
+                throw new OpenSearchException("failed to analyze query text. ", e);
+            }
+            return queryTokens;
+        }
+        throw new IllegalArgumentException("Query tokens cannot be null.");
+    }
+
     @Override
     protected Query doToQuery(QueryShardContext context) throws IOException {
         final MappedFieldType ft = context.fieldMapper(fieldName);
         validateFieldType(ft);
-        Map<String, Float> queryTokens = queryTokensSupplier.get();
-        if (Objects.isNull(queryTokens)) {
-            throw new IllegalArgumentException("Query tokens cannot be null.");
-        }
+        Map<String, Float> queryTokens = getQueryTokens(context);
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
         for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
             builder.add(FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()), BooleanClause.Occur.SHOULD);
@@ -447,4 +497,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID);
     }
 
+    private static boolean isClusterOnOrAfterMinReqVersionForAnalyzer() {
+        return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_ANALYZER);
+    }
 }

@@ -8,6 +8,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -66,6 +68,8 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
     private ClusterService clusterService;
     @Mock
     private ThreadPool threadPool;
+    @Mock
+    private Environment environment;
 
     @Before
     public void setup() {
