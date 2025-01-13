@@ -109,9 +109,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             queryBuilder.toXContent(builder, params);
         }
         builder.endArray();
-        if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
-            builder.field(PAGINATION_DEPTH_FIELD.getPreferredName(), paginationDepth == 0 ? DEFAULT_PAGINATION_DEPTH : paginationDepth);
-        }
+        // if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
+        builder.field(PAGINATION_DEPTH_FIELD.getPreferredName(), paginationDepth == 0 ? DEFAULT_PAGINATION_DEPTH : paginationDepth);
+        // }
         printBoostAndQueryName(builder);
         builder.endObject();
     }
@@ -205,12 +205,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                     );
                 }
             } else {
-                if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
-                    if (PAGINATION_DEPTH_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                        paginationDepth = parser.intValue();
-                    }
-                }
-                if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                if (PAGINATION_DEPTH_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    paginationDepth = parser.intValue();
+                } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     boost = parser.floatValue();
                     // regular boost functionality is not supported, user should use score normalization methods to manipulate with scores
                     if (boost != DEFAULT_BOOST) {
@@ -239,9 +236,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         HybridQueryBuilder compoundQueryBuilder = new HybridQueryBuilder();
         compoundQueryBuilder.queryName(queryName);
         compoundQueryBuilder.boost(boost);
-        if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
-            compoundQueryBuilder.paginationDepth(paginationDepth);
-        }
+        // if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
+        compoundQueryBuilder.paginationDepth(paginationDepth);
+        // }
         for (QueryBuilder query : queries) {
             compoundQueryBuilder.add(query);
         }
@@ -261,9 +258,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         if (changed) {
             newBuilder.queryName(queryName);
             newBuilder.boost(boost);
-            if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
-                newBuilder.paginationDepth(paginationDepth);
-            }
+            // if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
+            newBuilder.paginationDepth(paginationDepth);
+            // }
             return newBuilder;
         } else {
             return this;
