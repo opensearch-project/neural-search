@@ -128,12 +128,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         if (queryCollection.isEmpty()) {
             return Queries.newMatchNoDocsQuery(String.format(Locale.ROOT, "no clauses for %s query", NAME));
         }
-        if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
-            validatePaginationDepth(paginationDepth, queryShardContext);
-            HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(paginationDepth).build();
-            return new HybridQuery(queryCollection, hybridQueryContext);
-        }
-        return new HybridQuery(queryCollection, null);
+        validatePaginationDepth(paginationDepth, queryShardContext);
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(paginationDepth).build();
+        return new HybridQuery(queryCollection, hybridQueryContext);
     }
 
     /**
@@ -208,6 +205,11 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                     );
                 }
             } else {
+                if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
+                    if (PAGINATION_DEPTH_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                        paginationDepth = parser.intValue();
+                    }
+                }
                 if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     boost = parser.floatValue();
                     // regular boost functionality is not supported, user should use score normalization methods to manipulate with scores
@@ -217,16 +219,13 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                     }
                 } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     queryName = parser.text();
-                } else if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()
-                    && PAGINATION_DEPTH_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                        paginationDepth = parser.intValue();
-                    } else {
-                        log.error(String.format(Locale.ROOT, "[%s] query does not support [%s]", NAME, currentFieldName));
-                        throw new ParsingException(
-                            parser.getTokenLocation(),
-                            String.format(Locale.ROOT, "Field is not supported by [%s] query", NAME)
-                        );
-                    }
+                } else {
+                    log.error(String.format(Locale.ROOT, "[%s] query does not support [%s]", NAME, currentFieldName));
+                    throw new ParsingException(
+                        parser.getTokenLocation(),
+                        String.format(Locale.ROOT, "Field is not supported by [%s] query", NAME)
+                    );
+                }
             }
         }
 
