@@ -12,6 +12,7 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
+
 import org.opensearch.test.OpenSearchTestCase;
 
 import lombok.SneakyThrows;
@@ -22,7 +23,11 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
 
     public void testEmptyResults_whenEmptyResultsAndDefaultMethod_thenNoProcessing() {
         ScoreNormalizer scoreNormalizationMethod = new ScoreNormalizer();
-        scoreNormalizationMethod.normalizeScores(List.of(), ScoreNormalizationFactory.DEFAULT_METHOD);
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(List.of())
+            .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+            .build();
+        scoreNormalizationMethod.normalizeScores(normalizeScoresDTO);
     }
 
     @SneakyThrows
@@ -36,7 +41,11 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
                 SEARCH_SHARD
             )
         );
-        scoreNormalizationMethod.normalizeScores(queryTopDocs, ScoreNormalizationFactory.DEFAULT_METHOD);
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(queryTopDocs)
+            .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+            .build();
+        scoreNormalizationMethod.normalizeScores(normalizeScoresDTO);
         assertNotNull(queryTopDocs);
         assertEquals(1, queryTopDocs.size());
         CompoundTopDocs resultDoc = queryTopDocs.get(0);
@@ -68,7 +77,11 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
                 SEARCH_SHARD
             )
         );
-        scoreNormalizationMethod.normalizeScores(queryTopDocs, ScoreNormalizationFactory.DEFAULT_METHOD);
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(queryTopDocs)
+            .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+            .build();
+        scoreNormalizationMethod.normalizeScores(normalizeScoresDTO);
         assertNotNull(queryTopDocs);
         assertEquals(1, queryTopDocs.size());
         CompoundTopDocs resultDoc = queryTopDocs.get(0);
@@ -106,7 +119,11 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
                 SEARCH_SHARD
             )
         );
-        scoreNormalizationMethod.normalizeScores(queryTopDocs, ScoreNormalizationFactory.DEFAULT_METHOD);
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(queryTopDocs)
+            .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+            .build();
+        scoreNormalizationMethod.normalizeScores(normalizeScoresDTO);
 
         assertNotNull(queryTopDocs);
         assertEquals(1, queryTopDocs.size());
@@ -177,7 +194,11 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
                 SEARCH_SHARD
             )
         );
-        scoreNormalizationMethod.normalizeScores(queryTopDocs, ScoreNormalizationFactory.DEFAULT_METHOD);
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(queryTopDocs)
+            .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+            .build();
+        scoreNormalizationMethod.normalizeScores(normalizeScoresDTO);
         assertNotNull(queryTopDocs);
         assertEquals(3, queryTopDocs.size());
         // shard one

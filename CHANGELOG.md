@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 2.x](https://github.com/opensearch-project/neural-search/compare/2.18...2.x)
 ### Features
 - Pagination in Hybrid query ([#1048](https://github.com/opensearch-project/neural-search/pull/1048))
+- Implement Reciprocal Rank Fusion score normalization/combination technique in hybrid query ([#874](https://github.com/opensearch-project/neural-search/pull/874))
 ### Enhancements
 - Explainability in hybrid query ([#970](https://github.com/opensearch-project/neural-search/pull/970))
 - Support new knn query parameter expand_nested ([#1013](https://github.com/opensearch-project/neural-search/pull/1013))

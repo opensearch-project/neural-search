@@ -26,6 +26,14 @@ public class ScoreNormalizationFactoryTests extends OpenSearchQueryTestCase {
         assertTrue(scoreNormalizationTechnique instanceof L2ScoreNormalizationTechnique);
     }
 
+    public void testRRFNorm_whenCreatingByName_thenReturnCorrectInstance() {
+        ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
+        ScoreNormalizationTechnique scoreNormalizationTechnique = scoreNormalizationFactory.createNormalization("rrf");
+
+        assertNotNull(scoreNormalizationTechnique);
+        assertTrue(scoreNormalizationTechnique instanceof RRFNormalizationTechnique);
+    }
+
     public void testUnsupportedTechnique_whenPassingInvalidName_thenFail() {
         ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
         IllegalArgumentException illegalArgumentException = expectThrows(
