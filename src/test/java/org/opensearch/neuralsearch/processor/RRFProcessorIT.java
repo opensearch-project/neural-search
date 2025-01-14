@@ -50,9 +50,9 @@ public class RRFProcessorIT extends BaseNeuralSearchIT {
             Map<String, Object> hits = (Map<String, Object>) results.get("hits");
             ArrayList<HashMap<String, Object>> hitsList = (ArrayList<HashMap<String, Object>>) hits.get("hits");
             assertEquals(3, hitsList.size());
-            assertEquals(0.016393442, (Double) hitsList.getFirst().get("_score"), DELTA_FOR_SCORE_ASSERTION);
+            assertEquals(0.016393442, (Double) hitsList.get(0).get("_score"), DELTA_FOR_SCORE_ASSERTION);
             assertEquals(0.016129032, (Double) hitsList.get(1).get("_score"), DELTA_FOR_SCORE_ASSERTION);
-            assertEquals(0.015873017, (Double) hitsList.getLast().get("_score"), DELTA_FOR_SCORE_ASSERTION);
+            assertEquals(0.015873017, (Double) hitsList.get(hitsList.size() - 1).get("_score"), DELTA_FOR_SCORE_ASSERTION);
         } finally {
             wipeOfTestResources(RRF_INDEX_NAME, RRF_INGEST_PIPELINE, null, RRF_SEARCH_PIPELINE);
         }
