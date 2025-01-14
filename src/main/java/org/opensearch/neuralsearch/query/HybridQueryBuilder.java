@@ -109,6 +109,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             queryBuilder.toXContent(builder, params);
         }
         builder.endArray();
+        // TODO https://github.com/opensearch-project/neural-search/issues/1097
         if (Objects.nonNull(paginationDepth)) {
             builder.field(PAGINATION_DEPTH_FIELD.getPreferredName(), paginationDepth);
         }
