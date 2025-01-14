@@ -55,7 +55,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
 
     private final List<QueryBuilder> queries = new ArrayList<>();
 
-    private int paginationDepth;
+    private Integer paginationDepth;
 
     static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
     private final static int DEFAULT_PAGINATION_DEPTH = 10;
@@ -65,7 +65,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         super(in);
         queries.addAll(readQueries(in));
         if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
-            paginationDepth = in.readInt();
+            paginationDepth = in.readOptionalInt();
         }
     }
 
@@ -78,7 +78,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     protected void doWriteTo(StreamOutput out) throws IOException {
         writeQueries(out, queries);
         if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
-            out.writeInt(paginationDepth);
+            out.writeOptionalInt(paginationDepth);
         }
     }
 
@@ -109,9 +109,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             queryBuilder.toXContent(builder, params);
         }
         builder.endArray();
-        // if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
-        builder.field(PAGINATION_DEPTH_FIELD.getPreferredName(), paginationDepth == 0 ? DEFAULT_PAGINATION_DEPTH : paginationDepth);
-        // }
+        builder.field(
+            PAGINATION_DEPTH_FIELD.getPreferredName(),
+            (paginationDepth == null || paginationDepth == 0) ? DEFAULT_PAGINATION_DEPTH : paginationDepth
+        );
         printBoostAndQueryName(builder);
         builder.endObject();
     }
@@ -205,9 +206,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                     );
                 }
             } else {
-                if (PAGINATION_DEPTH_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    paginationDepth = parser.intValue();
-                } else if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                if (AbstractQueryBuilder.BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     boost = parser.floatValue();
                     // regular boost functionality is not supported, user should use score normalization methods to manipulate with scores
                     if (boost != DEFAULT_BOOST) {
@@ -216,6 +215,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                     }
                 } else if (AbstractQueryBuilder.NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     queryName = parser.text();
+                } else if (PAGINATION_DEPTH_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    paginationDepth = parser.intValue();
                 } else {
                     log.error(String.format(Locale.ROOT, "[%s] query does not support [%s]", NAME, currentFieldName));
                     throw new ParsingException(
@@ -236,9 +237,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         HybridQueryBuilder compoundQueryBuilder = new HybridQueryBuilder();
         compoundQueryBuilder.queryName(queryName);
         compoundQueryBuilder.boost(boost);
-        // if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
         compoundQueryBuilder.paginationDepth(paginationDepth);
-        // }
         for (QueryBuilder query : queries) {
             compoundQueryBuilder.add(query);
         }
@@ -258,9 +257,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         if (changed) {
             newBuilder.queryName(queryName);
             newBuilder.boost(boost);
-            // if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
             newBuilder.paginationDepth(paginationDepth);
-            // }
             return newBuilder;
         } else {
             return this;
