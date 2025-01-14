@@ -109,10 +109,12 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             queryBuilder.toXContent(builder, params);
         }
         builder.endArray();
-        builder.field(
-            PAGINATION_DEPTH_FIELD.getPreferredName(),
-            (paginationDepth == null || paginationDepth == 0) ? DEFAULT_PAGINATION_DEPTH : paginationDepth
-        );
+        if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
+            builder.field(
+                PAGINATION_DEPTH_FIELD.getPreferredName(),
+                (paginationDepth == null || paginationDepth == 0) ? DEFAULT_PAGINATION_DEPTH : paginationDepth
+            );
+        }
         printBoostAndQueryName(builder);
         builder.endObject();
     }
@@ -237,7 +239,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         HybridQueryBuilder compoundQueryBuilder = new HybridQueryBuilder();
         compoundQueryBuilder.queryName(queryName);
         compoundQueryBuilder.boost(boost);
-        compoundQueryBuilder.paginationDepth(paginationDepth);
+        if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
+            compoundQueryBuilder.paginationDepth(paginationDepth);
+        }
         for (QueryBuilder query : queries) {
             compoundQueryBuilder.add(query);
         }
