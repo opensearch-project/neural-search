@@ -109,11 +109,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             queryBuilder.toXContent(builder, params);
         }
         builder.endArray();
-        if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
-            builder.field(
-                PAGINATION_DEPTH_FIELD.getPreferredName(),
-                (paginationDepth == null || paginationDepth == 0) ? DEFAULT_PAGINATION_DEPTH : paginationDepth
-            );
+        if (Objects.nonNull(paginationDepth)) {
+            builder.field(PAGINATION_DEPTH_FIELD.getPreferredName(), paginationDepth);
         }
         printBoostAndQueryName(builder);
         builder.endObject();
