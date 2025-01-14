@@ -55,7 +55,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
 
     private final List<QueryBuilder> queries = new ArrayList<>();
 
-    private int paginationDepth;
+    private Integer paginationDepth;
 
     static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
     private final static int DEFAULT_PAGINATION_DEPTH = 10;
@@ -65,7 +65,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         super(in);
         queries.addAll(readQueries(in));
         if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
-            paginationDepth = in.readInt();
+            paginationDepth = in.readOptionalInt();
         }
     }
 
@@ -78,7 +78,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     protected void doWriteTo(StreamOutput out) throws IOException {
         writeQueries(out, queries);
         if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
-            out.writeInt(paginationDepth);
+            out.writeOptionalInt(paginationDepth);
         }
     }
 
@@ -109,8 +109,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             queryBuilder.toXContent(builder, params);
         }
         builder.endArray();
-        if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
-            builder.field(PAGINATION_DEPTH_FIELD.getPreferredName(), paginationDepth == 0 ? DEFAULT_PAGINATION_DEPTH : paginationDepth);
+        if (Objects.nonNull(paginationDepth)) {
+            builder.field(PAGINATION_DEPTH_FIELD.getPreferredName(), paginationDepth);
         }
         printBoostAndQueryName(builder);
         builder.endObject();
@@ -324,6 +324,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     private static void validatePaginationDepth(final int paginationDepth, final QueryShardContext queryShardContext) {
+        if (Objects.isNull(paginationDepth)) {
+            return;
+        }
         if (paginationDepth < LOWER_BOUND_OF_PAGINATION_DEPTH) {
             throw new IllegalArgumentException(
                 String.format(Locale.ROOT, "pagination_depth should be greater than %s", LOWER_BOUND_OF_PAGINATION_DEPTH)
