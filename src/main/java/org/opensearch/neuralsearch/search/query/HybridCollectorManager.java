@@ -491,6 +491,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         if (searchContext.from() == 0) {
             return searchContext.size();
         }
+        log.info("pagination_depth is {}", paginationDepth);
         return paginationDepth;
     }
 
