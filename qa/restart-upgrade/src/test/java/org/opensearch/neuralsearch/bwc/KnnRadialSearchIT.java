@@ -69,7 +69,6 @@ public class KnnRadialSearchIT extends AbstractRestartUpgradeRestTestCase {
             .modelId(modelId)
             .maxDistance(100000f)
             .build();
-
         Map<String, Object> responseWithMaxDistanceQuery = search(getIndexNameForTest(), neuralQueryBuilderWithMaxDistanceQuery, 1);
         assertNotNull(responseWithMaxDistanceQuery);
     }

@@ -93,6 +93,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     );
     private static final Set<RestStatus> SUCCESS_STATUSES = Set.of(RestStatus.CREATED, RestStatus.OK);
     protected static final String CONCURRENT_SEGMENT_SEARCH_ENABLED = "search.concurrent_segment_search.enabled";
+    protected static final String RRF_SEARCH_PIPELINE = "rrf-search-pipeline";
 
     protected final ClassLoader classLoader = this.getClass().getClassLoader();
 
@@ -1554,5 +1555,46 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         TEXT_IMAGE_EMBEDDING,
         SPARSE_ENCODING,
         SPARSE_ENCODING_PRUNE
+    }
+
+    @SneakyThrows
+    protected void createDefaultRRFSearchPipeline() {
+        createRRFSearchPipeline(RRF_SEARCH_PIPELINE, false);
+    }
+
+    @SneakyThrows
+    protected void createRRFSearchPipeline(final String pipelineName, boolean addExplainResponseProcessor) {
+        XContentBuilder builder = XContentFactory.jsonBuilder()
+            .startObject()
+            .field("description", "Post processor for hybrid search")
+            .startArray("phase_results_processors")
+            .startObject()
+            .startObject("score-ranker-processor")
+            .startObject("combination")
+            .field("technique", "rrf")
+            .endObject()
+            .endObject()
+            .endObject()
+            .endArray();
+
+        if (addExplainResponseProcessor) {
+            builder.startArray("response_processors")
+                .startObject()
+                .startObject("hybrid_score_explanation")
+                .endObject()
+                .endObject()
+                .endArray();
+        }
+
+        String requestBody = builder.endObject().toString();
+
+        makeRequest(
+            client(),
+            "PUT",
+            String.format(LOCALE, "/_search/pipeline/%s", pipelineName),
+            null,
+            toHttpEntity(String.format(LOCALE, requestBody)),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
     }
 }

@@ -111,8 +111,9 @@ public class ExplanationResponseProcessor implements SearchResponseProcessor {
                         );
                     }
                     // Create and set final explanation combining all components
+                    Float finalScore = Float.isNaN(searchHit.getScore()) ? 0.0f : searchHit.getScore();
                     Explanation finalExplanation = Explanation.match(
-                        searchHit.getScore(),
+                        finalScore,
                         // combination level explanation is always a single detail
                         combinationExplanation.getScoreDetails().get(0).getValue(),
                         normalizedExplanation

@@ -22,14 +22,12 @@ import org.apache.lucene.search.FieldDoc;
 import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.processor.combination.CombineScoresDto;
-import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.explain.CombinedExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.processor.explain.ExplanationPayload;
-import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
@@ -57,34 +55,14 @@ public class NormalizationProcessorWorkflow {
 
     /**
      * Start execution of this workflow
-     * @param querySearchResults input data with QuerySearchResult from multiple shards
-     * @param normalizationTechnique technique for score normalization
-     * @param combinationTechnique technique for score combination
+     * @param request contains querySearchResults input data with QuerySearchResult
+     * from multiple shards, fetchSearchResultOptional, normalizationTechnique technique for score normalization
+     *  combinationTechnique technique for score combination, and nullable rankConstant only used in RRF technique
      */
-    public void execute(
-        final List<QuerySearchResult> querySearchResults,
-        final Optional<FetchSearchResult> fetchSearchResultOptional,
-        final ScoreNormalizationTechnique normalizationTechnique,
-        final ScoreCombinationTechnique combinationTechnique,
-        final SearchPhaseContext searchPhaseContext
-    ) {
-        NormalizationProcessorWorkflowExecuteRequest request = NormalizationProcessorWorkflowExecuteRequest.builder()
-            .querySearchResults(querySearchResults)
-            .fetchSearchResultOptional(fetchSearchResultOptional)
-            .normalizationTechnique(normalizationTechnique)
-            .combinationTechnique(combinationTechnique)
-            .explain(false)
-            .searchPhaseContext(searchPhaseContext)
-            .build();
-        execute(request);
-    }
-
     public void execute(final NormalizationProcessorWorkflowExecuteRequest request) {
         List<QuerySearchResult> querySearchResults = request.getQuerySearchResults();
         Optional<FetchSearchResult> fetchSearchResultOptional = request.getFetchSearchResultOptional();
-
-        // save original state
-        List<Integer> unprocessedDocIds = unprocessedDocIds(querySearchResults);
+        List<Integer> unprocessedDocIds = unprocessedDocIds(request.getQuerySearchResults());
 
         // pre-process data
         log.debug("Pre-process query results");
@@ -92,9 +70,15 @@ public class NormalizationProcessorWorkflow {
 
         explain(request, queryTopDocs);
 
+        // Data transfer object for score normalization used to pass nullable rankConstant which is only used in RRF
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(queryTopDocs)
+            .normalizationTechnique(request.getNormalizationTechnique())
+            .build();
+
         // normalize
         log.debug("Do score normalization");
-        scoreNormalizer.normalizeScores(queryTopDocs, request.getNormalizationTechnique());
+        scoreNormalizer.normalizeScores(normalizeScoresDTO);
 
         CombineScoresDto combineScoresDTO = CombineScoresDto.builder()
             .queryTopDocs(queryTopDocs)
