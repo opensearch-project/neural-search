@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.bwc.rolling;
+package org.opensearch.neuralsearch.bwc;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -12,8 +12,8 @@ import static org.opensearch.neuralsearch.util.TestUtils.TEXT_IMAGE_EMBEDDING_PR
 import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
-public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
-    private static final String PIPELINE_NAME = "nlp-ingest-pipeline";
+public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
+    private static final String PIPELINE_NAME = "radial-search-pipeline";
     private static final String TEST_FIELD = "passage_text";
     private static final String TEST_IMAGE_FIELD = "passage_image";
     private static final String TEXT = "Hello world";
@@ -26,11 +26,11 @@ public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
     private static final int NUM_DOCS_PER_ROUND = 1;
     private static String modelId = "";
 
-    // Test rolling-upgrade test image embedding processor
+    // Test rolling-upgrade with kNN radial search
     // Create Text Image Embedding Processor, Ingestion Pipeline and add document
-    // Validate process , pipeline and document count in rolling-upgrade scenario
-    public void testTextImageEmbeddingProcessor_E2EFlow() throws Exception {
-        waitForClusterHealthGreen(NODES_BWC_CLUSTER, 90);
+    // Validate radial query, pipeline and document count in rolling-upgrade scenario
+    public void testKnnRadialSearch_E2EFlow() throws Exception {
+        waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         switch (getClusterType()) {
             case OLD:
                 modelId = uploadTextImageEmbeddingModel();
@@ -48,11 +48,11 @@ public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
-                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, TEXT, TEST_IMAGE_TEXT);
+                    validateIndexQueryOnUpgrade(totalDocsCountMixed, modelId, TEXT, TEST_IMAGE_TEXT);
                     addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_MIXED, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_MIXED);
                 } else {
                     totalDocsCountMixed = 2 * NUM_DOCS_PER_ROUND;
-                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, TEXT_MIXED, TEST_IMAGE_TEXT_MIXED);
+                    validateIndexQueryOnUpgrade(totalDocsCountMixed, modelId, TEXT_MIXED, TEST_IMAGE_TEXT_MIXED);
                 }
                 break;
             case UPGRADED:
@@ -61,7 +61,7 @@ public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
                     int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
                     loadModel(modelId);
                     addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_UPGRADED);
-                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, TEXT_UPGRADED, TEST_IMAGE_TEXT_UPGRADED);
+                    validateIndexQueryOnUpgrade(totalDocsCountUpgraded, modelId, TEXT_UPGRADED, TEST_IMAGE_TEXT_UPGRADED);
                 } finally {
                     wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
                 }
@@ -71,20 +71,32 @@ public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
         }
     }
 
-    private void validateTestIndexOnUpgrade(final int numberOfDocs, final String modelId, final String text, final String imageText)
+    private void validateIndexQueryOnUpgrade(final int numberOfDocs, final String modelId, final String text, final String imageText)
         throws Exception {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
         loadModel(modelId);
-        NeuralQueryBuilder neuralQueryBuilderWithKQuery = NeuralQueryBuilder.builder()
+
+        NeuralQueryBuilder neuralQueryBuilderWithMinScoreQuery = NeuralQueryBuilder.builder()
             .fieldName("passage_embedding")
             .queryText(text)
             .queryImage(imageText)
             .modelId(modelId)
-            .k(1)
+            .minScore(0.01f)
             .build();
 
-        Map<String, Object> responseWithKQuery = search(getIndexNameForTest(), neuralQueryBuilderWithKQuery, 1);
-        assertNotNull(responseWithKQuery);
+        Map<String, Object> responseWithMinScore = search(getIndexNameForTest(), neuralQueryBuilderWithMinScoreQuery, 1);
+        assertNotNull(responseWithMinScore);
+
+        NeuralQueryBuilder neuralQueryBuilderWithMaxDistanceQuery = NeuralQueryBuilder.builder()
+            .fieldName("passage_embedding")
+            .queryText(text)
+            .queryImage(imageText)
+            .modelId(modelId)
+            .maxDistance(100000f)
+            .build();
+
+        Map<String, Object> responseWithMaxScore = search(getIndexNameForTest(), neuralQueryBuilderWithMaxDistanceQuery, 1);
+        assertNotNull(responseWithMaxScore);
     }
 }

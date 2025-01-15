@@ -76,40 +76,40 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
     // because these features were released in 2.11 version.
     if (versionsBelow2_11.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.MultiModalSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.HybridSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.NeuralSparseSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.NeuralQueryEnricherProcessorIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.*"
         }
     }
 
     // Excluding the these tests because we introduce them in 2.13
     if (versionsBelow2_13.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.NeuralQueryEnricherProcessorIT.testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.TextChunkingProcessorIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.TextChunkingProcessorIT.*"
         }
     }
 
     // Excluding the k-NN radial search tests because we introduce this feature in 2.14
     if (versionsBelow2_14.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.KnnRadialSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.KnnRadialSearchIT.*"
         }
     }
 
     // Excluding the NeuralSparseQuery two-phase search pipeline tests because we introduce this feature in 2.15
     if (versionsBelow2_15.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.NeuralSparseTwoPhaseProcessorIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.HybridSearchWithRescoreIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseTwoPhaseProcessorIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchWithRescoreIT.*"
         }
     }
 
     // Excluding the batching processor tests because we introduce this feature in 2.16
     if (versionsBelow2_16.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.BatchIngestionIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.BatchIngestionIT.*"
         }
     }
 
@@ -141,40 +141,40 @@ task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
     // because these features were released in 2.11 version.
     if (versionsBelow2_11.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.MultiModalSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.HybridSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.NeuralSparseSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.NeuralQueryEnricherProcessorIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.MultiModalSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.*"
         }
     }
 
     // Excluding these tests because we introduce them in 2.13
     if (versionsBelow2_13.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.NeuralQueryEnricherProcessorIT.testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.TextChunkingProcessorIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralQueryEnricherProcessorIT.testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.TextChunkingProcessorIT.*"
         }
     }
 
     // Excluding the k-NN radial search tests because we introduce this feature in 2.14
     if (versionsBelow2_14.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.KnnRadialSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.KnnRadialSearchIT.*"
         }
     }
 
     // Excluding the NeuralSparseQuery two-phase search pipeline tests because we introduce this feature in 2.15
     if (versionsBelow2_15.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.NeuralSparseTwoPhaseProcessorIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.HybridSearchWithRescoreIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.NeuralSparseTwoPhaseProcessorIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.HybridSearchWithRescoreIT.*"
         }
     }
 
     // Excluding the batch processor tests because we introduce this feature in 2.16
     if (versionsBelow2_16.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.BatchIngestionIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.BatchIngestionIT.*"
         }
     }
 

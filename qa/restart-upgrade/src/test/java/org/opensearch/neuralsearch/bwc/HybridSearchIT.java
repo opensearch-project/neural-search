@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.bwc.restart;
+package org.opensearch.neuralsearch.bwc;
 
 import java.io.IOException;
 import java.nio.file.Files;
