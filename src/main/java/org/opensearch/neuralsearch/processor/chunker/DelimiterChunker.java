@@ -16,12 +16,25 @@ import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterPars
  */
 public final class DelimiterChunker implements Chunker {
 
+    /**
+     * The identifier for the delimiter chunking algorithm.
+     */
     public static final String ALGORITHM_NAME = "delimiter";
 
+    /**
+     * The parameter field name for specifying the delimiter.
+     */
     public static final String DELIMITER_FIELD = "delimiter";
 
+    /**
+     * The default delimiter value used when none is specified.
+     * Uses two consecutive newline characters to split on paragraph boundaries.
+     */
     public static final String DEFAULT_DELIMITER = "\n\n";
 
+    /**
+     * The delimiter string used for text chunking.
+     */
     private String delimiter;
 
     public DelimiterChunker(final Map<String, Object> parameters) {
