@@ -49,6 +49,7 @@ public interface Chunker {
      * @param chunkResultSize the size of chunking result
      * @param runtimeMaxChunkLimit runtime max_chunk_limit, used to check with chunkResultSize
      * @param chunkStringCount runtime chunk_string_count, used to check with chunkResultSize
+     * @return true if adding the new chunks would exceed the limit, false otherwise
      */
     static boolean checkRunTimeMaxChunkLimit(int chunkResultSize, int runtimeMaxChunkLimit, int chunkStringCount) {
         return runtimeMaxChunkLimit != DISABLED_MAX_CHUNK_LIMIT && chunkResultSize + chunkStringCount >= runtimeMaxChunkLimit;
