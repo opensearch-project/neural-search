@@ -2,14 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.bwc;
-
-import org.opensearch.index.query.MatchQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.knn.index.query.rescore.RescoreContext;
-import org.opensearch.neuralsearch.query.HybridQueryBuilder;
-import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+package org.opensearch.neuralsearch.bwc.rolling;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import org.opensearch.index.query.MatchQueryBuilder;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
 import static org.opensearch.neuralsearch.util.TestUtils.TEXT_EMBEDDING_PROCESSOR;
@@ -25,10 +19,15 @@ import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_M
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 
-public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.knn.index.query.rescore.RescoreContext;
+import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
-    private static final String PIPELINE_NAME = "nlp-hybrid-with-rescore-pipeline";
-    private static final String SEARCH_PIPELINE_NAME = "nlp-search-with_rescore-pipeline";
+public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
+
+    private static final String PIPELINE_NAME = "nlp-hybrid-pipeline";
+    private static final String SEARCH_PIPELINE_NAME = "nlp-search-pipeline";
     private static final String TEST_FIELD = "passage_text";
     private static final String TEXT = "Hello world";
     private static final String TEXT_MIXED = "Hi planet";
@@ -39,10 +38,10 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
     protected static final String RESCORE_QUERY = "hi";
     private static String modelId = "";
 
-    /**
-     * Test normalization with hybrid query and rescore. This test is required as rescore will not be compatible with version lower than 2.15
-     */
-    public void testHybridQueryWithRescore_whenIndexWithMultipleShards_E2EFlow() throws Exception {
+    // Test rolling-upgrade normalization processor when index with multiple shards
+    // Create Text Embedding Processor, Ingestion Pipeline, add document and search pipeline with noramlization processor
+    // Validate process , pipeline and document count in rolling-upgrade scenario
+    public void testNormalizationProcessor_whenIndexWithMultipleShards_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         switch (getClusterType()) {
             case OLD:
@@ -67,13 +66,12 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
-                    HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null);
-                    QueryBuilder rescorer = QueryBuilders.matchQuery(TEST_FIELD, RESCORE_QUERY).boost(0.3f);
-                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, hybridQueryBuilder, rescorer);
+                    HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null, null);
+                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, hybridQueryBuilder, null);
                     addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_MIXED, null, null);
                 } else {
                     totalDocsCountMixed = 2 * NUM_DOCS_PER_ROUND;
-                    HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null);
+                    HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null, null);
                     validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, hybridQueryBuilder, null);
                 }
                 break;
@@ -83,11 +81,10 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
                     int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
                     loadModel(modelId);
                     addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, null, null);
-                    HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null);
-                    QueryBuilder rescorer = QueryBuilders.matchQuery(TEST_FIELD, RESCORE_QUERY).boost(0.3f);
-                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, hybridQueryBuilder, rescorer);
-                    hybridQueryBuilder = getQueryBuilder(modelId, Map.of("ef_search", 100), RescoreContext.getDefault());
-                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, hybridQueryBuilder, rescorer);
+                    HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null, null);
+                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, hybridQueryBuilder, null);
+                    hybridQueryBuilder = getQueryBuilder(modelId, Boolean.FALSE, Map.of("ef_search", 100), RescoreContext.getDefault());
+                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, hybridQueryBuilder, null);
                 } finally {
                     wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, SEARCH_PIPELINE_NAME);
                 }
@@ -124,6 +121,7 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
 
     private HybridQueryBuilder getQueryBuilder(
         final String modelId,
+        final Boolean expandNestedDocs,
         final Map<String, ?> methodParameters,
         final RescoreContext rescoreContextForNeuralQuery
     ) {
@@ -133,6 +131,9 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
             .queryText(QUERY)
             .k(5)
             .build();
+        if (expandNestedDocs != null) {
+            neuralQueryBuilder.expandNested(expandNestedDocs);
+        }
         if (methodParameters != null) {
             neuralQueryBuilder.methodParameters(methodParameters);
         }
