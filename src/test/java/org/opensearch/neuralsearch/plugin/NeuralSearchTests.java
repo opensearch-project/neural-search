@@ -27,8 +27,10 @@ import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
+import org.opensearch.neuralsearch.processor.RRFProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
+import org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory;
 import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
@@ -143,12 +145,19 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         Map<String, org.opensearch.search.pipeline.Processor.Factory<SearchPhaseResultsProcessor>> searchPhaseResultsProcessors = plugin
             .getSearchPhaseResultsProcessors(searchParameters);
         assertNotNull(searchPhaseResultsProcessors);
-        assertEquals(1, searchPhaseResultsProcessors.size());
+        assertEquals(2, searchPhaseResultsProcessors.size());
+        // assert normalization processor conditions
         assertTrue(searchPhaseResultsProcessors.containsKey("normalization-processor"));
         org.opensearch.search.pipeline.Processor.Factory<SearchPhaseResultsProcessor> scoringProcessor = searchPhaseResultsProcessors.get(
             NormalizationProcessor.TYPE
         );
         assertTrue(scoringProcessor instanceof NormalizationProcessorFactory);
+        // assert rrf processor conditions
+        assertTrue(searchPhaseResultsProcessors.containsKey("score-ranker-processor"));
+        org.opensearch.search.pipeline.Processor.Factory<SearchPhaseResultsProcessor> rankingProcessor = searchPhaseResultsProcessors.get(
+            RRFProcessor.TYPE
+        );
+        assertTrue(rankingProcessor instanceof RRFProcessorFactory);
     }
 
     public void testGetSettings() {
