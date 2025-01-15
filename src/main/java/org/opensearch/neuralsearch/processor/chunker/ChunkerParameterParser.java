@@ -19,8 +19,12 @@ public final class ChunkerParameterParser {
     private ChunkerParameterParser() {} // no instance of this util class
 
     /**
-     * Parse String type parameter.
-     * Throw IllegalArgumentException if parameter is not a string or an empty string.
+     * Parses and validates a string parameter from the parameters map.
+     *
+     * @param parameters The map containing chunking parameters
+     * @param fieldName The name of the field to extract from the parameters map
+     * @return The validated string value from the parameters map
+     * @throws IllegalArgumentException if the parameter is not a string or is empty
      */
     public static String parseString(final Map<String, Object> parameters, final String fieldName) {
         Object fieldValue = parameters.get(fieldName);
@@ -36,9 +40,13 @@ public final class ChunkerParameterParser {
     }
 
     /**
-     * Parse String type parameter.
-     * Return default value if the parameter is missing.
-     * Throw IllegalArgumentException if parameter is not a string or an empty string.
+     * Parses and validates a string parameter from the parameters map with fallback to a default value.
+     *
+     * @param parameters The map containing chunking parameters
+     * @param fieldName The name of the field to extract from the parameters map
+     * @param defaultValue The default value to return if the parameter is not present
+     * @return The validated string value from the parameters map if present, otherwise the default value
+     * @throws IllegalArgumentException if the parameter is present but is not a string or is empty
      */
     public static String parseStringWithDefault(final Map<String, Object> parameters, final String fieldName, final String defaultValue) {
         if (!parameters.containsKey(fieldName)) {
@@ -49,8 +57,12 @@ public final class ChunkerParameterParser {
     }
 
     /**
-     * Parse integer type parameter with default value.
-     * Throw IllegalArgumentException if the parameter is not an integer.
+     * Parses and validates an integer value from the parameters map.
+     *
+     * @param parameters The map containing chunking parameters
+     * @param fieldName The name of the field to extract from the parameters map
+     * @return The parsed integer value from the parameters map
+     * @throws IllegalArgumentException if the parameter is not an integer or is empty
      */
     public static int parseInteger(final Map<String, Object> parameters, final String fieldName) {
         String fieldValueString = parameters.get(fieldName).toString();
@@ -64,9 +76,13 @@ public final class ChunkerParameterParser {
     }
 
     /**
-     * Parse integer type parameter with default value.
-     * Return default value if the parameter is missing.
-     * Throw IllegalArgumentException if the parameter is not an integer.
+     * Parses and validates an integer parameter from the parameters map with fallback to a default value.
+     *
+     * @param parameters The map containing chunking parameters
+     * @param fieldName The name of the field to extract from the parameters map
+     * @param defaultValue The default value to return if the parameter is not present
+     * @return The integer value from the parameters map if present, otherwise the default value
+     * @throws IllegalArgumentException if the parameter is present but cannot be converted to an integer
      */
     public static int parseIntegerWithDefault(final Map<String, Object> parameters, final String fieldName, final int defaultValue) {
         if (!parameters.containsKey(fieldName)) {
@@ -77,9 +93,12 @@ public final class ChunkerParameterParser {
     }
 
     /**
-     * Parse integer type parameter with positive value.
-     * Return default value if the parameter is missing.
-     * Throw IllegalArgumentException if the parameter is not a positive integer.
+     * Parses and validates a positive integer parameter from the parameters map.
+     *
+     * @param parameters The map containing chunking parameters
+     * @param fieldName The name of the field to extract from the parameters map
+     * @return The parsed positive integer value
+     * @throws IllegalArgumentException if the parameter is not a positive integer or cannot be converted to an integer
      */
     public static int parsePositiveInteger(final Map<String, Object> parameters, final String fieldName) {
         int fieldValueInt = parseInteger(parameters, fieldName);
@@ -90,9 +109,13 @@ public final class ChunkerParameterParser {
     }
 
     /**
-     * Parse integer type parameter with positive value.
-     * Return default value if the parameter is missing.
-     * Throw IllegalArgumentException if the parameter is not a positive integer.
+     * Parses and validates a positive integer parameter from the parameters map with fallback to a default value.
+     *
+     * @param parameters The map containing chunking parameters
+     * @param fieldName The name of the field to extract from the parameters map
+     * @param defaultValue The default value to return if the parameter is not present
+     * @return The positive integer value from the parameters map if present, otherwise the default value
+     * @throws IllegalArgumentException if the parameter is present but is not a positive integer
      */
     public static int parsePositiveIntegerWithDefault(
         final Map<String, Object> parameters,
@@ -107,8 +130,12 @@ public final class ChunkerParameterParser {
     }
 
     /**
-     * Parse double type parameter.
-     * Throw IllegalArgumentException if parameter is not a double.
+     * Parses and validates a double value from the parameters map.
+     *
+     * @param parameters The map containing chunking parameters
+     * @param fieldName The name of the field to extract from the parameters map
+     * @return The parsed double value
+     * @throws IllegalArgumentException if the parameter cannot be converted to a double
      */
     public static double parseDouble(final Map<String, Object> parameters, final String fieldName) {
         String fieldValueString = parameters.get(fieldName).toString();
@@ -122,9 +149,13 @@ public final class ChunkerParameterParser {
     }
 
     /**
-     * Parse double type parameter.
-     * Return default value if the parameter is missing.
-     * Throw IllegalArgumentException if parameter is not a double.
+     * Parses and validates a double value from the parameters map with fallback to a default value.
+     *
+     * @param parameters The map containing chunking parameters
+     * @param fieldName The name of the field to extract from the parameters map
+     * @param defaultValue The default value to return if the parameter is not present
+     * @return The double value from the parameters map if present, otherwise the default value
+     * @throws IllegalArgumentException if the parameter is present but cannot be converted to a double
      */
     public static double parseDoubleWithDefault(final Map<String, Object> parameters, final String fieldName, final double defaultValue) {
         if (!parameters.containsKey(fieldName)) {
