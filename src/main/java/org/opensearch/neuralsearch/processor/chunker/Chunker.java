@@ -13,9 +13,16 @@ import java.util.List;
  */
 public interface Chunker {
 
+    /** Field name for specifying the maximum chunk limit in the configuration. */
     String MAX_CHUNK_LIMIT_FIELD = "max_chunk_limit";
+
+    /** Field name for tracking the count of chunked strings. */
     String CHUNK_STRING_COUNT_FIELD = "chunk_string_count";
+
+    /** Default maximum number of chunks allowed (100). */
     int DEFAULT_MAX_CHUNK_LIMIT = 100;
+
+    /** Special value (-1) indicating that chunk limiting is disabled. */
     int DISABLED_MAX_CHUNK_LIMIT = -1;
 
     /**
