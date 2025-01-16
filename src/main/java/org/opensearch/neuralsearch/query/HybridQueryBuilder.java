@@ -59,7 +59,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
 
     static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
     private final static int DEFAULT_PAGINATION_DEPTH = 10;
-    private static final int LOWER_BOUND_OF_PAGINATION_DEPTH = 0;
+    private static final int LOWER_BOUND_OF_PAGINATION_DEPTH = 1;
 
     public HybridQueryBuilder(StreamInput in) throws IOException {
         super(in);
