@@ -25,8 +25,16 @@ public final class ChunkerFactory {
         DelimiterChunker::new
     );
 
+    /** Set of supported chunker algorithm types */
     public static Set<String> CHUNKER_ALGORITHMS = CHUNKERS_CONSTRUCTORS.keySet();
 
+    /**
+     * Creates a new Chunker instance based on the specified type and parameters.
+     *
+     * @param type the type of chunker to create
+     * @param parameters configuration parameters for the chunker
+     * @return a new Chunker instance configured with the given parameters
+     */
     public static Chunker create(final String type, final Map<String, Object> parameters) {
         Function<Map<String, Object>, Chunker> chunkerConstructionFunction = CHUNKERS_CONSTRUCTORS.get(type);
         // chunkerConstructionFunction is not null because we have validated the type in text chunking processor
