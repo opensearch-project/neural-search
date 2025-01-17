@@ -94,11 +94,6 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     // it means it's origin NeuralSparseQueryBuilder and should split the low score tokens form itself then put it into
     // twoPhaseSharedQueryToken.
     private Map<String, Float> twoPhaseSharedQueryToken;
-    // A parameter with a default value 0F,
-    // 1. If the query request are using neural_sparse_two_phase_processor and be collected,
-    // It's value will be the ratio of processor.
-    // 2. If it's the sub query only build for two-phase, the value will be set to -1 * ratio of processor.
-    // Then in the DoToQuery, we can use this to determine which type are this queryBuilder.
     private NeuralSparseQueryTwoPhaseInfo neuralSparseQueryTwoPhaseInfo = new NeuralSparseQueryTwoPhaseInfo();
 
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
@@ -167,7 +162,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     }
 
     /**
-     * Copy this QueryBuilder for two phase rescorer, set the copy one's twoPhasePruneRatio to -1.
+     * Copy this QueryBuilder for two phase rescorer.
      * @param pruneRatio the parameter of the NeuralSparseTwoPhaseProcessor, control how to split the queryTokens to two phase.
      * @return A copy NeuralSparseQueryBuilder for twoPhase, it will be added to the rescorer.
      */
@@ -184,7 +179,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .analyzer(this.analyzer)
             .maxTokenScore(this.maxTokenScore)
             .neuralSparseQueryTwoPhaseInfo(
-                new NeuralSparseQueryTwoPhaseInfo(NeuralSparseQueryTwoPhaseInfo.TwoPhaseStatus.CHILD, pruneRatio * -1f, pruneType)
+                new NeuralSparseQueryTwoPhaseInfo(NeuralSparseQueryTwoPhaseInfo.TwoPhaseStatus.CHILD, pruneRatio, pruneType)
             );
         if (Objects.nonNull(this.queryTokensSupplier)) {
             Map<String, Float> tokens = queryTokensSupplier.get();
@@ -398,7 +393,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     }
 
     private Map<String, Float> getQueryTokens(QueryShardContext context) {
-        if (Objects.nonNull(queryTokensSupplier)) {
+        if (Objects.nonNull(queryTokensSupplier) && !queryTokensSupplier.get().isEmpty()) {
             return queryTokensSupplier.get();
         } else if (Objects.nonNull(analyzer)) {
             Map<String, Float> queryTokens = new HashMap<>();
@@ -417,7 +412,19 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             } catch (IOException e) {
                 throw new OpenSearchException("failed to analyze query text. ", e);
             }
-            return queryTokens;
+            return switch (neuralSparseQueryTwoPhaseInfo.getStatus()) {
+                case NeuralSparseQueryTwoPhaseInfo.TwoPhaseStatus.CHILD -> PruneUtils.splitSparseVector(
+                    neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneType(),
+                    neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneRatio(),
+                    queryTokens
+                ).v2();
+                case NeuralSparseQueryTwoPhaseInfo.TwoPhaseStatus.PARENT -> PruneUtils.splitSparseVector(
+                    neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneType(),
+                    neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneRatio(),
+                    queryTokens
+                ).v1();
+                default -> queryTokens;
+            };
         }
         throw new IllegalArgumentException("Query tokens cannot be null.");
     }
