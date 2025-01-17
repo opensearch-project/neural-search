@@ -757,6 +757,90 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         }
     }
 
+    public void testRerank_reranksHits_WhenTargetFieldIsNumericalString() throws IOException {
+        String targetField = "ml.info.score";
+        setUpValidSearchResultsWithNestedTargetValueWithNumericalString();
+        List<Map.Entry<Integer, Float>> sortedScoresDescending = sampleIndexMLScorePairs.stream()
+            .sorted(Map.Entry.<Integer, Float>comparingByValue().reversed())
+            .toList();
+
+        Map<String, Object> config = new HashMap<>(
+            Map.of(RerankType.BY_FIELD.getLabel(), new HashMap<>(Map.of(ByFieldRerankProcessor.TARGET_FIELD, targetField)))
+        );
+        processor = (ByFieldRerankProcessor) factory.create(
+            Map.of(),
+            "rerank processor",
+            "processor for 2nd level reranking based on provided field, This will check a nested field and numerical string",
+            false,
+            config,
+            pipelineContext
+        );
+        ActionListener<SearchResponse> listener = mock(ActionListener.class);
+        processor.rerank(response, Map.of(), listener);
+        ArgumentCaptor<SearchResponse> argCaptor = ArgumentCaptor.forClass(SearchResponse.class);
+
+        verify(listener, times(1)).onResponse(argCaptor.capture());
+        SearchResponse searchResponse = argCaptor.getValue();
+
+        assertEquals(sampleIndexMLScorePairs.size(), searchResponse.getHits().getHits().length);
+        assertEquals(sortedScoresDescending.getFirst().getValue(), searchResponse.getHits().getMaxScore(), 0.0001);
+
+        for (int i = 0; i < sortedScoresDescending.size(); i++) {
+            int docId = sortedScoresDescending.get(i).getKey();
+            float ml_score = sortedScoresDescending.get(i).getValue();
+            assertEquals(docId, searchResponse.getHits().getAt(i).docId());
+            assertEquals(ml_score, searchResponse.getHits().getAt(i).getScore(), 0.001);
+
+            // Test that the path to targetField is valid
+            Map<String, Object> currentMap = searchResponse.getHits().getAt(i).getSourceAsMap();
+            String[] keys = targetField.split("\\.");
+            String lastKey = keys[keys.length - 1];
+            for (int keyIndex = 0; keyIndex < keys.length - 1; keyIndex++) {
+                String key = keys[keyIndex];
+                assertTrue("The key:" + key + "does not exist in" + currentMap, currentMap.containsKey(key));
+                currentMap = (Map<String, Object>) currentMap.get(key);
+            }
+            assertTrue("The key:" + lastKey + "does not exist in" + currentMap, currentMap.containsKey(lastKey));
+
+        }
+    }
+
+    /**
+     * Setups a search response that has a target field with a numerical string for example "3.2"
+     * Which can be used by the processor to rerank documents.
+     */
+    private void setUpValidSearchResultsWithNestedTargetValueWithNumericalString() {
+        SearchHit[] hits = new SearchHit[sampleIndexMLScorePairs.size()];
+
+        String templateString = """
+            {
+               "my_field" : "%s",
+               "ml": {
+                    "info"  : {
+                         "score": "%s"
+                    }
+               }
+            }
+            """.replace("\n", "");
+
+        for (int i = 0; i < sampleIndexMLScorePairs.size(); i++) {
+            int docId = sampleIndexMLScorePairs.get(i).getKey();
+            String mlScore = sampleIndexMLScorePairs.get(i).getValue() + "";
+
+            String sourceMap = templateString.formatted(i, mlScore);
+
+            hits[i] = new SearchHit(docId, docId + "", Collections.emptyMap(), Collections.emptyMap());
+            hits[i].sourceRef(new BytesArray(sourceMap));
+            hits[i].score(1);
+        }
+
+        TotalHits totalHits = new TotalHits(sampleIndexMLScorePairs.size(), TotalHits.Relation.EQUAL_TO);
+
+        SearchHits searchHits = new SearchHits(hits, totalHits, 1.0f);
+        SearchResponseSections internal = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        response = new SearchResponse(internal, null, 1, 1, 0, 1, new ShardSearchFailure[0], new SearchResponse.Clusters(1, 1, 0), null);
+    }
+
     /**
      * Creates a searchResponse where the value to reRank by is Nested.
      * The location where the target is within a map of size 1 meaning after
@@ -891,7 +975,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         ArgumentCaptor<Exception> argumentCaptor = ArgumentCaptor.forClass(Exception.class);
         verify(listener, times(1)).onFailure(argumentCaptor.capture());
 
-        assertEquals("There is no source field to be able to perform rerank on hit [" + 1 + "]", argumentCaptor.getValue().getMessage());
+        assertEquals("There is no source field to be able to perform rerank on hit [" + 2 + "]", argumentCaptor.getValue().getMessage());
         assert (argumentCaptor.getValue() instanceof IllegalArgumentException);
     }
 
@@ -929,7 +1013,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         ArgumentCaptor<Exception> argumentCaptor = ArgumentCaptor.forClass(Exception.class);
         verify(listener, times(1)).onFailure(argumentCaptor.capture());
 
-        assertEquals("The field to rerank by is not found at hit [" + 1 + "]", argumentCaptor.getValue().getMessage());
+        assertEquals("The field to rerank by is not found at hit [" + 2 + "]", argumentCaptor.getValue().getMessage());
         assert (argumentCaptor.getValue() instanceof IllegalArgumentException);
     }
 
@@ -969,7 +1053,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         ArgumentCaptor<Exception> argumentCaptor = ArgumentCaptor.forClass(Exception.class);
         verify(listener, times(1)).onFailure(argumentCaptor.capture());
 
-        assertEquals("The field to rerank by is not found at hit [" + 1 + "]", argumentCaptor.getValue().getMessage());
+        assertEquals("The field to rerank by is not found at hit [" + 2 + "]", argumentCaptor.getValue().getMessage());
         assert (argumentCaptor.getValue() instanceof IllegalArgumentException);
     }
 
@@ -1007,7 +1091,10 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         ArgumentCaptor<Exception> argumentCaptor = ArgumentCaptor.forClass(Exception.class);
         verify(listener, times(1)).onFailure(argumentCaptor.capture());
 
-        assertEquals("The field mapping to rerank by [hello world] is not Numerical", argumentCaptor.getValue().getMessage());
+        assertEquals(
+            "The field mapping to rerank by [hello world] is not Numerical, instead of type [String]",
+            argumentCaptor.getValue().getMessage()
+        );
         assert (argumentCaptor.getValue() instanceof IllegalArgumentException);
 
     }
