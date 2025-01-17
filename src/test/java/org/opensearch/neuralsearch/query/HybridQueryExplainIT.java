@@ -37,10 +37,10 @@ import static org.opensearch.neuralsearch.util.TestUtils.getTotalHits;
 import static org.opensearch.neuralsearch.util.TestUtils.getValueByKey;
 
 public class HybridQueryExplainIT extends BaseNeuralSearchIT {
-    private static final String TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME = "test-hybrid-vector-doc-field-index";
-    private static final String TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME = "test-hybrid-multi-doc-nested-fields-index";
-    private static final String TEST_MULTI_DOC_INDEX_NAME = "test-hybrid-multi-doc-index";
-    private static final String TEST_LARGE_DOCS_INDEX_NAME = "test-hybrid-large-docs-index";
+    private static final String TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME = "test-hybrid-index-explain";
+    private static final String TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME = "test-hybrid-index-explain";
+    private static final String TEST_MULTI_DOC_INDEX_NAME = "test-hybrid-multi-doc-index-explain";
+    private static final String TEST_LARGE_DOCS_INDEX_NAME = "test-hybrid-large-docs-index-explain";
 
     private static final String TEST_QUERY_TEXT3 = "hello";
     private static final String TEST_QUERY_TEXT4 = "place";
