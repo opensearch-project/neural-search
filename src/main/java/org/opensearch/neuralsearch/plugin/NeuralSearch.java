@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.opensearch.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.service.ClusterService;
@@ -86,6 +87,27 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     private final ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();
     public static final String EXPLANATION_RESPONSE_KEY = "explanation_response";
 
+    @VisibleForTesting
+    public enum DependentPlugin {
+        ML_COMMONS("org.opensearch.ml.client.MachineLearningClient"),
+        KNN("org.opensearch.knn.plugin.KNNPlugin");
+
+        private final String className;
+
+        DependentPlugin(final String className) {
+            this.className = className;
+        }
+
+        public void validateAvailability() {
+            try {
+                Class.forName(className);
+                log.info("Plugin [{}] is installed", this.name());
+            } catch (ClassNotFoundException e) {
+                throw new IllegalStateException("Neural Search plugin requires the " + this.name() + " plugin to be installed", e);
+            }
+        }
+    }
+
     @Override
     public Collection<Object> createComponents(
         final Client client,
@@ -100,6 +122,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         final IndexNameExpressionResolver indexNameExpressionResolver,
         final Supplier<RepositoriesService> repositoriesServiceSupplier
     ) {
+        validateDependentPlugins();
         NeuralSearchClusterUtil.instance().initialize(clusterService);
         NeuralQueryBuilder.initialize(clientAccessor);
         NeuralSparseQueryBuilder.initialize(clientAccessor);
@@ -203,5 +226,12 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
                 parser -> RerankSearchExtBuilder.parse(parser)
             )
         );
+    }
+
+    private void validateDependentPlugins() {
+        for (DependentPlugin plugin : DependentPlugin.values()) {
+            plugin.validateAvailability();
+        }
+        log.info("All required plugins are installed");
     }
 }
