@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.bwc;
+package org.opensearch.neuralsearch.bwc.restart;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -12,8 +12,8 @@ import static org.opensearch.neuralsearch.util.TestUtils.TEXT_IMAGE_EMBEDDING_PR
 import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
-public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
-    private static final String PIPELINE_NAME = "nlp-ingest-pipeline";
+public class KnnRadialSearchIT extends AbstractRestartUpgradeRestTestCase {
+    private static final String PIPELINE_NAME = "radial-search-pipeline";
     private static final String TEST_FIELD = "passage_text";
     private static final String TEST_IMAGE_FIELD = "passage_image";
     private static final String TEXT = "Hello world";
@@ -21,10 +21,10 @@ public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
     private static final String TEST_IMAGE_TEXT = "/9j/4AAQSkZJRgABAQAASABIAAD";
     private static final String TEST_IMAGE_TEXT_1 = "/9j/4AAQSkZJRgbdwoeicfhoid";
 
-    // Test restart-upgrade test image embedding processor
+    // Test rolling-upgrade with kNN radial search
     // Create Text Image Embedding Processor, Ingestion Pipeline and add document
-    // Validate process , pipeline and document count in restart-upgrade scenario
-    public void testTextImageEmbeddingProcessor_E2EFlow() throws Exception {
+    // Validate radial query, pipeline and document count in restart-upgrade scenario
+    public void testKnnRadialSearch_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
 
         if (isRunningAgainstOldCluster()) {
@@ -43,25 +43,33 @@ public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
                 modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
                 loadModel(modelId);
                 addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_1);
-                validateTestIndex(modelId);
+                validateIndexQuery(modelId);
             } finally {
                 wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
             }
         }
     }
 
-    private void validateTestIndex(final String modelId) throws Exception {
-        int docCount = getDocCount(getIndexNameForTest());
-        assertEquals(2, docCount);
-        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+    private void validateIndexQuery(final String modelId) {
+        NeuralQueryBuilder neuralQueryBuilderWithMinScoreQuery = NeuralQueryBuilder.builder()
             .fieldName("passage_embedding")
             .queryText(TEXT)
             .queryImage(TEST_IMAGE_TEXT)
             .modelId(modelId)
-            .k(1)
+            .minScore(0.01f)
             .build();
-        Map<String, Object> response = search(getIndexNameForTest(), neuralQueryBuilder, 1);
-        assertNotNull(response);
-    }
 
+        Map<String, Object> responseWithMinScoreQuery = search(getIndexNameForTest(), neuralQueryBuilderWithMinScoreQuery, 1);
+        assertNotNull(responseWithMinScoreQuery);
+
+        NeuralQueryBuilder neuralQueryBuilderWithMaxDistanceQuery = NeuralQueryBuilder.builder()
+            .fieldName("passage_embedding")
+            .queryText(TEXT)
+            .queryImage(TEST_IMAGE_TEXT)
+            .modelId(modelId)
+            .maxDistance(100000f)
+            .build();
+        Map<String, Object> responseWithMaxDistanceQuery = search(getIndexNameForTest(), neuralQueryBuilderWithMaxDistanceQuery, 1);
+        assertNotNull(responseWithMaxDistanceQuery);
+    }
 }

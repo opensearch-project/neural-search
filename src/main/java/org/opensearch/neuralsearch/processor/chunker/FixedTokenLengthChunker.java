@@ -24,13 +24,22 @@ import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterPars
  */
 public final class FixedTokenLengthChunker implements Chunker {
 
+    /** The identifier for the fixed token length chunking algorithm. */
     public static final String ALGORITHM_NAME = "fixed_token_length";
 
-    // field name for each parameter
+    /** Field name for the analysis registry configuration parameter. */
     public static final String ANALYSIS_REGISTRY_FIELD = "analysis_registry";
+
+    /** Field name for specifying the maximum number of tokens per chunk. */
     public static final String TOKEN_LIMIT_FIELD = "token_limit";
+
+    /** Field name for specifying the overlap rate between consecutive chunks. */
     public static final String OVERLAP_RATE_FIELD = "overlap_rate";
+
+    /** Field name for specifying the maximum token count allowed in the input text. */
     public static final String MAX_TOKEN_COUNT_FIELD = "max_token_count";
+
+    /** Field name for specifying the tokenizer to be used for text analysis. */
     public static final String TOKENIZER_FIELD = "tokenizer";
 
     // default values for each non-runtime parameter
@@ -57,6 +66,10 @@ public final class FixedTokenLengthChunker implements Chunker {
     private double overlapRate;
     private final AnalysisRegistry analysisRegistry;
 
+    /**
+     * Constructor that initializes the fixed token length chunker with the specified parameters.
+     * @param parameters a map with non-runtime parameters to be parsed
+     */
     public FixedTokenLengthChunker(final Map<String, Object> parameters) {
         parseParameters(parameters);
         this.analysisRegistry = (AnalysisRegistry) parameters.get(ANALYSIS_REGISTRY_FIELD);

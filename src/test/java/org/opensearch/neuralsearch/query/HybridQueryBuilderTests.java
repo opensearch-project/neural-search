@@ -426,7 +426,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertEquals(2, queryTwoSubQueries.queries().size());
         assertTrue(queryTwoSubQueries.queries().get(0) instanceof NeuralQueryBuilder);
         assertTrue(queryTwoSubQueries.queries().get(1) instanceof TermQueryBuilder);
-        assertEquals(10, queryTwoSubQueries.paginationDepth());
+        assertEquals(10, queryTwoSubQueries.paginationDepth().intValue());
         // verify knn vector query
         NeuralQueryBuilder neuralQueryBuilder = (NeuralQueryBuilder) queryTwoSubQueries.queries().get(0);
         assertEquals(VECTOR_FIELD_NAME, neuralQueryBuilder.fieldName());

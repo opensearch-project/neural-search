@@ -99,7 +99,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
             countOfQueries++;
         }
         assertEquals(2, countOfQueries);
-        assertEquals(10, query3.getQueryContext().getPaginationDepth());
+        assertEquals(10, query3.getQueryContext().getPaginationDepth().intValue());
     }
 
     @SneakyThrows

@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.bwc;
+package org.opensearch.neuralsearch.bwc.rolling;
 
 import org.opensearch.neuralsearch.util.TestUtils;
 
