@@ -825,7 +825,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
             int docId = sampleIndexMLScorePairs.get(i).getKey();
             String mlScore = sampleIndexMLScorePairs.get(i).getValue() + "";
 
-            String sourceMap = String.format(templateString, i, mlScore);
+            String sourceMap = String.format(Locale.ROOT, templateString, i, mlScore);
 
             hits[i] = new SearchHit(docId, docId + "", Collections.emptyMap(), Collections.emptyMap());
             hits[i].sourceRef(new BytesArray(sourceMap));
