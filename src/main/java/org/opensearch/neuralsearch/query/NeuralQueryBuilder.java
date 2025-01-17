@@ -295,6 +295,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             out.writeVInt(this.k);
         }
         out.writeOptionalNamedWriteable(this.filter);
+        out.writeOptionalNamedWriteable(this.filter);
         if (isClusterOnOrAfterMinReqVersionForRadialSearch()) {
             out.writeOptionalFloat(this.maxDistance);
             out.writeOptionalFloat(this.minScore);
