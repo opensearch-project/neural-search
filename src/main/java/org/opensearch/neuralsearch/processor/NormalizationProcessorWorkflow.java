@@ -62,7 +62,7 @@ public class NormalizationProcessorWorkflow {
     public void execute(final NormalizationProcessorWorkflowExecuteRequest request) {
         List<QuerySearchResult> querySearchResults = request.getQuerySearchResults();
         Optional<FetchSearchResult> fetchSearchResultOptional = request.getFetchSearchResultOptional();
-        List<Integer> unprocessedDocIds = unprocessedDocIds(request.getQuerySearchResults());
+        List<Integer> unprocessedDocIds = unprocessedDocIds(querySearchResults);
 
         // pre-process data
         log.debug("Pre-process query results");
