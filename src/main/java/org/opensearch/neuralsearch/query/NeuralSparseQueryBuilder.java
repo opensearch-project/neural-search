@@ -99,8 +99,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     // It's value will be the ratio of processor.
     // 2. If it's the sub query only build for two-phase, the value will be set to -1 * ratio of processor.
     // Then in the DoToQuery, we can use this to determine which type are this queryBuilder.
-    private float twoPhasePruneRatio = 0F;
-    private PruneType twoPhasePruneType = PruneType.NONE;
+    private NeuralSparseQueryTwoPhaseInfo neuralSparseQueryTwoPhaseInfo = new NeuralSparseQueryTwoPhaseInfo();
 
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_ANALYZER = Version.V_3_0_0;
@@ -124,13 +123,14 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         } else {
             this.modelId = in.readString();
         }
-        if (isClusterOnOrAfterMinReqVersionForAnalyzer()) {
-            this.analyzer = in.readOptionalString();
-        }
         this.maxTokenScore = in.readOptionalFloat();
         if (in.readBoolean()) {
             Map<String, Float> queryTokens = in.readMap(StreamInput::readString, StreamInput::readFloat);
             this.queryTokensSupplier = () -> queryTokens;
+        }
+        if (isClusterOnOrAfterMinReqVersionForAnalyzer()) {
+            this.analyzer = in.readOptionalString();
+            this.neuralSparseQueryTwoPhaseInfo = new NeuralSparseQueryTwoPhaseInfo(in);
         }
         // to be backward compatible with previous version, we need to use writeString/readString API instead of optionalString API
         // after supporting query by tokens, queryText and modelId can be null. here we write an empty String instead
@@ -140,35 +140,6 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (StringUtils.EMPTY.equals(this.modelId)) {
             this.modelId = null;
         }
-    }
-
-    /**
-     * Copy this QueryBuilder for two phase rescorer, set the copy one's twoPhasePruneRatio to -1.
-     * @param pruneRatio the parameter of the NeuralSparseTwoPhaseProcessor, control how to split the queryTokens to two phase.
-     * @return A copy NeuralSparseQueryBuilder for twoPhase, it will be added to the rescorer.
-     */
-    public NeuralSparseQueryBuilder getCopyNeuralSparseQueryBuilderForTwoPhase(float pruneRatio, PruneType pruneType) {
-        this.twoPhasePruneRatio(pruneRatio);
-        this.twoPhasePruneType(pruneType);
-        NeuralSparseQueryBuilder copy = new NeuralSparseQueryBuilder().fieldName(this.fieldName)
-            .queryName(this.queryName)
-            .queryText(this.queryText)
-            .modelId(this.modelId)
-            .analyzer(this.analyzer)
-            .maxTokenScore(this.maxTokenScore)
-            .twoPhasePruneRatio(-1f * pruneRatio);
-        if (Objects.nonNull(this.queryTokensSupplier)) {
-            Map<String, Float> tokens = queryTokensSupplier.get();
-            // Splitting tokens based on a threshold value: tokens greater than the threshold are stored in v1,
-            // while those less than or equal to the threshold are stored in v2.
-            Tuple<Map<String, Float>, Map<String, Float>> splitTokens = PruneUtils.splitSparseVector(pruneType, pruneRatio, tokens);
-            this.queryTokensSupplier(() -> splitTokens.v1());
-            copy.queryTokensSupplier(() -> splitTokens.v2());
-        } else {
-            this.twoPhaseSharedQueryToken = new HashMap<>();
-            copy.queryTokensSupplier(() -> this.twoPhaseSharedQueryToken);
-        }
-        return copy;
     }
 
     @Override
@@ -182,9 +153,6 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         } else {
             out.writeString(StringUtils.defaultString(this.modelId, StringUtils.EMPTY));
         }
-        if (isClusterOnOrAfterMinReqVersionForAnalyzer()) {
-            out.writeOptionalString(this.analyzer);
-        }
         out.writeOptionalFloat(maxTokenScore);
         if (!Objects.isNull(this.queryTokensSupplier) && !Objects.isNull(this.queryTokensSupplier.get())) {
             out.writeBoolean(true);
@@ -192,6 +160,44 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         } else {
             out.writeBoolean(false);
         }
+        if (isClusterOnOrAfterMinReqVersionForAnalyzer()) {
+            out.writeOptionalString(this.analyzer);
+            this.neuralSparseQueryTwoPhaseInfo.writeTo(out);
+        }
+    }
+
+    /**
+     * Copy this QueryBuilder for two phase rescorer, set the copy one's twoPhasePruneRatio to -1.
+     * @param pruneRatio the parameter of the NeuralSparseTwoPhaseProcessor, control how to split the queryTokens to two phase.
+     * @return A copy NeuralSparseQueryBuilder for twoPhase, it will be added to the rescorer.
+     */
+    public NeuralSparseQueryBuilder getCopyNeuralSparseQueryBuilderForTwoPhase(float pruneRatio, PruneType pruneType) {
+        this.neuralSparseQueryTwoPhaseInfo = new NeuralSparseQueryTwoPhaseInfo(
+            NeuralSparseQueryTwoPhaseInfo.TwoPhaseStatus.PARENT,
+            pruneRatio,
+            pruneType
+        );
+        NeuralSparseQueryBuilder copy = new NeuralSparseQueryBuilder().fieldName(this.fieldName)
+            .queryName(this.queryName)
+            .queryText(this.queryText)
+            .modelId(this.modelId)
+            .analyzer(this.analyzer)
+            .maxTokenScore(this.maxTokenScore)
+            .neuralSparseQueryTwoPhaseInfo(
+                new NeuralSparseQueryTwoPhaseInfo(NeuralSparseQueryTwoPhaseInfo.TwoPhaseStatus.CHILD, pruneRatio * -1f, pruneType)
+            );
+        if (Objects.nonNull(this.queryTokensSupplier)) {
+            Map<String, Float> tokens = queryTokensSupplier.get();
+            // Splitting tokens based on a threshold value: tokens greater than the threshold are stored in v1,
+            // while those less than or equal to the threshold are stored in v2.
+            Tuple<Map<String, Float>, Map<String, Float>> splitTokens = PruneUtils.splitSparseVector(pruneType, pruneRatio, tokens);
+            this.queryTokensSupplier(() -> splitTokens.v1());
+            copy.queryTokensSupplier(() -> splitTokens.v2());
+        } else {
+            this.twoPhaseSharedQueryToken = new HashMap<>();
+            copy.queryTokensSupplier(() -> this.twoPhaseSharedQueryToken);
+        }
+        return copy;
     }
 
     @Override
@@ -362,7 +368,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .maxTokenScore(maxTokenScore)
             .queryTokensSupplier(queryTokensSetOnce::get)
             .twoPhaseSharedQueryToken(twoPhaseSharedQueryToken)
-            .twoPhasePruneRatio(twoPhasePruneRatio);
+            .neuralSparseQueryTwoPhaseInfo(neuralSparseQueryTwoPhaseInfo);
     }
 
     private BiConsumer<Client, ActionListener<?>> getModelInferenceAsync(SetOnce<Map<String, Float>> setOnce) {
@@ -377,8 +383,8 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
                 Map<String, Float> queryTokens = TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList).get(0);
                 if (Objects.nonNull(twoPhaseSharedQueryToken)) {
                     Tuple<Map<String, Float>, Map<String, Float>> splitQueryTokens = PruneUtils.splitSparseVector(
-                        twoPhasePruneType,
-                        twoPhasePruneRatio,
+                        neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneType(),
+                        neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneRatio(),
                         queryTokens
                     );
                     setOnce.set(splitQueryTokens.v1());
@@ -404,7 +410,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
 
                 while (stream.incrementToken()) {
                     String token = term.toString();
-                    Float weight = Objects.isNull(payload.getPayload()) ? 1 : HFModelTokenizer.bytesToFloat(payload.getPayload().bytes);
+                    Float weight = Objects.isNull(payload.getPayload()) ? 1.0f : HFModelTokenizer.bytesToFloat(payload.getPayload().bytes);
                     queryTokens.put(token, weight);
                 }
                 stream.end();
@@ -466,7 +472,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .append(queryText, obj.queryText)
             .append(modelId, obj.modelId)
             .append(maxTokenScore, obj.maxTokenScore)
-            .append(twoPhasePruneRatio, obj.twoPhasePruneRatio)
+            .append(neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneType(), obj.neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneType())
+            .append(neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneRatio(), obj.neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneRatio())
+            .append(neuralSparseQueryTwoPhaseInfo.getStatus().getValue(), obj.neuralSparseQueryTwoPhaseInfo.getStatus().getValue())
             .append(twoPhaseSharedQueryToken, obj.twoPhaseSharedQueryToken);
         if (Objects.nonNull(queryTokensSupplier)) {
             equalsBuilder.append(queryTokensSupplier.get(), obj.queryTokensSupplier.get());
@@ -480,7 +488,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .append(queryText)
             .append(modelId)
             .append(maxTokenScore)
-            .append(twoPhasePruneRatio)
+            .append(neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneType())
+            .append(neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneRatio())
+            .append(neuralSparseQueryTwoPhaseInfo.getStatus().getValue())
             .append(twoPhaseSharedQueryToken);
         if (Objects.nonNull(queryTokensSupplier)) {
             builder.append(queryTokensSupplier.get());

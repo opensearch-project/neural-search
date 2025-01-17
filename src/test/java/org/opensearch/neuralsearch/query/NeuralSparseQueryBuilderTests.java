@@ -659,8 +659,9 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .queryText(QUERY_TEXT)
             .modelId(MODEL_ID)
             .twoPhaseSharedQueryToken(Map.of())
-            .twoPhasePruneRatio(3.0f)
-            .twoPhasePruneType(PruneType.ABS_VALUE);
+            .neuralSparseQueryTwoPhaseInfo(
+                new NeuralSparseQueryTwoPhaseInfo(NeuralSparseQueryTwoPhaseInfo.TwoPhaseStatus.PARENT, 3f, PruneType.ABS_VALUE)
+            );
         Map<String, Float> expectedMap = Map.of("1", 1f, "2", 5f);
         MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
         doAnswer(invocation -> {
