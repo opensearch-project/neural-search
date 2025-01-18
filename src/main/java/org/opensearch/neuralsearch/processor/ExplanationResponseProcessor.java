@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.processor;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.search.Explanation;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
@@ -99,16 +100,26 @@ public class ExplanationResponseProcessor implements SearchResponseProcessor {
                     ExplanationDetails normalizationExplanation = combinedExplainDetail.getNormalizationExplanations();
                     ExplanationDetails combinationExplanation = combinedExplainDetail.getCombinationExplanations();
                     // Create normalized explanations for each detail
-                    Explanation[] normalizedExplanation = new Explanation[queryLevelExplanation.getDetails().length];
-                    for (int i = 0; i < queryLevelExplanation.getDetails().length; i++) {
-                        normalizedExplanation[i] = Explanation.match(
-                            // normalized score
-                            normalizationExplanation.getScoreDetails().get(i).getKey(),
-                            // description of normalized score
-                            normalizationExplanation.getScoreDetails().get(i).getValue(),
-                            // shard level details
-                            queryLevelExplanation.getDetails()[i]
-                        );
+                    List<Explanation> normalizedExplanation = new ArrayList<>();
+                    int normalizationExplanationIndex = 0;
+                    for (Explanation queryExplanation : queryLevelExplanation.getDetails()) {
+                        // adding only explanations where this hit has matched
+                        if (Float.compare(queryExplanation.getValue().floatValue(), 0.0f) > 0) {
+                            Pair<Float, String> normalizedScoreDetails = normalizationExplanation.getScoreDetails()
+                                .get(normalizationExplanationIndex);
+                            normalizedExplanation.add(
+                                Explanation.match(
+                                    // normalized score
+                                    normalizedScoreDetails.getKey(),
+                                    // description of normalized score
+                                    normalizedScoreDetails.getValue(),
+                                    // shard level details
+                                    queryExplanation
+                                )
+                            );
+                        }
+                        // we increment index in all cases, scores in query explanation can be 0.0
+                        normalizationExplanationIndex++;
                     }
                     // Create and set final explanation combining all components
                     Float finalScore = Float.isNaN(searchHit.getScore()) ? 0.0f : searchHit.getScore();
