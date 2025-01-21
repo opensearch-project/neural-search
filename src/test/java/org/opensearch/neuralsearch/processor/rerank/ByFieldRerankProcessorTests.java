@@ -762,7 +762,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         setUpValidSearchResultsWithNestedTargetValueWithNumericalString();
         List<Map.Entry<Integer, Float>> sortedScoresDescending = sampleIndexMLScorePairs.stream()
             .sorted(Map.Entry.<Integer, Float>comparingByValue().reversed())
-            .toList();
+            .collect(Collectors.toList());
 
         Map<String, Object> config = new HashMap<>(
             Map.of(RerankType.BY_FIELD.getLabel(), new HashMap<>(Map.of(ByFieldRerankProcessor.TARGET_FIELD, targetField)))
@@ -783,7 +783,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         SearchResponse searchResponse = argCaptor.getValue();
 
         assertEquals(sampleIndexMLScorePairs.size(), searchResponse.getHits().getHits().length);
-        assertEquals(sortedScoresDescending.getFirst().getValue(), searchResponse.getHits().getMaxScore(), 0.0001);
+        assertEquals(sortedScoresDescending.get(0).getValue(), searchResponse.getHits().getMaxScore(), 0.0001);
 
         for (int i = 0; i < sortedScoresDescending.size(); i++) {
             int docId = sortedScoresDescending.get(i).getKey();
@@ -812,22 +812,20 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
     private void setUpValidSearchResultsWithNestedTargetValueWithNumericalString() {
         SearchHit[] hits = new SearchHit[sampleIndexMLScorePairs.size()];
 
-        String templateString = """
-            {
-               "my_field" : "%s",
-               "ml": {
-                    "info"  : {
-                         "score": "%s"
-                    }
-               }
-            }
-            """.replace("\n", "");
+        String templateString = "{\n"
+            + "   \"my_field\" : \"%s\",\n"
+            + "   \"ml\": {\n"
+            + "        \"info\"  : {\n"
+            + "             \"score\": \"%s\"\n"
+            + "        }\n"
+            + "   }\n"
+            + "}\n".replace("\n", "");
 
         for (int i = 0; i < sampleIndexMLScorePairs.size(); i++) {
             int docId = sampleIndexMLScorePairs.get(i).getKey();
             String mlScore = sampleIndexMLScorePairs.get(i).getValue() + "";
 
-            String sourceMap = templateString.formatted(i, mlScore);
+            String sourceMap = String.format(Locale.ROOT, templateString, i, mlScore);
 
             hits[i] = new SearchHit(docId, docId + "", Collections.emptyMap(), Collections.emptyMap());
             hits[i].sourceRef(new BytesArray(sourceMap));
