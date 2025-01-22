@@ -100,7 +100,7 @@ public class ExplanationResponseProcessor implements SearchResponseProcessor {
                     ExplanationDetails normalizationExplanation = combinedExplainDetail.getNormalizationExplanations();
                     ExplanationDetails combinationExplanation = combinedExplainDetail.getCombinationExplanations();
                     // Create normalized explanations for each detail
-                    List<Explanation> normalizedExplanation = new ArrayList<>();
+                    List<Explanation> normalizedExplanation = new ArrayList<>(queryLevelExplanation.getDetails().length);
                     int normalizationExplanationIndex = 0;
                     for (Explanation queryExplanation : queryLevelExplanation.getDetails()) {
                         // adding only explanations where this hit has matched
