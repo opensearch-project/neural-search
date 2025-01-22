@@ -439,7 +439,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
-        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().build();
 
         HybridQuery hybridQueryWithMatchAll = new HybridQuery(
             List.of(QueryBuilders.matchAllQuery().toQuery(mockQueryShardContext)),
@@ -633,7 +633,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
-        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().build();
 
         HybridQuery hybridQueryWithTerm = new HybridQuery(
             List.of(QueryBuilders.matchAllQuery().toQuery(mockQueryShardContext)),
@@ -1166,6 +1166,43 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         );
         assertEquals(
             String.format(Locale.ROOT, "Scroll operation is not supported in hybrid query"),
+            illegalArgumentException.getMessage()
+        );
+    }
+
+    @SneakyThrows
+    public void testCreateCollectorManager_whenPaginationDepthIsEqualToNullAndFromIsGreaterThanZero_thenFail() {
+        SearchContext searchContext = mock(SearchContext.class);
+        // From >0
+        when(searchContext.from()).thenReturn(5);
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
+
+        HybridQuery hybridQuery = new HybridQuery(
+            List.of(termSubQuery.toQuery(mockQueryShardContext)),
+            HybridQueryContext.builder().build() // pagination_depth is set to null
+        );
+
+        when(searchContext.query()).thenReturn(hybridQuery);
+        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+        IndexReader indexReader = mock(IndexReader.class);
+        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
+        when(searchContext.searcher()).thenReturn(indexSearcher);
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
+
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
+        when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
+        when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
+
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> HybridCollectorManager.createHybridCollectorManager(searchContext)
+        );
+        assertEquals(
+            String.format(Locale.ROOT, "pagination_depth param is missing in the search request"),
             illegalArgumentException.getMessage()
         );
     }

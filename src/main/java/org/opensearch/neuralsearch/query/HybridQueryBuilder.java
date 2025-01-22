@@ -58,7 +58,6 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     private Integer paginationDepth;
 
     static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
-    private final static int DEFAULT_PAGINATION_DEPTH = 10;
     private static final int LOWER_BOUND_OF_PAGINATION_DEPTH = 0;
 
     public HybridQueryBuilder(StreamInput in) throws IOException {
@@ -167,7 +166,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     public static HybridQueryBuilder fromXContent(XContentParser parser) throws IOException {
         float boost = AbstractQueryBuilder.DEFAULT_BOOST;
 
-        int paginationDepth = DEFAULT_PAGINATION_DEPTH;
+        Integer paginationDepth = null;
         final List<QueryBuilder> queries = new ArrayList<>();
         String queryName = null;
 
@@ -324,7 +323,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         return queries;
     }
 
-    private static void validatePaginationDepth(final int paginationDepth, final QueryShardContext queryShardContext) {
+    private static void validatePaginationDepth(final Integer paginationDepth, final QueryShardContext queryShardContext) {
         if (Objects.isNull(paginationDepth)) {
             return;
         }
