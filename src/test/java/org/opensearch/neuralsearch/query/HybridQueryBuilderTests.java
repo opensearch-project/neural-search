@@ -398,6 +398,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             .endObject()
             .endObject()
             .endArray()
+            .field("pagination_depth", 10)
             .endObject();
 
         NamedXContentRegistry namedXContentRegistry = new NamedXContentRegistry(
