@@ -1,8 +1,6 @@
 name: Check Workflow Events
 on:
   pull_request:
-    paths:
-      - '.github/workflows/**'
 
 jobs:
   check-workflow-events:
