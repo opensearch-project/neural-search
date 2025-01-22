@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.processor;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.search.Explanation;
 import org.opensearch.action.search.SearchRequest;
@@ -22,6 +23,7 @@ import org.opensearch.search.pipeline.SearchResponseProcessor;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -33,6 +35,7 @@ import static org.opensearch.neuralsearch.processor.explain.ExplanationPayload.P
  */
 @Getter
 @AllArgsConstructor
+@Log4j2
 public class ExplanationResponseProcessor implements SearchResponseProcessor {
 
     public static final String TYPE = "hybrid_score_explanation";
@@ -100,6 +103,17 @@ public class ExplanationResponseProcessor implements SearchResponseProcessor {
                     ExplanationDetails normalizationExplanation = combinedExplainDetail.getNormalizationExplanations();
                     ExplanationDetails combinationExplanation = combinedExplainDetail.getCombinationExplanations();
                     // Create normalized explanations for each detail
+                    if (normalizationExplanation.getScoreDetails().size() != queryLevelExplanation.getDetails().length) {
+                        log.error(
+                            String.format(
+                                Locale.ROOT,
+                                "length of query level explanations %d must match length of explanations after normalization %d",
+                                queryLevelExplanation.getDetails().length,
+                                normalizationExplanation.getScoreDetails().size()
+                            )
+                        );
+                        throw new IllegalStateException("mismatch in number of query level explanations and normalization explanations");
+                    }
                     List<Explanation> normalizedExplanation = new ArrayList<>(queryLevelExplanation.getDetails().length);
                     int normalizationExplanationIndex = 0;
                     for (Explanation queryExplanation : queryLevelExplanation.getDetails()) {
@@ -107,6 +121,9 @@ public class ExplanationResponseProcessor implements SearchResponseProcessor {
                         if (Float.compare(queryExplanation.getValue().floatValue(), 0.0f) > 0) {
                             Pair<Float, String> normalizedScoreDetails = normalizationExplanation.getScoreDetails()
                                 .get(normalizationExplanationIndex);
+                            if (Objects.isNull(normalizedScoreDetails)) {
+                                throw new IllegalStateException("normalized score details must not be null");
+                            }
                             normalizedExplanation.add(
                                 Explanation.match(
                                     // normalized score

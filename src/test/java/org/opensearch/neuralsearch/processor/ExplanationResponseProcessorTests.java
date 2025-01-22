@@ -30,6 +30,7 @@ import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.transport.RemoteClusterAware;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
@@ -41,6 +42,7 @@ import java.util.PriorityQueue;
 import java.util.TreeMap;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY;
 import static org.opensearch.neuralsearch.processor.explain.ExplanationPayload.PayloadType.NORMALIZATION_PROCESSOR;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_FLOATS_ASSERTION;
@@ -366,6 +368,121 @@ public class ExplanationResponseProcessorTests extends OpenSearchTestCase {
 
         // Verify that no details are included (all scores were zero)
         assertEquals(0, processedExplanation.getDetails().length);
+    }
+
+    public void testProcessResponseThrowsExceptionWhenExplanationLengthsMismatch() {
+        ExplanationResponseProcessor processor = new ExplanationResponseProcessor("test description", "test tag", false);
+
+        // Mock search request and response
+        SearchRequest request = mock(SearchRequest.class);
+        SearchResponse response = mock(SearchResponse.class);
+        PipelineProcessingContext context = mock(PipelineProcessingContext.class);
+
+        // Create actual SearchHit with explanation
+        SearchHit searchHit = new SearchHit(1);
+        ShardId shardId = new ShardId("index", "_na_", 0);
+        SearchShardTarget shardTarget = new SearchShardTarget("node1", shardId, null, null);
+        searchHit.shard(shardTarget);
+
+        // Create explanation
+        Explanation queryExplanation = Explanation.match(1.0f, "combined score", new Explanation[] { Explanation.match(0.5f, "exp1") });
+        searchHit.explanation(queryExplanation);
+
+        // Setup combined explanation details with mismatched lengths
+        Map<SearchShard, List<CombinedExplanationDetails>> combinedDetails = new HashMap<>();
+        SearchShard searchShard = new SearchShard(shardId.getIndexName(), shardId.getId(), shardTarget.getNodeId());
+
+        // Create explanations with different lengths
+        ExplanationDetails normalizationExplanation = new ExplanationDetails(
+            List.of(
+                Pair.of(0.5f, "norm1"),
+                Pair.of(0.3f, "norm2") // Extra explanation
+            )
+        );
+
+        ExplanationDetails originalExplanation = new ExplanationDetails(
+            List.of(Pair.of(1.0f, "original"))  // Only one explanation
+        );
+
+        CombinedExplanationDetails combinedExplanationDetails = new CombinedExplanationDetails(
+            normalizationExplanation,
+            originalExplanation
+        );
+
+        combinedDetails.put(searchShard, List.of(combinedExplanationDetails));
+
+        // Setup explanation payload
+        Map<ExplanationPayload.PayloadType, Object> explainPayload = new HashMap<>();
+        explainPayload.put(NORMALIZATION_PROCESSOR, combinedDetails);
+        ExplanationPayload explanationPayload = new ExplanationPayload(explainPayload);
+
+        // Setup response with actual SearchHits
+        SearchHits searchHits = new SearchHits(new SearchHit[] { searchHit }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1.0f);
+        when(response.getHits()).thenReturn(searchHits);
+        when(context.getAttribute(EXPLANATION_RESPONSE_KEY)).thenReturn(explanationPayload);
+
+        // Verify the exception is thrown
+        IllegalStateException exception = expectThrows(
+            IllegalStateException.class,
+            () -> processor.processResponse(request, response, context)
+        );
+
+        assertEquals("mismatch in number of query level explanations and normalization explanations", exception.getMessage());
+    }
+
+    public void testProcessResponseThrowsExceptionWhenNormalizedScoreDetailsIsNull() {
+        ExplanationResponseProcessor processor = new ExplanationResponseProcessor("test description", "test tag", false);
+
+        // Mock search request and response
+        SearchRequest request = mock(SearchRequest.class);
+        SearchResponse response = mock(SearchResponse.class);
+        PipelineProcessingContext context = mock(PipelineProcessingContext.class);
+
+        // Create actual SearchHit with explanation
+        SearchHit searchHit = new SearchHit(1);
+        ShardId shardId = new ShardId("index", "_na_", 0);
+        SearchShardTarget shardTarget = new SearchShardTarget("node1", shardId, null, null);
+        searchHit.shard(shardTarget);
+
+        // Create explanation
+        Explanation queryExplanation = Explanation.match(1.0f, "combined score", new Explanation[] { Explanation.match(0.5f, "exp1") });
+        searchHit.explanation(queryExplanation);
+
+        // Setup combined explanation details with ExplanationDetails that has a null Pair
+        Map<SearchShard, List<CombinedExplanationDetails>> combinedDetails = new HashMap<>();
+
+        // Use the same index and shard information as in the SearchHit
+        SearchShard searchShard = new SearchShard(shardId.getIndexName(), shardId.getId(), shardTarget.getNodeId());
+
+        // Create ExplanationDetails with a list containing a null Pair
+        List<Pair<Float, String>> scoreDetails = new ArrayList<>();
+        scoreDetails.add(null); // This will trigger the null check
+        ExplanationDetails normalizationExplanation = new ExplanationDetails(scoreDetails);
+
+        CombinedExplanationDetails combinedExplanationDetails = new CombinedExplanationDetails(
+            normalizationExplanation,  // ExplanationDetails with a null Pair in scoreDetails
+            new ExplanationDetails(List.of(Pair.of(1.0f, "combined")))
+        );
+
+        combinedDetails.put(searchShard, List.of(combinedExplanationDetails));
+
+        // Setup explanation payload
+        Map<ExplanationPayload.PayloadType, Object> explainPayload = new HashMap<>();
+        explainPayload.put(NORMALIZATION_PROCESSOR, combinedDetails);
+        ExplanationPayload explanationPayload = new ExplanationPayload(explainPayload);
+
+        // Setup response with actual SearchHits
+        SearchHits searchHits = new SearchHits(new SearchHit[] { searchHit }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1.0f);
+        when(response.getHits()).thenReturn(searchHits);
+        when(context.getAttribute(EXPLANATION_RESPONSE_KEY)).thenReturn(explanationPayload);
+
+        // Verify the exception is thrown
+        IllegalStateException exception = expectThrows(
+            IllegalStateException.class,
+            () -> processor.processResponse(request, response, context)
+        );
+
+        assertEquals("normalized score details must not be null", exception.getMessage());
     }
 
     private PipelineProcessingContext createContextWithExplanations(
