@@ -5,7 +5,9 @@
 package org.opensearch.neuralsearch.processor.normalization;
 
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -53,5 +55,31 @@ class ScoreNormalizationUtil {
                 );
             }
         }
+    }
+
+    /**
+     * Sets a normalized score for a specific document at a specific subquery index
+     *
+     * @param normalizedScores map of document IDs to their list of scores
+     * @param docIdAtSearchShard document ID
+     * @param subQueryIndex index of the subquery
+     * @param normalizedScore normalized score to set
+     */
+    public static void setNormalizedScore(
+        Map<DocIdAtSearchShard, List<Float>> normalizedScores,
+        DocIdAtSearchShard docIdAtSearchShard,
+        int subQueryIndex,
+        int numberOfSubQueries,
+        float normalizedScore
+    ) {
+        List<Float> scores = normalizedScores.get(docIdAtSearchShard);
+        if (Objects.isNull(scores)) {
+            scores = new ArrayList<>(numberOfSubQueries);
+            for (int i = 0; i < numberOfSubQueries; i++) {
+                scores.add(0.0f);
+            }
+            normalizedScores.put(docIdAtSearchShard, scores);
+        }
+        scores.set(subQueryIndex, normalizedScore);
     }
 }

@@ -5,15 +5,22 @@
 package org.opensearch.neuralsearch.processor.normalization;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
+import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.processor.SearchShard;
+import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
+import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
+import org.opensearch.search.SearchShardTarget;
 
 /**
  * Abstracts normalization of scores based on L2 method
@@ -233,6 +240,84 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
         for (int i = 0; i < expectedCompoundDocsShard2.getTopDocs().size(); i++) {
             assertCompoundTopDocs(expectedCompoundDocsShard2.getTopDocs().get(i), compoundTopDocs.get(1).getTopDocs().get(i));
         }
+    }
+
+    public void testNormalizedScoresAreSetAtCorrectIndices() {
+        // Setup test data
+        SearchShardTarget shardTarget = new SearchShardTarget("node1", new ShardId("index", "_na_", 0), null, null);
+        SearchShard searchShard = SearchShard.createSearchShard(shardTarget);
+
+        // Create TopDocs with different scores for different subqueries
+        TopDocs topDocs1 = new TopDocs(
+            new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+            new ScoreDoc[] {
+                new ScoreDoc(1, 2.0f),  // L2 norm will be 2/sqrt(4+9) = 0.5547
+                new ScoreDoc(2, 3.0f)   // L2 norm will be 3/sqrt(4+9) = 0.8321
+            }
+        );
+
+        TopDocs topDocs2 = new TopDocs(
+            new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+            new ScoreDoc[] {
+                new ScoreDoc(2, 4.0f),  // L2 norm will be 4/sqrt(16+25) = 0.6247
+                new ScoreDoc(1, 5.0f)   // L2 norm will be 5/sqrt(16+25) = 0.7809
+            }
+        );
+
+        TopDocs topDocs3 = new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(1, 1.0f)   // L2 norm
+                                                                                                                               // will be
+                                                                                                                               // 1/sqrt(1)
+                                                                                                                               // = 1.0
+        });
+
+        // Create CompoundTopDocs with multiple subqueries
+        CompoundTopDocs compoundTopDocs = new CompoundTopDocs(
+            new TotalHits(5, TotalHits.Relation.EQUAL_TO),
+            Arrays.asList(topDocs1, topDocs2, topDocs3),
+            false,
+            searchShard
+        );
+
+        L2ScoreNormalizationTechnique normalizer = new L2ScoreNormalizationTechnique();
+        Map<DocIdAtSearchShard, ExplanationDetails> result = normalizer.explain(Collections.singletonList(compoundTopDocs));
+
+        // Verify results
+        DocIdAtSearchShard doc1 = new DocIdAtSearchShard(1, searchShard);
+        DocIdAtSearchShard doc2 = new DocIdAtSearchShard(2, searchShard);
+
+        // Verify document 1 normalized scores
+        ExplanationDetails doc1Details = result.get(doc1);
+        assertNotNull(doc1Details);
+        List<Pair<Float, String>> doc1Scores = doc1Details.getScoreDetails();
+        assertEquals(3, doc1Scores.size());
+
+        // Verify L2 normalized scores for document 1
+        assertEquals(0.5547f, doc1Scores.get(0).getKey(), DELTA_FOR_ASSERTION); // First subquery
+        assertEquals(0.7809f, doc1Scores.get(1).getKey(), DELTA_FOR_ASSERTION); // Second subquery
+        assertEquals(1.0000f, doc1Scores.get(2).getKey(), DELTA_FOR_ASSERTION); // Third subquery
+
+        // Verify document 2 normalized scores
+        ExplanationDetails doc2Details = result.get(doc2);
+        assertNotNull(doc2Details);
+        List<Pair<Float, String>> doc2Scores = doc2Details.getScoreDetails();
+        assertEquals(3, doc2Scores.size());
+
+        // Verify L2 normalized scores for document 2
+        assertEquals(0.8321f, doc2Scores.get(0).getKey(), DELTA_FOR_ASSERTION); // First subquery
+        assertEquals(0.6247f, doc2Scores.get(1).getKey(), DELTA_FOR_ASSERTION); // Second subquery
+        assertEquals(0.0000f, doc2Scores.get(2).getKey(), DELTA_FOR_ASSERTION); // Third subquery (doc2 not present)
+
+        // Verify that original ScoreDoc scores were updated with L2 normalized values
+        assertEquals(0.5547f, topDocs1.scoreDocs[0].score, DELTA_FOR_ASSERTION); // doc1 in first subquery
+        assertEquals(0.8321f, topDocs1.scoreDocs[1].score, DELTA_FOR_ASSERTION); // doc2 in first subquery
+        assertEquals(0.6247f, topDocs2.scoreDocs[0].score, DELTA_FOR_ASSERTION); // doc2 in second subquery
+        assertEquals(0.7809f, topDocs2.scoreDocs[1].score, DELTA_FOR_ASSERTION); // doc1 in second subquery
+        assertEquals(1.0000f, topDocs3.scoreDocs[0].score, DELTA_FOR_ASSERTION); // doc1 in third subquery
+
+        // Verify explanation descriptions
+        assertTrue(doc1Scores.get(0).getValue().contains("l2 normalization"));
+        assertTrue(doc1Scores.get(1).getValue().contains("l2 normalization"));
+        assertTrue(doc1Scores.get(2).getValue().contains("l2 normalization"));
     }
 
     private float l2Norm(float score, List<Float> scores) {

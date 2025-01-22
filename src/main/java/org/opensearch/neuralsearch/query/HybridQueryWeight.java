@@ -11,6 +11,8 @@ import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 
+import lombok.AccessLevel;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.Explanation;
@@ -33,6 +35,7 @@ import static org.opensearch.neuralsearch.query.HybridQueryBuilder.MAX_NUMBER_OF
 public final class HybridQueryWeight extends Weight {
 
     // The Weights for our subqueries, in 1-1 correspondence
+    @Getter(AccessLevel.PACKAGE)
     private final List<Weight> weights;
 
     private final ScoreMode scoreMode;
@@ -157,10 +160,13 @@ public final class HybridQueryWeight extends Weight {
             if (e.isMatch()) {
                 match = true;
                 double score = e.getValue().doubleValue();
-                subsOnMatch.add(e);
                 max = Math.max(max, score);
-            } else if (!match) {
-                subsOnNoMatch.add(e);
+                subsOnMatch.add(e);
+            } else {
+                if (!match) {
+                    subsOnNoMatch.add(e);
+                }
+                subsOnMatch.add(e);
             }
         }
         if (match) {

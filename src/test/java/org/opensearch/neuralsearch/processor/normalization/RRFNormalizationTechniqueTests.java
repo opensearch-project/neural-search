@@ -4,19 +4,23 @@
  */
 package org.opensearch.neuralsearch.processor.normalization;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
+import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 import org.opensearch.neuralsearch.processor.SearchShard;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
+import org.opensearch.search.SearchShardTarget;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -236,6 +240,89 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         for (int i = 0; i < expectedCompoundDocsShard2.getTopDocs().size(); i++) {
             assertCompoundTopDocs(expectedCompoundDocsShard2.getTopDocs().get(i), compoundTopDocs.get(1).getTopDocs().get(i));
         }
+    }
+
+    public void testNormalizedScoresAreSetAtCorrectIndices() {
+        // Setup test data
+        SearchShardTarget shardTarget = new SearchShardTarget("node1", new ShardId("index", "_na_", 0), null, null);
+        SearchShard searchShard = SearchShard.createSearchShard(shardTarget);
+
+        // Create TopDocs with different scores and ranks for different subqueries
+        TopDocs topDocs1 = new TopDocs(
+            new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+            new ScoreDoc[] {
+                new ScoreDoc(1, 0.8f),  // Rank 1: RRF = 1/(60 + 1) = 0.0164
+                new ScoreDoc(2, 0.6f)   // Rank 2: RRF = 1/(60 + 2) = 0.0161
+            }
+        );
+
+        TopDocs topDocs2 = new TopDocs(
+            new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+            new ScoreDoc[] {
+                new ScoreDoc(2, 0.9f),  // Rank 1: RRF = 1/(60 + 1) = 0.0164
+                new ScoreDoc(1, 0.7f)   // Rank 2: RRF = 1/(60 + 2) = 0.0161
+            }
+        );
+
+        TopDocs topDocs3 = new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(1, 0.5f)   // Rank 1:
+                                                                                                                               // RRF =
+                                                                                                                               // 1/(60 + 1)
+                                                                                                                               // = 0.0164
+        });
+
+        // Create CompoundTopDocs with multiple subqueries
+        CompoundTopDocs compoundTopDocs = new CompoundTopDocs(
+            new TotalHits(5, TotalHits.Relation.EQUAL_TO),
+            Arrays.asList(topDocs1, topDocs2, topDocs3),
+            false,
+            searchShard
+        );
+
+        RRFNormalizationTechnique normalizer = new RRFNormalizationTechnique(Map.of(), new ScoreNormalizationUtil());
+        Map<DocIdAtSearchShard, ExplanationDetails> result = normalizer.explain(Collections.singletonList(compoundTopDocs));
+
+        // Verify results
+        DocIdAtSearchShard doc1 = new DocIdAtSearchShard(1, searchShard);
+        DocIdAtSearchShard doc2 = new DocIdAtSearchShard(2, searchShard);
+
+        // Constants for RRF score calculation
+        float rank1Score = 1.0f / (60.0f + 1.0f); // ≈ 0.0164
+        float rank2Score = 1.0f / (60.0f + 2.0f); // ≈ 0.0161
+        float zeroScore = 0.0f;
+
+        // Verify document 1 normalized scores
+        ExplanationDetails doc1Details = result.get(doc1);
+        assertNotNull(doc1Details);
+        List<Pair<Float, String>> doc1Scores = doc1Details.getScoreDetails();
+        assertEquals(3, doc1Scores.size());
+
+        // Verify RRF scores for document 1
+        assertEquals(rank1Score, doc1Scores.get(0).getKey(), DELTA_FOR_ASSERTION); // First subquery (rank 1)
+        assertEquals(rank2Score, doc1Scores.get(1).getKey(), DELTA_FOR_ASSERTION); // Second subquery (rank 2)
+        assertEquals(rank1Score, doc1Scores.get(2).getKey(), DELTA_FOR_ASSERTION); // Third subquery (rank 1)
+
+        // Verify document 2 normalized scores
+        ExplanationDetails doc2Details = result.get(doc2);
+        assertNotNull(doc2Details);
+        List<Pair<Float, String>> doc2Scores = doc2Details.getScoreDetails();
+        assertEquals(3, doc2Scores.size());
+
+        // Verify RRF scores for document 2
+        assertEquals(rank2Score, doc2Scores.get(0).getKey(), DELTA_FOR_ASSERTION); // First subquery (rank 2)
+        assertEquals(rank1Score, doc2Scores.get(1).getKey(), DELTA_FOR_ASSERTION); // Second subquery (rank 1)
+        assertEquals(zeroScore, doc2Scores.get(2).getKey(), DELTA_FOR_ASSERTION);  // Third subquery (not present)
+
+        // Verify that original ScoreDoc scores were updated with RRF scores
+        assertEquals(rank1Score, topDocs1.scoreDocs[0].score, DELTA_FOR_ASSERTION); // doc1 in first subquery
+        assertEquals(rank2Score, topDocs1.scoreDocs[1].score, DELTA_FOR_ASSERTION); // doc2 in first subquery
+        assertEquals(rank1Score, topDocs2.scoreDocs[0].score, DELTA_FOR_ASSERTION); // doc2 in second subquery
+        assertEquals(rank2Score, topDocs2.scoreDocs[1].score, DELTA_FOR_ASSERTION); // doc1 in second subquery
+        assertEquals(rank1Score, topDocs3.scoreDocs[0].score, DELTA_FOR_ASSERTION); // doc1 in third subquery
+
+        // Verify explanation descriptions
+        assertTrue(doc1Scores.get(0).getValue().contains("rrf"));
+        assertTrue(doc1Scores.get(1).getValue().contains("rrf"));
+        assertTrue(doc1Scores.get(2).getValue().contains("rrf"));
     }
 
     public void testExplainWithEmptyAndNullList() {

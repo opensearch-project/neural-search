@@ -380,8 +380,14 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             String expectedTopLevelDescription = "combined score of:";
             assertEquals(expectedTopLevelDescription, topLevelExplanationsHit1.get("description"));
             List<Map<String, Object>> normalizationExplanationHit1 = getListOfValues(topLevelExplanationsHit1, "details");
-            assertEquals(1, normalizationExplanationHit1.size());
-            Map<String, Object> hit1DetailsForHit1 = normalizationExplanationHit1.get(0);
+            assertEquals(2, normalizationExplanationHit1.size());
+
+            Map<String, Object> noMatchDetailsForHit1 = normalizationExplanationHit1.get(0);
+            assertEquals(0.0f, (double) noMatchDetailsForHit1.get("value"), DELTA_FOR_SCORE_ASSERTION);
+            assertEquals("no matching term", noMatchDetailsForHit1.get("description"));
+            assertEquals(0, ((List) noMatchDetailsForHit1.get("details")).size());
+
+            Map<String, Object> hit1DetailsForHit1 = normalizationExplanationHit1.get(1);
             assertEquals(0.754f, (double) hit1DetailsForHit1.get("value"), DELTA_FOR_SCORE_ASSERTION);
             assertEquals("sum of:", hit1DetailsForHit1.get("description"));
             assertEquals(1, ((List) hit1DetailsForHit1.get("details")).size());
@@ -422,7 +428,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
 
             assertEquals(expectedTopLevelDescription, topLevelExplanationsHit2.get("description"));
             List<Map<String, Object>> normalizationExplanationHit2 = getListOfValues(topLevelExplanationsHit2, "details");
-            assertEquals(1, normalizationExplanationHit2.size());
+            assertEquals(2, normalizationExplanationHit2.size());
 
             Map<String, Object> hit1DetailsForHit2 = normalizationExplanationHit2.get(0);
             assertEquals(0.287f, (double) hit1DetailsForHit2.get("value"), DELTA_FOR_SCORE_ASSERTION);
@@ -439,6 +445,11 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             assertEquals("boost", explanationsHit2Details.get("description"));
             assertEquals(0, getListOfValues(explanationsHit2Details, "details").size());
 
+            Map<String, Object> hit1DetailsForHit2NoMatch = normalizationExplanationHit2.get(1);
+            assertEquals(0.0f, (double) hit1DetailsForHit2NoMatch.get("value"), DELTA_FOR_SCORE_ASSERTION);
+            assertEquals("No matching clauses", hit1DetailsForHit2NoMatch.get("description"));
+            assertEquals(0, ((List) hit1DetailsForHit2NoMatch.get("details")).size());
+
             // search hit 3
             Map<String, Object> searchHit3 = hitsNestedList.get(1);
             Map<String, Object> topLevelExplanationsHit3 = getValueByKey(searchHit3, "_explanation");
@@ -447,7 +458,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
 
             assertEquals(expectedTopLevelDescription, topLevelExplanationsHit3.get("description"));
             List<Map<String, Object>> normalizationExplanationHit3 = getListOfValues(topLevelExplanationsHit3, "details");
-            assertEquals(1, normalizationExplanationHit3.size());
+            assertEquals(2, normalizationExplanationHit3.size());
 
             Map<String, Object> hit1DetailsForHit3 = normalizationExplanationHit3.get(0);
             assertEquals(0.287, (double) hit1DetailsForHit3.get("value"), DELTA_FOR_SCORE_ASSERTION);
@@ -463,6 +474,11 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             assertEquals(2.2f, (double) explanationsHit3Details.get("value"), DELTA_FOR_SCORE_ASSERTION);
             assertEquals("boost", explanationsHit3Details.get("description"));
             assertEquals(0, getListOfValues(explanationsHit3Details, "details").size());
+
+            Map<String, Object> hit1DetailsForHit3NoMatch = normalizationExplanationHit2.get(1);
+            assertEquals(0.0f, (double) hit1DetailsForHit3NoMatch.get("value"), DELTA_FOR_SCORE_ASSERTION);
+            assertEquals("No matching clauses", hit1DetailsForHit3NoMatch.get("description"));
+            assertEquals(0, ((List) hit1DetailsForHit3NoMatch.get("details")).size());
         } finally {
             wipeOfTestResources(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, null, null, NORMALIZATION_SEARCH_PIPELINE);
         }

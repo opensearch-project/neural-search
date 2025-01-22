@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch.processor.normalization;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -92,16 +91,23 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                 continue;
             }
             List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
-            for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
-                TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
+            int numberOfSubQueries = topDocsPerSubQuery.size();
+            for (int subQueryIndex = 0; subQueryIndex < numberOfSubQueries; subQueryIndex++) {
+                TopDocs subQueryTopDoc = topDocsPerSubQuery.get(subQueryIndex);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
                     DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(scoreDoc.doc, compoundQueryTopDocs.getSearchShard());
                     float normalizedScore = normalizeSingleScore(
                         scoreDoc.score,
-                        minMaxScores.getMinScoresPerSubquery()[j],
-                        minMaxScores.getMaxScoresPerSubquery()[j]
+                        minMaxScores.getMinScoresPerSubquery()[subQueryIndex],
+                        minMaxScores.getMaxScoresPerSubquery()[subQueryIndex]
                     );
-                    normalizedScores.computeIfAbsent(docIdAtSearchShard, k -> new ArrayList<>()).add(normalizedScore);
+                    ScoreNormalizationUtil.setNormalizedScore(
+                        normalizedScores,
+                        docIdAtSearchShard,
+                        subQueryIndex,
+                        numberOfSubQueries,
+                        normalizedScore
+                    );
                     scoreDoc.score = normalizedScore;
                 }
             }
