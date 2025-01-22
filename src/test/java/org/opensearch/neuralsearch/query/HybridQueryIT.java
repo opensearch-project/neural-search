@@ -871,40 +871,6 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    public void testHybridQuery_whenFromIsGreaterThanZeroAndPaginationDepthIsNotSent_thenSuccessful() {
-        try {
-            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
-            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-            HybridQueryBuilder hybridQueryBuilderOnlyMatchAll = new HybridQueryBuilder();
-            hybridQueryBuilderOnlyMatchAll.add(new MatchAllQueryBuilder());
-
-            Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD,
-                hybridQueryBuilderOnlyMatchAll,
-                null,
-                10,
-                Map.of("search_pipeline", SEARCH_PIPELINE),
-                null,
-                null,
-                null,
-                false,
-                null,
-                2
-            );
-
-            assertEquals(2, getHitCount(searchResponseAsMap));
-            Map<String, Object> total = getTotalHits(searchResponseAsMap);
-            assertNotNull(total.get("value"));
-            assertEquals(4, total.get("value"));
-            assertNotNull(total.get("relation"));
-            assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, null, null, SEARCH_PIPELINE);
-        }
-    }
-
-    @SneakyThrows
     public void testHybridQuery_whenFromIsGreaterThanTotalResultCount_thenFail() {
         try {
             updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
@@ -912,6 +878,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
             HybridQueryBuilder hybridQueryBuilderOnlyMatchAll = new HybridQueryBuilder();
             hybridQueryBuilderOnlyMatchAll.add(new MatchAllQueryBuilder());
+            hybridQueryBuilderOnlyMatchAll.paginationDepth(10);
 
             ResponseException responseException = assertThrows(
                 ResponseException.class,
