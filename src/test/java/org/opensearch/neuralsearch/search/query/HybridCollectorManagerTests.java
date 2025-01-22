@@ -1179,10 +1179,10 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
         TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
-        // if pagination_depth ==0 then internally by default it will pick 10 as the depth
+
         HybridQuery hybridQuery = new HybridQuery(
             List.of(termSubQuery.toQuery(mockQueryShardContext)),
-            HybridQueryContext.builder().build()
+            HybridQueryContext.builder().build() // pagination_depth is set to null
         );
 
         when(searchContext.query()).thenReturn(hybridQuery);

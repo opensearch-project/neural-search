@@ -492,7 +492,6 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             throw new IllegalArgumentException(String.format(Locale.ROOT, "pagination_depth param is missing in the search request"));
         }
 
-        log.info("pagination_depth is {}", paginationDepth);
         if (Objects.nonNull(paginationDepth)) {
             return paginationDepth;
         }
