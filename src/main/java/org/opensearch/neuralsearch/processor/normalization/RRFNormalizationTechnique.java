@@ -6,22 +6,24 @@ package org.opensearch.neuralsearch.processor.normalization;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Locale;
 import java.util.Set;
-import java.util.function.BiConsumer;
-import java.util.stream.IntStream;
 
 import org.apache.commons.lang3.Range;
 import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.TopDocs;
+import org.opensearch.common.TriConsumer;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import lombok.ToString;
 import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
+import org.opensearch.neuralsearch.processor.SearchShard;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
@@ -65,7 +67,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
     public void normalize(final NormalizeScoresDTO normalizeScoresDTO) {
         final List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
-            processTopDocs(compoundQueryTopDocs, (docId, score) -> {});
+            processTopDocs(compoundQueryTopDocs, (docId, score, subQueryIndex) -> {});
         }
     }
 
@@ -79,31 +81,51 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
         Map<DocIdAtSearchShard, List<Float>> normalizedScores = new HashMap<>();
 
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
+            if (Objects.isNull(compoundQueryTopDocs)) {
+                continue;
+            }
+            List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
+            int numberOfSubQueries = topDocsPerSubQuery.size();
             processTopDocs(
                 compoundQueryTopDocs,
-                (docId, score) -> normalizedScores.computeIfAbsent(docId, k -> new ArrayList<>()).add(score)
+                (docId, score, subQueryIndex) -> ScoreNormalizationUtil.setNormalizedScore(
+                    normalizedScores,
+                    docId,
+                    subQueryIndex,
+                    numberOfSubQueries,
+                    score
+                )
             );
         }
 
         return getDocIdAtQueryForNormalization(normalizedScores, this);
     }
 
-    private void processTopDocs(CompoundTopDocs compoundQueryTopDocs, BiConsumer<DocIdAtSearchShard, Float> scoreProcessor) {
+    private void processTopDocs(CompoundTopDocs compoundQueryTopDocs, TriConsumer<DocIdAtSearchShard, Float, Integer> scoreProcessor) {
         if (Objects.isNull(compoundQueryTopDocs)) {
             return;
         }
 
-        compoundQueryTopDocs.getTopDocs().forEach(topDocs -> {
-            IntStream.range(0, topDocs.scoreDocs.length).forEach(position -> {
-                float normalizedScore = calculateNormalizedScore(position);
-                DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(
-                    topDocs.scoreDocs[position].doc,
-                    compoundQueryTopDocs.getSearchShard()
-                );
-                scoreProcessor.accept(docIdAtSearchShard, normalizedScore);
-                topDocs.scoreDocs[position].score = normalizedScore;
-            });
-        });
+        List<TopDocs> topDocsList = compoundQueryTopDocs.getTopDocs();
+        SearchShard searchShard = compoundQueryTopDocs.getSearchShard();
+
+        for (int topDocsIndex = 0; topDocsIndex < topDocsList.size(); topDocsIndex++) {
+            processTopDocsEntry(topDocsList.get(topDocsIndex), searchShard, topDocsIndex, scoreProcessor);
+        }
+    }
+
+    private void processTopDocsEntry(
+        TopDocs topDocs,
+        SearchShard searchShard,
+        int topDocsIndex,
+        TriConsumer<DocIdAtSearchShard, Float, Integer> scoreProcessor
+    ) {
+        for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
+            float normalizedScore = calculateNormalizedScore(Arrays.asList(topDocs.scoreDocs).indexOf(scoreDoc));
+            DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(scoreDoc.doc, searchShard);
+            scoreProcessor.apply(docIdAtSearchShard, normalizedScore, topDocsIndex);
+            scoreDoc.score = normalizedScore;
+        }
     }
 
     private float calculateNormalizedScore(int position) {

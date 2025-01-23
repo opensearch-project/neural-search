@@ -75,12 +75,19 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
                 continue;
             }
             List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
-            for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
-                TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
+            int numberOfSubQueries = topDocsPerSubQuery.size();
+            for (int subQueryIndex = 0; subQueryIndex < numberOfSubQueries; subQueryIndex++) {
+                TopDocs subQueryTopDoc = topDocsPerSubQuery.get(subQueryIndex);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
                     DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(scoreDoc.doc, compoundQueryTopDocs.getSearchShard());
-                    float normalizedScore = normalizeSingleScore(scoreDoc.score, normsPerSubquery.get(j));
-                    normalizedScores.computeIfAbsent(docIdAtSearchShard, k -> new ArrayList<>()).add(normalizedScore);
+                    float normalizedScore = normalizeSingleScore(scoreDoc.score, normsPerSubquery.get(subQueryIndex));
+                    ScoreNormalizationUtil.setNormalizedScore(
+                        normalizedScores,
+                        docIdAtSearchShard,
+                        subQueryIndex,
+                        numberOfSubQueries,
+                        normalizedScore
+                    );
                     scoreDoc.score = normalizedScore;
                 }
             }
