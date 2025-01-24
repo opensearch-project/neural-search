@@ -113,7 +113,16 @@ public class NormalizationProcessorWorkflow {
         if (searchPhaseContext.getNumShards() > 1 || request.fetchSearchResultOptional.isEmpty()) {
             return -1;
         }
-        return searchPhaseContext.getRequest().source().from();
+        int from = searchPhaseContext.getRequest().source().from();
+        // for the initial searchRequest, it creates a default search context which sets the value of
+        // from to 0 if it's -1. That's not the case with SearchPhaseContext, that's why need to
+        // explicitly set to 0 for the single shard case
+        // Ref:
+        // https://github.com/opensearch-project/OpenSearch/blob/2.18/server/src/main/java/org/opensearch/search/DefaultSearchContext.java#L288
+        if (from == -1) {
+            return 0;
+        }
+        return from;
     }
 
     /**
