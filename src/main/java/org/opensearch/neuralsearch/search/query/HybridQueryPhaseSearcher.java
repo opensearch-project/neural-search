@@ -14,6 +14,7 @@ import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.DisjunctionMaxQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.index.mapper.MapperService;
@@ -104,7 +105,7 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
      *      }
      *   ]
      * }
-     * TODO add similar validation for other compound type queries like dis_max, constant_score etc.
+     * TODO add similar validation for other compound type queries like constant_score, function_score etc.
      *
      * @param query query to validate
      */
@@ -113,6 +114,10 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
             for (BooleanClause booleanClause : booleanClauses) {
                 validateNestedBooleanQuery(booleanClause.getQuery(), getMaxDepthLimit(searchContext));
+            }
+        } else if (query instanceof DisjunctionMaxQuery) {
+            for (Query disjunct : (DisjunctionMaxQuery) query) {
+                validateNestedDisJunctionQuery(disjunct, getMaxDepthLimit(searchContext));
             }
         }
     }
@@ -131,6 +136,24 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
         if (query instanceof BooleanQuery) {
             for (BooleanClause booleanClause : ((BooleanQuery) query).clauses()) {
                 validateNestedBooleanQuery(booleanClause.getQuery(), level - 1);
+            }
+        }
+    }
+
+    private void validateNestedDisJunctionQuery(final Query query, final int level) {
+        if (query instanceof HybridQuery) {
+            throw new IllegalArgumentException("hybrid query must be a top level query and cannot be wrapped into other queries");
+        }
+        if (level <= 0) {
+            // ideally we should throw an error here but this code is on the main search workflow path and that might block
+            // execution of some queries. Instead, we're silently exit and allow such query to execute and potentially produce incorrect
+            // results in case hybrid query is wrapped into such dis_max query
+            log.error("reached max nested query limit, cannot process dis_max query with that many nested clauses");
+            return;
+        }
+        if (query instanceof DisjunctionMaxQuery) {
+            for (Query disjunct : (DisjunctionMaxQuery) query) {
+                validateNestedDisJunctionQuery(disjunct, level - 1);
             }
         }
     }
