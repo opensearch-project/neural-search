@@ -61,7 +61,7 @@ public class HybridQueryUtil {
 
     private static boolean isWrappedHybridQuery(final Query query) {
         return query instanceof BooleanQuery
-            && ((BooleanQuery) query).clauses().stream().anyMatch(clauseQuery -> clauseQuery.getQuery() instanceof HybridQuery);
+            && ((BooleanQuery) query).clauses().stream().anyMatch(clauseQuery -> clauseQuery.query() instanceof HybridQuery);
     }
 
     private static boolean hasAliasFilter(final Query query, final SearchContext searchContext) {

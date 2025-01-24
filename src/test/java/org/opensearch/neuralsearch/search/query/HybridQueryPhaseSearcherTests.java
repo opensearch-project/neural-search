@@ -323,7 +323,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         assertNotNull(querySearchResult.topDocs());
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
         TopDocs topDocs = topDocsAndMaxScore.topDocs;
-        assertEquals(0, topDocs.totalHits.value);
+        assertEquals(0, topDocs.totalHits.value());
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         assertNotNull(scoreDocs);
         assertEquals(0, scoreDocs.length);
@@ -414,7 +414,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         assertNotNull(querySearchResult.topDocs());
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
         TopDocs topDocs = topDocsAndMaxScore.topDocs;
-        assertEquals(0, topDocs.totalHits.value);
+        assertEquals(0, topDocs.totalHits.value());
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         assertNotNull(scoreDocs);
         assertEquals(0, scoreDocs.length);
@@ -831,7 +831,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         assertNotNull(querySearchResult.topDocs());
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
         TopDocs topDocs = topDocsAndMaxScore.topDocs;
-        assertEquals(0, topDocs.totalHits.value);
+        assertEquals(0, topDocs.totalHits.value());
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         assertNotNull(scoreDocs);
         assertEquals(0, scoreDocs.length);
@@ -915,7 +915,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         assertNotNull(querySearchResult.topDocs());
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
         TopDocs topDocs = topDocsAndMaxScore.topDocs;
-        assertTrue(topDocs.totalHits.value > 0);
+        assertTrue(topDocs.totalHits.value() > 0);
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         assertNotNull(scoreDocs);
         assertTrue(scoreDocs.length > 0);
@@ -1122,7 +1122,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         assertNotNull(querySearchResult.topDocs());
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
         TopDocs topDocs = topDocsAndMaxScore.topDocs;
-        assertEquals(0, topDocs.totalHits.value);
+        assertEquals(0, topDocs.totalHits.value());
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         assertNotNull(scoreDocs);
         assertEquals(0, scoreDocs.length);

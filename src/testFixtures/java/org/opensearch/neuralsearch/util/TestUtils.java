@@ -197,9 +197,9 @@ public class TestUtils {
         assertFalse(
             querySearchResults.stream()
                 .map(searchResult -> searchResult.topDocs().topDocs.totalHits)
-                .filter(totalHits -> Objects.isNull(totalHits.relation))
-                .filter(totalHits -> TotalHits.Relation.EQUAL_TO != totalHits.relation)
-                .anyMatch(totalHits -> 0 != totalHits.value)
+                .filter(totalHits -> Objects.isNull(totalHits.relation()))
+                .filter(totalHits -> TotalHits.Relation.EQUAL_TO != totalHits.relation())
+                .anyMatch(totalHits -> 0 != totalHits.value())
         );
     }
 
@@ -289,7 +289,7 @@ public class TestUtils {
         assertEquals(1.0f, maxScore, DELTA_FOR_SCORE_ASSERTION);
         TotalHits totalHits = searchHits.getTotalHits();
         assertNotNull(totalHits);
-        assertEquals(expectedNumberOfHits, totalHits.value);
+        assertEquals(expectedNumberOfHits, totalHits.value());
         assertNotNull(searchHits.getHits());
         assertEquals(expectedNumberOfHits, searchHits.getHits().length);
         float maxScoreScoreFromScoreDocs = Arrays.stream(searchHits.getHits())

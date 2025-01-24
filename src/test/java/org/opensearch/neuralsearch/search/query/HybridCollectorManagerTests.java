@@ -321,9 +321,9 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         LeafCollector leafCollector = collector.getLeafCollector(leafReaderContext);
         LeafCollector leafCollector1 = collector1.getLeafCollector(leafReaderContext);
         BulkScorer scorer = weight.bulkScorer(leafReaderContext);
-        scorer.score(leafCollector, leafReaderContext.reader().getLiveDocs());
+        scorer.score(leafCollector, leafReaderContext.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
         leafCollector.finish();
-        scorer.score(leafCollector1, leafReaderContext.reader().getLiveDocs());
+        scorer.score(leafCollector1, leafReaderContext.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
         leafCollector1.finish();
 
         Object results = hybridCollectorManager.reduce(List.of());
@@ -337,8 +337,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
 
         assertNotNull(topDocsAndMaxScore);
-        assertEquals(1, topDocsAndMaxScore.topDocs.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, topDocsAndMaxScore.topDocs.totalHits.relation);
+        assertEquals(1, topDocsAndMaxScore.topDocs.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, topDocsAndMaxScore.topDocs.totalHits.relation());
         float maxScore = topDocsAndMaxScore.maxScore;
         assertTrue(maxScore > 0);
         ScoreDoc[] scoreDocs = topDocsAndMaxScore.topDocs.scoreDocs;
@@ -500,10 +500,10 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         LeafCollector leafCollector = simpleFieldCollector.getLeafCollector(leafReaderContext);
         LeafCollector leafCollector1 = pagingFieldCollector.getLeafCollector(leafReaderContext);
         BulkScorer scorer = weight.bulkScorer(leafReaderContext);
-        scorer.score(leafCollector, leafReaderContext.reader().getLiveDocs());
+        scorer.score(leafCollector, leafReaderContext.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
         leafCollector.finish();
         BulkScorer scorer1 = weight.bulkScorer(leafReaderContext);
-        scorer1.score(leafCollector1, leafReaderContext.reader().getLiveDocs());
+        scorer1.score(leafCollector1, leafReaderContext.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
         leafCollector1.finish();
 
         Object results = hybridCollectorManager.reduce(List.of());
@@ -517,8 +517,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
 
         assertNotNull(topDocsAndMaxScore);
-        assertEquals(3, topDocsAndMaxScore.topDocs.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, topDocsAndMaxScore.topDocs.totalHits.relation);
+        assertEquals(3, topDocsAndMaxScore.topDocs.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, topDocsAndMaxScore.topDocs.totalHits.relation());
         float maxScore = topDocsAndMaxScore.maxScore;
         assertTrue(maxScore > 0);
         ScoreDoc[] scoreDocs = topDocsAndMaxScore.topDocs.scoreDocs;
@@ -591,8 +591,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         LeafCollector leafCollector2 = collector2.getLeafCollector(leafReaderContext);
 
         BulkScorer scorer = weight.bulkScorer(leafReaderContext);
-        scorer.score(leafCollector1, leafReaderContext.reader().getLiveDocs());
-        scorer.score(leafCollector2, leafReaderContext.reader().getLiveDocs());
+        scorer.score(leafCollector1, leafReaderContext.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
+        scorer.score(leafCollector2, leafReaderContext.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
 
         leafCollector1.finish();
         leafCollector2.finish();
@@ -606,8 +606,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
 
         assertNotNull(topDocsAndMaxScore);
-        assertEquals(2, topDocsAndMaxScore.topDocs.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, topDocsAndMaxScore.topDocs.totalHits.relation);
+        assertEquals(2, topDocsAndMaxScore.topDocs.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, topDocsAndMaxScore.topDocs.totalHits.relation());
         float maxScore = topDocsAndMaxScore.maxScore;
         assertTrue(maxScore > 0);
 
@@ -723,10 +723,10 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         LeafReaderContext leafReaderContext2 = searcher2.getIndexReader().leaves().get(0);
         LeafCollector leafCollector2 = collector2.getLeafCollector(leafReaderContext2);
         BulkScorer scorer = weight1.bulkScorer(leafReaderContext);
-        scorer.score(leafCollector1, leafReaderContext.reader().getLiveDocs());
+        scorer.score(leafCollector1, leafReaderContext.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
         leafCollector1.finish();
         BulkScorer scorer2 = weight2.bulkScorer(leafReaderContext2);
-        scorer2.score(leafCollector2, leafReaderContext2.reader().getLiveDocs());
+        scorer2.score(leafCollector2, leafReaderContext2.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
         leafCollector2.finish();
 
         Object results = hybridCollectorManager.reduce(List.of(collector1, collector2));
@@ -738,8 +738,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
 
         assertNotNull(topDocsAndMaxScore);
-        assertEquals(3, topDocsAndMaxScore.topDocs.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, topDocsAndMaxScore.topDocs.totalHits.relation);
+        assertEquals(3, topDocsAndMaxScore.topDocs.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, topDocsAndMaxScore.topDocs.totalHits.relation());
         float maxScore = topDocsAndMaxScore.maxScore;
         assertTrue(maxScore > 0);
         FieldDoc[] fieldDocs = (FieldDoc[]) topDocsAndMaxScore.topDocs.scoreDocs;
@@ -845,9 +845,9 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         LeafCollector leafCollector = collector.getLeafCollector(leafReaderContext);
         LeafCollector filteredCollectorLeafCollector = filteredCollector.getLeafCollector(leafReaderContext);
         BulkScorer scorer = weight.bulkScorer(leafReaderContext);
-        scorer.score(leafCollector, leafReaderContext.reader().getLiveDocs());
+        scorer.score(leafCollector, leafReaderContext.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
         leafCollector.finish();
-        scorer.score(filteredCollectorLeafCollector, leafReaderContext.reader().getLiveDocs());
+        scorer.score(filteredCollectorLeafCollector, leafReaderContext.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
         filteredCollectorLeafCollector.finish();
 
         Object results1 = hybridCollectorManager1.reduce(List.of());
@@ -861,8 +861,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
 
         assertNotNull(topDocsAndMaxScore);
-        assertEquals(2, topDocsAndMaxScore.topDocs.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, topDocsAndMaxScore.topDocs.totalHits.relation);
+        assertEquals(2, topDocsAndMaxScore.topDocs.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, topDocsAndMaxScore.topDocs.totalHits.relation());
         float maxScore = topDocsAndMaxScore.maxScore;
         assertTrue(maxScore > 0);
         ScoreDoc[] scoreDocs = topDocsAndMaxScore.topDocs.scoreDocs;
@@ -984,13 +984,13 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         LeafReaderContext leafReaderContext = searcher1.getIndexReader().leaves().get(0);
         LeafCollector leafCollector1 = collector1.getLeafCollector(leafReaderContext);
         BulkScorer scorer = weight1.bulkScorer(leafReaderContext);
-        scorer.score(leafCollector1, leafReaderContext.reader().getLiveDocs());
+        scorer.score(leafCollector1, leafReaderContext.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
         leafCollector1.finish();
 
         LeafReaderContext leafReaderContext2 = searcher2.getIndexReader().leaves().get(0);
         LeafCollector leafCollector2 = collector2.getLeafCollector(leafReaderContext2);
         BulkScorer scorer2 = weight2.bulkScorer(leafReaderContext2);
-        scorer2.score(leafCollector2, leafReaderContext2.reader().getLiveDocs());
+        scorer2.score(leafCollector2, leafReaderContext2.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
         leafCollector2.finish();
 
         Object results = hybridCollectorManager.reduce(List.of(collector1, collector2));
@@ -1003,8 +1003,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
 
         assertNotNull(topDocsAndMaxScore);
-        assertEquals(3, topDocsAndMaxScore.topDocs.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, topDocsAndMaxScore.topDocs.totalHits.relation);
+        assertEquals(3, topDocsAndMaxScore.topDocs.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, topDocsAndMaxScore.topDocs.totalHits.relation());
         float maxScore = topDocsAndMaxScore.maxScore;
         assertTrue(maxScore > 0);
         ScoreDoc[] scoreDocs = topDocsAndMaxScore.topDocs.scoreDocs;
@@ -1090,7 +1090,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         LeafCollector leafCollector = collector.getLeafCollector(leafReaderContext);
 
         BulkScorer scorer = weight.bulkScorer(leafReaderContext);
-        scorer.score(leafCollector, leafReaderContext.reader().getLiveDocs());
+        scorer.score(leafCollector, leafReaderContext.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
         leafCollector.finish();
 
         expectThrows(HybridSearchRescoreQueryException.class, () -> hybridCollectorManager1.reduce(List.of()));

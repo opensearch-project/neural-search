@@ -270,8 +270,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
     }
 
     private void assertCompoundTopDocs(TopDocs expected, TopDocs actual) {
-        assertEquals(expected.totalHits.value, actual.totalHits.value);
-        assertEquals(expected.totalHits.relation, actual.totalHits.relation);
+        assertEquals(expected.totalHits.value(), actual.totalHits.value());
+        assertEquals(expected.totalHits.relation(), actual.totalHits.relation());
         assertEquals(expected.scoreDocs.length, actual.scoreDocs.length);
         for (int i = 0; i < expected.scoreDocs.length; i++) {
             assertEquals(expected.scoreDocs[i].score, actual.scoreDocs[i].score, DELTA_FOR_ASSERTION);

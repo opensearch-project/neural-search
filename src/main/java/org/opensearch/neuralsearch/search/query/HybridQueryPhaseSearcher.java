@@ -78,13 +78,13 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
     protected Query extractHybridQuery(final SearchContext searchContext, final Query query) {
         if (isHybridQueryWrappedInBooleanQuery(searchContext, query)) {
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
-            if (!(booleanClauses.get(0).getQuery() instanceof HybridQuery)) {
+            if (!(booleanClauses.get(0).query() instanceof HybridQuery)) {
                 throw new IllegalStateException("cannot process hybrid query due to incorrect structure of top level query");
             }
-            HybridQuery hybridQuery = (HybridQuery) booleanClauses.stream().findFirst().get().getQuery();
+            HybridQuery hybridQuery = (HybridQuery) booleanClauses.stream().findFirst().get().query();
             List<Query> filterQueries = booleanClauses.stream()
-                .filter(clause -> BooleanClause.Occur.FILTER == clause.getOccur())
-                .map(BooleanClause::getQuery)
+                .filter(clause -> BooleanClause.Occur.FILTER == clause.occur())
+                .map(BooleanClause::query)
                 .collect(Collectors.toList());
             HybridQuery hybridQueryWithFilter = new HybridQuery(hybridQuery.getSubQueries(), filterQueries, hybridQuery.getQueryContext());
             return hybridQueryWithFilter;
@@ -113,7 +113,7 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
         if (query instanceof BooleanQuery) {
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
             for (BooleanClause booleanClause : booleanClauses) {
-                validateNestedBooleanQuery(booleanClause.getQuery(), getMaxDepthLimit(searchContext));
+                validateNestedBooleanQuery(booleanClause.query(), getMaxDepthLimit(searchContext));
             }
         } else if (query instanceof DisjunctionMaxQuery) {
             for (Query disjunct : (DisjunctionMaxQuery) query) {
@@ -135,7 +135,7 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
         }
         if (query instanceof BooleanQuery) {
             for (BooleanClause booleanClause : ((BooleanQuery) query).clauses()) {
-                validateNestedBooleanQuery(booleanClause.getQuery(), level - 1);
+                validateNestedBooleanQuery(booleanClause.query(), level - 1);
             }
         }
     }

@@ -230,7 +230,7 @@ public class HybridQueryScorerTests extends OpenSearchQueryTestCase {
         Weight weight = mock(Weight.class);
 
         Scorer scorer = mock(Scorer.class);
-        when(scorer.getWeight()).thenReturn(fakeWeight(new MatchAllDocsQuery()));
+        // when(scorer.getWeight()).thenReturn(fakeWeight(new MatchAllDocsQuery()));
         when(scorer.iterator()).thenReturn(iterator(docs));
         when(scorer.getMaxScore(anyInt())).thenThrow(new IOException("Test exception"));
 
@@ -301,8 +301,8 @@ public class HybridQueryScorerTests extends OpenSearchQueryTestCase {
         when(scorer2.score()).thenReturn(0.3f);
 
         // Create DisiWrapper list
-        DisiWrapper wrapper1 = new DisiWrapper(scorer1);
-        wrapper1.next = new DisiWrapper(scorer2);
+        DisiWrapper wrapper1 = new DisiWrapper(scorer1, false);
+        wrapper1.next = new DisiWrapper(scorer2, false);
 
         Weight weight = mock(Weight.class);
         HybridQueryScorer hybridScorer = new HybridQueryScorer(weight, Arrays.asList(scorer1, scorer2));
@@ -331,7 +331,7 @@ public class HybridQueryScorerTests extends OpenSearchQueryTestCase {
         when(scorer.twoPhaseIterator()).thenReturn(twoPhase);
 
         // Create wrapper
-        DisiWrapper wrapper = new DisiWrapper(scorer);
+        DisiWrapper wrapper = new DisiWrapper(scorer, false);
 
         // Create weight mock
         Weight weight = mock(Weight.class);
@@ -536,8 +536,8 @@ public class HybridQueryScorerTests extends OpenSearchQueryTestCase {
         when(neuralScorer.score()).thenReturn(0.9f);
 
         // Create DisiWrapper chain
-        DisiWrapper boolWrapper = new DisiWrapper(boolScorer);
-        DisiWrapper neuralWrapper = new DisiWrapper(neuralScorer);
+        DisiWrapper boolWrapper = new DisiWrapper(boolScorer, false);
+        DisiWrapper neuralWrapper = new DisiWrapper(neuralScorer, false);
         boolWrapper.next = neuralWrapper;
 
         Weight weight = mock(Weight.class);
@@ -661,7 +661,7 @@ public class HybridQueryScorerTests extends OpenSearchQueryTestCase {
 
     protected static Scorer scorerWithTwoPhaseIterator(final int[] docs, final float[] scores, Weight weight, int maxDoc) {
         final DocIdSetIterator iterator = DocIdSetIterator.all(maxDoc);
-        return new Scorer(weight) {
+        return new Scorer() {
 
             int lastScoredDoc = -1;
 
