@@ -398,6 +398,73 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
         TestUtils.assertFetchResultScores(fetchSearchResult, 4);
     }
 
+    public void testNormalization_whenOneShardAndFromIsNegativeOne_thenSuccess() {
+        NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+        );
+
+        int shardId = 0;
+        SearchShardTarget searchShardTarget = new SearchShardTarget(
+            "node",
+            new ShardId("index", "uuid", shardId),
+            null,
+            OriginalIndices.NONE
+        );
+
+        // Setup query search results
+        List<QuerySearchResult> querySearchResults = new ArrayList<>();
+        FetchSearchResult fetchSearchResult = new FetchSearchResult();
+        QuerySearchResult querySearchResult = new QuerySearchResult();
+        querySearchResult.topDocs(
+            new TopDocsAndMaxScore(
+                new TopDocs(
+                    new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+                    new ScoreDoc[] {
+                        createStartStopElementForHybridSearchResults(0),
+                        createDelimiterElementForHybridSearchResults(0),
+                        new ScoreDoc(0, 0.5f),
+                        new ScoreDoc(2, 0.3f),
+                        new ScoreDoc(4, 0.25f),
+                        new ScoreDoc(10, 0.2f),
+                        createStartStopElementForHybridSearchResults(0) }
+                ),
+                0.5f
+            ),
+            null
+        );
+        querySearchResult.setSearchShardTarget(searchShardTarget);
+        querySearchResult.setShardIndex(shardId);
+        ShardSearchRequest shardSearchRequest = mock(ShardSearchRequest.class);
+        when(shardSearchRequest.requestCache()).thenReturn(Boolean.TRUE);
+        querySearchResult.setShardSearchRequest(shardSearchRequest);
+        querySearchResults.add(querySearchResult);
+        SearchHits searchHits = getSearchHits();
+        fetchSearchResult.hits(searchHits);
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
+        SearchRequest searchRequest = mock(SearchRequest.class);
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        // searchSourceBuilder.from(); if no from is defined here it would initialize it to -1
+        when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+        when(searchRequest.source()).thenReturn(searchSourceBuilder);
+        when(searchPhaseContext.getNumShards()).thenReturn(1);
+        NormalizationProcessorWorkflowExecuteRequest normalizationExecuteDTO = NormalizationProcessorWorkflowExecuteRequest.builder()
+            .querySearchResults(querySearchResults)
+            .fetchSearchResultOptional(Optional.of(fetchSearchResult))
+            .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+            .combinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+            .searchPhaseContext(searchPhaseContext)
+            .build();
+
+        // Setup fetch search result
+        fetchSearchResult.hits(searchHits);
+
+        normalizationProcessorWorkflow.execute(normalizationExecuteDTO);
+
+        // Verify that the fetch result has been updated correctly
+        TestUtils.assertQueryResultScores(querySearchResults);
+        TestUtils.assertFetchResultScores(fetchSearchResult, 4);
+    }
+
     public void testNormalization_whenFromIsGreaterThanResultsSize_thenFail() {
         NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
             new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
