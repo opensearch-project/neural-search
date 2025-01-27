@@ -27,7 +27,9 @@ public class ScoreCombinationFactory {
         GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME,
         params -> new GeometricMeanScoreCombinationTechnique(params, scoreCombinationUtil),
         RRFScoreCombinationTechnique.TECHNIQUE_NAME,
-        params -> new RRFScoreCombinationTechnique()
+        params -> new RRFScoreCombinationTechnique(),
+        ArithmeticMeanScoreCombinationWithNegativeSupportTechnique.TECHNIQUE_NAME,
+        params -> new ArithmeticMeanScoreCombinationWithNegativeSupportTechnique(params, scoreCombinationUtil)
     );
 
     /**
