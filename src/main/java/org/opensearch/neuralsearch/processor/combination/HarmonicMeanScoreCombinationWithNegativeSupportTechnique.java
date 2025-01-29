@@ -11,18 +11,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.opensearch.neuralsearch.processor.combination.ScoreCombinationUtil.PARAM_NAME_WEIGHTS;
 import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.describeCombinationTechnique;
 
-public class ArithmeticMeanScoreCombinationWithNegativeSupportTechnique implements ScoreCombinationTechnique, ExplainableTechnique {
+public class HarmonicMeanScoreCombinationWithNegativeSupportTechnique implements ScoreCombinationTechnique, ExplainableTechnique {
     @ToString.Include
-    public static final String TECHNIQUE_NAME = "arithmetic_mean_with_negatives_support";
-    public static final String PARAM_NAME_WEIGHTS = "weights";
+    public static final String TECHNIQUE_NAME = "harmonic_mean_with_negative_support";
     private static final Set<String> SUPPORTED_PARAMS = Set.of(PARAM_NAME_WEIGHTS);
     private static final Float ZERO_SCORE = 0.0f;
     private final List<Float> weights;
     private final ScoreCombinationUtil scoreCombinationUtil;
 
-    public ArithmeticMeanScoreCombinationWithNegativeSupportTechnique(
+    public HarmonicMeanScoreCombinationWithNegativeSupportTechnique(
         final Map<String, Object> params,
         final ScoreCombinationUtil combinationUtil
     ) {
@@ -32,27 +32,23 @@ public class ArithmeticMeanScoreCombinationWithNegativeSupportTechnique implemen
     }
 
     /**
-     * Arithmetic mean method for combining scores.
-     * score = (weight1*score1 + weight2*score2 +...+ weightN*scoreN)/(weight1 + weight2 + ... + weightN)
+     * Weighted harmonic mean method for combining scores.
+     * score = sum(weight_1 + .... + weight_n)/sum(weight_1/score_1 + ... + weight_n/score_n)
      *
      * Zero (0.0) scores are excluded from number of scores N
      */
     @Override
     public float combine(final float[] scores) {
         scoreCombinationUtil.validateIfWeightsMatchScores(scores, weights);
-        float combinedScore = 0.0f;
         float sumOfWeights = 0;
+        float sumOfHarmonics = 0;
         for (int indexOfSubQuery = 0; indexOfSubQuery < scores.length; indexOfSubQuery++) {
             float score = scores[indexOfSubQuery];
-            float weight = scoreCombinationUtil.getWeightForSubQuery(weights, indexOfSubQuery);
-            score = score * weight;
-            combinedScore += score;
-            sumOfWeights += weight;
+            float weightOfSubQuery = scoreCombinationUtil.getWeightForSubQuery(weights, indexOfSubQuery);
+            sumOfWeights += weightOfSubQuery;
+            sumOfHarmonics += weightOfSubQuery / score;
         }
-        if (sumOfWeights == 0.0f) {
-            return ZERO_SCORE;
-        }
-        return combinedScore / sumOfWeights;
+        return sumOfHarmonics > 0 ? sumOfWeights / sumOfHarmonics : ZERO_SCORE;
     }
 
     @Override
