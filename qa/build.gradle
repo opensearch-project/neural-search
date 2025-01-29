@@ -34,6 +34,7 @@ def knnJarDirectory = "$rootDir/build/dependencies/opensearch-knn"
 
 dependencies {
     api "org.opensearch:opensearch:${opensearch_version}"
+    zipArchive group: 'org.opensearch.plugin', name:'opensearch-job-scheduler', version: "${opensearch_build}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-knn', version: "${opensearch_build}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-ml-plugin', version: "${opensearch_build}"
     compileOnly fileTree(dir: knnJarDirectory, include: "opensearch-knn-${opensearch_build}.jar")
@@ -70,6 +71,16 @@ if (Os.isFamily(Os.FAMILY_WINDOWS)) {
 
 ext{
     plugins = [provider(new Callable<RegularFile>(){
+        @Override
+        RegularFile call() throws Exception {
+            return new RegularFile() {
+                @Override
+                File getAsFile() {
+                    return configurations.zipArchive.asFileTree.matching{include "**/opensearch-job-scheduler-${opensearch_build}.zip"}.getSingleFile()
+                }
+            }
+        }
+    }), provider(new Callable<RegularFile>(){
         @Override
         RegularFile call() throws Exception {
             return new RegularFile() {
