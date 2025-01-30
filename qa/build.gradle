@@ -77,6 +77,16 @@ ext{
             return new RegularFile() {
                 @Override
                 File getAsFile() {
+                    return configurations.zipArchive.asFileTree.matching{include "**/opensearch-job-scheduler-${opensearch_build}.zip"}.getSingleFile()
+                }
+            }
+        }
+    }), provider(new Callable<RegularFile>(){
+        @Override
+        RegularFile call() throws Exception {
+            return new RegularFile() {
+                @Override
+                File getAsFile() {
                     return configurations.zipArchive.asFileTree.matching{include "**/opensearch-ml-plugin-${opensearch_build}.zip"}.getSingleFile()
                 }
             }
