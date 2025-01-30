@@ -263,7 +263,6 @@ dependencies {
     // ml-common excluded reflection for runtime so we need to add it by ourselves.
     // https://github.com/opensearch-project/ml-commons/commit/464bfe34c66d7a729a00dd457f03587ea4e504d9
     // TODO: Remove following three lines of dependencies if ml-common include them in their jar
-    runtimeOnly 'com.jayway.jsonpath:json-path:2.9.0'
     runtimeOnly group: 'org.reflections', name: 'reflections', version: '0.9.12'
     runtimeOnly group: 'org.javassist', name: 'javassist', version: '3.29.2-GA'
     runtimeOnly group: 'org.opensearch', name: 'common-utils', version: "${opensearch_build}"
