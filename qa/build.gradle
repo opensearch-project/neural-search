@@ -33,7 +33,6 @@ configurations {
 def knnJarDirectory = "$rootDir/build/dependencies/opensearch-knn"
 
 dependencies {
-    implementation 'com.jayway.jsonpath:json-path:2.9.0'
     api "org.opensearch:opensearch:${opensearch_version}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-job-scheduler', version: "${opensearch_build}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-knn', version: "${opensearch_build}"
@@ -44,7 +43,10 @@ dependencies {
     api "org.apache.logging.log4j:log4j-api:${versions.log4j}"
     api "org.apache.logging.log4j:log4j-core:${versions.log4j}"
     api "junit:junit:${versions.junit}"
-    testImplementation 'com.jayway.jsonpath:json-path:2.9.0'
+    if(neural_search_bwc_version > "2.19.0-SNAPSHOT"){
+       testRuntimeOnly 'com.jayway.jsonpath:json-path:2.9.0' 
+       testImplementation 'com.jayway.jsonpath:json-path:2.9.0'
+    }
     testImplementation "org.opensearch.test:framework:${opensearch_version}"
     testImplementation(testFixtures(rootProject))
 }
