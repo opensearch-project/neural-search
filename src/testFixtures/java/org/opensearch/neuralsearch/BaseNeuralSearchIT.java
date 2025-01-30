@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch;
 
+import org.opensearch.client.ResponseException;
 import org.opensearch.ml.common.model.MLModelState;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 
@@ -1504,23 +1505,32 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final String modelId,
         final String searchPipeline
     ) throws IOException {
-        if (ingestPipeline != null) {
-            deletePipeline(ingestPipeline);
-        }
-        if (searchPipeline != null) {
-            deleteSearchPipeline(searchPipeline);
-        }
-        if (modelId != null) {
-            try {
-                deleteModel(modelId);
-            } catch (AssertionError e) {
-                // sometimes we have flaky test that the model state doesn't change after call undeploy api
-                // for this case we can call undeploy api one more time
-                deleteModel(modelId);
+        try {
+            if (ingestPipeline != null) {
+                deletePipeline(ingestPipeline);
             }
-        }
-        if (indexName != null) {
-            deleteIndex(indexName);
+            if (searchPipeline != null) {
+                deleteSearchPipeline(searchPipeline);
+            }
+            if (modelId != null) {
+                try {
+                    deleteModel(modelId);
+                } catch (AssertionError e) {
+                    // sometimes we have flaky test that the model state doesn't change after call undeploy api
+                    // for this case we can call undeploy api one more time
+                    deleteModel(modelId);
+                }
+            }
+            if (indexName != null) {
+                deleteIndex(indexName);
+            }
+        } catch (ResponseException e) {
+            // It's possible that test fails during resources (index, model, pipeline, etc.) creation, when clean up
+            // these resources after test run, the delete methods will throw ResponseException with 404 Not Found code
+            // In this case, we just need to ignore this exception, for other exceptions, continue throwing
+            if (RestStatus.fromCode(e.getResponse().getStatusLine().getStatusCode()) != RestStatus.NOT_FOUND) {
+                throw e;
+            }
         }
     }
 
