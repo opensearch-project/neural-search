@@ -40,6 +40,7 @@ dependencies {
     compileOnly fileTree(dir: knnJarDirectory, include: "opensearch-knn-${opensearch_build}.jar")
     compileOnly group: 'com.google.guava', name: 'guava', version:'32.1.3-jre'
     compileOnly group: 'commons-lang', name: 'commons-lang', version: '2.6'
+    runtimeOnly 'com.jayway.jsonpath:json-path:2.9.0'
     api "org.apache.logging.log4j:log4j-api:${versions.log4j}"
     api "org.apache.logging.log4j:log4j-core:${versions.log4j}"
     api "junit:junit:${versions.junit}"
