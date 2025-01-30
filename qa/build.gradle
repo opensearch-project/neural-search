@@ -36,12 +36,14 @@ dependencies {
     api "org.opensearch:opensearch:${opensearch_version}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-knn', version: "${opensearch_build}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-ml-plugin', version: "${opensearch_build}"
+    zipArchive group: 'org.opensearch.plugin', name:'opensearch-job-scheduler', version: "${opensearch_build}"
     compileOnly fileTree(dir: knnJarDirectory, include: "opensearch-knn-${opensearch_build}.jar")
     compileOnly group: 'com.google.guava', name: 'guava', version:'32.1.3-jre'
     compileOnly group: 'commons-lang', name: 'commons-lang', version: '2.6'
     api "org.apache.logging.log4j:log4j-api:${versions.log4j}"
     api "org.apache.logging.log4j:log4j-core:${versions.log4j}"
     api "junit:junit:${versions.junit}"
+    implementation 'com.jayway.jsonpath:json-path:2.9.0'
     testImplementation "org.opensearch.test:framework:${opensearch_version}"
     testImplementation(testFixtures(rootProject))
 }
