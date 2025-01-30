@@ -36,6 +36,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.OpenSearchParseException;
+import org.opensearch.client.OpenSearchClient;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
@@ -67,6 +68,10 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
     protected static final String TEXT_VALUE_2 = "text_value2";
     protected static final String TEXT_VALUE_3 = "text_value3";
     protected static final String TEXT_FIELD_2 = "abc";
+
+    @Mock
+    private OpenSearchClient openSearchClient;
+
     @Mock
     private MLCommonsClientAccessor mlCommonsClientAccessor;
 
@@ -175,6 +180,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         Map<String, Processor.Factory> registry = new HashMap<>();
         MLCommonsClientAccessor accessor = mock(MLCommonsClientAccessor.class);
         TextEmbeddingProcessorFactory textEmbeddingProcessorFactory = new TextEmbeddingProcessorFactory(
+            openSearchClient,
             accessor,
             environment,
             clusterService
@@ -203,6 +209,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         Map<String, Processor.Factory> registry = new HashMap<>();
         MLCommonsClientAccessor accessor = mock(MLCommonsClientAccessor.class);
         TextEmbeddingProcessorFactory textEmbeddingProcessorFactory = new TextEmbeddingProcessorFactory(
+            openSearchClient,
             accessor,
             environment,
             clusterService
