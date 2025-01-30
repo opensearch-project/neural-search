@@ -44,6 +44,11 @@ dependencies {
     api "org.apache.logging.log4j:log4j-core:${versions.log4j}"
     api "junit:junit:${versions.junit}"
     testImplementation "org.opensearch.test:framework:${opensearch_version}"
+    // json-path 2.9.0 depends on slf4j 2.0.11, which conflicts with the version used by OpenSearch core.
+    // Excluding slf4j here since json-path is only used for testing, and logging failures in this context are acceptable.
+    testRuntimeOnly('com.jayway.jsonpath:json-path:2.9.0') {
+        exclude group: 'org.slf4j', module: 'slf4j-api'
+    }
     testImplementation(testFixtures(rootProject))
 }
 
