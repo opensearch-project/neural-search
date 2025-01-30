@@ -243,7 +243,7 @@ opensearchplugin {
 dependencyLicenses.enabled = false
 thirdPartyAudit.enabled = false
 loggerUsageCheck.enabled = false
-// No need to validate pom, as we do not upload to maven/sonatype
+// no need to validate pom, as we do not upload to maven/sonatype
 validateNebulaPom.enabled = false
 
 def knnJarDirectory = "$buildDir/dependencies/opensearch-knn"
