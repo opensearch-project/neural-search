@@ -279,7 +279,6 @@ dependencies {
         exclude group: 'org.slf4j', module: 'slf4j-api'
     }
     // OpenSearch core is using slf4j 1.7.36. Therefore, we cannot change the version here.
-    implementation 'org.slf4j:slf4j-api:1.7.36'
     testFixturesCompileOnly group: 'com.google.guava', name: 'guava', version:'32.1.3-jre'
     testFixturesCompileOnly fileTree(dir: knnJarDirectory, include: "opensearch-knn-${opensearch_build}.jar")
 }
