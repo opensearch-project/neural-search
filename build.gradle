@@ -250,6 +250,7 @@ def knnJarDirectory = "$buildDir/dependencies/opensearch-knn"
 
 dependencies {
     api "org.opensearch:opensearch:${opensearch_version}"
+    zipArchive group: 'org.opensearch.plugin', name:'opensearch-job-scheduler', version: "${opensearch_build}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-knn', version: "${opensearch_build}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-ml-plugin', version: "${opensearch_build}"
     secureIntegTestPluginArchive group: 'org.opensearch.plugin', name:'opensearch-security', version: "${opensearch_build}"
@@ -268,6 +269,12 @@ dependencies {
     runtimeOnly group: 'org.apache.commons', name: 'commons-text', version: '1.10.0'
     runtimeOnly group: 'com.google.code.gson', name: 'gson', version: '2.10.1'
     runtimeOnly group: 'org.json', name: 'json', version: '20231013'
+    // json-path 2.9.0 depends on slf4j 2.0.11, which conflicts with the version used by OpenSearch core.
+    // Excluding slf4j here since json-path is only used for testing, and logging failures in this context are acceptable.
+    runtimeOnly('com.jayway.jsonpath:json-path:2.9.0') {
+        // OpenSearch core is using slf4j 1.7.36. Therefore, we cannot change the version here.
+        exclude group: 'org.slf4j', module: 'slf4j-api'
+    }
     runtimeOnly("com.fasterxml.jackson.core:jackson-annotations:${versions.jackson}")
     runtimeOnly("com.fasterxml.jackson.core:jackson-databind:${versions.jackson_databind}")
     testFixturesImplementation "org.opensearch:common-utils:${version}"
