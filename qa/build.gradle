@@ -75,6 +75,16 @@ ext{
             return new RegularFile() {
                 @Override
                 File getAsFile() {
+                    return configurations.zipArchive.asFileTree.matching{include "**/opensearch-job-scheduler-${opensearch_build}.zip"}.getSingleFile()
+                }
+            }
+        }
+    }),provider(new Callable<RegularFile>(){
+        @Override
+        RegularFile call() throws Exception {
+            return new RegularFile() {
+                @Override
+                File getAsFile() {
                     return configurations.zipArchive.asFileTree.matching{include "**/opensearch-ml-plugin-${opensearch_build}.zip"}.getSingleFile()
                 }
             }
@@ -131,19 +141,8 @@ task pullOpensearchArtifact {
    }
 }
 
-// Task to pull job scheduler plugin from archive
-task pullJobSchedulerBwcPlugin {
-    doLast {
-        copy {
-            from(Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}", "plugins", "opensearch-job-scheduler"))
-            into Path.of(tmp_dir.absolutePath, "opensearch-job-scheduler")
-        }
-    }
-}
-
 // Task to pull ml plugin from archive
 task pullMlCommonsBwcPlugin {
-    dependsOn "pullJobSchedulerBwcPlugin"
     doLast {
         copy {
             from(Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}", "plugins", "opensearch-ml"))
@@ -160,6 +159,17 @@ task pullKnnBwcPlugin {
         copy {
             from(Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}", "plugins", "opensearch-knn"))
             into Path.of(tmp_dir.absolutePath, "opensearch-knn")
+        }
+    }
+}
+
+// Task to pull job scheduler plugin from archive
+task pullJobSchedulerBwcPlugin {
+    dependsOn "pullKnnBwcPlugin"
+    doLast {
+        copy {
+            from(Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}", "plugins", "opensearch-job-scheduler"))
+            into Path.of(tmp_dir.absolutePath, "opensearch-job-scheduler")
         }
     }
 }
