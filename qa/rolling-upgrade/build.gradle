@@ -45,6 +45,7 @@ testClusters {
             }
         }else{
             versions = [ext.neural_search_bwc_version, opensearch_version]
+            plugin(project.tasks.zipBwcJobSchedulerPlugin.archiveFile)
             plugin(project.tasks.zipBwcMlCommonsPlugin.archiveFile)
             plugin(project.tasks.zipBwcKnnPlugin.archiveFile)
             plugin(project.tasks.zipBwcPlugin.archiveFile)
