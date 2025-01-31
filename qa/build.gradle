@@ -86,7 +86,7 @@ ext{
                 }
             }
         }
-    }),provider(new Callable<RegularFile>(){
+    }), provider(new Callable<RegularFile>(){
         @Override
         RegularFile call() throws Exception {
             return new RegularFile() {
