@@ -165,6 +165,17 @@ task pullKnnBwcPlugin {
     }
 }
 
+// Task to pull job scheduler plugin from archive
+task pullJobSchedulerBwcPlugin {
+    dependsOn "pullKnnBwcPlugin"
+    doLast {
+        copy {
+            from(Path.of(tmp_dir.absolutePath, "opensearch-${neural_search_bwc_version_no_qualifier}", "plugins", "opensearch-job-scheduler"))
+            into Path.of(tmp_dir.absolutePath, "opensearch-job-scheduler")
+        }
+    }
+}
+
 // Task to pull neural search plugin from archive
 task pullBwcPlugin {
     doLast {
@@ -176,9 +187,21 @@ task pullBwcPlugin {
     }
 }
 
+// Task to zip opensearch-job-scheduler plugin from archive
+task zipBwcJobSchedulerPlugin(type: Zip) {
+    dependsOn "pullJobSchedulerBwcPlugin"
+    from(Path.of(tmp_dir.absolutePath, "opensearch-job-scheduler"))
+    destinationDirectory = tmp_dir
+    archiveFileName = "opensearch-job-scheduler-${neural_search_bwc_version_no_qualifier}.zip"
+    doLast {
+        delete Path.of(tmp_dir.absolutePath, "opensearch-job-scheduler")
+    }
+}
+
 // Task to zip ml-commons plugin from archive
 task zipBwcMlCommonsPlugin(type: Zip) {
     dependsOn "pullMlCommonsBwcPlugin"
+    dependsOn "zipBwcJobSchedulerPlugin"
     from(Path.of(tmp_dir.absolutePath, "opensearch-ml"))
     destinationDirectory = tmp_dir
     archiveFileName = "opensearch-ml-${neural_search_bwc_version_no_qualifier}.zip"
