@@ -114,7 +114,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: ${{ matrix.os }} == "ubuntu-latest"
         with:
-          name: coverage-report-${{ matrix.os }}
+          name: coverage-report-${{ matrix.os }}-${{ matrix.java }}
           path: ./
 
   Precommit-neural-search-windows:
@@ -143,12 +143,13 @@ jobs:
     needs: Precommit-neural-search-linux
     strategy:
       matrix:
+        java: [21, 23]
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: coverage-report-${{ matrix.os }}
+          name: coverage-report-${{ matrix.os }}-${{ matrix.java }}
           path: ./
       - name: Upload Coverage Report
         uses: codecov/codecov-action@v5
