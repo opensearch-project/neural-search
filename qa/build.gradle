@@ -178,11 +178,11 @@ task pullBwcPlugin {
 // Task to zip opensearch-job-scheduler plugin from archive
 task zipBwcJobSchedulerPlugin(type: Zip) {
     dependsOn "pullJobSchedulerBwcPlugin"
-    from(Path.of(tmp_dir.absolutePath, "opensearch-ml"))
+    from(Path.of(tmp_dir.absolutePath, "opensearch-job-scheduler"))
     destinationDirectory = tmp_dir
-    archiveFileName = "opensearch-ml-${neural_search_bwc_version_no_qualifier}.zip"
+    archiveFileName = "opensearch-job-scheduler-${neural_search_bwc_version_no_qualifier}.zip"
     doLast {
-        delete Path.of(tmp_dir.absolutePath, "opensearch-ml")
+        delete Path.of(tmp_dir.absolutePath, "opensearch-job-scheduler")
     }
 }
 
