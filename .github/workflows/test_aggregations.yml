@@ -20,7 +20,7 @@ jobs:
     needs: Get-CI-Image-Tag
     strategy:
       matrix:
-        java: [21]
+        java: [21, 23]
         os: [ubuntu-latest]
 
     name: Integ Tests Linux
@@ -54,7 +54,7 @@ jobs:
   Check-neural-search-windows:
     strategy:
       matrix:
-        java: [21]
+        java: [21, 23]
         os: [windows-latest]
 
     name: Integ Tests Windows
