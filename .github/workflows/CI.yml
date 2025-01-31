@@ -109,7 +109,7 @@ jobs:
       - name: Run build
         run: |
           chown -R 1000:1000 `pwd`
-          su `id -un 1000` -c "./gradlew precommit --parallel"
+          su `id -un 1000` -c "./gradlew precommit --parallel && ./gradlew jacocoTestReport"
 
       - uses: actions/upload-artifact@v4
         if: ${{ matrix.os }} == "ubuntu-latest"
