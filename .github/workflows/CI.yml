@@ -109,13 +109,13 @@ jobs:
       - name: Run build
         run: |
           chown -R 1000:1000 `pwd`
-          su `id -un 1000` -c "./gradlew precommit --parallel && ./gradlew jacocoTestReport"
+          su `id -un 1000` -c "./gradlew precommit --parallel && ./gradlew jacocoTestReport && cp -v build/reports/jacoco/test/jacocoTestReport.xml ./jacocoTestReport.xml"
 
       - uses: actions/upload-artifact@v4
         if: ${{ matrix.os }} == "ubuntu-latest"
         with:
           name: coverage-report-${{ matrix.os }}-${{ matrix.java }}
-          path: ./
+          path: ./jacocoTestReport.xml
 
   Precommit-neural-search-windows:
     strategy:
@@ -150,8 +150,9 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: coverage-report-${{ matrix.os }}-${{ matrix.java }}
-          path: ./
+          path: ./jacocoTestReport.xml
       - name: Upload Coverage Report
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./jacocoTestReport.xml
