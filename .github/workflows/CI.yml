@@ -150,7 +150,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: coverage-report-${{ matrix.os }}-${{ matrix.java }}
-          path: ./jacocoTestReport.xml
+          path: ./
       - name: Upload Coverage Report
         uses: codecov/codecov-action@v5
         with:
