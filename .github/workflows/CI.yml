@@ -21,7 +21,7 @@ jobs:
     needs: Get-CI-Image-Tag
     strategy:
       matrix:
-        java: [21]
+        java: [21, 23]
         os: [ubuntu-latest]
 
     name: Gradle Check Linux
@@ -59,7 +59,7 @@ jobs:
   Check-neural-search-windows:
     strategy:
       matrix:
-        java: [21]
+        java: [21, 23]
         os: [windows-latest]
 
     name: Gradle Check Windows
@@ -82,7 +82,7 @@ jobs:
     needs: Get-CI-Image-Tag
     strategy:
       matrix:
-        java: [21]
+        java: [21, 23]
         os: [ubuntu-latest]
 
     name: Pre-commit Linux
@@ -109,18 +109,18 @@ jobs:
       - name: Run build
         run: |
           chown -R 1000:1000 `pwd`
-          su `id -un 1000` -c "./gradlew precommit --parallel"
+          su `id -un 1000` -c "./gradlew precommit --parallel && ./gradlew jacocoTestReport && cp -v build/reports/jacoco/test/jacocoTestReport.xml ./jacocoTestReport.xml"
 
-      - name: Upload Coverage Report
-        if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v3
+      - uses: actions/upload-artifact@v4
+        if: ${{ matrix.os }} == "ubuntu-latest"
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          name: coverage-report-${{ matrix.os }}-${{ matrix.java }}
+          path: ./jacocoTestReport.xml
 
   Precommit-neural-search-windows:
     strategy:
       matrix:
-        java: [21]
+        java: [21, 23]
         os: [windows-latest]
 
     name: Pre-commit Windows
@@ -138,3 +138,21 @@ jobs:
       - name: Run build
         run: |
           ./gradlew precommit --parallel
+
+  Precommit-codecov:
+    needs: Precommit-neural-search-linux
+    strategy:
+      matrix:
+        java: [21, 23]
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-report-${{ matrix.os }}-${{ matrix.java }}
+          path: ./
+      - name: Upload Coverage Report
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./jacocoTestReport.xml
