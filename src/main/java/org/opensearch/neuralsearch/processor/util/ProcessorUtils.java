@@ -8,6 +8,7 @@ import org.opensearch.common.collect.Tuple;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.search.SearchHit;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -151,25 +152,80 @@ public class ProcessorUtils {
      * @return A possible result within an optional
      */
     public static Optional<Object> getValueFromSource(final Map<String, Object> sourceAsMap, final String targetField) {
-        String[] keys = targetField.split("\\.");
-        Optional<Object> currentValue = Optional.of(sourceAsMap);
+        return getValueFromSource(sourceAsMap, targetField, -1);
+    }
 
+    public static Optional<Object> getValueFromSource(
+        final Map<String, Object> sourceAsMap,
+        final String targetField,
+        final int listIndex
+    ) {
+        // filter keys with non-empty strings
+        String[] keys = Arrays.stream(targetField.split("\\.")).filter(key -> !key.isBlank()).toArray(String[]::new);
+        Optional<Object> currentValue = Optional.of(sourceAsMap);
         for (String key : keys) {
             currentValue = currentValue.flatMap(value -> {
-                if (!(value instanceof Map<?, ?>)) {
-                    return Optional.empty();
+                if (value instanceof List<?> && listIndex != -1) {
+                    List<Object> currentList = (List<Object>) value;
+                    Object listValue = currentList.get(listIndex);
+                    if (listValue instanceof Map) {
+                        Map<String, Object> currentMap = (Map<String, Object>) listValue;
+                        return Optional.ofNullable(currentMap.get(key));
+                    }
                 }
-                Map<String, Object> currentMap = (Map<String, Object>) value;
-                return Optional.ofNullable(currentMap.get(key));
+                if ((value instanceof Map<?, ?>)) {
+                    Map<String, Object> currentMap = (Map<String, Object>) value;
+                    return Optional.ofNullable(currentMap.get(key));
+                }
+                return Optional.empty();
             });
 
             if (currentValue.isEmpty()) {
                 return Optional.empty();
             }
         }
-
         return currentValue;
     }
+
+    /**
+     * Given the path to existing targetField in sourceAsMap, sets targetValue in targetField
+     * return true if targetValue was successfully set in targetField
+     * returns false otherwise
+     *
+     * @param sourceAsMap The Source map (a map of maps) to iterate through
+     * @param targetPath The path to key to insert the desired targetValue
+     * @param targetValue The value to insert in targetField
+     */
+    public static boolean setValueToSource(
+        final Map<String, Object> sourceAsMap,
+        final String targetPath,
+        final Object targetValue,
+        final int listIndex
+    ) {
+        // filter keys with non-empty strings
+        String[] keys = Arrays.stream(targetPath.split("\\.")).filter(key -> !key.isBlank()).toArray(String[]::new);
+        Map<String, Object> currentMap = sourceAsMap;
+        String lastKey = keys[keys.length - 1];
+        for (int i = 0; i < keys.length - 1; i++) {
+            String key = keys[i];
+            Object value = currentMap.get(key);
+            if (value instanceof List && listIndex != -1) {
+                List<Object> currentList = (List<Object>) value;
+                Object listValue = currentList.get(listIndex);
+                if (listValue instanceof Map) {
+                    currentMap = (Map<String, Object>) listValue;
+                }
+            } else if (value instanceof Map) {
+                currentMap = (Map<String, Object>) value;
+            } else {
+                return false;
+            }
+        }
+        currentMap.put(lastKey, targetValue);
+        return true;
+    }
+
+
 
     /**
      * Determines whether there exists a value that has a mapping according to the pathToValue. This is particularly
@@ -208,5 +264,59 @@ public class ProcessorUtils {
         }
 
         return false;
+    }
+
+    /**
+     * Given a map, path and value, return the key mapped with given value.
+     *
+     * e.g:
+     *
+     * sourceAsMap: {
+     *     "level1": {
+     *          "level2" : {
+     *              "text": "passage_embedding"
+     *          }
+     *      }
+     * }
+     * path: "level1.level2"
+     * targeValue: "passage_embedding"
+     *
+     * returns "text"
+     *
+     * if there are multiple keys mapping with same value, return the last key
+     *
+     * @param sourceAsMap The Source map (a map of maps) to iterate through
+     * @param targetPath The path to key to insert the desired mapping
+     * @param targetValue The target value to find in targetField
+     */
+    public static Optional<String> findKeyFromFromValue(
+            final Map<String, Object> sourceAsMap,
+            final String targetPath,
+            final String targetValue
+    ) {
+        // filter keys with non-empty strings
+        String[] keys = Arrays.stream(targetPath.split("\\.")).filter(key -> !key.isBlank()).toArray(String[]::new);
+        Optional<Object> currentValue = Optional.of(sourceAsMap);
+
+        for (String key : keys) {
+            currentValue = currentValue.flatMap(value -> {
+                if (!(value instanceof Map<?, ?>)) {
+                    return Optional.empty();
+                }
+                Map<String, Object> currentMap = (Map<String, Object>) value;
+                return Optional.ofNullable(currentMap.get(key));
+            });
+
+            if (currentValue.isEmpty()) {
+                return Optional.empty();
+            }
+        }
+        String targetKey = null;
+        for (Map.Entry<String, String> entry : (Iterable<Map.Entry<String, String>>) ((Map) currentValue.get()).entrySet()) {
+            if (entry.getValue().equals(targetValue)) {
+                targetKey = entry.getKey();
+            }
+        }
+        return Optional.ofNullable(targetKey);
     }
 }

@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -27,6 +28,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.opensearch.common.collect.Tuple;
+import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
@@ -41,6 +43,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.processor.util.ProcessorUtils;
 import org.opensearch.neuralsearch.util.ProcessorDocumentUtils;
 
 /**
@@ -278,7 +281,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
     }
 
     @SuppressWarnings({ "unchecked" })
-    private List<String> createInferenceList(Map<String, Object> knnKeyMap) {
+    protected List<String> createInferenceList(Map<String, Object> knnKeyMap) {
         List<String> texts = new ArrayList<>();
         knnKeyMap.entrySet().stream().filter(knnMapEntry -> knnMapEntry.getValue() != null).forEach(knnMapEntry -> {
             Object sourceValue = knnMapEntry.getValue();
@@ -434,6 +437,160 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         return result;
     }
 
+    /**
+     * This method traverses the ProcessMap generated with IngestDocument to filter out the entries that can be skipped for inference.
+     * @param existingSourceAndMetadataMap SourceAndMetadataMap of existing Document
+     * @param sourceAndMetadataMap SourceAndMetadataMap of IngestDocument
+     * @param processMap processMap built from ingestDocument
+     * @return filtered ProcessMap with only entries that require model inferencing
+     */
+
+    protected Map<String, Object> filterProcessMap(
+        Map<String, Object> existingSourceAndMetadataMap,
+        Map<String, Object> sourceAndMetadataMap,
+        Map<String, Object> processMap
+    ) {
+        Iterator<Map.Entry<String, Object>> iterator = processMap.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, Object> entry = iterator.next();
+            Pair<String, Object> processedNestedKey = processNestedKey(entry);
+            String key = processedNestedKey.getKey();
+            Object sourceValue = processedNestedKey.getValue();
+            traverseProcessMap(key, "", key, sourceValue, iterator, existingSourceAndMetadataMap, sourceAndMetadataMap, 0);
+        }
+        return processMap;
+    }
+
+    /**
+     * This method recursively traverses sourceValue with Map and List Iterators and removes entries that have copied existing embeddings from existing document
+     * @param pathKey traversed path separated by .
+     * @param prevPathKey previous traversed path separated by .
+     * @param currKey current key in ProcessMap in traversal
+     * @param sourceValue current object in traversal. Can be List, Map or String
+     * @param iterator Map/List Iterator used to iterating and removing eligible entries
+     * @param existingSourceAndMetadataMap SourceAndMetadataMap of existing Document
+     * @param sourceAndMetadataMap SourceAndMetadataMap of ingestDocument
+     * @param listIndex index of sourceValue if in list
+     */
+
+    private void traverseProcessMap(
+        String pathKey,
+        String prevPathKey,
+        String currKey,
+        Object sourceValue,
+        Iterator<?> iterator,
+        Map<String, Object> existingSourceAndMetadataMap,
+        Map<String, Object> sourceAndMetadataMap,
+        int listIndex
+    ) {
+        if (sourceValue instanceof String) {
+            if (copyEmbeddings(
+                prevPathKey,
+                currKey,
+                sourceValue.toString(),
+                existingSourceAndMetadataMap,
+                sourceAndMetadataMap,
+                listIndex
+            )) {
+                iterator.remove();
+            }
+        } else if (sourceValue instanceof List) {
+            Iterator<?> listIterator = ((List) sourceValue).iterator();
+            IntStream.range(0, ((List) sourceValue).size()).forEach(index -> {
+                Object item = listIterator.next();
+                traverseProcessMap(
+                    pathKey,
+                    prevPathKey,
+                    currKey,
+                    item,
+                    listIterator,
+                    existingSourceAndMetadataMap,
+                    sourceAndMetadataMap,
+                    index
+                );
+            });
+        } else if (sourceValue instanceof Map) {
+            Iterator<Map.Entry<String, Object>> nestedIterator = ((Map<String, Object>) sourceValue).entrySet().iterator();
+            while (nestedIterator.hasNext()) {
+                Map.Entry<String, Object> nestedEntry = nestedIterator.next();
+                Pair<String, Object> processedNestedKey = processNestedKey(nestedEntry);
+                String nextPathKey = pathKey + "." + processedNestedKey.getKey();
+                Object nextSourceValue = processedNestedKey.getValue();
+                traverseProcessMap(
+                    nextPathKey,
+                    pathKey,
+                    processedNestedKey.getKey(),
+                    nextSourceValue,
+                    nestedIterator,
+                    existingSourceAndMetadataMap,
+                    sourceAndMetadataMap,
+                    listIndex
+                );
+            }
+        }
+    }
+
+    /**
+     * This method checks for the following requirements to determine whether embeddings can be copied from existingSourceAndMetadataMap to sourceAndMetadataMap
+     *  - inference text is the same between existingSourceAndMetadataMap and sourceAndMetadataMap
+     *  - existing existingSourceAndMetadataMap has embeddings for inference text
+     * @param embeddingPath path to embedding field
+     * @param embeddingField name of the embedding field
+     * @param text inference text in IngestDocument
+     * @param existingSourceAndMetadataMap SourceAndMetadataMap of existing Document
+     * @param sourceAndMetadataMap SourceAndMetadataMap of ingestDocument
+     * @param listIndex index of sourceValue if in list
+     *
+     * returns true if existing embedding was successfully populated after passing the required checks, return false otherwise
+     */
+
+    private boolean copyEmbeddings(
+        String embeddingPath,
+        String embeddingField,
+        String text,
+        Map<String, Object> existingSourceAndMetadataMap,
+        Map<String, Object> sourceAndMetadataMap,
+        int listIndex
+    ) {
+        Optional<String> textKeyValue = ProcessorUtils.findKeyFromFromValue(fieldMap, embeddingPath, embeddingField);
+        if (textKeyValue.isPresent()) {
+            String textKey = textKeyValue.get();
+            Optional<Object> inferenceText = ProcessorUtils.getValueFromSource(
+                existingSourceAndMetadataMap,
+                String.join(".", embeddingPath, textKey),
+                listIndex
+            );
+            if (inferenceText.isPresent() && inferenceText.get().equals(text)) {
+                Optional<Object> embeddings = ProcessorUtils.getValueFromSource(
+                    existingSourceAndMetadataMap,
+                    String.join(".", embeddingPath, embeddingField),
+                    listIndex
+                );
+                if (embeddings.isPresent()) {
+                    return ProcessorUtils.setValueToSource(
+                        sourceAndMetadataMap,
+                        String.join(".", embeddingPath, embeddingField),
+                        embeddings.get(),
+                        listIndex
+                    );
+                }
+            }
+        }
+        return false;
+    }
+
+    protected void makeInferenceCall(
+        IngestDocument ingestDocument,
+        Map<String, Object> ProcessMap,
+        List<String> inferenceList,
+        BiConsumer<IngestDocument, Exception> handler
+    ) {
+        mlCommonsClientAccessor.inferenceSentences(this.modelId, inferenceList, ActionListener.wrap(vectors -> {
+            setVectorFieldsToDocument(ingestDocument, ProcessMap, vectors);
+            handler.accept(ingestDocument, null);
+        }, e -> { handler.accept(null, e); }));
+    }
+
     @SuppressWarnings({ "unchecked" })
     private void putNLPResultToSourceMapForMapType(
         String processorKey,
@@ -512,7 +669,8 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
     ) {
         // build nlp output for object in sourceValue which is map type
         Iterator<Map<String, Object>> iterator = sourceAndMetadataMapValueInList.iterator();
-        IntStream.range(0, sourceAndMetadataMapValueInList.size()).forEach(index -> {
+        IndexWrapper listIndexWrapper = new IndexWrapper(0);
+        for (int i = 0; i < sourceAndMetadataMapValueInList.size(); i++) {
             Map<String, Object> nestedElement = iterator.next();
             putNLPResultToSingleSourceMapInList(
                 inputNestedMapEntryKey,
@@ -520,9 +678,9 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
                 results,
                 indexWrapper,
                 nestedElement,
-                index
+                listIndexWrapper
             );
-        });
+        }
     }
 
     /**
@@ -534,7 +692,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
      * @param results
      * @param indexWrapper
      * @param sourceAndMetadataMap
-     * @param nestedElementIndex index of the element in the list field of source document
+     * @param listIndexWrapper index of the element in the list field of source document
      */
     @SuppressWarnings("unchecked")
     private void putNLPResultToSingleSourceMapInList(
@@ -543,7 +701,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         List<?> results,
         IndexWrapper indexWrapper,
         Map<String, Object> sourceAndMetadataMap,
-        int nestedElementIndex
+        IndexWrapper listIndexWrapper
     ) {
         if (processorKey == null || sourceAndMetadataMap == null || sourceValue == null) return;
         if (sourceValue instanceof Map) {
@@ -556,12 +714,17 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
                     results,
                     indexWrapper,
                     sourceMap,
-                    nestedElementIndex
+                    listIndexWrapper
                 );
             }
         } else {
-            if (sourceValue instanceof List && ((List<Object>) sourceValue).get(nestedElementIndex) != null) {
-                sourceAndMetadataMap.merge(processorKey, results.get(indexWrapper.index++), REMAPPING_FUNCTION);
+            if (sourceValue instanceof List) {
+                if (sourceAndMetadataMap.containsKey(processorKey)) {
+                    return;
+                }
+                if (((List<Object>) sourceValue).get(listIndexWrapper.index++) != null) {
+                    sourceAndMetadataMap.merge(processorKey, results.get(indexWrapper.index++), REMAPPING_FUNCTION);
+                }
             }
         }
     }
