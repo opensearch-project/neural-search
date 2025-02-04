@@ -56,15 +56,11 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
                 }
                 break;
             case UPGRADED:
-                try {
-                    modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
-                    int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                    loadModel(modelId);
-                    addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_UPGRADED);
-                    validateIndexQueryOnUpgrade(totalDocsCountUpgraded, modelId, TEXT_UPGRADED, TEST_IMAGE_TEXT_UPGRADED);
-                } finally {
-                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
-                }
+                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
+                int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
+                loadModel(modelId);
+                addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_UPGRADED);
+                validateIndexQueryOnUpgrade(totalDocsCountUpgraded, modelId, TEXT_UPGRADED, TEST_IMAGE_TEXT_UPGRADED);
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());

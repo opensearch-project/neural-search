@@ -78,19 +78,15 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
                 }
                 break;
             case UPGRADED:
-                try {
-                    modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                    int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                    loadModel(modelId);
-                    addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, null, null);
-                    HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null);
-                    QueryBuilder rescorer = QueryBuilders.matchQuery(TEST_FIELD, RESCORE_QUERY).boost(0.3f);
-                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, hybridQueryBuilder, rescorer);
-                    hybridQueryBuilder = getQueryBuilder(modelId, Map.of("ef_search", 100), RescoreContext.getDefault());
-                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, hybridQueryBuilder, rescorer);
-                } finally {
-                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, SEARCH_PIPELINE_NAME);
-                }
+                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
+                loadModel(modelId);
+                addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, null, null);
+                HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null);
+                QueryBuilder rescorer = QueryBuilders.matchQuery(TEST_FIELD, RESCORE_QUERY).boost(0.3f);
+                validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, hybridQueryBuilder, rescorer);
+                hybridQueryBuilder = getQueryBuilder(modelId, Map.of("ef_search", 100), RescoreContext.getDefault());
+                validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, hybridQueryBuilder, rescorer);
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());

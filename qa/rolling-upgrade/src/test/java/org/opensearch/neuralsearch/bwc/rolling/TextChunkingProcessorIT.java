@@ -54,13 +54,9 @@ public class TextChunkingProcessorIT extends AbstractRollingUpgradeTestCase {
                 }
                 break;
             case UPGRADED:
-                try {
-                    int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                    addDocument(indexName, "2", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
-                    validateTestIndex(indexName, OUTPUT_FIELD, totalDocsCountUpgraded, expectedPassages);
-                } finally {
-                    wipeOfTestResources(indexName, PIPELINE_NAME, null, null);
-                }
+                int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
+                addDocument(indexName, "2", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
+                validateTestIndex(indexName, OUTPUT_FIELD, totalDocsCountUpgraded, expectedPassages);
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());

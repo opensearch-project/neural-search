@@ -67,18 +67,13 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
             addDocuments(getIndexNameForTest(), true);
             createSearchPipeline(searchPipelineName);
         } else {
-            String modelId = null;
-            try {
-                modelId = getModelId(getIngestionPipeline(pipelineName), TEXT_EMBEDDING_PROCESSOR);
-                loadModel(modelId);
-                addDocuments(getIndexNameForTest(), false);
-                HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null, null);
-                validateTestIndex(getIndexNameForTest(), searchPipelineName, hybridQueryBuilder);
-                hybridQueryBuilder = getQueryBuilder(modelId, Boolean.FALSE, Map.of("ef_search", 100), RescoreContext.getDefault());
-                validateTestIndex(getIndexNameForTest(), searchPipelineName, hybridQueryBuilder);
-            } finally {
-                wipeOfTestResources(getIndexNameForTest(), pipelineName, modelId, searchPipelineName);
-            }
+            String modelId = getModelId(getIngestionPipeline(pipelineName), TEXT_EMBEDDING_PROCESSOR);
+            loadModel(modelId);
+            addDocuments(getIndexNameForTest(), false);
+            HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null, null);
+            validateTestIndex(getIndexNameForTest(), searchPipelineName, hybridQueryBuilder);
+            hybridQueryBuilder = getQueryBuilder(modelId, Boolean.FALSE, Map.of("ef_search", 100), RescoreContext.getDefault());
+            validateTestIndex(getIndexNameForTest(), searchPipelineName, hybridQueryBuilder);
         }
     }
 

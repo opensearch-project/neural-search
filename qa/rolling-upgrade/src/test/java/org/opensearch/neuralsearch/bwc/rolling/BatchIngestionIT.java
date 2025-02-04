@@ -46,15 +46,11 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
                 validateDocCountAndInfo(indexName, 10, () -> getDocById(indexName, "9"), EMBEDDING_FIELD_NAME, Map.class);
                 break;
             case UPGRADED:
-                try {
-                    sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_PIPELINE), SPARSE_ENCODING_PROCESSOR);
-                    loadModel(sparseModelId);
-                    List<Map<String, String>> docsForUpgraded = prepareDataForBulkIngestion(10, 5);
-                    bulkAddDocuments(indexName, TEXT_FIELD_NAME, SPARSE_PIPELINE, docsForUpgraded);
-                    validateDocCountAndInfo(indexName, 15, () -> getDocById(indexName, "14"), EMBEDDING_FIELD_NAME, Map.class);
-                } finally {
-                    wipeOfTestResources(indexName, SPARSE_PIPELINE, sparseModelId, null);
-                }
+                sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_PIPELINE), SPARSE_ENCODING_PROCESSOR);
+                loadModel(sparseModelId);
+                List<Map<String, String>> docsForUpgraded = prepareDataForBulkIngestion(10, 5);
+                bulkAddDocuments(indexName, TEXT_FIELD_NAME, SPARSE_PIPELINE, docsForUpgraded);
+                validateDocCountAndInfo(indexName, 15, () -> getDocById(indexName, "14"), EMBEDDING_FIELD_NAME, Map.class);
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());

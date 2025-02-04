@@ -73,17 +73,13 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                 );
                 break;
             case UPGRADED:
-                try {
-                    sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                    loadModel(sparseModelId);
-                    sparseEncodingQueryBuilderWithModelId.modelId(sparseModelId);
-                    assertEquals(
-                        search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
-                        search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
-                    );
-                } finally {
-                    wipeOfTestResources(getIndexNameForTest(), SPARSE_INGEST_PIPELINE_NAME, sparseModelId, SPARSE_SEARCH_PIPELINE_NAME);
-                }
+                sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                loadModel(sparseModelId);
+                sparseEncodingQueryBuilderWithModelId.modelId(sparseModelId);
+                assertEquals(
+                    search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
+                    search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
+                );
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());
@@ -138,18 +134,14 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                 );
                 break;
             case UPGRADED:
-                try {
-                    denseModelId = TestUtils.getModelId(getIngestionPipeline(DENSE_INGEST_PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                    loadModel(denseModelId);
-                    neuralQueryBuilderWithModelId.modelId(denseModelId);
+                denseModelId = TestUtils.getModelId(getIngestionPipeline(DENSE_INGEST_PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                loadModel(denseModelId);
+                neuralQueryBuilderWithModelId.modelId(denseModelId);
 
-                    assertEquals(
-                        search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
-                        search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
-                    );
-                } finally {
-                    wipeOfTestResources(getIndexNameForTest(), DENSE_INGEST_PIPELINE_NAME, denseModelId, DENSE_SEARCH_PIPELINE_NAME);
-                }
+                assertEquals(
+                    search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
+                    search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
+                );
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());

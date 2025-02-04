@@ -59,19 +59,14 @@ public class HybridSearchWithRescoreIT extends AbstractRestartUpgradeRestTestCas
                 Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.7f }))
             );
         } else {
-            String modelId = null;
-            try {
-                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                loadModel(modelId);
-                addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_UPGRADED, null, null);
-                HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null);
-                QueryBuilder rescorer = QueryBuilders.matchQuery(TEST_FIELD, RESCORE_QUERY).boost(0.3f);
-                validateTestIndex(getIndexNameForTest(), hybridQueryBuilder, rescorer);
-                hybridQueryBuilder = getQueryBuilder(modelId, Map.of("ef_search", 100), RescoreContext.getDefault());
-                validateTestIndex(getIndexNameForTest(), hybridQueryBuilder, rescorer);
-            } finally {
-                wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
-            }
+            String modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+            loadModel(modelId);
+            addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_UPGRADED, null, null);
+            HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null);
+            QueryBuilder rescorer = QueryBuilders.matchQuery(TEST_FIELD, RESCORE_QUERY).boost(0.3f);
+            validateTestIndex(getIndexNameForTest(), hybridQueryBuilder, rescorer);
+            hybridQueryBuilder = getQueryBuilder(modelId, Map.of("ef_search", 100), RescoreContext.getDefault());
+            validateTestIndex(getIndexNameForTest(), hybridQueryBuilder, rescorer);
         }
     }
 

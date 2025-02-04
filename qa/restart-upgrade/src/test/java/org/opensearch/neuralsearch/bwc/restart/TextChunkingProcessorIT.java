@@ -40,12 +40,8 @@ public class TextChunkingProcessorIT extends AbstractRestartUpgradeRestTestCase 
             addDocument(indexName, "0", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
             validateTestIndex(indexName, OUTPUT_FIELD, 1, expectedPassages);
         } else {
-            try {
-                addDocument(indexName, "1", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
-                validateTestIndex(indexName, OUTPUT_FIELD, 2, expectedPassages);
-            } finally {
-                wipeOfTestResources(indexName, PIPELINE_NAME, null, null);
-            }
+            addDocument(indexName, "1", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
+            validateTestIndex(indexName, OUTPUT_FIELD, 2, expectedPassages);
         }
     }
 

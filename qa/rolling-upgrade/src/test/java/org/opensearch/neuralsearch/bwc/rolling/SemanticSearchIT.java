@@ -51,15 +51,11 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
                 }
                 break;
             case UPGRADED:
-                try {
-                    modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                    int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                    loadModel(modelId);
-                    addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, null, null);
-                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, TEXT_UPGRADED);
-                } finally {
-                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
-                }
+                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
+                loadModel(modelId);
+                addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, null, null);
+                validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, TEXT_UPGRADED);
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());

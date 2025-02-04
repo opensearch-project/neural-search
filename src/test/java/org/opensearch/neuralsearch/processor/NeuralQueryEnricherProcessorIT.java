@@ -48,84 +48,68 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testNeuralQueryEnricherProcessor_whenNoModelIdPassed_thenSuccess() {
         String modelId = null;
-        try {
-            initializeIndexIfNotExist(index);
-            modelId = prepareModel();
-            createSearchRequestProcessor(modelId, search_pipeline);
-            createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
-            updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
-            NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
-                .queryText("Hello World")
-                .k(1)
-                .build();
-            Map<String, Object> response = search(index, neuralQueryBuilder, 2);
-            assertFalse(response.isEmpty());
-        } finally {
-            wipeOfTestResources(index, ingest_pipeline, modelId, search_pipeline);
-        }
+        initializeIndexIfNotExist(index);
+        modelId = prepareModel();
+        createSearchRequestProcessor(modelId, search_pipeline);
+        createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
+        updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+            .queryText("Hello World")
+            .k(1)
+            .build();
+        Map<String, Object> response = search(index, neuralQueryBuilder, 2);
+        assertFalse(response.isEmpty());
     }
 
     @SneakyThrows
     public void testNeuralQueryEnricherProcessor_whenNoModelIdPassedInNeuralSparseQuery_thenSuccess() {
         String modelId = null;
-        try {
-            initializeIndexIfNotExist(sparseIndex);
-            modelId = prepareSparseEncodingModel();
-            createSearchRequestProcessor(modelId, search_pipeline);
-            createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.SPARSE_ENCODING);
-            updateIndexSettings(sparseIndex, Settings.builder().put("index.search.default_pipeline", search_pipeline));
-            NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
-            neuralSparseQueryBuilder.fieldName(TEST_RANK_FEATURES_FIELD_NAME_1);
-            neuralSparseQueryBuilder.queryText("hello");
-            Map<String, Object> response = search(sparseIndex, neuralSparseQueryBuilder, 2);
-            assertFalse(response.isEmpty());
-        } finally {
-            wipeOfTestResources(sparseIndex, ingest_pipeline, modelId, search_pipeline);
-        }
+        initializeIndexIfNotExist(sparseIndex);
+        modelId = prepareSparseEncodingModel();
+        createSearchRequestProcessor(modelId, search_pipeline);
+        createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.SPARSE_ENCODING);
+        updateIndexSettings(sparseIndex, Settings.builder().put("index.search.default_pipeline", search_pipeline));
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
+        neuralSparseQueryBuilder.fieldName(TEST_RANK_FEATURES_FIELD_NAME_1);
+        neuralSparseQueryBuilder.queryText("hello");
+        Map<String, Object> response = search(sparseIndex, neuralSparseQueryBuilder, 2);
+        assertFalse(response.isEmpty());
     }
 
     @SneakyThrows
     public void testNeuralQueryEnricherProcessor_whenGetEmptyQueryBody_thenSuccess() {
-        try {
-            initializeIndexIfNotExist(index);
-            createSearchRequestProcessor(null, search_pipeline);
-            createPipelineProcessor(null, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
-            updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
-            Request request = new Request("POST", "/" + index + "/_search");
-            Response response = client().performRequest(request);
-            assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
-            String responseBody = EntityUtils.toString(response.getEntity());
-            Map<String, Object> responseInMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
-            assertFalse(responseInMap.isEmpty());
-            assertEquals(3, ((Map) responseInMap.get("hits")).size());
-        } finally {
-            wipeOfTestResources(index, ingest_pipeline, null, search_pipeline);
-        }
+        initializeIndexIfNotExist(index);
+        createSearchRequestProcessor(null, search_pipeline);
+        createPipelineProcessor(null, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
+        updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
+        Request request = new Request("POST", "/" + index + "/_search");
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> responseInMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
+        assertFalse(responseInMap.isEmpty());
+        assertEquals(3, ((Map) responseInMap.get("hits")).size());
     }
 
     @SneakyThrows
     public void testNeuralQueryEnricherProcessor_whenHybridQueryBuilderAndNoModelIdPassed_thenSuccess() {
         String modelId = null;
-        try {
-            initializeIndexIfNotExist(index);
-            modelId = prepareModel();
-            createSearchRequestProcessor(modelId, search_pipeline);
-            createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
-            updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
-            NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
-                .queryText("Hello World")
-                .k(1)
-                .build();
-            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-            hybridQueryBuilder.add(neuralQueryBuilder);
-            Map<String, Object> response = search(index, hybridQueryBuilder, 2);
+        initializeIndexIfNotExist(index);
+        modelId = prepareModel();
+        createSearchRequestProcessor(modelId, search_pipeline);
+        createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
+        updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+            .queryText("Hello World")
+            .k(1)
+            .build();
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        hybridQueryBuilder.add(neuralQueryBuilder);
+        Map<String, Object> response = search(index, hybridQueryBuilder, 2);
 
-            assertFalse(response.isEmpty());
-        } finally {
-            wipeOfTestResources(index, ingest_pipeline, modelId, search_pipeline);
-        }
+        assertFalse(response.isEmpty());
     }
 
     @SneakyThrows

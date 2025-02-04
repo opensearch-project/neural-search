@@ -54,6 +54,9 @@ public class TestUtils {
     public static final String SKIP_DELETE_MODEL_INDEX = "tests.skip_delete_model_index";
     public static final String SECURITY_AUDITLOG_PREFIX = "security-auditlog";
     public static final String OPENSEARCH_SYSTEM_INDEX_PREFIX = ".opensearch";
+    public static final String ML_PLUGIN_SYSTEM_INDEX_PREFIX = ".plugins-ml";
+    public static final String INGEST_PIPELINE_TYPE = "_ingest";
+    public static final String SEARCH_PIPELINE_TYPE = "_search";
     public static final String TEXT_EMBEDDING_PROCESSOR = "text_embedding";
     public static final String TEXT_IMAGE_EMBEDDING_PROCESSOR = "text_image_embedding";
     public static final int MAX_TASK_RESULT_QUERY_TIME_IN_SECOND = 60 * 5;

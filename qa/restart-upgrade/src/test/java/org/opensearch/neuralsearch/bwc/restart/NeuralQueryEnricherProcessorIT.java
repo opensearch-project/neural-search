@@ -59,18 +59,13 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
                 search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
             );
         } else {
-            String modelId = null;
-            try {
-                modelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                loadModel(modelId);
-                sparseEncodingQueryBuilderWithModelId.modelId(modelId);
-                assertEquals(
-                    search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
-                    search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
-                );
-            } finally {
-                wipeOfTestResources(getIndexNameForTest(), SPARSE_INGEST_PIPELINE_NAME, modelId, SPARSE_SEARCH_PIPELINE_NAME);
-            }
+            String modelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+            loadModel(modelId);
+            sparseEncodingQueryBuilderWithModelId.modelId(modelId);
+            assertEquals(
+                search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
+                search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
+            );
         }
     }
 
@@ -105,19 +100,14 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
                 search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
             );
         } else {
-            String modelId = null;
-            try {
-                modelId = TestUtils.getModelId(getIngestionPipeline(DENSE_INGEST_PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                loadModel(modelId);
-                neuralQueryBuilderWithModelId.modelId(modelId);
+            String modelId = TestUtils.getModelId(getIngestionPipeline(DENSE_INGEST_PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+            loadModel(modelId);
+            neuralQueryBuilderWithModelId.modelId(modelId);
 
-                assertEquals(
-                    search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
-                    search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
-                );
-            } finally {
-                wipeOfTestResources(getIndexNameForTest(), DENSE_INGEST_PIPELINE_NAME, modelId, DENSE_SEARCH_PIPELINE_NAME);
-            }
+            assertEquals(
+                search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
+                search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
+            );
         }
     }
 }

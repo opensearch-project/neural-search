@@ -51,22 +51,17 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
                 List.of(TEXT_1)
             );
         } else {
-            String modelId = null;
-            try {
-                modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                loadModel(modelId);
-                addSparseEncodingDoc(
-                    getIndexNameForTest(),
-                    "1",
-                    List.of(TEST_SPARSE_ENCODING_FIELD),
-                    List.of(testRankFeaturesDoc2),
-                    List.of(TEST_TEXT_FIELD),
-                    List.of(TEXT_2)
-                );
-                validateTestIndex(modelId);
-            } finally {
-                wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
-            }
+            String modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+            loadModel(modelId);
+            addSparseEncodingDoc(
+                getIndexNameForTest(),
+                "1",
+                List.of(TEST_SPARSE_ENCODING_FIELD),
+                List.of(testRankFeaturesDoc2),
+                List.of(TEST_TEXT_FIELD),
+                List.of(TEXT_2)
+            );
+            validateTestIndex(modelId);
         }
 
     }

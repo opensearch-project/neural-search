@@ -63,140 +63,108 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testTextChunkingProcessor_withFixedTokenLengthAlgorithmStandardTokenizer_thenSucceed() {
-        try {
-            createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
-            createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
+        createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
+        createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
 
-            String document = getDocumentFromFilePath(TEST_DOCUMENT);
-            ingestDocument(INDEX_NAME, document);
+        String document = getDocumentFromFilePath(TEST_DOCUMENT);
+        ingestDocument(INDEX_NAME, document);
 
-            List<String> expectedPassages = new ArrayList<>();
-            expectedPassages.add("This is an example document to be chunked. The document ");
-            expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by ");
-            expectedPassages.add("standard tokenizer in OpenSearch.");
-            validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
-        } finally {
-            wipeOfTestResources(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME, null, null);
-        }
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked. The document ");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by ");
+        expectedPassages.add("standard tokenizer in OpenSearch.");
+        validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
     }
 
     @SneakyThrows
     public void testTextChunkingProcessor_withFixedTokenLengthAlgorithmLetterTokenizer_thenSucceed() {
-        try {
-            createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_LETTER_TOKENIZER_NAME);
-            createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_LETTER_TOKENIZER_NAME);
+        createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_LETTER_TOKENIZER_NAME);
+        createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_LETTER_TOKENIZER_NAME);
 
-            String document = getDocumentFromFilePath(TEST_DOCUMENT);
-            ingestDocument(INDEX_NAME, document);
+        String document = getDocumentFromFilePath(TEST_DOCUMENT);
+        ingestDocument(INDEX_NAME, document);
 
-            List<String> expectedPassages = new ArrayList<>();
-            expectedPassages.add("This is an example document to be chunked. The document ");
-            expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by standard ");
-            expectedPassages.add("tokenizer in OpenSearch.");
-            validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
-        } finally {
-            wipeOfTestResources(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_LETTER_TOKENIZER_NAME, null, null);
-        }
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked. The document ");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by standard ");
+        expectedPassages.add("tokenizer in OpenSearch.");
+        validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
     }
 
     @SneakyThrows
     public void testTextChunkingProcessor_withFixedTokenLengthAlgorithmLowercaseTokenizer_thenSucceed() {
-        try {
-            createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME);
-            createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME);
+        createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME);
+        createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME);
 
-            String document = getDocumentFromFilePath(TEST_DOCUMENT);
-            ingestDocument(INDEX_NAME, document);
+        String document = getDocumentFromFilePath(TEST_DOCUMENT);
+        ingestDocument(INDEX_NAME, document);
 
-            List<String> expectedPassages = new ArrayList<>();
-            expectedPassages.add("This is an example document to be chunked. The document ");
-            expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by standard ");
-            expectedPassages.add("tokenizer in OpenSearch.");
-            validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
-        } finally {
-            wipeOfTestResources(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME, null, null);
-        }
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked. The document ");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by standard ");
+        expectedPassages.add("tokenizer in OpenSearch.");
+        validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
     }
 
     @SneakyThrows
     public void testTextChunkingProcessor_withFixedTokenLengthAlgorithmStandardTokenizer_whenExceedMaxTokenCount_thenFail() {
-        try {
-            createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
-            createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
-            Exception exception = assertThrows(Exception.class, () -> {
-                String document = getDocumentFromFilePath(TEST_LONG_DOCUMENT);
-                ingestDocument(INDEX_NAME, document);
-            });
-            // max_token_count is 100 by index settings
-            assert (exception.getMessage()
-                .contains("The number of tokens produced by calling _analyze has exceeded the allowed maximum of [100]."));
-            assertEquals(0, getDocCount(INDEX_NAME));
-        } finally {
-            wipeOfTestResources(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME, null, null);
-        }
+        createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
+        createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
+        Exception exception = assertThrows(Exception.class, () -> {
+            String document = getDocumentFromFilePath(TEST_LONG_DOCUMENT);
+            ingestDocument(INDEX_NAME, document);
+        });
+        // max_token_count is 100 by index settings
+        assert (exception.getMessage()
+            .contains("The number of tokens produced by calling _analyze has exceeded the allowed maximum of [100]."));
+        assertEquals(0, getDocCount(INDEX_NAME));
     }
 
     @SneakyThrows
     public void testTextChunkingProcessor_withDelimiterAlgorithm_successful() {
-        try {
-            createPipelineProcessor(DELIMITER_PIPELINE_NAME);
-            createTextChunkingIndex(INDEX_NAME, DELIMITER_PIPELINE_NAME);
+        createPipelineProcessor(DELIMITER_PIPELINE_NAME);
+        createTextChunkingIndex(INDEX_NAME, DELIMITER_PIPELINE_NAME);
 
-            String document = getDocumentFromFilePath(TEST_DOCUMENT);
-            ingestDocument(INDEX_NAME, document);
+        String document = getDocumentFromFilePath(TEST_DOCUMENT);
+        ingestDocument(INDEX_NAME, document);
 
-            List<String> expectedPassages = new ArrayList<>();
-            expectedPassages.add("This is an example document to be chunked.");
-            expectedPassages.add(
-                " The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch."
-            );
-            validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
-        } finally {
-            wipeOfTestResources(INDEX_NAME, DELIMITER_PIPELINE_NAME, null, null);
-        }
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked.");
+        expectedPassages.add(" The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.");
+        validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
     }
 
     @SneakyThrows
     public void testTextChunkingProcessor_withCascadePipeline_successful() {
-        try {
-            createPipelineProcessor(CASCADE_PIPELINE_NAME);
-            createTextChunkingIndex(INDEX_NAME, CASCADE_PIPELINE_NAME);
+        createPipelineProcessor(CASCADE_PIPELINE_NAME);
+        createTextChunkingIndex(INDEX_NAME, CASCADE_PIPELINE_NAME);
 
-            String document = getDocumentFromFilePath(TEST_DOCUMENT);
-            ingestDocument(INDEX_NAME, document);
+        String document = getDocumentFromFilePath(TEST_DOCUMENT);
+        ingestDocument(INDEX_NAME, document);
 
-            List<String> expectedPassages = new ArrayList<>();
-            expectedPassages.add("This is an example document to be chunked.");
-            expectedPassages.add(" The document contains a single paragraph, two sentences and 24 ");
-            expectedPassages.add("tokens by standard tokenizer in OpenSearch.");
-            validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked.");
+        expectedPassages.add(" The document contains a single paragraph, two sentences and 24 ");
+        expectedPassages.add("tokens by standard tokenizer in OpenSearch.");
+        validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
 
-            expectedPassages.clear();
-            expectedPassages.add("This is an example document to be chunked.");
-            expectedPassages.add(
-                " The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch."
-            );
-            validateIndexIngestResults(INDEX_NAME, INTERMEDIATE_FIELD, expectedPassages);
-        } finally {
-            wipeOfTestResources(INDEX_NAME, CASCADE_PIPELINE_NAME, null, null);
-        }
+        expectedPassages.clear();
+        expectedPassages.add("This is an example document to be chunked.");
+        expectedPassages.add(" The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.");
+        validateIndexIngestResults(INDEX_NAME, INTERMEDIATE_FIELD, expectedPassages);
     }
 
     public void testTextChunkingProcessor_withFixedTokenLengthAlgorithmStandardTokenizer_whenReindexingDocument_thenSuccessful()
         throws Exception {
-        try {
-            String fromIndexName = "test-reindex-from";
-            createIndexWithConfiguration(fromIndexName, "{ \"settings\": { \"number_of_shards\": 1, \"number_of_replicas\": 0 } }", null);
-            String document = getDocumentFromFilePath(TEST_DOCUMENT);
-            ingestDocument(fromIndexName, document);
+        String fromIndexName = "test-reindex-from";
+        createIndexWithConfiguration(fromIndexName, "{ \"settings\": { \"number_of_shards\": 1, \"number_of_replicas\": 0 } }", null);
+        String document = getDocumentFromFilePath(TEST_DOCUMENT);
+        ingestDocument(fromIndexName, document);
 
-            createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
-            createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
-            reindex(fromIndexName, INDEX_NAME);
-            assertEquals(1, getDocCount(INDEX_NAME));
-        } finally {
-            wipeOfTestResources(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME, null, null);
-        }
+        createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
+        createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
+        reindex(fromIndexName, INDEX_NAME);
+        assertEquals(1, getDocCount(INDEX_NAME));
     }
 
     private void validateIndexIngestResults(String indexName, String fieldName, Object expected) {

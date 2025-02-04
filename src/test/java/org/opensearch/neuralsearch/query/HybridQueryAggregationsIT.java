@@ -152,41 +152,37 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
     public void testAggregationNotSupportedConcurrentSearch_whenUseSamplerAgg_thenSuccessful() {
         updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
 
-        try {
-            prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+        prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.sampler(GENERIC_AGGREGATION_NAME)
-                .shardSize(2)
-                .subAggregation(AggregationBuilders.terms(BUCKETS_AGGREGATION_NAME_1).field(KEYWORD_FIELD_1));
+        AggregationBuilder aggsBuilder = AggregationBuilders.sampler(GENERIC_AGGREGATION_NAME)
+            .shardSize(2)
+            .subAggregation(AggregationBuilders.terms(BUCKETS_AGGREGATION_NAME_1).field(KEYWORD_FIELD_1));
 
-            Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
-                List.of(aggsBuilder),
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
-                3
-            );
+        Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
+            List.of(aggsBuilder),
+            TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+            3
+        );
 
-            Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
-            assertNotNull(aggregations);
+        Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
+        assertNotNull(aggregations);
 
-            Map<String, Object> aggValue = getAggregationValues(aggregations, GENERIC_AGGREGATION_NAME);
-            assertEquals(2, aggValue.size());
-            assertEquals(3, aggValue.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            Map<String, Object> nestedAggs = getAggregationValues(aggValue, BUCKETS_AGGREGATION_NAME_1);
-            assertNotNull(nestedAggs);
-            assertEquals(0, nestedAggs.get("doc_count_error_upper_bound"));
-            List<Map<String, Object>> buckets = getAggregationBuckets(aggValue, BUCKETS_AGGREGATION_NAME_1);
-            assertEquals(2, buckets.size());
+        Map<String, Object> aggValue = getAggregationValues(aggregations, GENERIC_AGGREGATION_NAME);
+        assertEquals(2, aggValue.size());
+        assertEquals(3, aggValue.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        Map<String, Object> nestedAggs = getAggregationValues(aggValue, BUCKETS_AGGREGATION_NAME_1);
+        assertNotNull(nestedAggs);
+        assertEquals(0, nestedAggs.get("doc_count_error_upper_bound"));
+        List<Map<String, Object>> buckets = getAggregationBuckets(aggValue, BUCKETS_AGGREGATION_NAME_1);
+        assertEquals(2, buckets.size());
 
-            Map<String, Object> firstBucket = buckets.get(0);
-            assertEquals(1, firstBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals("likeable", firstBucket.get(KEY));
+        Map<String, Object> firstBucket = buckets.get(0);
+        assertEquals(1, firstBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals("likeable", firstBucket.get(KEY));
 
-            Map<String, Object> secondBucket = buckets.get(1);
-            assertEquals(1, secondBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals("workable", secondBucket.get(KEY));
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        Map<String, Object> secondBucket = buckets.get(1);
+        assertEquals(1, secondBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals("workable", secondBucket.get(KEY));
     }
 
     @SneakyThrows
@@ -205,263 +201,251 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     private void testPostFilterWithSimpleHybridQuery(boolean isSingleShard, boolean hasPostFilterQuery) {
-        try {
-            if (isSingleShard) {
-                prepareResourcesForSingleShardIndex(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, SEARCH_PIPELINE);
-            } else {
-                prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
-            }
+        if (isSingleShard) {
+            prepareResourcesForSingleShardIndex(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, SEARCH_PIPELINE);
+        } else {
+            prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+        }
 
-            HybridQueryBuilder simpleHybridQueryBuilder = createHybridQueryBuilder(false);
+        HybridQueryBuilder simpleHybridQueryBuilder = createHybridQueryBuilder(false);
 
-            QueryBuilder rangeFilterQuery = QueryBuilders.rangeQuery(INTEGER_FIELD_1).gte(2000).lte(5000);
+        QueryBuilder rangeFilterQuery = QueryBuilders.rangeQuery(INTEGER_FIELD_1).gte(2000).lte(5000);
 
-            Map<String, Object> searchResponseAsMap;
+        Map<String, Object> searchResponseAsMap;
 
-            if (isSingleShard && hasPostFilterQuery) {
-                searchResponseAsMap = search(
-                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD,
-                    simpleHybridQueryBuilder,
-                    null,
-                    10,
-                    Map.of("search_pipeline", SEARCH_PIPELINE),
-                    null,
-                    rangeFilterQuery,
-                    null,
-                    false,
-                    null,
-                    0
-                );
+        if (isSingleShard && hasPostFilterQuery) {
+            searchResponseAsMap = search(
+                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD,
+                simpleHybridQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null,
+                rangeFilterQuery,
+                null,
+                false,
+                null,
+                0
+            );
 
-                assertHitResultsFromQuery(1, searchResponseAsMap);
-            } else if (isSingleShard && !hasPostFilterQuery) {
-                searchResponseAsMap = search(
-                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD,
-                    simpleHybridQueryBuilder,
-                    null,
-                    10,
-                    Map.of("search_pipeline", SEARCH_PIPELINE),
-                    null,
-                    null,
-                    null,
-                    false,
-                    null,
-                    0
-                );
-                assertHitResultsFromQuery(2, searchResponseAsMap);
-            } else if (!isSingleShard && hasPostFilterQuery) {
-                searchResponseAsMap = search(
-                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
-                    simpleHybridQueryBuilder,
-                    null,
-                    10,
-                    Map.of("search_pipeline", SEARCH_PIPELINE),
-                    null,
-                    rangeFilterQuery,
-                    null,
-                    false,
-                    null,
-                    0
-                );
-                assertHitResultsFromQuery(2, searchResponseAsMap);
-            } else {
-                searchResponseAsMap = search(
-                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
-                    simpleHybridQueryBuilder,
-                    null,
-                    10,
-                    Map.of("search_pipeline", SEARCH_PIPELINE),
-                    null,
-                    null,
-                    null,
-                    false,
-                    null,
-                    0
-                );
-                assertHitResultsFromQuery(3, searchResponseAsMap);
-            }
+            assertHitResultsFromQuery(1, searchResponseAsMap);
+        } else if (isSingleShard && !hasPostFilterQuery) {
+            searchResponseAsMap = search(
+                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD,
+                simpleHybridQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null,
+                null,
+                null,
+                false,
+                null,
+                0
+            );
+            assertHitResultsFromQuery(2, searchResponseAsMap);
+        } else if (!isSingleShard && hasPostFilterQuery) {
+            searchResponseAsMap = search(
+                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+                simpleHybridQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null,
+                rangeFilterQuery,
+                null,
+                false,
+                null,
+                0
+            );
+            assertHitResultsFromQuery(2, searchResponseAsMap);
+        } else {
+            searchResponseAsMap = search(
+                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+                simpleHybridQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null,
+                null,
+                null,
+                false,
+                null,
+                0
+            );
+            assertHitResultsFromQuery(3, searchResponseAsMap);
+        }
 
-            // assert post-filter
-            List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
+        // assert post-filter
+        List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
 
-            List<Integer> docIndexes = new ArrayList<>();
-            for (Map<String, Object> oneHit : hitsNestedList) {
-                assertNotNull(oneHit.get("_source"));
-                Map<String, Object> source = (Map<String, Object>) oneHit.get("_source");
-                int docIndex = (int) source.get(INTEGER_FIELD_1);
-                docIndexes.add(docIndex);
-            }
-            if (isSingleShard && hasPostFilterQuery) {
-                assertEquals(0, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
+        List<Integer> docIndexes = new ArrayList<>();
+        for (Map<String, Object> oneHit : hitsNestedList) {
+            assertNotNull(oneHit.get("_source"));
+            Map<String, Object> source = (Map<String, Object>) oneHit.get("_source");
+            int docIndex = (int) source.get(INTEGER_FIELD_1);
+            docIndexes.add(docIndex);
+        }
+        if (isSingleShard && hasPostFilterQuery) {
+            assertEquals(0, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
 
-            } else if (isSingleShard && !hasPostFilterQuery) {
-                assertEquals(1, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
+        } else if (isSingleShard && !hasPostFilterQuery) {
+            assertEquals(1, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
 
-            } else if (!isSingleShard && hasPostFilterQuery) {
-                assertEquals(0, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
-            } else {
-                assertEquals(1, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
-            }
-        } finally {
-            if (isSingleShard) {
-                wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, null, null, SEARCH_PIPELINE);
-            } else {
-                wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-            }
+        } else if (!isSingleShard && hasPostFilterQuery) {
+            assertEquals(0, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
+        } else {
+            assertEquals(1, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
         }
     }
 
     @SneakyThrows
     private void testPostFilterWithComplexHybridQuery(boolean isSingleShard, boolean hasPostFilterQuery) {
-        try {
-            if (isSingleShard) {
-                prepareResourcesForSingleShardIndex(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, SEARCH_PIPELINE);
-            } else {
-                prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
-            }
+        if (isSingleShard) {
+            prepareResourcesForSingleShardIndex(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, SEARCH_PIPELINE);
+        } else {
+            prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+        }
 
-            HybridQueryBuilder complexHybridQueryBuilder = createHybridQueryBuilder(true);
+        HybridQueryBuilder complexHybridQueryBuilder = createHybridQueryBuilder(true);
 
-            QueryBuilder rangeFilterQuery = QueryBuilders.rangeQuery(INTEGER_FIELD_1).gte(2000).lte(5000);
+        QueryBuilder rangeFilterQuery = QueryBuilders.rangeQuery(INTEGER_FIELD_1).gte(2000).lte(5000);
 
-            Map<String, Object> searchResponseAsMap;
+        Map<String, Object> searchResponseAsMap;
 
-            if (isSingleShard && hasPostFilterQuery) {
-                searchResponseAsMap = search(
-                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD,
-                    complexHybridQueryBuilder,
-                    null,
-                    10,
-                    Map.of("search_pipeline", SEARCH_PIPELINE),
-                    null,
-                    rangeFilterQuery,
-                    null,
-                    false,
-                    null,
-                    0
-                );
+        if (isSingleShard && hasPostFilterQuery) {
+            searchResponseAsMap = search(
+                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD,
+                complexHybridQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null,
+                rangeFilterQuery,
+                null,
+                false,
+                null,
+                0
+            );
 
-                assertHitResultsFromQuery(1, searchResponseAsMap);
-            } else if (isSingleShard && !hasPostFilterQuery) {
-                searchResponseAsMap = search(
-                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD,
-                    complexHybridQueryBuilder,
-                    null,
-                    10,
-                    Map.of("search_pipeline", SEARCH_PIPELINE),
-                    null,
-                    null,
-                    null,
-                    false,
-                    null,
-                    0
-                );
-                assertHitResultsFromQuery(2, searchResponseAsMap);
-            } else if (!isSingleShard && hasPostFilterQuery) {
-                searchResponseAsMap = search(
-                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
-                    complexHybridQueryBuilder,
-                    null,
-                    10,
-                    Map.of("search_pipeline", SEARCH_PIPELINE),
-                    null,
-                    rangeFilterQuery,
-                    null,
-                    false,
-                    null,
-                    0
-                );
-                assertHitResultsFromQuery(4, searchResponseAsMap);
-            } else {
-                searchResponseAsMap = search(
-                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
-                    complexHybridQueryBuilder,
-                    null,
-                    10,
-                    Map.of("search_pipeline", SEARCH_PIPELINE),
-                    null,
-                    null,
-                    null,
-                    false,
-                    null,
-                    0
-                );
-                assertHitResultsFromQuery(3, searchResponseAsMap);
-            }
+            assertHitResultsFromQuery(1, searchResponseAsMap);
+        } else if (isSingleShard && !hasPostFilterQuery) {
+            searchResponseAsMap = search(
+                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD,
+                complexHybridQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null,
+                null,
+                null,
+                false,
+                null,
+                0
+            );
+            assertHitResultsFromQuery(2, searchResponseAsMap);
+        } else if (!isSingleShard && hasPostFilterQuery) {
+            searchResponseAsMap = search(
+                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+                complexHybridQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null,
+                rangeFilterQuery,
+                null,
+                false,
+                null,
+                0
+            );
+            assertHitResultsFromQuery(4, searchResponseAsMap);
+        } else {
+            searchResponseAsMap = search(
+                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+                complexHybridQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null,
+                null,
+                null,
+                false,
+                null,
+                0
+            );
+            assertHitResultsFromQuery(3, searchResponseAsMap);
+        }
 
-            // assert post-filter
-            List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
+        // assert post-filter
+        List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
 
-            List<Integer> docIndexes = new ArrayList<>();
-            for (Map<String, Object> oneHit : hitsNestedList) {
-                assertNotNull(oneHit.get("_source"));
-                Map<String, Object> source = (Map<String, Object>) oneHit.get("_source");
-                int docIndex = (int) source.get(INTEGER_FIELD_1);
-                docIndexes.add(docIndex);
-            }
-            if (isSingleShard && hasPostFilterQuery) {
-                assertEquals(0, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
+        List<Integer> docIndexes = new ArrayList<>();
+        for (Map<String, Object> oneHit : hitsNestedList) {
+            assertNotNull(oneHit.get("_source"));
+            Map<String, Object> source = (Map<String, Object>) oneHit.get("_source");
+            int docIndex = (int) source.get(INTEGER_FIELD_1);
+            docIndexes.add(docIndex);
+        }
+        if (isSingleShard && hasPostFilterQuery) {
+            assertEquals(0, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
 
-            } else if (isSingleShard && !hasPostFilterQuery) {
-                assertEquals(1, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
+        } else if (isSingleShard && !hasPostFilterQuery) {
+            assertEquals(1, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
 
-            } else if (!isSingleShard && hasPostFilterQuery) {
-                assertEquals(0, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
-            } else {
-                assertEquals(1, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
-            }
-        } finally {
-            if (isSingleShard) {
-                wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, null, null, SEARCH_PIPELINE);
-            } else {
-                wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-            }
+        } else if (!isSingleShard && hasPostFilterQuery) {
+            assertEquals(0, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
+        } else {
+            assertEquals(1, docIndexes.stream().filter(docIndex -> docIndex < 2000 || docIndex > 5000).count());
         }
     }
 
     @SneakyThrows
     private void testAvgSumMinMaxAggs() {
-        try {
-            prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+        prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.dateHistogram(GENERIC_AGGREGATION_NAME)
-                .calendarInterval(DateHistogramInterval.YEAR)
-                .field(DATE_FIELD_1)
-                .subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_1));
+        AggregationBuilder aggsBuilder = AggregationBuilders.dateHistogram(GENERIC_AGGREGATION_NAME)
+            .calendarInterval(DateHistogramInterval.YEAR)
+            .field(DATE_FIELD_1)
+            .subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_1));
 
-            BucketMetricsPipelineAggregationBuilder<AvgBucketPipelineAggregationBuilder> aggAvgBucket = PipelineAggregatorBuilders
-                .avgBucket(BUCKETS_AGGREGATION_NAME_1, GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME);
+        BucketMetricsPipelineAggregationBuilder<AvgBucketPipelineAggregationBuilder> aggAvgBucket = PipelineAggregatorBuilders.avgBucket(
+            BUCKETS_AGGREGATION_NAME_1,
+            GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME
+        );
 
-            BucketMetricsPipelineAggregationBuilder<SumBucketPipelineAggregationBuilder> aggSumBucket = PipelineAggregatorBuilders
-                .sumBucket(BUCKETS_AGGREGATION_NAME_2, GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME);
+        BucketMetricsPipelineAggregationBuilder<SumBucketPipelineAggregationBuilder> aggSumBucket = PipelineAggregatorBuilders.sumBucket(
+            BUCKETS_AGGREGATION_NAME_2,
+            GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME
+        );
 
-            BucketMetricsPipelineAggregationBuilder<MinBucketPipelineAggregationBuilder> aggMinBucket = PipelineAggregatorBuilders
-                .minBucket(BUCKETS_AGGREGATION_NAME_3, GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME);
+        BucketMetricsPipelineAggregationBuilder<MinBucketPipelineAggregationBuilder> aggMinBucket = PipelineAggregatorBuilders.minBucket(
+            BUCKETS_AGGREGATION_NAME_3,
+            GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME
+        );
 
-            BucketMetricsPipelineAggregationBuilder<MaxBucketPipelineAggregationBuilder> aggMaxBucket = PipelineAggregatorBuilders
-                .maxBucket(BUCKETS_AGGREGATION_NAME_4, GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME);
+        BucketMetricsPipelineAggregationBuilder<MaxBucketPipelineAggregationBuilder> aggMaxBucket = PipelineAggregatorBuilders.maxBucket(
+            BUCKETS_AGGREGATION_NAME_4,
+            GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME
+        );
 
-            Map<String, Object> searchResponseAsMapAnngsBoolQuery = executeQueryAndGetAggsResults(
-                List.of(aggsBuilder, aggAvgBucket, aggSumBucket, aggMinBucket, aggMaxBucket),
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
-                3
-            );
+        Map<String, Object> searchResponseAsMapAnngsBoolQuery = executeQueryAndGetAggsResults(
+            List.of(aggsBuilder, aggAvgBucket, aggSumBucket, aggMinBucket, aggMaxBucket),
+            TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+            3
+        );
 
-            assertResultsOfPipelineSumtoDateHistogramAggs(searchResponseAsMapAnngsBoolQuery);
+        assertResultsOfPipelineSumtoDateHistogramAggs(searchResponseAsMapAnngsBoolQuery);
 
-            // test only aggregation without query (handled as match_all query)
-            Map<String, Object> searchResponseAsMapAggsNoQuery = executeQueryAndGetAggsResults(
-                List.of(aggsBuilder, aggAvgBucket),
-                null,
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
-                6
-            );
+        // test only aggregation without query (handled as match_all query)
+        Map<String, Object> searchResponseAsMapAggsNoQuery = executeQueryAndGetAggsResults(
+            List.of(aggsBuilder, aggAvgBucket),
+            null,
+            TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+            6
+        );
 
-            assertResultsOfPipelineSumtoDateHistogramAggsForMatchAllQuery(searchResponseAsMapAggsNoQuery);
+        assertResultsOfPipelineSumtoDateHistogramAggsForMatchAllQuery(searchResponseAsMapAggsNoQuery);
 
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
     }
 
     @SneakyThrows
@@ -481,23 +465,15 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testNestedAggs_whenMultipleShardsAndConcurrentSearchDisabled_thenSuccessful() {
         updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
-        try {
-            prepareResourcesForNestegAggregationsScenario(TEST_MULTI_DOC_INDEX_FOR_NESTED_AGGS_MULTIPLE_SHARDS);
-            assertNestedAggregations(TEST_MULTI_DOC_INDEX_FOR_NESTED_AGGS_MULTIPLE_SHARDS);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_FOR_NESTED_AGGS_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        prepareResourcesForNestegAggregationsScenario(TEST_MULTI_DOC_INDEX_FOR_NESTED_AGGS_MULTIPLE_SHARDS);
+        assertNestedAggregations(TEST_MULTI_DOC_INDEX_FOR_NESTED_AGGS_MULTIPLE_SHARDS);
     }
 
     @SneakyThrows
     public void testNestedAggs_whenMultipleShardsAndConcurrentSearchEnabled_thenSuccessful() {
         updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
-        try {
-            prepareResourcesForNestegAggregationsScenario(TEST_MULTI_DOC_INDEX_FOR_NESTED_AGGS_MULTIPLE_SHARDS);
-            assertNestedAggregations(TEST_MULTI_DOC_INDEX_FOR_NESTED_AGGS_MULTIPLE_SHARDS);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_FOR_NESTED_AGGS_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        prepareResourcesForNestegAggregationsScenario(TEST_MULTI_DOC_INDEX_FOR_NESTED_AGGS_MULTIPLE_SHARDS);
+        assertNestedAggregations(TEST_MULTI_DOC_INDEX_FOR_NESTED_AGGS_MULTIPLE_SHARDS);
     }
 
     private void prepareResourcesForNestegAggregationsScenario(String index) throws Exception {
@@ -659,72 +635,64 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
     }
 
     private void testMaxAggsOnSingleShardCluster() throws Exception {
-        try {
-            prepareResourcesForSingleShardIndex(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, SEARCH_PIPELINE);
+        prepareResourcesForSingleShardIndex(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, SEARCH_PIPELINE);
 
-            TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
-            TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT5);
+        TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT5);
 
-            HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
-            hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder1);
-            hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder2);
+        HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
+        hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder1);
+        hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder2);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.max(MAX_AGGREGATION_NAME).field(INTEGER_FIELD_1);
-            Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD,
-                hybridQueryBuilderNeuralThenTerm,
-                null,
-                10,
-                Map.of("search_pipeline", SEARCH_PIPELINE),
-                List.of(aggsBuilder)
-            );
+        AggregationBuilder aggsBuilder = AggregationBuilders.max(MAX_AGGREGATION_NAME).field(INTEGER_FIELD_1);
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD,
+            hybridQueryBuilderNeuralThenTerm,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            List.of(aggsBuilder)
+        );
 
-            assertHitResultsFromQuery(2, searchResponseAsMap);
+        assertHitResultsFromQuery(2, searchResponseAsMap);
 
-            Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
-            assertNotNull(aggregations);
-            assertTrue(aggregations.containsKey(MAX_AGGREGATION_NAME));
-            double maxAggsValue = getAggregationValue(aggregations, MAX_AGGREGATION_NAME);
-            assertTrue(maxAggsValue >= 0);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, null, null, SEARCH_PIPELINE);
-        }
+        Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
+        assertNotNull(aggregations);
+        assertTrue(aggregations.containsKey(MAX_AGGREGATION_NAME));
+        double maxAggsValue = getAggregationValue(aggregations, MAX_AGGREGATION_NAME);
+        assertTrue(maxAggsValue >= 0);
     }
 
     private void testDateRange() throws IOException {
-        try {
-            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.dateRange(DATE_AGGREGATION_NAME)
-                .field(DATE_FIELD_1)
-                .format("MM-yyyy")
-                .addRange("01-2014", "02-2024");
+        AggregationBuilder aggsBuilder = AggregationBuilders.dateRange(DATE_AGGREGATION_NAME)
+            .field(DATE_FIELD_1)
+            .format("MM-yyyy")
+            .addRange("01-2014", "02-2024");
 
-            Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
-                List.of(aggsBuilder),
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
-                3
-            );
+        Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
+            List.of(aggsBuilder),
+            TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+            3
+        );
 
-            Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
-            assertNotNull(aggregations);
-            List<Map<String, Object>> buckets = getAggregationBuckets(aggregations, DATE_AGGREGATION_NAME);
-            assertNotNull(buckets);
-            assertEquals(1, buckets.size());
+        Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
+        assertNotNull(aggregations);
+        List<Map<String, Object>> buckets = getAggregationBuckets(aggregations, DATE_AGGREGATION_NAME);
+        assertNotNull(buckets);
+        assertEquals(1, buckets.size());
 
-            Map<String, Object> bucket = buckets.get(0);
+        Map<String, Object> bucket = buckets.get(0);
 
-            assertEquals(6, bucket.size());
-            assertEquals("01-2014", bucket.get("from_as_string"));
-            assertEquals(2, bucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals("02-2024", bucket.get("to_as_string"));
-            assertTrue(bucket.containsKey("from"));
-            assertTrue(bucket.containsKey("to"));
-            assertTrue(bucket.containsKey(KEY));
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        assertEquals(6, bucket.size());
+        assertEquals("01-2014", bucket.get("from_as_string"));
+        assertEquals(2, bucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals("02-2024", bucket.get("to_as_string"));
+        assertTrue(bucket.containsKey("from"));
+        assertTrue(bucket.containsKey("to"));
+        assertTrue(bucket.containsKey(KEY));
     }
 
     @SneakyThrows

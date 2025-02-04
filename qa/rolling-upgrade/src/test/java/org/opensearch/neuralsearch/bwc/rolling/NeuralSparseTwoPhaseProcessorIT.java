@@ -57,19 +57,10 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRollingUpgradeTestC
                 assertNotNull(search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits"));
                 break;
             case UPGRADED:
-                try {
-                    sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                    loadModel(sparseModelId);
-                    neuralSparseQueryBuilder.modelId(sparseModelId);
-                    assertNotNull(search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits"));
-                } finally {
-                    wipeOfTestResources(
-                        getIndexNameForTest(),
-                        SPARSE_INGEST_PIPELINE_NAME,
-                        sparseModelId,
-                        SPARSE_SEARCH_TWO_PHASE_PIPELINE_NAME
-                    );
-                }
+                sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                loadModel(sparseModelId);
+                neuralSparseQueryBuilder.modelId(sparseModelId);
+                assertNotNull(search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits"));
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());

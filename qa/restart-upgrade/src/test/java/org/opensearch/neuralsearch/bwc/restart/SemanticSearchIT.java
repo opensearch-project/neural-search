@@ -36,15 +36,10 @@ public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
             );
             addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, null, null);
         } else {
-            String modelId = null;
-            try {
-                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                loadModel(modelId);
-                addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1, null, null);
-                validateTestIndex(modelId);
-            } finally {
-                wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
-            }
+            String modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+            loadModel(modelId);
+            addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1, null, null);
+            validateTestIndex(modelId);
         }
     }
 

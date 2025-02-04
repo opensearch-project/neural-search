@@ -78,22 +78,18 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
                 }
                 break;
             case UPGRADED:
-                try {
-                    modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                    int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                    loadModel(modelId);
-                    addSparseEncodingDoc(
-                        getIndexNameForTest(),
-                        "2",
-                        List.of(TEST_SPARSE_ENCODING_FIELD),
-                        List.of(testRankFeaturesDoc3),
-                        List.of(TEST_TEXT_FIELD),
-                        List.of(TEXT_UPGRADED)
-                    );
-                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId);
-                } finally {
-                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
-                }
+                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
+                loadModel(modelId);
+                addSparseEncodingDoc(
+                    getIndexNameForTest(),
+                    "2",
+                    List.of(TEST_SPARSE_ENCODING_FIELD),
+                    List.of(testRankFeaturesDoc3),
+                    List.of(TEST_TEXT_FIELD),
+                    List.of(TEXT_UPGRADED)
+                );
+                validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId);
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());

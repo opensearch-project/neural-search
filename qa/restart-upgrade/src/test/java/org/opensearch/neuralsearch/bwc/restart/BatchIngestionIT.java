@@ -40,13 +40,9 @@ public class BatchIngestionIT extends AbstractRestartUpgradeRestTestCase {
             String modelId = null;
             modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
             loadModel(modelId);
-            try {
-                List<Map<String, String>> docs = prepareDataForBulkIngestion(5, 5);
-                bulkAddDocuments(indexName, TEXT_FIELD_NAME, PIPELINE_NAME, docs);
-                validateDocCountAndInfo(indexName, 10, () -> getDocById(indexName, "9"), EMBEDDING_FIELD_NAME, Map.class);
-            } finally {
-                wipeOfTestResources(indexName, PIPELINE_NAME, modelId, null);
-            }
+            List<Map<String, String>> docs = prepareDataForBulkIngestion(5, 5);
+            bulkAddDocuments(indexName, TEXT_FIELD_NAME, PIPELINE_NAME, docs);
+            validateDocCountAndInfo(indexName, 10, () -> getDocById(indexName, "9"), EMBEDDING_FIELD_NAME, Map.class);
         }
     }
 

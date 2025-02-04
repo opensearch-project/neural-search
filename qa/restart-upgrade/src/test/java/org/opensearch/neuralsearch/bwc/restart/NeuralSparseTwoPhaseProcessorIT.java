@@ -45,21 +45,11 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRestartUpgradeRestT
             Object resultWith2PhasePipeline = search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits");
             assertNotNull(resultWith2PhasePipeline);
         } else {
-            String modelId = null;
-            try {
-                modelId = TestUtils.getModelId(getIngestionPipeline(NEURAL_SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                loadModel(modelId);
-                neuralSparseQueryBuilder.modelId(modelId);
-                Object resultWith2PhasePipeline = search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits");
-                assertNotNull(resultWith2PhasePipeline);
-            } finally {
-                wipeOfTestResources(
-                    getIndexNameForTest(),
-                    NEURAL_SPARSE_INGEST_PIPELINE_NAME,
-                    modelId,
-                    NEURAL_SPARSE_TWO_PHASE_SEARCH_PIPELINE_NAME
-                );
-            }
+            String modelId = TestUtils.getModelId(getIngestionPipeline(NEURAL_SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+            loadModel(modelId);
+            neuralSparseQueryBuilder.modelId(modelId);
+            Object resultWith2PhasePipeline = search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits");
+            assertNotNull(resultWith2PhasePipeline);
         }
     }
 }
