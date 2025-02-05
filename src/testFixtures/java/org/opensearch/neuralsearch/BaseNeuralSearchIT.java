@@ -1423,9 +1423,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     protected Map<String, Object> getIngestionPipeline(final String pipelineName) {
         Request request = new Request("GET", "/_ingest/pipeline/" + pipelineName);
         Response response = client().performRequest(request);
-        if (RestStatus.fromCode(response.getStatusLine().getStatusCode()).equals(RestStatus.NOT_FOUND)) {
-            return null;
-        }
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
         String responseBody = EntityUtils.toString(response.getEntity());
         Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), responseBody).map();
         return (Map<String, Object>) responseMap.get(pipelineName);
