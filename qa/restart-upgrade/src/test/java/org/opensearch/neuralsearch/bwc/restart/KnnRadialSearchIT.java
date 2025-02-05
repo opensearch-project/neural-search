@@ -28,9 +28,9 @@ public class KnnRadialSearchIT extends AbstractRestartUpgradeRestTestCase {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
 
         if (isRunningAgainstOldCluster()) {
-            String modelId = getOrUploadTextEmbeddingModel(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
+            String modelId = uploadTextEmbeddingModel();
             loadModel(modelId);
-            createPipelineForTextImageProcessor(modelId, PIPELINE_NAME, TEXT_IMAGE_EMBEDDING_PROCESSOR);
+            createPipelineForTextImageProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
                 Files.readString(Path.of(classLoader.getResource("processor/IndexMappingMultipleShard.json").toURI())),

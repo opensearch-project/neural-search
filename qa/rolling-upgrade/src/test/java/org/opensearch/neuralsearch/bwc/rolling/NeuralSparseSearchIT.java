@@ -41,9 +41,9 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER, 90);
         switch (getClusterType()) {
             case OLD:
-                modelId = getOrUploadSparseEncodingModel(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                modelId = uploadSparseEncodingModel();
                 loadModel(modelId);
-                createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME, SPARSE_ENCODING_PROCESSOR);
+                createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
                     getIndexNameForTest(),
                     Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),

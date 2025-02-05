@@ -33,9 +33,9 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         switch (getClusterType()) {
             case OLD:
-                modelId = getOrUploadTextImageEmbeddingModel(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
+                modelId = uploadTextImageEmbeddingModel();
                 loadModel(modelId);
-                createPipelineForTextImageProcessor(modelId, PIPELINE_NAME, TEXT_IMAGE_EMBEDDING_PROCESSOR);
+                createPipelineForTextImageProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
                     getIndexNameForTest(),
                     Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
