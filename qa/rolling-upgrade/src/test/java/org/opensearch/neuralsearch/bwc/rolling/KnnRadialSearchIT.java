@@ -13,7 +13,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
-    private static final String PIPELINE_NAME = "nlp-ingest-pipeline-text-image";
+    private static final String PIPELINE_NAME = "radial-search-pipeline";
     private static final String TEST_FIELD = "passage_text";
     private static final String TEST_IMAGE_FIELD = "passage_image";
     private static final String TEXT = "Hello world";

@@ -13,7 +13,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
-    private static final String PIPELINE_NAME = "nlp-pipeline-text-embedding";
+    private static final String PIPELINE_NAME = "nlp-pipeline";
     private static final String TEST_FIELD = "passage_text";
     private static final String TEXT = "Hello world";
     private static final String TEXT_MIXED = "Hello world mixed";

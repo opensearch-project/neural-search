@@ -16,7 +16,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESSOR;
 
 public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
-    private static final String SPARSE_PIPELINE = "nlp-ingest-pipeline-sparse";
+    private static final String SPARSE_PIPELINE = "BatchIngestionIT_sparse_pipeline_rolling";
     private static final String TEXT_FIELD_NAME = "passage_text";
     private static final String EMBEDDING_FIELD_NAME = "passage_embedding";
 

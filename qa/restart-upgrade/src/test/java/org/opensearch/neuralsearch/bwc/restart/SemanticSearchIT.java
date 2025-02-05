@@ -14,7 +14,7 @@ import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
 
-    private static final String PIPELINE_NAME = "nlp-pipeline-text-embedding";
+    private static final String PIPELINE_NAME = "nlp-pipeline";
     private static final String TEST_FIELD = "passage_text";
     private static final String TEXT = "Hello world";
     private static final String TEXT_1 = "Hello world a";

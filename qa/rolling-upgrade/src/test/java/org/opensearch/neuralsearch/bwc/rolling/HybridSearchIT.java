@@ -26,7 +26,7 @@ import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
 
-    private static final String PIPELINE_NAME = "nlp-pipeline-text-embedding";
+    private static final String PIPELINE_NAME = "nlp-hybrid-pipeline";
     private static final String SEARCH_PIPELINE_NAME = "nlp-search-pipeline";
     private static final String TEST_FIELD = "passage_text";
     private static final String TEXT = "Hello world";

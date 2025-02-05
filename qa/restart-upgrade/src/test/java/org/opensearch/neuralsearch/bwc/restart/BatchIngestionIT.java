@@ -16,7 +16,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESSOR;
 
 public class BatchIngestionIT extends AbstractRestartUpgradeRestTestCase {
-    private static final String PIPELINE_NAME = "nlp-pipeline-sparse";
+    private static final String PIPELINE_NAME = "pipeline-BatchIngestionIT";
     private static final String TEXT_FIELD_NAME = "passage_text";
     private static final String EMBEDDING_FIELD_NAME = "passage_embedding";
     private static final int batchSize = 3;
