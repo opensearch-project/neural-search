@@ -116,7 +116,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     @SneakyThrows
     protected void setUpModels() {
-        textEmbeddingModelId = uploadTextEmbeddingModel();
+        textEmbeddingModelId = uploadTextEmbedding();
     }
 
     protected ThreadPool setUpThreadPool() {
@@ -131,12 +131,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return ClusterServiceUtils.createClusterService(threadPool);
     }
 
-    protected String uploadTextEmbeddingModel() throws Exception {
+    protected String uploadTextEmbedding() throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        return registerModelGroupAndGetModelId(requestBody);
+        return registerModel(requestBody);
     }
 
-    protected String registerModelGroupAndGetModelId(String requestBody) throws Exception {
+    protected String registerModel(String requestBody) throws Exception {
         String modelGroupRegisterRequestBody = Files.readString(
             Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
         );
