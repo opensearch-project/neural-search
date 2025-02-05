@@ -8,6 +8,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Optional;
+
+import joptsimple.internal.Strings;
+import lombok.SneakyThrows;
+import org.junit.After;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
@@ -23,11 +27,36 @@ import org.opensearch.test.rest.OpenSearchRestTestCase;
 
 public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT {
 
+    protected static String textEmbeddingModelId = Strings.EMPTY;
+    protected static String textImageEmbeddingModelId = Strings.EMPTY;
+    protected static String sparseEncodingModelId = Strings.EMPTY;
+
+    @Override
+    public void setupSettings() {
+        super.setupSettings();
+        setUpModels();
+    }
+
     @Before
     protected String getIndexNameForTest() {
         // Creating index name by concatenating "neural-bwc-" prefix with test method name
         // for all the tests in this sub-project
         return NEURAL_SEARCH_BWC_PREFIX + getTestName().toLowerCase(Locale.ROOT);
+    }
+
+    @SneakyThrows
+    protected void setUpModels() {
+        textEmbeddingModelId = uploadTextEmbeddingModel();
+        textImageEmbeddingModelId = uploadTextImageEmbeddingModel();
+        sparseEncodingModelId = uploadSparseEncodingModel();
+    }
+
+    @After
+    @SneakyThrows
+    public void tearDownModels() {
+        wipeOfTestResources(null, null, textEmbeddingModelId, null);
+        wipeOfTestResources(null, null, textImageEmbeddingModelId, null);
+        wipeOfTestResources(null, null, sparseEncodingModelId, null);
     }
 
     @Override
