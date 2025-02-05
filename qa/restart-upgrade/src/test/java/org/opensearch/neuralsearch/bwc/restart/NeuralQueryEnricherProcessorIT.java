@@ -37,10 +37,10 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
             .queryText(TEXT_1);
 
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadSparseEncodingModel();
+            String modelId = getOrUploadSparseEncodingModel(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
             loadModel(modelId);
             sparseEncodingQueryBuilderWithModelId.modelId(modelId);
-            createPipelineForSparseEncodingProcessor(modelId, SPARSE_INGEST_PIPELINE_NAME);
+            createPipelineForSparseEncodingProcessor(modelId, SPARSE_INGEST_PIPELINE_NAME, SPARSE_ENCODING_PROCESSOR);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
                 Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),
@@ -86,10 +86,10 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
             .build();
 
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadTextEmbeddingModel();
+            String modelId = getOrUploadTextEmbeddingModel(getIngestionPipeline(DENSE_INGEST_PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
             loadModel(modelId);
             neuralQueryBuilderWithModelId.modelId(modelId);
-            createPipelineProcessor(modelId, DENSE_INGEST_PIPELINE_NAME);
+            createPipelineProcessor(modelId, DENSE_INGEST_PIPELINE_NAME, TEXT_EMBEDDING_PROCESSOR);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
                 Files.readString(Path.of(classLoader.getResource("processor/IndexMappingMultipleShard.json").toURI())),

@@ -26,9 +26,9 @@ public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
 
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadTextEmbeddingModel();
+            String modelId = getOrUploadTextEmbeddingModel(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
             loadModel(modelId);
-            createPipelineProcessor(modelId, PIPELINE_NAME);
+            createPipelineProcessor(modelId, PIPELINE_NAME, TEXT_EMBEDDING_PROCESSOR);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
                 Files.readString(Path.of(classLoader.getResource("processor/IndexMappingMultipleShard.json").toURI())),

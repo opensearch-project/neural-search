@@ -25,9 +25,9 @@ public class BatchIngestionIT extends AbstractRestartUpgradeRestTestCase {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         String indexName = getIndexNameForTest();
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadSparseEncodingModel();
+            String modelId = getOrUploadSparseEncodingModel(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
             loadModel(modelId);
-            createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME, batchSize);
+            createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME, SPARSE_ENCODING_PROCESSOR, batchSize);
             createIndexWithConfiguration(
                 indexName,
                 Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),

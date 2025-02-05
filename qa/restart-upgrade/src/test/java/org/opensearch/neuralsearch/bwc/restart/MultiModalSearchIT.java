@@ -28,9 +28,9 @@ public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
 
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadTextEmbeddingModel();
+            String modelId = getOrUploadTextEmbeddingModel(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
             loadModel(modelId);
-            createPipelineForTextImageProcessor(modelId, PIPELINE_NAME);
+            createPipelineForTextImageProcessor(modelId, PIPELINE_NAME, TEXT_IMAGE_EMBEDDING_PROCESSOR);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
                 Files.readString(Path.of(classLoader.getResource("processor/IndexMappingMultipleShard.json").toURI())),

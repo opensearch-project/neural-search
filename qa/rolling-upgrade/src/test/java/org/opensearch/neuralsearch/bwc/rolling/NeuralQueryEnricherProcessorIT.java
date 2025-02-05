@@ -41,10 +41,13 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
 
         switch (getClusterType()) {
             case OLD:
-                sparseModelId = uploadSparseEncodingModel();
+                sparseModelId = getOrUploadSparseEncodingModel(
+                    getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME),
+                    SPARSE_ENCODING_PROCESSOR
+                );
                 loadModel(sparseModelId);
                 sparseEncodingQueryBuilderWithModelId.modelId(sparseModelId);
-                createPipelineForSparseEncodingProcessor(sparseModelId, SPARSE_INGEST_PIPELINE_NAME);
+                createPipelineForSparseEncodingProcessor(sparseModelId, SPARSE_INGEST_PIPELINE_NAME, SPARSE_ENCODING_PROCESSOR);
                 createIndexWithConfiguration(
                     getIndexNameForTest(),
                     Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),
@@ -105,10 +108,10 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
 
         switch (getClusterType()) {
             case OLD:
-                denseModelId = uploadTextEmbeddingModel();
+                denseModelId = getOrUploadTextEmbeddingModel(getIngestionPipeline(DENSE_INGEST_PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
                 loadModel(denseModelId);
                 neuralQueryBuilderWithModelId.modelId(denseModelId);
-                createPipelineProcessor(denseModelId, DENSE_INGEST_PIPELINE_NAME);
+                createPipelineProcessor(denseModelId, DENSE_INGEST_PIPELINE_NAME, TEXT_EMBEDDING_PROCESSOR);
                 createIndexWithConfiguration(
                     getIndexNameForTest(),
                     Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),

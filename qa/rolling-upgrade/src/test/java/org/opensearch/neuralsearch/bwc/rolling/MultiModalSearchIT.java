@@ -33,9 +33,9 @@ public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER, 90);
         switch (getClusterType()) {
             case OLD:
-                modelId = uploadTextImageEmbeddingModel();
+                modelId = getOrUploadTextImageEmbeddingModel(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
                 loadModel(modelId);
-                createPipelineForTextImageProcessor(modelId, PIPELINE_NAME);
+                createPipelineForTextImageProcessor(modelId, PIPELINE_NAME, TEXT_IMAGE_EMBEDDING_PROCESSOR);
                 createIndexWithConfiguration(
                     getIndexNameForTest(),
                     Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),

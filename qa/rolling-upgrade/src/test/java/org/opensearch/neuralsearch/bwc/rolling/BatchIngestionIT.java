@@ -26,9 +26,9 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
         String sparseModelId = null;
         switch (getClusterType()) {
             case OLD:
-                sparseModelId = uploadSparseEncodingModel();
+                sparseModelId = getOrUploadSparseEncodingModel(getIngestionPipeline(SPARSE_PIPELINE), SPARSE_ENCODING_PROCESSOR);
                 loadModel(sparseModelId);
-                createPipelineForSparseEncodingProcessor(sparseModelId, SPARSE_PIPELINE, 2);
+                createPipelineForSparseEncodingProcessor(sparseModelId, SPARSE_PIPELINE, SPARSE_ENCODING_PROCESSOR, 2);
                 createIndexWithConfiguration(
                     indexName,
                     Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),

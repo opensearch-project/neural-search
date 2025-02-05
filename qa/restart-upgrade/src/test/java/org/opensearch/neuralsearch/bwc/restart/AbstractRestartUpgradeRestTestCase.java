@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.bwc.restart;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
@@ -16,6 +17,8 @@ import static org.opensearch.neuralsearch.util.TestUtils.CLIENT_TIMEOUT_VALUE;
 import static org.opensearch.neuralsearch.util.TestUtils.RESTART_UPGRADE_OLD_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.BWC_VERSION;
 import static org.opensearch.neuralsearch.util.TestUtils.generateModelId;
+import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
+
 import org.opensearch.test.rest.OpenSearchRestTestCase;
 
 public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearchIT {
@@ -61,7 +64,11 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
         return Optional.ofNullable(System.getProperty(BWC_VERSION, null));
     }
 
-    protected String uploadTextEmbeddingModel() throws Exception {
+    protected String getOrUploadTextEmbeddingModel(Map<String, Object> pipeline, String processor) throws Exception {
+        String modelId = getModelId(pipeline, processor);
+        if (modelId != null) {
+            return modelId;
+        }
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
         return registerModelGroupAndGetModelId(requestBody);
     }
@@ -74,35 +81,57 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
         return uploadModel(String.format(LOCALE, requestBody, modelGroupId));
     }
 
-    protected void createPipelineProcessor(final String modelId, final String pipelineName) throws Exception {
+    protected void createPipelineProcessor(final String modelId, final String pipelineName, String processor) throws Exception {
+        String modelIdInPipeline = getModelId(getIngestionPipeline(pipelineName), processor);
+        if (modelIdInPipeline != null && modelIdInPipeline.equals(modelId)) {
+            return;
+        }
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/PipelineConfiguration.json").toURI()));
         createPipelineProcessor(requestBody, pipelineName, modelId, null);
     }
 
-    protected String uploadSparseEncodingModel() throws Exception {
+    protected String getOrUploadSparseEncodingModel(Map<String, Object> pipeline, String processor) throws Exception {
+        String modelId = getModelId(pipeline, processor);
+        if (modelId != null) {
+            return modelId;
+        }
         String requestBody = Files.readString(
             Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
         );
         return registerModelGroupAndGetModelId(requestBody);
     }
 
-    protected void createPipelineForTextImageProcessor(final String modelId, final String pipelineName) throws Exception {
+    protected void createPipelineForTextImageProcessor(final String modelId, final String pipelineName, final String processor)
+        throws Exception {
+        String modelIdInPipeline = getModelId(getIngestionPipeline(pipelineName), processor);
+        if (modelIdInPipeline != null && modelIdInPipeline.equals(modelId)) {
+            return;
+        }
         String requestBody = Files.readString(
             Path.of(classLoader.getResource("processor/PipelineForTextImageProcessorConfiguration.json").toURI())
         );
         createPipelineProcessor(requestBody, pipelineName, modelId, null);
     }
 
-    protected void createPipelineForSparseEncodingProcessor(final String modelId, final String pipelineName, final Integer batchSize)
-        throws Exception {
+    protected void createPipelineForSparseEncodingProcessor(
+        final String modelId,
+        final String pipelineName,
+        final String processor,
+        final Integer batchSize
+    ) throws Exception {
+        String modelIdInPipeline = getModelId(getIngestionPipeline(pipelineName), processor);
+        if (modelIdInPipeline != null && modelIdInPipeline.equals(modelId)) {
+            return;
+        }
         String requestBody = Files.readString(
             Path.of(classLoader.getResource("processor/PipelineForSparseEncodingProcessorConfiguration.json").toURI())
         );
         createPipelineProcessor(requestBody, pipelineName, modelId, batchSize);
     }
 
-    protected void createPipelineForSparseEncodingProcessor(final String modelId, final String pipelineName) throws Exception {
-        createPipelineForSparseEncodingProcessor(modelId, pipelineName, null);
+    protected void createPipelineForSparseEncodingProcessor(final String modelId, final String pipelineName, String processor)
+        throws Exception {
+        createPipelineForSparseEncodingProcessor(modelId, pipelineName, processor, null);
     }
 
     protected void createPipelineForTextChunkingProcessor(String pipelineName) throws Exception {

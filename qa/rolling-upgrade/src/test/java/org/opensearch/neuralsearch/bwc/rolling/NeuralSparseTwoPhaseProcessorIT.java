@@ -33,10 +33,13 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRollingUpgradeTestC
 
         switch (getClusterType()) {
             case OLD:
-                sparseModelId = uploadSparseEncodingModel();
+                sparseModelId = getOrUploadSparseEncodingModel(
+                    getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME),
+                    SPARSE_ENCODING_PROCESSOR
+                );
                 loadModel(sparseModelId);
                 neuralSparseQueryBuilder.modelId(sparseModelId);
-                createPipelineForSparseEncodingProcessor(sparseModelId, SPARSE_INGEST_PIPELINE_NAME);
+                createPipelineForSparseEncodingProcessor(sparseModelId, SPARSE_INGEST_PIPELINE_NAME, SPARSE_ENCODING_PROCESSOR);
                 createIndexWithConfiguration(
                     getIndexNameForTest(),
                     Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),

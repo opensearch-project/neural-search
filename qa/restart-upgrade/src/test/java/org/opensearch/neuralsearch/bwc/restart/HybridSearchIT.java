@@ -56,9 +56,9 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadTextEmbeddingModel();
+            String modelId = getOrUploadTextEmbeddingModel(getIngestionPipeline(pipelineName), TEXT_EMBEDDING_PROCESSOR);
             loadModel(modelId);
-            createPipelineProcessor(modelId, pipelineName);
+            createPipelineProcessor(modelId, pipelineName, TEXT_EMBEDDING_PROCESSOR);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
                 Files.readString(Path.of(classLoader.getResource(fileName).toURI())),

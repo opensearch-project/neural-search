@@ -46,9 +46,9 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         switch (getClusterType()) {
             case OLD:
-                modelId = uploadTextEmbeddingModel();
+                modelId = getOrUploadTextEmbeddingModel(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
                 loadModel(modelId);
-                createPipelineProcessor(modelId, PIPELINE_NAME);
+                createPipelineProcessor(modelId, PIPELINE_NAME, TEXT_EMBEDDING_PROCESSOR);
                 createIndexWithConfiguration(
                     getIndexNameForTest(),
                     Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
