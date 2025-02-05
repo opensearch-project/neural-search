@@ -9,7 +9,6 @@ import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Optional;
 
-import joptsimple.internal.Strings;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
@@ -25,31 +24,11 @@ import org.opensearch.test.rest.OpenSearchRestTestCase;
 
 public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT {
 
-    protected static String textEmbeddingModelId = Strings.EMPTY;
-    protected static String textImageEmbeddingModelId = Strings.EMPTY;
-    protected static String sparseEncodingModelId = Strings.EMPTY;
-
-    @Override
-    public void setupSettings() {
-        super.setupSettings();
-        try {
-            setUpModels();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
     @Before
     protected String getIndexNameForTest() {
         // Creating index name by concatenating "neural-bwc-" prefix with test method name
         // for all the tests in this sub-project
         return NEURAL_SEARCH_BWC_PREFIX + getTestName().toLowerCase(Locale.ROOT);
-    }
-
-    protected void setUpModels() throws Exception {
-        textEmbeddingModelId = uploadTextEmbeddingModel();
-        textImageEmbeddingModelId = uploadTextImageEmbeddingModel();
-        sparseEncodingModelId = uploadSparseEncodingModel();
     }
 
     @Override
