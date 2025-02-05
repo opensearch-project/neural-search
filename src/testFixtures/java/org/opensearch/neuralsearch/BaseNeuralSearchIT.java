@@ -186,6 +186,9 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     protected void loadModel(final String modelId) throws Exception {
+        if (isLoaded(modelId)) {
+            return;
+        }
         Response uploadResponse = makeRequest(
             client(),
             "POST",
@@ -1598,5 +1601,18 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             toHttpEntity(String.format(LOCALE, requestBody)),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
+    }
+
+    @SneakyThrows
+    private boolean isLoaded(String modelId) {
+        Response response = makeRequest(
+            client(),
+            "GET",
+            String.format(LOCALE, "/_plugins/_ml/models/%s", modelId),
+            null,
+            toHttpEntity(""),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+        return RestStatus.fromCode(response.getStatusLine().getStatusCode()).equals(RestStatus.OK);
     }
 }
