@@ -48,9 +48,9 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
             case UPGRADED:
                 try {
                     int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                    loadModel(textImageEmbeddingModelId);
+                    loadModel(textEmbeddingModelId);
                     addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, null, null);
-                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, textImageEmbeddingModelId, TEXT_UPGRADED);
+                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, textEmbeddingModelId, TEXT_UPGRADED);
                 } finally {
                     wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, null, null);
                 }
