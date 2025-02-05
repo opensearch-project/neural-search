@@ -25,7 +25,7 @@ import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
-    private static final String PIPELINE_NAME = "nlp-hybrid-pipeline";
+    private static final String PIPELINE_NAME = "nlp-pipeline-text-embedding";
     private static final String PIPELINE1_NAME = "nlp-hybrid-1-pipeline";
     private static final String SEARCH_PIPELINE_NAME = "nlp-search-pipeline";
     private static final String SEARCH_PIPELINE1_NAME = "nlp-search-1-pipeline";

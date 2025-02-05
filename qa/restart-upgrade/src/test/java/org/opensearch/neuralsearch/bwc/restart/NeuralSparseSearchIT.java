@@ -17,7 +17,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.objectToFloat;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 
 public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
-    private static final String PIPELINE_NAME = "nlp-ingest-pipeline-sparse";
+    private static final String PIPELINE_NAME = "nlp-pipeline-sparse";
     private static final String TEST_SPARSE_ENCODING_FIELD = "passage_embedding";
     private static final String TEST_TEXT_FIELD = "passage_text";
     private static final String TEXT_1 = "Hello world a b";

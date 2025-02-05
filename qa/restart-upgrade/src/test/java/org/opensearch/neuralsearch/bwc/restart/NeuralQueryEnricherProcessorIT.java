@@ -19,7 +19,7 @@ import java.util.List;
 
 public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTestCase {
     // add prefix to avoid conflicts with other IT class, since we don't wipe resources after first round
-    private static final String SPARSE_INGEST_PIPELINE_NAME = "nqep-nlp-ingest-pipeline-sparse";
+    private static final String SPARSE_INGEST_PIPELINE_NAME = "nlp-pipeline-sparse";
     private static final String DENSE_INGEST_PIPELINE_NAME = "nqep-nlp-ingest-pipeline-dense";
     private static final String SPARSE_SEARCH_PIPELINE_NAME = "nqep-nlp-search-pipeline-sparse";
     private static final String DENSE_SEARCH_PIPELINE_NAME = "nqep-nlp-search-pipeline-dense";

@@ -27,7 +27,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 
 public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
 
-    private static final String PIPELINE_NAME = "nlp-hybrid-with-rescore-pipeline";
+    private static final String PIPELINE_NAME = "nlp-pipeline-text-embedding";
     private static final String SEARCH_PIPELINE_NAME = "nlp-search-with_rescore-pipeline";
     private static final String TEST_FIELD = "passage_text";
     private static final String TEXT = "Hello world";

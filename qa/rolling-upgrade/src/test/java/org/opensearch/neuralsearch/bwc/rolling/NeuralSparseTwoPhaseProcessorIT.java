@@ -17,7 +17,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESS
 
 public class NeuralSparseTwoPhaseProcessorIT extends AbstractRollingUpgradeTestCase {
     // add prefix to avoid conflicts with other IT class, since don't wipe resources after first round
-    private static final String SPARSE_INGEST_PIPELINE_NAME = "nstp-nlp-ingest-pipeline-sparse";
+    private static final String SPARSE_INGEST_PIPELINE_NAME = "nlp-ingest-pipeline-sparse";
     private static final String SPARSE_SEARCH_TWO_PHASE_PIPELINE_NAME = "nstp-nlp-two-phase-search-pipeline-sparse";
     private static final String TEST_ENCODING_FIELD = "passage_embedding";
     private static final String TEST_TEXT_FIELD = "passage_text";
