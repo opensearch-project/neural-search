@@ -10,6 +10,8 @@ import java.util.Locale;
 import java.util.Optional;
 
 import joptsimple.internal.Strings;
+import lombok.SneakyThrows;
+import org.junit.After;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
@@ -50,6 +52,14 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
         textEmbeddingModelId = uploadTextEmbeddingModel();
         textImageEmbeddingModelId = uploadTextImageEmbeddingModel();
         sparseEncodingModelId = uploadSparseEncodingModel();
+    }
+
+    @After
+    @SneakyThrows
+    public void tearDownModels() {
+        wipeOfTestResources(null, null, textEmbeddingModelId, null);
+        wipeOfTestResources(null, null, textImageEmbeddingModelId, null);
+        wipeOfTestResources(null, null, sparseEncodingModelId, null);
     }
 
     @Override
