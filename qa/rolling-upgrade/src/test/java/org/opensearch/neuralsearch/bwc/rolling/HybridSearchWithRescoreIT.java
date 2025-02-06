@@ -20,10 +20,8 @@ import java.util.Objects;
 
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
-import static org.opensearch.neuralsearch.util.TestUtils.TEXT_EMBEDDING_PROCESSOR;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
-import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 
 public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
 
@@ -63,7 +61,7 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
                 );
                 break;
             case MIXED:
-                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                modelId = TextImageEmbeddingModel.getModelId();
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
@@ -79,7 +77,7 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
                 break;
             case UPGRADED:
                 try {
-                    modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                    modelId = TextImageEmbeddingModel.getModelId();
                     int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
                     loadModel(modelId);
                     addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, null, null);

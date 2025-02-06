@@ -4,8 +4,6 @@
  */
 package org.opensearch.neuralsearch.bwc.rolling;
 
-import org.opensearch.neuralsearch.util.TestUtils;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -13,7 +11,6 @@ import java.util.Map;
 
 import static org.opensearch.neuralsearch.util.BatchIngestionUtils.prepareDataForBulkIngestion;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
-import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESSOR;
 
 public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
     private static final String SPARSE_PIPELINE = "BatchIngestionIT_sparse_pipeline_rolling";
@@ -39,7 +36,7 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
                 validateDocCountAndInfo(indexName, 5, () -> getDocById(indexName, "4"), EMBEDDING_FIELD_NAME, Map.class);
                 break;
             case MIXED:
-                sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_PIPELINE), SPARSE_ENCODING_PROCESSOR);
+                sparseModelId = SparseEncodingModel.getModelId();
                 loadModel(sparseModelId);
                 List<Map<String, String>> docsForMixed = prepareDataForBulkIngestion(5, 5);
                 bulkAddDocuments(indexName, TEXT_FIELD_NAME, SPARSE_PIPELINE, docsForMixed);
@@ -47,7 +44,7 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
                 break;
             case UPGRADED:
                 try {
-                    sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_PIPELINE), SPARSE_ENCODING_PROCESSOR);
+                    sparseModelId = SparseEncodingModel.getModelId();
                     loadModel(sparseModelId);
                     List<Map<String, String>> docsForUpgraded = prepareDataForBulkIngestion(10, 5);
                     bulkAddDocuments(indexName, TEXT_FIELD_NAME, SPARSE_PIPELINE, docsForUpgraded);

@@ -14,7 +14,6 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
-import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESSOR;
 import static org.opensearch.neuralsearch.util.TestUtils.TEXT_EMBEDDING_PROCESSOR;
 
 public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCase {
@@ -63,7 +62,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                 );
                 break;
             case MIXED:
-                sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                sparseModelId = SparseEncodingModel.getModelId();
                 loadModel(sparseModelId);
                 sparseEncodingQueryBuilderWithModelId.modelId(sparseModelId);
 
@@ -74,7 +73,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                 break;
             case UPGRADED:
                 try {
-                    sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                    sparseModelId = SparseEncodingModel.getModelId();
                     loadModel(sparseModelId);
                     sparseEncodingQueryBuilderWithModelId.modelId(sparseModelId);
                     assertEquals(

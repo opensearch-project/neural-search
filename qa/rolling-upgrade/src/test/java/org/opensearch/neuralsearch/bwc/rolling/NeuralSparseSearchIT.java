@@ -12,9 +12,7 @@ import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.neuralsearch.util.TestUtils;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
-import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESSOR;
 import static org.opensearch.neuralsearch.util.TestUtils.objectToFloat;
-import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 
 public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
@@ -59,7 +57,7 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
                 );
                 break;
             case MIXED:
-                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                modelId = SparseEncodingModel.getModelId();
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
@@ -79,7 +77,7 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
                 break;
             case UPGRADED:
                 try {
-                    modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                    modelId = SparseEncodingModel.getModelId();
                     int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
                     loadModel(modelId);
                     addSparseEncodingDoc(
