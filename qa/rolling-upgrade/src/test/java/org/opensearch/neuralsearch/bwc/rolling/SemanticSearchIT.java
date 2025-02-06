@@ -8,8 +8,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
-import static org.opensearch.neuralsearch.util.TestUtils.TEXT_EMBEDDING_PROCESSOR;
-import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
@@ -39,7 +37,7 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
                 addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, null, null);
                 break;
             case MIXED:
-                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                modelId = TextEmbeddingModel.getModelId();
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
@@ -52,7 +50,7 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
                 break;
             case UPGRADED:
                 try {
-                    modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                    modelId = TextEmbeddingModel.getModelId();
                     int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
                     loadModel(modelId);
                     addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, null, null);

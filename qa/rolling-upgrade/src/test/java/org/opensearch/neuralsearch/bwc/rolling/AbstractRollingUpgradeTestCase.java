@@ -8,6 +8,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Optional;
+
+import lombok.Getter;
+import lombok.Setter;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
@@ -75,6 +78,14 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
         }
     }
 
+    protected enum TextEmbeddingModel {
+        INSTANCE;
+
+        @Setter
+        @Getter
+        private static String modelId;
+    }
+
     protected final ClusterType getClusterType() {
         return ClusterType.instance(System.getProperty(BWCSUITE_CLUSTER));
     }
@@ -88,8 +99,14 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
     }
 
     protected String uploadTextEmbeddingModel() throws Exception {
-        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        return registerModelGroupAndGetModelId(requestBody);
+        String modelId = TextEmbeddingModel.getModelId();
+        if (modelId == null) {
+            String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
+            String id = registerModelGroupAndGetModelId(requestBody);
+            TextEmbeddingModel.setModelId(id);
+            return id;
+        }
+        return modelId;
     }
 
     protected String registerModelGroupAndGetModelId(String requestBody) throws Exception {
