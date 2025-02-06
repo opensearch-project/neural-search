@@ -8,9 +8,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Optional;
-
-import lombok.Getter;
-import lombok.Setter;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
@@ -33,19 +30,29 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
     protected enum TextEmbeddingModel {
         INSTANCE;
 
-        @Getter
-        @Setter
         private static String modelId;
 
+        public static void setModelId(String id) {
+            modelId = id;
+        }
+
+        public static String getModelId() {
+            return modelId;
+        }
     }
 
     protected enum SparseEncodingModel {
         INSTANCE;
 
-        @Getter
-        @Setter
         private static String modelId;
 
+        public static void setModelId(String id) {
+            modelId = id;
+        }
+
+        public static String getModelId() {
+            return modelId;
+        }
     }
 
     @Override
