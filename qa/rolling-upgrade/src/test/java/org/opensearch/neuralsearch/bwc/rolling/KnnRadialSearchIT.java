@@ -63,7 +63,7 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
                     addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_UPGRADED);
                     validateIndexQueryOnUpgrade(totalDocsCountUpgraded, modelId, TEXT_UPGRADED, TEST_IMAGE_TEXT_UPGRADED);
                 } finally {
-                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
+                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, null, null);
                 }
                 break;
             default:

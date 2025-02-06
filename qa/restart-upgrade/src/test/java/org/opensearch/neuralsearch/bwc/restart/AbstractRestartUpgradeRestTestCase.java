@@ -27,6 +27,34 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
         return NEURAL_SEARCH_BWC_PREFIX + getTestName().toLowerCase(Locale.ROOT);
     }
 
+    protected enum TextEmbeddingModel {
+        INSTANCE;
+
+        private static String modelId;
+
+        public static void setModelId(String id) {
+            modelId = id;
+        }
+
+        public static String getModelId() {
+            return modelId;
+        }
+    }
+
+    protected enum SparseEncodingModel {
+        INSTANCE;
+
+        private static String modelId;
+
+        public static void setModelId(String id) {
+            modelId = id;
+        }
+
+        public static String getModelId() {
+            return modelId;
+        }
+    }
+
     @Override
     protected final boolean preserveIndicesUponCompletion() {
         return true;
@@ -62,8 +90,14 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
     }
 
     protected String uploadTextEmbeddingModel() throws Exception {
-        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        return registerModelGroupAndGetModelId(requestBody);
+        String modelId = TextEmbeddingModel.getModelId();
+        if (modelId == null) {
+            String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
+            String id = registerModelGroupAndGetModelId(requestBody);
+            TextEmbeddingModel.setModelId(id);
+            return id;
+        }
+        return modelId;
     }
 
     protected String registerModelGroupAndGetModelId(final String requestBody) throws Exception {
@@ -80,10 +114,16 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
     }
 
     protected String uploadSparseEncodingModel() throws Exception {
-        String requestBody = Files.readString(
-            Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
-        );
-        return registerModelGroupAndGetModelId(requestBody);
+        String modelId = SparseEncodingModel.getModelId();
+        if (modelId == null) {
+            String requestBody = Files.readString(
+                Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
+            );
+            String id = registerModelGroupAndGetModelId(requestBody);
+            SparseEncodingModel.setModelId(id);
+            return id;
+        }
+        return modelId;
     }
 
     protected void createPipelineForTextImageProcessor(final String modelId, final String pipelineName) throws Exception {

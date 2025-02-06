@@ -13,10 +13,8 @@ import java.util.Map;
 
 import org.opensearch.index.query.MatchQueryBuilder;
 
-import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
-import static org.opensearch.neuralsearch.util.TestUtils.TEXT_EMBEDDING_PROCESSOR;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
 
@@ -69,7 +67,7 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         } else {
             String modelId = null;
             try {
-                modelId = getModelId(getIngestionPipeline(pipelineName), TEXT_EMBEDDING_PROCESSOR);
+                modelId = TextEmbeddingModel.getModelId();
                 loadModel(modelId);
                 addDocuments(getIndexNameForTest(), false);
                 HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null, null);
@@ -77,7 +75,7 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
                 hybridQueryBuilder = getQueryBuilder(modelId, Boolean.FALSE, Map.of("ef_search", 100), RescoreContext.getDefault());
                 validateTestIndex(getIndexNameForTest(), searchPipelineName, hybridQueryBuilder);
             } finally {
-                wipeOfTestResources(getIndexNameForTest(), pipelineName, modelId, searchPipelineName);
+                wipeOfTestResources(getIndexNameForTest(), pipelineName, null, searchPipelineName);
             }
         }
     }

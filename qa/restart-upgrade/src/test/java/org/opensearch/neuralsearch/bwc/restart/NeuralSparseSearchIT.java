@@ -12,7 +12,6 @@ import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.neuralsearch.util.TestUtils;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
-import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESSOR;
 import static org.opensearch.neuralsearch.util.TestUtils.objectToFloat;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 
@@ -53,7 +52,7 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
         } else {
             String modelId = null;
             try {
-                modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                modelId = SparseEncodingModel.getModelId();
                 loadModel(modelId);
                 addSparseEncodingDoc(
                     getIndexNameForTest(),
@@ -65,7 +64,7 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
                 );
                 validateTestIndex(modelId);
             } finally {
-                wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
+                wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, null, null);
             }
         }
 

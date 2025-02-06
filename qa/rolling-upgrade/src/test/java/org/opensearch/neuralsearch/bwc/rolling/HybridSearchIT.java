@@ -84,7 +84,7 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
                     hybridQueryBuilder = getQueryBuilder(modelId, Boolean.FALSE, Map.of("ef_search", 100), RescoreContext.getDefault());
                     validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, hybridQueryBuilder, null);
                 } finally {
-                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, SEARCH_PIPELINE_NAME);
+                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, null, SEARCH_PIPELINE_NAME);
                 }
                 break;
             default:

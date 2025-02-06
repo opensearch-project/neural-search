@@ -61,12 +61,7 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRollingUpgradeTestC
                     neuralSparseQueryBuilder.modelId(sparseModelId);
                     assertNotNull(search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits"));
                 } finally {
-                    wipeOfTestResources(
-                        getIndexNameForTest(),
-                        SPARSE_INGEST_PIPELINE_NAME,
-                        sparseModelId,
-                        SPARSE_SEARCH_TWO_PHASE_PIPELINE_NAME
-                    );
+                    wipeOfTestResources(getIndexNameForTest(), SPARSE_INGEST_PIPELINE_NAME, null, SPARSE_SEARCH_TWO_PHASE_PIPELINE_NAME);
                 }
                 break;
             default:

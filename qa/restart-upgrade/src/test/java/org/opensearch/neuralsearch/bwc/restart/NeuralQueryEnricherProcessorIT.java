@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.bwc.restart;
 
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
-import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESSOR;
 import static org.opensearch.neuralsearch.util.TestUtils.TEXT_EMBEDDING_PROCESSOR;
 
 import org.opensearch.common.settings.Settings;
@@ -61,7 +60,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
         } else {
             String modelId = null;
             try {
-                modelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                modelId = SparseEncodingModel.getModelId();
                 loadModel(modelId);
                 sparseEncodingQueryBuilderWithModelId.modelId(modelId);
                 assertEquals(
@@ -69,7 +68,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
                     search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
                 );
             } finally {
-                wipeOfTestResources(getIndexNameForTest(), SPARSE_INGEST_PIPELINE_NAME, modelId, SPARSE_SEARCH_PIPELINE_NAME);
+                wipeOfTestResources(getIndexNameForTest(), SPARSE_INGEST_PIPELINE_NAME, null, SPARSE_SEARCH_PIPELINE_NAME);
             }
         }
     }

@@ -81,7 +81,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                         search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
                     );
                 } finally {
-                    wipeOfTestResources(getIndexNameForTest(), SPARSE_INGEST_PIPELINE_NAME, sparseModelId, SPARSE_SEARCH_PIPELINE_NAME);
+                    wipeOfTestResources(getIndexNameForTest(), SPARSE_INGEST_PIPELINE_NAME, null, SPARSE_SEARCH_PIPELINE_NAME);
                 }
                 break;
             default:

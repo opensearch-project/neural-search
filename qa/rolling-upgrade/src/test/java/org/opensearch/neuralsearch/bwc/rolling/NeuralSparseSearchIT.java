@@ -90,7 +90,7 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
                     );
                     validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId);
                 } finally {
-                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
+                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, null, null);
                 }
                 break;
             default:

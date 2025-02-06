@@ -56,7 +56,7 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
                     addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, null, null);
                     validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, TEXT_UPGRADED);
                 } finally {
-                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
+                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, null, null);
                 }
                 break;
             default:
