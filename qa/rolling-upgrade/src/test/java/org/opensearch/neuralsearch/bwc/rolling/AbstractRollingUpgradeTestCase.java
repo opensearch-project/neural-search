@@ -34,11 +34,7 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
     @Override
     public void setupSettings() {
         super.setupSettings();
-        try {
-            setUpModels();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        setUpModels();
     }
 
     @Before
@@ -48,7 +44,8 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
         return NEURAL_SEARCH_BWC_PREFIX + getTestName().toLowerCase(Locale.ROOT);
     }
 
-    protected void setUpModels() throws Exception {
+    @SneakyThrows
+    protected void setUpModels() {
         textEmbeddingModelId = uploadTextEmbeddingModel();
         textImageEmbeddingModelId = uploadTextImageEmbeddingModel();
         sparseEncodingModelId = uploadSparseEncodingModel();
