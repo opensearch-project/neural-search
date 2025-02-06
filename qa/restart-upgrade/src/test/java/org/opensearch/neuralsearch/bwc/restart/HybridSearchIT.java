@@ -69,8 +69,7 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         } else {
             String modelId = null;
             try {
-                modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                ;
+                modelId = TestUtils.getModelId(getIngestionPipeline(pipelineName), TEXT_EMBEDDING_PROCESSOR);
                 loadModel(modelId);
                 addDocuments(getIndexNameForTest(), false);
                 HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null, null);
