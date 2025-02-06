@@ -43,7 +43,7 @@ public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
                 addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1, null, null);
                 validateTestIndex(modelId);
             } finally {
-                wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, null, null);
+                // wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, null, null);
             }
         }
     }

@@ -45,7 +45,7 @@ public class BatchIngestionIT extends AbstractRestartUpgradeRestTestCase {
                 bulkAddDocuments(indexName, TEXT_FIELD_NAME, PIPELINE_NAME, docs);
                 validateDocCountAndInfo(indexName, 10, () -> getDocById(indexName, "9"), EMBEDDING_FIELD_NAME, Map.class);
             } finally {
-                wipeOfTestResources(indexName, PIPELINE_NAME, null, null);
+                // wipeOfTestResources(indexName, PIPELINE_NAME, null, null);
             }
         }
     }

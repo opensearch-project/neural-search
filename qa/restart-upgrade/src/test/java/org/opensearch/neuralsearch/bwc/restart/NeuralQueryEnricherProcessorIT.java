@@ -69,7 +69,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
                     search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
                 );
             } finally {
-                wipeOfTestResources(getIndexNameForTest(), SPARSE_INGEST_PIPELINE_NAME, null, SPARSE_SEARCH_PIPELINE_NAME);
+                // wipeOfTestResources(getIndexNameForTest(), SPARSE_INGEST_PIPELINE_NAME, null, SPARSE_SEARCH_PIPELINE_NAME);
             }
         }
     }

@@ -77,7 +77,7 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
                 hybridQueryBuilder = getQueryBuilder(modelId, Boolean.FALSE, Map.of("ef_search", 100), RescoreContext.getDefault());
                 validateTestIndex(getIndexNameForTest(), searchPipelineName, hybridQueryBuilder);
             } finally {
-                wipeOfTestResources(getIndexNameForTest(), pipelineName, null, searchPipelineName);
+                // wipeOfTestResources(getIndexNameForTest(), pipelineName, null, searchPipelineName);
             }
         }
     }

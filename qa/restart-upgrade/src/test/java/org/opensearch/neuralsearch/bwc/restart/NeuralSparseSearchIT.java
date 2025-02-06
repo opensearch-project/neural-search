@@ -65,7 +65,7 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
                 );
                 validateTestIndex(modelId);
             } finally {
-                wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, null, null);
+                // wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, null, null);
             }
         }
 
