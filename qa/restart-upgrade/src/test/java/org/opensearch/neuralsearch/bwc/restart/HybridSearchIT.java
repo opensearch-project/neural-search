@@ -21,6 +21,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_MET
 import org.opensearch.knn.index.query.rescore.RescoreContext;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+import org.opensearch.neuralsearch.util.TextEmbeddingModel;
 
 public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
     private static final String PIPELINE_NAME = "nlp-hybrid-pipeline";
@@ -67,7 +68,7 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         } else {
             String modelId = null;
             try {
-                modelId = TextEmbeddingModel.getModelId();
+                modelId = TextEmbeddingModel.getInstance().getModelId();
                 loadModel(modelId);
                 addDocuments(getIndexNameForTest(), false);
                 HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null, null);

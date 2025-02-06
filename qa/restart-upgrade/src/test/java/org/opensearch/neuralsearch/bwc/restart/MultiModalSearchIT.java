@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.Map;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+import org.opensearch.neuralsearch.util.TextEmbeddingModel;
 
 public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
     private static final String PIPELINE_NAME = "nlp-ingest-pipeline";
@@ -38,7 +39,7 @@ public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
         } else {
             String modelId = null;
             try {
-                modelId = TextEmbeddingModel.getModelId();
+                modelId = TextEmbeddingModel.getInstance().getModelId();
                 loadModel(modelId);
                 addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_1);
                 validateTestIndex(modelId);

@@ -8,6 +8,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.TEXT_EMBEDDING_PROCESSOR;
 
 import org.opensearch.common.settings.Settings;
+import org.opensearch.neuralsearch.util.SparseEncodingModel;
 import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
@@ -60,7 +61,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
         } else {
             String modelId = null;
             try {
-                modelId = SparseEncodingModel.getModelId();
+                modelId = SparseEncodingModel.getInstance().getModelId();
                 loadModel(modelId);
                 sparseEncodingQueryBuilderWithModelId.modelId(modelId);
                 assertEquals(

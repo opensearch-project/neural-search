@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.neuralsearch.util.SparseEncodingModel;
 import org.opensearch.neuralsearch.util.TestUtils;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.objectToFloat;
@@ -52,7 +53,7 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
         } else {
             String modelId = null;
             try {
-                modelId = SparseEncodingModel.getModelId();
+                modelId = SparseEncodingModel.getInstance().getModelId();
                 loadModel(modelId);
                 addSparseEncodingDoc(
                     getIndexNameForTest(),

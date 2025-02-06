@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.bwc.restart;
 
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.util.SparseEncodingModel;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -45,7 +46,7 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRestartUpgradeRestT
         } else {
             String modelId = null;
             try {
-                modelId = SparseEncodingModel.getModelId();
+                modelId = SparseEncodingModel.getInstance().getModelId();
                 loadModel(modelId);
                 neuralSparseQueryBuilder.modelId(modelId);
                 Object resultWith2PhasePipeline = search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits");

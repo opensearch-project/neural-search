@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Optional;
+
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
@@ -16,6 +17,9 @@ import static org.opensearch.neuralsearch.util.TestUtils.CLIENT_TIMEOUT_VALUE;
 import static org.opensearch.neuralsearch.util.TestUtils.RESTART_UPGRADE_OLD_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.BWC_VERSION;
 import static org.opensearch.neuralsearch.util.TestUtils.generateModelId;
+
+import org.opensearch.neuralsearch.util.SparseEncodingModel;
+import org.opensearch.neuralsearch.util.TextEmbeddingModel;
 import org.opensearch.test.rest.OpenSearchRestTestCase;
 
 public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearchIT {
@@ -25,34 +29,6 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
         // Creating index name by concatenating "neural-bwc-" prefix with test method name
         // for all the tests in this sub-project
         return NEURAL_SEARCH_BWC_PREFIX + getTestName().toLowerCase(Locale.ROOT);
-    }
-
-    protected enum TextEmbeddingModel {
-        INSTANCE;
-
-        private static String modelId;
-
-        public static void setModelId(String id) {
-            modelId = id;
-        }
-
-        public static String getModelId() {
-            return modelId;
-        }
-    }
-
-    protected enum SparseEncodingModel {
-        INSTANCE;
-
-        private static String modelId;
-
-        public static void setModelId(String id) {
-            modelId = id;
-        }
-
-        public static String getModelId() {
-            return modelId;
-        }
     }
 
     @Override
@@ -90,11 +66,12 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
     }
 
     protected String uploadTextEmbeddingModel() throws Exception {
-        String modelId = TextEmbeddingModel.getModelId();
+        TextEmbeddingModel textEmbeddingModel = TextEmbeddingModel.getInstance();
+        String modelId = textEmbeddingModel.getModelId();
         if (modelId == null) {
             String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
             String id = registerModelGroupAndGetModelId(requestBody);
-            TextEmbeddingModel.setModelId(id);
+            textEmbeddingModel.setModelId(id);
             return id;
         }
         return modelId;
@@ -114,13 +91,14 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
     }
 
     protected String uploadSparseEncodingModel() throws Exception {
-        String modelId = SparseEncodingModel.getModelId();
+        SparseEncodingModel sparseEncodingModel = SparseEncodingModel.getInstance();
+        String modelId = sparseEncodingModel.getModelId();
         if (modelId == null) {
             String requestBody = Files.readString(
                 Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
             );
             String id = registerModelGroupAndGetModelId(requestBody);
-            SparseEncodingModel.setModelId(id);
+            sparseEncodingModel.setModelId(id);
             return id;
         }
         return modelId;
