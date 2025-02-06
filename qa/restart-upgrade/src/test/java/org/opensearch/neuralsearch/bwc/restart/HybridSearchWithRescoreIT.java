@@ -22,7 +22,6 @@ import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.knn.index.query.rescore.RescoreContext;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
-import org.opensearch.neuralsearch.util.TextEmbeddingModel;
 
 public class HybridSearchWithRescoreIT extends AbstractRestartUpgradeRestTestCase {
     private static final String PIPELINE_NAME = "nlp-hybrid-with-rescore-pipeline";
@@ -42,7 +41,7 @@ public class HybridSearchWithRescoreIT extends AbstractRestartUpgradeRestTestCas
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
 
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadTextEmbeddingModel();
+            String modelId = getOrUploadTextEmbeddingModel();
             loadModel(modelId);
             createPipelineProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
@@ -60,7 +59,7 @@ public class HybridSearchWithRescoreIT extends AbstractRestartUpgradeRestTestCas
         } else {
             String modelId = null;
             try {
-                modelId = TextEmbeddingModel.getInstance().getModelId();
+                modelId = getOrUploadTextEmbeddingModel();
                 loadModel(modelId);
                 addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_UPGRADED, null, null);
                 HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null);

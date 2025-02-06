@@ -9,7 +9,6 @@ import java.nio.file.Path;
 import java.util.Map;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
-import org.opensearch.neuralsearch.util.TextEmbeddingModel;
 
 public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
 
@@ -24,7 +23,7 @@ public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
     public void testTextEmbeddingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadTextEmbeddingModel();
+            String modelId = getOrUploadTextEmbeddingModel();
             loadModel(modelId);
             createPipelineProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
@@ -35,9 +34,8 @@ public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
             addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, null, null);
         } else {
             String modelId = null;
-            fail("Text Embedding model state [" + TextEmbeddingModel.getInstance().getModelId() + "]");
             try {
-                modelId = TextEmbeddingModel.getInstance().getModelId();
+                modelId = getOrUploadTextEmbeddingModel();
                 loadModel(modelId);
                 addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1, null, null);
                 validateTestIndex(modelId);

@@ -65,7 +65,7 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
         return Optional.ofNullable(System.getProperty(BWC_VERSION, null));
     }
 
-    protected String uploadTextEmbeddingModel() throws Exception {
+    protected String getOrUploadTextEmbeddingModel() throws Exception {
         TextEmbeddingModel textEmbeddingModel = TextEmbeddingModel.getInstance();
         String modelId = textEmbeddingModel.getModelId();
         if (modelId == null) {
@@ -90,7 +90,7 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
         createPipelineProcessor(requestBody, pipelineName, modelId, null);
     }
 
-    protected String uploadSparseEncodingModel() throws Exception {
+    protected String getOrUploadSparseEncodingModel() throws Exception {
         SparseEncodingModel sparseEncodingModel = SparseEncodingModel.getInstance();
         String modelId = sparseEncodingModel.getModelId();
         if (modelId == null) {

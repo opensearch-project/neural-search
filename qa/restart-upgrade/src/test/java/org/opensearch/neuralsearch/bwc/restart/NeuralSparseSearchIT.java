@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Map;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
-import org.opensearch.neuralsearch.util.SparseEncodingModel;
 import org.opensearch.neuralsearch.util.TestUtils;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.objectToFloat;
@@ -33,7 +32,7 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
     public void testSparseEncodingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadSparseEncodingModel();
+            String modelId = getOrUploadSparseEncodingModel();
             loadModel(modelId);
             createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
@@ -53,7 +52,7 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
         } else {
             String modelId = null;
             try {
-                modelId = SparseEncodingModel.getInstance().getModelId();
+                modelId = getOrUploadSparseEncodingModel();
                 loadModel(modelId);
                 addSparseEncodingDoc(
                     getIndexNameForTest(),

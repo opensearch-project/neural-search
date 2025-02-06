@@ -5,11 +5,8 @@
 package org.opensearch.neuralsearch.bwc.restart;
 
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
-import static org.opensearch.neuralsearch.util.TestUtils.TEXT_EMBEDDING_PROCESSOR;
 
 import org.opensearch.common.settings.Settings;
-import org.opensearch.neuralsearch.util.SparseEncodingModel;
-import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 
@@ -37,7 +34,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
             .queryText(TEXT_1);
 
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadSparseEncodingModel();
+            String modelId = getOrUploadSparseEncodingModel();
             loadModel(modelId);
             sparseEncodingQueryBuilderWithModelId.modelId(modelId);
             createPipelineForSparseEncodingProcessor(modelId, SPARSE_INGEST_PIPELINE_NAME);
@@ -61,7 +58,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
         } else {
             String modelId = null;
             try {
-                modelId = SparseEncodingModel.getInstance().getModelId();
+                modelId = getOrUploadSparseEncodingModel();
                 loadModel(modelId);
                 sparseEncodingQueryBuilderWithModelId.modelId(modelId);
                 assertEquals(
@@ -86,7 +83,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
             .build();
 
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadTextEmbeddingModel();
+            String modelId = getOrUploadTextEmbeddingModel();
             loadModel(modelId);
             neuralQueryBuilderWithModelId.modelId(modelId);
             createPipelineProcessor(modelId, DENSE_INGEST_PIPELINE_NAME);
@@ -107,7 +104,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
         } else {
             String modelId = null;
             try {
-                modelId = TestUtils.getModelId(getIngestionPipeline(DENSE_INGEST_PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                modelId = getOrUploadTextEmbeddingModel();
                 loadModel(modelId);
                 neuralQueryBuilderWithModelId.modelId(modelId);
 

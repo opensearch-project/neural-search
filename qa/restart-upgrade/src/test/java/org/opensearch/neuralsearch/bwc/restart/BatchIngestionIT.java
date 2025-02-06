@@ -4,8 +4,6 @@
  */
 package org.opensearch.neuralsearch.bwc.restart;
 
-import org.opensearch.neuralsearch.util.SparseEncodingModel;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -24,7 +22,7 @@ public class BatchIngestionIT extends AbstractRestartUpgradeRestTestCase {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         String indexName = getIndexNameForTest();
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadSparseEncodingModel();
+            String modelId = getOrUploadSparseEncodingModel();
             loadModel(modelId);
             createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME, batchSize);
             createIndexWithConfiguration(
@@ -37,7 +35,7 @@ public class BatchIngestionIT extends AbstractRestartUpgradeRestTestCase {
             validateDocCountAndInfo(indexName, 5, () -> getDocById(indexName, "4"), EMBEDDING_FIELD_NAME, Map.class);
         } else {
             String modelId = null;
-            modelId = SparseEncodingModel.getInstance().getModelId();
+            modelId = getOrUploadSparseEncodingModel();
             loadModel(modelId);
             try {
                 List<Map<String, String>> docs = prepareDataForBulkIngestion(5, 5);
