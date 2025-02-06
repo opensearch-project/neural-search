@@ -74,7 +74,6 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
             textEmbeddingModel.setModelId(id);
             return id;
         }
-        fail("existing MODEL ID [" + modelId + "]");
         return modelId;
     }
 

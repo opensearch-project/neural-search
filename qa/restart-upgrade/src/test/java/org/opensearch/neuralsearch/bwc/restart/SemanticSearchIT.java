@@ -35,6 +35,7 @@ public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
             addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, null, null);
         } else {
             String modelId = null;
+            fail("Text Embedding model state [" + TextEmbeddingModel.getInstance() + "]");
             try {
                 modelId = TextEmbeddingModel.getInstance().getModelId();
                 loadModel(modelId);
