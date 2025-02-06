@@ -26,7 +26,7 @@ public class TextEmbeddingModel {
         return modelId;
     }
 
-    public static synchronized TextEmbeddingModel getInstance() {
+    public static TextEmbeddingModel getInstance() {
         // To ensure only one instance is created
         if (instance == null) {
             instance = new TextEmbeddingModel();
