@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch;
 
-import joptsimple.internal.Strings;
 import org.opensearch.ml.common.model.MLModelState;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 
@@ -70,7 +69,6 @@ import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_MET
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_RETRY;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TIME_OUT_INTERVAL;
-import static org.opensearch.neuralsearch.util.TestUtils.generateModelId;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -80,7 +78,6 @@ import lombok.SneakyThrows;
 public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     protected static final Locale LOCALE = Locale.ROOT;
-    protected static String textEmbeddingModelId = Strings.EMPTY;
 
     protected static final Map<ProcessorType, String> PIPELINE_CONFIGS_BY_TYPE = Map.of(
         ProcessorType.TEXT_EMBEDDING,
@@ -111,12 +108,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             updateClusterSettings();
         }
         NeuralSearchClusterUtil.instance().initialize(clusterService);
-        setUpModels();
-    }
-
-    @SneakyThrows
-    protected void setUpModels() {
-        textEmbeddingModelId = uploadTextEmbeddingModel();
     }
 
     protected ThreadPool setUpThreadPool() {
@@ -129,19 +120,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     public static ClusterService createClusterService(ThreadPool threadPool) {
         return ClusterServiceUtils.createClusterService(threadPool);
-    }
-
-    protected String uploadTextEmbeddingModel() throws Exception {
-        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        return registerModelGroupAndGetModelId(requestBody);
-    }
-
-    protected String registerModelGroupAndGetModelId(String requestBody) throws Exception {
-        String modelGroupRegisterRequestBody = Files.readString(
-            Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
-        );
-        String modelGroupId = registerModelGroup(String.format(LOCALE, modelGroupRegisterRequestBody, generateModelId()));
-        return uploadModel(String.format(LOCALE, requestBody, modelGroupId));
     }
 
     protected void updateClusterSettings() {
