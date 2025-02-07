@@ -627,7 +627,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
             listener.onResponse(List.of(Map.of("response", List.of(expectedMap))));
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), any(), any());
+        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), any());
         NeuralSparseQueryBuilder.initialize(mlCommonsClientAccessor);
 
         final CountDownLatch inProgressLatch = new CountDownLatch(1);
@@ -664,7 +664,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
             listener.onResponse(List.of(Map.of("response", List.of(expectedMap))));
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), any(), any());
+        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), any());
         NeuralSparseQueryBuilder.initialize(mlCommonsClientAccessor);
 
         final CountDownLatch inProgressLatch = new CountDownLatch(1);

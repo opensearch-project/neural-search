@@ -5,8 +5,6 @@
 package org.opensearch.neuralsearch.processor.rerank;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -122,7 +120,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
             List<Float> scores = List.of(1f, 2f, 3f);
             listener.onResponse(scores);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSimilarity(anyString(), anyString(), anyList(), any());
+        }).when(mlCommonsClientAccessor).inferenceSimilarity(any(), any());
     }
 
     private void setupSearchResults() throws IOException {
@@ -353,7 +351,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
             List<Float> scores = List.of(1f, 2f);
             listener.onResponse(scores);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSimilarity(anyString(), anyString(), anyList(), any());
+        }).when(mlCommonsClientAccessor).inferenceSimilarity(any(), any());
         setupSearchResults();
         @SuppressWarnings("unchecked")
         ActionListener<SearchResponse> listener = mock(ActionListener.class);

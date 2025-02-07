@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch.processor;
 
-import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.doAnswer;
@@ -159,7 +158,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
@@ -189,7 +188,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
             DESCRIPTION,
             config
         );
-        doThrow(new RuntimeException()).when(accessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+        doThrow(new RuntimeException()).when(accessor).inferenceSentences(any(), isA(ActionListener.class));
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
         verify(handler).accept(isNull(), any(RuntimeException.class));
@@ -217,7 +216,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
             DESCRIPTION,
             config
         );
-        doThrow(new RuntimeException()).when(accessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+        doThrow(new RuntimeException()).when(accessor).inferenceSentences(any(), isA(ActionListener.class));
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
         verify(handler).accept(any(IngestDocument.class), isNull());
@@ -238,7 +237,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
@@ -314,7 +313,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
@@ -355,7 +354,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
 
         processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
         assertNotNull(ingestDocument);
@@ -415,7 +414,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
 
         processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
         assertNotNull(ingestDocument);
@@ -473,7 +472,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
 
         processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
         assertNotNull(ingestDocument);
@@ -552,7 +551,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
 
         processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
         assertNotNull(ingestDocument);
@@ -608,7 +607,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
 
         processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
         assertNotNull(ingestDocument);
@@ -677,7 +676,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
             listener.onFailure(new IllegalArgumentException("illegal argument"));
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
@@ -717,7 +716,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
             listener.onFailure(new IllegalArgumentException("illegal argument"));
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
         TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig();
@@ -1079,7 +1078,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
 
         Consumer resultHandler = mock(Consumer.class);
         processor.batchExecute(ingestDocumentWrappers, resultHandler);
@@ -1100,7 +1099,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
             listener.onFailure(new RuntimeException());
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyList(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
 
         Consumer resultHandler = mock(Consumer.class);
         processor.batchExecute(ingestDocumentWrappers, resultHandler);

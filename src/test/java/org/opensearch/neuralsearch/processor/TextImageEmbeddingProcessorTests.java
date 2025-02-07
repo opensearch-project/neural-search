@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch.processor;
 
-import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doAnswer;
@@ -195,7 +194,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyMap(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
@@ -229,7 +228,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
             DESCRIPTION,
             config
         );
-        doThrow(new RuntimeException()).when(accessor).inferenceSentences(anyString(), anyMap(), isA(ActionListener.class));
+        doThrow(new RuntimeException()).when(accessor).inferenceSentences(any(), isA(ActionListener.class));
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
         verify(handler).accept(isNull(), any(RuntimeException.class));
@@ -248,7 +247,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyMap(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
@@ -280,7 +279,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
             listener.onFailure(new IllegalArgumentException("illegal argument"));
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyMap(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
@@ -339,7 +338,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(anyString(), anyMap(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);

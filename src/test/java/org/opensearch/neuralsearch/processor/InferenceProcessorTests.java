@@ -25,13 +25,12 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.constants.TestCommonConstants.INFERENCE_REQUEST;
 
 public class InferenceProcessorTests extends InferenceProcessorTestCase {
     private MLCommonsClientAccessor clientAccessor;
@@ -63,7 +62,7 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
         ArgumentCaptor<List<IngestDocumentWrapper>> captor = ArgumentCaptor.forClass(List.class);
         verify(resultHandler).accept(captor.capture());
         assertTrue(captor.getValue().isEmpty());
-        verify(clientAccessor, never()).inferenceSentences(anyString(), anyList(), any());
+        verify(clientAccessor, never()).inferenceSentences(any(), any());
     }
 
     public void test_batchExecuteWithNull_allFailedValidation() {
@@ -82,7 +81,7 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
             assertEquals("list type field [key1] has null, cannot process it", captor.getValue().get(i).getException().getMessage());
             assertEquals(wrapperList.get(i).getIngestDocument(), captor.getValue().get(i).getIngestDocument());
         }
-        verify(clientAccessor, never()).inferenceSentences(anyString(), anyList(), any());
+        verify(clientAccessor, never()).inferenceSentences(any(), any());
     }
 
     public void test_batchExecute_happyCase() {
@@ -102,7 +101,7 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
             assertEquals(wrapperList.get(i).getIngestDocument(), captor.getValue().get(i).getIngestDocument());
         }
         ArgumentCaptor<List<String>> inferenceTextCaptor = ArgumentCaptor.forClass(List.class);
-        verify(clientAccessor).inferenceSentences(anyString(), inferenceTextCaptor.capture(), any());
+        verify(clientAccessor).inferenceSentences(any(), any());
         assertEquals(4, inferenceTextCaptor.getValue().size());
     }
 
@@ -123,7 +122,7 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
             assertEquals(wrapperList.get(i).getIngestDocument(), captor.getValue().get(i).getIngestDocument());
         }
         ArgumentCaptor<List<String>> inferenceTextCaptor = ArgumentCaptor.forClass(List.class);
-        verify(clientAccessor).inferenceSentences(anyString(), inferenceTextCaptor.capture(), any());
+        verify(clientAccessor).inferenceSentences(any(), any());
         assertEquals(4, inferenceTextCaptor.getValue().size());
         assertEquals(Arrays.asList("cc", "bbb", "ddd", "aaaaa"), inferenceTextCaptor.getValue());
 
@@ -154,7 +153,7 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
             assertNotNull(captor.getValue().get(i).getException());
             assertEquals(wrapperList.get(i).getIngestDocument(), captor.getValue().get(i).getIngestDocument());
         }
-        verify(clientAccessor).inferenceSentences(anyString(), anyList(), any());
+        verify(clientAccessor).inferenceSentences(any(), any());
     }
 
     public void test_batchExecute_subBatches() {
@@ -202,7 +201,7 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
         @Override
         void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException) {
             // use to verify if doBatchExecute is called from InferenceProcessor
-            clientAccessor.inferenceSentences(MODEL_ID, inferenceList, ActionListener.wrap(results -> {}, ex -> {}));
+            clientAccessor.inferenceSentences(INFERENCE_REQUEST, ActionListener.wrap(results -> {}, ex -> {}));
             allInferenceInputs.add(inferenceList);
             if (this.exception != null) {
                 onException.accept(this.exception);

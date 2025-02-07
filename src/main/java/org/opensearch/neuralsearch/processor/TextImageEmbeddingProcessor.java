@@ -113,10 +113,13 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
             if (inferenceMap.isEmpty()) {
                 handler.accept(ingestDocument, null);
             } else {
-                mlCommonsClientAccessor.inferenceSentences(this.modelId, inferenceMap, ActionListener.wrap(vectors -> {
-                    setVectorFieldsToDocument(ingestDocument, vectors);
-                    handler.accept(ingestDocument, null);
-                }, e -> { handler.accept(null, e); }));
+                mlCommonsClientAccessor.inferenceSentencesMap(
+                    InferenceRequest.builder().modelId(this.modelId).inputObjects(inferenceMap).build(),
+                    ActionListener.wrap(vectors -> {
+                        setVectorFieldsToDocument(ingestDocument, vectors);
+                        handler.accept(ingestDocument, null);
+                    }, e -> { handler.accept(null, e); })
+                );
             }
         } catch (Exception e) {
             handler.accept(null, e);

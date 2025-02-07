@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.query;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS;
@@ -777,7 +776,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
             ActionListener<List<Float>> listener = invocation.getArgument(2);
             listener.onResponse(expectedVector);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(any(), anyMap(), any());
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), any());
         NeuralQueryBuilder.initialize(mlCommonsClientAccessor);
 
         final CountDownLatch inProgressLatch = new CountDownLatch(1);
@@ -815,7 +814,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
             ActionListener<List<Float>> listener = invocation.getArgument(2);
             listener.onResponse(expectedVector);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(any(), anyMap(), any());
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), any());
         NeuralQueryBuilder.initialize(mlCommonsClientAccessor);
 
         final CountDownLatch inProgressLatch = new CountDownLatch(1);

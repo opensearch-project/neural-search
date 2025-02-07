@@ -26,6 +26,7 @@ import org.opensearch.ml.common.output.model.ModelResultFilter;
 import org.opensearch.ml.common.output.model.ModelTensor;
 import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
+import org.opensearch.neuralsearch.processor.InferenceRequest;
 import org.opensearch.neuralsearch.util.RetryUtil;
 
 import lombok.NonNull;
@@ -45,16 +46,19 @@ public class MLCommonsClientAccessor {
      * Wrapper around {@link #inferenceSentences} that expected a single input text and produces a single floating
      * point vector as a response.
      *
-     * @param modelId {@link String}
-     * @param inputText {@link List} of {@link String} on which inference needs to happen
+     * @param inferenceRequest {@link InferenceRequest}
      * @param listener {@link ActionListener} which will be called when prediction is completed or errored out
      */
-    public void inferenceSentence(
-        @NonNull final String modelId,
-        @NonNull final String inputText,
-        @NonNull final ActionListener<List<Float>> listener
-    ) {
-        inferenceSentences(TARGET_RESPONSE_FILTERS, modelId, List.of(inputText), ActionListener.wrap(response -> {
+    public void inferenceSentence(@NonNull final InferenceRequest inferenceRequest, @NonNull final ActionListener<List<Float>> listener) {
+        if (inferenceRequest.getInputTexts().size() != 1) {
+            listener.onFailure(
+                new IllegalArgumentException(
+                    "Unexpected number of input texts. Expected 1 input text, but got [" + inferenceRequest.getInputTexts().size() + "]"
+                )
+            );
+            return;
+        }
+        inferenceSentences(inferenceRequest, ActionListener.wrap(response -> {
             if (response.size() != 1) {
                 listener.onFailure(
                     new IllegalStateException(
@@ -64,27 +68,8 @@ public class MLCommonsClientAccessor {
                 return;
             }
 
-            listener.onResponse(response.get(0));
+            listener.onResponse(response.getFirst());
         }, listener::onFailure));
-    }
-
-    /**
-     * Abstraction to call predict function of api of MLClient with default targetResponse filters. It uses the
-     * custom model provided as modelId and run the {@link FunctionName#TEXT_EMBEDDING}. The return will be sent
-     * using the actionListener which will have a {@link List} of {@link List} of {@link Float} in the order of
-     * inputText. We are not making this function generic enough to take any function or TaskType as currently we
-     * need to run only TextEmbedding tasks only.
-     *
-     * @param modelId {@link String}
-     * @param inputText {@link List} of {@link String} on which inference needs to happen
-     * @param listener {@link ActionListener} which will be called when prediction is completed or errored out
-     */
-    public void inferenceSentences(
-        @NonNull final String modelId,
-        @NonNull final List<String> inputText,
-        @NonNull final ActionListener<List<List<Float>>> listener
-    ) {
-        inferenceSentences(TARGET_RESPONSE_FILTERS, modelId, inputText, listener);
     }
 
     /**
@@ -94,26 +79,29 @@ public class MLCommonsClientAccessor {
      * inputText. We are not making this function generic enough to take any function or TaskType as currently we
      * need to run only TextEmbedding tasks only.
      *
-     * @param targetResponseFilters {@link List} of {@link String} which filters out the responses
-     * @param modelId {@link String}
-     * @param inputText {@link List} of {@link String} on which inference needs to happen
+     * @param inferenceRequest {@link InferenceRequest}
      * @param listener {@link ActionListener} which will be called when prediction is completed or errored out.
      */
     public void inferenceSentences(
-        @NonNull final List<String> targetResponseFilters,
-        @NonNull final String modelId,
-        @NonNull final List<String> inputText,
+        @NonNull final InferenceRequest inferenceRequest,
         @NonNull final ActionListener<List<List<Float>>> listener
     ) {
-        retryableInferenceSentencesWithVectorResult(targetResponseFilters, modelId, inputText, 0, listener);
+        retryableInferenceSentencesWithVectorResult(
+            (inferenceRequest.getTargetResponseFilters() == null || inferenceRequest.getTargetResponseFilters().isEmpty())
+                ? TARGET_RESPONSE_FILTERS
+                : inferenceRequest.getTargetResponseFilters(),
+            inferenceRequest.getModelId(),
+            inferenceRequest.getInputTexts(),
+            0,
+            listener
+        );
     }
 
     public void inferenceSentencesWithMapResult(
-        @NonNull final String modelId,
-        @NonNull final List<String> inputText,
+        @NonNull final InferenceRequest inferenceRequest,
         @NonNull final ActionListener<List<Map<String, ?>>> listener
     ) {
-        retryableInferenceSentencesWithMapResult(modelId, inputText, 0, listener);
+        retryableInferenceSentencesWithMapResult(inferenceRequest.getModelId(), inferenceRequest.getInputTexts(), 0, listener);
     }
 
     /**
@@ -121,16 +109,18 @@ public class MLCommonsClientAccessor {
      * custom model provided as modelId and run the {@link FunctionName#TEXT_EMBEDDING}. The return will be sent
      * using the actionListener which will have a list of floats in the order of inputText.
      *
-     * @param modelId {@link String}
-     * @param inputObjects {@link Map} of {@link String}, {@link String} on which inference needs to happen
+     * @param inferenceRequest {@link InferenceRequest}
      * @param listener {@link ActionListener} which will be called when prediction is completed or errored out.
      */
-    public void inferenceSentences(
-        @NonNull final String modelId,
-        @NonNull final Map<String, String> inputObjects,
-        @NonNull final ActionListener<List<Float>> listener
-    ) {
-        retryableInferenceSentencesWithSingleVectorResult(TARGET_RESPONSE_FILTERS, modelId, inputObjects, 0, listener);
+    public void inferenceSentencesMap(@NonNull InferenceRequest inferenceRequest, @NonNull final ActionListener<List<Float>> listener) {
+        retryableInferenceSentencesWithSingleVectorResult(
+            (inferenceRequest.getTargetResponseFilters() == null || inferenceRequest.getTargetResponseFilters().isEmpty())
+                ? TARGET_RESPONSE_FILTERS
+                : inferenceRequest.getTargetResponseFilters(),            inferenceRequest.getModelId(),
+            inferenceRequest.getInputObjects(),
+            0,
+            listener
+        );
     }
 
     /**
@@ -138,18 +128,17 @@ public class MLCommonsClientAccessor {
      * {@link FunctionName#TEXT_SIMILARITY}. The return will be sent via actionListener as a list of floats representing
      * the similarity scores of the texts w.r.t. the query text, in the order of the input texts.
      *
-     * @param modelId {@link String} ML-Commons Model Id
-     * @param queryText {@link String} The query to compare all the inputText to
-     * @param inputText {@link List} of {@link String} The texts to compare to the query
+     * @param inferenceRequest {@link InferenceRequest}
      * @param listener {@link ActionListener} receives the result of the inference
      */
-    public void inferenceSimilarity(
-        @NonNull final String modelId,
-        @NonNull final String queryText,
-        @NonNull final List<String> inputText,
-        @NonNull final ActionListener<List<Float>> listener
-    ) {
-        retryableInferenceSimilarityWithVectorResult(modelId, queryText, inputText, 0, listener);
+    public void inferenceSimilarity(@NonNull InferenceRequest inferenceRequest, @NonNull final ActionListener<List<Float>> listener) {
+        retryableInferenceSimilarityWithVectorResult(
+            inferenceRequest.getModelId(),
+            inferenceRequest.getQueryText(),
+            inferenceRequest.getInputTexts(),
+            0,
+            listener
+        );
     }
 
     private void retryableInferenceSentencesWithMapResult(
