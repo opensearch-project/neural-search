@@ -26,29 +26,32 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRestartUpgradeRestT
     public void testNeuralSparseQueryTwoPhaseProcessor_NeuralSearch_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_ENCODING_FIELD).queryText(TEXT_1);
+        super.ingestPipelineName = NEURAL_SPARSE_INGEST_PIPELINE_NAME;
+        super.searchPipelineName = NEURAL_SPARSE_TWO_PHASE_SEARCH_PIPELINE_NAME;
+
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadSparseEncodingModel();
-            loadModel(modelId);
-            neuralSparseQueryBuilder.modelId(modelId);
-            createPipelineForSparseEncodingProcessor(modelId, NEURAL_SPARSE_INGEST_PIPELINE_NAME);
+            super.modelId = uploadSparseEncodingModel();
+            loadModel(super.modelId);
+            neuralSparseQueryBuilder.modelId(super.modelId);
+            createPipelineForSparseEncodingProcessor(super.modelId, NEURAL_SPARSE_INGEST_PIPELINE_NAME);
             createIndexWithConfiguration(
-                getIndexNameForTest(),
+                super.indexName,
                 Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),
                 NEURAL_SPARSE_INGEST_PIPELINE_NAME
             );
-            addSparseEncodingDoc(getIndexNameForTest(), "0", List.of(), List.of(), List.of(TEST_TEXT_FIELD), List.of(TEXT_1));
+            addSparseEncodingDoc(super.indexName, "0", List.of(), List.of(), List.of(TEST_TEXT_FIELD), List.of(TEXT_1));
             createNeuralSparseTwoPhaseSearchProcessor(NEURAL_SPARSE_TWO_PHASE_SEARCH_PIPELINE_NAME);
             updateIndexSettings(
-                getIndexNameForTest(),
+                super.indexName,
                 Settings.builder().put("index.search.default_pipeline", NEURAL_SPARSE_TWO_PHASE_SEARCH_PIPELINE_NAME)
             );
-            Object resultWith2PhasePipeline = search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits");
+            Object resultWith2PhasePipeline = search(super.indexName, neuralSparseQueryBuilder, 1).get("hits");
             assertNotNull(resultWith2PhasePipeline);
         } else {
-            String modelId = TestUtils.getModelId(getIngestionPipeline(NEURAL_SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-            loadModel(modelId);
-            neuralSparseQueryBuilder.modelId(modelId);
-            Object resultWith2PhasePipeline = search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits");
+            super.modelId = TestUtils.getModelId(getIngestionPipeline(NEURAL_SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+            loadModel(super.modelId);
+            neuralSparseQueryBuilder.modelId(super.modelId);
+            Object resultWith2PhasePipeline = search(super.indexName, neuralSparseQueryBuilder, 1).get("hits");
             assertNotNull(resultWith2PhasePipeline);
         }
     }

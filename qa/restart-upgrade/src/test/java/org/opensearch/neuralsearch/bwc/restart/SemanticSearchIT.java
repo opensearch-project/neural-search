@@ -24,27 +24,28 @@ public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
     // Validate process , pipeline and document count in restart-upgrade scenario
     public void testTextEmbeddingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
+        super.ingestPipelineName = PIPELINE_NAME;
 
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadTextEmbeddingModel();
-            loadModel(modelId);
-            createPipelineProcessor(modelId, PIPELINE_NAME);
+            super.modelId = uploadTextEmbeddingModel();
+            loadModel(super.modelId);
+            createPipelineProcessor(super.modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
-                getIndexNameForTest(),
+                super.indexName,
                 Files.readString(Path.of(classLoader.getResource("processor/IndexMappingMultipleShard.json").toURI())),
                 PIPELINE_NAME
             );
-            addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, null, null);
+            addDocument(super.indexName, "0", TEST_FIELD, TEXT, null, null);
         } else {
-            String modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-            loadModel(modelId);
-            addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1, null, null);
-            validateTestIndex(modelId);
+            super.modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+            loadModel(super.modelId);
+            addDocument(super.indexName, "1", TEST_FIELD, TEXT_1, null, null);
+            validateTestIndex(super.modelId);
         }
     }
 
     private void validateTestIndex(final String modelId) throws Exception {
-        int docCount = getDocCount(getIndexNameForTest());
+        int docCount = getDocCount(super.indexName);
         assertEquals(2, docCount);
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
             .fieldName("passage_embedding")
@@ -52,7 +53,7 @@ public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
             .modelId(modelId)
             .k(1)
             .build();
-        Map<String, Object> response = search(getIndexNameForTest(), neuralQueryBuilder, 1);
+        Map<String, Object> response = search(super.indexName, neuralQueryBuilder, 1);
         assertNotNull(response);
     }
 }

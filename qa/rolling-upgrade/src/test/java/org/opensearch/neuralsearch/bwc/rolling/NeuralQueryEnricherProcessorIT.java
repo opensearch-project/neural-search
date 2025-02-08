@@ -26,8 +26,6 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
     private static final String TEST_ENCODING_FIELD = "passage_embedding";
     private static final String TEST_TEXT_FIELD = "passage_text";
     private static final String TEXT_1 = "Hello world a b";
-    private String sparseModelId = "";
-    private String denseModelId = "";
 
     // test of NeuralQueryEnricherProcessor supports neural_sparse query default model_id
     // the feature is introduced from 2.13
@@ -38,47 +36,46 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
         // will set the model_id after we obtain the id
         NeuralSparseQueryBuilder sparseEncodingQueryBuilderWithModelId = new NeuralSparseQueryBuilder().fieldName(TEST_ENCODING_FIELD)
             .queryText(TEXT_1);
+        super.ingestPipelineName = SPARSE_INGEST_PIPELINE_NAME;
+        super.searchPipelineName = SPARSE_SEARCH_PIPELINE_NAME;
 
         switch (getClusterType()) {
             case OLD:
-                sparseModelId = uploadSparseEncodingModel();
-                loadModel(sparseModelId);
-                sparseEncodingQueryBuilderWithModelId.modelId(sparseModelId);
-                createPipelineForSparseEncodingProcessor(sparseModelId, SPARSE_INGEST_PIPELINE_NAME);
+                super.modelId = uploadSparseEncodingModel();
+                loadModel(super.modelId);
+                sparseEncodingQueryBuilderWithModelId.modelId(super.modelId);
+                createPipelineForSparseEncodingProcessor(super.modelId, SPARSE_INGEST_PIPELINE_NAME);
                 createIndexWithConfiguration(
-                    getIndexNameForTest(),
+                    super.indexName,
                     Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),
                     SPARSE_INGEST_PIPELINE_NAME
                 );
 
-                addSparseEncodingDoc(getIndexNameForTest(), "0", List.of(), List.of(), List.of(TEST_TEXT_FIELD), List.of(TEXT_1));
-                createSearchRequestProcessor(sparseModelId, SPARSE_SEARCH_PIPELINE_NAME);
-                updateIndexSettings(
-                    getIndexNameForTest(),
-                    Settings.builder().put("index.search.default_pipeline", SPARSE_SEARCH_PIPELINE_NAME)
-                );
+                addSparseEncodingDoc(super.indexName, "0", List.of(), List.of(), List.of(TEST_TEXT_FIELD), List.of(TEXT_1));
+                createSearchRequestProcessor(super.modelId, SPARSE_SEARCH_PIPELINE_NAME);
+                updateIndexSettings(super.indexName, Settings.builder().put("index.search.default_pipeline", SPARSE_SEARCH_PIPELINE_NAME));
                 assertEquals(
-                    search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
-                    search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
+                    search(super.indexName, sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
+                    search(super.indexName, sparseEncodingQueryBuilderWithModelId, 1).get("hits")
                 );
                 break;
             case MIXED:
-                sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                loadModel(sparseModelId);
-                sparseEncodingQueryBuilderWithModelId.modelId(sparseModelId);
+                super.modelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                loadModel(super.modelId);
+                sparseEncodingQueryBuilderWithModelId.modelId(super.modelId);
 
                 assertEquals(
-                    search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
-                    search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
+                    search(super.indexName, sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
+                    search(super.indexName, sparseEncodingQueryBuilderWithModelId, 1).get("hits")
                 );
                 break;
             case UPGRADED:
-                sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                loadModel(sparseModelId);
-                sparseEncodingQueryBuilderWithModelId.modelId(sparseModelId);
+                super.modelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                loadModel(super.modelId);
+                sparseEncodingQueryBuilderWithModelId.modelId(super.modelId);
                 assertEquals(
-                    search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
-                    search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
+                    search(super.indexName, sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
+                    search(super.indexName, sparseEncodingQueryBuilderWithModelId, 1).get("hits")
                 );
                 break;
             default:
@@ -98,49 +95,48 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
             .fieldName(TEST_ENCODING_FIELD)
             .queryText(TEXT_1)
             .build();
+        super.ingestPipelineName = DENSE_INGEST_PIPELINE_NAME;
+        super.searchPipelineName = DENSE_SEARCH_PIPELINE_NAME;
 
         switch (getClusterType()) {
             case OLD:
-                denseModelId = uploadTextEmbeddingModel();
-                loadModel(denseModelId);
-                neuralQueryBuilderWithModelId.modelId(denseModelId);
-                createPipelineProcessor(denseModelId, DENSE_INGEST_PIPELINE_NAME);
+                super.modelId = uploadTextEmbeddingModel();
+                loadModel(super.modelId);
+                neuralQueryBuilderWithModelId.modelId(super.modelId);
+                createPipelineProcessor(super.modelId, DENSE_INGEST_PIPELINE_NAME);
                 createIndexWithConfiguration(
-                    getIndexNameForTest(),
+                    super.indexName,
                     Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
                     DENSE_INGEST_PIPELINE_NAME
                 );
 
-                addDocument(getIndexNameForTest(), "0", TEST_TEXT_FIELD, TEXT_1, null, null);
+                addDocument(super.indexName, "0", TEST_TEXT_FIELD, TEXT_1, null, null);
 
-                createSearchRequestProcessor(denseModelId, DENSE_SEARCH_PIPELINE_NAME);
-                updateIndexSettings(
-                    getIndexNameForTest(),
-                    Settings.builder().put("index.search.default_pipeline", DENSE_SEARCH_PIPELINE_NAME)
-                );
+                createSearchRequestProcessor(super.modelId, DENSE_SEARCH_PIPELINE_NAME);
+                updateIndexSettings(super.indexName, Settings.builder().put("index.search.default_pipeline", DENSE_SEARCH_PIPELINE_NAME));
                 assertEquals(
-                    search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
-                    search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
+                    search(super.indexName, neuralQueryBuilderWithoutModelId, 1).get("hits"),
+                    search(super.indexName, neuralQueryBuilderWithModelId, 1).get("hits")
                 );
                 break;
             case MIXED:
-                denseModelId = TestUtils.getModelId(getIngestionPipeline(DENSE_INGEST_PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                loadModel(denseModelId);
-                neuralQueryBuilderWithModelId.modelId(denseModelId);
+                super.modelId = TestUtils.getModelId(getIngestionPipeline(DENSE_INGEST_PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                loadModel(super.modelId);
+                neuralQueryBuilderWithModelId.modelId(super.modelId);
 
                 assertEquals(
-                    search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
-                    search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
+                    search(super.indexName, neuralQueryBuilderWithoutModelId, 1).get("hits"),
+                    search(super.indexName, neuralQueryBuilderWithModelId, 1).get("hits")
                 );
                 break;
             case UPGRADED:
-                denseModelId = TestUtils.getModelId(getIngestionPipeline(DENSE_INGEST_PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                loadModel(denseModelId);
-                neuralQueryBuilderWithModelId.modelId(denseModelId);
+                super.modelId = TestUtils.getModelId(getIngestionPipeline(DENSE_INGEST_PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                loadModel(super.modelId);
+                neuralQueryBuilderWithModelId.modelId(super.modelId);
 
                 assertEquals(
-                    search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
-                    search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")
+                    search(super.indexName, neuralQueryBuilderWithoutModelId, 1).get("hits"),
+                    search(super.indexName, neuralQueryBuilderWithModelId, 1).get("hits")
                 );
                 break;
             default:

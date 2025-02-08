@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.neuralsearch.util.TestUtils;
@@ -32,25 +33,26 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
     private final Map<String, Float> testRankFeaturesDoc2 = TestUtils.createRandomTokenWeightMap(TEST_TOKENS_2);
     private final Map<String, Float> testRankFeaturesDoc3 = TestUtils.createRandomTokenWeightMap(TEST_TOKENS_3);
     private static final int NUM_DOCS_PER_ROUND = 1;
-    private static String modelId = "";
 
     // Test rolling-upgrade test sparse embedding processor
     // Create Sparse Encoding Processor, Ingestion Pipeline and add document
     // Validate process , pipeline and document count in rolling-upgrade scenario
     public void testSparseEncodingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER, 90);
+        super.ingestPipelineName = PIPELINE_NAME;
+
         switch (getClusterType()) {
             case OLD:
-                modelId = uploadSparseEncodingModel();
-                loadModel(modelId);
-                createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME);
+                super.modelId = uploadSparseEncodingModel();
+                loadModel(super.modelId);
+                createPipelineForSparseEncodingProcessor(super.modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
-                    getIndexNameForTest(),
+                    super.indexName,
                     Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),
                     PIPELINE_NAME
                 );
                 addSparseEncodingDoc(
-                    getIndexNameForTest(),
+                    super.indexName,
                     "0",
                     List.of(TEST_SPARSE_ENCODING_FIELD),
                     List.of(testRankFeaturesDoc1),
@@ -59,13 +61,13 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
                 );
                 break;
             case MIXED:
-                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                super.modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
-                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId);
+                    validateTestIndexOnUpgrade(totalDocsCountMixed, super.modelId);
                     addSparseEncodingDoc(
-                        getIndexNameForTest(),
+                        super.indexName,
                         "1",
                         List.of(TEST_SPARSE_ENCODING_FIELD),
                         List.of(testRankFeaturesDoc2),
@@ -74,22 +76,22 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
                     );
                 } else {
                     totalDocsCountMixed = 2 * NUM_DOCS_PER_ROUND;
-                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId);
+                    validateTestIndexOnUpgrade(totalDocsCountMixed, super.modelId);
                 }
                 break;
             case UPGRADED:
-                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                super.modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
                 int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                loadModel(modelId);
+                loadModel(super.modelId);
                 addSparseEncodingDoc(
-                    getIndexNameForTest(),
+                    super.indexName,
                     "2",
                     List.of(TEST_SPARSE_ENCODING_FIELD),
                     List.of(testRankFeaturesDoc3),
                     List.of(TEST_TEXT_FIELD),
                     List.of(TEXT_UPGRADED)
                 );
-                validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId);
+                validateTestIndexOnUpgrade(totalDocsCountUpgraded, super.modelId);
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());
@@ -97,7 +99,7 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
     }
 
     private void validateTestIndexOnUpgrade(final int numberOfDocs, final String modelId) throws Exception {
-        int docCount = getDocCount(getIndexNameForTest());
+        int docCount = getDocCount(super.indexName);
         assertEquals(numberOfDocs, docCount);
         loadModel(modelId);
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
@@ -106,7 +108,7 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
             .modelId(modelId);
         MatchQueryBuilder matchQueryBuilder = new MatchQueryBuilder(TEST_TEXT_FIELD, TEXT);
         boolQueryBuilder.should(sparseEncodingQueryBuilder).should(matchQueryBuilder);
-        Map<String, Object> response = search(getIndexNameForTest(), boolQueryBuilder, 1);
+        Map<String, Object> response = search(super.indexName, boolQueryBuilder, 1);
         Map<String, Object> firstInnerHit = getFirstInnerHit(response);
 
         assertEquals("0", firstInnerHit.get("_id"));

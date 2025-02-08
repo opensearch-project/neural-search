@@ -36,24 +36,26 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
     private static final int NUM_DOCS_PER_ROUND = 1;
     private static final String VECTOR_EMBEDDING_FIELD = "passage_embedding";
     protected static final String RESCORE_QUERY = "hi";
-    private static String modelId = "";
 
     // Test rolling-upgrade normalization processor when index with multiple shards
     // Create Text Embedding Processor, Ingestion Pipeline, add document and search pipeline with noramlization processor
     // Validate process , pipeline and document count in rolling-upgrade scenario
     public void testNormalizationProcessor_whenIndexWithMultipleShards_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
+        super.ingestPipelineName = PIPELINE_NAME;
+        super.searchPipelineName = SEARCH_PIPELINE_NAME;
+
         switch (getClusterType()) {
             case OLD:
-                modelId = uploadTextEmbeddingModel();
-                loadModel(modelId);
-                createPipelineProcessor(modelId, PIPELINE_NAME);
+                super.modelId = uploadTextEmbeddingModel();
+                loadModel(super.modelId);
+                createPipelineProcessor(super.modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
-                    getIndexNameForTest(),
+                    super.indexName,
                     Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
                     PIPELINE_NAME
                 );
-                addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, null, null);
+                addDocument(super.indexName, "0", TEST_FIELD, TEXT, null, null);
                 createSearchPipeline(
                     SEARCH_PIPELINE_NAME,
                     DEFAULT_NORMALIZATION_METHOD,
@@ -62,28 +64,28 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
                 );
                 break;
             case MIXED:
-                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                super.modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
-                    HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null, null);
-                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, hybridQueryBuilder, null);
-                    addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_MIXED, null, null);
+                    HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(super.modelId, null, null, null);
+                    validateTestIndexOnUpgrade(totalDocsCountMixed, super.modelId, hybridQueryBuilder, null);
+                    addDocument(super.indexName, "1", TEST_FIELD, TEXT_MIXED, null, null);
                 } else {
                     totalDocsCountMixed = 2 * NUM_DOCS_PER_ROUND;
-                    HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null, null);
-                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, hybridQueryBuilder, null);
+                    HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(super.modelId, null, null, null);
+                    validateTestIndexOnUpgrade(totalDocsCountMixed, super.modelId, hybridQueryBuilder, null);
                 }
                 break;
             case UPGRADED:
-                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                super.modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
                 int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                loadModel(modelId);
-                addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, null, null);
-                HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null, null);
-                validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, hybridQueryBuilder, null);
-                hybridQueryBuilder = getQueryBuilder(modelId, Boolean.FALSE, Map.of("ef_search", 100), RescoreContext.getDefault());
-                validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, hybridQueryBuilder, null);
+                loadModel(super.modelId);
+                addDocument(super.indexName, "2", TEST_FIELD, TEXT_UPGRADED, null, null);
+                HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(super.modelId, null, null, null);
+                validateTestIndexOnUpgrade(totalDocsCountUpgraded, super.modelId, hybridQueryBuilder, null);
+                hybridQueryBuilder = getQueryBuilder(super.modelId, Boolean.FALSE, Map.of("ef_search", 100), RescoreContext.getDefault());
+                validateTestIndexOnUpgrade(totalDocsCountUpgraded, super.modelId, hybridQueryBuilder, null);
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());
@@ -96,11 +98,11 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
         HybridQueryBuilder hybridQueryBuilder,
         QueryBuilder rescorer
     ) throws Exception {
-        int docCount = getDocCount(getIndexNameForTest());
+        int docCount = getDocCount(super.indexName);
         assertEquals(numberOfDocs, docCount);
         loadModel(modelId);
         Map<String, Object> searchResponseAsMap = search(
-            getIndexNameForTest(),
+            super.indexName,
             hybridQueryBuilder,
             rescorer,
             1,

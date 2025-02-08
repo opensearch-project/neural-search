@@ -35,7 +35,8 @@ public class TextChunkingProcessorIT extends AbstractRollingUpgradeTestCase {
     // Validate process, pipeline and document count in rolling-upgrade scenario
     public void testTextChunkingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-        String indexName = getIndexNameForTest();
+        super.ingestPipelineName = PIPELINE_NAME;
+
         switch (getClusterType()) {
             case OLD:
                 createPipelineForTextChunkingProcessor(PIPELINE_NAME);

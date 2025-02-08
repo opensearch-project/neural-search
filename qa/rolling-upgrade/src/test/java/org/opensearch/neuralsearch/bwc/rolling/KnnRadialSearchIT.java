@@ -24,43 +24,44 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
     private static final String TEST_IMAGE_TEXT_UPGRADED = "/9j/4AAQSkZJR8eydhgfwceocvlk";
 
     private static final int NUM_DOCS_PER_ROUND = 1;
-    private static String modelId = "";
 
     // Test rolling-upgrade with kNN radial search
     // Create Text Image Embedding Processor, Ingestion Pipeline and add document
     // Validate radial query, pipeline and document count in rolling-upgrade scenario
     public void testKnnRadialSearch_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
+        super.ingestPipelineName = PIPELINE_NAME;
+
         switch (getClusterType()) {
             case OLD:
-                modelId = uploadTextImageEmbeddingModel();
-                loadModel(modelId);
-                createPipelineForTextImageProcessor(modelId, PIPELINE_NAME);
+                super.modelId = uploadTextImageEmbeddingModel();
+                loadModel(super.modelId);
+                createPipelineForTextImageProcessor(super.modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
-                    getIndexNameForTest(),
+                    super.indexName,
                     Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
                     PIPELINE_NAME
                 );
-                addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT);
+                addDocument(super.indexName, "0", TEST_FIELD, TEXT, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT);
                 break;
             case MIXED:
-                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
+                super.modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
-                    validateIndexQueryOnUpgrade(totalDocsCountMixed, modelId, TEXT, TEST_IMAGE_TEXT);
-                    addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_MIXED, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_MIXED);
+                    validateIndexQueryOnUpgrade(totalDocsCountMixed, super.modelId, TEXT, TEST_IMAGE_TEXT);
+                    addDocument(super.indexName, "1", TEST_FIELD, TEXT_MIXED, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_MIXED);
                 } else {
                     totalDocsCountMixed = 2 * NUM_DOCS_PER_ROUND;
-                    validateIndexQueryOnUpgrade(totalDocsCountMixed, modelId, TEXT_MIXED, TEST_IMAGE_TEXT_MIXED);
+                    validateIndexQueryOnUpgrade(totalDocsCountMixed, super.modelId, TEXT_MIXED, TEST_IMAGE_TEXT_MIXED);
                 }
                 break;
             case UPGRADED:
-                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
+                super.modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
                 int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                loadModel(modelId);
-                addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_UPGRADED);
-                validateIndexQueryOnUpgrade(totalDocsCountUpgraded, modelId, TEXT_UPGRADED, TEST_IMAGE_TEXT_UPGRADED);
+                loadModel(super.modelId);
+                addDocument(super.indexName, "2", TEST_FIELD, TEXT_UPGRADED, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_UPGRADED);
+                validateIndexQueryOnUpgrade(totalDocsCountUpgraded, super.modelId, TEXT_UPGRADED, TEST_IMAGE_TEXT_UPGRADED);
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());
@@ -69,7 +70,7 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
 
     private void validateIndexQueryOnUpgrade(final int numberOfDocs, final String modelId, final String text, final String imageText)
         throws Exception {
-        int docCount = getDocCount(getIndexNameForTest());
+        int docCount = getDocCount(super.indexName);
         assertEquals(numberOfDocs, docCount);
         loadModel(modelId);
 
@@ -81,7 +82,7 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
             .minScore(0.01f)
             .build();
 
-        Map<String, Object> responseWithMinScore = search(getIndexNameForTest(), neuralQueryBuilderWithMinScoreQuery, 1);
+        Map<String, Object> responseWithMinScore = search(super.indexName, neuralQueryBuilderWithMinScoreQuery, 1);
         assertNotNull(responseWithMinScore);
 
         NeuralQueryBuilder neuralQueryBuilderWithMaxDistanceQuery = NeuralQueryBuilder.builder()
@@ -92,7 +93,7 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
             .maxDistance(100000f)
             .build();
 
-        Map<String, Object> responseWithMaxScore = search(getIndexNameForTest(), neuralQueryBuilderWithMaxDistanceQuery, 1);
+        Map<String, Object> responseWithMaxScore = search(super.indexName, neuralQueryBuilderWithMaxDistanceQuery, 1);
         assertNotNull(responseWithMaxScore);
     }
 }

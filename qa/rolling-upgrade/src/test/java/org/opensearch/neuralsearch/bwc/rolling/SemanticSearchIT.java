@@ -19,43 +19,44 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
     private static final String TEXT_MIXED = "Hello world mixed";
     private static final String TEXT_UPGRADED = "Hello world upgraded";
     private static final int NUM_DOCS_PER_ROUND = 1;
-    private static String modelId = "";
 
     // Test rolling-upgrade Semantic Search
     // Create Text Embedding Processor, Ingestion Pipeline and add document
     // Validate process , pipeline and document count in rolling-upgrade scenario
     public void testSemanticSearch_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER, 90);
+        super.ingestPipelineName = PIPELINE_NAME;
+
         switch (getClusterType()) {
             case OLD:
-                modelId = uploadTextEmbeddingModel();
-                loadModel(modelId);
-                createPipelineProcessor(modelId, PIPELINE_NAME);
+                super.modelId = uploadTextEmbeddingModel();
+                loadModel(super.modelId);
+                createPipelineProcessor(super.modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
-                    getIndexNameForTest(),
+                    super.indexName,
                     Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
                     PIPELINE_NAME
                 );
-                addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, null, null);
+                addDocument(super.indexName, "0", TEST_FIELD, TEXT, null, null);
                 break;
             case MIXED:
-                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                super.modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
-                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, TEXT);
-                    addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_MIXED, null, null);
+                    validateTestIndexOnUpgrade(totalDocsCountMixed, super.modelId, TEXT);
+                    addDocument(super.indexName, "1", TEST_FIELD, TEXT_MIXED, null, null);
                 } else {
                     totalDocsCountMixed = 2 * NUM_DOCS_PER_ROUND;
-                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, TEXT_MIXED);
+                    validateTestIndexOnUpgrade(totalDocsCountMixed, super.modelId, TEXT_MIXED);
                 }
                 break;
             case UPGRADED:
-                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                super.modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
                 int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                loadModel(modelId);
-                addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, null, null);
-                validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, TEXT_UPGRADED);
+                loadModel(super.modelId);
+                addDocument(super.indexName, "2", TEST_FIELD, TEXT_UPGRADED, null, null);
+                validateTestIndexOnUpgrade(totalDocsCountUpgraded, super.modelId, TEXT_UPGRADED);
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());
@@ -64,7 +65,7 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
     }
 
     private void validateTestIndexOnUpgrade(final int numberOfDocs, final String modelId, final String text) throws Exception {
-        int docCount = getDocCount(getIndexNameForTest());
+        int docCount = getDocCount(super.indexName);
         assertEquals(numberOfDocs, docCount);
         loadModel(modelId);
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
@@ -73,7 +74,7 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
             .queryText(text)
             .k(1)
             .build();
-        Map<String, Object> response = search(getIndexNameForTest(), neuralQueryBuilder, 1);
+        Map<String, Object> response = search(super.indexName, neuralQueryBuilder, 1);
         assertNotNull(response);
     }
 }
