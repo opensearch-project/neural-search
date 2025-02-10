@@ -32,20 +32,18 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
     // Validate process , pipeline and document count in restart-upgrade scenario
     public void testSparseEncodingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-        super.ingestPipelineName = PIPELINE_NAME;
-
         if (isRunningAgainstOldCluster()) {
-            super.modelId = uploadSparseEncodingModel();
-            loadModel(super.modelId);
-            createPipelineForSparseEncodingProcessor(super.modelId, PIPELINE_NAME);
+            String modelId = uploadSparseEncodingModel();
+            loadModel(modelId);
+            createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
-                super.indexName,
+                getIndexNameForTest(),
                 Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),
                 PIPELINE_NAME
             );
 
             addSparseEncodingDoc(
-                super.indexName,
+                getIndexNameForTest(),
                 "0",
                 List.of(TEST_SPARSE_ENCODING_FIELD),
                 List.of(testRankFeaturesDoc1),
@@ -53,23 +51,28 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
                 List.of(TEXT_1)
             );
         } else {
-            super.modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-            loadModel(super.modelId);
-            addSparseEncodingDoc(
-                super.indexName,
-                "1",
-                List.of(TEST_SPARSE_ENCODING_FIELD),
-                List.of(testRankFeaturesDoc2),
-                List.of(TEST_TEXT_FIELD),
-                List.of(TEXT_2)
-            );
-            validateTestIndex(super.modelId);
+            String modelId = null;
+            try {
+                modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                loadModel(modelId);
+                addSparseEncodingDoc(
+                    getIndexNameForTest(),
+                    "1",
+                    List.of(TEST_SPARSE_ENCODING_FIELD),
+                    List.of(testRankFeaturesDoc2),
+                    List.of(TEST_TEXT_FIELD),
+                    List.of(TEXT_2)
+                );
+                validateTestIndex(modelId);
+            } finally {
+                wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
+            }
         }
 
     }
 
     private void validateTestIndex(final String modelId) throws Exception {
-        int docCount = getDocCount(super.indexName);
+        int docCount = getDocCount(getIndexNameForTest());
         assertEquals(2, docCount);
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_SPARSE_ENCODING_FIELD)
@@ -77,7 +80,7 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
             .modelId(modelId);
         MatchQueryBuilder matchQueryBuilder = new MatchQueryBuilder(TEST_TEXT_FIELD, TEXT_1);
         boolQueryBuilder.should(sparseEncodingQueryBuilder).should(matchQueryBuilder);
-        Map<String, Object> response = search(super.indexName, boolQueryBuilder, 1);
+        Map<String, Object> response = search(getIndexNameForTest(), boolQueryBuilder, 1);
         Map<String, Object> firstInnerHit = getFirstInnerHit(response);
 
         assertEquals("0", firstInnerHit.get("_id"));

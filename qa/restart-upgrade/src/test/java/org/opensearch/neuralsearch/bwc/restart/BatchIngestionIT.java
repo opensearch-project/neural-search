@@ -23,26 +23,30 @@ public class BatchIngestionIT extends AbstractRestartUpgradeRestTestCase {
 
     public void testBatchIngestionWithNeuralSparseProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-        super.ingestPipelineName = PIPELINE_NAME;
-
+        String indexName = getIndexNameForTest();
         if (isRunningAgainstOldCluster()) {
-            super.modelId = uploadSparseEncodingModel();
-            loadModel(super.modelId);
-            createPipelineForSparseEncodingProcessor(super.modelId, PIPELINE_NAME, batchSize);
+            String modelId = uploadSparseEncodingModel();
+            loadModel(modelId);
+            createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME, batchSize);
             createIndexWithConfiguration(
-                super.indexName,
+                indexName,
                 Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),
                 PIPELINE_NAME
             );
             List<Map<String, String>> docs = prepareDataForBulkIngestion(0, 5);
-            bulkAddDocuments(super.indexName, TEXT_FIELD_NAME, PIPELINE_NAME, docs);
-            validateDocCountAndInfo(super.indexName, 5, () -> getDocById(super.indexName, "4"), EMBEDDING_FIELD_NAME, Map.class);
+            bulkAddDocuments(indexName, TEXT_FIELD_NAME, PIPELINE_NAME, docs);
+            validateDocCountAndInfo(indexName, 5, () -> getDocById(indexName, "4"), EMBEDDING_FIELD_NAME, Map.class);
         } else {
-            super.modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-            loadModel(super.modelId);
-            List<Map<String, String>> docs = prepareDataForBulkIngestion(5, 5);
-            bulkAddDocuments(super.indexName, TEXT_FIELD_NAME, PIPELINE_NAME, docs);
-            validateDocCountAndInfo(super.indexName, 10, () -> getDocById(super.indexName, "9"), EMBEDDING_FIELD_NAME, Map.class);
+            String modelId = null;
+            modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+            loadModel(modelId);
+            try {
+                List<Map<String, String>> docs = prepareDataForBulkIngestion(5, 5);
+                bulkAddDocuments(indexName, TEXT_FIELD_NAME, PIPELINE_NAME, docs);
+                validateDocCountAndInfo(indexName, 10, () -> getDocById(indexName, "9"), EMBEDDING_FIELD_NAME, Map.class);
+            } finally {
+                wipeOfTestResources(indexName, PIPELINE_NAME, modelId, null);
+            }
         }
     }
 

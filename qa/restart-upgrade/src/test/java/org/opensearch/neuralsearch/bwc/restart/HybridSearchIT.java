@@ -55,28 +55,30 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
     private void validateNormalizationProcessor(final String fileName, final String pipelineName, final String searchPipelineName)
         throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-        super.ingestPipelineName = pipelineName;
-        super.searchPipelineName = searchPipelineName;
-
         if (isRunningAgainstOldCluster()) {
-            super.modelId = uploadTextEmbeddingModel();
-            loadModel(super.modelId);
-            createPipelineProcessor(super.modelId, pipelineName);
+            String modelId = uploadTextEmbeddingModel();
+            loadModel(modelId);
+            createPipelineProcessor(modelId, pipelineName);
             createIndexWithConfiguration(
-                super.indexName,
+                getIndexNameForTest(),
                 Files.readString(Path.of(classLoader.getResource(fileName).toURI())),
                 pipelineName
             );
-            addDocuments(super.indexName, true);
+            addDocuments(getIndexNameForTest(), true);
             createSearchPipeline(searchPipelineName);
         } else {
-            super.modelId = getModelId(getIngestionPipeline(pipelineName), TEXT_EMBEDDING_PROCESSOR);
-            loadModel(super.modelId);
-            addDocuments(super.indexName, false);
-            HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(super.modelId, null, null, null);
-            validateTestIndex(super.indexName, searchPipelineName, hybridQueryBuilder);
-            hybridQueryBuilder = getQueryBuilder(super.modelId, Boolean.FALSE, Map.of("ef_search", 100), RescoreContext.getDefault());
-            validateTestIndex(super.indexName, searchPipelineName, hybridQueryBuilder);
+            String modelId = null;
+            try {
+                modelId = getModelId(getIngestionPipeline(pipelineName), TEXT_EMBEDDING_PROCESSOR);
+                loadModel(modelId);
+                addDocuments(getIndexNameForTest(), false);
+                HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null, null);
+                validateTestIndex(getIndexNameForTest(), searchPipelineName, hybridQueryBuilder);
+                hybridQueryBuilder = getQueryBuilder(modelId, Boolean.FALSE, Map.of("ef_search", 100), RescoreContext.getDefault());
+                validateTestIndex(getIndexNameForTest(), searchPipelineName, hybridQueryBuilder);
+            } finally {
+                wipeOfTestResources(getIndexNameForTest(), pipelineName, modelId, searchPipelineName);
+            }
         }
     }
 

@@ -35,8 +35,7 @@ public class TextChunkingProcessorIT extends AbstractRollingUpgradeTestCase {
     // Validate process, pipeline and document count in rolling-upgrade scenario
     public void testTextChunkingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-        super.ingestPipelineName = PIPELINE_NAME;
-
+        String indexName = getIndexNameForTest();
         switch (getClusterType()) {
             case OLD:
                 createPipelineForTextChunkingProcessor(PIPELINE_NAME);
@@ -55,9 +54,13 @@ public class TextChunkingProcessorIT extends AbstractRollingUpgradeTestCase {
                 }
                 break;
             case UPGRADED:
-                int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                addDocument(indexName, "2", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
-                validateTestIndex(indexName, OUTPUT_FIELD, totalDocsCountUpgraded, expectedPassages);
+                try {
+                    int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
+                    addDocument(indexName, "2", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
+                    validateTestIndex(indexName, OUTPUT_FIELD, totalDocsCountUpgraded, expectedPassages);
+                } finally {
+                    wipeOfTestResources(indexName, PIPELINE_NAME, null, null);
+                }
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());

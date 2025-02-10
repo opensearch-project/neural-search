@@ -22,35 +22,39 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
 
     public void testBatchIngestion_SparseEncodingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER, 90);
-        super.ingestPipelineName = SPARSE_PIPELINE;
-
+        String indexName = getIndexNameForTest();
+        String sparseModelId = null;
         switch (getClusterType()) {
             case OLD:
-                super.modelId = uploadSparseEncodingModel();
-                loadModel(super.modelId);
-                createPipelineForSparseEncodingProcessor(super.modelId, SPARSE_PIPELINE, 2);
+                sparseModelId = uploadSparseEncodingModel();
+                loadModel(sparseModelId);
+                createPipelineForSparseEncodingProcessor(sparseModelId, SPARSE_PIPELINE, 2);
                 createIndexWithConfiguration(
-                    super.indexName,
+                    indexName,
                     Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),
                     SPARSE_PIPELINE
                 );
                 List<Map<String, String>> docs = prepareDataForBulkIngestion(0, 5);
                 bulkAddDocuments(indexName, TEXT_FIELD_NAME, SPARSE_PIPELINE, docs);
-                validateDocCountAndInfo(super.indexName, 5, () -> getDocById(super.indexName, "4"), EMBEDDING_FIELD_NAME, Map.class);
+                validateDocCountAndInfo(indexName, 5, () -> getDocById(indexName, "4"), EMBEDDING_FIELD_NAME, Map.class);
                 break;
             case MIXED:
-                super.modelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_PIPELINE), SPARSE_ENCODING_PROCESSOR);
-                loadModel(super.modelId);
+                sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_PIPELINE), SPARSE_ENCODING_PROCESSOR);
+                loadModel(sparseModelId);
                 List<Map<String, String>> docsForMixed = prepareDataForBulkIngestion(5, 5);
-                bulkAddDocuments(super.indexName, TEXT_FIELD_NAME, SPARSE_PIPELINE, docsForMixed);
-                validateDocCountAndInfo(super.indexName, 10, () -> getDocById(super.indexName, "9"), EMBEDDING_FIELD_NAME, Map.class);
+                bulkAddDocuments(indexName, TEXT_FIELD_NAME, SPARSE_PIPELINE, docsForMixed);
+                validateDocCountAndInfo(indexName, 10, () -> getDocById(indexName, "9"), EMBEDDING_FIELD_NAME, Map.class);
                 break;
             case UPGRADED:
-                super.modelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_PIPELINE), SPARSE_ENCODING_PROCESSOR);
-                loadModel(super.modelId);
-                List<Map<String, String>> docsForUpgraded = prepareDataForBulkIngestion(10, 5);
-                bulkAddDocuments(super.indexName, TEXT_FIELD_NAME, SPARSE_PIPELINE, docsForUpgraded);
-                validateDocCountAndInfo(super.indexName, 15, () -> getDocById(super.indexName, "14"), EMBEDDING_FIELD_NAME, Map.class);
+                try {
+                    sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_PIPELINE), SPARSE_ENCODING_PROCESSOR);
+                    loadModel(sparseModelId);
+                    List<Map<String, String>> docsForUpgraded = prepareDataForBulkIngestion(10, 5);
+                    bulkAddDocuments(indexName, TEXT_FIELD_NAME, SPARSE_PIPELINE, docsForUpgraded);
+                    validateDocCountAndInfo(indexName, 15, () -> getDocById(indexName, "14"), EMBEDDING_FIELD_NAME, Map.class);
+                } finally {
+                    wipeOfTestResources(indexName, SPARSE_PIPELINE, sparseModelId, null);
+                }
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());

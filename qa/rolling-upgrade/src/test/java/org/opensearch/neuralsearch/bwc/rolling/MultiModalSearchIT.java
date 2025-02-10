@@ -24,44 +24,47 @@ public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
     private static final String TEST_IMAGE_TEXT_UPGRADED = "/9j/4AAQSkZJR8eydhgfwceocvlk";
 
     private static final int NUM_DOCS_PER_ROUND = 1;
+    private static String modelId = "";
 
     // Test rolling-upgrade test image embedding processor
     // Create Text Image Embedding Processor, Ingestion Pipeline and add document
     // Validate process , pipeline and document count in rolling-upgrade scenario
     public void testTextImageEmbeddingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER, 90);
-        super.ingestPipelineName = PIPELINE_NAME;
-
         switch (getClusterType()) {
             case OLD:
-                super.modelId = uploadTextImageEmbeddingModel();
-                loadModel(super.modelId);
-                createPipelineForTextImageProcessor(super.modelId, PIPELINE_NAME);
+                modelId = uploadTextImageEmbeddingModel();
+                loadModel(modelId);
+                createPipelineForTextImageProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
-                    super.indexName,
+                    getIndexNameForTest(),
                     Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
                     PIPELINE_NAME
                 );
-                addDocument(super.indexName, "0", TEST_FIELD, TEXT, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT);
+                addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT);
                 break;
             case MIXED:
-                super.modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
+                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
-                    validateTestIndexOnUpgrade(totalDocsCountMixed, super.modelId, TEXT, TEST_IMAGE_TEXT);
-                    addDocument(super.indexName, "1", TEST_FIELD, TEXT_MIXED, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_MIXED);
+                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, TEXT, TEST_IMAGE_TEXT);
+                    addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_MIXED, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_MIXED);
                 } else {
                     totalDocsCountMixed = 2 * NUM_DOCS_PER_ROUND;
-                    validateTestIndexOnUpgrade(totalDocsCountMixed, super.modelId, TEXT_MIXED, TEST_IMAGE_TEXT_MIXED);
+                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, TEXT_MIXED, TEST_IMAGE_TEXT_MIXED);
                 }
                 break;
             case UPGRADED:
-                super.modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
-                int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                loadModel(super.modelId);
-                addDocument(super.indexName, "2", TEST_FIELD, TEXT_UPGRADED, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_UPGRADED);
-                validateTestIndexOnUpgrade(totalDocsCountUpgraded, super.modelId, TEXT_UPGRADED, TEST_IMAGE_TEXT_UPGRADED);
+                try {
+                    modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
+                    int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
+                    loadModel(modelId);
+                    addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_UPGRADED);
+                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, TEXT_UPGRADED, TEST_IMAGE_TEXT_UPGRADED);
+                } finally {
+                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
+                }
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());
@@ -70,7 +73,7 @@ public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
 
     private void validateTestIndexOnUpgrade(final int numberOfDocs, final String modelId, final String text, final String imageText)
         throws Exception {
-        int docCount = getDocCount(super.indexName);
+        int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
         loadModel(modelId);
         NeuralQueryBuilder neuralQueryBuilderWithKQuery = NeuralQueryBuilder.builder()
@@ -81,7 +84,7 @@ public class MultiModalSearchIT extends AbstractRollingUpgradeTestCase {
             .k(1)
             .build();
 
-        Map<String, Object> responseWithKQuery = search(super.indexName, neuralQueryBuilderWithKQuery, 1);
+        Map<String, Object> responseWithKQuery = search(getIndexNameForTest(), neuralQueryBuilderWithKQuery, 1);
         assertNotNull(responseWithKQuery);
     }
 }

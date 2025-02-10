@@ -8,9 +8,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Optional;
-
-import lombok.SneakyThrows;
-import org.junit.After;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
@@ -23,30 +20,11 @@ import org.opensearch.test.rest.OpenSearchRestTestCase;
 
 public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearchIT {
 
-    // Resources to be cleaned up after each test, need to assign the actual values in the test itself
-    protected String modelId;
-    protected String ingestPipelineName;
-    protected String searchPipelineName;
-    protected String indexName;
-
     @Before
-    public void initialize() {
-        // Initialize variables
-        this.modelId = null;
-        this.ingestPipelineName = null;
-        this.searchPipelineName = null;
-
+    protected String getIndexNameForTest() {
         // Creating index name by concatenating "neural-bwc-" prefix with test method name
         // for all the tests in this sub-project
-        this.indexName = NEURAL_SEARCH_BWC_PREFIX + getTestName().toLowerCase(Locale.ROOT);
-    }
-
-    @SneakyThrows
-    @After
-    public void cleanUpResources() {
-        if (!isRunningAgainstOldCluster()) {
-            wipeOfTestResources(this.indexName, this.ingestPipelineName, this.modelId, this.searchPipelineName);
-        }
+        return NEURAL_SEARCH_BWC_PREFIX + getTestName().toLowerCase(Locale.ROOT);
     }
 
     @Override

@@ -22,6 +22,7 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRollingUpgradeTestC
     private static final String TEST_ENCODING_FIELD = "passage_embedding";
     private static final String TEST_TEXT_FIELD = "passage_text";
     private static final String TEXT_1 = "Hello world a b";
+    private String sparseModelId = "";
 
     // test of NeuralSparseTwoPhaseProcessor supports neural_sparse query's two phase speed up
     // the feature is introduced from 2.15
@@ -29,33 +30,46 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRollingUpgradeTestC
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         // will set the model_id after we obtain the id
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_ENCODING_FIELD).queryText(TEXT_1);
-        super.ingestPipelineName = SPARSE_INGEST_PIPELINE_NAME;
-        super.searchPipelineName = SPARSE_SEARCH_TWO_PHASE_PIPELINE_NAME;
 
         switch (getClusterType()) {
             case OLD:
-                super.modelId = uploadSparseEncodingModel();
-                loadModel(super.modelId);
-                neuralSparseQueryBuilder.modelId(super.modelId);
-                createPipelineForSparseEncodingProcessor(super.modelId, SPARSE_INGEST_PIPELINE_NAME);
+                sparseModelId = uploadSparseEncodingModel();
+                loadModel(sparseModelId);
+                neuralSparseQueryBuilder.modelId(sparseModelId);
+                createPipelineForSparseEncodingProcessor(sparseModelId, SPARSE_INGEST_PIPELINE_NAME);
                 createIndexWithConfiguration(
-                    super.indexName,
+                    getIndexNameForTest(),
                     Files.readString(Path.of(classLoader.getResource("processor/SparseIndexMappings.json").toURI())),
                     SPARSE_INGEST_PIPELINE_NAME
                 );
-                addSparseEncodingDoc(super.indexName, "0", List.of(), List.of(), List.of(TEST_TEXT_FIELD), List.of(TEXT_1));
+                addSparseEncodingDoc(getIndexNameForTest(), "0", List.of(), List.of(), List.of(TEST_TEXT_FIELD), List.of(TEXT_1));
                 createNeuralSparseTwoPhaseSearchProcessor(SPARSE_SEARCH_TWO_PHASE_PIPELINE_NAME);
                 updateIndexSettings(
-                    super.indexName,
+                    getIndexNameForTest(),
                     Settings.builder().put("index.search.default_pipeline", SPARSE_SEARCH_TWO_PHASE_PIPELINE_NAME)
                 );
-                assertNotNull(search(super.indexName, neuralSparseQueryBuilder, 1).get("hits"));
+                assertNotNull(search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits"));
                 break;
-            case MIXED, UPGRADED:
-                super.modelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                loadModel(super.modelId);
-                neuralSparseQueryBuilder.modelId(super.modelId);
-                assertNotNull(search(super.indexName, neuralSparseQueryBuilder, 1).get("hits"));
+            case MIXED:
+                sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                loadModel(sparseModelId);
+                neuralSparseQueryBuilder.modelId(sparseModelId);
+                assertNotNull(search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits"));
+                break;
+            case UPGRADED:
+                try {
+                    sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                    loadModel(sparseModelId);
+                    neuralSparseQueryBuilder.modelId(sparseModelId);
+                    assertNotNull(search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits"));
+                } finally {
+                    wipeOfTestResources(
+                        getIndexNameForTest(),
+                        SPARSE_INGEST_PIPELINE_NAME,
+                        sparseModelId,
+                        SPARSE_SEARCH_TWO_PHASE_PIPELINE_NAME
+                    );
+                }
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());

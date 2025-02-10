@@ -26,24 +26,27 @@ public class KnnRadialSearchIT extends AbstractRestartUpgradeRestTestCase {
     // Validate radial query, pipeline and document count in restart-upgrade scenario
     public void testKnnRadialSearch_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-        super.ingestPipelineName = PIPELINE_NAME;
 
         if (isRunningAgainstOldCluster()) {
-            super.modelId = uploadTextEmbeddingModel();
-            loadModel(super.modelId);
-            createPipelineForTextImageProcessor(super.modelId, PIPELINE_NAME);
+            String modelId = uploadTextEmbeddingModel();
+            loadModel(modelId);
+            createPipelineForTextImageProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
-                super.indexName,
+                getIndexNameForTest(),
                 Files.readString(Path.of(classLoader.getResource("processor/IndexMappingMultipleShard.json").toURI())),
                 PIPELINE_NAME
             );
-            addDocument(super.indexName, "0", TEST_FIELD, TEXT, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT);
+            addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT);
         } else {
-            super.modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
-
-            loadModel(super.modelId);
-            addDocument(super.indexName, "1", TEST_FIELD, TEXT_1, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_1);
-            validateIndexQuery(super.modelId);
+            String modelId = null;
+            try {
+                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
+                loadModel(modelId);
+                addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_1);
+                validateIndexQuery(modelId);
+            } finally {
+                wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
+            }
         }
     }
 
@@ -56,7 +59,7 @@ public class KnnRadialSearchIT extends AbstractRestartUpgradeRestTestCase {
             .minScore(0.01f)
             .build();
 
-        Map<String, Object> responseWithMinScoreQuery = search(super.indexName, neuralQueryBuilderWithMinScoreQuery, 1);
+        Map<String, Object> responseWithMinScoreQuery = search(getIndexNameForTest(), neuralQueryBuilderWithMinScoreQuery, 1);
         assertNotNull(responseWithMinScoreQuery);
 
         NeuralQueryBuilder neuralQueryBuilderWithMaxDistanceQuery = NeuralQueryBuilder.builder()
@@ -66,7 +69,7 @@ public class KnnRadialSearchIT extends AbstractRestartUpgradeRestTestCase {
             .modelId(modelId)
             .maxDistance(100000f)
             .build();
-        Map<String, Object> responseWithMaxDistanceQuery = search(super.indexName, neuralQueryBuilderWithMaxDistanceQuery, 1);
+        Map<String, Object> responseWithMaxDistanceQuery = search(getIndexNameForTest(), neuralQueryBuilderWithMaxDistanceQuery, 1);
         assertNotNull(responseWithMaxDistanceQuery);
     }
 }

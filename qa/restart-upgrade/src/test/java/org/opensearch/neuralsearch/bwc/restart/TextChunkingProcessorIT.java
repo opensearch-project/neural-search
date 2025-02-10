@@ -33,16 +33,19 @@ public class TextChunkingProcessorIT extends AbstractRestartUpgradeRestTestCase 
     // Validate process, pipeline and document count in restart-upgrade scenario
     public void testTextChunkingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-        super.ingestPipelineName = PIPELINE_NAME;
-
+        String indexName = getIndexNameForTest();
         if (isRunningAgainstOldCluster()) {
             createPipelineForTextChunkingProcessor(PIPELINE_NAME);
-            createChunkingIndex(super.indexName);
-            addDocument(super.indexName, "0", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
-            validateTestIndex(super.indexName, OUTPUT_FIELD, 1, expectedPassages);
+            createChunkingIndex(indexName);
+            addDocument(indexName, "0", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
+            validateTestIndex(indexName, OUTPUT_FIELD, 1, expectedPassages);
         } else {
-            addDocument(super.indexName, "1", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
-            validateTestIndex(super.indexName, OUTPUT_FIELD, 2, expectedPassages);
+            try {
+                addDocument(indexName, "1", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
+                validateTestIndex(indexName, OUTPUT_FIELD, 2, expectedPassages);
+            } finally {
+                wipeOfTestResources(indexName, PIPELINE_NAME, null, null);
+            }
         }
     }
 

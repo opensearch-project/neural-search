@@ -37,26 +37,24 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
     private static final int NUM_DOCS_PER_ROUND = 1;
     private static final String VECTOR_EMBEDDING_FIELD = "passage_embedding";
     protected static final String RESCORE_QUERY = "hi";
+    private static String modelId = "";
 
     /**
      * Test normalization with hybrid query and rescore. This test is required as rescore will not be compatible with version lower than 2.15
      */
     public void testHybridQueryWithRescore_whenIndexWithMultipleShards_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-        super.ingestPipelineName = PIPELINE_NAME;
-        super.searchPipelineName = SEARCH_PIPELINE_NAME;
-
         switch (getClusterType()) {
             case OLD:
-                super.modelId = uploadTextEmbeddingModel();
-                loadModel(super.modelId);
-                createPipelineProcessor(super.modelId, PIPELINE_NAME);
+                modelId = uploadTextEmbeddingModel();
+                loadModel(modelId);
+                createPipelineProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
-                    super.indexName,
+                    getIndexNameForTest(),
                     Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
                     PIPELINE_NAME
                 );
-                addDocument(super.indexName, "0", TEST_FIELD, TEXT, null, null);
+                addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, null, null);
                 createSearchPipeline(
                     SEARCH_PIPELINE_NAME,
                     DEFAULT_NORMALIZATION_METHOD,
@@ -65,30 +63,34 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
                 );
                 break;
             case MIXED:
-                super.modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
-                    HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(super.modelId, null, null);
+                    HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null);
                     QueryBuilder rescorer = QueryBuilders.matchQuery(TEST_FIELD, RESCORE_QUERY).boost(0.3f);
-                    validateTestIndexOnUpgrade(totalDocsCountMixed, super.modelId, hybridQueryBuilder, rescorer);
-                    addDocument(super.indexName, "1", TEST_FIELD, TEXT_MIXED, null, null);
+                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, hybridQueryBuilder, rescorer);
+                    addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_MIXED, null, null);
                 } else {
                     totalDocsCountMixed = 2 * NUM_DOCS_PER_ROUND;
-                    HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(super.modelId, null, null);
-                    validateTestIndexOnUpgrade(totalDocsCountMixed, super.modelId, hybridQueryBuilder, null);
+                    HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null);
+                    validateTestIndexOnUpgrade(totalDocsCountMixed, modelId, hybridQueryBuilder, null);
                 }
                 break;
             case UPGRADED:
-                super.modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                loadModel(super.modelId);
-                addDocument(super.indexName, "2", TEST_FIELD, TEXT_UPGRADED, null, null);
-                HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(super.modelId, null, null);
-                QueryBuilder rescorer = QueryBuilders.matchQuery(TEST_FIELD, RESCORE_QUERY).boost(0.3f);
-                validateTestIndexOnUpgrade(totalDocsCountUpgraded, super.modelId, hybridQueryBuilder, rescorer);
-                hybridQueryBuilder = getQueryBuilder(super.modelId, Map.of("ef_search", 100), RescoreContext.getDefault());
-                validateTestIndexOnUpgrade(totalDocsCountUpgraded, super.modelId, hybridQueryBuilder, rescorer);
+                try {
+                    modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                    int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
+                    loadModel(modelId);
+                    addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, null, null);
+                    HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null);
+                    QueryBuilder rescorer = QueryBuilders.matchQuery(TEST_FIELD, RESCORE_QUERY).boost(0.3f);
+                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, hybridQueryBuilder, rescorer);
+                    hybridQueryBuilder = getQueryBuilder(modelId, Map.of("ef_search", 100), RescoreContext.getDefault());
+                    validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, hybridQueryBuilder, rescorer);
+                } finally {
+                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, SEARCH_PIPELINE_NAME);
+                }
                 break;
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());
@@ -101,11 +103,11 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
         HybridQueryBuilder hybridQueryBuilder,
         QueryBuilder rescorer
     ) throws Exception {
-        int docCount = getDocCount(super.indexName);
+        int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
         loadModel(modelId);
         Map<String, Object> searchResponseAsMap = search(
-            super.indexName,
+            getIndexNameForTest(),
             hybridQueryBuilder,
             rescorer,
             1,
