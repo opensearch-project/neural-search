@@ -133,50 +133,46 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testComplexQuery_whenMultipleSubqueries_thenSuccessful() {
-        try {
-            initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-            TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
-            TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
-            TermQueryBuilder termQueryBuilder3 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT5);
-            BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
-            boolQueryBuilder.should(termQueryBuilder2).should(termQueryBuilder3);
+        initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
+        TermQueryBuilder termQueryBuilder3 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT5);
+        BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
+        boolQueryBuilder.should(termQueryBuilder2).should(termQueryBuilder3);
 
-            HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
-            hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder1);
-            hybridQueryBuilderNeuralThenTerm.add(boolQueryBuilder);
+        HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
+        hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder1);
+        hybridQueryBuilderNeuralThenTerm.add(boolQueryBuilder);
 
-            Map<String, Object> searchResponseAsMap1 = search(
-                TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
-                hybridQueryBuilderNeuralThenTerm,
-                null,
-                10,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
-            );
+        Map<String, Object> searchResponseAsMap1 = search(
+            TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
+            hybridQueryBuilderNeuralThenTerm,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
 
-            assertEquals(3, getHitCount(searchResponseAsMap1));
+        assertEquals(3, getHitCount(searchResponseAsMap1));
 
-            List<Map<String, Object>> hits1NestedList = getNestedHits(searchResponseAsMap1);
-            List<String> ids = new ArrayList<>();
-            List<Double> scores = new ArrayList<>();
-            for (Map<String, Object> oneHit : hits1NestedList) {
-                ids.add((String) oneHit.get("_id"));
-                scores.add((Double) oneHit.get("_score"));
-            }
-
-            // verify that scores are in desc order
-            assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
-            // verify that all ids are unique
-            assertEquals(Set.copyOf(ids).size(), ids.size());
-
-            Map<String, Object> total = getTotalHits(searchResponseAsMap1);
-            assertNotNull(total.get("value"));
-            assertEquals(3, total.get("value"));
-            assertNotNull(total.get("relation"));
-            assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-        } finally {
-            wipeOfTestResources(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, null, null, SEARCH_PIPELINE);
+        List<Map<String, Object>> hits1NestedList = getNestedHits(searchResponseAsMap1);
+        List<String> ids = new ArrayList<>();
+        List<Double> scores = new ArrayList<>();
+        for (Map<String, Object> oneHit : hits1NestedList) {
+            ids.add((String) oneHit.get("_id"));
+            scores.add((Double) oneHit.get("_score"));
         }
+
+        // verify that scores are in desc order
+        assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
+        // verify that all ids are unique
+        assertEquals(Set.copyOf(ids).size(), ids.size());
+
+        Map<String, Object> total = getTotalHits(searchResponseAsMap1);
+        assertNotNull(total.get("value"));
+        assertEquals(3, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
 
     @SneakyThrows
@@ -266,363 +262,333 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testComplexQuery_whenMultipleIdenticalSubQueries_thenSuccessful() {
-        try {
-            initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-            TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
-            TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
-            TermQueryBuilder termQueryBuilder3 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
+        TermQueryBuilder termQueryBuilder3 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
 
-            HybridQueryBuilder hybridQueryBuilderThreeTerms = new HybridQueryBuilder();
-            hybridQueryBuilderThreeTerms.add(termQueryBuilder1);
-            hybridQueryBuilderThreeTerms.add(termQueryBuilder2);
-            hybridQueryBuilderThreeTerms.add(termQueryBuilder3);
+        HybridQueryBuilder hybridQueryBuilderThreeTerms = new HybridQueryBuilder();
+        hybridQueryBuilderThreeTerms.add(termQueryBuilder1);
+        hybridQueryBuilderThreeTerms.add(termQueryBuilder2);
+        hybridQueryBuilderThreeTerms.add(termQueryBuilder3);
 
-            Map<String, Object> searchResponseAsMap1 = search(
-                TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
-                hybridQueryBuilderThreeTerms,
-                null,
-                10,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
-            );
+        Map<String, Object> searchResponseAsMap1 = search(
+            TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
+            hybridQueryBuilderThreeTerms,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
 
-            assertEquals(2, getHitCount(searchResponseAsMap1));
+        assertEquals(2, getHitCount(searchResponseAsMap1));
 
-            List<Map<String, Object>> hits1NestedList = getNestedHits(searchResponseAsMap1);
-            List<String> ids = new ArrayList<>();
-            List<Double> scores = new ArrayList<>();
-            for (Map<String, Object> oneHit : hits1NestedList) {
-                ids.add((String) oneHit.get("_id"));
-                scores.add((Double) oneHit.get("_score"));
-            }
-
-            // verify that scores are in desc order
-            assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
-            // verify that all ids are unique
-            assertEquals(Set.copyOf(ids).size(), ids.size());
-
-            Map<String, Object> total = getTotalHits(searchResponseAsMap1);
-            assertNotNull(total.get("value"));
-            assertEquals(2, total.get("value"));
-            assertNotNull(total.get("relation"));
-            assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-        } finally {
-            wipeOfTestResources(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, null, null, SEARCH_PIPELINE);
+        List<Map<String, Object>> hits1NestedList = getNestedHits(searchResponseAsMap1);
+        List<String> ids = new ArrayList<>();
+        List<Double> scores = new ArrayList<>();
+        for (Map<String, Object> oneHit : hits1NestedList) {
+            ids.add((String) oneHit.get("_id"));
+            scores.add((Double) oneHit.get("_score"));
         }
+
+        // verify that scores are in desc order
+        assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
+        // verify that all ids are unique
+        assertEquals(Set.copyOf(ids).size(), ids.size());
+
+        Map<String, Object> total = getTotalHits(searchResponseAsMap1);
+        assertNotNull(total.get("value"));
+        assertEquals(2, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
 
     @SneakyThrows
     public void testNoMatchResults_whenOnlyTermSubQueryWithoutMatch_thenEmptyResult() {
-        try {
-            initializeIndexIfNotExist(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME);
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-            TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
-            TermQueryBuilder termQuery2Builder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT2);
-            HybridQueryBuilder hybridQueryBuilderOnlyTerm = new HybridQueryBuilder();
-            hybridQueryBuilderOnlyTerm.add(termQueryBuilder);
-            hybridQueryBuilderOnlyTerm.add(termQuery2Builder);
+        initializeIndexIfNotExist(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
+        TermQueryBuilder termQuery2Builder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT2);
+        HybridQueryBuilder hybridQueryBuilderOnlyTerm = new HybridQueryBuilder();
+        hybridQueryBuilderOnlyTerm.add(termQueryBuilder);
+        hybridQueryBuilderOnlyTerm.add(termQuery2Builder);
 
-            Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME,
-                hybridQueryBuilderOnlyTerm,
-                null,
-                10,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
-            );
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME,
+            hybridQueryBuilderOnlyTerm,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
 
-            assertEquals(0, getHitCount(searchResponseAsMap));
-            assertTrue(getMaxScore(searchResponseAsMap).isPresent());
-            assertEquals(0.0f, getMaxScore(searchResponseAsMap).get(), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(0, getHitCount(searchResponseAsMap));
+        assertTrue(getMaxScore(searchResponseAsMap).isPresent());
+        assertEquals(0.0f, getMaxScore(searchResponseAsMap).get(), DELTA_FOR_SCORE_ASSERTION);
 
-            Map<String, Object> total = getTotalHits(searchResponseAsMap);
-            assertNotNull(total.get("value"));
-            assertEquals(0, total.get("value"));
-            assertNotNull(total.get("relation"));
-            assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME, null, null, SEARCH_PIPELINE);
-        }
+        Map<String, Object> total = getTotalHits(searchResponseAsMap);
+        assertNotNull(total.get("value"));
+        assertEquals(0, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
 
     @SneakyThrows
     public void testNestedQuery_whenHybridQueryIsWrappedIntoOtherQuery_thenFail() {
-        try {
-            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-            MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
-            MatchQueryBuilder matchQuery2Builder = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
-            HybridQueryBuilder hybridQueryBuilderOnlyTerm = new HybridQueryBuilder();
-            hybridQueryBuilderOnlyTerm.add(matchQueryBuilder);
-            hybridQueryBuilderOnlyTerm.add(matchQuery2Builder);
-            MatchQueryBuilder matchQuery3Builder = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
-            BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery().should(hybridQueryBuilderOnlyTerm).should(matchQuery3Builder);
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        MatchQueryBuilder matchQuery2Builder = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
+        HybridQueryBuilder hybridQueryBuilderOnlyTerm = new HybridQueryBuilder();
+        hybridQueryBuilderOnlyTerm.add(matchQueryBuilder);
+        hybridQueryBuilderOnlyTerm.add(matchQuery2Builder);
+        MatchQueryBuilder matchQuery3Builder = QueryBuilders.matchQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery().should(hybridQueryBuilderOnlyTerm).should(matchQuery3Builder);
 
-            ResponseException exceptionNoNestedTypes = expectThrows(
-                ResponseException.class,
-                () -> search(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, boolQueryBuilder, null, 10, Map.of("search_pipeline", SEARCH_PIPELINE))
-            );
+        ResponseException exceptionNoNestedTypes = expectThrows(
+            ResponseException.class,
+            () -> search(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, boolQueryBuilder, null, 10, Map.of("search_pipeline", SEARCH_PIPELINE))
+        );
 
-            org.hamcrest.MatcherAssert.assertThat(
-                exceptionNoNestedTypes.getMessage(),
-                allOf(
-                    containsString("hybrid query must be a top level query and cannot be wrapped into other queries"),
-                    containsString("illegal_argument_exception")
-                )
-            );
+        org.hamcrest.MatcherAssert.assertThat(
+            exceptionNoNestedTypes.getMessage(),
+            allOf(
+                containsString("hybrid query must be a top level query and cannot be wrapped into other queries"),
+                containsString("illegal_argument_exception")
+            )
+        );
 
-            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
 
-            ResponseException exceptionQWithNestedTypes = expectThrows(
-                ResponseException.class,
-                () -> search(
-                    TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD,
-                    boolQueryBuilder,
-                    null,
-                    10,
-                    Map.of("search_pipeline", SEARCH_PIPELINE)
-                )
-            );
+        ResponseException exceptionQWithNestedTypes = expectThrows(
+            ResponseException.class,
+            () -> search(
+                TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD,
+                boolQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE)
+            )
+        );
 
-            org.hamcrest.MatcherAssert.assertThat(
-                exceptionQWithNestedTypes.getMessage(),
-                allOf(
-                    containsString("hybrid query must be a top level query and cannot be wrapped into other queries"),
-                    containsString("illegal_argument_exception")
-                )
-            );
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, null, null, SEARCH_PIPELINE);
-        }
+        org.hamcrest.MatcherAssert.assertThat(
+            exceptionQWithNestedTypes.getMessage(),
+            allOf(
+                containsString("hybrid query must be a top level query and cannot be wrapped into other queries"),
+                containsString("illegal_argument_exception")
+            )
+        );
     }
 
     @SneakyThrows
     public void testIndexWithNestedFields_whenHybridQuery_thenSuccess() {
-        try {
-            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-            TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
-            TermQueryBuilder termQuery2Builder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT2);
-            HybridQueryBuilder hybridQueryBuilderOnlyTerm = new HybridQueryBuilder();
-            hybridQueryBuilderOnlyTerm.add(termQueryBuilder);
-            hybridQueryBuilderOnlyTerm.add(termQuery2Builder);
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        TermQueryBuilder termQuery2Builder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT2);
+        HybridQueryBuilder hybridQueryBuilderOnlyTerm = new HybridQueryBuilder();
+        hybridQueryBuilderOnlyTerm.add(termQueryBuilder);
+        hybridQueryBuilderOnlyTerm.add(termQuery2Builder);
 
-            Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD,
-                hybridQueryBuilderOnlyTerm,
-                null,
-                10,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
-            );
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD,
+            hybridQueryBuilderOnlyTerm,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
 
-            assertEquals(1, getHitCount(searchResponseAsMap));
-            assertTrue(getMaxScore(searchResponseAsMap).isPresent());
-            assertEquals(0.5f, getMaxScore(searchResponseAsMap).get(), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(1, getHitCount(searchResponseAsMap));
+        assertTrue(getMaxScore(searchResponseAsMap).isPresent());
+        assertEquals(0.5f, getMaxScore(searchResponseAsMap).get(), DELTA_FOR_SCORE_ASSERTION);
 
-            Map<String, Object> total = getTotalHits(searchResponseAsMap);
-            assertNotNull(total.get("value"));
-            assertEquals(1, total.get("value"));
-            assertNotNull(total.get("relation"));
-            assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD, null, null, SEARCH_PIPELINE);
-        }
+        Map<String, Object> total = getTotalHits(searchResponseAsMap);
+        assertNotNull(total.get("value"));
+        assertEquals(1, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
 
     @SneakyThrows
     public void testIndexWithNestedFields_whenHybridQueryIncludesNested_thenSuccess() {
-        try {
-            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-            TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
-            NestedQueryBuilder nestedQueryBuilder = QueryBuilders.nestedQuery(
-                TEST_NESTED_TYPE_FIELD_NAME_1,
-                matchQuery(TEST_NESTED_TYPE_FIELD_NAME_1 + "." + NESTED_FIELD_1, NESTED_FIELD_1_VALUE),
-                ScoreMode.Total
-            );
-            HybridQueryBuilder hybridQueryBuilderOnlyTerm = new HybridQueryBuilder();
-            hybridQueryBuilderOnlyTerm.add(termQueryBuilder);
-            hybridQueryBuilderOnlyTerm.add(nestedQueryBuilder);
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT);
+        NestedQueryBuilder nestedQueryBuilder = QueryBuilders.nestedQuery(
+            TEST_NESTED_TYPE_FIELD_NAME_1,
+            matchQuery(TEST_NESTED_TYPE_FIELD_NAME_1 + "." + NESTED_FIELD_1, NESTED_FIELD_1_VALUE),
+            ScoreMode.Total
+        );
+        HybridQueryBuilder hybridQueryBuilderOnlyTerm = new HybridQueryBuilder();
+        hybridQueryBuilderOnlyTerm.add(termQueryBuilder);
+        hybridQueryBuilderOnlyTerm.add(nestedQueryBuilder);
 
-            Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD,
-                hybridQueryBuilderOnlyTerm,
-                null,
-                10,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
-            );
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD,
+            hybridQueryBuilderOnlyTerm,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
 
-            assertEquals(1, getHitCount(searchResponseAsMap));
-            assertTrue(getMaxScore(searchResponseAsMap).isPresent());
-            assertEquals(0.5f, getMaxScore(searchResponseAsMap).get(), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(1, getHitCount(searchResponseAsMap));
+        assertTrue(getMaxScore(searchResponseAsMap).isPresent());
+        assertEquals(0.5f, getMaxScore(searchResponseAsMap).get(), DELTA_FOR_SCORE_ASSERTION);
 
-            Map<String, Object> total = getTotalHits(searchResponseAsMap);
-            assertNotNull(total.get("value"));
-            assertEquals(1, total.get("value"));
-            assertNotNull(total.get("relation"));
-            assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_NESTED_TYPE_NAME_ONE_SHARD, null, null, SEARCH_PIPELINE);
-        }
+        Map<String, Object> total = getTotalHits(searchResponseAsMap);
+        assertNotNull(total.get("value"));
+        assertEquals(1, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
 
     @SneakyThrows
     public void testRequestCache_whenOneShardAndQueryReturnResults_thenSuccessful() {
-        try {
-            initializeIndexIfNotExist(TEST_INDEX_WITH_KEYWORDS_ONE_SHARD);
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-            MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(KEYWORD_FIELD_1, KEYWORD_FIELD_2_VALUE);
-            RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery(INTEGER_FIELD_PRICE).gte(10).lte(1000);
+        initializeIndexIfNotExist(TEST_INDEX_WITH_KEYWORDS_ONE_SHARD);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(KEYWORD_FIELD_1, KEYWORD_FIELD_2_VALUE);
+        RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery(INTEGER_FIELD_PRICE).gte(10).lte(1000);
 
-            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-            hybridQueryBuilder.add(matchQueryBuilder);
-            hybridQueryBuilder.add(rangeQueryBuilder);
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        hybridQueryBuilder.add(matchQueryBuilder);
+        hybridQueryBuilder.add(rangeQueryBuilder);
 
-            // first query with cache flag executed normally by reading documents from index
-            Map<String, Object> firstSearchResponseAsMap = search(
-                TEST_INDEX_WITH_KEYWORDS_ONE_SHARD,
-                hybridQueryBuilder,
-                null,
-                10,
-                Map.of("search_pipeline", SEARCH_PIPELINE, "request_cache", Boolean.TRUE.toString())
-            );
+        // first query with cache flag executed normally by reading documents from index
+        Map<String, Object> firstSearchResponseAsMap = search(
+            TEST_INDEX_WITH_KEYWORDS_ONE_SHARD,
+            hybridQueryBuilder,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE, "request_cache", Boolean.TRUE.toString())
+        );
 
-            int firstQueryHitCount = getHitCount(firstSearchResponseAsMap);
-            assertTrue(firstQueryHitCount > 0);
+        int firstQueryHitCount = getHitCount(firstSearchResponseAsMap);
+        assertTrue(firstQueryHitCount > 0);
 
-            List<Map<String, Object>> hitsNestedList = getNestedHits(firstSearchResponseAsMap);
-            List<String> ids = new ArrayList<>();
-            List<Double> scores = new ArrayList<>();
-            for (Map<String, Object> oneHit : hitsNestedList) {
-                ids.add((String) oneHit.get("_id"));
-                scores.add((Double) oneHit.get("_score"));
-            }
-
-            // verify that scores are in desc order
-            assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
-            // verify that all ids are unique
-            assertEquals(Set.copyOf(ids).size(), ids.size());
-
-            Map<String, Object> total = getTotalHits(firstSearchResponseAsMap);
-            assertNotNull(total.get("value"));
-            assertEquals(firstQueryHitCount, total.get("value"));
-            assertNotNull(total.get("relation"));
-            assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-
-            // second query is served from the cache
-            Map<String, Object> secondSearchResponseAsMap = search(
-                TEST_INDEX_WITH_KEYWORDS_ONE_SHARD,
-                hybridQueryBuilder,
-                null,
-                10,
-                Map.of("search_pipeline", SEARCH_PIPELINE, "request_cache", Boolean.TRUE.toString())
-            );
-
-            assertEquals(firstQueryHitCount, getHitCount(secondSearchResponseAsMap));
-
-            List<Map<String, Object>> hitsNestedListSecondQuery = getNestedHits(secondSearchResponseAsMap);
-            List<String> idsSecondQuery = new ArrayList<>();
-            List<Double> scoresSecondQuery = new ArrayList<>();
-            for (Map<String, Object> oneHit : hitsNestedListSecondQuery) {
-                idsSecondQuery.add((String) oneHit.get("_id"));
-                scoresSecondQuery.add((Double) oneHit.get("_score"));
-            }
-
-            // verify that scores are in desc order
-            assertTrue(
-                IntStream.range(0, scoresSecondQuery.size() - 1)
-                    .noneMatch(idx -> scoresSecondQuery.get(idx) < scoresSecondQuery.get(idx + 1))
-            );
-            // verify that all ids are unique
-            assertEquals(Set.copyOf(idsSecondQuery).size(), idsSecondQuery.size());
-
-            Map<String, Object> totalSecondQuery = getTotalHits(secondSearchResponseAsMap);
-            assertNotNull(totalSecondQuery.get("value"));
-            assertEquals(firstQueryHitCount, totalSecondQuery.get("value"));
-            assertNotNull(totalSecondQuery.get("relation"));
-            assertEquals(RELATION_EQUAL_TO, totalSecondQuery.get("relation"));
-        } finally {
-            wipeOfTestResources(TEST_INDEX_WITH_KEYWORDS_ONE_SHARD, null, null, SEARCH_PIPELINE);
+        List<Map<String, Object>> hitsNestedList = getNestedHits(firstSearchResponseAsMap);
+        List<String> ids = new ArrayList<>();
+        List<Double> scores = new ArrayList<>();
+        for (Map<String, Object> oneHit : hitsNestedList) {
+            ids.add((String) oneHit.get("_id"));
+            scores.add((Double) oneHit.get("_score"));
         }
+
+        // verify that scores are in desc order
+        assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
+        // verify that all ids are unique
+        assertEquals(Set.copyOf(ids).size(), ids.size());
+
+        Map<String, Object> total = getTotalHits(firstSearchResponseAsMap);
+        assertNotNull(total.get("value"));
+        assertEquals(firstQueryHitCount, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+
+        // second query is served from the cache
+        Map<String, Object> secondSearchResponseAsMap = search(
+            TEST_INDEX_WITH_KEYWORDS_ONE_SHARD,
+            hybridQueryBuilder,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE, "request_cache", Boolean.TRUE.toString())
+        );
+
+        assertEquals(firstQueryHitCount, getHitCount(secondSearchResponseAsMap));
+
+        List<Map<String, Object>> hitsNestedListSecondQuery = getNestedHits(secondSearchResponseAsMap);
+        List<String> idsSecondQuery = new ArrayList<>();
+        List<Double> scoresSecondQuery = new ArrayList<>();
+        for (Map<String, Object> oneHit : hitsNestedListSecondQuery) {
+            idsSecondQuery.add((String) oneHit.get("_id"));
+            scoresSecondQuery.add((Double) oneHit.get("_score"));
+        }
+
+        // verify that scores are in desc order
+        assertTrue(
+            IntStream.range(0, scoresSecondQuery.size() - 1).noneMatch(idx -> scoresSecondQuery.get(idx) < scoresSecondQuery.get(idx + 1))
+        );
+        // verify that all ids are unique
+        assertEquals(Set.copyOf(idsSecondQuery).size(), idsSecondQuery.size());
+
+        Map<String, Object> totalSecondQuery = getTotalHits(secondSearchResponseAsMap);
+        assertNotNull(totalSecondQuery.get("value"));
+        assertEquals(firstQueryHitCount, totalSecondQuery.get("value"));
+        assertNotNull(totalSecondQuery.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, totalSecondQuery.get("relation"));
     }
 
     @SneakyThrows
     public void testRequestCache_whenMultipleShardsQueryReturnResults_thenSuccessful() {
-        try {
-            initializeIndexIfNotExist(TEST_INDEX_WITH_KEYWORDS_THREE_SHARDS);
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-            MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(KEYWORD_FIELD_1, KEYWORD_FIELD_2_VALUE);
-            RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery(INTEGER_FIELD_PRICE).gte(10).lte(1000);
+        initializeIndexIfNotExist(TEST_INDEX_WITH_KEYWORDS_THREE_SHARDS);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(KEYWORD_FIELD_1, KEYWORD_FIELD_2_VALUE);
+        RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery(INTEGER_FIELD_PRICE).gte(10).lte(1000);
 
-            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-            hybridQueryBuilder.add(matchQueryBuilder);
-            hybridQueryBuilder.add(rangeQueryBuilder);
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        hybridQueryBuilder.add(matchQueryBuilder);
+        hybridQueryBuilder.add(rangeQueryBuilder);
 
-            // first query with cache flag executed normally by reading documents from index
-            Map<String, Object> firstSearchResponseAsMap = search(
-                TEST_INDEX_WITH_KEYWORDS_THREE_SHARDS,
-                hybridQueryBuilder,
-                null,
-                10,
-                Map.of("search_pipeline", SEARCH_PIPELINE, "request_cache", Boolean.TRUE.toString())
-            );
+        // first query with cache flag executed normally by reading documents from index
+        Map<String, Object> firstSearchResponseAsMap = search(
+            TEST_INDEX_WITH_KEYWORDS_THREE_SHARDS,
+            hybridQueryBuilder,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE, "request_cache", Boolean.TRUE.toString())
+        );
 
-            int firstQueryHitCount = getHitCount(firstSearchResponseAsMap);
-            assertTrue(firstQueryHitCount > 0);
+        int firstQueryHitCount = getHitCount(firstSearchResponseAsMap);
+        assertTrue(firstQueryHitCount > 0);
 
-            List<Map<String, Object>> hitsNestedList = getNestedHits(firstSearchResponseAsMap);
-            List<String> ids = new ArrayList<>();
-            List<Double> scores = new ArrayList<>();
-            for (Map<String, Object> oneHit : hitsNestedList) {
-                ids.add((String) oneHit.get("_id"));
-                scores.add((Double) oneHit.get("_score"));
-            }
-
-            // verify that scores are in desc order
-            assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
-            // verify that all ids are unique
-            assertEquals(Set.copyOf(ids).size(), ids.size());
-
-            Map<String, Object> total = getTotalHits(firstSearchResponseAsMap);
-            assertNotNull(total.get("value"));
-            assertEquals(firstQueryHitCount, total.get("value"));
-            assertNotNull(total.get("relation"));
-            assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-
-            // second query is served from the cache
-            Map<String, Object> secondSearchResponseAsMap = search(
-                TEST_INDEX_WITH_KEYWORDS_THREE_SHARDS,
-                hybridQueryBuilder,
-                null,
-                10,
-                Map.of("search_pipeline", SEARCH_PIPELINE, "request_cache", Boolean.TRUE.toString())
-            );
-
-            assertEquals(firstQueryHitCount, getHitCount(secondSearchResponseAsMap));
-
-            List<Map<String, Object>> hitsNestedListSecondQuery = getNestedHits(secondSearchResponseAsMap);
-            List<String> idsSecondQuery = new ArrayList<>();
-            List<Double> scoresSecondQuery = new ArrayList<>();
-            for (Map<String, Object> oneHit : hitsNestedListSecondQuery) {
-                idsSecondQuery.add((String) oneHit.get("_id"));
-                scoresSecondQuery.add((Double) oneHit.get("_score"));
-            }
-
-            // verify that scores are in desc order
-            assertTrue(
-                IntStream.range(0, scoresSecondQuery.size() - 1)
-                    .noneMatch(idx -> scoresSecondQuery.get(idx) < scoresSecondQuery.get(idx + 1))
-            );
-            // verify that all ids are unique
-            assertEquals(Set.copyOf(idsSecondQuery).size(), idsSecondQuery.size());
-
-            Map<String, Object> totalSecondQuery = getTotalHits(secondSearchResponseAsMap);
-            assertNotNull(totalSecondQuery.get("value"));
-            assertEquals(firstQueryHitCount, totalSecondQuery.get("value"));
-            assertNotNull(totalSecondQuery.get("relation"));
-            assertEquals(RELATION_EQUAL_TO, totalSecondQuery.get("relation"));
-        } finally {
-            wipeOfTestResources(TEST_INDEX_WITH_KEYWORDS_THREE_SHARDS, null, null, SEARCH_PIPELINE);
+        List<Map<String, Object>> hitsNestedList = getNestedHits(firstSearchResponseAsMap);
+        List<String> ids = new ArrayList<>();
+        List<Double> scores = new ArrayList<>();
+        for (Map<String, Object> oneHit : hitsNestedList) {
+            ids.add((String) oneHit.get("_id"));
+            scores.add((Double) oneHit.get("_score"));
         }
+
+        // verify that scores are in desc order
+        assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
+        // verify that all ids are unique
+        assertEquals(Set.copyOf(ids).size(), ids.size());
+
+        Map<String, Object> total = getTotalHits(firstSearchResponseAsMap);
+        assertNotNull(total.get("value"));
+        assertEquals(firstQueryHitCount, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+
+        // second query is served from the cache
+        Map<String, Object> secondSearchResponseAsMap = search(
+            TEST_INDEX_WITH_KEYWORDS_THREE_SHARDS,
+            hybridQueryBuilder,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE, "request_cache", Boolean.TRUE.toString())
+        );
+
+        assertEquals(firstQueryHitCount, getHitCount(secondSearchResponseAsMap));
+
+        List<Map<String, Object>> hitsNestedListSecondQuery = getNestedHits(secondSearchResponseAsMap);
+        List<String> idsSecondQuery = new ArrayList<>();
+        List<Double> scoresSecondQuery = new ArrayList<>();
+        for (Map<String, Object> oneHit : hitsNestedListSecondQuery) {
+            idsSecondQuery.add((String) oneHit.get("_id"));
+            scoresSecondQuery.add((Double) oneHit.get("_score"));
+        }
+
+        // verify that scores are in desc order
+        assertTrue(
+            IntStream.range(0, scoresSecondQuery.size() - 1).noneMatch(idx -> scoresSecondQuery.get(idx) < scoresSecondQuery.get(idx + 1))
+        );
+        // verify that all ids are unique
+        assertEquals(Set.copyOf(idsSecondQuery).size(), idsSecondQuery.size());
+
+        Map<String, Object> totalSecondQuery = getTotalHits(secondSearchResponseAsMap);
+        assertNotNull(totalSecondQuery.get("value"));
+        assertEquals(firstQueryHitCount, totalSecondQuery.get("value"));
+        assertNotNull(totalSecondQuery.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, totalSecondQuery.get("relation"));
     }
 
     @SneakyThrows
@@ -658,7 +624,6 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertEquals(RELATION_EQUAL_TO, total.get("relation"));
         } finally {
             deleteIndexAlias(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME, alias);
-            wipeOfTestResources(TEST_MULTI_DOC_WITH_NESTED_FIELDS_INDEX_NAME, null, null, SEARCH_PIPELINE);
         }
     }
 
@@ -695,7 +660,6 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertEquals(RELATION_EQUAL_TO, total.get("relation"));
         } finally {
             deleteIndexAlias(TEST_MULTI_DOC_INDEX_NAME, alias);
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME, null, null, SEARCH_PIPELINE);
         }
     }
 
@@ -741,7 +705,6 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertNotNull(total.get("relation"));
             assertEquals(RELATION_EQUAL_TO, total.get("relation"));
         } finally {
-            wipeOfTestResources(TEST_INDEX_DOC_QTY_ONE_SHARD, null, null, SEARCH_PIPELINE);
             updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         }
     }
@@ -789,57 +752,40 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             assertNotNull(total.get("relation"));
             assertEquals(RELATION_EQUAL_TO, total.get("relation"));
         } finally {
-            wipeOfTestResources(TEST_INDEX_DOC_QTY_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
             updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         }
     }
 
     @SneakyThrows
     public void testPaginationOnSingleShard_whenConcurrentSearchEnabled_thenSuccessful() {
-        try {
-            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
-            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-            testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, null, null, SEARCH_PIPELINE);
-        }
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
     }
 
     @SneakyThrows
     public void testPaginationOnSingleShard_whenConcurrentSearchDisabled_thenSuccessful() {
-        try {
-            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
-            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-            testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, null, null, SEARCH_PIPELINE);
-        }
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
     }
 
     @SneakyThrows
     public void testPaginationOnMultipleShard_whenConcurrentSearchEnabled_thenSuccessful() {
-        try {
-            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
-            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-            testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME, null, null, SEARCH_PIPELINE);
-        }
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME);
     }
 
     @SneakyThrows
     public void testPaginationOnMultipleShard_whenConcurrentSearchDisabled_thenSuccessful() {
-        try {
-            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
-            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-            testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME, null, null, SEARCH_PIPELINE);
-        }
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME);
     }
 
     @SneakyThrows
@@ -872,74 +818,66 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testHybridQuery_whenFromIsGreaterThanTotalResultCount_thenFail() {
-        try {
-            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
-            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-            HybridQueryBuilder hybridQueryBuilderOnlyMatchAll = new HybridQueryBuilder();
-            hybridQueryBuilderOnlyMatchAll.add(new MatchAllQueryBuilder());
-            hybridQueryBuilderOnlyMatchAll.paginationDepth(10);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        HybridQueryBuilder hybridQueryBuilderOnlyMatchAll = new HybridQueryBuilder();
+        hybridQueryBuilderOnlyMatchAll.add(new MatchAllQueryBuilder());
+        hybridQueryBuilderOnlyMatchAll.paginationDepth(10);
 
-            ResponseException responseException = assertThrows(
-                ResponseException.class,
-                () -> search(
-                    TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD,
-                    hybridQueryBuilderOnlyMatchAll,
-                    null,
-                    10,
-                    Map.of("search_pipeline", SEARCH_PIPELINE),
-                    null,
-                    null,
-                    null,
-                    false,
-                    null,
-                    5
-                )
-            );
+        ResponseException responseException = assertThrows(
+            ResponseException.class,
+            () -> search(
+                TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD,
+                hybridQueryBuilderOnlyMatchAll,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null,
+                null,
+                null,
+                false,
+                null,
+                5
+            )
+        );
 
-            org.hamcrest.MatcherAssert.assertThat(
-                responseException.getMessage(),
-                allOf(containsString("Reached end of search result, increase pagination_depth value to see more results"))
-            );
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, null, null, SEARCH_PIPELINE);
-        }
+        org.hamcrest.MatcherAssert.assertThat(
+            responseException.getMessage(),
+            allOf(containsString("Reached end of search result, increase pagination_depth value to see more results"))
+        );
     }
 
     @SneakyThrows
     public void testHybridQuery_whenPaginationDepthIsOutOfRange_thenFail() {
-        try {
-            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
-            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-            HybridQueryBuilder hybridQueryBuilderOnlyMatchAll = new HybridQueryBuilder();
-            hybridQueryBuilderOnlyMatchAll.add(new MatchAllQueryBuilder());
-            hybridQueryBuilderOnlyMatchAll.paginationDepth(100001);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        HybridQueryBuilder hybridQueryBuilderOnlyMatchAll = new HybridQueryBuilder();
+        hybridQueryBuilderOnlyMatchAll.add(new MatchAllQueryBuilder());
+        hybridQueryBuilderOnlyMatchAll.paginationDepth(100001);
 
-            ResponseException responseException = assertThrows(
-                ResponseException.class,
-                () -> search(
-                    TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD,
-                    hybridQueryBuilderOnlyMatchAll,
-                    null,
-                    10,
-                    Map.of("search_pipeline", SEARCH_PIPELINE),
-                    null,
-                    null,
-                    null,
-                    false,
-                    null,
-                    0
-                )
-            );
+        ResponseException responseException = assertThrows(
+            ResponseException.class,
+            () -> search(
+                TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD,
+                hybridQueryBuilderOnlyMatchAll,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null,
+                null,
+                null,
+                false,
+                null,
+                0
+            )
+        );
 
-            org.hamcrest.MatcherAssert.assertThat(
-                responseException.getMessage(),
-                allOf(containsString("pagination_depth should be less than or equal to index.max_result_window setting"))
-            );
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, null, null, SEARCH_PIPELINE);
-        }
+        org.hamcrest.MatcherAssert.assertThat(
+            responseException.getMessage(),
+            allOf(containsString("pagination_depth should be less than or equal to index.max_result_window setting"))
+        );
     }
 
     @SneakyThrows

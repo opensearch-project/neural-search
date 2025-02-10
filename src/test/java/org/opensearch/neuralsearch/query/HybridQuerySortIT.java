@@ -71,53 +71,37 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testSortOnSingleShard_whenConcurrentSearchEnabled_thenSuccessful() {
-        try {
-            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
-            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
-            testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
-            testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, null, null, SEARCH_PIPELINE);
-        }
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
+        testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+        testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
     }
 
     @SneakyThrows
     public void testSortOnSingleShard_whenConcurrentSearchDisabled_thenSuccessful() {
-        try {
-            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
-            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
-            testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
-            testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
-            testScoreSort_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, null, null, SEARCH_PIPELINE);
-        }
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
+        testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+        testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+        testScoreSort_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
     }
 
     @SneakyThrows
     public void testSortOnMultipleShard_whenConcurrentSearchEnabled_thenSuccessful() {
-        try {
-            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
-            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
-            testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
-            testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
-            testScoreSort_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+        testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+        testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+        testScoreSort_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
     }
 
     @SneakyThrows
     public void testSortOnMultipleShard_whenConcurrentSearchDisabled_thenSuccessful() {
-        try {
-            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
-            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
-            testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
-            testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
-            testScoreSort_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+        testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+        testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+        testScoreSort_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
     }
 
     @SneakyThrows
@@ -182,119 +166,95 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testSingleFieldSort_whenTrackScoresIsEnabled_thenFail() {
-        try {
-            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
-            HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
-                "mission",
-                "part",
-                LTE_OF_RANGE_IN_HYBRID_QUERY,
-                GTE_OF_RANGE_IN_HYBRID_QUERY
-            );
-            Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
-            fieldSortOrderMap.put("stock", SortOrder.DESC);
-            assertThrows(
-                "Hybrid search results when sorted by any field, docId or _id, track_scores must be set to false.",
-                ResponseException.class,
-                () -> search(
-                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
-                    hybridQueryBuilder,
-                    null,
-                    10,
-                    Map.of("search_pipeline", SEARCH_PIPELINE),
-                    null,
-                    null,
-                    createSortBuilders(fieldSortOrderMap, false),
-                    true,
-                    null,
-                    0
-                )
-            );
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+        HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
+            "mission",
+            "part",
+            LTE_OF_RANGE_IN_HYBRID_QUERY,
+            GTE_OF_RANGE_IN_HYBRID_QUERY
+        );
+        Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
+        fieldSortOrderMap.put("stock", SortOrder.DESC);
+        assertThrows(
+            "Hybrid search results when sorted by any field, docId or _id, track_scores must be set to false.",
+            ResponseException.class,
+            () -> search(
+                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+                hybridQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null,
+                null,
+                createSortBuilders(fieldSortOrderMap, false),
+                true,
+                null,
+                0
+            )
+        );
     }
 
     @SneakyThrows
     public void testSingleFieldSort_whenSortCriteriaIsByScoreAndField_thenFail() {
-        try {
-            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
-            HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
-                "mission",
-                "part",
-                LTE_OF_RANGE_IN_HYBRID_QUERY,
-                GTE_OF_RANGE_IN_HYBRID_QUERY
-            );
-            Map<String, SortOrder> fieldSortOrderMap = new LinkedHashMap<>();
-            fieldSortOrderMap.put("stock", SortOrder.DESC);
-            fieldSortOrderMap.put("_score", SortOrder.DESC);
-            assertThrows(
-                "_score sort criteria cannot be applied with any other criteria. Please select one sort criteria out of them.",
-                ResponseException.class,
-                () -> search(
-                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
-                    hybridQueryBuilder,
-                    null,
-                    10,
-                    Map.of("search_pipeline", SEARCH_PIPELINE),
-                    null,
-                    null,
-                    createSortBuilders(fieldSortOrderMap, false),
-                    true,
-                    null,
-                    0
-                )
-            );
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+        HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
+            "mission",
+            "part",
+            LTE_OF_RANGE_IN_HYBRID_QUERY,
+            GTE_OF_RANGE_IN_HYBRID_QUERY
+        );
+        Map<String, SortOrder> fieldSortOrderMap = new LinkedHashMap<>();
+        fieldSortOrderMap.put("stock", SortOrder.DESC);
+        fieldSortOrderMap.put("_score", SortOrder.DESC);
+        assertThrows(
+            "_score sort criteria cannot be applied with any other criteria. Please select one sort criteria out of them.",
+            ResponseException.class,
+            () -> search(
+                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+                hybridQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null,
+                null,
+                createSortBuilders(fieldSortOrderMap, false),
+                true,
+                null,
+                0
+            )
+        );
     }
 
     @SneakyThrows
     public void testSearchAfterWithSortOnSingleShard_whenConcurrentSearchEnabled_thenSuccessful() {
-        try {
-            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
-            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
-            testSearchAfter_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
-            testSearchAfter_whenMultipleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, null, null, SEARCH_PIPELINE);
-        }
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
+        testSearchAfter_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+        testSearchAfter_whenMultipleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
     }
 
     @SneakyThrows
     public void testSearchAfterWithSortOnSingleShard_whenConcurrentSearchDisabled_thenSuccessful() {
-        try {
-            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
-            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
-            testSearchAfter_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
-            testSearchAfter_whenMultipleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD, null, null, SEARCH_PIPELINE);
-        }
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
+        testSearchAfter_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+        testSearchAfter_whenMultipleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
     }
 
     @SneakyThrows
     public void testSearchAfterWithSortOnMultipleShard_whenConcurrentSearchEnabled_thenSuccessful() {
-        try {
-            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
-            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
-            testSearchAfter_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
-            testSearchAfter_whenMultipleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+        testSearchAfter_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+        testSearchAfter_whenMultipleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
     }
 
     @SneakyThrows
     public void testSearchAfterWithSortOnMultipleShard_whenConcurrentSearchDisabled_thenSuccessful() {
-        try {
-            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
-            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
-            testSearchAfter_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
-            testSearchAfter_whenMultipleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+        testSearchAfter_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
+        testSearchAfter_whenMultipleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS);
     }
 
     @SneakyThrows
@@ -399,75 +359,67 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testSort_whenSortFieldsSizeNotEqualToSearchAfterSize_thenFail() {
-        try {
-            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
-            HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
-                "mission",
-                "part",
-                LTE_OF_RANGE_IN_HYBRID_QUERY,
-                GTE_OF_RANGE_IN_HYBRID_QUERY
-            );
-            Map<String, SortOrder> fieldSortOrderMap = new LinkedHashMap<>();
-            fieldSortOrderMap.put("stock", SortOrder.DESC);
-            List<Object> searchAfter = new ArrayList<>();
-            searchAfter.add(25);
-            searchAfter.add(0);
-            assertThrows(
-                "after.fields has 2 values but sort has 1",
-                ResponseException.class,
-                () -> search(
-                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
-                    hybridQueryBuilder,
-                    null,
-                    10,
-                    Map.of("search_pipeline", SEARCH_PIPELINE),
-                    null,
-                    null,
-                    createSortBuilders(fieldSortOrderMap, false),
-                    true,
-                    searchAfter,
-                    0
-                )
-            );
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+        HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
+            "mission",
+            "part",
+            LTE_OF_RANGE_IN_HYBRID_QUERY,
+            GTE_OF_RANGE_IN_HYBRID_QUERY
+        );
+        Map<String, SortOrder> fieldSortOrderMap = new LinkedHashMap<>();
+        fieldSortOrderMap.put("stock", SortOrder.DESC);
+        List<Object> searchAfter = new ArrayList<>();
+        searchAfter.add(25);
+        searchAfter.add(0);
+        assertThrows(
+            "after.fields has 2 values but sort has 1",
+            ResponseException.class,
+            () -> search(
+                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+                hybridQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null,
+                null,
+                createSortBuilders(fieldSortOrderMap, false),
+                true,
+                searchAfter,
+                0
+            )
+        );
     }
 
     @SneakyThrows
     public void testSearchAfter_whenAfterFieldIsNotPassed_thenFail() {
-        try {
-            prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
-            HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
-                "mission",
-                "part",
-                LTE_OF_RANGE_IN_HYBRID_QUERY,
-                GTE_OF_RANGE_IN_HYBRID_QUERY
-            );
-            Map<String, SortOrder> fieldSortOrderMap = new LinkedHashMap<>();
-            fieldSortOrderMap.put("stock", SortOrder.DESC);
-            List<Object> searchAfter = new ArrayList<>();
-            searchAfter.add(null);
-            assertThrows(
-                "after.fields wasn't set; you must pass fillFields=true for the previous search",
-                ResponseException.class,
-                () -> search(
-                    TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
-                    hybridQueryBuilder,
-                    null,
-                    10,
-                    Map.of("search_pipeline", SEARCH_PIPELINE),
-                    null,
-                    null,
-                    createSortBuilders(fieldSortOrderMap, false),
-                    true,
-                    searchAfter,
-                    0
-                )
-            );
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+        HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
+            "mission",
+            "part",
+            LTE_OF_RANGE_IN_HYBRID_QUERY,
+            GTE_OF_RANGE_IN_HYBRID_QUERY
+        );
+        Map<String, SortOrder> fieldSortOrderMap = new LinkedHashMap<>();
+        fieldSortOrderMap.put("stock", SortOrder.DESC);
+        List<Object> searchAfter = new ArrayList<>();
+        searchAfter.add(null);
+        assertThrows(
+            "after.fields wasn't set; you must pass fillFields=true for the previous search",
+            ResponseException.class,
+            () -> search(
+                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+                hybridQueryBuilder,
+                null,
+                10,
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null,
+                null,
+                createSortBuilders(fieldSortOrderMap, false),
+                true,
+                searchAfter,
+                0
+            )
+        );
     }
 
     @SneakyThrows
@@ -528,144 +480,135 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                 )
             );
         } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
             updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         }
     }
 
     @SneakyThrows
     public void testExplainAndSort_whenIndexWithMultipleShards_thenSuccessful() {
-        try {
-            // Setup
-            updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+        // Setup
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
 
-            initializeIndexIfNotExists(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
-            createSearchPipeline(SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), true);
-            // Assert
-            // scores for search hits
-            HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
-                "mission",
-                "part",
-                LTE_OF_RANGE_IN_HYBRID_QUERY,
-                GTE_OF_RANGE_IN_HYBRID_QUERY
-            );
+        initializeIndexIfNotExists(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+        createSearchPipeline(SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), true);
+        // Assert
+        // scores for search hits
+        HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
+            "mission",
+            "part",
+            LTE_OF_RANGE_IN_HYBRID_QUERY,
+            GTE_OF_RANGE_IN_HYBRID_QUERY
+        );
 
-            Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
-            fieldSortOrderMap.put("stock", SortOrder.DESC);
+        Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
+        fieldSortOrderMap.put("stock", SortOrder.DESC);
 
-            Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
-                hybridQueryBuilder,
-                null,
-                10,
-                Map.of("search_pipeline", SEARCH_PIPELINE, "explain", Boolean.TRUE.toString()),
-                null,
-                null,
-                createSortBuilders(fieldSortOrderMap, false),
-                false,
-                null,
-                0
-            );
-            List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6, 6);
-            assertStockValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, LARGEST_STOCK_VALUE_IN_QUERY_RESULT, true, true);
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,
+            hybridQueryBuilder,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE, "explain", Boolean.TRUE.toString()),
+            null,
+            null,
+            createSortBuilders(fieldSortOrderMap, false),
+            false,
+            null,
+            0
+        );
+        List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6, 6);
+        assertStockValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, LARGEST_STOCK_VALUE_IN_QUERY_RESULT, true, true);
 
-            // explain
-            Map<String, Object> searchHit1 = nestedHits.get(0);
-            Map<String, Object> explanationForHit1 = (Map<String, Object>) searchHit1.get("_explanation");
-            assertNotNull(explanationForHit1);
-            assertNull(searchHit1.get("_score"));
-            String expectedGeneralCombineScoreDescription = "arithmetic_mean combination of:";
-            assertEquals(expectedGeneralCombineScoreDescription, explanationForHit1.get("description"));
-            List<Map<String, Object>> hit1Details = getListOfValues(explanationForHit1, "details");
-            assertEquals(2, hit1Details.size());
-            Map<String, Object> hit1DetailsForHit1 = hit1Details.get(0);
-            assertEquals(1.0, hit1DetailsForHit1.get("value"));
-            assertEquals("min_max normalization of:", hit1DetailsForHit1.get("description"));
-            List<Map<String, Object>> hit1DetailsForHit1Details = getListOfValues(hit1DetailsForHit1, "details");
-            assertEquals(1, hit1DetailsForHit1Details.size());
+        // explain
+        Map<String, Object> searchHit1 = nestedHits.get(0);
+        Map<String, Object> explanationForHit1 = (Map<String, Object>) searchHit1.get("_explanation");
+        assertNotNull(explanationForHit1);
+        assertNull(searchHit1.get("_score"));
+        String expectedGeneralCombineScoreDescription = "arithmetic_mean combination of:";
+        assertEquals(expectedGeneralCombineScoreDescription, explanationForHit1.get("description"));
+        List<Map<String, Object>> hit1Details = getListOfValues(explanationForHit1, "details");
+        assertEquals(2, hit1Details.size());
+        Map<String, Object> hit1DetailsForHit1 = hit1Details.get(0);
+        assertEquals(1.0, hit1DetailsForHit1.get("value"));
+        assertEquals("min_max normalization of:", hit1DetailsForHit1.get("description"));
+        List<Map<String, Object>> hit1DetailsForHit1Details = getListOfValues(hit1DetailsForHit1, "details");
+        assertEquals(1, hit1DetailsForHit1Details.size());
 
-            Map<String, Object> hit1DetailsForHit1DetailsForHit1 = hit1DetailsForHit1Details.get(0);
-            assertEquals("weight(name:mission in 0) [PerFieldSimilarity], result of:", hit1DetailsForHit1DetailsForHit1.get("description"));
-            assertTrue((double) hit1DetailsForHit1DetailsForHit1.get("value") > 0.0f);
-            assertEquals(1, getListOfValues(hit1DetailsForHit1DetailsForHit1, "details").size());
+        Map<String, Object> hit1DetailsForHit1DetailsForHit1 = hit1DetailsForHit1Details.get(0);
+        assertEquals("weight(name:mission in 0) [PerFieldSimilarity], result of:", hit1DetailsForHit1DetailsForHit1.get("description"));
+        assertTrue((double) hit1DetailsForHit1DetailsForHit1.get("value") > 0.0f);
+        assertEquals(1, getListOfValues(hit1DetailsForHit1DetailsForHit1, "details").size());
 
-            Map<String, Object> hit1DetailsForHit1DetailsForHit1DetailsForHit1 = getListOfValues(
-                hit1DetailsForHit1DetailsForHit1,
-                "details"
-            ).get(0);
-            assertEquals(
-                "score(freq=1.0), computed as boost * idf * tf from:",
-                hit1DetailsForHit1DetailsForHit1DetailsForHit1.get("description")
-            );
-            assertTrue((double) hit1DetailsForHit1DetailsForHit1DetailsForHit1.get("value") > 0.0f);
-            assertEquals(3, getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").size());
+        Map<String, Object> hit1DetailsForHit1DetailsForHit1DetailsForHit1 = getListOfValues(hit1DetailsForHit1DetailsForHit1, "details")
+            .get(0);
+        assertEquals(
+            "score(freq=1.0), computed as boost * idf * tf from:",
+            hit1DetailsForHit1DetailsForHit1DetailsForHit1.get("description")
+        );
+        assertTrue((double) hit1DetailsForHit1DetailsForHit1DetailsForHit1.get("value") > 0.0f);
+        assertEquals(3, getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").size());
 
-            assertEquals("boost", getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(0).get("description"));
-            assertTrue((double) getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(0).get("value") > 0.0f);
-            assertEquals(
-                "idf, computed as log(1 + (N - n + 0.5) / (n + 0.5)) from:",
-                getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(1).get("description")
-            );
-            assertTrue((double) getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(1).get("value") > 0.0f);
-            assertEquals(
-                "tf, computed as freq / (freq + k1 * (1 - b + b * dl / avgdl)) from:",
-                getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(2).get("description")
-            );
-            assertTrue((double) getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(2).get("value") > 0.0f);
+        assertEquals("boost", getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(0).get("description"));
+        assertTrue((double) getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(0).get("value") > 0.0f);
+        assertEquals(
+            "idf, computed as log(1 + (N - n + 0.5) / (n + 0.5)) from:",
+            getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(1).get("description")
+        );
+        assertTrue((double) getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(1).get("value") > 0.0f);
+        assertEquals(
+            "tf, computed as freq / (freq + k1 * (1 - b + b * dl / avgdl)) from:",
+            getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(2).get("description")
+        );
+        assertTrue((double) getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(2).get("value") > 0.0f);
 
-            // hit 4
-            Map<String, Object> searchHit4 = nestedHits.get(3);
-            Map<String, Object> explanationForHit4 = (Map<String, Object>) searchHit4.get("_explanation");
-            assertNotNull(explanationForHit4);
-            assertNull(searchHit4.get("_score"));
-            assertEquals(expectedGeneralCombineScoreDescription, explanationForHit4.get("description"));
-            List<Map<String, Object>> hit4Details = getListOfValues(explanationForHit4, "details");
-            assertEquals(2, hit4Details.size());
-            Map<String, Object> hit1DetailsForHit4 = hit4Details.get(0);
-            assertEquals(1.0, hit1DetailsForHit4.get("value"));
-            assertEquals("min_max normalization of:", hit1DetailsForHit4.get("description"));
-            assertEquals(1, ((List) hit1DetailsForHit4.get("details")).size());
-            List<Map<String, Object>> hit1DetailsForHit4Details = getListOfValues(hit1DetailsForHit4, "details");
-            assertEquals(1, hit1DetailsForHit4Details.size());
+        // hit 4
+        Map<String, Object> searchHit4 = nestedHits.get(3);
+        Map<String, Object> explanationForHit4 = (Map<String, Object>) searchHit4.get("_explanation");
+        assertNotNull(explanationForHit4);
+        assertNull(searchHit4.get("_score"));
+        assertEquals(expectedGeneralCombineScoreDescription, explanationForHit4.get("description"));
+        List<Map<String, Object>> hit4Details = getListOfValues(explanationForHit4, "details");
+        assertEquals(2, hit4Details.size());
+        Map<String, Object> hit1DetailsForHit4 = hit4Details.get(0);
+        assertEquals(1.0, hit1DetailsForHit4.get("value"));
+        assertEquals("min_max normalization of:", hit1DetailsForHit4.get("description"));
+        assertEquals(1, ((List) hit1DetailsForHit4.get("details")).size());
+        List<Map<String, Object>> hit1DetailsForHit4Details = getListOfValues(hit1DetailsForHit4, "details");
+        assertEquals(1, hit1DetailsForHit4Details.size());
 
-            Map<String, Object> hit1DetailsForHit1DetailsForHit4 = hit1DetailsForHit4Details.get(0);
-            assertEquals("weight(name:part in 0) [PerFieldSimilarity], result of:", hit1DetailsForHit1DetailsForHit4.get("description"));
-            assertTrue((double) hit1DetailsForHit1DetailsForHit4.get("value") > 0.0f);
-            assertEquals(1, getListOfValues(hit1DetailsForHit1DetailsForHit4, "details").size());
+        Map<String, Object> hit1DetailsForHit1DetailsForHit4 = hit1DetailsForHit4Details.get(0);
+        assertEquals("weight(name:part in 0) [PerFieldSimilarity], result of:", hit1DetailsForHit1DetailsForHit4.get("description"));
+        assertTrue((double) hit1DetailsForHit1DetailsForHit4.get("value") > 0.0f);
+        assertEquals(1, getListOfValues(hit1DetailsForHit1DetailsForHit4, "details").size());
 
-            Map<String, Object> hit1DetailsForHit1DetailsForHit1DetailsForHit4 = getListOfValues(
-                hit1DetailsForHit1DetailsForHit4,
-                "details"
-            ).get(0);
-            assertEquals(
-                "score(freq=1.0), computed as boost * idf * tf from:",
-                hit1DetailsForHit1DetailsForHit1DetailsForHit4.get("description")
-            );
-            assertTrue((double) hit1DetailsForHit1DetailsForHit1DetailsForHit4.get("value") > 0.0f);
-            assertEquals(3, getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit4, "details").size());
+        Map<String, Object> hit1DetailsForHit1DetailsForHit1DetailsForHit4 = getListOfValues(hit1DetailsForHit1DetailsForHit4, "details")
+            .get(0);
+        assertEquals(
+            "score(freq=1.0), computed as boost * idf * tf from:",
+            hit1DetailsForHit1DetailsForHit1DetailsForHit4.get("description")
+        );
+        assertTrue((double) hit1DetailsForHit1DetailsForHit1DetailsForHit4.get("value") > 0.0f);
+        assertEquals(3, getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit4, "details").size());
 
-            // hit 6
-            Map<String, Object> searchHit6 = nestedHits.get(5);
-            Map<String, Object> explanationForHit6 = (Map<String, Object>) searchHit6.get("_explanation");
-            assertNotNull(explanationForHit6);
-            assertNull(searchHit6.get("_score"));
-            assertEquals(expectedGeneralCombineScoreDescription, explanationForHit6.get("description"));
-            List<Map<String, Object>> hit6Details = getListOfValues(explanationForHit6, "details");
-            assertEquals(1, hit6Details.size());
-            Map<String, Object> hit1DetailsForHit6 = hit6Details.get(0);
-            assertEquals(1.0, hit1DetailsForHit6.get("value"));
-            assertEquals("min_max normalization of:", hit1DetailsForHit6.get("description"));
-            assertEquals(1, ((List) hit1DetailsForHit6.get("details")).size());
-            List<Map<String, Object>> hit1DetailsForHit6Details = getListOfValues(hit1DetailsForHit6, "details");
-            assertEquals(1, hit1DetailsForHit6Details.size());
+        // hit 6
+        Map<String, Object> searchHit6 = nestedHits.get(5);
+        Map<String, Object> explanationForHit6 = (Map<String, Object>) searchHit6.get("_explanation");
+        assertNotNull(explanationForHit6);
+        assertNull(searchHit6.get("_score"));
+        assertEquals(expectedGeneralCombineScoreDescription, explanationForHit6.get("description"));
+        List<Map<String, Object>> hit6Details = getListOfValues(explanationForHit6, "details");
+        assertEquals(1, hit6Details.size());
+        Map<String, Object> hit1DetailsForHit6 = hit6Details.get(0);
+        assertEquals(1.0, hit1DetailsForHit6.get("value"));
+        assertEquals("min_max normalization of:", hit1DetailsForHit6.get("description"));
+        assertEquals(1, ((List) hit1DetailsForHit6.get("details")).size());
+        List<Map<String, Object>> hit1DetailsForHit6Details = getListOfValues(hit1DetailsForHit6, "details");
+        assertEquals(1, hit1DetailsForHit6Details.size());
 
-            Map<String, Object> hit1DetailsForHit1DetailsForHit6 = hit1DetailsForHit6Details.get(0);
-            assertEquals("weight(name:part in 0) [PerFieldSimilarity], result of:", hit1DetailsForHit1DetailsForHit4.get("description"));
-            assertTrue((double) hit1DetailsForHit1DetailsForHit6.get("value") > 0.0f);
-            assertEquals(0, getListOfValues(hit1DetailsForHit1DetailsForHit6, "details").size());
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        Map<String, Object> hit1DetailsForHit1DetailsForHit6 = hit1DetailsForHit6Details.get(0);
+        assertEquals("weight(name:part in 0) [PerFieldSimilarity], result of:", hit1DetailsForHit1DetailsForHit4.get("description"));
+        assertTrue((double) hit1DetailsForHit1DetailsForHit6.get("value") > 0.0f);
+        assertEquals(0, getListOfValues(hit1DetailsForHit1DetailsForHit6, "details").size());
     }
 
     private HybridQueryBuilder createHybridQueryBuilderWithMatchTermAndRangeQuery(String text, String value, int lte, int gte) {

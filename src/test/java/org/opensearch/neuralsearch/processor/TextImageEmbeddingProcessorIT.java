@@ -41,21 +41,16 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
     }
 
     public void testEmbeddingProcessor_whenIngestingDocumentWithOrWithoutSourceMatchingMapping_thenSuccessful() throws Exception {
-        String modelId = null;
-        try {
-            modelId = uploadModel();
-            loadModel(modelId);
-            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
-            createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
-            // verify doc with mapping
-            ingestDocument(INDEX_NAME, INGEST_DOCUMENT);
-            assertEquals(1, getDocCount(INDEX_NAME));
-            // verify doc without mapping
-            ingestDocument(INDEX_NAME, INGEST_DOCUMENT_UNMAPPED_FIELDS);
-            assertEquals(2, getDocCount(INDEX_NAME));
-        } finally {
-            wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
-        }
+        String modelId = uploadModel();
+        loadModel(modelId);
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
+        createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
+        // verify doc with mapping
+        ingestDocument(INDEX_NAME, INGEST_DOCUMENT);
+        assertEquals(1, getDocCount(INDEX_NAME));
+        // verify doc without mapping
+        ingestDocument(INDEX_NAME, INGEST_DOCUMENT_UNMAPPED_FIELDS);
+        assertEquals(2, getDocCount(INDEX_NAME));
     }
 
     private String uploadModel() throws Exception {
@@ -68,17 +63,12 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
         String fromIndexName = "test-reindex-from";
         createIndexWithConfiguration(fromIndexName, "{ \"settings\": { \"number_of_shards\": 1, \"number_of_replicas\": 0 } }", null);
         ingestDocument(fromIndexName, "{ \"text\": \"hello world\" }");
-        String modelId = null;
-        try {
-            modelId = uploadModel();
-            loadModel(modelId);
-            String toIndexName = "test-reindex-to";
-            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
-            createIndexWithPipeline(toIndexName, "IndexMappings.json", PIPELINE_NAME);
-            reindex(fromIndexName, toIndexName);
-            assertEquals(1, getDocCount(toIndexName));
-        } finally {
-            wipeOfTestResources(fromIndexName, PIPELINE_NAME, modelId, null);
-        }
+        String modelId = uploadModel();
+        loadModel(modelId);
+        String toIndexName = "test-reindex-to";
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
+        createIndexWithPipeline(toIndexName, "IndexMappings.json", PIPELINE_NAME);
+        reindex(fromIndexName, toIndexName);
+        assertEquals(1, getDocCount(toIndexName));
     }
 }

@@ -53,6 +53,16 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
             .build();
     }
 
+    @Override
+    protected boolean shouldCleanUpResources() {
+        // All NEW CLUSTER tests depend on resources created in OLD CLUSTER test cases
+        // Before NEW CLUSTER tests run, all OLD CLUSTER test cases will be run first
+        // We only want to clean up resources in NEW CLUSTER tests, also we don't want to clean up after each test case finishes
+        // this is because the cleanup method will pull every resource and delete, which will impact other tests
+        // Overriding the method in base class so that resources won't be accidentally clean up
+        return false;
+    }
+
     protected static final boolean isRunningAgainstOldCluster() {
         return Boolean.parseBoolean(System.getProperty(RESTART_UPGRADE_OLD_CLUSTER));
     }

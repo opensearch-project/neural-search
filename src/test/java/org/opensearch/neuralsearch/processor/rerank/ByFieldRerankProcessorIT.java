@@ -81,14 +81,10 @@ public class ByFieldRerankProcessorIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testByFieldRerankProcessor() throws IOException {
-        try {
-            createAndPopulateIndex();
-            createPipeline();
-            applyPipeLine();
-            testSearchResponse();
-        } finally {
-            wipeOfTestResources(INDEX_NAME, null, null, PIPELINE_NAME);
-        }
+        createAndPopulateIndex();
+        createPipeline();
+        applyPipeLine();
+        testSearchResponse();
     }
 
     private void createAndPopulateIndex() throws Exception {

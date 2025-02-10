@@ -82,35 +82,31 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testResultProcessor_whenOneShardAndQueryMatches_thenSuccessful() {
         String modelId = null;
-        try {
-            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
-            modelId = prepareModel();
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+        modelId = prepareModel();
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
 
-            NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
-                .queryText(TEST_DOC_TEXT1)
-                .modelId(modelId)
-                .k(5)
-                .build();
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+            .queryText(TEST_DOC_TEXT1)
+            .modelId(modelId)
+            .k(5)
+            .build();
 
-            TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
 
-            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-            hybridQueryBuilder.add(neuralQueryBuilder);
-            hybridQueryBuilder.add(termQueryBuilder);
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        hybridQueryBuilder.add(neuralQueryBuilder);
+        hybridQueryBuilder.add(termQueryBuilder);
 
-            Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-                hybridQueryBuilder,
-                null,
-                5,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
-            );
-            assertQueryResults(searchResponseAsMap, 5, false);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, null, modelId, SEARCH_PIPELINE);
-        }
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+            hybridQueryBuilder,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
+        assertQueryResults(searchResponseAsMap, 5, false);
     }
 
     /**
@@ -128,127 +124,119 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testResultProcessor_whenDefaultProcessorConfigAndQueryMatches_thenSuccessful() {
         String modelId = null;
-        try {
-            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
-            modelId = prepareModel();
-            createSearchPipelineWithDefaultResultsPostProcessor(SEARCH_PIPELINE);
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+        modelId = prepareModel();
+        createSearchPipelineWithDefaultResultsPostProcessor(SEARCH_PIPELINE);
 
-            NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
-                .queryText(TEST_DOC_TEXT1)
-                .modelId(modelId)
-                .k(5)
-                .build();
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+            .queryText(TEST_DOC_TEXT1)
+            .modelId(modelId)
+            .k(5)
+            .build();
 
-            TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
 
-            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-            hybridQueryBuilder.add(neuralQueryBuilder);
-            hybridQueryBuilder.add(termQueryBuilder);
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        hybridQueryBuilder.add(neuralQueryBuilder);
+        hybridQueryBuilder.add(termQueryBuilder);
 
-            Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-                hybridQueryBuilder,
-                null,
-                5,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
-            );
-            assertQueryResults(searchResponseAsMap, 5, false);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, null, modelId, SEARCH_PIPELINE);
-        }
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+            hybridQueryBuilder,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
+        assertQueryResults(searchResponseAsMap, 5, false);
     }
 
     @SneakyThrows
     public void testQueryMatches_whenMultipleShards_thenSuccessful() {
         String modelId = null;
-        try {
-            initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
-            modelId = prepareModel();
-            createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
-            int totalExpectedDocQty = 6;
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
+        modelId = prepareModel();
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        int totalExpectedDocQty = 6;
 
-            NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
-                .queryText(TEST_DOC_TEXT1)
-                .modelId(modelId)
-                .k(6)
-                .build();
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+            .queryText(TEST_DOC_TEXT1)
+            .modelId(modelId)
+            .k(6)
+            .build();
 
-            TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
 
-            HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-            hybridQueryBuilder.add(neuralQueryBuilder);
-            hybridQueryBuilder.add(termQueryBuilder);
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        hybridQueryBuilder.add(neuralQueryBuilder);
+        hybridQueryBuilder.add(termQueryBuilder);
 
-            Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-                hybridQueryBuilder,
-                null,
-                6,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
-            );
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+            hybridQueryBuilder,
+            null,
+            6,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
 
-            assertNotNull(searchResponseAsMap);
-            Map<String, Object> total = getTotalHits(searchResponseAsMap);
-            assertNotNull(total.get("value"));
-            assertEquals(totalExpectedDocQty, total.get("value"));
-            assertNotNull(total.get("relation"));
-            assertEquals(RELATION_EQUAL_TO, total.get("relation"));
-            assertTrue(getMaxScore(searchResponseAsMap).isPresent());
-            assertTrue(Range.between(.5f, 1.0f).contains(getMaxScore(searchResponseAsMap).get()));
-            List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
-            List<String> ids = new ArrayList<>();
-            List<Double> scores = new ArrayList<>();
-            for (Map<String, Object> oneHit : hitsNestedList) {
-                ids.add((String) oneHit.get("_id"));
-                scores.add((Double) oneHit.get("_score"));
-            }
-            // verify scores order
-            assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
-
-            // verify the scores are normalized. we need special assert logic because combined score may vary as neural search query
-            // based on random vectors and return results for every doc. In some cases that may affect 1.0 score from term query and make it
-            // lower.
-            float highestScore = scores.stream().max(Double::compare).get().floatValue();
-            assertTrue(Range.between(.5f, 1.0f).contains(highestScore));
-            float lowestScore = scores.stream().min(Double::compare).get().floatValue();
-            assertTrue(Range.between(.0f, .5f).contains(lowestScore));
-
-            // verify that all ids are unique
-            assertEquals(Set.copyOf(ids).size(), ids.size());
-
-            // verify case when there are partial match
-            HybridQueryBuilder hybridQueryBuilderPartialMatch = new HybridQueryBuilder();
-            hybridQueryBuilderPartialMatch.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
-            hybridQueryBuilderPartialMatch.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4));
-            hybridQueryBuilderPartialMatch.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT7));
-
-            Map<String, Object> searchResponseAsMapPartialMatch = search(
-                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-                hybridQueryBuilderPartialMatch,
-                null,
-                5,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
-            );
-            assertQueryResults(searchResponseAsMapPartialMatch, 4, true, Range.between(0.33f, 1.0f));
-
-            // verify case when query doesn't have a match
-            HybridQueryBuilder hybridQueryBuilderNoMatches = new HybridQueryBuilder();
-            hybridQueryBuilderNoMatches.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT6));
-            hybridQueryBuilderNoMatches.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT7));
-
-            Map<String, Object> searchResponseAsMapNoMatches = search(
-                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-                hybridQueryBuilderNoMatches,
-                null,
-                5,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
-            );
-            assertQueryResults(searchResponseAsMapNoMatches, 0, true);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, null, modelId, SEARCH_PIPELINE);
+        assertNotNull(searchResponseAsMap);
+        Map<String, Object> total = getTotalHits(searchResponseAsMap);
+        assertNotNull(total.get("value"));
+        assertEquals(totalExpectedDocQty, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+        assertTrue(getMaxScore(searchResponseAsMap).isPresent());
+        assertTrue(Range.between(.5f, 1.0f).contains(getMaxScore(searchResponseAsMap).get()));
+        List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
+        List<String> ids = new ArrayList<>();
+        List<Double> scores = new ArrayList<>();
+        for (Map<String, Object> oneHit : hitsNestedList) {
+            ids.add((String) oneHit.get("_id"));
+            scores.add((Double) oneHit.get("_score"));
         }
+        // verify scores order
+        assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
+
+        // verify the scores are normalized. we need special assert logic because combined score may vary as neural search query
+        // based on random vectors and return results for every doc. In some cases that may affect 1.0 score from term query and make it
+        // lower.
+        float highestScore = scores.stream().max(Double::compare).get().floatValue();
+        assertTrue(Range.between(.5f, 1.0f).contains(highestScore));
+        float lowestScore = scores.stream().min(Double::compare).get().floatValue();
+        assertTrue(Range.between(.0f, .5f).contains(lowestScore));
+
+        // verify that all ids are unique
+        assertEquals(Set.copyOf(ids).size(), ids.size());
+
+        // verify case when there are partial match
+        HybridQueryBuilder hybridQueryBuilderPartialMatch = new HybridQueryBuilder();
+        hybridQueryBuilderPartialMatch.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
+        hybridQueryBuilderPartialMatch.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4));
+        hybridQueryBuilderPartialMatch.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT7));
+
+        Map<String, Object> searchResponseAsMapPartialMatch = search(
+            TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+            hybridQueryBuilderPartialMatch,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
+        assertQueryResults(searchResponseAsMapPartialMatch, 4, true, Range.between(0.33f, 1.0f));
+
+        // verify case when query doesn't have a match
+        HybridQueryBuilder hybridQueryBuilderNoMatches = new HybridQueryBuilder();
+        hybridQueryBuilderNoMatches.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT6));
+        hybridQueryBuilderNoMatches.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT7));
+
+        Map<String, Object> searchResponseAsMapNoMatches = search(
+            TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+            hybridQueryBuilderNoMatches,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
+        assertQueryResults(searchResponseAsMapNoMatches, 0, true);
     }
 
     private void initializeIndexIfNotExist(String indexName) throws IOException {

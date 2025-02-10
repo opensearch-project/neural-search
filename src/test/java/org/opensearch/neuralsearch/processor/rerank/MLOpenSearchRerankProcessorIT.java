@@ -37,16 +37,11 @@ public class MLOpenSearchRerankProcessorIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testCrossEncoderRerankProcessor() {
-        String modelId = null;
-        try {
-            modelId = uploadTextSimilarityModel();
-            loadModel(modelId);
-            createSearchPipelineViaConfig(modelId, PIPELINE_NAME, "processor/RerankMLOpenSearchPipelineConfiguration.json");
-            setupIndex();
-            runQueries();
-        } finally {
-            wipeOfTestResources(INDEX_NAME, null, modelId, PIPELINE_NAME);
-        }
+        String modelId = uploadTextSimilarityModel();
+        loadModel(modelId);
+        createSearchPipelineViaConfig(modelId, PIPELINE_NAME, "processor/RerankMLOpenSearchPipelineConfiguration.json");
+        setupIndex();
+        runQueries();
     }
 
     private String uploadTextSimilarityModel() throws Exception {

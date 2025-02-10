@@ -39,44 +39,35 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
 
     public void testSparseEncodingProcessor() throws Exception {
         String modelId = null;
-        try {
-            modelId = prepareSparseEncodingModel();
-            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING);
-            createIndexWithPipeline(INDEX_NAME, "SparseEncodingIndexMappings.json", PIPELINE_NAME);
-            ingestDocument(INDEX_NAME, INGEST_DOCUMENT);
-            assertEquals(1, getDocCount(INDEX_NAME));
+        modelId = prepareSparseEncodingModel();
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING);
+        createIndexWithPipeline(INDEX_NAME, "SparseEncodingIndexMappings.json", PIPELINE_NAME);
+        ingestDocument(INDEX_NAME, INGEST_DOCUMENT);
+        assertEquals(1, getDocCount(INDEX_NAME));
 
-            NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
-            neuralSparseQueryBuilder.fieldName("title_sparse");
-            neuralSparseQueryBuilder.queryTokensSupplier(() -> Map.of("good", 1.0f, "a", 2.0f));
-            Map<String, Object> searchResponse = search(INDEX_NAME, neuralSparseQueryBuilder, 2);
-            assertFalse(searchResponse.isEmpty());
-            double maxScore = (Double) ((Map) searchResponse.get("hits")).get("max_score");
-            assertEquals(4.4433594, maxScore, 1e-3);
-        } finally {
-            wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
-        }
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
+        neuralSparseQueryBuilder.fieldName("title_sparse");
+        neuralSparseQueryBuilder.queryTokensSupplier(() -> Map.of("good", 1.0f, "a", 2.0f));
+        Map<String, Object> searchResponse = search(INDEX_NAME, neuralSparseQueryBuilder, 2);
+        assertFalse(searchResponse.isEmpty());
+        double maxScore = (Double) ((Map) searchResponse.get("hits")).get("max_score");
+        assertEquals(4.4433594, maxScore, 1e-3);
     }
 
     public void testSparseEncodingProcessorWithPrune() throws Exception {
-        String modelId = null;
-        try {
-            modelId = prepareSparseEncodingModel();
-            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING_PRUNE);
-            createIndexWithPipeline(INDEX_NAME, "SparseEncodingIndexMappings.json", PIPELINE_NAME);
-            ingestDocument(INDEX_NAME, INGEST_DOCUMENT);
-            assertEquals(1, getDocCount(INDEX_NAME));
+        String modelId = prepareSparseEncodingModel();
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING_PRUNE);
+        createIndexWithPipeline(INDEX_NAME, "SparseEncodingIndexMappings.json", PIPELINE_NAME);
+        ingestDocument(INDEX_NAME, INGEST_DOCUMENT);
+        assertEquals(1, getDocCount(INDEX_NAME));
 
-            NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
-            neuralSparseQueryBuilder.fieldName("title_sparse");
-            neuralSparseQueryBuilder.queryTokensSupplier(() -> Map.of("good", 1.0f, "a", 2.0f));
-            Map<String, Object> searchResponse = search(INDEX_NAME, neuralSparseQueryBuilder, 2);
-            assertFalse(searchResponse.isEmpty());
-            double maxScore = (Double) ((Map) searchResponse.get("hits")).get("max_score");
-            assertEquals(3.640625, maxScore, 1e-3);
-        } finally {
-            wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
-        }
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
+        neuralSparseQueryBuilder.fieldName("title_sparse");
+        neuralSparseQueryBuilder.queryTokensSupplier(() -> Map.of("good", 1.0f, "a", 2.0f));
+        Map<String, Object> searchResponse = search(INDEX_NAME, neuralSparseQueryBuilder, 2);
+        assertFalse(searchResponse.isEmpty());
+        double maxScore = (Double) ((Map) searchResponse.get("hits")).get("max_score");
+        assertEquals(3.640625, maxScore, 1e-3);
     }
 
     public void testSparseEncodingProcessorWithReindex() throws Exception {
@@ -85,16 +76,11 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
         createIndexWithConfiguration(fromIndexName, "{ \"settings\": { \"number_of_shards\": 1, \"number_of_replicas\": 0 } }", null);
         ingestDocument(fromIndexName, "{ \"text\": \"hello world\" }");
         // create text embedding index for reindex
-        String modelId = null;
-        try {
-            modelId = prepareSparseEncodingModel();
-            String toIndexName = "test-reindex-to";
-            createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING);
-            createIndexWithPipeline(toIndexName, "SparseEncodingIndexMappings.json", PIPELINE_NAME);
-            reindex(fromIndexName, toIndexName);
-            assertEquals(1, getDocCount(toIndexName));
-        } finally {
-            wipeOfTestResources(fromIndexName, PIPELINE_NAME, modelId, null);
-        }
+        String modelId = prepareSparseEncodingModel();
+        String toIndexName = "test-reindex-to";
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING);
+        createIndexWithPipeline(toIndexName, "SparseEncodingIndexMappings.json", PIPELINE_NAME);
+        reindex(fromIndexName, toIndexName);
+        assertEquals(1, getDocCount(toIndexName));
     }
 }

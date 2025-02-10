@@ -56,6 +56,16 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
             .build();
     }
 
+    @Override
+    protected boolean shouldCleanUpResources() {
+        // All UPGRADE tests depend on resources created in OLD and MIXED test cases
+        // Before UPGRADE tests run, all OLD and MIXED test cases will be run first
+        // We only want to clean up resources in upgrade tests, also we don't want to clean up after each test case finishes
+        // this is because the cleanup method will pull every resource and delete, which will impact other tests
+        // Overriding the method in base class so that resources won't be accidentally clean up
+        return false;
+    }
+
     protected enum ClusterType {
         OLD,
         MIXED,

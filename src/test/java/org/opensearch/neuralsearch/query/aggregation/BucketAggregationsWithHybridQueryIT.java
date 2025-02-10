@@ -231,282 +231,256 @@ public class BucketAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
     }
 
     private void testAvgNestedIntoFilter() throws IOException {
-        try {
-            prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+        prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.filter(
-                GENERIC_AGGREGATION_NAME,
-                QueryBuilders.rangeQuery(INTEGER_FIELD_DOCINDEX).lte(3000)
-            ).subAggregation(AggregationBuilders.avg(AVG_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX));
-            Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
-                aggsBuilder,
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
-            );
+        AggregationBuilder aggsBuilder = AggregationBuilders.filter(
+            GENERIC_AGGREGATION_NAME,
+            QueryBuilders.rangeQuery(INTEGER_FIELD_DOCINDEX).lte(3000)
+        ).subAggregation(AggregationBuilders.avg(AVG_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX));
+        Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
+            aggsBuilder,
+            TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
+        );
 
-            Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
-            assertNotNull(aggregations);
-            assertTrue(aggregations.containsKey(GENERIC_AGGREGATION_NAME));
-            double avgValue = getAggregationValue(getAggregationValues(aggregations, GENERIC_AGGREGATION_NAME), AVG_AGGREGATION_NAME);
-            assertEquals(1789.5, avgValue, DELTA_FOR_SCORE_ASSERTION);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
+        assertNotNull(aggregations);
+        assertTrue(aggregations.containsKey(GENERIC_AGGREGATION_NAME));
+        double avgValue = getAggregationValue(getAggregationValues(aggregations, GENERIC_AGGREGATION_NAME), AVG_AGGREGATION_NAME);
+        assertEquals(1789.5, avgValue, DELTA_FOR_SCORE_ASSERTION);
     }
 
     private void testSumNestedIntoFilters() throws IOException {
-        try {
-            prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+        prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.filters(
-                GENERIC_AGGREGATION_NAME,
-                QueryBuilders.rangeQuery(INTEGER_FIELD_DOCINDEX).lte(3000),
-                QueryBuilders.termQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_WORKABLE)
-            ).otherBucket(true).subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX));
-            Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
-                aggsBuilder,
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
-            );
+        AggregationBuilder aggsBuilder = AggregationBuilders.filters(
+            GENERIC_AGGREGATION_NAME,
+            QueryBuilders.rangeQuery(INTEGER_FIELD_DOCINDEX).lte(3000),
+            QueryBuilders.termQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_WORKABLE)
+        ).otherBucket(true).subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX));
+        Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
+            aggsBuilder,
+            TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
+        );
 
-            Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
-            assertNotNull(aggregations);
+        Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
+        assertNotNull(aggregations);
 
-            List<Map<String, Object>> buckets = getAggregationBuckets(aggregations, GENERIC_AGGREGATION_NAME);
-            assertNotNull(buckets);
-            assertEquals(3, buckets.size());
+        List<Map<String, Object>> buckets = getAggregationBuckets(aggregations, GENERIC_AGGREGATION_NAME);
+        assertNotNull(buckets);
+        assertEquals(3, buckets.size());
 
-            Map<String, Object> firstBucket = buckets.get(0);
-            assertEquals(2, firstBucket.size());
-            assertEquals(2, firstBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(3579.0, getAggregationValue(firstBucket, SUM_AGGREGATION_NAME), DELTA_FOR_SCORE_ASSERTION);
+        Map<String, Object> firstBucket = buckets.get(0);
+        assertEquals(2, firstBucket.size());
+        assertEquals(2, firstBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals(3579.0, getAggregationValue(firstBucket, SUM_AGGREGATION_NAME), DELTA_FOR_SCORE_ASSERTION);
 
-            Map<String, Object> secondBucket = buckets.get(1);
-            assertEquals(2, secondBucket.size());
-            assertEquals(1, secondBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(1234.0, getAggregationValue(secondBucket, SUM_AGGREGATION_NAME), DELTA_FOR_SCORE_ASSERTION);
+        Map<String, Object> secondBucket = buckets.get(1);
+        assertEquals(2, secondBucket.size());
+        assertEquals(1, secondBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals(1234.0, getAggregationValue(secondBucket, SUM_AGGREGATION_NAME), DELTA_FOR_SCORE_ASSERTION);
 
-            Map<String, Object> thirdBucket = buckets.get(2);
-            assertEquals(2, thirdBucket.size());
-            assertEquals(1, thirdBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(3456.0, getAggregationValue(thirdBucket, SUM_AGGREGATION_NAME), DELTA_FOR_SCORE_ASSERTION);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        Map<String, Object> thirdBucket = buckets.get(2);
+        assertEquals(2, thirdBucket.size());
+        assertEquals(1, thirdBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals(3456.0, getAggregationValue(thirdBucket, SUM_AGGREGATION_NAME), DELTA_FOR_SCORE_ASSERTION);
     }
 
     private void testGlobalAggs() throws IOException {
-        try {
-            prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+        prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
-            TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT5);
+        TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT5);
 
-            HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
-            hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder1);
-            hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder2);
+        HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
+        hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder1);
+        hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder2);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.global(GENERIC_AGGREGATION_NAME)
-                .subAggregation(AggregationBuilders.sum(AVG_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX));
+        AggregationBuilder aggsBuilder = AggregationBuilders.global(GENERIC_AGGREGATION_NAME)
+            .subAggregation(AggregationBuilders.sum(AVG_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX));
 
-            Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
-                List.of(aggsBuilder),
-                hybridQueryBuilderNeuralThenTerm,
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
-            );
+        Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
+            List.of(aggsBuilder),
+            hybridQueryBuilderNeuralThenTerm,
+            TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
+        );
 
-            Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
-            assertNotNull(aggregations);
-            assertTrue(aggregations.containsKey(GENERIC_AGGREGATION_NAME));
-            double avgValue = getAggregationValue(getAggregationValues(aggregations, GENERIC_AGGREGATION_NAME), AVG_AGGREGATION_NAME);
-            assertEquals(15058.0, avgValue, DELTA_FOR_SCORE_ASSERTION);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
+        assertNotNull(aggregations);
+        assertTrue(aggregations.containsKey(GENERIC_AGGREGATION_NAME));
+        double avgValue = getAggregationValue(getAggregationValues(aggregations, GENERIC_AGGREGATION_NAME), AVG_AGGREGATION_NAME);
+        assertEquals(15058.0, avgValue, DELTA_FOR_SCORE_ASSERTION);
     }
 
     private void testHistogramAggs() throws IOException {
-        try {
-            prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+        prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.histogram(GENERIC_AGGREGATION_NAME)
-                .field(INTEGER_FIELD_PRICE)
-                .interval(100);
+        AggregationBuilder aggsBuilder = AggregationBuilders.histogram(GENERIC_AGGREGATION_NAME).field(INTEGER_FIELD_PRICE).interval(100);
 
-            Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
-                aggsBuilder,
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
-            );
+        Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
+            aggsBuilder,
+            TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
+        );
 
-            Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
-            assertNotNull(aggregations);
+        Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
+        assertNotNull(aggregations);
 
-            List<Map<String, Object>> buckets = getAggregationBuckets(aggregations, GENERIC_AGGREGATION_NAME);
-            assertNotNull(buckets);
-            assertEquals(2, buckets.size());
+        List<Map<String, Object>> buckets = getAggregationBuckets(aggregations, GENERIC_AGGREGATION_NAME);
+        assertNotNull(buckets);
+        assertEquals(2, buckets.size());
 
-            Map<String, Object> firstBucket = buckets.get(0);
-            assertEquals(2, firstBucket.size());
-            assertEquals(1, firstBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(0.0, (Double) firstBucket.get(KEY), DELTA_FOR_SCORE_ASSERTION);
+        Map<String, Object> firstBucket = buckets.get(0);
+        assertEquals(2, firstBucket.size());
+        assertEquals(1, firstBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals(0.0, (Double) firstBucket.get(KEY), DELTA_FOR_SCORE_ASSERTION);
 
-            Map<String, Object> secondBucket = buckets.get(1);
-            assertEquals(2, secondBucket.size());
-            assertEquals(2, secondBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(100.0, (Double) secondBucket.get(KEY), DELTA_FOR_SCORE_ASSERTION);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        Map<String, Object> secondBucket = buckets.get(1);
+        assertEquals(2, secondBucket.size());
+        assertEquals(2, secondBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals(100.0, (Double) secondBucket.get(KEY), DELTA_FOR_SCORE_ASSERTION);
     }
 
     private void testNestedAggs() throws IOException {
-        try {
-            prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+        prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.nested(GENERIC_AGGREGATION_NAME, NESTED_TYPE_FIELD_USER)
-                .subAggregation(
-                    AggregationBuilders.terms(BUCKETS_AGGREGATION_NAME_1)
-                        .field(String.join(".", NESTED_TYPE_FIELD_USER, NESTED_FIELD_FIRSTNAME))
-                );
-
-            Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
-                aggsBuilder,
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
+        AggregationBuilder aggsBuilder = AggregationBuilders.nested(GENERIC_AGGREGATION_NAME, NESTED_TYPE_FIELD_USER)
+            .subAggregation(
+                AggregationBuilders.terms(BUCKETS_AGGREGATION_NAME_1)
+                    .field(String.join(".", NESTED_TYPE_FIELD_USER, NESTED_FIELD_FIRSTNAME))
             );
 
-            Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
-            assertNotNull(aggregations);
+        Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
+            aggsBuilder,
+            TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
+        );
 
-            Map<String, Object> nestedAgg = getAggregationValues(aggregations, GENERIC_AGGREGATION_NAME);
-            assertNotNull(nestedAgg);
+        Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
+        assertNotNull(aggregations);
 
-            assertEquals(3, nestedAgg.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            List<Map<String, Object>> buckets = getAggregationBuckets(nestedAgg, BUCKETS_AGGREGATION_NAME_1);
+        Map<String, Object> nestedAgg = getAggregationValues(aggregations, GENERIC_AGGREGATION_NAME);
+        assertNotNull(nestedAgg);
 
-            assertNotNull(buckets);
-            assertEquals(3, buckets.size());
+        assertEquals(3, nestedAgg.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        List<Map<String, Object>> buckets = getAggregationBuckets(nestedAgg, BUCKETS_AGGREGATION_NAME_1);
 
-            Map<String, Object> firstBucket = buckets.get(0);
-            assertEquals(2, firstBucket.size());
-            assertEquals(1, firstBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(NESTED_FIELD_FIRSTNAME_FRODO, firstBucket.get(KEY));
+        assertNotNull(buckets);
+        assertEquals(3, buckets.size());
 
-            Map<String, Object> secondBucket = buckets.get(1);
-            assertEquals(2, secondBucket.size());
-            assertEquals(1, secondBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(NESTED_FIELD_FIRSTNAME_JOHN, secondBucket.get(KEY));
+        Map<String, Object> firstBucket = buckets.get(0);
+        assertEquals(2, firstBucket.size());
+        assertEquals(1, firstBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals(NESTED_FIELD_FIRSTNAME_FRODO, firstBucket.get(KEY));
 
-            Map<String, Object> thirdBucket = buckets.get(2);
-            assertEquals(2, thirdBucket.size());
-            assertEquals(1, thirdBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(NESTED_FIELD_FIRSTNAME_SUN, thirdBucket.get(KEY));
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        Map<String, Object> secondBucket = buckets.get(1);
+        assertEquals(2, secondBucket.size());
+        assertEquals(1, secondBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals(NESTED_FIELD_FIRSTNAME_JOHN, secondBucket.get(KEY));
+
+        Map<String, Object> thirdBucket = buckets.get(2);
+        assertEquals(2, thirdBucket.size());
+        assertEquals(1, thirdBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals(NESTED_FIELD_FIRSTNAME_SUN, thirdBucket.get(KEY));
     }
 
     private void testDiversifiedSampler() throws IOException {
-        try {
-            prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+        prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.diversifiedSampler(GENERIC_AGGREGATION_NAME)
-                .field(KEYWORD_FIELD_DOCKEYWORD)
-                .shardSize(2)
-                .subAggregation(AggregationBuilders.terms(BUCKETS_AGGREGATION_NAME_1).field(KEYWORD_FIELD_DOCKEYWORD));
+        AggregationBuilder aggsBuilder = AggregationBuilders.diversifiedSampler(GENERIC_AGGREGATION_NAME)
+            .field(KEYWORD_FIELD_DOCKEYWORD)
+            .shardSize(2)
+            .subAggregation(AggregationBuilders.terms(BUCKETS_AGGREGATION_NAME_1).field(KEYWORD_FIELD_DOCKEYWORD));
 
-            Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
-                aggsBuilder,
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
-            );
+        Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
+            aggsBuilder,
+            TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
+        );
 
-            Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
-            assertNotNull(aggregations);
+        Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
+        assertNotNull(aggregations);
 
-            Map<String, Object> aggValue = getAggregationValues(aggregations, GENERIC_AGGREGATION_NAME);
-            assertEquals(2, aggValue.size());
-            assertEquals(3, aggValue.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            Map<String, Object> nestedAggs = getAggregationValues(aggValue, BUCKETS_AGGREGATION_NAME_1);
-            assertNotNull(nestedAggs);
-            assertEquals(0, nestedAggs.get("doc_count_error_upper_bound"));
-            List<Map<String, Object>> buckets = getAggregationBuckets(aggValue, BUCKETS_AGGREGATION_NAME_1);
-            assertEquals(2, buckets.size());
+        Map<String, Object> aggValue = getAggregationValues(aggregations, GENERIC_AGGREGATION_NAME);
+        assertEquals(2, aggValue.size());
+        assertEquals(3, aggValue.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        Map<String, Object> nestedAggs = getAggregationValues(aggValue, BUCKETS_AGGREGATION_NAME_1);
+        assertNotNull(nestedAggs);
+        assertEquals(0, nestedAggs.get("doc_count_error_upper_bound"));
+        List<Map<String, Object>> buckets = getAggregationBuckets(aggValue, BUCKETS_AGGREGATION_NAME_1);
+        assertEquals(2, buckets.size());
 
-            Map<String, Object> firstBucket = buckets.get(0);
-            assertEquals(1, firstBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals("likeable", firstBucket.get(KEY));
+        Map<String, Object> firstBucket = buckets.get(0);
+        assertEquals(1, firstBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals("likeable", firstBucket.get(KEY));
 
-            Map<String, Object> secondBucket = buckets.get(1);
-            assertEquals(1, secondBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals("workable", secondBucket.get(KEY));
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        Map<String, Object> secondBucket = buckets.get(1);
+        assertEquals(1, secondBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals("workable", secondBucket.get(KEY));
     }
 
     private void testAdjacencyMatrixAggs() throws IOException {
-        try {
-            prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+        prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.adjacencyMatrix(
-                GENERIC_AGGREGATION_NAME,
-                Map.of(
-                    "grpA",
-                    QueryBuilders.matchQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_WORKABLE),
-                    "grpB",
-                    QueryBuilders.matchQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_ANGRY),
-                    "grpC",
-                    QueryBuilders.matchQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_LIKABLE)
-                )
-            );
-            Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
-                aggsBuilder,
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
-            );
+        AggregationBuilder aggsBuilder = AggregationBuilders.adjacencyMatrix(
+            GENERIC_AGGREGATION_NAME,
+            Map.of(
+                "grpA",
+                QueryBuilders.matchQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_WORKABLE),
+                "grpB",
+                QueryBuilders.matchQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_ANGRY),
+                "grpC",
+                QueryBuilders.matchQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_LIKABLE)
+            )
+        );
+        Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
+            aggsBuilder,
+            TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
+        );
 
-            Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
-            assertNotNull(aggregations);
-            List<Map<String, Object>> buckets = getAggregationBuckets(aggregations, GENERIC_AGGREGATION_NAME);
-            assertNotNull(buckets);
-            assertEquals(2, buckets.size());
-            Map<String, Object> grpA = buckets.get(0);
-            assertEquals(1, grpA.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals("grpA", grpA.get(KEY));
-            Map<String, Object> grpC = buckets.get(1);
-            assertEquals(1, grpC.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals("grpC", grpC.get(KEY));
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
+        assertNotNull(aggregations);
+        List<Map<String, Object>> buckets = getAggregationBuckets(aggregations, GENERIC_AGGREGATION_NAME);
+        assertNotNull(buckets);
+        assertEquals(2, buckets.size());
+        Map<String, Object> grpA = buckets.get(0);
+        assertEquals(1, grpA.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals("grpA", grpA.get(KEY));
+        Map<String, Object> grpC = buckets.get(1);
+        assertEquals(1, grpC.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals("grpC", grpC.get(KEY));
     }
 
     private void testDateBucketedSumsPipelinedToBucketMinMaxSumAvgAggs() throws IOException {
-        try {
-            prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+        prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggDateHisto = AggregationBuilders.dateHistogram(GENERIC_AGGREGATION_NAME)
-                .calendarInterval(DateHistogramInterval.YEAR)
-                .field(DATE_FIELD)
-                .subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX));
+        AggregationBuilder aggDateHisto = AggregationBuilders.dateHistogram(GENERIC_AGGREGATION_NAME)
+            .calendarInterval(DateHistogramInterval.YEAR)
+            .field(DATE_FIELD)
+            .subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX));
 
-            BucketMetricsPipelineAggregationBuilder<AvgBucketPipelineAggregationBuilder> aggAvgBucket = PipelineAggregatorBuilders
-                .avgBucket(BUCKETS_AGGREGATION_NAME_1, GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME);
+        BucketMetricsPipelineAggregationBuilder<AvgBucketPipelineAggregationBuilder> aggAvgBucket = PipelineAggregatorBuilders.avgBucket(
+            BUCKETS_AGGREGATION_NAME_1,
+            GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME
+        );
 
-            BucketMetricsPipelineAggregationBuilder<SumBucketPipelineAggregationBuilder> aggSumBucket = PipelineAggregatorBuilders
-                .sumBucket(BUCKETS_AGGREGATION_NAME_2, GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME);
+        BucketMetricsPipelineAggregationBuilder<SumBucketPipelineAggregationBuilder> aggSumBucket = PipelineAggregatorBuilders.sumBucket(
+            BUCKETS_AGGREGATION_NAME_2,
+            GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME
+        );
 
-            BucketMetricsPipelineAggregationBuilder<MinBucketPipelineAggregationBuilder> aggMinBucket = PipelineAggregatorBuilders
-                .minBucket(BUCKETS_AGGREGATION_NAME_3, GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME);
+        BucketMetricsPipelineAggregationBuilder<MinBucketPipelineAggregationBuilder> aggMinBucket = PipelineAggregatorBuilders.minBucket(
+            BUCKETS_AGGREGATION_NAME_3,
+            GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME
+        );
 
-            BucketMetricsPipelineAggregationBuilder<MaxBucketPipelineAggregationBuilder> aggMaxBucket = PipelineAggregatorBuilders
-                .maxBucket(BUCKETS_AGGREGATION_NAME_4, GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME);
+        BucketMetricsPipelineAggregationBuilder<MaxBucketPipelineAggregationBuilder> aggMaxBucket = PipelineAggregatorBuilders.maxBucket(
+            BUCKETS_AGGREGATION_NAME_4,
+            GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME
+        );
 
-            Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
-                List.of(aggDateHisto, aggAvgBucket, aggSumBucket, aggMinBucket, aggMaxBucket),
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
-            );
+        Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
+            List.of(aggDateHisto, aggAvgBucket, aggSumBucket, aggMinBucket, aggMaxBucket),
+            TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
+        );
 
-            assertResultsOfPipelineSumtoDateHistogramAggs(searchResponseAsMap);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        assertResultsOfPipelineSumtoDateHistogramAggs(searchResponseAsMap);
     }
 
     private void assertResultsOfPipelineSumtoDateHistogramAggs(Map<String, Object> searchResponseAsMap) {
@@ -553,221 +527,199 @@ public class BucketAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
     }
 
     private void testDateBucketedSumsPipelinedToBucketStatsAggs() throws IOException {
-        try {
-            prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+        prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggDateHisto = AggregationBuilders.dateHistogram(GENERIC_AGGREGATION_NAME)
-                .calendarInterval(DateHistogramInterval.YEAR)
-                .field(DATE_FIELD)
-                .subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX));
+        AggregationBuilder aggDateHisto = AggregationBuilders.dateHistogram(GENERIC_AGGREGATION_NAME)
+            .calendarInterval(DateHistogramInterval.YEAR)
+            .field(DATE_FIELD)
+            .subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX));
 
-            StatsBucketPipelineAggregationBuilder aggStatsBucket = PipelineAggregatorBuilders.statsBucket(
-                BUCKETS_AGGREGATION_NAME_1,
-                GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME
-            );
+        StatsBucketPipelineAggregationBuilder aggStatsBucket = PipelineAggregatorBuilders.statsBucket(
+            BUCKETS_AGGREGATION_NAME_1,
+            GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME
+        );
 
-            Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
-                List.of(aggDateHisto, aggStatsBucket),
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
-            );
+        Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
+            List.of(aggDateHisto, aggStatsBucket),
+            TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
+        );
 
-            Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
-            assertNotNull(aggregations);
+        Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
+        assertNotNull(aggregations);
 
-            Map<String, Object> statsAggs = getAggregationValues(aggregations, BUCKETS_AGGREGATION_NAME_1);
+        Map<String, Object> statsAggs = getAggregationValues(aggregations, BUCKETS_AGGREGATION_NAME_1);
 
-            assertNotNull(statsAggs);
+        assertNotNull(statsAggs);
 
-            assertEquals(3517.5, (Double) statsAggs.get("avg"), DELTA_FOR_SCORE_ASSERTION);
-            assertEquals(7035.0, (Double) statsAggs.get("sum"), DELTA_FOR_SCORE_ASSERTION);
-            assertEquals(1234.0, (Double) statsAggs.get("min"), DELTA_FOR_SCORE_ASSERTION);
-            assertEquals(5801.0, (Double) statsAggs.get("max"), DELTA_FOR_SCORE_ASSERTION);
-            assertEquals(2, (int) statsAggs.get("count"));
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        assertEquals(3517.5, (Double) statsAggs.get("avg"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(7035.0, (Double) statsAggs.get("sum"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(1234.0, (Double) statsAggs.get("min"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(5801.0, (Double) statsAggs.get("max"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(2, (int) statsAggs.get("count"));
     }
 
     private void testDateBucketedSumsPipelinedToBucketScriptedAggs() throws IOException {
-        try {
-            prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+        prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggBuilder = AggregationBuilders.dateHistogram(DATE_AGGREGATION_NAME)
-                .calendarInterval(DateHistogramInterval.YEAR)
-                .field(DATE_FIELD)
-                .subAggregations(
-                    new AggregatorFactories.Builder().addAggregator(
-                        AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX)
+        AggregationBuilder aggBuilder = AggregationBuilders.dateHistogram(DATE_AGGREGATION_NAME)
+            .calendarInterval(DateHistogramInterval.YEAR)
+            .field(DATE_FIELD)
+            .subAggregations(
+                new AggregatorFactories.Builder().addAggregator(AggregationBuilders.sum(SUM_AGGREGATION_NAME).field(INTEGER_FIELD_DOCINDEX))
+                    .addAggregator(
+                        AggregationBuilders.filter(
+                            GENERIC_AGGREGATION_NAME,
+                            QueryBuilders.boolQuery()
+                                .should(
+                                    QueryBuilders.boolQuery()
+                                        .should(QueryBuilders.termQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_WORKABLE))
+                                        .should(QueryBuilders.termQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_ANGRY))
+                                )
+                                .should(QueryBuilders.boolQuery().mustNot(QueryBuilders.existsQuery(KEYWORD_FIELD_DOCKEYWORD)))
+                        ).subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME_2).field(INTEGER_FIELD_PRICE))
                     )
-                        .addAggregator(
-                            AggregationBuilders.filter(
-                                GENERIC_AGGREGATION_NAME,
-                                QueryBuilders.boolQuery()
-                                    .should(
-                                        QueryBuilders.boolQuery()
-                                            .should(QueryBuilders.termQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_WORKABLE))
-                                            .should(QueryBuilders.termQuery(KEYWORD_FIELD_DOCKEYWORD, KEYWORD_FIELD_DOCKEYWORD_ANGRY))
-                                    )
-                                    .should(QueryBuilders.boolQuery().mustNot(QueryBuilders.existsQuery(KEYWORD_FIELD_DOCKEYWORD)))
-                            ).subAggregation(AggregationBuilders.sum(SUM_AGGREGATION_NAME_2).field(INTEGER_FIELD_PRICE))
+                    .addPipelineAggregator(
+                        PipelineAggregatorBuilders.bucketScript(
+                            BUCKETS_AGGREGATION_NAME_1,
+                            Map.of("docNum", GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME_2, "totalNum", SUM_AGGREGATION_NAME),
+                            new Script("params.docNum / params.totalNum")
                         )
-                        .addPipelineAggregator(
-                            PipelineAggregatorBuilders.bucketScript(
-                                BUCKETS_AGGREGATION_NAME_1,
-                                Map.of("docNum", GENERIC_AGGREGATION_NAME + ">" + SUM_AGGREGATION_NAME_2, "totalNum", SUM_AGGREGATION_NAME),
-                                new Script("params.docNum / params.totalNum")
-                            )
-                        )
-                );
-
-            Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
-                aggBuilder,
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
+                    )
             );
 
-            Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
-            assertNotNull(aggregations);
+        Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
+            aggBuilder,
+            TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
+        );
 
-            List<Map<String, Object>> buckets = getAggregationBuckets(aggregations, DATE_AGGREGATION_NAME);
+        Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
+        assertNotNull(aggregations);
 
-            assertNotNull(buckets);
-            assertEquals(21, buckets.size());
+        List<Map<String, Object>> buckets = getAggregationBuckets(aggregations, DATE_AGGREGATION_NAME);
 
-            // check content of few buckets
-            // first bucket have all the aggs values
-            Map<String, Object> firstBucket = buckets.get(0);
-            assertEquals(6, firstBucket.size());
-            assertEquals("01/01/1995", firstBucket.get(BUCKET_AGG_KEY_AS_STRING));
-            assertEquals(1, firstBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(0.1053, getAggregationValue(firstBucket, BUCKETS_AGGREGATION_NAME_1), DELTA_FOR_SCORE_ASSERTION);
-            assertEquals(1234.0, getAggregationValue(firstBucket, SUM_AGGREGATION_NAME), DELTA_FOR_SCORE_ASSERTION);
-            assertTrue(firstBucket.containsKey(KEY));
+        assertNotNull(buckets);
+        assertEquals(21, buckets.size());
 
-            Map<String, Object> inBucketAggValues = getAggregationValues(firstBucket, GENERIC_AGGREGATION_NAME);
-            assertNotNull(inBucketAggValues);
-            assertEquals(1, inBucketAggValues.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(130.0, getAggregationValue(inBucketAggValues, SUM_AGGREGATION_NAME_2), DELTA_FOR_SCORE_ASSERTION);
+        // check content of few buckets
+        // first bucket have all the aggs values
+        Map<String, Object> firstBucket = buckets.get(0);
+        assertEquals(6, firstBucket.size());
+        assertEquals("01/01/1995", firstBucket.get(BUCKET_AGG_KEY_AS_STRING));
+        assertEquals(1, firstBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals(0.1053, getAggregationValue(firstBucket, BUCKETS_AGGREGATION_NAME_1), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(1234.0, getAggregationValue(firstBucket, SUM_AGGREGATION_NAME), DELTA_FOR_SCORE_ASSERTION);
+        assertTrue(firstBucket.containsKey(KEY));
 
-            // second bucket is empty
-            Map<String, Object> secondBucket = buckets.get(1);
-            assertEquals(5, secondBucket.size());
-            assertEquals("01/01/1996", secondBucket.get(BUCKET_AGG_KEY_AS_STRING));
-            assertEquals(0, secondBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertFalse(secondBucket.containsKey(BUCKETS_AGGREGATION_NAME_1));
-            assertEquals(0.0, getAggregationValue(secondBucket, SUM_AGGREGATION_NAME), DELTA_FOR_SCORE_ASSERTION);
-            assertTrue(secondBucket.containsKey(KEY));
+        Map<String, Object> inBucketAggValues = getAggregationValues(firstBucket, GENERIC_AGGREGATION_NAME);
+        assertNotNull(inBucketAggValues);
+        assertEquals(1, inBucketAggValues.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals(130.0, getAggregationValue(inBucketAggValues, SUM_AGGREGATION_NAME_2), DELTA_FOR_SCORE_ASSERTION);
 
-            Map<String, Object> inSecondBucketAggValues = getAggregationValues(secondBucket, GENERIC_AGGREGATION_NAME);
-            assertNotNull(inSecondBucketAggValues);
-            assertEquals(0, inSecondBucketAggValues.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(0.0, getAggregationValue(inSecondBucketAggValues, SUM_AGGREGATION_NAME_2), DELTA_FOR_SCORE_ASSERTION);
+        // second bucket is empty
+        Map<String, Object> secondBucket = buckets.get(1);
+        assertEquals(5, secondBucket.size());
+        assertEquals("01/01/1996", secondBucket.get(BUCKET_AGG_KEY_AS_STRING));
+        assertEquals(0, secondBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertFalse(secondBucket.containsKey(BUCKETS_AGGREGATION_NAME_1));
+        assertEquals(0.0, getAggregationValue(secondBucket, SUM_AGGREGATION_NAME), DELTA_FOR_SCORE_ASSERTION);
+        assertTrue(secondBucket.containsKey(KEY));
 
-            // last bucket has values
-            Map<String, Object> lastBucket = buckets.get(buckets.size() - 1);
-            assertEquals(6, lastBucket.size());
-            assertEquals("01/01/2015", lastBucket.get(BUCKET_AGG_KEY_AS_STRING));
-            assertEquals(2, lastBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(0.0172, getAggregationValue(lastBucket, BUCKETS_AGGREGATION_NAME_1), DELTA_FOR_SCORE_ASSERTION);
-            assertEquals(5801.0, getAggregationValue(lastBucket, SUM_AGGREGATION_NAME), DELTA_FOR_SCORE_ASSERTION);
-            assertTrue(lastBucket.containsKey(KEY));
+        Map<String, Object> inSecondBucketAggValues = getAggregationValues(secondBucket, GENERIC_AGGREGATION_NAME);
+        assertNotNull(inSecondBucketAggValues);
+        assertEquals(0, inSecondBucketAggValues.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals(0.0, getAggregationValue(inSecondBucketAggValues, SUM_AGGREGATION_NAME_2), DELTA_FOR_SCORE_ASSERTION);
 
-            Map<String, Object> inLastBucketAggValues = getAggregationValues(lastBucket, GENERIC_AGGREGATION_NAME);
-            assertNotNull(inLastBucketAggValues);
-            assertEquals(1, inLastBucketAggValues.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(100.0, getAggregationValue(inLastBucketAggValues, SUM_AGGREGATION_NAME_2), DELTA_FOR_SCORE_ASSERTION);
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        // last bucket has values
+        Map<String, Object> lastBucket = buckets.get(buckets.size() - 1);
+        assertEquals(6, lastBucket.size());
+        assertEquals("01/01/2015", lastBucket.get(BUCKET_AGG_KEY_AS_STRING));
+        assertEquals(2, lastBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals(0.0172, getAggregationValue(lastBucket, BUCKETS_AGGREGATION_NAME_1), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(5801.0, getAggregationValue(lastBucket, SUM_AGGREGATION_NAME), DELTA_FOR_SCORE_ASSERTION);
+        assertTrue(lastBucket.containsKey(KEY));
+
+        Map<String, Object> inLastBucketAggValues = getAggregationValues(lastBucket, GENERIC_AGGREGATION_NAME);
+        assertNotNull(inLastBucketAggValues);
+        assertEquals(1, inLastBucketAggValues.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals(100.0, getAggregationValue(inLastBucketAggValues, SUM_AGGREGATION_NAME_2), DELTA_FOR_SCORE_ASSERTION);
     }
 
     private void testSampler() throws IOException {
-        try {
-            prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+        prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.sampler(GENERIC_AGGREGATION_NAME)
-                .shardSize(2)
-                .subAggregation(AggregationBuilders.terms(BUCKETS_AGGREGATION_NAME_1).field(KEYWORD_FIELD_DOCKEYWORD));
+        AggregationBuilder aggsBuilder = AggregationBuilders.sampler(GENERIC_AGGREGATION_NAME)
+            .shardSize(2)
+            .subAggregation(AggregationBuilders.terms(BUCKETS_AGGREGATION_NAME_1).field(KEYWORD_FIELD_DOCKEYWORD));
 
-            Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
-                aggsBuilder,
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
-            );
+        Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
+            aggsBuilder,
+            TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
+        );
 
-            Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
-            assertNotNull(aggregations);
+        Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
+        assertNotNull(aggregations);
 
-            Map<String, Object> aggValue = getAggregationValues(aggregations, GENERIC_AGGREGATION_NAME);
-            assertEquals(2, aggValue.size());
-            assertEquals(3, aggValue.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            Map<String, Object> nestedAggs = getAggregationValues(aggValue, BUCKETS_AGGREGATION_NAME_1);
-            assertNotNull(nestedAggs);
-            assertEquals(0, nestedAggs.get("doc_count_error_upper_bound"));
-            List<Map<String, Object>> buckets = getAggregationBuckets(aggValue, BUCKETS_AGGREGATION_NAME_1);
-            assertEquals(2, buckets.size());
+        Map<String, Object> aggValue = getAggregationValues(aggregations, GENERIC_AGGREGATION_NAME);
+        assertEquals(2, aggValue.size());
+        assertEquals(3, aggValue.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        Map<String, Object> nestedAggs = getAggregationValues(aggValue, BUCKETS_AGGREGATION_NAME_1);
+        assertNotNull(nestedAggs);
+        assertEquals(0, nestedAggs.get("doc_count_error_upper_bound"));
+        List<Map<String, Object>> buckets = getAggregationBuckets(aggValue, BUCKETS_AGGREGATION_NAME_1);
+        assertEquals(2, buckets.size());
 
-            Map<String, Object> firstBucket = buckets.get(0);
-            assertEquals(1, firstBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals("likeable", firstBucket.get(KEY));
+        Map<String, Object> firstBucket = buckets.get(0);
+        assertEquals(1, firstBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals("likeable", firstBucket.get(KEY));
 
-            Map<String, Object> secondBucket = buckets.get(1);
-            assertEquals(1, secondBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals("workable", secondBucket.get(KEY));
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        Map<String, Object> secondBucket = buckets.get(1);
+        assertEquals(1, secondBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals("workable", secondBucket.get(KEY));
     }
 
     private void testTermsAggs() throws IOException {
-        try {
-            prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+        prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.terms(GENERIC_AGGREGATION_NAME).field(KEYWORD_FIELD_DOCKEYWORD);
-            Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
-                aggsBuilder,
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
-            );
+        AggregationBuilder aggsBuilder = AggregationBuilders.terms(GENERIC_AGGREGATION_NAME).field(KEYWORD_FIELD_DOCKEYWORD);
+        Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
+            aggsBuilder,
+            TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
+        );
 
-            Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
-            assertNotNull(aggregations);
-            List<Map<String, Object>> buckets = ((Map<String, List>) getAggregationValues(aggregations, GENERIC_AGGREGATION_NAME)).get(
-                "buckets"
-            );
-            assertNotNull(buckets);
-            assertEquals(2, buckets.size());
-            Map<String, Object> firstBucket = buckets.get(0);
-            assertEquals(1, firstBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(KEYWORD_FIELD_DOCKEYWORD_LIKABLE, firstBucket.get(KEY));
-            Map<String, Object> secondBucket = buckets.get(1);
-            assertEquals(1, secondBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(KEYWORD_FIELD_DOCKEYWORD_WORKABLE, secondBucket.get(KEY));
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
+        assertNotNull(aggregations);
+        List<Map<String, Object>> buckets = ((Map<String, List>) getAggregationValues(aggregations, GENERIC_AGGREGATION_NAME)).get(
+            "buckets"
+        );
+        assertNotNull(buckets);
+        assertEquals(2, buckets.size());
+        Map<String, Object> firstBucket = buckets.get(0);
+        assertEquals(1, firstBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals(KEYWORD_FIELD_DOCKEYWORD_LIKABLE, firstBucket.get(KEY));
+        Map<String, Object> secondBucket = buckets.get(1);
+        assertEquals(1, secondBucket.get(BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals(KEYWORD_FIELD_DOCKEYWORD_WORKABLE, secondBucket.get(KEY));
     }
 
     private void testSignificantTermsAggs() throws IOException {
-        try {
-            prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
+        prepareResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, SEARCH_PIPELINE);
 
-            AggregationBuilder aggsBuilder = AggregationBuilders.significantTerms(GENERIC_AGGREGATION_NAME).field(KEYWORD_FIELD_DOCKEYWORD);
-            Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
-                aggsBuilder,
-                TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
-            );
+        AggregationBuilder aggsBuilder = AggregationBuilders.significantTerms(GENERIC_AGGREGATION_NAME).field(KEYWORD_FIELD_DOCKEYWORD);
+        Map<String, Object> searchResponseAsMap = executeQueryAndGetAggsResults(
+            aggsBuilder,
+            TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS
+        );
 
-            Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
-            assertNotNull(aggregations);
-            List<Map<String, Object>> buckets = getAggregationBuckets(aggregations, GENERIC_AGGREGATION_NAME);
-            assertNotNull(buckets);
+        Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
+        assertNotNull(aggregations);
+        List<Map<String, Object>> buckets = getAggregationBuckets(aggregations, GENERIC_AGGREGATION_NAME);
+        assertNotNull(buckets);
 
-            Map<String, Object> significantTermsAggregations = getAggregationValues(aggregations, GENERIC_AGGREGATION_NAME);
+        Map<String, Object> significantTermsAggregations = getAggregationValues(aggregations, GENERIC_AGGREGATION_NAME);
 
-            assertNotNull(significantTermsAggregations);
-            assertEquals(3, (int) getAggregationValues(significantTermsAggregations, BUCKET_AGG_DOC_COUNT_FIELD));
-            assertEquals(11, (int) getAggregationValues(significantTermsAggregations, "bg_count"));
-        } finally {
-            wipeOfTestResources(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS, null, null, SEARCH_PIPELINE);
-        }
+        assertNotNull(significantTermsAggregations);
+        assertEquals(3, (int) getAggregationValues(significantTermsAggregations, BUCKET_AGG_DOC_COUNT_FIELD));
+        assertEquals(11, (int) getAggregationValues(significantTermsAggregations, "bg_count"));
     }
 
     private Map<String, Object> executeQueryAndGetAggsResults(final Object aggsBuilder, String indexName) {

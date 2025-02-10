@@ -4,12 +4,23 @@
  */
 package org.opensearch.neuralsearch;
 
+import org.junit.After;
+import org.opensearch.action.search.SearchResponse;
+import org.opensearch.client.ResponseException;
+import org.opensearch.core.xcontent.DeprecationHandler;
+import org.opensearch.core.xcontent.MediaType;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.ml.common.model.MLModelState;
+
+import static org.opensearch.knn.common.KNNConstants.MODEL_INDEX_NAME;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -52,6 +63,7 @@ import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
+import org.opensearch.search.SearchHit;
 import org.opensearch.search.sort.SortBuilder;
 import org.opensearch.test.ClusterServiceUtils;
 import org.opensearch.threadpool.TestThreadPool;
@@ -61,14 +73,20 @@ import com.carrotsearch.randomizedtesting.RandomizedTest;
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import com.google.common.collect.ImmutableList;
 
+import static org.opensearch.neuralsearch.util.TestUtils.INGEST_PIPELINE_TYPE;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TASK_RESULT_QUERY_TIME_IN_SECOND;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_USER_AGENT;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
+import static org.opensearch.neuralsearch.util.TestUtils.ML_PLUGIN_SYSTEM_INDEX_PREFIX;
+import static org.opensearch.neuralsearch.util.TestUtils.OPENDISTRO_SECURITY;
+import static org.opensearch.neuralsearch.util.TestUtils.OPENSEARCH_SYSTEM_INDEX_PREFIX;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_RETRY;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TIME_OUT_INTERVAL;
+import static org.opensearch.neuralsearch.util.TestUtils.SEARCH_PIPELINE_TYPE;
+import static org.opensearch.neuralsearch.util.TestUtils.SECURITY_AUDITLOG_PREFIX;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -95,6 +113,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     protected static final String CONCURRENT_SEGMENT_SEARCH_ENABLED = "search.concurrent_segment_search.enabled";
     protected static final String RRF_SEARCH_PIPELINE = "rrf-search-pipeline";
 
+    private final Set<String> IMMUTABLE_INDEX_PREFIXES = Set.of(
+        SECURITY_AUDITLOG_PREFIX,
+        OPENSEARCH_SYSTEM_INDEX_PREFIX,
+        ML_PLUGIN_SYSTEM_INDEX_PREFIX
+    );
+
     protected final ClassLoader classLoader = this.getClass().getClassLoader();
 
     protected ThreadPool threadPool;
@@ -108,6 +132,21 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             updateClusterSettings();
         }
         NeuralSearchClusterUtil.instance().initialize(clusterService);
+    }
+
+    // Wipe of all the resources after execution of the tests.
+    @After
+    public void cleanUp() {
+        if (shouldCleanUpResources()) {
+            deleteExistingIngestionPipelines();
+            deleteExistingSearchPipelines();
+            deleteExistingModels();
+            deleteExistingIndices();
+        }
+    }
+
+    protected boolean shouldCleanUpResources() {
+        return true;
     }
 
     protected ThreadPool setUpThreadPool() {
@@ -1243,18 +1282,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     @SneakyThrows
-    protected void deleteSearchPipeline(final String pipelineId) {
-        makeRequest(
-            client(),
-            "DELETE",
-            String.format(LOCALE, "/_search/pipeline/%s", pipelineId),
-            null,
-            toHttpEntity(""),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
-        );
-    }
-
-    @SneakyThrows
     private String getModelGroupId() {
         String modelGroupRegisterRequestBody = Files.readString(
             Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
@@ -1411,6 +1438,96 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     /**
+     * Retrieve all available index
+     * @return index as a list of map object
+     */
+    @SneakyThrows
+    protected List<Map<String, Object>> retrieveIndices() {
+        Request request = new Request("GET", "/_cat/indices?format=json&expand_wildcards=all");
+        Response response = client().performRequest(request);
+        MediaType mediaType = MediaType.fromMediaType(response.getEntity().getContentType());
+        try (
+            XContentParser parser = mediaType.xContent()
+                .createParser(
+                    NamedXContentRegistry.EMPTY,
+                    DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
+                    response.getEntity().getContent()
+                )
+        ) {
+            XContentParser.Token token = parser.nextToken();
+            List<Map<String, Object>> parserList = null;
+            if (token == XContentParser.Token.START_ARRAY) {
+                parserList = parser.listOrderedMap().stream().map(obj -> (Map<String, Object>) obj).collect(Collectors.toList());
+            } else {
+                parserList = Collections.singletonList(parser.mapOrdered());
+            }
+
+            return parserList;
+        }
+    }
+
+    /**
+     * Fetch all existing indices and clean up, note that some system generated indices are skipped
+     */
+    @SneakyThrows
+    protected void deleteExistingIndices() {
+        List<Map<String, Object>> indices = retrieveIndices();
+        for (Map<String, Object> index : indices) {
+            final String indexName = (String) index.get("index");
+            if (shouldDeleteIndex(indexName)) {
+                deleteIndex(indexName);
+            }
+        }
+    }
+
+    private boolean shouldDeleteIndex(String indexName) {
+        return indexName != null
+            && !OPENDISTRO_SECURITY.equals(indexName)
+            && IMMUTABLE_INDEX_PREFIXES.stream().noneMatch(indexName::startsWith)
+            && !MODEL_INDEX_NAME.equals(indexName);
+    }
+
+    /**
+     * Retrieve all existing pipelines or a specific pipeline
+     * @param pipelineType _ingest for retrieving ingest pipelines, _search for retrieving search pipelines
+     * @param pipelineName a specific pipeline to retrieve, if the value is null, it returns all pipelines
+     * @return get pipeline response as a map object
+     */
+    @SneakyThrows
+    protected Map<String, Object> retrievePipelines(final String pipelineType, final String pipelineName) {
+        try {
+            Request request = new Request(
+                "GET",
+                String.format(LOCALE, "/%s/pipeline/%s", pipelineType, Optional.ofNullable(pipelineName).orElse(""))
+            );
+            Response response = client().performRequest(request);
+            assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+            String responseBody = EntityUtils.toString(response.getEntity());
+            Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), responseBody).map();
+            return StringUtils.isEmpty(pipelineName) ? responseMap : (Map<String, Object>) responseMap.get(pipelineName);
+        } catch (ResponseException e) {
+            // If no pipeline exits, we will probably receive a 404 NOT Found exception in the above GET call,
+            // see issue: https://github.com/opensearch-project/OpenSearch/issues/15917,
+            // we can just ignore the 404 exception, and rethrow the exception for other code
+            if (RestStatus.NOT_FOUND != RestStatus.fromCode(e.getResponse().getStatusLine().getStatusCode())) {
+                throw e;
+            }
+        }
+
+        return Map.of();
+    }
+
+    private void deleteExistingIngestionPipelines() {
+        Map<String, Object> pipelines = retrievePipelines(INGEST_PIPELINE_TYPE, null);
+        pipelines.keySet().forEach(this::deleteIngestPipeline);
+    }
+
+    private void deleteExistingSearchPipelines() {
+        Map<String, Object> pipelines = retrievePipelines(SEARCH_PIPELINE_TYPE, null);
+        pipelines.keySet().forEach(this::deleteSearchPipeline);
+    }
+
+    /**
      * Get ingest pipeline
      * @param pipelineName of the ingest pipeline
      *
@@ -1418,29 +1535,118 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     */
     @SneakyThrows
     protected Map<String, Object> getIngestionPipeline(final String pipelineName) {
-        Request request = new Request("GET", "/_ingest/pipeline/" + pipelineName);
-        Response response = client().performRequest(request);
-        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
-        String responseBody = EntityUtils.toString(response.getEntity());
-        Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), responseBody).map();
-        return (Map<String, Object>) responseMap.get(pipelineName);
+        return retrievePipelines(INGEST_PIPELINE_TYPE, pipelineName);
     }
 
     /**
      * Delete pipeline
+     *
+     * @param pipelineType _ingest for ingest pipelines, _search for search pipelines
+     * @param pipelineName of the pipeline
+     *
+     * @return delete pipeline response as a map object
+     */
+    @SneakyThrows
+    protected Map<String, Object> deletePipeline(final String pipelineType, final String pipelineName) {
+        Request request = new Request("DELETE", "/" + pipelineType + "/pipeline/" + pipelineName);
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), responseBody).map();
+        return responseMap;
+    }
+
+    /**
+     * Delete an ingest pipeline
      *
      * @param pipelineName of the pipeline
      *
      * @return delete pipeline response as a map object
      */
     @SneakyThrows
-    protected Map<String, Object> deletePipeline(final String pipelineName) {
-        Request request = new Request("DELETE", "/_ingest/pipeline/" + pipelineName);
-        Response response = client().performRequest(request);
-        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
-        String responseBody = EntityUtils.toString(response.getEntity());
-        Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), responseBody).map();
-        return responseMap;
+    protected Map<String, Object> deleteIngestPipeline(final String pipelineName) {
+        return deletePipeline(INGEST_PIPELINE_TYPE, pipelineName);
+    }
+
+    /**
+     * Delete a search pipeline
+     *
+     * @param pipelineName of the pipeline
+     *
+     * @return delete pipeline response as a map object
+     */
+    @SneakyThrows
+    protected Map<String, Object> deleteSearchPipeline(final String pipelineName) {
+        return deletePipeline(SEARCH_PIPELINE_TYPE, pipelineName);
+    }
+
+    /**
+     * Retrieves all existing models
+     * @return models as a map object
+     */
+    @SneakyThrows
+    protected List<String> retrieveModels() {
+        Response response = makeRequest(
+            client(),
+            "POST",
+            "/_plugins/_ml/models/_search",
+            null,
+            toHttpEntity("{\"query\":{\"match_all\":{}}}"),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+
+        assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+
+        final String responseBody = EntityUtils.toString(response.getEntity());
+        assertNotNull(responseBody);
+
+        final XContentParser parser = createParser(MediaTypeRegistry.getDefaultMediaType().xContent(), responseBody);
+        final SearchResponse searchResponse = SearchResponse.fromXContent(parser);
+
+        return Arrays.stream(searchResponse.getHits().getHits())
+            .filter(h -> !h.getSourceAsMap().containsKey("chunk_number"))
+            .map(SearchHit::getId)
+            .toList();
+    }
+
+    private void deleteExistingModels() {
+        List<String> modelIds = retrieveModels();
+        modelIds.forEach(m -> {
+            try {
+                deleteModel(m);
+            } catch (AssertionError e) {
+                // sometimes we have flaky test that the model state doesn't change after call undeploy api
+                // for this case we can call undeploy api one more time
+                deleteModel(m);
+            }
+        });
+    }
+
+    @SneakyThrows
+    protected void wipeOfTestResources(
+        final String indexName,
+        final String ingestPipeline,
+        final String modelId,
+        final String searchPipeline
+    ) {
+        if (ingestPipeline != null) {
+            deleteIngestPipeline(ingestPipeline);
+        }
+        if (searchPipeline != null) {
+            deleteSearchPipeline(searchPipeline);
+        }
+        if (modelId != null) {
+            try {
+                deleteModel(modelId);
+            } catch (AssertionError e) {
+                // sometimes we have flaky test that the model state doesn't change after call undeploy api
+                // for this case we can call undeploy api one more time
+                deleteModel(modelId);
+            }
+        }
+        if (indexName != null) {
+            deleteIndex(indexName);
+        }
     }
 
     protected float computeExpectedScore(final String modelId, final Map<String, Float> tokenWeightMap, final String queryText) {
@@ -1495,33 +1701,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         freqBits = freqBits >> 15;
         freqBits = ((int) ((float) freqBits)) << 15;
         return Float.intBitsToFloat(freqBits);
-    }
-
-    // Wipe of all the resources after execution of the tests.
-    protected void wipeOfTestResources(
-        final String indexName,
-        final String ingestPipeline,
-        final String modelId,
-        final String searchPipeline
-    ) throws IOException {
-        if (ingestPipeline != null) {
-            deletePipeline(ingestPipeline);
-        }
-        if (searchPipeline != null) {
-            deleteSearchPipeline(searchPipeline);
-        }
-        if (modelId != null) {
-            try {
-                deleteModel(modelId);
-            } catch (AssertionError e) {
-                // sometimes we have flaky test that the model state doesn't change after call undeploy api
-                // for this case we can call undeploy api one more time
-                deleteModel(modelId);
-            }
-        }
-        if (indexName != null) {
-            deleteIndex(indexName);
-        }
     }
 
     protected Object validateDocCountAndInfo(

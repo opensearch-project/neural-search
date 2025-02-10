@@ -29,33 +29,20 @@ public class RRFProcessorIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testRRF_whenValidInput_thenSucceed() {
-        try {
-            createPipelineProcessor(null, RRF_INGEST_PIPELINE, ProcessorType.TEXT_EMBEDDING);
-            prepareKnnIndex(
-                RRF_INDEX_NAME,
-                Collections.singletonList(new KNNFieldConfig("passage_embedding", RRF_DIMENSION, TEST_SPACE_TYPE))
-            );
-            addDocuments();
-            createDefaultRRFSearchPipeline();
+        createPipelineProcessor(null, RRF_INGEST_PIPELINE, ProcessorType.TEXT_EMBEDDING);
+        prepareKnnIndex(RRF_INDEX_NAME, Collections.singletonList(new KNNFieldConfig("passage_embedding", RRF_DIMENSION, TEST_SPACE_TYPE)));
+        addDocuments();
+        createDefaultRRFSearchPipeline();
 
-            HybridQueryBuilder hybridQueryBuilder = getHybridQueryBuilder();
+        HybridQueryBuilder hybridQueryBuilder = getHybridQueryBuilder();
 
-            Map<String, Object> results = search(
-                RRF_INDEX_NAME,
-                hybridQueryBuilder,
-                null,
-                5,
-                Map.of("search_pipeline", RRF_SEARCH_PIPELINE)
-            );
-            Map<String, Object> hits = (Map<String, Object>) results.get("hits");
-            ArrayList<HashMap<String, Object>> hitsList = (ArrayList<HashMap<String, Object>>) hits.get("hits");
-            assertEquals(3, hitsList.size());
-            assertEquals(0.016393442, (Double) hitsList.getFirst().get("_score"), DELTA_FOR_SCORE_ASSERTION);
-            assertEquals(0.016129032, (Double) hitsList.get(1).get("_score"), DELTA_FOR_SCORE_ASSERTION);
-            assertEquals(0.015873017, (Double) hitsList.getLast().get("_score"), DELTA_FOR_SCORE_ASSERTION);
-        } finally {
-            wipeOfTestResources(RRF_INDEX_NAME, RRF_INGEST_PIPELINE, null, RRF_SEARCH_PIPELINE);
-        }
+        Map<String, Object> results = search(RRF_INDEX_NAME, hybridQueryBuilder, null, 5, Map.of("search_pipeline", RRF_SEARCH_PIPELINE));
+        Map<String, Object> hits = (Map<String, Object>) results.get("hits");
+        ArrayList<HashMap<String, Object>> hitsList = (ArrayList<HashMap<String, Object>>) hits.get("hits");
+        assertEquals(3, hitsList.size());
+        assertEquals(0.016393442, (Double) hitsList.getFirst().get("_score"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(0.016129032, (Double) hitsList.get(1).get("_score"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(0.015873017, (Double) hitsList.getLast().get("_score"), DELTA_FOR_SCORE_ASSERTION);
     }
 
     private HybridQueryBuilder getHybridQueryBuilder() {
