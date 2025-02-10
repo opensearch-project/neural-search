@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.processor;
 
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
@@ -155,10 +156,10 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
 
         List<List<Float>> modelTensorList = createMockVectorResult();
         doAnswer(invocation -> {
-            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
@@ -188,7 +189,8 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
             DESCRIPTION,
             config
         );
-        doThrow(new RuntimeException()).when(accessor).inferenceSentences(any(), isA(ActionListener.class));
+        doThrow(new RuntimeException()).when(accessor)
+            .inferenceSentences(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
         verify(handler).accept(isNull(), any(RuntimeException.class));
@@ -216,7 +218,8 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
             DESCRIPTION,
             config
         );
-        doThrow(new RuntimeException()).when(accessor).inferenceSentences(any(), isA(ActionListener.class));
+        doThrow(new RuntimeException()).when(accessor)
+            .inferenceSentences(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
         verify(handler).accept(any(IngestDocument.class), isNull());
@@ -234,10 +237,10 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
 
         List<List<Float>> modelTensorList = createMockVectorResult();
         doAnswer(invocation -> {
-            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
@@ -310,10 +313,10 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
 
         List<List<Float>> modelTensorList = createMockVectorResult();
         doAnswer(invocation -> {
-            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
@@ -351,10 +354,10 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
 
         List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(1, 100, 0.0f, 1.0f);
         doAnswer(invocation -> {
-            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
         assertNotNull(ingestDocument);
@@ -411,10 +414,10 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
 
         List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(1, 100, 0.0f, 1.0f);
         doAnswer(invocation -> {
-            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
         assertNotNull(ingestDocument);
@@ -469,10 +472,10 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
 
         List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(1, 100, 0.0f, 1.0f);
         doAnswer(invocation -> {
-            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
         assertNotNull(ingestDocument);
@@ -548,10 +551,10 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
 
         List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(2, 100, 0.0f, 1.0f);
         doAnswer(invocation -> {
-            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
         assertNotNull(ingestDocument);
@@ -604,10 +607,10 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
 
         List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(1, 100, 0.0f, 1.0f);
         doAnswer(invocation -> {
-            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
         assertNotNull(ingestDocument);
@@ -673,10 +676,10 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig();
 
         doAnswer(invocation -> {
-            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
             listener.onFailure(new IllegalArgumentException("illegal argument"));
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
@@ -713,10 +716,10 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         sourceAndMetadata.put("key2", 100.232D);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         doAnswer(invocation -> {
-            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
             listener.onFailure(new IllegalArgumentException("illegal argument"));
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
         TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig();
@@ -1075,10 +1078,10 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
 
         List<List<Float>> modelTensorList = createMockVectorWithLength(10);
         doAnswer(invocation -> {
-            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
             listener.onResponse(modelTensorList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         Consumer resultHandler = mock(Consumer.class);
         processor.batchExecute(ingestDocumentWrappers, resultHandler);
@@ -1096,10 +1099,10 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
         TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(docCount);
         doAnswer(invocation -> {
-            ActionListener<List<List<Float>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
             listener.onFailure(new RuntimeException());
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor).inferenceSentences(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         Consumer resultHandler = mock(Consumer.class);
         processor.batchExecute(ingestDocumentWrappers, resultHandler);

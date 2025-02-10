@@ -116,7 +116,8 @@ public class MLCommonsClientAccessor {
         retryableInferenceSentencesWithSingleVectorResult(
             (inferenceRequest.getTargetResponseFilters() == null || inferenceRequest.getTargetResponseFilters().isEmpty())
                 ? TARGET_RESPONSE_FILTERS
-                : inferenceRequest.getTargetResponseFilters(),            inferenceRequest.getModelId(),
+                : inferenceRequest.getTargetResponseFilters(),
+            inferenceRequest.getModelId(),
             inferenceRequest.getInputObjects(),
             0,
             listener

@@ -14,6 +14,7 @@ import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.IngestDocumentWrapper;
+import org.opensearch.neuralsearch.constants.TestCommonConstants;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
 import java.util.ArrayList;
@@ -100,9 +101,9 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
             assertNull(captor.getValue().get(i).getException());
             assertEquals(wrapperList.get(i).getIngestDocument(), captor.getValue().get(i).getIngestDocument());
         }
-        ArgumentCaptor<List<String>> inferenceTextCaptor = ArgumentCaptor.forClass(List.class);
-        verify(clientAccessor).inferenceSentences(any(), any());
-        assertEquals(4, inferenceTextCaptor.getValue().size());
+        ArgumentCaptor<InferenceRequest> inferenceRequest = ArgumentCaptor.forClass(InferenceRequest.class);
+        verify(clientAccessor).inferenceSentences(inferenceRequest.capture(), any());
+        assertEquals(1, inferenceRequest.getValue().getInputTexts().size());
     }
 
     public void test_batchExecute_sort() {
@@ -121,10 +122,10 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
             assertNull(captor.getValue().get(i).getException());
             assertEquals(wrapperList.get(i).getIngestDocument(), captor.getValue().get(i).getIngestDocument());
         }
-        ArgumentCaptor<List<String>> inferenceTextCaptor = ArgumentCaptor.forClass(List.class);
-        verify(clientAccessor).inferenceSentences(any(), any());
-        assertEquals(4, inferenceTextCaptor.getValue().size());
-        assertEquals(Arrays.asList("cc", "bbb", "ddd", "aaaaa"), inferenceTextCaptor.getValue());
+        ArgumentCaptor<InferenceRequest> inferenceRequestArgumentCaptor = ArgumentCaptor.forClass(InferenceRequest.class);
+        verify(clientAccessor).inferenceSentences(inferenceRequestArgumentCaptor.capture(), any());
+        assertEquals(1, inferenceRequestArgumentCaptor.getValue().getInputTexts().size());
+        assertEquals(TestCommonConstants.SENTENCES_LIST, inferenceRequestArgumentCaptor.getValue().getInputTexts());
 
         List<?> doc1Embeddings = (List) (captor.getValue().get(0).getIngestDocument().getFieldValue("embedding_key1", List.class));
         List<?> doc2Embeddings = (List) (captor.getValue().get(1).getIngestDocument().getFieldValue("embedding_key1", List.class));

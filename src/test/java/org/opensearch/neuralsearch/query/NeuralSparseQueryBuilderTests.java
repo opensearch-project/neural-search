@@ -5,6 +5,8 @@
 package org.opensearch.neuralsearch.query;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.opensearch.index.query.AbstractQueryBuilder.BOOST_FIELD;
@@ -624,10 +626,11 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         Map<String, Float> expectedMap = Map.of("1", 1f, "2", 2f);
         MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
         doAnswer(invocation -> {
-            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(1);
             listener.onResponse(List.of(Map.of("response", List.of(expectedMap))));
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), any());
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
         NeuralSparseQueryBuilder.initialize(mlCommonsClientAccessor);
 
         final CountDownLatch inProgressLatch = new CountDownLatch(1);
@@ -661,10 +664,11 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         Map<String, Float> expectedMap = Map.of("1", 1f, "2", 5f);
         MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
         doAnswer(invocation -> {
-            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(1);
             listener.onResponse(List.of(Map.of("response", List.of(expectedMap))));
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), any());
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
         NeuralSparseQueryBuilder.initialize(mlCommonsClientAccessor);
 
         final CountDownLatch inProgressLatch = new CountDownLatch(1);

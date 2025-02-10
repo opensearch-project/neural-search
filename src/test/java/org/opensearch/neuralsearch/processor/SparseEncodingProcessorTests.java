@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor;
 
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isA;
@@ -113,10 +114,11 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
 
         List<Map<String, ?>> dataAsMapList = createMockMapResult(2);
         doAnswer(invocation -> {
-            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(1);
             listener.onResponse(dataAsMapList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
@@ -145,7 +147,8 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
             DESCRIPTION,
             config
         );
-        doThrow(new RuntimeException()).when(accessor).inferenceSentences(any(), isA(ActionListener.class));
+        doThrow(new RuntimeException()).when(accessor)
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
         verify(handler).accept(any(IngestDocument.class), isNull());
@@ -163,10 +166,11 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
 
         List<Map<String, ?>> dataAsMapList = createMockMapResult(6);
         doAnswer(invocation -> {
-            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(1);
             listener.onResponse(dataAsMapList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
@@ -182,10 +186,11 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         SparseEncodingProcessor processor = createInstance();
 
         doAnswer(invocation -> {
-            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(1);
             listener.onFailure(new IllegalArgumentException("illegal argument"));
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
@@ -219,10 +224,11 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
 
         List<Map<String, ?>> dataAsMapList = createMockMapResult(2);
         doAnswer(invocation -> {
-            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(1);
             listener.onResponse(dataAsMapList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
@@ -236,10 +242,11 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         SparseEncodingProcessor processor = createInstance(docCount);
         List<Map<String, ?>> dataAsMapList = createMockMapResult(10);
         doAnswer(invocation -> {
-            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(1);
             listener.onResponse(dataAsMapList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         Consumer resultHandler = mock(Consumer.class);
         processor.batchExecute(ingestDocumentWrappers, resultHandler);
@@ -257,10 +264,11 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
         SparseEncodingProcessor processor = createInstance(docCount);
         doAnswer(invocation -> {
-            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(1);
             listener.onFailure(new RuntimeException());
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         Consumer resultHandler = mock(Consumer.class);
         processor.batchExecute(ingestDocumentWrappers, resultHandler);
@@ -288,10 +296,11 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         );
 
         doAnswer(invocation -> {
-            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(1);
             listener.onResponse(dataAsMapList);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
@@ -330,10 +339,11 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         );
 
         doAnswer(invocation -> {
-            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(1);
             listener.onResponse(mockMLResponse);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), isA(ActionListener.class));
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         Consumer<List<?>> resultHandler = mock(Consumer.class);
         Consumer<Exception> exceptionHandler = mock(Consumer.class);
