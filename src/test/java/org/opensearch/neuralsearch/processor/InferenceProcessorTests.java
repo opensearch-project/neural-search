@@ -31,7 +31,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.opensearch.neuralsearch.constants.TestCommonConstants.INFERENCE_REQUEST;
+import static org.opensearch.neuralsearch.constants.TestCommonConstants.TEXT_INFERENCE_REQUEST;
 
 public class InferenceProcessorTests extends InferenceProcessorTestCase {
     private MLCommonsClientAccessor clientAccessor;
@@ -101,9 +101,9 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
             assertNull(captor.getValue().get(i).getException());
             assertEquals(wrapperList.get(i).getIngestDocument(), captor.getValue().get(i).getIngestDocument());
         }
-        ArgumentCaptor<InferenceRequest> inferenceRequest = ArgumentCaptor.forClass(InferenceRequest.class);
+        ArgumentCaptor<TextInferenceRequest> inferenceRequest = ArgumentCaptor.forClass(TextInferenceRequest.class);
         verify(clientAccessor).inferenceSentences(inferenceRequest.capture(), any());
-        assertEquals(1, inferenceRequest.getValue().getInputTexts().size());
+        assertEquals(2, inferenceRequest.getValue().getInputTexts().size());
     }
 
     public void test_batchExecute_sort() {
@@ -122,9 +122,9 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
             assertNull(captor.getValue().get(i).getException());
             assertEquals(wrapperList.get(i).getIngestDocument(), captor.getValue().get(i).getIngestDocument());
         }
-        ArgumentCaptor<InferenceRequest> inferenceRequestArgumentCaptor = ArgumentCaptor.forClass(InferenceRequest.class);
+        ArgumentCaptor<TextInferenceRequest> inferenceRequestArgumentCaptor = ArgumentCaptor.forClass(TextInferenceRequest.class);
         verify(clientAccessor).inferenceSentences(inferenceRequestArgumentCaptor.capture(), any());
-        assertEquals(1, inferenceRequestArgumentCaptor.getValue().getInputTexts().size());
+        assertEquals(2, inferenceRequestArgumentCaptor.getValue().getInputTexts().size());
         assertEquals(TestCommonConstants.SENTENCES_LIST, inferenceRequestArgumentCaptor.getValue().getInputTexts());
 
         List<?> doc1Embeddings = (List) (captor.getValue().get(0).getIngestDocument().getFieldValue("embedding_key1", List.class));
@@ -202,7 +202,7 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
         @Override
         void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException) {
             // use to verify if doBatchExecute is called from InferenceProcessor
-            clientAccessor.inferenceSentences(INFERENCE_REQUEST, ActionListener.wrap(results -> {}, ex -> {}));
+            clientAccessor.inferenceSentences(TEXT_INFERENCE_REQUEST, ActionListener.wrap(results -> {}, ex -> {}));
             allInferenceInputs.add(inferenceList);
             if (this.exception != null) {
                 onException.accept(this.exception);

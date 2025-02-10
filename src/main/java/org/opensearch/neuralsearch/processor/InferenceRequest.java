@@ -6,25 +6,32 @@ package org.opensearch.neuralsearch.processor;
 
 import java.util.List;
 
-import java.util.Map;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.NonNull;
 import lombok.Setter;
+import lombok.experimental.SuperBuilder;
 
-@Builder
-@AllArgsConstructor
+@SuperBuilder
+@NoArgsConstructor
 @Getter
 @Setter
 /**
- * POJO class to hold request parameters to call ml commons client accessor.
+ *  Base abstract class for inference requests.
+ *  This class contains common fields and behaviors shared across different types of inference requests.
  */
-public class InferenceRequest {
+public abstract class InferenceRequest {
+    /**
+     * Unique identifier for the model to be used for inference.
+     * This field is required and cannot be null.
+     */
     @NonNull
-    private String modelId; // required
-    private List<String> inputTexts; // on which inference needs to happen
-    private Map<String, String> inputObjects;
-    private List<String> targetResponseFilters;
-    private String queryText;
+    private String modelId;
+    /**
+     * List of targetResponseFilters to be applied.
+     * Defaults value if not specified.
+     */
+    @Builder.Default
+    private List<String> targetResponseFilters = List.of("sentence_embedding");
 }

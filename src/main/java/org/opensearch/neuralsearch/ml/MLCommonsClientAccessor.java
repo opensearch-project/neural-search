@@ -27,6 +27,9 @@ import org.opensearch.ml.common.output.model.ModelTensor;
 import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
 import org.opensearch.neuralsearch.processor.InferenceRequest;
+import org.opensearch.neuralsearch.processor.MapInferenceRequest;
+import org.opensearch.neuralsearch.processor.SimilarityInferenceRequest;
+import org.opensearch.neuralsearch.processor.TextInferenceRequest;
 import org.opensearch.neuralsearch.util.RetryUtil;
 
 import lombok.NonNull;
@@ -39,37 +42,37 @@ import lombok.extern.log4j.Log4j2;
 @RequiredArgsConstructor
 @Log4j2
 public class MLCommonsClientAccessor {
-    private static final List<String> TARGET_RESPONSE_FILTERS = List.of("sentence_embedding");
     private final MachineLearningNodeClient mlClient;
 
     /**
      * Wrapper around {@link #inferenceSentences} that expected a single input text and produces a single floating
      * point vector as a response.
      *
-     * @param inferenceRequest {@link InferenceRequest}
+     * @param modelId {@link String}
+     * @param inputText {@link String}
      * @param listener {@link ActionListener} which will be called when prediction is completed or errored out
      */
-    public void inferenceSentence(@NonNull final InferenceRequest inferenceRequest, @NonNull final ActionListener<List<Float>> listener) {
-        if (inferenceRequest.getInputTexts().size() != 1) {
-            listener.onFailure(
-                new IllegalArgumentException(
-                    "Unexpected number of input texts. Expected 1 input text, but got [" + inferenceRequest.getInputTexts().size() + "]"
-                )
-            );
-            return;
-        }
-        inferenceSentences(inferenceRequest, ActionListener.wrap(response -> {
-            if (response.size() != 1) {
-                listener.onFailure(
-                    new IllegalStateException(
-                        "Unexpected number of vectors produced. Expected 1 vector to be returned, but got [" + response.size() + "]"
-                    )
-                );
-                return;
-            }
+    public void inferenceSentence(
+        @NonNull final String modelId,
+        @NonNull final String inputText,
+        @NonNull final ActionListener<List<Float>> listener
+    ) {
 
-            listener.onResponse(response.getFirst());
-        }, listener::onFailure));
+        inferenceSentences(
+            TextInferenceRequest.builder().modelId(modelId).inputTexts(List.of(inputText)).build(),
+            ActionListener.wrap(response -> {
+                if (response.size() != 1) {
+                    listener.onFailure(
+                        new IllegalStateException(
+                            "Unexpected number of vectors produced. Expected 1 vector to be returned, but got [" + response.size() + "]"
+                        )
+                    );
+                    return;
+                }
+
+                listener.onResponse(response.getFirst());
+            }, listener::onFailure)
+        );
     }
 
     /**
@@ -83,25 +86,17 @@ public class MLCommonsClientAccessor {
      * @param listener {@link ActionListener} which will be called when prediction is completed or errored out.
      */
     public void inferenceSentences(
-        @NonNull final InferenceRequest inferenceRequest,
+        @NonNull final TextInferenceRequest inferenceRequest,
         @NonNull final ActionListener<List<List<Float>>> listener
     ) {
-        retryableInferenceSentencesWithVectorResult(
-            (inferenceRequest.getTargetResponseFilters() == null || inferenceRequest.getTargetResponseFilters().isEmpty())
-                ? TARGET_RESPONSE_FILTERS
-                : inferenceRequest.getTargetResponseFilters(),
-            inferenceRequest.getModelId(),
-            inferenceRequest.getInputTexts(),
-            0,
-            listener
-        );
+        retryableInferenceSentencesWithVectorResult(inferenceRequest, 0, listener);
     }
 
     public void inferenceSentencesWithMapResult(
-        @NonNull final InferenceRequest inferenceRequest,
+        @NonNull final TextInferenceRequest inferenceRequest,
         @NonNull final ActionListener<List<Map<String, ?>>> listener
     ) {
-        retryableInferenceSentencesWithMapResult(inferenceRequest.getModelId(), inferenceRequest.getInputTexts(), 0, listener);
+        retryableInferenceSentencesWithMapResult(inferenceRequest, 0, listener);
     }
 
     /**
@@ -112,16 +107,8 @@ public class MLCommonsClientAccessor {
      * @param inferenceRequest {@link InferenceRequest}
      * @param listener {@link ActionListener} which will be called when prediction is completed or errored out.
      */
-    public void inferenceSentencesMap(@NonNull InferenceRequest inferenceRequest, @NonNull final ActionListener<List<Float>> listener) {
-        retryableInferenceSentencesWithSingleVectorResult(
-            (inferenceRequest.getTargetResponseFilters() == null || inferenceRequest.getTargetResponseFilters().isEmpty())
-                ? TARGET_RESPONSE_FILTERS
-                : inferenceRequest.getTargetResponseFilters(),
-            inferenceRequest.getModelId(),
-            inferenceRequest.getInputObjects(),
-            0,
-            listener
-        );
+    public void inferenceSentencesMap(@NonNull MapInferenceRequest inferenceRequest, @NonNull final ActionListener<List<Float>> listener) {
+        retryableInferenceSentencesWithSingleVectorResult(inferenceRequest, 0, listener);
     }
 
     /**
@@ -132,73 +119,65 @@ public class MLCommonsClientAccessor {
      * @param inferenceRequest {@link InferenceRequest}
      * @param listener {@link ActionListener} receives the result of the inference
      */
-    public void inferenceSimilarity(@NonNull InferenceRequest inferenceRequest, @NonNull final ActionListener<List<Float>> listener) {
-        retryableInferenceSimilarityWithVectorResult(
-            inferenceRequest.getModelId(),
-            inferenceRequest.getQueryText(),
-            inferenceRequest.getInputTexts(),
-            0,
-            listener
-        );
+    public void inferenceSimilarity(
+        @NonNull SimilarityInferenceRequest inferenceRequest,
+        @NonNull final ActionListener<List<Float>> listener
+    ) {
+        retryableInferenceSimilarityWithVectorResult(inferenceRequest, 0, listener);
     }
 
     private void retryableInferenceSentencesWithMapResult(
-        final String modelId,
-        final List<String> inputText,
+        final TextInferenceRequest inferenceRequest,
         final int retryTime,
         final ActionListener<List<Map<String, ?>>> listener
     ) {
-        MLInput mlInput = createMLTextInput(null, inputText);
-        mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
+        MLInput mlInput = createMLTextInput(null, inferenceRequest.getInputTexts());
+        mlClient.predict(inferenceRequest.getModelId(), mlInput, ActionListener.wrap(mlOutput -> {
             final List<Map<String, ?>> result = buildMapResultFromResponse(mlOutput);
             listener.onResponse(result);
         },
             e -> RetryUtil.handleRetryOrFailure(
                 e,
                 retryTime,
-                () -> retryableInferenceSentencesWithMapResult(modelId, inputText, retryTime + 1, listener),
+                () -> retryableInferenceSentencesWithMapResult(inferenceRequest, retryTime + 1, listener),
                 listener
             )
         ));
     }
 
     private void retryableInferenceSentencesWithVectorResult(
-        final List<String> targetResponseFilters,
-        final String modelId,
-        final List<String> inputText,
+        final TextInferenceRequest inferenceRequest,
         final int retryTime,
         final ActionListener<List<List<Float>>> listener
     ) {
-        MLInput mlInput = createMLTextInput(targetResponseFilters, inputText);
-        mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
+        MLInput mlInput = createMLTextInput(inferenceRequest.getTargetResponseFilters(), inferenceRequest.getInputTexts());
+        mlClient.predict(inferenceRequest.getModelId(), mlInput, ActionListener.wrap(mlOutput -> {
             final List<List<Float>> vector = buildVectorFromResponse(mlOutput);
             listener.onResponse(vector);
         },
             e -> RetryUtil.handleRetryOrFailure(
                 e,
                 retryTime,
-                () -> retryableInferenceSentencesWithVectorResult(targetResponseFilters, modelId, inputText, retryTime + 1, listener),
+                () -> retryableInferenceSentencesWithVectorResult(inferenceRequest, retryTime + 1, listener),
                 listener
             )
         ));
     }
 
     private void retryableInferenceSimilarityWithVectorResult(
-        final String modelId,
-        final String queryText,
-        final List<String> inputText,
+        final SimilarityInferenceRequest inferenceRequest,
         final int retryTime,
         final ActionListener<List<Float>> listener
     ) {
-        MLInput mlInput = createMLTextPairsInput(queryText, inputText);
-        mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
+        MLInput mlInput = createMLTextPairsInput(inferenceRequest.getQueryText(), inferenceRequest.getInputTexts());
+        mlClient.predict(inferenceRequest.getModelId(), mlInput, ActionListener.wrap(mlOutput -> {
             final List<Float> scores = buildVectorFromResponse(mlOutput).stream().map(v -> v.get(0)).collect(Collectors.toList());
             listener.onResponse(scores);
         },
             e -> RetryUtil.handleRetryOrFailure(
                 e,
                 retryTime,
-                () -> retryableInferenceSimilarityWithVectorResult(modelId, queryText, inputText, retryTime + 1, listener),
+                () -> retryableInferenceSimilarityWithVectorResult(inferenceRequest, retryTime + 1, listener),
                 listener
             )
         ));
@@ -252,14 +231,12 @@ public class MLCommonsClientAccessor {
     }
 
     private void retryableInferenceSentencesWithSingleVectorResult(
-        final List<String> targetResponseFilters,
-        final String modelId,
-        final Map<String, String> inputObjects,
+        final MapInferenceRequest inferenceRequest,
         final int retryTime,
         final ActionListener<List<Float>> listener
     ) {
-        MLInput mlInput = createMLMultimodalInput(targetResponseFilters, inputObjects);
-        mlClient.predict(modelId, mlInput, ActionListener.wrap(mlOutput -> {
+        MLInput mlInput = createMLMultimodalInput(inferenceRequest.getTargetResponseFilters(), inferenceRequest.getInputObjects());
+        mlClient.predict(inferenceRequest.getModelId(), mlInput, ActionListener.wrap(mlOutput -> {
             final List<Float> vector = buildSingleVectorFromResponse(mlOutput);
             log.debug("Inference Response for input sentence is : {} ", vector);
             listener.onResponse(vector);
@@ -267,13 +244,7 @@ public class MLCommonsClientAccessor {
             e -> RetryUtil.handleRetryOrFailure(
                 e,
                 retryTime,
-                () -> retryableInferenceSentencesWithSingleVectorResult(
-                    targetResponseFilters,
-                    modelId,
-                    inputObjects,
-                    retryTime + 1,
-                    listener
-                ),
+                () -> retryableInferenceSentencesWithSingleVectorResult(inferenceRequest, retryTime + 1, listener),
                 listener
             )
         ));

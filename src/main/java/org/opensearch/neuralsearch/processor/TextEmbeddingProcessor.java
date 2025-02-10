@@ -48,7 +48,7 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
         BiConsumer<IngestDocument, Exception> handler
     ) {
         mlCommonsClientAccessor.inferenceSentences(
-            InferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
+            TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
             ActionListener.wrap(vectors -> {
                 setVectorFieldsToDocument(ingestDocument, ProcessMap, vectors);
                 handler.accept(ingestDocument, null);
@@ -59,7 +59,7 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
     @Override
     public void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException) {
         mlCommonsClientAccessor.inferenceSentences(
-            InferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
+            TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
             ActionListener.wrap(handler::accept, onException)
         );
     }

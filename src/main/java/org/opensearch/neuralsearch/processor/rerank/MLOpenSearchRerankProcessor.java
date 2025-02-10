@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
-import org.opensearch.neuralsearch.processor.InferenceRequest;
+import org.opensearch.neuralsearch.processor.SimilarityInferenceRequest;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
 import org.opensearch.neuralsearch.processor.rerank.context.ContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.context.DocumentContextSourceFetcher;
@@ -74,7 +74,7 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
         List<?> ctxList = (List<?>) ctxObj;
         List<String> contexts = ctxList.stream().map(str -> (String) str).collect(Collectors.toList());
         mlCommonsClientAccessor.inferenceSimilarity(
-            InferenceRequest.builder()
+            SimilarityInferenceRequest.builder()
                 .modelId(modelId)
                 .queryText((String) rerankingContext.get(QueryContextSourceFetcher.QUERY_TEXT_FIELD))
                 .inputTexts(contexts)

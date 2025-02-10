@@ -56,7 +56,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.log4j.Log4j2;
-import org.opensearch.neuralsearch.processor.InferenceRequest;
+import org.opensearch.neuralsearch.processor.MapInferenceRequest;
 
 /**
  * NeuralQueryBuilder is responsible for producing "neural" query types. A "neural" query type is a wrapper around a
@@ -492,7 +492,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         }
         queryRewriteContext.registerAsyncAction(
             ((client, actionListener) -> ML_CLIENT.inferenceSentencesMap(
-                InferenceRequest.builder().modelId(modelId()).inputObjects(inferenceInput).build(),
+                MapInferenceRequest.builder().modelId(modelId()).inputObjects(inferenceInput).build(),
                 ActionListener.wrap(floatList -> {
                     vectorSetOnce.set(vectorAsListToArray(floatList));
                     actionListener.onResponse(null);

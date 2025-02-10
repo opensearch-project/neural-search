@@ -114,7 +114,7 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
                 handler.accept(ingestDocument, null);
             } else {
                 mlCommonsClientAccessor.inferenceSentencesMap(
-                    InferenceRequest.builder().modelId(this.modelId).inputObjects(inferenceMap).build(),
+                    MapInferenceRequest.builder().modelId(this.modelId).inputObjects(inferenceMap).build(),
                     ActionListener.wrap(vectors -> {
                         setVectorFieldsToDocument(ingestDocument, vectors);
                         handler.accept(ingestDocument, null);
