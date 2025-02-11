@@ -70,9 +70,6 @@ import org.opensearch.knn.index.engine.KNNMethodContext;
 import org.opensearch.knn.index.engine.MethodComponentContext;
 import org.opensearch.knn.index.mapper.KNNMappingConfig;
 import org.opensearch.knn.index.mapper.KNNVectorFieldType;
-import org.opensearch.knn.index.query.KNNQuery;
-import org.opensearch.knn.index.query.KNNQueryBuilder;
-import org.opensearch.knn.index.query.nativelib.NativeEngineKnnVectorQuery;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 
@@ -154,11 +151,10 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertNotNull(queryOnlyNeural);
         assertTrue(queryOnlyNeural instanceof HybridQuery);
         assertEquals(1, ((HybridQuery) queryOnlyNeural).getSubQueries().size());
-        assertTrue(((HybridQuery) queryOnlyNeural).getSubQueries().iterator().next() instanceof NativeEngineKnnVectorQuery);
-        KNNQuery knnQuery = ((NativeEngineKnnVectorQuery) ((HybridQuery) queryOnlyNeural).getSubQueries().iterator().next()).getKnnQuery();
-        assertEquals(VECTOR_FIELD_NAME, knnQuery.getField());
-        assertEquals(K, knnQuery.getK());
-        assertNotNull(knnQuery.getQueryVector());
+        assertTrue(((HybridQuery) queryOnlyNeural).getSubQueries().iterator().next() instanceof NeuralKNNQuery);
+        Query knnQuery = ((NeuralKNNQuery) ((HybridQuery) queryOnlyNeural).getSubQueries().iterator().next()).getKnnQuery();
+        assertNotNull(knnQuery);
+        assertTrue(knnQuery.toString(VECTOR_FIELD_NAME).contains(VECTOR_FIELD_NAME));
     }
 
     @SneakyThrows
@@ -203,11 +199,10 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         // verify knn vector query
         Iterator<Query> queryIterator = ((HybridQuery) queryTwoSubQueries).getSubQueries().iterator();
         Query firstQuery = queryIterator.next();
-        assertTrue(firstQuery instanceof NativeEngineKnnVectorQuery);
-        KNNQuery knnQuery = ((NativeEngineKnnVectorQuery) firstQuery).getKnnQuery();
-        assertEquals(VECTOR_FIELD_NAME, knnQuery.getField());
-        assertEquals(K, knnQuery.getK());
-        assertNotNull(knnQuery.getQueryVector());
+        assertTrue(firstQuery instanceof NeuralKNNQuery);
+        Query knnQuery = ((NeuralKNNQuery) firstQuery).getKnnQuery();
+        assertNotNull(knnQuery);
+        assertTrue(knnQuery.toString(VECTOR_FIELD_NAME).contains(VECTOR_FIELD_NAME));
         // verify term query
         Query secondQuery = queryIterator.next();
         assertTrue(secondQuery instanceof TermQuery);
@@ -765,10 +760,10 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertEquals(2, hybridQueryBuilder.queries().size());
         List<QueryBuilder> queryBuilders = hybridQueryBuilder.queries();
         // verify each sub-query builder
-        assertTrue(queryBuilders.get(0) instanceof KNNQueryBuilder);
-        KNNQueryBuilder knnQueryBuilder = (KNNQueryBuilder) queryBuilders.get(0);
-        assertEquals(neuralQueryBuilder.fieldName(), knnQueryBuilder.fieldName());
-        assertEquals((int) neuralQueryBuilder.k(), knnQueryBuilder.getK());
+        assertTrue(queryBuilders.get(0) instanceof NeuralKNNQueryBuilder);
+        NeuralKNNQueryBuilder neuralKNNQueryBuilder = (NeuralKNNQueryBuilder) queryBuilders.get(0);
+        assertEquals(neuralQueryBuilder.fieldName(), neuralKNNQueryBuilder.fieldName());
+        assertEquals((int) neuralQueryBuilder.k(), neuralKNNQueryBuilder.k());
         assertTrue(queryBuilders.get(1) instanceof TermQueryBuilder);
         TermQueryBuilder termQueryBuilder = (TermQueryBuilder) queryBuilders.get(1);
         assertEquals(termSubQuery.fieldName(), termQueryBuilder.fieldName());

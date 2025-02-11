@@ -40,7 +40,6 @@ import org.opensearch.index.query.AbstractQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.knn.index.query.parser.MethodParametersParser;
 import org.opensearch.knn.index.query.parser.RescoreParser;
 import org.opensearch.knn.index.query.rescore.RescoreContext;
@@ -463,22 +462,23 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         // https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/index/query/Rewriteable.java#L117.
         // With the asynchronous call, on first rewrite, we create a new
         // vector supplier that will get populated once the asynchronous call finishes and pass this supplier in to
-        // create a new builder. Once the supplier's value gets set, we return a KNNQueryBuilder. Otherwise, we just
-        // return the current unmodified query builder.
+        // create a new builder. Once the supplier's value gets set, we return a NeuralKNNQueryBuilder
+        // which wrapped KNNQueryBuilder. Otherwise, we just return the current unmodified query builder.
         if (vectorSupplier() != null) {
             if (vectorSupplier().get() == null) {
                 return this;
             }
-            return KNNQueryBuilder.builder()
+
+            return NeuralKNNQueryBuilder.builder()
                 .fieldName(fieldName())
                 .vector(vectorSupplier.get())
+                .k(k())
                 .filter(filter())
-                .maxDistance(maxDistance)
-                .minScore(minScore)
-                .expandNested(expandNested)
-                .k(k)
-                .methodParameters(methodParameters)
-                .rescoreContext(rescoreContext)
+                .maxDistance(maxDistance())
+                .minScore(minScore())
+                .expandNested(expandNested())
+                .methodParameters(methodParameters())
+                .rescoreContext(rescoreContext())
                 .build();
         }
 

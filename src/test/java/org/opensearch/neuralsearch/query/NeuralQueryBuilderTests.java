@@ -56,7 +56,6 @@ import org.opensearch.index.query.MatchNoneQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.knn.index.query.rescore.RescoreContext;
 import org.opensearch.neuralsearch.common.MinClusterVersionUtil;
 import org.opensearch.neuralsearch.common.VectorUtil;
@@ -869,7 +868,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
             .vectorSupplier(TEST_VECTOR_SUPPLIER)
             .build();
 
-        KNNQueryBuilder expected = KNNQueryBuilder.builder()
+        NeuralKNNQueryBuilder expected = NeuralKNNQueryBuilder.builder()
             .k(K)
             .fieldName(neuralQueryBuilder.fieldName())
             .methodParameters(neuralQueryBuilder.methodParameters())
@@ -892,9 +891,9 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
             .filter(TEST_FILTER)
             .build();
         QueryBuilder queryBuilder = neuralQueryBuilder.doRewrite(null);
-        assertTrue(queryBuilder instanceof KNNQueryBuilder);
-        KNNQueryBuilder knnQueryBuilder = (KNNQueryBuilder) queryBuilder;
-        assertEquals(neuralQueryBuilder.filter(), knnQueryBuilder.getFilter());
+        assertTrue(queryBuilder instanceof NeuralKNNQueryBuilder);
+        NeuralKNNQueryBuilder neuralKNNQueryBuilder = (NeuralKNNQueryBuilder) queryBuilder;
+        assertEquals(neuralQueryBuilder.filter(), neuralKNNQueryBuilder.getKnnQueryBuilder().getFilter());
     }
 
     public void testQueryCreation_whenCreateQueryWithDoToQuery_thenFail() {
