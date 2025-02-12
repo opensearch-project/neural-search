@@ -13,7 +13,9 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
+import org.opensearch.knn.index.query.parser.KNNQueryBuilderParser;
 import org.opensearch.knn.index.query.rescore.RescoreContext;
+import org.opensearch.knn.index.util.IndexUtil;
 
 import java.io.IOException;
 import java.util.Map;
@@ -127,12 +129,12 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
 
     @Override
     public void doWriteTo(StreamOutput out) throws IOException {
-        knnQueryBuilder.writeTo(out);
+        KNNQueryBuilderParser.streamOutput(out, knnQueryBuilder, IndexUtil::isClusterOnOrAfterMinRequiredVersion);
     }
 
     @Override
     protected void doXContent(XContentBuilder builder, Params params) throws IOException {
-        knnQueryBuilder.toXContent(builder, params);
+        knnQueryBuilder.doXContent(builder, params);
     }
 
     @Override
