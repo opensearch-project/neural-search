@@ -16,7 +16,6 @@ import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_M
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
 import static org.opensearch.neuralsearch.util.TestUtils.TEXT_EMBEDDING_PROCESSOR;
-import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
@@ -24,6 +23,7 @@ import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.knn.index.query.rescore.RescoreContext;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+import org.opensearch.neuralsearch.util.TestUtils;
 
 public class HybridSearchWithRescoreIT extends AbstractRestartUpgradeRestTestCase {
     private static final String PIPELINE_NAME = "nlp-hybrid-with-rescore-pipeline";
@@ -43,7 +43,7 @@ public class HybridSearchWithRescoreIT extends AbstractRestartUpgradeRestTestCas
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
 
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadTextEmbeddingModel();
+            String modelId = getOrUploadTextEmbeddingModel();
             loadModel(modelId);
             createPipelineProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
@@ -61,7 +61,8 @@ public class HybridSearchWithRescoreIT extends AbstractRestartUpgradeRestTestCas
         } else {
             String modelId = null;
             try {
-                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                ;
                 loadModel(modelId);
                 addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_UPGRADED, null, null);
                 HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null);
@@ -70,7 +71,7 @@ public class HybridSearchWithRescoreIT extends AbstractRestartUpgradeRestTestCas
                 hybridQueryBuilder = getQueryBuilder(modelId, Map.of("ef_search", 100), RescoreContext.getDefault());
                 validateTestIndex(getIndexNameForTest(), hybridQueryBuilder, rescorer);
             } finally {
-                wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
+                // wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, null, null);
             }
         }
     }

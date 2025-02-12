@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Optional;
+
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
@@ -85,6 +86,48 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
         }
     }
 
+    protected enum TextEmbeddingModel {
+        INSTANCE;
+
+        private static String modelId;
+
+        public static void setModelId(String id) {
+            modelId = id;
+        }
+
+        public static String getModelId() {
+            return modelId;
+        }
+    }
+
+    protected enum TextImageEmbeddingModel {
+        INSTANCE;
+
+        private static String modelId;
+
+        public static void setModelId(String id) {
+            modelId = id;
+        }
+
+        public static String getModelId() {
+            return modelId;
+        }
+    }
+
+    protected enum SparseEncodingModel {
+        INSTANCE;
+
+        private static String modelId;
+
+        public static void setModelId(String id) {
+            modelId = id;
+        }
+
+        public static String getModelId() {
+            return modelId;
+        }
+    }
+
     protected final ClusterType getClusterType() {
         return ClusterType.instance(System.getProperty(BWCSUITE_CLUSTER));
     }
@@ -98,8 +141,14 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
     }
 
     protected String uploadTextEmbeddingModel() throws Exception {
-        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        return registerModelGroupAndGetModelId(requestBody);
+        String modelId = TextEmbeddingModel.getModelId();
+        if (modelId == null) {
+            String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
+            String id = registerModelGroupAndGetModelId(requestBody);
+            TextEmbeddingModel.setModelId(id);
+            return id;
+        }
+        return modelId;
     }
 
     protected String registerModelGroupAndGetModelId(String requestBody) throws Exception {
@@ -116,8 +165,14 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
     }
 
     protected String uploadTextImageEmbeddingModel() throws Exception {
-        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        return registerModelGroupAndGetModelId(requestBody);
+        String modelId = TextImageEmbeddingModel.getModelId();
+        if (modelId == null) {
+            String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
+            String id = registerModelGroupAndGetModelId(requestBody);
+            TextImageEmbeddingModel.setModelId(id);
+            return id;
+        }
+        return modelId;
     }
 
     protected void createPipelineForTextImageProcessor(String modelId, String pipelineName) throws Exception {
@@ -128,10 +183,16 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
     }
 
     protected String uploadSparseEncodingModel() throws Exception {
-        String requestBody = Files.readString(
-            Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
-        );
-        return registerModelGroupAndGetModelId(requestBody);
+        String modelId = SparseEncodingModel.getModelId();
+        if (modelId == null) {
+            String requestBody = Files.readString(
+                Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
+            );
+            String id = registerModelGroupAndGetModelId(requestBody);
+            SparseEncodingModel.setModelId(id);
+            return id;
+        }
+        return modelId;
     }
 
     protected void createPipelineForSparseEncodingProcessor(String modelId, String pipelineName, Integer batchSize) throws Exception {

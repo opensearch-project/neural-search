@@ -9,9 +9,9 @@ import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESS
 import static org.opensearch.neuralsearch.util.TestUtils.TEXT_EMBEDDING_PROCESSOR;
 
 import org.opensearch.common.settings.Settings;
-import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.util.TestUtils;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,7 +37,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
             .queryText(TEXT_1);
 
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadSparseEncodingModel();
+            String modelId = getOrUploadSparseEncodingModel();
             loadModel(modelId);
             sparseEncodingQueryBuilderWithModelId.modelId(modelId);
             createPipelineForSparseEncodingProcessor(modelId, SPARSE_INGEST_PIPELINE_NAME);
@@ -69,7 +69,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
                     search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
                 );
             } finally {
-                wipeOfTestResources(getIndexNameForTest(), SPARSE_INGEST_PIPELINE_NAME, modelId, SPARSE_SEARCH_PIPELINE_NAME);
+                // wipeOfTestResources(getIndexNameForTest(), SPARSE_INGEST_PIPELINE_NAME, null, SPARSE_SEARCH_PIPELINE_NAME);
             }
         }
     }
@@ -86,7 +86,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
             .build();
 
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadTextEmbeddingModel();
+            String modelId = getOrUploadTextEmbeddingModel();
             loadModel(modelId);
             neuralQueryBuilderWithModelId.modelId(modelId);
             createPipelineProcessor(modelId, DENSE_INGEST_PIPELINE_NAME);

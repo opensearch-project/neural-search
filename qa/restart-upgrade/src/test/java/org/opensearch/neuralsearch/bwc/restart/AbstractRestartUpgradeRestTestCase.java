@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Optional;
+
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
@@ -16,6 +17,9 @@ import static org.opensearch.neuralsearch.util.TestUtils.CLIENT_TIMEOUT_VALUE;
 import static org.opensearch.neuralsearch.util.TestUtils.RESTART_UPGRADE_OLD_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.BWC_VERSION;
 import static org.opensearch.neuralsearch.util.TestUtils.generateModelId;
+
+import org.opensearch.neuralsearch.util.SparseEncodingModel;
+import org.opensearch.neuralsearch.util.TextEmbeddingModel;
 import org.opensearch.test.rest.OpenSearchRestTestCase;
 
 public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearchIT {
@@ -71,9 +75,16 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
         return Optional.ofNullable(System.getProperty(BWC_VERSION, null));
     }
 
-    protected String uploadTextEmbeddingModel() throws Exception {
-        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        return registerModelGroupAndGetModelId(requestBody);
+    protected String getOrUploadTextEmbeddingModel() throws Exception {
+        TextEmbeddingModel textEmbeddingModel = TextEmbeddingModel.getInstance();
+        String modelId = textEmbeddingModel.getModelId();
+        if (modelId == null) {
+            String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
+            String id = registerModelGroupAndGetModelId(requestBody);
+            textEmbeddingModel.setModelId(id);
+            return id;
+        }
+        return modelId;
     }
 
     protected String registerModelGroupAndGetModelId(final String requestBody) throws Exception {
@@ -89,11 +100,18 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
         createPipelineProcessor(requestBody, pipelineName, modelId, null);
     }
 
-    protected String uploadSparseEncodingModel() throws Exception {
-        String requestBody = Files.readString(
-            Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
-        );
-        return registerModelGroupAndGetModelId(requestBody);
+    protected String getOrUploadSparseEncodingModel() throws Exception {
+        SparseEncodingModel sparseEncodingModel = SparseEncodingModel.getInstance();
+        String modelId = sparseEncodingModel.getModelId();
+        if (modelId == null) {
+            String requestBody = Files.readString(
+                Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
+            );
+            String id = registerModelGroupAndGetModelId(requestBody);
+            sparseEncodingModel.setModelId(id);
+            return id;
+        }
+        return modelId;
     }
 
     protected void createPipelineForTextImageProcessor(final String modelId, final String pipelineName) throws Exception {

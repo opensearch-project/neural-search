@@ -10,6 +10,7 @@ import java.util.Map;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.TEXT_IMAGE_EMBEDDING_PROCESSOR;
 import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
+
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
@@ -28,7 +29,7 @@ public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
 
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadTextEmbeddingModel();
+            String modelId = getOrUploadTextEmbeddingModel();
             loadModel(modelId);
             createPipelineForTextImageProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
@@ -45,7 +46,7 @@ public class MultiModalSearchIT extends AbstractRestartUpgradeRestTestCase {
                 addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_1);
                 validateTestIndex(modelId);
             } finally {
-                wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
+                // wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, null, null);
             }
         }
     }
