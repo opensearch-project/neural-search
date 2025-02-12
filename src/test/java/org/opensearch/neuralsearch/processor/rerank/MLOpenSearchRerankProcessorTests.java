@@ -4,9 +4,8 @@
  */
 package org.opensearch.neuralsearch.processor.rerank;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -118,11 +117,15 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
 
     private void setupSimilarityRescoring() {
         doAnswer(invocation -> {
-            ActionListener<List<Float>> listener = invocation.getArgument(3);
+            ActionListener<List<Float>> listener = invocation.getArgument(1);
             List<Float> scores = List.of(1f, 2f, 3f);
             listener.onResponse(scores);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSimilarity(anyString(), anyString(), anyList(), any());
+        }).when(mlCommonsClientAccessor)
+            .inferenceSimilarity(
+                argThat(request -> request.getQueryText() != null && request.getInputTexts() != null),
+                isA(ActionListener.class)
+            );
     }
 
     private void setupSearchResults() throws IOException {
@@ -349,11 +352,15 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
 
     public void testRerank_whenScoresAndHitsHaveDiffLengths_thenFail() throws IOException {
         doAnswer(invocation -> {
-            ActionListener<List<Float>> listener = invocation.getArgument(3);
+            ActionListener<List<Float>> listener = invocation.getArgument(1);
             List<Float> scores = List.of(1f, 2f);
             listener.onResponse(scores);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSimilarity(anyString(), anyString(), anyList(), any());
+        }).when(mlCommonsClientAccessor)
+            .inferenceSimilarity(
+                argThat(request -> request.getQueryText() != null && request.getInputTexts() != null),
+                isA(ActionListener.class)
+            );
         setupSearchResults();
         @SuppressWarnings("unchecked")
         ActionListener<SearchResponse> listener = mock(ActionListener.class);
@@ -366,7 +373,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
         processor.rerank(response, scoringContext, listener);
         ArgumentCaptor<Exception> argCaptor = ArgumentCaptor.forClass(Exception.class);
         verify(listener, times(1)).onFailure(argCaptor.capture());
-        assert (argCaptor.getValue().getMessage().equals("scores and hits are not the same length"));
+        assertEquals(argCaptor.getValue().getMessage(), "scores and hits are not the same length");
     }
 
     public void testBasics() throws IOException {

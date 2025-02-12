@@ -59,24 +59,30 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         List<String> inferenceList,
         BiConsumer<IngestDocument, Exception> handler
     ) {
-        mlCommonsClientAccessor.inferenceSentencesWithMapResult(this.modelId, inferenceList, ActionListener.wrap(resultMaps -> {
-            List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps)
-                .stream()
-                .map(vector -> PruneUtils.pruneSparseVector(pruneType, pruneRatio, vector))
-                .toList();
-            setVectorFieldsToDocument(ingestDocument, ProcessMap, sparseVectors);
-            handler.accept(ingestDocument, null);
-        }, e -> { handler.accept(null, e); }));
+        mlCommonsClientAccessor.inferenceSentencesWithMapResult(
+            TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
+            ActionListener.wrap(resultMaps -> {
+                List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps)
+                    .stream()
+                    .map(vector -> PruneUtils.pruneSparseVector(pruneType, pruneRatio, vector))
+                    .toList();
+                setVectorFieldsToDocument(ingestDocument, ProcessMap, sparseVectors);
+                handler.accept(ingestDocument, null);
+            }, e -> { handler.accept(null, e); })
+        );
     }
 
     @Override
     public void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException) {
-        mlCommonsClientAccessor.inferenceSentencesWithMapResult(this.modelId, inferenceList, ActionListener.wrap(resultMaps -> {
-            List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps)
-                .stream()
-                .map(vector -> PruneUtils.pruneSparseVector(pruneType, pruneRatio, vector))
-                .toList();
-            handler.accept(sparseVectors);
-        }, onException));
+        mlCommonsClientAccessor.inferenceSentencesWithMapResult(
+            TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
+            ActionListener.wrap(resultMaps -> {
+                List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps)
+                    .stream()
+                    .map(vector -> PruneUtils.pruneSparseVector(pruneType, pruneRatio, vector))
+                    .toList();
+                handler.accept(sparseVectors);
+            }, onException)
+        );
     }
 }

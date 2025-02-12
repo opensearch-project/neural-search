@@ -5,7 +5,8 @@
 package org.opensearch.neuralsearch.query;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS;
@@ -774,10 +775,11 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         List<Float> expectedVector = Arrays.asList(1.0f, 2.0f, 3.0f, 4.0f, 5.0f);
         MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
         doAnswer(invocation -> {
-            ActionListener<List<Float>> listener = invocation.getArgument(2);
+            ActionListener<List<Float>> listener = invocation.getArgument(1);
             listener.onResponse(expectedVector);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(any(), anyMap(), any());
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesMap(argThat(request -> request.getInputObjects() != null), isA(ActionListener.class));
         NeuralQueryBuilder.initialize(mlCommonsClientAccessor);
 
         final CountDownLatch inProgressLatch = new CountDownLatch(1);
@@ -812,10 +814,11 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         List<Float> expectedVector = Arrays.asList(1.0f, 2.0f, 3.0f, 4.0f, 5.0f);
         MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
         doAnswer(invocation -> {
-            ActionListener<List<Float>> listener = invocation.getArgument(2);
+            ActionListener<List<Float>> listener = invocation.getArgument(1);
             listener.onResponse(expectedVector);
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentences(any(), anyMap(), any());
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesMap(argThat(request -> request.getInputObjects() != null), isA(ActionListener.class));
         NeuralQueryBuilder.initialize(mlCommonsClientAccessor);
 
         final CountDownLatch inProgressLatch = new CountDownLatch(1);
