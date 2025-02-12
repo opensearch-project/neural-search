@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Documentation
 ### Maintenance
 ### Refactoring
+- Encapsulate KNNQueryBuilder creation within NeuralKNNQueryBuilder ([#1183](https://github.com/opensearch-project/neural-search/pull/1183))
 
 ## [Unreleased 2.x](https://github.com/opensearch-project/neural-search/compare/2.19...2.x)
 ### Features
