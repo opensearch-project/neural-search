@@ -79,14 +79,11 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
         if (isHybridQueryWrappedInBooleanQuery(searchContext, query)) {
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
             if (!(booleanClauses.get(0).query() instanceof HybridQuery)) {
-                throw new IllegalStateException("cannot process hybrid query due to incorrect structure of top level query");
+                throw new IllegalArgumentException("hybrid query must be a top level query and cannot be wrapped into other queries");
             }
-            HybridQuery hybridQuery = (HybridQuery) booleanClauses.stream().findFirst().get().query();
-            List<Query> filterQueries = booleanClauses.stream()
-                .filter(clause -> BooleanClause.Occur.FILTER == clause.occur())
-                .map(BooleanClause::query)
-                .collect(Collectors.toList());
-            HybridQuery hybridQueryWithFilter = new HybridQuery(hybridQuery.getSubQueries(), filterQueries, hybridQuery.getQueryContext());
+            HybridQuery hybridQuery = (HybridQuery) booleanClauses.get(0).query();
+            List<BooleanClause> filterQueries = booleanClauses.stream().skip(1).collect(Collectors.toList());
+            HybridQuery hybridQueryWithFilter = new HybridQuery(hybridQuery.getSubQueries(), hybridQuery.getQueryContext(), filterQueries);
             return hybridQueryWithFilter;
         }
         return query;

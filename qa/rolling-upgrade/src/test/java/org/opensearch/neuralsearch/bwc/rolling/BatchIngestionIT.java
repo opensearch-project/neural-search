@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.opensearch.neuralsearch.util.BatchIngestionUtils.prepareDataForBulkIngestion;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
@@ -20,6 +21,7 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
     private static final String SPARSE_PIPELINE = "BatchIngestionIT_sparse_pipeline_rolling";
     private static final String TEXT_FIELD_NAME = "passage_text";
     private static final String EMBEDDING_FIELD_NAME = "passage_embedding";
+    private static final Set<MLModelState> READY_FOR_INFERENCE_STATES = Set.of(MLModelState.LOADED, MLModelState.DEPLOYED);
 
     public void testBatchIngestion_SparseEncodingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER, 90);
@@ -98,7 +100,7 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
 
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
             MLModelState state = getModelState(modelId);
-            if (state == MLModelState.LOADED) {
+            if (READY_FOR_INFERENCE_STATES.contains(state)) {
                 logger.info("Model {} is now loaded after {} attempts", modelId, attempt + 1);
                 return;
             }

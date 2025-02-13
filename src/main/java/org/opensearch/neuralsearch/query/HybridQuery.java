@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
 
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
@@ -42,6 +43,26 @@ public final class HybridQuery extends Query implements Iterable<Query> {
      * @param filterQueries list of filters that will be applied to each sub query. Each filter from the list is added as bool "filter" clause. If this is null sub queries will be executed as is
      */
     public HybridQuery(final Collection<Query> subQueries, final List<Query> filterQueries, final HybridQueryContext hybridQueryContext) {
+        this(
+            subQueries,
+            hybridQueryContext,
+            filterQueries == null
+                ? null
+                : filterQueries.stream().map(query -> new BooleanClause(query, BooleanClause.Occur.FILTER)).collect(Collectors.toList())
+        );
+    }
+
+    /**
+     * Create new instance of hybrid query object based on collection of sub queries and boolean clauses that are used as filters for each sub-query
+     * @param subQueries
+     * @param hybridQueryContext
+     * @param booleanClauses
+     */
+    public HybridQuery(
+        final Collection<Query> subQueries,
+        final HybridQueryContext hybridQueryContext,
+        final List<BooleanClause> booleanClauses
+    ) {
         Objects.requireNonNull(subQueries, "collection of queries must not be null");
         if (subQueries.isEmpty()) {
             throw new IllegalArgumentException("collection of queries must not be empty");
@@ -50,14 +71,14 @@ public final class HybridQuery extends Query implements Iterable<Query> {
         if (Objects.nonNull(paginationDepth) && paginationDepth == 0) {
             throw new IllegalArgumentException("pagination_depth must not be zero");
         }
-        if (Objects.isNull(filterQueries) || filterQueries.isEmpty()) {
+        if (Objects.isNull(booleanClauses) || booleanClauses.isEmpty()) {
             this.subQueries = new ArrayList<>(subQueries);
         } else {
             List<Query> modifiedSubQueries = new ArrayList<>();
             for (Query subQuery : subQueries) {
                 BooleanQuery.Builder builder = new BooleanQuery.Builder();
                 builder.add(subQuery, BooleanClause.Occur.MUST);
-                filterQueries.forEach(filterQuery -> builder.add(filterQuery, BooleanClause.Occur.FILTER));
+                booleanClauses.forEach(filterQuery -> builder.add(booleanClauses));
                 modifiedSubQueries.add(builder.build());
             }
             this.subQueries = modifiedSubQueries;

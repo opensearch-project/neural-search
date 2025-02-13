@@ -57,6 +57,7 @@ import org.opensearch.index.IndexSettings;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.ParsedQuery;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.DisMaxQueryBuilder;
 import org.opensearch.index.query.QueryShardContext;
@@ -702,8 +703,8 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         when(searchContext.query()).thenReturn(query);
 
-        IllegalStateException exception = expectThrows(
-            IllegalStateException.class,
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
             () -> hybridQueryPhaseSearcher.searchWith(
                 searchContext,
                 contextIndexSearcher,
@@ -716,7 +717,7 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         org.hamcrest.MatcherAssert.assertThat(
             exception.getMessage(),
-            containsString("cannot process hybrid query due to incorrect structure of top level query")
+            containsString("hybrid query must be a top level query and cannot be wrapped into other queries")
         );
 
         releaseResources(directory, w, reader);
@@ -818,6 +819,8 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
         Query query = builder.build();
 
         when(searchContext.query()).thenReturn(query);
+        Query hybridQuery = queryBuilder.toQuery(mockQueryShardContext);
+        when(searchContext.parsedQuery()).thenReturn(new ParsedQuery(hybridQuery));
 
         CollectorManager<? extends Collector, ReduceableSearchResult> collectorManager = HybridCollectorManager
             .createHybridCollectorManager(searchContext);
@@ -1109,6 +1112,9 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         when(searchContext.query()).thenReturn(query);
         when(searchContext.aliasFilter()).thenReturn(termFilter);
+
+        Query hybridQuery = queryBuilder.toQuery(mockQueryShardContext);
+        when(searchContext.parsedQuery()).thenReturn(new ParsedQuery(hybridQuery));
 
         CollectorManager<? extends Collector, ReduceableSearchResult> collectorManager = HybridCollectorManager
             .createHybridCollectorManager(searchContext);
