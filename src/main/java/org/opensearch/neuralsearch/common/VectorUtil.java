@@ -21,10 +21,10 @@ public class VectorUtil {
      * @param vectorAsList {@link List} of {@link Float}'s representing the vector
      * @return array of floats produced from input list
      */
-    public static float[] vectorAsListToArray(List<Float> vectorAsList) {
+    public static float[] vectorAsListToArray(List<Number> vectorAsList) {
         float[] vector = new float[vectorAsList.size()];
         for (int i = 0; i < vectorAsList.size(); i++) {
-            vector[i] = vectorAsList.get(i);
+            vector[i] = vectorAsList.get(i).floatValue();
         }
         return vector;
     }
