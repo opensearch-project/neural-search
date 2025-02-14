@@ -31,8 +31,12 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
                 loadModel(sparseModelId);
                 MLModelState oldModelState = getModelState(sparseModelId);
                 logger.info("Model state in OLD phase: {}", oldModelState);
-                if (oldModelState != MLModelState.LOADED) {
-                    logger.error("Model {} is not in LOADED state in OLD phase. Current state: {}", sparseModelId, oldModelState);
+                if (oldModelState != MLModelState.LOADED && oldModelState != MLModelState.DEPLOYED) {
+                    logger.error(
+                        "Model {} is not in LOADED or DEPLOYED state in OLD phase. Current state: {}",
+                        sparseModelId,
+                        oldModelState
+                    );
                     waitForModelToLoad(sparseModelId);
                 }
                 createPipelineForSparseEncodingProcessor(sparseModelId, SPARSE_PIPELINE, 2);
@@ -52,8 +56,12 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
                 loadModel(sparseModelId);
                 MLModelState mixedModelState = getModelState(sparseModelId);
                 logger.info("Model state in MIXED phase: {}", mixedModelState);
-                if (mixedModelState != MLModelState.LOADED) {
-                    logger.error("Model {} is not in LOADED state in MIXED phase. Current state: {}", sparseModelId, mixedModelState);
+                if (mixedModelState != MLModelState.LOADED && mixedModelState != MLModelState.DEPLOYED) {
+                    logger.error(
+                        "Model {} is not in LOADED or DEPLOYED state in MIXED phase. Current state: {}",
+                        sparseModelId,
+                        mixedModelState
+                    );
                     waitForModelToLoad(sparseModelId);
                 }
                 logger.info("Pipeline state in MIXED phase: {}", getIngestionPipeline(SPARSE_PIPELINE));
