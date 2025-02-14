@@ -8,8 +8,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
+
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.ml.common.model.MLModelState;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import static org.opensearch.neuralsearch.util.TestUtils.NEURAL_SEARCH_BWC_PREFIX;
 import static org.opensearch.neuralsearch.util.TestUtils.OLD_CLUSTER;
@@ -22,6 +25,8 @@ import static org.opensearch.neuralsearch.util.TestUtils.generateModelId;
 import org.opensearch.test.rest.OpenSearchRestTestCase;
 
 public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT {
+
+    private static final Set<MLModelState> READY_FOR_INFERENCE_STATES = Set.of(MLModelState.LOADED, MLModelState.DEPLOYED);
 
     @Before
     protected String getIndexNameForTest() {
@@ -158,5 +163,25 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
             Path.of(classLoader.getResource("processor/PipelineForTextChunkingProcessorConfiguration.json").toURI())
         );
         createPipelineProcessor(requestBody, pipelineName, "", null);
+    }
+
+    protected boolean isModelReadyForInference(final MLModelState mlModelState) throws Exception {
+        return READY_FOR_INFERENCE_STATES.contains(mlModelState);
+    }
+
+    protected void waitForModelToLoad(String modelId) throws Exception {
+        int maxAttempts = 30;  // Maximum number of attempts
+        int waitTimeInSeconds = 2;  // Time to wait between attempts
+
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
+            MLModelState state = getModelState(modelId);
+            if (isModelReadyForInference(state)) {
+                logger.info("Model {} is now loaded after {} attempts", modelId, attempt + 1);
+                return;
+            }
+            logger.info("Waiting for model {} to load. Current state: {}. Attempt {}/{}", modelId, state, attempt + 1, maxAttempts);
+            Thread.sleep(waitTimeInSeconds * 1000);
+        }
+        throw new RuntimeException("Model " + modelId + " failed to load after " + maxAttempts + " attempts");
     }
 }
