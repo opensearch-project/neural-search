@@ -11,7 +11,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.opensearch.neuralsearch.util.BatchIngestionUtils.prepareDataForBulkIngestion;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;

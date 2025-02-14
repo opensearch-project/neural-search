@@ -74,7 +74,7 @@ import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import com.google.common.collect.ImmutableList;
 
 import static org.opensearch.neuralsearch.util.TestUtils.INGEST_PIPELINE_TYPE;
-import static org.opensearch.neuralsearch.util.TestUtils.MAX_TASK_RESULT_QUERY_TIME_IN_SECOND;
+import static org.opensearch.neuralsearch.util.TestUtils.MAX_TASK_RETRIES;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_USER_AGENT;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
@@ -214,7 +214,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
         Map<String, Object> taskQueryResult = getTaskQueryResponse(taskId);
         boolean isComplete = checkComplete(taskQueryResult);
-        for (int i = 0; !isComplete && i < MAX_TASK_RESULT_QUERY_TIME_IN_SECOND; i++) {
+        for (int i = 0; !isComplete && i < MAX_TASK_RETRIES; i++) {
             taskQueryResult = getTaskQueryResponse(taskId);
             isComplete = checkComplete(taskQueryResult);
             Thread.sleep(DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND);
@@ -243,12 +243,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
         Map<String, Object> taskQueryResult = getTaskQueryResponse(taskId);
         boolean isComplete = checkComplete(taskQueryResult);
-        for (int i = 0; !isComplete && i < MAX_TASK_RESULT_QUERY_TIME_IN_SECOND; i++) {
+        for (int i = 0; !isComplete && i < MAX_TASK_RETRIES; i++) {
             taskQueryResult = getTaskQueryResponse(taskId);
             isComplete = checkComplete(taskQueryResult);
             Thread.sleep(DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND);
         }
-        assertTrue(isComplete);
+        assertTrue(String.format(Locale.ROOT, "failed to load the model, last task finished with status %s", taskQueryResult.get("state")), isComplete);
     }
 
     /**

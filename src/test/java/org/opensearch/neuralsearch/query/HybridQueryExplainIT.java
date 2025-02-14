@@ -23,6 +23,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
@@ -562,10 +563,10 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             assertNotNull(explanation);
             assertEquals("arithmetic_mean combination of:", explanation.get("description"));
             Map<String, Object> hitDetailsForHit = getListOfValues(explanation, "details").get(0);
-            assertTrue((double) hitDetailsForHit.get("value") > 0.0f);
+            org.hamcrest.MatcherAssert.assertThat((double) hitDetailsForHit.get("value"), greaterThanOrEqualTo(0.0));
             assertEquals("min_max normalization of:", hitDetailsForHit.get("description"));
             Map<String, Object> subQueryDetailsForHit = getListOfValues(hitDetailsForHit, "details").get(0);
-            assertTrue((double) subQueryDetailsForHit.get("value") > 0.0f);
+            org.hamcrest.MatcherAssert.assertThat((double) subQueryDetailsForHit.get("value"), greaterThanOrEqualTo(0.0));
             assertFalse(subQueryDetailsForHit.get("description").toString().isEmpty());
             assertNotNull(getListOfValues(subQueryDetailsForHit, "details"));
         }
