@@ -8,6 +8,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +65,8 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
     private ClusterService clusterService;
     @Mock
     private ThreadPool threadPool;
+    @Mock
+    private Environment environment;
 
     @Before
     public void setup() {
@@ -79,6 +83,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
     public void testCreateComponents() {
         // clientAccessor can not be null, and this is the only way to access it from this test
         plugin.getProcessors(ingestParameters);
+        when(environment.dataFiles()).thenReturn(new Path[] { Paths.get("test") });
         Collection<Object> components = plugin.createComponents(
             null,
             clusterService,
@@ -86,7 +91,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
             null,
             null,
             null,
-            null,
+            environment,
             null,
             null,
             null,
