@@ -167,11 +167,13 @@ public class MLCommonsClientAccessor {
     private void retryableInferenceSimilarityWithVectorResult(
         final SimilarityInferenceRequest inferenceRequest,
         final int retryTime,
-        final ActionListener<List<Number>> listener
+        final ActionListener<List<Float>> listener
     ) {
         MLInput mlInput = createMLTextPairsInput(inferenceRequest.getQueryText(), inferenceRequest.getInputTexts());
         mlClient.predict(inferenceRequest.getModelId(), mlInput, ActionListener.wrap(mlOutput -> {
-            final List<Number> scores = buildVectorFromResponse(mlOutput).stream().map(v -> v.get(0)).collect(Collectors.toList());
+            final List<Float> scores = buildVectorFromResponse(mlOutput).stream()
+                .map(v -> v.getFirst().floatValue())
+                .collect(Collectors.toList());
             listener.onResponse(scores);
         },
             e -> RetryUtil.handleRetryOrFailure(

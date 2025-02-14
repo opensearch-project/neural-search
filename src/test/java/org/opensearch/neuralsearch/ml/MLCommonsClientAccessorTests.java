@@ -130,17 +130,17 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
 
-        accessor.inferenceSimilarity(TestCommonConstants.SIMILARITY_INFERENCE_REQUEST, singleSentenceResultListener);
+        accessor.inferenceSimilarity(TestCommonConstants.SIMILARITY_INFERENCE_REQUEST, similarityResultListener);
 
         // Verify client.predict is called 4 times (1 initial + 3 retries)
         Mockito.verify(client, times(4))
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
 
         // Verify failure is propagated to the listener after all retries
-        Mockito.verify(singleSentenceResultListener).onFailure(nodeNodeConnectedException);
+        Mockito.verify(similarityResultListener).onFailure(nodeNodeConnectedException);
 
         // Ensure no additional interactions with the listener
-        Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
+        Mockito.verifyNoMoreInteractions(similarityResultListener);
     }
 
     public void testInferenceSentences_whenExceptionFromMLClient_thenRetry_thenFailure() {
@@ -356,7 +356,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
 
-        accessor.inferenceSimilarity(TestCommonConstants.SIMILARITY_INFERENCE_REQUEST, singleSentenceResultListener);
+        accessor.inferenceSimilarity(TestCommonConstants.SIMILARITY_INFERENCE_REQUEST, similarityResultListener);
 
         Mockito.verify(client)
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -372,7 +372,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
 
-        accessor.inferenceSimilarity(TestCommonConstants.SIMILARITY_INFERENCE_REQUEST, singleSentenceResultListener);
+        accessor.inferenceSimilarity(TestCommonConstants.SIMILARITY_INFERENCE_REQUEST, similarityResultListener);
 
         Mockito.verify(client)
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
