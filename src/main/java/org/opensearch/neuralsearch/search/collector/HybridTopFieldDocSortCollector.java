@@ -166,13 +166,13 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
                 return (HybridQueryScorer) scorer;
             }
             for (Scorable.ChildScorable childScorable : scorer.getChildren()) {
-                HybridQueryScorer hybridQueryScorer = getHybridQueryScorer(childScorable.child);
+                HybridQueryScorer hybridQueryScorer = getHybridQueryScorer(childScorable.child());
                 if (Objects.nonNull(hybridQueryScorer)) {
                     log.debug(
                         String.format(
                             Locale.ROOT,
                             "found hybrid query scorer, it's child of scorer %s",
-                            childScorable.child.getClass().getSimpleName()
+                            childScorable.child().getClass().getSimpleName()
                         )
                     );
                     return hybridQueryScorer;
@@ -289,7 +289,7 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
         private void initializeComparators(LeafReaderContext context, int subQueryNumber) throws IOException {
             // as all segments are sorted in the same way, enough to check only the 1st segment for indexSort
             if (searchSortPartOfIndexSort == null) {
-                Sort indexSort = context.reader().getMetaData().getSort();
+                Sort indexSort = context.reader().getMetaData().sort();
                 searchSortPartOfIndexSort = canEarlyTerminate(sort, indexSort);
                 if (searchSortPartOfIndexSort) {
                     firstComparator.disableSkipping();

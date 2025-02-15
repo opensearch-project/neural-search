@@ -77,13 +77,13 @@ public class HybridTopScoreDocCollector implements HybridSearchCollector {
                     return (HybridQueryScorer) scorer;
                 }
                 for (Scorable.ChildScorable childScorable : scorer.getChildren()) {
-                    HybridQueryScorer hybridQueryScorer = getHybridQueryScorer(childScorable.child);
+                    HybridQueryScorer hybridQueryScorer = getHybridQueryScorer(childScorable.child());
                     if (Objects.nonNull(hybridQueryScorer)) {
                         log.debug(
                             String.format(
                                 Locale.ROOT,
                                 "found hybrid query scorer, it's child of scorer %s",
-                                childScorable.child.getClass().getSimpleName()
+                                childScorable.child().getClass().getSimpleName()
                             )
                         );
                         return hybridQueryScorer;

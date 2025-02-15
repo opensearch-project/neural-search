@@ -455,7 +455,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         }
         // in this case top docs are already present in result, and we need to merge next result object with what we have.
         // if collector doesn't have any hits we can just skip it and save some cycles by not doing merge
-        if (topDocsAndMaxScore.topDocs.totalHits.value == 0) {
+        if (topDocsAndMaxScore.topDocs.totalHits.value() == 0) {
             return;
         }
         // we need to do actual merge because query result and current collector both have some score hits
@@ -509,7 +509,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         // In case of nested fields and alias filter, hybrid query is wrapped under bool query and lies in the first clause.
         if (isHybridQueryWrappedInBooleanQuery(searchContext, searchContext.query())) {
             BooleanQuery booleanQuery = (BooleanQuery) query;
-            hybridQuery = (HybridQuery) booleanQuery.clauses().get(0).getQuery();
+            hybridQuery = (HybridQuery) booleanQuery.clauses().get(0).query();
         } else {
             hybridQuery = (HybridQuery) query;
         }

@@ -52,8 +52,8 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
         assertNotNull(resultDoc.getTopDocs());
         assertEquals(1, resultDoc.getTopDocs().size());
         TopDocs topDoc = resultDoc.getTopDocs().get(0);
-        assertEquals(1, topDoc.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, topDoc.totalHits.relation);
+        assertEquals(1, topDoc.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, topDoc.totalHits.relation());
         assertNotNull(topDoc.scoreDocs);
         assertEquals(1, topDoc.scoreDocs.length);
         ScoreDoc scoreDoc = topDoc.scoreDocs[0];
@@ -88,8 +88,8 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
         assertNotNull(resultDoc.getTopDocs());
         assertEquals(1, resultDoc.getTopDocs().size());
         TopDocs topDoc = resultDoc.getTopDocs().get(0);
-        assertEquals(3, topDoc.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, topDoc.totalHits.relation);
+        assertEquals(3, topDoc.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, topDoc.totalHits.relation());
         assertNotNull(topDoc.scoreDocs);
         assertEquals(3, topDoc.scoreDocs.length);
         ScoreDoc highScoreDoc = topDoc.scoreDocs[0];
@@ -132,8 +132,8 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
         assertEquals(2, resultDoc.getTopDocs().size());
         // sub-query one
         TopDocs topDocSubqueryOne = resultDoc.getTopDocs().get(0);
-        assertEquals(3, topDocSubqueryOne.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, topDocSubqueryOne.totalHits.relation);
+        assertEquals(3, topDocSubqueryOne.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, topDocSubqueryOne.totalHits.relation());
         assertNotNull(topDocSubqueryOne.scoreDocs);
         assertEquals(3, topDocSubqueryOne.scoreDocs.length);
         ScoreDoc highScoreDoc = topDocSubqueryOne.scoreDocs[0];
@@ -144,8 +144,8 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
         assertEquals(4, lowScoreDoc.doc);
         // sub-query two
         TopDocs topDocSubqueryTwo = resultDoc.getTopDocs().get(1);
-        assertEquals(2, topDocSubqueryTwo.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, topDocSubqueryTwo.totalHits.relation);
+        assertEquals(2, topDocSubqueryTwo.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, topDocSubqueryTwo.totalHits.relation());
         assertNotNull(topDocSubqueryTwo.scoreDocs);
         assertEquals(2, topDocSubqueryTwo.scoreDocs.length);
         assertEquals(1.0, topDocSubqueryTwo.scoreDocs[0].score, 0.001f);
@@ -206,8 +206,8 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
         assertEquals(2, resultDocShardOne.getTopDocs().size());
         // sub-query one
         TopDocs topDocSubqueryOne = resultDocShardOne.getTopDocs().get(0);
-        assertEquals(3, topDocSubqueryOne.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, topDocSubqueryOne.totalHits.relation);
+        assertEquals(3, topDocSubqueryOne.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, topDocSubqueryOne.totalHits.relation());
         assertNotNull(topDocSubqueryOne.scoreDocs);
         assertEquals(3, topDocSubqueryOne.scoreDocs.length);
         ScoreDoc highScoreDoc = topDocSubqueryOne.scoreDocs[0];
@@ -218,8 +218,8 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
         assertEquals(4, lowScoreDoc.doc);
         // sub-query two
         TopDocs topDocSubqueryTwo = resultDocShardOne.getTopDocs().get(1);
-        assertEquals(2, topDocSubqueryTwo.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, topDocSubqueryTwo.totalHits.relation);
+        assertEquals(2, topDocSubqueryTwo.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, topDocSubqueryTwo.totalHits.relation());
         assertNotNull(topDocSubqueryTwo.scoreDocs);
         assertEquals(2, topDocSubqueryTwo.scoreDocs.length);
         assertTrue(Range.between(0.0f, 1.0f).contains(topDocSubqueryTwo.scoreDocs[0].score));
@@ -232,14 +232,14 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
         assertEquals(2, resultDocShardTwo.getTopDocs().size());
         // sub-query one
         TopDocs topDocShardTwoSubqueryOne = resultDocShardTwo.getTopDocs().get(0);
-        assertEquals(0, topDocShardTwoSubqueryOne.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, topDocShardTwoSubqueryOne.totalHits.relation);
+        assertEquals(0, topDocShardTwoSubqueryOne.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, topDocShardTwoSubqueryOne.totalHits.relation());
         assertNotNull(topDocShardTwoSubqueryOne.scoreDocs);
         assertEquals(0, topDocShardTwoSubqueryOne.scoreDocs.length);
         // sub-query two
         TopDocs topDocShardTwoSubqueryTwo = resultDocShardTwo.getTopDocs().get(1);
-        assertEquals(4, topDocShardTwoSubqueryTwo.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, topDocShardTwoSubqueryTwo.totalHits.relation);
+        assertEquals(4, topDocShardTwoSubqueryTwo.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, topDocShardTwoSubqueryTwo.totalHits.relation());
         assertNotNull(topDocShardTwoSubqueryTwo.scoreDocs);
         assertEquals(4, topDocShardTwoSubqueryTwo.scoreDocs.length);
         assertEquals(1.0, topDocShardTwoSubqueryTwo.scoreDocs[0].score, 0.001f);
@@ -252,13 +252,13 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
         assertEquals(2, resultDocShardThree.getTopDocs().size());
         // sub-query one
         TopDocs topDocShardThreeSubqueryOne = resultDocShardThree.getTopDocs().get(0);
-        assertEquals(0, topDocShardThreeSubqueryOne.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, topDocShardThreeSubqueryOne.totalHits.relation);
+        assertEquals(0, topDocShardThreeSubqueryOne.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, topDocShardThreeSubqueryOne.totalHits.relation());
         assertEquals(0, topDocShardThreeSubqueryOne.scoreDocs.length);
         // sub-query two
         TopDocs topDocShardThreeSubqueryTwo = resultDocShardThree.getTopDocs().get(1);
-        assertEquals(0, topDocShardThreeSubqueryTwo.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, topDocShardThreeSubqueryTwo.totalHits.relation);
+        assertEquals(0, topDocShardThreeSubqueryTwo.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, topDocShardThreeSubqueryTwo.totalHits.relation());
         assertEquals(0, topDocShardThreeSubqueryTwo.scoreDocs.length);
     }
 }

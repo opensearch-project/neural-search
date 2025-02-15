@@ -9,6 +9,7 @@ import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Scorer;
+import org.apache.lucene.search.ScorerSupplier;
 import org.apache.lucene.search.Weight;
 
 import java.io.IOException;
@@ -60,7 +61,7 @@ public class HybridScoreBlockBoundaryPropagatorTests extends OpenSearchQueryTest
         }
 
         @Override
-        public Scorer scorer(LeafReaderContext context) {
+        public ScorerSupplier scorerSupplier(LeafReaderContext leafReaderContext) {
             return null;
         }
 
@@ -76,7 +77,7 @@ public class HybridScoreBlockBoundaryPropagatorTests extends OpenSearchQueryTest
         final float maxScore;
 
         MockScorer(int boundary, float maxScore) throws IOException {
-            super(new MockWeight());
+            super();
             this.boundary = boundary;
             this.maxScore = maxScore;
         }

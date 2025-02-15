@@ -242,7 +242,7 @@ public class NormalizationProcessorWorkflow {
      * @return  max score
      */
     private float maxScoreForShard(CompoundTopDocs updatedTopDocs, boolean isSortEnabled) {
-        if (updatedTopDocs.getTotalHits().value == 0 || updatedTopDocs.getScoreDocs().isEmpty()) {
+        if (updatedTopDocs.getTotalHits().value() == 0 || updatedTopDocs.getScoreDocs().isEmpty()) {
             return MAX_SCORE_WHEN_NO_HITS_FOUND;
         }
         if (isSortEnabled) {

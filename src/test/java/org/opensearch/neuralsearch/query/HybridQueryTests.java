@@ -128,7 +128,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
             List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext)),
             new HybridQueryContext(10)
         );
-        Query rewritten = hybridQueryWithTerm.rewrite(reader);
+        Query rewritten = hybridQueryWithTerm.rewrite(new IndexSearcher(reader));
         // term query is the same after we rewrite it
         assertSame(hybridQueryWithTerm, rewritten);
 
@@ -180,7 +180,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         List<Integer> expectedDocIds = List.of(docId1, docId2);
         List<Integer> actualDocIds = Arrays.stream(hybridQueryResult.scoreDocs).map(scoreDoc -> {
             try {
-                return reader.document(scoreDoc.doc).getField("id").stringValue();
+                return reader.storedFields().document(scoreDoc.doc).getField("id").stringValue();
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -334,11 +334,11 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
             assertTrue(query instanceof BooleanQuery);
             BooleanQuery booleanQuery = (BooleanQuery) query;
             assertEquals(2, booleanQuery.clauses().size());
-            Query subQuery = booleanQuery.clauses().get(0).getQuery();
+            Query subQuery = booleanQuery.clauses().get(0).query();
             assertTrue(subQuery instanceof TermQuery);
-            Query filterQuery = booleanQuery.clauses().get(1).getQuery();
+            Query filterQuery = booleanQuery.clauses().get(1).query();
             assertTrue(filterQuery instanceof BooleanQuery);
-            assertTrue(((BooleanQuery) filterQuery).clauses().get(0).getQuery() instanceof MatchNoDocsQuery);
+            assertTrue(((BooleanQuery) filterQuery).clauses().get(0).query() instanceof MatchNoDocsQuery);
             countOfQueries++;
         }
         assertEquals(2, countOfQueries);

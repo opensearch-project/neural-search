@@ -54,7 +54,7 @@ jobs:
   Check-neural-search-windows:
     strategy:
       matrix:
-        java: [21, 23]
+        java: [23]
         os: [windows-latest]
 
     name: Integ Tests Windows

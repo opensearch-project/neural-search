@@ -17,7 +17,7 @@ public class HybridDisiWrapper extends DisiWrapper {
     private final int subQueryIndex;
 
     public HybridDisiWrapper(Scorer scorer, int subQueryIndex) {
-        super(scorer);
+        super(scorer, false);
         this.subQueryIndex = subQueryIndex;
     }
 }

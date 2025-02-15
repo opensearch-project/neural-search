@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.query;
 
 import lombok.Getter;
-import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.QueryVisitor;
@@ -45,8 +44,8 @@ public class NeuralKNNQuery extends Query {
     }
 
     @Override
-    public Query rewrite(IndexReader reader) throws IOException {
-        Query rewritten = knnQuery.rewrite(reader);
+    public Query rewrite(IndexSearcher indexSearcher) throws IOException {
+        Query rewritten = knnQuery.rewrite(indexSearcher);
         if (rewritten == knnQuery) {
             return this;
         }

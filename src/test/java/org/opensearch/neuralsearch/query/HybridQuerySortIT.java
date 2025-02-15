@@ -546,20 +546,18 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
             hit1DetailsForHit1DetailsForHit1DetailsForHit1.get("description")
         );
         assertTrue((double) hit1DetailsForHit1DetailsForHit1DetailsForHit1.get("value") > 0.0f);
-        assertEquals(3, getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").size());
+        assertEquals(2, getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").size());
 
-        assertEquals("boost", getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(0).get("description"));
-        assertTrue((double) getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(0).get("value") > 0.0f);
         assertEquals(
             "idf, computed as log(1 + (N - n + 0.5) / (n + 0.5)) from:",
+            getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(0).get("description")
+        );
+        assertTrue((double) getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(0).get("value") > 0.0f);
+        assertEquals(
+            "tf, computed as freq / (freq + k1 * (1 - b + b * dl / avgdl)) from:",
             getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(1).get("description")
         );
         assertTrue((double) getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(1).get("value") > 0.0f);
-        assertEquals(
-            "tf, computed as freq / (freq + k1 * (1 - b + b * dl / avgdl)) from:",
-            getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(2).get("description")
-        );
-        assertTrue((double) getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit1, "details").get(2).get("value") > 0.0f);
 
         // hit 4
         Map<String, Object> searchHit4 = nestedHits.get(3);
@@ -588,7 +586,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
             hit1DetailsForHit1DetailsForHit1DetailsForHit4.get("description")
         );
         assertTrue((double) hit1DetailsForHit1DetailsForHit1DetailsForHit4.get("value") > 0.0f);
-        assertEquals(3, getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit4, "details").size());
+        assertEquals(2, getListOfValues(hit1DetailsForHit1DetailsForHit1DetailsForHit4, "details").size());
 
         // hit 6
         Map<String, Object> searchHit6 = nestedHits.get(5);

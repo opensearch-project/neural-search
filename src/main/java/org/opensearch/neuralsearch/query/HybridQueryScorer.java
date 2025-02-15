@@ -49,7 +49,7 @@ public class HybridQueryScorer extends Scorer {
     }
 
     HybridQueryScorer(final Weight weight, final List<Scorer> subScorers, final ScoreMode scoreMode) throws IOException {
-        super(weight);
+        super();
         this.subScorers = Collections.unmodifiableList(subScorers);
         this.numSubqueries = subScorers.size();
         this.subScorersPQ = initializeSubScorersPQ();

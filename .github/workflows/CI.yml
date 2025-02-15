@@ -117,28 +117,6 @@ jobs:
           name: coverage-report-${{ matrix.os }}-${{ matrix.java }}
           path: ./jacocoTestReport.xml
 
-  Precommit-neural-search-windows:
-    strategy:
-      matrix:
-        java: [21, 23]
-        os: [windows-latest]
-
-    name: Pre-commit Windows
-    runs-on: ${{ matrix.os }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Java ${{ matrix.java }}
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: ${{ matrix.java }}
-
-      - name: Run build
-        run: |
-          ./gradlew precommit --parallel
-
   Precommit-codecov:
     needs: Precommit-neural-search-linux
     strategy:

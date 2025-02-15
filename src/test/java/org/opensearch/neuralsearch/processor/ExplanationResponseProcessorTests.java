@@ -521,7 +521,7 @@ public class ExplanationResponseProcessorTests extends OpenSearchTestCase {
         TotalHits.Relation totalHitsRelation = randomFrom(TotalHits.Relation.values());
         TotalHits totalHits = new TotalHits(randomLongBetween(1, 1000), totalHitsRelation);
 
-        final int numDocs = totalHits.value >= requestedSize ? requestedSize : (int) totalHits.value;
+        final int numDocs = totalHits.value() >= requestedSize ? requestedSize : (int) totalHits.value();
         int scoreFactor = randomIntBetween(1, numResponses);
 
         SearchHit[] searchHitArray = randomSearchHitArray(

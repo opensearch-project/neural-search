@@ -5,13 +5,21 @@
 package org.opensearch.neuralsearch.search.query;
 
 import lombok.SneakyThrows;
+import org.apache.lucene.document.Document;
+import org.apache.lucene.document.Field;
+import org.apache.lucene.document.StringField;
+import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.CollectorManager;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
+import org.apache.lucene.store.ByteBuffersDirectory;
+import org.apache.lucene.store.Directory;
 import org.opensearch.action.OriginalIndices;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.core.index.shard.ShardId;
@@ -31,6 +39,7 @@ import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.QuerySearchResult;
 import org.opensearch.search.query.ReduceableSearchResult;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,6 +56,19 @@ public class HybridAggregationProcessorTests extends OpenSearchQueryTestCase {
 
     static final String TEXT_FIELD_NAME = "field";
     static final String TERM_QUERY_TEXT = "keyword";
+
+    private Directory directory;
+    private IndexWriter writer;
+    private IndexReader indexReader;
+
+    @Override
+    public void setUp() throws Exception {
+        super.setUp();
+        IndexObjects indexObjects = createIndexObjects(2);
+        directory = indexObjects.directory();
+        writer = indexObjects.writer();
+        indexReader = indexObjects.indexReader();
+    }
 
     @SneakyThrows
     public void testAggregationProcessorDelegate_whenPreAndPostAreCalled_thenSuccessful() {
@@ -78,7 +100,6 @@ public class HybridAggregationProcessorTests extends OpenSearchQueryTestCase {
         MapperService mapperService = mock(MapperService.class);
         when(searchContext.mapperService()).thenReturn(mapperService);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
-        IndexReader indexReader = mock(IndexReader.class);
         when(indexSearcher.getIndexReader()).thenReturn(indexReader);
         when(searchContext.searcher()).thenReturn(indexSearcher);
 
@@ -141,7 +162,6 @@ public class HybridAggregationProcessorTests extends OpenSearchQueryTestCase {
         MapperService mapperService = createMapperService();
         when(searchContext.mapperService()).thenReturn(mapperService);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
-        IndexReader indexReader = mock(IndexReader.class);
         when(indexSearcher.getIndexReader()).thenReturn(indexReader);
         when(searchContext.searcher()).thenReturn(indexSearcher);
 
@@ -185,6 +205,10 @@ public class HybridAggregationProcessorTests extends OpenSearchQueryTestCase {
         hybridAggregationProcessor.postProcess(searchContext);
 
         verifyNoInteractions(hybridCollectorManagerSpy);
+
+        indexReader.close();
+        writer.close();
+        directory.close();
     }
 
     @SneakyThrows
@@ -202,7 +226,6 @@ public class HybridAggregationProcessorTests extends OpenSearchQueryTestCase {
 
         when(searchContext.query()).thenReturn(termQuery);
         ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
-        IndexReader indexReader = mock(IndexReader.class);
         when(indexSearcher.getIndexReader()).thenReturn(indexReader);
         when(searchContext.searcher()).thenReturn(indexSearcher);
 
@@ -237,5 +260,25 @@ public class HybridAggregationProcessorTests extends OpenSearchQueryTestCase {
         hybridAggregationProcessor.postProcess(searchContext);
 
         assertTrue(classCollectorManagerMap.isEmpty());
+    }
+
+    private record IndexObjects(IndexReader indexReader, Directory directory, IndexWriter writer) {
+    }
+
+    private IndexObjects createIndexObjects(int numDocs) throws IOException {
+        Directory directory = new ByteBuffersDirectory();
+        IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig());
+
+        // Add the specified number of documents
+        for (int i = 1; i <= numDocs; i++) {
+            Document doc = new Document();
+            doc.add(new StringField("field", "value" + i, Field.Store.YES));
+            writer.addDocument(doc);
+        }
+
+        writer.commit();
+        IndexReader indexReader = DirectoryReader.open(writer);
+
+        return new IndexObjects(indexReader, directory, writer);
     }
 }
