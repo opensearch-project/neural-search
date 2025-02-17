@@ -22,6 +22,7 @@ import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.search.SearchShardTarget;
 
+import static org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique.MIN_SCORE;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 
 /**
@@ -267,6 +268,85 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         assertEquals(1.0f, topDocs2.scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION); // doc2 in second subquery
         assertEquals(0.0f, topDocs2.scoreDocs[1].score, DELTA_FOR_SCORE_ASSERTION); // doc1 in second subquery
         assertEquals(1.0f, topDocs3.scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION); // doc1 in third subquery
+    }
+
+    public void testMode_fromString_validValues() {
+        assertEquals(MinMaxScoreNormalizationTechnique.Mode.APPLY, MinMaxScoreNormalizationTechnique.Mode.fromString("apply"));
+        assertEquals(MinMaxScoreNormalizationTechnique.Mode.CLIP, MinMaxScoreNormalizationTechnique.Mode.fromString("clip"));
+        assertEquals(MinMaxScoreNormalizationTechnique.Mode.IGNORE, MinMaxScoreNormalizationTechnique.Mode.fromString("ignore"));
+        // Case insensitive check
+        assertEquals(MinMaxScoreNormalizationTechnique.Mode.APPLY, MinMaxScoreNormalizationTechnique.Mode.fromString("APPLY"));
+    }
+
+    public void testMode_fromString_invalidValues() {
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> MinMaxScoreNormalizationTechnique.Mode.fromString("invalid")
+        );
+        assertEquals("invalid mode: invalid, valid values are: apply, clip, ignore", exception.getMessage());
+    }
+
+    public void testMode_fromString_nullOrEmpty() {
+        IllegalArgumentException nullException = expectThrows(
+            IllegalArgumentException.class,
+            () -> MinMaxScoreNormalizationTechnique.Mode.fromString(null)
+        );
+        assertEquals("mode value cannot be null or empty", nullException.getMessage());
+
+        IllegalArgumentException emptyException = expectThrows(
+            IllegalArgumentException.class,
+            () -> MinMaxScoreNormalizationTechnique.Mode.fromString("")
+        );
+        assertEquals("mode value cannot be null or empty", emptyException.getMessage());
+    }
+
+    public void testMode_normalize_apply() {
+        float score = 0.5f;
+        float minScore = 0.2f;
+        float maxScore = 0.8f;
+        float lowerBoundScore = 0.3f;
+
+        float normalizedScore = MinMaxScoreNormalizationTechnique.Mode.APPLY.normalize(score, minScore, maxScore, lowerBoundScore);
+        assertEquals(0.4f, normalizedScore, DELTA_FOR_SCORE_ASSERTION);
+
+        // Test when score is below lower bound
+        float lowScore = 0.1f;
+        float normalizedLowScore = MinMaxScoreNormalizationTechnique.Mode.APPLY.normalize(lowScore, minScore, maxScore, lowerBoundScore);
+        assertEquals(0.143f, normalizedLowScore, DELTA_FOR_SCORE_ASSERTION);
+    }
+
+    public void testMode_normalize_clip() {
+        float score = 0.5f;
+        float minScore = 0.2f;
+        float maxScore = 0.8f;
+        float lowerBoundScore = 0.3f;
+
+        float normalizedScore = MinMaxScoreNormalizationTechnique.Mode.CLIP.normalize(score, minScore, maxScore, lowerBoundScore);
+        assertEquals(0.4f, normalizedScore, DELTA_FOR_SCORE_ASSERTION);
+
+        // Test when score is below min score
+        float lowScore = 0.1f;
+        float normalizedLowScore = MinMaxScoreNormalizationTechnique.Mode.CLIP.normalize(lowScore, minScore, maxScore, lowerBoundScore);
+        assertEquals(0.6f, normalizedLowScore, DELTA_FOR_SCORE_ASSERTION);
+    }
+
+    public void testMode_normalize_ignore() {
+        float score = 0.5f;
+        float minScore = 0.2f;
+        float maxScore = 0.8f;
+        float lowerBoundScore = 0.3f;
+
+        float normalizedScore = MinMaxScoreNormalizationTechnique.Mode.IGNORE.normalize(score, minScore, maxScore, lowerBoundScore);
+        assertEquals(0.5f, normalizedScore, DELTA_FOR_SCORE_ASSERTION);
+
+        // Test when normalized score would be 0
+        float lowScore = 0.2f;
+        float normalizedLowScore = MinMaxScoreNormalizationTechnique.Mode.IGNORE.normalize(lowScore, minScore, maxScore, lowerBoundScore);
+        assertEquals(MIN_SCORE, normalizedLowScore, DELTA_FOR_SCORE_ASSERTION);
+    }
+
+    public void testMode_defaultValue() {
+        assertEquals(MinMaxScoreNormalizationTechnique.Mode.APPLY, MinMaxScoreNormalizationTechnique.Mode.DEFAULT);
     }
 
     private void assertCompoundTopDocs(TopDocs expected, TopDocs actual) {
