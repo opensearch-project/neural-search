@@ -59,7 +59,7 @@ public abstract class RescoringRerankProcessor extends RerankProcessor {
         final ActionListener<SearchResponse> listener
     ) {
         try {
-            if (searchResponse.getHits().getTotalHits().value == 0) {
+            if (searchResponse.getHits().getTotalHits().value() == 0) {
                 listener.onResponse(searchResponse);
                 return;
             }

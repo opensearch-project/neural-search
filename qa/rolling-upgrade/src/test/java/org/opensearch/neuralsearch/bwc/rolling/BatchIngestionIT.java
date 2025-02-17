@@ -91,20 +91,4 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
                 throw new IllegalStateException("Unexpected value: " + getClusterType());
         }
     }
-
-    private void waitForModelToLoad(String modelId) throws Exception {
-        int maxAttempts = 30;  // Maximum number of attempts
-        int waitTimeInSeconds = 2;  // Time to wait between attempts
-
-        for (int attempt = 0; attempt < maxAttempts; attempt++) {
-            MLModelState state = getModelState(modelId);
-            if (state == MLModelState.LOADED) {
-                logger.info("Model {} is now loaded after {} attempts", modelId, attempt + 1);
-                return;
-            }
-            logger.info("Waiting for model {} to load. Current state: {}. Attempt {}/{}", modelId, state, attempt + 1, maxAttempts);
-            Thread.sleep(waitTimeInSeconds * 1000);
-        }
-        throw new RuntimeException("Model " + modelId + " failed to load after " + maxAttempts + " attempts");
-    }
 }

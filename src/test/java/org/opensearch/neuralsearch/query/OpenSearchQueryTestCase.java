@@ -11,6 +11,7 @@ import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Scorer;
+import org.apache.lucene.search.ScorerSupplier;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.BooleanClause;
 import org.opensearch.index.query.QueryBuilder;
@@ -150,7 +151,7 @@ public abstract class OpenSearchQueryTestCase extends OpenSearchTestCase {
             }
 
             @Override
-            public Scorer scorer(LeafReaderContext context) {
+            public ScorerSupplier scorerSupplier(LeafReaderContext leafReaderContext) {
                 return null;
             }
 
@@ -203,7 +204,7 @@ public abstract class OpenSearchQueryTestCase extends OpenSearchTestCase {
 
     protected static Scorer scorer(final int[] docs, final float[] scores, Weight weight) {
         final DocIdSetIterator iterator = iterator(docs);
-        return new Scorer(weight) {
+        return new Scorer() {
 
             int lastScoredDoc = -1;
 

@@ -63,8 +63,8 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
         assertNotNull(mergedTopDocsAndMaxScore);
 
         assertEquals(0.7f, mergedTopDocsAndMaxScore.maxScore, DELTA_FOR_ASSERTION);
-        assertEquals(6, mergedTopDocsAndMaxScore.topDocs.totalHits.value);
-        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, mergedTopDocsAndMaxScore.topDocs.totalHits.relation);
+        assertEquals(6, mergedTopDocsAndMaxScore.topDocs.totalHits.value());
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, mergedTopDocsAndMaxScore.topDocs.totalHits.relation());
         // expected number of rows is 5 from sub-query1 and 1 from sub-query2, plus 2 start-stop elements + 2 delimiters
         // 5 + 1 + 2 + 2 = 10
         assertEquals(10, mergedTopDocsAndMaxScore.topDocs.scoreDocs.length);
@@ -116,8 +116,8 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
         assertNotNull(mergedTopDocsAndMaxScore);
 
         assertEquals(0.7f, mergedTopDocsAndMaxScore.maxScore, DELTA_FOR_ASSERTION);
-        assertEquals(4, mergedTopDocsAndMaxScore.topDocs.totalHits.value);
-        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, mergedTopDocsAndMaxScore.topDocs.totalHits.relation);
+        assertEquals(4, mergedTopDocsAndMaxScore.topDocs.totalHits.value());
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, mergedTopDocsAndMaxScore.topDocs.totalHits.relation());
         // expected number of rows is 3 from sub-query1 and 1 from sub-query2, plus 2 start-stop elements + 2 delimiters
         // 3 + 1 + 2 + 2 = 8
         assertEquals(8, mergedTopDocsAndMaxScore.topDocs.scoreDocs.length);
@@ -163,8 +163,8 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
         assertNotNull(mergedTopDocsAndMaxScore);
 
         assertEquals(0f, mergedTopDocsAndMaxScore.maxScore, DELTA_FOR_ASSERTION);
-        assertEquals(0, mergedTopDocsAndMaxScore.topDocs.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, mergedTopDocsAndMaxScore.topDocs.totalHits.relation);
+        assertEquals(0, mergedTopDocsAndMaxScore.topDocs.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, mergedTopDocsAndMaxScore.topDocs.totalHits.relation());
         assertEquals(4, mergedTopDocsAndMaxScore.topDocs.scoreDocs.length);
         // check format, all elements one by one
         ScoreDoc[] scoreDocs = mergedTopDocsAndMaxScore.topDocs.scoreDocs;
@@ -199,8 +199,8 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
         assertNotNull(mergedTopDocsAndMaxScore);
 
         assertEquals(0.5f, mergedTopDocsAndMaxScore.maxScore, DELTA_FOR_ASSERTION);
-        assertEquals(2, mergedTopDocsAndMaxScore.topDocs.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, mergedTopDocsAndMaxScore.topDocs.totalHits.relation);
+        assertEquals(2, mergedTopDocsAndMaxScore.topDocs.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, mergedTopDocsAndMaxScore.topDocs.totalHits.relation());
         assertEquals(5, mergedTopDocsAndMaxScore.topDocs.scoreDocs.length);
         // check format, all elements one by one
         ScoreDoc[] scoreDocs = mergedTopDocsAndMaxScore.topDocs.scoreDocs;
@@ -221,8 +221,8 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
         assertNotNull(finalMergedTopDocsAndMaxScore);
 
         assertEquals(0.5f, finalMergedTopDocsAndMaxScore.maxScore, DELTA_FOR_ASSERTION);
-        assertEquals(2, finalMergedTopDocsAndMaxScore.topDocs.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, finalMergedTopDocsAndMaxScore.topDocs.totalHits.relation);
+        assertEquals(2, finalMergedTopDocsAndMaxScore.topDocs.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, finalMergedTopDocsAndMaxScore.topDocs.totalHits.relation());
         assertEquals(5, finalMergedTopDocsAndMaxScore.topDocs.scoreDocs.length);
         // check format, all elements one by one
         ScoreDoc[] finalScoreDocs = finalMergedTopDocsAndMaxScore.topDocs.scoreDocs;
@@ -288,8 +288,8 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
         );
 
         assertEquals(0.85f, finalMergedTopDocsAndMaxScore.maxScore, DELTA_FOR_ASSERTION);
-        assertEquals(9, finalMergedTopDocsAndMaxScore.topDocs.totalHits.value);
-        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, finalMergedTopDocsAndMaxScore.topDocs.totalHits.relation);
+        assertEquals(9, finalMergedTopDocsAndMaxScore.topDocs.totalHits.value());
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, finalMergedTopDocsAndMaxScore.topDocs.totalHits.relation());
         // expected number of rows is 6 from sub-query1 and 3 from sub-query2, plus 2 start-stop elements + 2 delimiters
         // 6 + 3 + 2 + 2 = 13
         assertEquals(13, finalMergedTopDocsAndMaxScore.topDocs.scoreDocs.length);
@@ -351,8 +351,8 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
         assertNotNull(mergedTopDocsAndMaxScore);
 
         assertEquals(0.7f, mergedTopDocsAndMaxScore.maxScore, DELTA_FOR_ASSERTION);
-        assertEquals(6, mergedTopDocsAndMaxScore.topDocs.totalHits.value);
-        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, mergedTopDocsAndMaxScore.topDocs.totalHits.relation);
+        assertEquals(6, mergedTopDocsAndMaxScore.topDocs.totalHits.value());
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, mergedTopDocsAndMaxScore.topDocs.totalHits.relation());
         // expected number of rows is 5 from sub-query1 and 1 from sub-query2, plus 2 start-stop elements + 2 delimiters
         // 5 + 1 + 2 + 2 = 10
         assertEquals(10, mergedTopDocsAndMaxScore.topDocs.scoreDocs.length);
@@ -410,8 +410,8 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
         assertNotNull(mergedTopDocsAndMaxScore);
 
         assertEquals(0.7f, mergedTopDocsAndMaxScore.maxScore, DELTA_FOR_ASSERTION);
-        assertEquals(4, mergedTopDocsAndMaxScore.topDocs.totalHits.value);
-        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, mergedTopDocsAndMaxScore.topDocs.totalHits.relation);
+        assertEquals(4, mergedTopDocsAndMaxScore.topDocs.totalHits.value());
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, mergedTopDocsAndMaxScore.topDocs.totalHits.relation());
         // expected number of rows is 3 from sub-query1 and 1 from sub-query2, plus 2 start-stop elements + 2 delimiters
         // 3 + 1 + 2 + 2 = 8
         assertEquals(8, mergedTopDocsAndMaxScore.topDocs.scoreDocs.length);
@@ -463,8 +463,8 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
         assertNotNull(mergedTopDocsAndMaxScore);
 
         assertEquals(0f, mergedTopDocsAndMaxScore.maxScore, DELTA_FOR_ASSERTION);
-        assertEquals(0, mergedTopDocsAndMaxScore.topDocs.totalHits.value);
-        assertEquals(TotalHits.Relation.EQUAL_TO, mergedTopDocsAndMaxScore.topDocs.totalHits.relation);
+        assertEquals(0, mergedTopDocsAndMaxScore.topDocs.totalHits.value());
+        assertEquals(TotalHits.Relation.EQUAL_TO, mergedTopDocsAndMaxScore.topDocs.totalHits.relation());
         assertEquals(4, mergedTopDocsAndMaxScore.topDocs.scoreDocs.length);
         // check format, all elements one by one
         FieldDoc[] fieldDocs = (FieldDoc[]) mergedTopDocsAndMaxScore.topDocs.scoreDocs;
@@ -535,8 +535,8 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
         );
 
         assertEquals(0.85f, finalMergedTopDocsAndMaxScore.maxScore, DELTA_FOR_ASSERTION);
-        assertEquals(9, finalMergedTopDocsAndMaxScore.topDocs.totalHits.value);
-        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, finalMergedTopDocsAndMaxScore.topDocs.totalHits.relation);
+        assertEquals(9, finalMergedTopDocsAndMaxScore.topDocs.totalHits.value());
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, finalMergedTopDocsAndMaxScore.topDocs.totalHits.relation());
         // expected number of rows is 6 from sub-query1 and 3 from sub-query2, plus 2 start-stop elements + 2 delimiters
         // 6 + 3 + 2 + 2 = 13
         assertEquals(13, finalMergedTopDocsAndMaxScore.topDocs.scoreDocs.length);

@@ -144,7 +144,7 @@ public class HybridTopFieldDocSortCollectorTests extends OpenSearchQueryTestCase
         for (TopFieldDocs topFieldDoc : topFieldDocs) {
             // assert results for each sub-query, there must be correct number of matches, all doc id are correct and scores must be desc
             // ordered
-            assertEquals(4, topFieldDoc.totalHits.value);
+            assertEquals(4, topFieldDoc.totalHits.value());
             ScoreDoc[] scoreDocs = topFieldDoc.scoreDocs;
             assertNotNull(scoreDocs);
             assertEquals(4, scoreDocs.length);
@@ -235,7 +235,7 @@ public class HybridTopFieldDocSortCollectorTests extends OpenSearchQueryTestCase
         for (TopFieldDocs topFieldDoc : topFieldDocs) {
             // assert results for each sub-query, there must be correct number of matches, all doc id are correct and scores must be desc
             // ordered
-            assertEquals(4 - (indexPositionOfDocId2 + 1), topFieldDoc.totalHits.value);
+            assertEquals(4 - (indexPositionOfDocId2 + 1), topFieldDoc.totalHits.value());
             ScoreDoc[] scoreDocs = topFieldDoc.scoreDocs;
             assertNotNull(scoreDocs);
             assertEquals(4 - (indexPositionOfDocId2 + 1), scoreDocs.length);

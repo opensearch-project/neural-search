@@ -110,24 +110,6 @@ public final class HybridQueryWeight extends Weight {
     }
 
     /**
-     * Create the scorer used to score our associated Query
-     *
-     * @param context the {@link LeafReaderContext} for which to return the
-     *                {@link Scorer}.
-     * @return scorer of hybrid query that contains scorers of each sub-query, null if there are no matches in any sub-query
-     * @throws IOException
-     */
-    @Override
-    public Scorer scorer(LeafReaderContext context) throws IOException {
-        ScorerSupplier supplier = scorerSupplier(context);
-        if (supplier == null) {
-            return null;
-        }
-        supplier.setTopLevelScoringClause();
-        return supplier.get(Long.MAX_VALUE);
-    }
-
-    /**
      * Check if weight object can be cached
      *
      * @param ctx

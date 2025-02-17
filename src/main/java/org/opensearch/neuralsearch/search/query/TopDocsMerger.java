@@ -80,7 +80,7 @@ class TopDocsMerger {
     private static boolean isEmpty(final TopDocsAndMaxScore topDocsAndMaxScore) {
         if (Objects.isNull(topDocsAndMaxScore)
             || Objects.isNull(topDocsAndMaxScore.topDocs)
-            || topDocsAndMaxScore.topDocs.totalHits.value == 0) {
+            || topDocsAndMaxScore.topDocs.totalHits.value() == 0) {
             return true;
         }
         return false;
@@ -89,11 +89,11 @@ class TopDocsMerger {
     private TotalHits getMergedTotalHits(final TopDocsAndMaxScore source, final TopDocsAndMaxScore newTopDocs) {
         // merged value is a lower bound - if both are equal_to than merged will also be equal_to,
         // otherwise assign greater_than_or_equal
-        TotalHits.Relation mergedHitsRelation = source.topDocs.totalHits.relation == TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO
-            || newTopDocs.topDocs.totalHits.relation == TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO
+        TotalHits.Relation mergedHitsRelation = source.topDocs.totalHits.relation() == TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO
+            || newTopDocs.topDocs.totalHits.relation() == TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO
                 ? TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO
                 : TotalHits.Relation.EQUAL_TO;
-        return new TotalHits(source.topDocs.totalHits.value + newTopDocs.topDocs.totalHits.value, mergedHitsRelation);
+        return new TotalHits(source.topDocs.totalHits.value() + newTopDocs.topDocs.totalHits.value(), mergedHitsRelation);
     }
 
     private TopDocs getTopDocs(ScoreDoc[] mergedScoreDocs, TotalHits mergedTotalHits) {

@@ -89,7 +89,7 @@ public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
 
         DocIdSetIterator iterator = scorer.iterator();
         int actualDoc = iterator.nextDoc();
-        int actualDocId = Integer.parseInt(reader.document(actualDoc).getField("id").stringValue());
+        int actualDocId = Integer.parseInt(reader.storedFields().document(actualDoc).getField("id").stringValue());
 
         assertEquals(docId, actualDocId);
 
@@ -146,7 +146,7 @@ public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
 
         DocIdSetIterator iterator = scorer.iterator();
         int actualDoc = iterator.nextDoc();
-        int actualDocId = Integer.parseInt(reader.document(actualDoc).getField("id").stringValue());
+        int actualDocId = Integer.parseInt(reader.storedFields().document(actualDoc).getField("id").stringValue());
 
         assertEquals(docId, actualDocId);
 

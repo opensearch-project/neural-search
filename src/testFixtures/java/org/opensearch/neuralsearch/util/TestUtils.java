@@ -59,14 +59,13 @@ public class TestUtils {
     public static final String SEARCH_PIPELINE_TYPE = "_search";
     public static final String TEXT_EMBEDDING_PROCESSOR = "text_embedding";
     public static final String TEXT_IMAGE_EMBEDDING_PROCESSOR = "text_image_embedding";
-    public static final int MAX_TASK_RESULT_QUERY_TIME_IN_SECOND = 60 * 5;
+    public static final int MAX_TASK_RETRIES = 30;
     public static final int DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND = 1000;
     public static final String DEFAULT_USER_AGENT = "Kibana";
     public static final String DEFAULT_NORMALIZATION_METHOD = "min_max";
     public static final String DEFAULT_COMBINATION_METHOD = "arithmetic_mean";
     public static final String PARAM_NAME_WEIGHTS = "weights";
     public static final String SPARSE_ENCODING_PROCESSOR = "sparse_encoding";
-    public static final String TEXT_CHUNKING_PROCESSOR = "text_chunking";
     public static final int MAX_TIME_OUT_INTERVAL = 3000;
     public static final int MAX_RETRY = 5;
 
@@ -197,9 +196,9 @@ public class TestUtils {
         assertFalse(
             querySearchResults.stream()
                 .map(searchResult -> searchResult.topDocs().topDocs.totalHits)
-                .filter(totalHits -> Objects.isNull(totalHits.relation))
-                .filter(totalHits -> TotalHits.Relation.EQUAL_TO != totalHits.relation)
-                .anyMatch(totalHits -> 0 != totalHits.value)
+                .filter(totalHits -> Objects.isNull(totalHits.relation()))
+                .filter(totalHits -> TotalHits.Relation.EQUAL_TO != totalHits.relation())
+                .anyMatch(totalHits -> 0 != totalHits.value())
         );
     }
 
@@ -289,7 +288,7 @@ public class TestUtils {
         assertEquals(1.0f, maxScore, DELTA_FOR_SCORE_ASSERTION);
         TotalHits totalHits = searchHits.getTotalHits();
         assertNotNull(totalHits);
-        assertEquals(expectedNumberOfHits, totalHits.value);
+        assertEquals(expectedNumberOfHits, totalHits.value());
         assertNotNull(searchHits.getHits());
         assertEquals(expectedNumberOfHits, searchHits.getHits().length);
         float maxScoreScoreFromScoreDocs = Arrays.stream(searchHits.getHits())
