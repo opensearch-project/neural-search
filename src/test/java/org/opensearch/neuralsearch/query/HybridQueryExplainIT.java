@@ -79,7 +79,14 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
     public void testExplain_whenMultipleSubqueriesAndOneShard_thenSuccessful() {
         initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
         // create search pipeline with both normalization processor and explain response processor
-        createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), true);
+        createSearchPipeline(
+            NORMALIZATION_SEARCH_PIPELINE,
+            DEFAULT_NORMALIZATION_METHOD,
+            Map.of(),
+            DEFAULT_COMBINATION_METHOD,
+            Map.of(),
+            true
+        );
 
         TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
         TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
@@ -195,6 +202,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
         createSearchPipeline(
             NORMALIZATION_SEARCH_PIPELINE,
             NORMALIZATION_TECHNIQUE_L2,
+            Map.of(),
             DEFAULT_COMBINATION_METHOD,
             Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.7f })),
             true
@@ -324,7 +332,14 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
     public void testExplanationResponseProcessor_whenProcessorIsNotConfigured_thenResponseHasQueryExplanations() {
         initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
         // create search pipeline with normalization processor, no explanation response processor
-        createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), false);
+        createSearchPipeline(
+            NORMALIZATION_SEARCH_PIPELINE,
+            DEFAULT_NORMALIZATION_METHOD,
+            Map.of(),
+            DEFAULT_COMBINATION_METHOD,
+            Map.of(),
+            false
+        );
 
         TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
         TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
@@ -472,7 +487,14 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
     public void testExplain_whenLargeNumberOfDocuments_thenSuccessful() {
         initializeIndexIfNotExist(TEST_LARGE_DOCS_INDEX_NAME);
         // create search pipeline with both normalization processor and explain response processor
-        createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), true);
+        createSearchPipeline(
+            NORMALIZATION_SEARCH_PIPELINE,
+            DEFAULT_NORMALIZATION_METHOD,
+            Map.of(),
+            DEFAULT_COMBINATION_METHOD,
+            Map.of(),
+            true
+        );
 
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
@@ -526,7 +548,14 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
     public void testSpecificQueryTypes_whenMultiMatchAndKnn_thenSuccessful() {
         initializeIndexIfNotExist(TEST_LARGE_DOCS_INDEX_NAME);
         // create search pipeline with both normalization processor and explain response processor
-        createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), true);
+        createSearchPipeline(
+            NORMALIZATION_SEARCH_PIPELINE,
+            DEFAULT_NORMALIZATION_METHOD,
+            Map.of(),
+            DEFAULT_COMBINATION_METHOD,
+            Map.of(),
+            true
+        );
 
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
         hybridQueryBuilder.add(QueryBuilders.multiMatchQuery(TEST_QUERY_TEXT3, TEST_TEXT_FIELD_NAME_1, TEST_TEXT_FIELD_NAME_2));

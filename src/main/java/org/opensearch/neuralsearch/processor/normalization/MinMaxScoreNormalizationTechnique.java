@@ -215,38 +215,6 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         return lowerBound.getMode().normalize(score, minScore, maxScore, lowerBound.getMinScore());
     }
 
-    private boolean shouldIgnoreLowerBound(LowerBound lowerBound) {
-        return !lowerBound.isEnabled() || lowerBound.getMode() == Mode.IGNORE;
-    }
-
-    private float normalizeWithoutLowerBound(float score, float minScore, float maxScore) {
-        float normalizedScore = (score - minScore) / (maxScore - minScore);
-        return normalizedScore == 0.0f ? MIN_SCORE : normalizedScore;
-    }
-
-    private float normalizeWithLowerBound(float score, float minScore, float maxScore, LowerBound lowerBound) {
-        if (lowerBound.getMode() == Mode.APPLY) {
-            return normalizeWithApplyMode(score, maxScore, lowerBound);
-        } else if (lowerBound.getMode() == Mode.CLIP) {
-            return normalizeWithClipMode(score, minScore, maxScore, lowerBound);
-        }
-        return (score - minScore) / (maxScore - minScore);
-    }
-
-    private float normalizeWithApplyMode(float score, float maxScore, LowerBound lowerBound) {
-        if (score < lowerBound.getMinScore()) {
-            return score / (maxScore - score);
-        }
-        return (score - lowerBound.getMinScore()) / (maxScore - lowerBound.getMinScore());
-    }
-
-    private float normalizeWithClipMode(float score, float minScore, float maxScore, LowerBound lowerBound) {
-        if (score < minScore) {
-            return lowerBound.getMinScore() / (maxScore - lowerBound.getMinScore());
-        }
-        return (score - lowerBound.getMinScore()) / (maxScore - lowerBound.getMinScore());
-    }
-
     /**
      * Result class to hold min and max scores for each sub query
      */
@@ -302,7 +270,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
      * Result class to hold lower bound for each sub query
      */
     @Getter
-    private class LowerBound {
+    private static class LowerBound {
         static final float MIN_LOWER_BOUND_SCORE = -10_000f;
         static final float MAX_LOWER_BOUND_SCORE = 10_000f;
         static final float DEFAULT_LOWER_BOUND_SCORE = 0.0f;
@@ -326,7 +294,9 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         APPLY {
             @Override
             public float normalize(float score, float minScore, float maxScore, float lowerBoundScore) {
-                if (score < lowerBoundScore) {
+                if (maxScore < lowerBoundScore) {
+                    return (score - minScore) / (maxScore - minScore);
+                } else if (score < lowerBoundScore) {
                     return score / (maxScore - score);
                 }
                 return (score - lowerBoundScore) / (maxScore - lowerBoundScore);
