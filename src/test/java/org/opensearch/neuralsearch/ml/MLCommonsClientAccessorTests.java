@@ -36,10 +36,13 @@ import org.opensearch.transport.NodeNotConnectedException;
 public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
     @Mock
-    private ActionListener<List<List<Float>>> resultListener;
+    private ActionListener<List<List<Number>>> resultListener;
 
     @Mock
-    private ActionListener<List<Float>> singleSentenceResultListener;
+    private ActionListener<List<Number>> singleSentenceResultListener;
+
+    @Mock
+    private ActionListener<List<Float>> similarityResultListener;
 
     @Mock
     private MachineLearningNodeClient client;
@@ -53,7 +56,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     }
 
     public void testInferenceSentence_whenValidInput_thenSuccess() {
-        final List<Float> vector = new ArrayList<>(List.of(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+        final List<Number> vector = new ArrayList<>(List.of(TestCommonConstants.PREDICT_VECTOR_ARRAY));
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onResponse(createModelTensorOutput(TestCommonConstants.PREDICT_VECTOR_ARRAY));
@@ -69,7 +72,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     }
 
     public void testInferenceSentences_whenValidInputThenSuccess() {
-        final List<List<Float>> vectorList = new ArrayList<>();
+        final List<List<Number>> vectorList = new ArrayList<>();
         vectorList.add(Arrays.asList(TestCommonConstants.PREDICT_VECTOR_ARRAY));
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
@@ -85,7 +88,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     }
 
     public void testInferenceSentences_whenResultFromClient_thenEmptyVectorList() {
-        final List<List<Float>> vectorList = new ArrayList<>();
+        final List<List<Number>> vectorList = new ArrayList<>();
         vectorList.add(Collections.emptyList());
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
@@ -127,17 +130,17 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
 
-        accessor.inferenceSimilarity(TestCommonConstants.SIMILARITY_INFERENCE_REQUEST, singleSentenceResultListener);
+        accessor.inferenceSimilarity(TestCommonConstants.SIMILARITY_INFERENCE_REQUEST, similarityResultListener);
 
         // Verify client.predict is called 4 times (1 initial + 3 retries)
         Mockito.verify(client, times(4))
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
 
         // Verify failure is propagated to the listener after all retries
-        Mockito.verify(singleSentenceResultListener).onFailure(nodeNodeConnectedException);
+        Mockito.verify(similarityResultListener).onFailure(nodeNodeConnectedException);
 
         // Ensure no additional interactions with the listener
-        Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
+        Mockito.verifyNoMoreInteractions(similarityResultListener);
     }
 
     public void testInferenceSentences_whenExceptionFromMLClient_thenRetry_thenFailure() {
@@ -288,7 +291,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     }
 
     public void testInferenceMultimodal_whenValidInput_thenSuccess() {
-        final List<Float> vector = new ArrayList<>(List.of(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+        final List<Number> vector = new ArrayList<>(List.of(TestCommonConstants.PREDICT_VECTOR_ARRAY));
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onResponse(createModelTensorOutput(TestCommonConstants.PREDICT_VECTOR_ARRAY));
@@ -353,12 +356,12 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
 
-        accessor.inferenceSimilarity(TestCommonConstants.SIMILARITY_INFERENCE_REQUEST, singleSentenceResultListener);
+        accessor.inferenceSimilarity(TestCommonConstants.SIMILARITY_INFERENCE_REQUEST, similarityResultListener);
 
         Mockito.verify(client)
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        Mockito.verify(singleSentenceResultListener).onResponse(vector);
-        Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
+        Mockito.verify(similarityResultListener).onResponse(vector);
+        Mockito.verifyNoMoreInteractions(similarityResultListener);
     }
 
     public void testInferencesSimilarity_whenExceptionFromMLClient_ThenFail() {
@@ -369,12 +372,12 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
 
-        accessor.inferenceSimilarity(TestCommonConstants.SIMILARITY_INFERENCE_REQUEST, singleSentenceResultListener);
+        accessor.inferenceSimilarity(TestCommonConstants.SIMILARITY_INFERENCE_REQUEST, similarityResultListener);
 
         Mockito.verify(client)
             .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        Mockito.verify(singleSentenceResultListener).onFailure(exception);
-        Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
+        Mockito.verify(similarityResultListener).onFailure(exception);
+        Mockito.verifyNoMoreInteractions(similarityResultListener);
     }
 
     private ModelTensorOutput createModelTensorOutput(final Float[] output) {
