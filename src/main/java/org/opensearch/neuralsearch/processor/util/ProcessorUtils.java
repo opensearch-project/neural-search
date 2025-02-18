@@ -8,6 +8,7 @@ import org.opensearch.common.collect.Tuple;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.search.SearchHit;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -151,12 +152,22 @@ public class ProcessorUtils {
      * @return A possible result within an optional
      */
     public static Optional<Object> getValueFromSource(final Map<String, Object> sourceAsMap, final String targetField) {
+        return getValueFromSource(sourceAsMap, targetField, -1);
+    }
+
+    public static Optional<Object> getValueFromSource(final Map<String, Object> sourceAsMap, final String targetField, int index) {
         String[] keys = targetField.split("\\.");
-        Optional<Object> currentValue = Optional.of(sourceAsMap);
+        Optional<Object> currentValue = Optional.ofNullable(sourceAsMap);
 
         for (String key : keys) {
             currentValue = currentValue.flatMap(value -> {
-                if (!(value instanceof Map<?, ?>)) {
+                if (value instanceof List && index != -1) {
+                    Object listValue = ((List) value).get(index);
+                    if (listValue instanceof Map) {
+                        Map<String, Object> currentMap = (Map<String, Object>) listValue;
+                        return Optional.ofNullable(currentMap.get(key));
+                    }
+                } else if (!(value instanceof Map<?, ?>)) {
                     return Optional.empty();
                 }
                 Map<String, Object> currentMap = (Map<String, Object>) value;
@@ -169,6 +180,49 @@ public class ProcessorUtils {
         }
 
         return currentValue;
+    }
+
+    /**
+     * Given the path to targetKey in sourceAsMap, sets targetValue in targetKey
+     *
+     * @param sourceAsMap The Source map (a map of maps) to iterate through
+     * @param targetKey The path to key to insert the desired targetValue
+     * @param targetValue The value to insert to targetKey
+     */
+    public static void setValueToSource(Map<String, Object> sourceAsMap, String targetKey, Object targetValue) {
+        setValueToSource(sourceAsMap, targetKey, targetValue, -1);
+    }
+
+    public static void setValueToSource(Map<String, Object> sourceAsMap, String targetKey, Object targetValue, int index) {
+        if (sourceAsMap == null || targetKey == null) return;
+
+        String[] keys = targetKey.split("\\.");
+        Map<String, Object> current = sourceAsMap;
+
+        for (int i = 0; i < keys.length - 1; i++) {
+            Object next = current.computeIfAbsent(keys[i], k -> new HashMap<>());
+            if (next instanceof List<?> list) {
+                if (index < 0 || index >= list.size()) return;
+                current = (Map<String, Object>) list.get(index);
+            } else if (next instanceof Map<?, ?>) {
+                current = (Map<String, Object>) next;
+            } else {
+                throw new IllegalStateException("Unexpected data structure at " + keys[i]);
+            }
+        }
+
+        String lastKey = keys[keys.length - 1];
+        Object existingValue = current.get(lastKey);
+
+        if (existingValue instanceof List<?> existingList) {
+            if (index >= 0 && index < existingList.size()) {
+                ((List<Object>) existingList).set(index, targetValue);
+            } else if (index == -1) {
+                ((List<Object>) existingList).add(targetValue);
+            }
+        } else {
+            current.put(lastKey, targetValue);
+        }
     }
 
     /**
@@ -208,5 +262,69 @@ public class ProcessorUtils {
         }
 
         return false;
+    }
+
+    /**
+     * Given path, new key, and level, return a new path with given new key
+     * e.g:
+     * path: level1.level2.oldKey
+     * textKey: newKey
+     * level: 2
+     * returns level1.level2.newKey
+     *
+     * @param path path to old key
+     * @param textKey new key to replace in old key
+     * @param level level of the traversal
+     * @return path with new key
+     */
+    public static String computeFullTextKey(String path, String textKey, int level) {
+        String[] keys = path.split("\\.", level);
+        keys[keys.length - 1] = textKey;
+        return String.join(".", keys);
+    }
+
+    /**
+     * Given a map, path to value, and level in the map, return the key mapped with given value.
+     * if there are multiple keys mapping with same value, return the last key
+     * e.g:
+     *
+     * map:
+     *  {
+     *     "level1": {
+     *          "level2" : {
+     *              "first_text": "passage_embedding",
+     *              "second_text": "passage_embedding"
+     *          }
+     *      }
+     * }
+     * path: "level1.level2.passage_embedding"
+     * level: 3
+     * returns "second_text".
+     *
+     * @param sourceAsMap The Source map (a map of maps) to iterate through
+     * @param path The path to key to insert the desired mapping
+     */
+    public static String findKeyFromFromValue(Map<String, Object> sourceAsMap, String path, int level) {
+        String[] keys = path.split("\\.", level);
+        Map<String, Object> currentMap = sourceAsMap;
+        String targetValue = keys[keys.length - 1];
+        for (String key : keys) {
+            if (key.equals(targetValue)) {
+                break;
+            }
+            if (currentMap.containsKey(key)) {
+                Object value = currentMap.get(key);
+                if (value instanceof Map) {
+                    currentMap = (Map<String, Object>) value;
+                }
+            }
+        }
+        String lastFoundKey = null;
+        for (Map.Entry<String, Object> entry : currentMap.entrySet()) {
+            if (entry.getValue().equals(targetValue)) {
+                lastFoundKey = entry.getKey();
+            }
+        }
+        return lastFoundKey;
     }
 }

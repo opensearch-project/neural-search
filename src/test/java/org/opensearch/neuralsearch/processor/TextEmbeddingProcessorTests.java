@@ -52,6 +52,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
 import lombok.SneakyThrows;
+import org.opensearch.transport.client.OpenSearchClient;
 
 public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
 
@@ -174,7 +175,9 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         Map<String, Processor.Factory> registry = new HashMap<>();
         MLCommonsClientAccessor accessor = mock(MLCommonsClientAccessor.class);
+        OpenSearchClient openSearchClient = mock(OpenSearchClient.class);
         TextEmbeddingProcessorFactory textEmbeddingProcessorFactory = new TextEmbeddingProcessorFactory(
+            openSearchClient,
             accessor,
             environment,
             clusterService
@@ -203,7 +206,9 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         Map<String, Processor.Factory> registry = new HashMap<>();
         MLCommonsClientAccessor accessor = mock(MLCommonsClientAccessor.class);
+        OpenSearchClient openSearchClient = mock(OpenSearchClient.class);
         TextEmbeddingProcessorFactory textEmbeddingProcessorFactory = new TextEmbeddingProcessorFactory(
+            openSearchClient,
             accessor,
             environment,
             clusterService

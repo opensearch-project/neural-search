@@ -6,13 +6,13 @@ package org.opensearch.neuralsearch.processor;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
@@ -27,6 +27,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.opensearch.common.collect.Tuple;
+import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
@@ -54,15 +55,32 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
     public static final String MODEL_ID_FIELD = "model_id";
     public static final String FIELD_MAP_FIELD = "field_map";
     private static final BiFunction<Object, Object, Object> REMAPPING_FUNCTION = (v1, v2) -> {
-        if (v1 instanceof Collection && v2 instanceof Collection) {
-            ((Collection) v1).addAll((Collection) v2);
-            return v1;
-        } else if (v1 instanceof Map && v2 instanceof Map) {
-            ((Map) v1).putAll((Map) v2);
-            return v1;
-        } else {
-            return v2;
+        if (v1 instanceof List<?> && v2 instanceof List<?>) {
+            List<Object> v1List = new ArrayList<>((List<?>) v1);
+            List<?> v2List = (List<?>) v2;
+
+            Iterator<?> iterator = v2List.iterator();
+            for (int i = 0; i < v1List.size() && iterator.hasNext(); i++) {
+                if (v1List.get(i) == null) {
+                    v1List.set(i, iterator.next());
+                }
+            }
+            return v1List;
         }
+
+        if (v1 instanceof Map<?, ?> && v2 instanceof Map<?, ?>) {
+            Map<String, Object> v1Map = new LinkedHashMap<>((Map<String, Object>) v1);
+            Map<?, ?> v2Map = (Map<?, ?>) v2;
+
+            for (Map.Entry<?, ?> entry : v2Map.entrySet()) {
+                if (entry.getKey() instanceof String && !v1Map.containsKey(entry.getKey())) {
+                    v1Map.put((String) entry.getKey(), entry.getValue());
+                }
+            }
+            return v1Map;
+        }
+        return v2 != null ? v2 : v1;
+
     };
 
     private final String type;
@@ -73,7 +91,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
 
     protected final String modelId;
 
-    private final Map<String, Object> fieldMap;
+    protected final Map<String, Object> fieldMap;
 
     protected final MLCommonsClientAccessor mlCommonsClientAccessor;
 
@@ -166,7 +184,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
      * @param handler a callback handler to handle inference results which is a list of objects.
      * @param onException an exception callback to handle exception.
      */
-    abstract void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException);
+    protected abstract void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException);
 
     @Override
     public void subBatchExecute(List<IngestDocumentWrapper> ingestDocumentWrappers, Consumer<List<IngestDocumentWrapper>> handler) {
@@ -278,7 +296,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
     }
 
     @SuppressWarnings({ "unchecked" })
-    private List<String> createInferenceList(Map<String, Object> knnKeyMap) {
+    protected List<String> createInferenceList(Map<String, Object> knnKeyMap) {
         List<String> texts = new ArrayList<>();
         knnKeyMap.entrySet().stream().filter(knnMapEntry -> knnMapEntry.getValue() != null).forEach(knnMapEntry -> {
             Object sourceValue = knnMapEntry.getValue();
@@ -407,11 +425,41 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         );
     }
 
-    protected void setVectorFieldsToDocument(IngestDocument ingestDocument, Map<String, Object> processorMap, List<?> results) {
+    protected void setVectorFieldsToDocument(
+        IngestDocument ingestDocument,
+        Map<String, Object> processorMap,
+        List<?> results,
+        boolean update
+    ) {
         Objects.requireNonNull(results, "embedding failed, inference returns null result!");
         log.debug("Model inference result fetched, starting build vector output!");
         Map<String, Object> nlpResult = buildNLPResult(processorMap, results, ingestDocument.getSourceAndMetadata());
-        nlpResult.forEach(ingestDocument::setFieldValue);
+        if (update) {
+            for (Map.Entry<String, Object> nlpEntry : nlpResult.entrySet()) {
+                String key = nlpEntry.getKey();
+                Object target = ingestDocument.getSourceAndMetadata().get(key);
+                Object nlpValues = nlpEntry.getValue();
+                if (target instanceof List<?> targetList && nlpValues instanceof List<?> nlpValueList) {
+                    List<Object> list = new ArrayList<>(targetList);
+                    ListIterator<Object> iterator = list.listIterator();
+                    ListIterator<Object> nlpIterator = (ListIterator<Object>) nlpValueList.listIterator();
+                    while (iterator.hasNext() && nlpIterator.hasNext()) {
+                        if (iterator.next() == null) {
+                            iterator.set(nlpIterator.next());
+                        }
+                    }
+                    ingestDocument.setFieldValue(key, list);
+                } else {
+                    ingestDocument.setFieldValue(key, nlpValues);
+                }
+            }
+        } else {
+            nlpResult.forEach(ingestDocument::setFieldValue);
+        }
+    }
+
+    protected void setVectorFieldsToDocument(IngestDocument ingestDocument, Map<String, Object> processorMap, List<?> results) {
+        setVectorFieldsToDocument(ingestDocument, processorMap, results, false);
     }
 
     @SuppressWarnings({ "unchecked" })
@@ -534,7 +582,6 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
      * @param results
      * @param indexWrapper
      * @param sourceAndMetadataMap
-     * @param nestedElementIndex index of the element in the list field of source document
      */
     @SuppressWarnings("unchecked")
     private void putNLPResultToSingleSourceMapInList(
@@ -582,6 +629,37 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         IntStream.range(0, sourceValue.size())
             .forEachOrdered(x -> keyToResult.add(ImmutableMap.of(listTypeNestedMapKey, results.get(indexWrapper.index++))));
         return keyToResult;
+    }
+
+    protected void makeInferenceCall(
+        IngestDocument ingestDocument,
+        Map<String, Object> ProcessMap,
+        List<String> inferenceList,
+        BiConsumer<IngestDocument, Exception> handler,
+        boolean update
+    ) {
+        mlCommonsClientAccessor.inferenceSentences(
+            TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
+            ActionListener.wrap(vectors -> {
+                setVectorFieldsToDocument(ingestDocument, ProcessMap, vectors, update);
+                handler.accept(ingestDocument, null);
+            }, e -> { handler.accept(null, e); })
+        );
+    }
+
+    protected void makeInferenceCall(
+        IngestDocument ingestDocument,
+        Map<String, Object> ProcessMap,
+        List<String> inferenceList,
+        BiConsumer<IngestDocument, Exception> handler
+    ) {
+        mlCommonsClientAccessor.inferenceSentences(
+            TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
+            ActionListener.wrap(vectors -> {
+                setVectorFieldsToDocument(ingestDocument, ProcessMap, vectors);
+                handler.accept(ingestDocument, null);
+            }, e -> { handler.accept(null, e); })
+        );
     }
 
     @Override

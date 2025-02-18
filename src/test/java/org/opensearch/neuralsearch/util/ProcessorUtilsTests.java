@@ -25,8 +25,11 @@ import java.util.Optional;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.computeFullTextKey;
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getValueFromSource;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.findKeyFromFromValue;
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.mappingExistsInSource;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.setValueToSource;
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.validateRerankCriteria;
 
 public class ProcessorUtilsTests extends OpenSearchTestCase {
@@ -213,4 +216,58 @@ public class ProcessorUtilsTests extends OpenSearchTestCase {
         assertFalse("The ml map no longer has the score `info` mapping ", innerMLMap.containsKey("info"));
     }
 
+    public void testSetValueToSource_returnsExpectedValues_WithExistingKeys() {
+        String targetPath = "ml.newField";
+        String targetValue = "newValue";
+        setUpValidSourceMap();
+        setValueToSource(sourceMap, targetPath, targetValue);
+        Map<String, Object> innerMLMap = (Map<String, Object>) sourceMap.get("ml");
+        assertEquals(targetValue, innerMLMap.get("newField"));
+    }
+
+    public void testGetValueToSource_returnsExpectedValues_WithNonExistingPath() {
+        String targetField = "ml.wrong";
+        setUpValidSourceMap();
+        Optional<Object> result = getValueFromSource(sourceMap, targetField);
+        assertTrue(result.isEmpty());
+    }
+
+    public void testFindKeyFromFromValueFromSourceAtRootLevel_returnsExpectedValues_WithExistingKeys() {
+        String targetPath = "test_value";
+        setUpValidSourceMap();
+        String key = findKeyFromFromValue(sourceMap, targetPath, 0);
+        assertEquals("my_field", key);
+    }
+
+    public void testFindKeyFromFromValueFromSourceAtNestedLevel_returnsExpectedValues_WithExistingKeys() {
+        String targetPath = "ml.myModel";
+        setUpValidSourceMap();
+        String key = findKeyFromFromValue(sourceMap, targetPath, 2);
+        assertEquals("model", key);
+    }
+
+    public void testFindKeyFromFromValueFromSourceAtNestedLevel_whenDuplicateExistsReturnsExpectedValues_WithExistingKeys() {
+        String setTargetPath = "ml.anotherModel";
+        String targetValue = "myModel";
+        setUpValidSourceMap();
+        String findPath = "ml.myModel";
+        setValueToSource(sourceMap, setTargetPath, targetValue);
+        String key = findKeyFromFromValue(sourceMap, findPath, 2);
+        assertEquals("model", key);
+    }
+
+    public void testFindKeyFromFromValueFromSource_returnsExpectedValuesInGivenIndex_WithNonExistingPath() {
+        String targetPath = "wrong";
+        setUpValidSourceMap();
+        String key = findKeyFromFromValue(sourceMap, targetPath, 0);
+        assertNull(key);
+    }
+
+    public void testComputeFullTextKey_returnsExpectedValues_WithExistingKeys() {
+        String targetPath = "ml.info";
+        String textKey = "model";
+        setUpValidSourceMap();
+        String newKey = computeFullTextKey(targetPath, textKey, 2);
+        assertEquals("ml.model", newKey);
+    }
 }
