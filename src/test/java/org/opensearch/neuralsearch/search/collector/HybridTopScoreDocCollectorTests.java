@@ -219,7 +219,7 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
         for (TopDocs topDoc : topDocs) {
             // assert results for each sub-query, there must be correct number of matches, all doc id are correct and scores must be desc
             // ordered
-            assertEquals(3, topDoc.totalHits.value);
+            assertEquals(3, topDoc.totalHits.value());
             ScoreDoc[] scoreDocs = topDoc.scoreDocs;
             assertNotNull(scoreDocs);
             assertEquals(3, scoreDocs.length);
@@ -311,7 +311,7 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
         // assert result for each sub query
         // term query 1
         TopDocs topDocQuery1 = topDocs.get(0);
-        assertEquals(docIdsQuery1.length, topDocQuery1.totalHits.value);
+        assertEquals(docIdsQuery1.length, topDocQuery1.totalHits.value());
         ScoreDoc[] scoreDocsQuery1 = topDocQuery1.scoreDocs;
         assertNotNull(scoreDocsQuery1);
         assertEquals(docIdsQuery1.length, scoreDocsQuery1.length);
@@ -322,7 +322,7 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
         assertTrue(Arrays.stream(docIdsQuery1).allMatch(resultDocIdsQuery1::contains));
         // term query 2
         TopDocs topDocQuery2 = topDocs.get(1);
-        assertEquals(docIdsQuery2.length, topDocQuery2.totalHits.value);
+        assertEquals(docIdsQuery2.length, topDocQuery2.totalHits.value());
         ScoreDoc[] scoreDocsQuery2 = topDocQuery2.scoreDocs;
         assertNotNull(scoreDocsQuery2);
         assertEquals(docIdsQuery2.length, scoreDocsQuery2.length);
@@ -333,13 +333,13 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
         assertTrue(Arrays.stream(docIdsQuery2).allMatch(resultDocIdsQuery2::contains));
         // no match query
         TopDocs topDocQuery3 = topDocs.get(2);
-        assertEquals(0, topDocQuery3.totalHits.value);
+        assertEquals(0, topDocQuery3.totalHits.value());
         ScoreDoc[] scoreDocsQuery3 = topDocQuery3.scoreDocs;
         assertNotNull(scoreDocsQuery3);
         assertEquals(0, scoreDocsQuery3.length);
         // all match query
         TopDocs topDocQueryMatchAll = topDocs.get(3);
-        assertEquals(docIdsQueryMatchAll.length, topDocQueryMatchAll.totalHits.value);
+        assertEquals(docIdsQueryMatchAll.length, topDocQueryMatchAll.totalHits.value());
         ScoreDoc[] scoreDocsQueryMatchAll = topDocQueryMatchAll.scoreDocs;
         assertNotNull(scoreDocsQueryMatchAll);
         assertEquals(docIdsQueryMatchAll.length, scoreDocsQueryMatchAll.length);
@@ -437,7 +437,7 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
         Weight weight = mock(Weight.class);
         Weight subQueryWeight = mock(Weight.class);
         Scorer subQueryScorer = mock(Scorer.class);
-        when(subQueryScorer.getWeight()).thenReturn(subQueryWeight);
+        // when(subQueryScorer.getWeight()).thenReturn(subQueryWeight);
         DocIdSetIterator iterator = mock(DocIdSetIterator.class);
         when(subQueryScorer.iterator()).thenReturn(iterator);
 
@@ -484,7 +484,7 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
         Weight weight = mock(Weight.class);
         Weight subQueryWeight = mock(Weight.class);
         Scorer subQueryScorer = mock(Scorer.class);
-        when(subQueryScorer.getWeight()).thenReturn(subQueryWeight);
+        // when(subQueryScorer.getWeight()).thenReturn(subQueryWeight);
         DocIdSetIterator iterator = mock(DocIdSetIterator.class);
         when(subQueryScorer.iterator()).thenReturn(iterator);
 

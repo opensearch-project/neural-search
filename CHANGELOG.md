@@ -6,10 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 3.0](https://github.com/opensearch-project/neural-search/compare/2.x...HEAD)
 ### Features
 ### Enhancements
-- Set neural-search plugin 3.0.0 baseline JDK version to JDK-2 ([#838](https://github.com/opensearch-project/neural-search/pull/838))
+- Set neural-search plugin 3.0.0 baseline JDK version to JDK-21 ([#838](https://github.com/opensearch-project/neural-search/pull/838))
 - Support different embedding types in model's response ([#1007](https://github.com/opensearch-project/neural-search/pull/1007))
 ### Bug Fixes
 ### Infrastructure
+- [3.0] Update neural-search for OpenSearch 3.0 compatibility ([#1141](https://github.com/opensearch-project/neural-search/pull/1141))
 ### Documentation
 ### Maintenance
 ### Refactoring

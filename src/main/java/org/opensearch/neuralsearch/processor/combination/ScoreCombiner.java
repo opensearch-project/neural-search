@@ -81,7 +81,7 @@ public class ScoreCombiner {
         final CompoundTopDocs compoundQueryTopDocs,
         final Sort sort
     ) {
-        if (Objects.isNull(compoundQueryTopDocs) || compoundQueryTopDocs.getTotalHits().value == 0) {
+        if (Objects.isNull(compoundQueryTopDocs) || compoundQueryTopDocs.getTotalHits().value() == 0) {
             return;
         }
         List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
@@ -292,7 +292,7 @@ public class ScoreCombiner {
         boolean isSortingEnabled
     ) {
         // - max number of hits will be the same which are passed from QueryPhase
-        long maxHits = compoundQueryTopDocs.getTotalHits().value;
+        long maxHits = compoundQueryTopDocs.getTotalHits().value();
         // - update query search results with normalized scores
         compoundQueryTopDocs.setScoreDocs(
             getCombinedScoreDocs(
@@ -309,7 +309,7 @@ public class ScoreCombiner {
 
     private TotalHits getTotalHits(final List<TopDocs> topDocsPerSubQuery, final long maxHits) {
         TotalHits.Relation totalHits = TotalHits.Relation.EQUAL_TO;
-        if (topDocsPerSubQuery.stream().anyMatch(topDocs -> topDocs.totalHits.relation == TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO)) {
+        if (topDocsPerSubQuery.stream().anyMatch(topDocs -> topDocs.totalHits.relation() == TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO)) {
             totalHits = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;
         }
         return new TotalHits(maxHits, totalHits);
@@ -343,7 +343,7 @@ public class ScoreCombiner {
         final CompoundTopDocs compoundQueryTopDocs,
         final Sort sort
     ) {
-        if (Objects.isNull(compoundQueryTopDocs) || compoundQueryTopDocs.getTotalHits().value == 0) {
+        if (Objects.isNull(compoundQueryTopDocs) || compoundQueryTopDocs.getTotalHits().value() == 0) {
             return List.of();
         }
         // create map of normalized scores results returned from the single shard

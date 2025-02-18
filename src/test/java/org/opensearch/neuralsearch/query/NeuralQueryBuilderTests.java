@@ -36,7 +36,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
 import org.opensearch.Version;
-import org.opensearch.client.Client;
+import org.opensearch.transport.client.Client;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.common.xcontent.XContentFactory;
