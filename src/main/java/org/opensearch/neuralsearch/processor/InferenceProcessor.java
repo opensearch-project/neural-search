@@ -560,7 +560,8 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
     ) {
         // build nlp output for object in sourceValue which is map type
         Iterator<Map<String, Object>> iterator = sourceAndMetadataMapValueInList.iterator();
-        IntStream.range(0, sourceAndMetadataMapValueInList.size()).forEach(index -> {
+        IndexWrapper listIndexWrapper = new IndexWrapper(0);
+        for (int i = 0; i < sourceAndMetadataMapValueInList.size(); i++) {
             Map<String, Object> nestedElement = iterator.next();
             putNLPResultToSingleSourceMapInList(
                 inputNestedMapEntryKey,
@@ -568,9 +569,9 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
                 results,
                 indexWrapper,
                 nestedElement,
-                index
+                listIndexWrapper
             );
-        });
+        }
     }
 
     /**
@@ -590,7 +591,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         List<?> results,
         IndexWrapper indexWrapper,
         Map<String, Object> sourceAndMetadataMap,
-        int nestedElementIndex
+        IndexWrapper listIndexWrapper
     ) {
         if (processorKey == null || sourceAndMetadataMap == null || sourceValue == null) return;
         if (sourceValue instanceof Map) {
@@ -603,12 +604,17 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
                     results,
                     indexWrapper,
                     sourceMap,
-                    nestedElementIndex
+                    listIndexWrapper
                 );
             }
         } else {
-            if (sourceValue instanceof List && ((List<Object>) sourceValue).get(nestedElementIndex) != null) {
-                sourceAndMetadataMap.merge(processorKey, results.get(indexWrapper.index++), REMAPPING_FUNCTION);
+            if (sourceValue instanceof List) {
+                if (sourceAndMetadataMap.containsKey(processorKey)) {
+                    return;
+                }
+                if (((List<Object>) sourceValue).get(listIndexWrapper.index++) != null) {
+                    sourceAndMetadataMap.merge(processorKey, results.get(indexWrapper.index++), REMAPPING_FUNCTION);
+                }
             }
         }
     }
