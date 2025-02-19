@@ -26,6 +26,8 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
 
     public static final String TYPE = "text_embedding";
     public static final String LIST_TYPE_NESTED_MAP_KEY = "knn";
+    public static final String IGNORE_EXISTING = "ignore_existing";
+    public static final boolean DEFAULT_IGNORE_EXISTING = Boolean.FALSE;
 
     public TextEmbeddingProcessor(
         String tag,

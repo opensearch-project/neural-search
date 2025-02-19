@@ -72,4 +72,32 @@ public class InferenceProcessorTestCase extends OpenSearchTestCase {
         }
         return result;
     }
+
+    protected Map<String, Object> deepCopy(Map<String, Object> original) {
+        Map<String, Object> copy = new HashMap<>();
+        for (Map.Entry<String, Object> entry : original.entrySet()) {
+            copy.put(entry.getKey(), deepCopyValue(entry.getValue()));
+        }
+        return copy;
+    }
+
+    protected Object deepCopyValue(Object value) {
+        if (value instanceof Map<?, ?>) {
+            Map<String, Object> newMap = new HashMap<>();
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+                newMap.put((String) entry.getKey(), deepCopyValue(entry.getValue()));
+            }
+            return newMap;
+        } else if (value instanceof List<?>) {
+            List<Object> newList = new ArrayList<>();
+            for (Object item : (List<?>) value) {
+                newList.add(deepCopyValue(item));
+            }
+            return newList;
+        } else if (value instanceof String) {
+            return new String((String) value);
+        } else {
+            return value;
+        }
+    }
 }
