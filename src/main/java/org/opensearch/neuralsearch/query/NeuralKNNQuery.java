@@ -21,9 +21,11 @@ import java.util.Objects;
 @Getter
 public class NeuralKNNQuery extends Query {
     private final Query knnQuery;
+    private final String originalQueryText;
 
-    public NeuralKNNQuery(Query knnQuery) {
+    public NeuralKNNQuery(Query knnQuery, String originalQueryText) {
         this.knnQuery = knnQuery;
+        this.originalQueryText = originalQueryText;
     }
 
     @Override
@@ -49,7 +51,7 @@ public class NeuralKNNQuery extends Query {
         if (rewritten == knnQuery) {
             return this;
         }
-        return new NeuralKNNQuery(rewritten);
+        return new NeuralKNNQuery(rewritten, originalQueryText);
     }
 
     @Override
@@ -57,11 +59,11 @@ public class NeuralKNNQuery extends Query {
         if (this == other) return true;
         if (other == null || getClass() != other.getClass()) return false;
         NeuralKNNQuery that = (NeuralKNNQuery) other;
-        return Objects.equals(knnQuery, that.knnQuery);
+        return Objects.equals(knnQuery, that.knnQuery) && Objects.equals(originalQueryText, that.originalQueryText);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(knnQuery);
+        return Objects.hash(knnQuery, originalQueryText);
     }
 }
