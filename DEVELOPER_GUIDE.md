@@ -351,9 +351,9 @@ through the same build issue.
 
 ### Class and package names
 
-Class names should use `CamelCase`. 
+Class names should use `CamelCase`.
 
-Try to put new classes into existing packages if package name abstracts the purpose of the class. 
+Try to put new classes into existing packages if package name abstracts the purpose of the class.
 
 Example of good class file name and package utilization:
 
@@ -371,7 +371,7 @@ methods rather than a long single one and does everything.
 ### Documentation
 
 Document you code. That includes purpose of new classes, every public method and code sections that have critical or non-trivial
-logic (check this example https://github.com/opensearch-project/neural-search/blob/main/src/main/java/org/opensearch/neuralsearch/query/NeuralQueryBuilder.java#L238). 
+logic (check this example https://github.com/opensearch-project/neural-search/blob/main/src/main/java/org/opensearch/neuralsearch/query/NeuralQueryBuilder.java#L238).
 
 When you submit a feature PR, please submit a new
 [documentation issue](https://github.com/opensearch-project/documentation-website/issues/new/choose). This is a path for the documentation to be published as part of https://opensearch.org/docs/latest/ documentation site.
@@ -384,17 +384,17 @@ For the most part, we're using common conventions for Java projects. Here are a 
 
 1. Use descriptive names for classes, methods, fields, and variables.
 2. Avoid abbreviations unless they are widely accepted
-3. Use `final` on all method arguments unless it's absolutely necessary 
+3. Use `final` on all method arguments unless it's absolutely necessary
 4. Wildcard imports are not allowed.
 5. Static imports are preferred over qualified imports when using static methods
 6. Prefer creating non-static public methods whenever possible. Avoid static methods in general, as they can often serve as shortcuts.
 Static methods are acceptable if they are private and do not access class state.
-7. Use functional programming style inside methods unless it's a performance critical section. 
+7. Use functional programming style inside methods unless it's a performance critical section.
 8. For parameters of lambda expression please use meaningful names instead of shorten cryptic ones.
 9. Use Optional for return values if the value may not be present. This should be preferred to returning null.
 10. Do not create checked exceptions, and do not throw checked exceptions from public methods whenever possible. In general, if you call a method with a checked exception, you should wrap that exception into an unchecked exception.
 11. Throwing checked exceptions from private methods is acceptable.
-12. Use String.format when a string includes parameters, and prefer this over direct string concatenation. Always specify a Locale with String.format; 
+12. Use String.format when a string includes parameters, and prefer this over direct string concatenation. Always specify a Locale with String.format;
 as a rule of thumb, use Locale.ROOT.
 13. Prefer Lombok annotations to the manually written boilerplate code
 14. When throwing an exception, avoid including user-provided content in the exception message. For secure coding practices,
@@ -440,17 +440,17 @@ Fix any new warnings before submitting your PR to ensure proper code documentati
 
 ### Tests
 
-Write unit and integration tests for your new functionality. 
+Write unit and integration tests for your new functionality.
 
 Unit tests are preferred as they are cheap and fast, try to use them to cover all possible
-combinations of parameters. Utilize mocks to mimic dependencies. 
+combinations of parameters. Utilize mocks to mimic dependencies.
 
-Integration tests should be used sparingly, focusing primarily on the main (happy path) scenario or cases where extensive 
-mocking is impractical. Include one or two unhappy paths to confirm that correct response codes are returned to the user. 
-Whenever possible, favor scenarios that do not require model deployment. If model deployment is necessary, use an existing 
+Integration tests should be used sparingly, focusing primarily on the main (happy path) scenario or cases where extensive
+mocking is impractical. Include one or two unhappy paths to confirm that correct response codes are returned to the user.
+Whenever possible, favor scenarios that do not require model deployment. If model deployment is necessary, use an existing
 model, as tests involving new model deployments are the most resource-intensive.
 
-If your changes could affect backward compatibility, please include relevant backward compatibility tests along with your 
+If your changes could affect backward compatibility, please include relevant backward compatibility tests along with your
 PR. For guidance on adding these tests, refer to the [Backwards Compatibility Testing](#backwards-compatibility-testing) section in this guide.
 
 ### Outdated or irrelevant code
