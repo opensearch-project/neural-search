@@ -15,14 +15,11 @@ public class ScoreNormalizationFactory {
 
     private static final ScoreNormalizationUtil scoreNormalizationUtil = new ScoreNormalizationUtil();
 
-    public static final ScoreNormalizationTechnique DEFAULT_METHOD = new MinMaxScoreNormalizationTechnique(
-        Map.of(),
-        scoreNormalizationUtil
-    );
+    public static final ScoreNormalizationTechnique DEFAULT_METHOD = new MinMaxScoreNormalizationTechnique(Map.of());
 
     private final Map<String, Function<Map<String, Object>, ScoreNormalizationTechnique>> scoreNormalizationMethodsMap = Map.of(
         MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME,
-        params -> new MinMaxScoreNormalizationTechnique(params, scoreNormalizationUtil),
+        MinMaxScoreNormalizationTechnique::new,
         L2ScoreNormalizationTechnique.TECHNIQUE_NAME,
         params -> new L2ScoreNormalizationTechnique(),
         RRFNormalizationTechnique.TECHNIQUE_NAME,

@@ -4,9 +4,12 @@
  */
 package org.opensearch.neuralsearch.processor.normalization;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import org.apache.commons.lang3.tuple.Pair;
@@ -23,6 +26,7 @@ import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.search.SearchShardTarget;
 
 import static org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique.MIN_SCORE;
+import static org.opensearch.neuralsearch.query.HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 
 /**
@@ -347,6 +351,42 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
 
     public void testMode_defaultValue() {
         assertEquals(MinMaxScoreNormalizationTechnique.Mode.APPLY, MinMaxScoreNormalizationTechnique.Mode.DEFAULT);
+    }
+
+    public void testLowerBoundsExceedsMaxSubQueries() {
+        List<Map<String, Object>> lowerBounds = new ArrayList<>();
+
+        for (int i = 0; i <= 100; i++) {
+            Map<String, Object> bound = new HashMap<>();
+            if (i % 3 == 0) {
+                bound.put("mode", "apply");
+                bound.put("min_score", 0.1f);
+            } else if (i % 3 == 1) {
+                bound.put("mode", "clip");
+                bound.put("min_score", 0.1f);
+            } else {
+                bound.put("mode", "ignore");
+            }
+            lowerBounds.add(bound);
+        }
+
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("lower_bounds", lowerBounds);
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> new MinMaxScoreNormalizationTechnique(parameters)
+        );
+
+        assertEquals(
+            String.format(
+                Locale.ROOT,
+                "lower_bounds size %d should be less than or equal to %d",
+                lowerBounds.size(),
+                MAX_NUMBER_OF_SUB_QUERIES
+            ),
+            exception.getMessage()
+        );
     }
 
     private void assertCompoundTopDocs(TopDocs expected, TopDocs actual) {

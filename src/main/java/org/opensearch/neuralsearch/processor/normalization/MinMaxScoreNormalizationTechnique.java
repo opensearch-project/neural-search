@@ -31,6 +31,7 @@ import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 
 import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.getDocIdAtQueryForNormalization;
+import static org.opensearch.neuralsearch.query.HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES;
 
 /**
  * Abstracts normalization of scores based on min-max method
@@ -44,10 +45,10 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
     private final List<Pair<Mode, Float>> lowerBounds;
 
     public MinMaxScoreNormalizationTechnique() {
-        this(Map.of(), new ScoreNormalizationUtil());
+        this(Map.of());
     }
 
-    public MinMaxScoreNormalizationTechnique(final Map<String, Object> params, final ScoreNormalizationUtil scoreNormalizationUtil) {
+    public MinMaxScoreNormalizationTechnique(final Map<String, Object> params) {
         lowerBounds = getLowerBounds(params);
     }
 
@@ -236,6 +237,17 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         Object lowerBoundsObj = params.get("lower_bounds");
         if (!(lowerBoundsObj instanceof List<?> lowerBoundsParams)) {
             throw new IllegalArgumentException("lower_bounds must be a List");
+        }
+
+        if (lowerBoundsParams.size() > MAX_NUMBER_OF_SUB_QUERIES) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "lower_bounds size %d should be less than or equal to %d",
+                    lowerBoundsParams.size(),
+                    MAX_NUMBER_OF_SUB_QUERIES
+                )
+            );
         }
 
         for (Object boundObj : lowerBoundsParams) {
