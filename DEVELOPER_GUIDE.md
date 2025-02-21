@@ -18,6 +18,13 @@
   - [Submitting Changes](#submitting-changes)
   - [Building On Lucene Version Updates](#building-on-lucene-version-updates)
   - [Code Guidelines](#code-guidelines)
+    - [Class and package names](#class-and-package-names)
+    - [Modular code](#modular-code)
+    - [Documentation](#documentation)
+    - [Code style](#code-style)
+    - [Style and Formatting Check](#style-and-formatting-check)
+    - [Tests](#tests)
+    - [Outdated or irrelevant code](#outdated-or-irrelevant-code)
 
 # Developer Guide
 
@@ -392,10 +399,44 @@ as a rule of thumb, use Locale.ROOT.
 13. Prefer Lombok annotations to the manually written boilerplate code
 14. When throwing an exception, avoid including user-provided content in the exception message. For secure coding practices,
 limit exception messages to the bare minimum and log additional details to the application logs, as user input could be maliciously crafted.
-    
 
+Please check [Java Language Formatting Guidelines](##Java Language Formatting Guidelines) section for more details.
 
-Some of mentioned styles are enforced by the `spotless` Gradle plugin, please check [Java Language Formatting Guidelines](##Java Language Formatting Guidelines) section for more details.
+### Style and Formatting Check
+As part of our continuous integration (CI) pipeline, we check code formatting and style. Failed checks may block your PR from being merged. To avoid this, run the following command locally before submitting your PR:
+
+```bash
+./gradlew spotlessApply
+```
+
+To verify that all required public Java documentation is present, run:
+
+```bash
+./gradlew javadoc
+```
+
+This command will identify missing or incomplete documentation. Common warnings include:
+
+- missing documentation for public methods
+- missing parameter descriptions
+- missing documentation for public fields
+
+Example warning:
+
+```
+/neural-search/build/generated/sources/delombok/java/main/org/opensearch/neuralsearch/processor/combination/ArithmeticMeanScoreCombinationTechnique.java:18: warning: no comment
+public static final String TECHNIQUE_NAME = "arithmetic_mean";
+```
+Documentation requirements:
+
+- all public methods must have descriptions that explain:
+    - main responsibility of the method
+    - any side effects (like mutating input objects)
+    - any exceptional conditions or error cases
+- all parameters in public methods must have descriptions
+- public fields should be documented with their purpose and usage
+
+Fix any new warnings before submitting your PR to ensure proper code documentation.
 
 ### Tests
 
