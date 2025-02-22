@@ -11,6 +11,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import lombok.AllArgsConstructor;
@@ -42,14 +44,25 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
     public static final String TECHNIQUE_NAME = "min_max";
     protected static final float MIN_SCORE = 0.001f;
     private static final float SINGLE_RESULT_SCORE = 1.0f;
-    private final List<Pair<Mode, Float>> lowerBounds;
+    private static final String PARAM_NAME_LOWER_BOUNDS = "lower_bounds";
+    private static final String PARAM_NAME_LOWER_BOUND_MODE = "mode";
+    private static final String PARAM_NAME_LOWER_BOUND_MIN_SCORE = "min_score";
+
+    private static final Set<String> SUPPORTED_PARAMETERS = Set.of(PARAM_NAME_LOWER_BOUNDS);
+    private static final Map<String, Set<String>> NESTED_PARAMETERS = Map.of(
+        PARAM_NAME_LOWER_BOUNDS,
+        Set.of(PARAM_NAME_LOWER_BOUND_MODE, PARAM_NAME_LOWER_BOUND_MIN_SCORE)
+    );
+
+    private final Optional<List<Pair<LowerBound.Mode, Float>>> lowerBoundsOptional;
 
     public MinMaxScoreNormalizationTechnique() {
-        this(Map.of());
+        this(Map.of(), new ScoreNormalizationUtil());
     }
 
-    public MinMaxScoreNormalizationTechnique(final Map<String, Object> params) {
-        lowerBounds = getLowerBounds(params);
+    public MinMaxScoreNormalizationTechnique(final Map<String, Object> params, final ScoreNormalizationUtil scoreNormalizationUtil) {
+        scoreNormalizationUtil.validateParameters(params, SUPPORTED_PARAMETERS, NESTED_PARAMETERS);
+        lowerBoundsOptional = getLowerBounds(params);
     }
 
     /**
@@ -69,8 +82,14 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                 continue;
             }
             List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
-            if (Objects.nonNull(lowerBounds) && !lowerBounds.isEmpty() && lowerBounds.size() != topDocsPerSubQuery.size()) {
-                throw new IllegalArgumentException("lower bounds size should be same as number of sub queries");
+            if (isLowerBoundsAndSubQueriesCountMismatched(topDocsPerSubQuery)) {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "expected lower bounds array to contain %d elements matching the number of sub-queries, but found a mismatch",
+                        topDocsPerSubQuery.size()
+                    )
+                );
             }
             for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
                 TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
@@ -87,14 +106,16 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         }
     }
 
-    private LowerBound getLowerBound(int j) {
-        LowerBound lowerBound;
-        if (Objects.isNull(lowerBounds) || lowerBounds.isEmpty()) {
-            lowerBound = new LowerBound();
-        } else {
-            lowerBound = new LowerBound(true, lowerBounds.get(j).getLeft(), lowerBounds.get(j).getRight());
-        }
-        return lowerBound;
+    private boolean isLowerBoundsAndSubQueriesCountMismatched(List<TopDocs> topDocsPerSubQuery) {
+        return lowerBoundsOptional.isPresent()
+            && !topDocsPerSubQuery.isEmpty()
+            && lowerBoundsOptional.get().size() != topDocsPerSubQuery.size();
+    }
+
+    private LowerBound getLowerBound(int subQueryIndex) {
+        return lowerBoundsOptional.map(
+            pairs -> new LowerBound(true, pairs.get(subQueryIndex).getLeft(), pairs.get(subQueryIndex).getRight())
+        ).orElseGet(LowerBound::new);
     }
 
     private MinMaxScores getMinMaxScoresResult(final List<CompoundTopDocs> queryTopDocs) {
@@ -108,7 +129,12 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
 
     @Override
     public String describe() {
-        return String.format(Locale.ROOT, "%s", TECHNIQUE_NAME);
+        return lowerBoundsOptional.map(lb -> {
+            String lowerBounds = lb.stream()
+                .map(pair -> String.format(Locale.ROOT, "(%s, %s)", pair.getLeft(), pair.getRight()))
+                .collect(Collectors.joining(", ", "[", "]"));
+            return String.format(Locale.ROOT, "%s, lower bounds %s", TECHNIQUE_NAME, lowerBounds);
+        }).orElse(String.format(Locale.ROOT, "%s", TECHNIQUE_NAME));
     }
 
     @Override
@@ -187,10 +213,6 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
             }
             List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
             for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
-                // LowerBound lowerBound = getLowerBound(j);
-                // we need to compute actual min score for everything except clipping. For clipping we have to use
-                // lower bound min_score, it's passed as parameter. If we skip for clipping we can save some CPU cycles.
-                // if (!lowerBound.isEnabled() || lowerBound.getMode() != Mode.CLIP) {
                 minScores[j] = Math.min(
                     minScores[j],
                     Arrays.stream(topDocsPerSubQuery.get(j).scoreDocs)
@@ -198,43 +220,30 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                         .min(Float::compare)
                         .orElse(Float.MAX_VALUE)
                 );
-                // }
             }
         }
         return minScores;
     }
 
-    private float normalizeSingleScore(final float score, final float minScore, final float maxScore, LowerBound lowerBound) {
+    private float normalizeSingleScore(final float score, final float minScore, final float maxScore, final LowerBound lowerBound) {
         // edge case when there is only one score and min and max scores are same
         if (Floats.compare(maxScore, minScore) == 0 && Floats.compare(maxScore, score) == 0) {
             return SINGLE_RESULT_SCORE;
         }
         if (!lowerBound.isEnabled()) {
-            return Mode.IGNORE.normalize(score, minScore, maxScore, lowerBound.getMinScore());
+            return LowerBound.Mode.IGNORE.normalize(score, minScore, maxScore, lowerBound.getMinScore());
         }
-
         return lowerBound.getMode().normalize(score, minScore, maxScore, lowerBound.getMinScore());
     }
 
-    /**
-     * Result class to hold min and max scores for each sub query
-     */
-    @AllArgsConstructor
-    @Getter
-    private class MinMaxScores {
-        float[] minScoresPerSubquery;
-        float[] maxScoresPerSubquery;
-    }
-
-    private List<Pair<Mode, Float>> getLowerBounds(final Map<String, Object> params) {
-        List<Pair<Mode, Float>> lowerBounds = new ArrayList<>();
-
-        // Early return if params is null or doesn't contain lower_bounds
-        if (Objects.isNull(params) || !params.containsKey("lower_bounds")) {
-            return lowerBounds;
+    private Optional<List<Pair<LowerBound.Mode, Float>>> getLowerBounds(final Map<String, Object> params) {
+        if (Objects.isNull(params) || !params.containsKey(PARAM_NAME_LOWER_BOUNDS)) {
+            return Optional.empty();
         }
 
-        Object lowerBoundsObj = params.get("lower_bounds");
+        List<Pair<LowerBound.Mode, Float>> lowerBounds = new ArrayList<>();
+
+        Object lowerBoundsObj = params.get(PARAM_NAME_LOWER_BOUNDS);
         if (!(lowerBoundsObj instanceof List<?> lowerBoundsParams)) {
             throw new IllegalArgumentException("lower_bounds must be a List");
         }
@@ -259,8 +268,17 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
             Map<String, Object> lowerBound = (Map<String, Object>) boundObj;
 
             try {
-                Mode mode = Mode.fromString(lowerBound.get("mode").toString());
-                float minScore = Float.parseFloat(String.valueOf(lowerBound.get("min_score")));
+                LowerBound.Mode mode = LowerBound.Mode.fromString(
+                    Objects.isNull(lowerBound.get(PARAM_NAME_LOWER_BOUND_MODE))
+                        ? ""
+                        : lowerBound.get(PARAM_NAME_LOWER_BOUND_MODE).toString()
+                );
+                float minScore;
+                if (Objects.isNull(lowerBound.get(PARAM_NAME_LOWER_BOUND_MIN_SCORE))) {
+                    minScore = LowerBound.DEFAULT_LOWER_BOUND_SCORE;
+                } else {
+                    minScore = Float.parseFloat(String.valueOf(lowerBound.get(PARAM_NAME_LOWER_BOUND_MIN_SCORE)));
+                }
 
                 Validate.isTrue(
                     minScore >= LowerBound.MIN_LOWER_BOUND_SCORE && minScore <= LowerBound.MAX_LOWER_BOUND_SCORE,
@@ -271,25 +289,35 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
 
                 lowerBounds.add(ImmutablePair.of(mode, minScore));
             } catch (NumberFormatException e) {
-                throw new IllegalArgumentException("Invalid format for min_score: must be a valid float value", e);
+                throw new IllegalArgumentException("invalid format for min_score: must be a valid float value", e);
             }
         }
 
-        return lowerBounds;
+        return Optional.of(lowerBounds);
+    }
+
+    /**
+     * Result class to hold min and max scores for each sub query
+     */
+    @AllArgsConstructor
+    @Getter
+    private static class MinMaxScores {
+        float[] minScoresPerSubquery;
+        float[] maxScoresPerSubquery;
     }
 
     /**
      * Result class to hold lower bound for each sub query
      */
     @Getter
-    private static class LowerBound {
+    public static class LowerBound {
         static final float MIN_LOWER_BOUND_SCORE = -10_000f;
         static final float MAX_LOWER_BOUND_SCORE = 10_000f;
         static final float DEFAULT_LOWER_BOUND_SCORE = 0.0f;
 
-        boolean enabled;
-        Mode mode;
-        float minScore;
+        private final boolean enabled;
+        private final Mode mode;
+        private final float minScore;
 
         LowerBound() {
             this(false, Mode.DEFAULT, DEFAULT_LOWER_BOUND_SCORE);
@@ -300,56 +328,79 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
             this.mode = mode;
             this.minScore = minScore;
         }
-    }
 
-    protected enum Mode {
-        APPLY {
-            @Override
-            public float normalize(float score, float minScore, float maxScore, float lowerBoundScore) {
-                if (maxScore < lowerBoundScore) {
-                    return (score - minScore) / (maxScore - minScore);
-                } else if (score < lowerBoundScore) {
-                    return score / (maxScore - score);
+        /**
+         * Enum for normalization mode
+         */
+        protected enum Mode {
+            APPLY {
+                @Override
+                public float normalize(float score, float minScore, float maxScore, float lowerBoundScore) {
+                    // if we apply the lower bound this mean we use actual score in case it's less then the lower bound min score
+                    // same applied to case when actual max_score is less than lower bound min score
+                    if (maxScore < lowerBoundScore || score < lowerBoundScore) {
+                        return (score - minScore) / (maxScore - minScore);
+                    }
+                    return (score - lowerBoundScore) / (maxScore - lowerBoundScore);
                 }
-                return (score - lowerBoundScore) / (maxScore - lowerBoundScore);
-            }
-        },
-        CLIP {
-            @Override
-            public float normalize(float score, float minScore, float maxScore, float lowerBoundScore) {
-                if (score < minScore) {
-                    return lowerBoundScore / (maxScore - lowerBoundScore);
+            },
+            CLIP {
+                @Override
+                public float normalize(float score, float minScore, float maxScore, float lowerBoundScore) {
+                    // apply clipping, return lower bound min score if score is less than min score. This effectively means 0 after
+                    // normalization
+                    if (score < minScore) {
+                        return 0.0f;
+                    }
+                    if (maxScore < lowerBoundScore) {
+                        return (score - minScore) / (maxScore - minScore);
+                    }
+                    return (score - lowerBoundScore) / (maxScore - lowerBoundScore);
                 }
-                return (score - lowerBoundScore) / (maxScore - lowerBoundScore);
+            },
+            IGNORE {
+                @Override
+                public float normalize(float score, float minScore, float maxScore, float lowerBoundScore) {
+                    // ignore lower bound logic and do raw min-max normalization using actual scores
+                    float normalizedScore = (score - minScore) / (maxScore - minScore);
+                    return normalizedScore == 0.0f ? MIN_SCORE : normalizedScore;
+                }
+            };
+
+            public static final Mode DEFAULT = APPLY;
+            // set of all valid values for mode
+            public static final String VALID_VALUES = Arrays.stream(values())
+                .map(mode -> mode.name().toLowerCase(Locale.ROOT))
+                .collect(Collectors.joining(", "));
+
+            /**
+             * Get mode from string value
+             * @param value string value of mode
+             * @return mode
+             * @throws IllegalArgumentException if mode is not valid
+             */
+            public static Mode fromString(String value) {
+                if (Objects.isNull(value)) {
+                    throw new IllegalArgumentException("mode value cannot be null or empty");
+                }
+                if (value.trim().isEmpty()) {
+                    return DEFAULT;
+                }
+                try {
+                    return valueOf(value.toUpperCase(Locale.ROOT));
+                } catch (IllegalArgumentException e) {
+                    throw new IllegalArgumentException(
+                        String.format(Locale.ROOT, "invalid mode: %s, valid values are: %s", value, VALID_VALUES)
+                    );
+                }
             }
-        },
-        IGNORE {
+
+            public abstract float normalize(float score, float minScore, float maxScore, float lowerBoundScore);
+
             @Override
-            public float normalize(float score, float minScore, float maxScore, float lowerBoundScore) {
-                float normalizedScore = (score - minScore) / (maxScore - minScore);
-                return normalizedScore == 0.0f ? MIN_SCORE : normalizedScore;
-            }
-        };
-
-        public static final Mode DEFAULT = APPLY;
-        public static final String VALID_VALUES = Arrays.stream(values())
-            .map(mode -> mode.name().toLowerCase(Locale.ROOT))
-            .collect(Collectors.joining(", "));
-
-        public static Mode fromString(String value) {
-            if (value == null || value.trim().isEmpty()) {
-                throw new IllegalArgumentException("mode value cannot be null or empty");
-            }
-
-            try {
-                return valueOf(value.toUpperCase(Locale.ROOT));
-            } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException(
-                    String.format(Locale.ROOT, "invalid mode: %s, valid values are: %s", value, VALID_VALUES)
-                );
+            public String toString() {
+                return name().toLowerCase(Locale.ROOT);
             }
         }
-
-        public abstract float normalize(float score, float minScore, float maxScore, float lowerBoundScore);
     }
 }
