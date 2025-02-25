@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.stats.names;
+package org.opensearch.neuralsearch.stats.state;
 
 import lombok.Getter;
 
@@ -10,15 +10,15 @@ import java.util.HashSet;
 import java.util.Set;
 
 @Getter
-public enum DerivedStatName {
+public enum StateStatName {
     // Cluster info
-    CLUSTER_VERSION("cluster_version", StatType.DERIVED_INFO_COUNTER),
-    TEXT_EMBEDDING_PROCESSORS("processors.text_embedding_processors_in_pipelines", StatType.DERIVED_INFO_COUNTER);
+    CLUSTER_VERSION("cluster_version", StateStatType.COUNTER),
+    TEXT_EMBEDDING_PROCESSORS("processors.text_embedding_processors_in_pipelines", StateStatType.COUNTER);
 
     private final String name;
-    private final StatType statType;
+    private final StateStatType statType;
 
-    DerivedStatName(String name, StatType statType) {
+    StateStatName(String name, StateStatType statType) {
         this.name = name;
         this.statType = statType;
     }
@@ -30,7 +30,7 @@ public enum DerivedStatName {
      */
     public static Set<String> getNames() {
         Set<String> names = new HashSet<>();
-        for (DerivedStatName eventStatNames : DerivedStatName.values()) {
+        for (StateStatName eventStatNames : StateStatName.values()) {
             names.add(eventStatNames.getName());
         }
         return names;
@@ -40,4 +40,5 @@ public enum DerivedStatName {
     public String toString() {
         return getName();
     }
+
 }

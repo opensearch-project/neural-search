@@ -16,8 +16,8 @@ import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
 import lombok.extern.log4j.Log4j2;
-import org.opensearch.neuralsearch.stats.EventStatsManager;
-import org.opensearch.neuralsearch.stats.names.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
 
 /**
  * This processor is used for user input data text embedding processing, model_id can be used to indicate which model user use,

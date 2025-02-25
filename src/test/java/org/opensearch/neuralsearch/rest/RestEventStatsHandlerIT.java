@@ -13,8 +13,8 @@ import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.plugin.NeuralSearch;
-import org.opensearch.neuralsearch.stats.names.DerivedStatName;
-import org.opensearch.neuralsearch.stats.names.EventStatName;
+import org.opensearch.neuralsearch.stats.state.StateStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -28,7 +28,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Log4j2
-public class RestNeuralStatsHandlerIT extends BaseNeuralSearchIT {
+public class RestEventStatsHandlerIT extends BaseNeuralSearchIT {
     private static final String INDEX_NAME = "stats_index";
     private static final String INDEX_NAME_2 = "stats_index_2";
     private static final String INDEX_NAME_3 = "stats_index_3";
@@ -88,7 +88,7 @@ public class RestNeuralStatsHandlerIT extends BaseNeuralSearchIT {
         "processor/chunker/PipelineForCascadedChunker.json"
     );
 
-    public RestNeuralStatsHandlerIT() throws IOException, URISyntaxException {}
+    public RestEventStatsHandlerIT() throws IOException, URISyntaxException {}
 
     @Before
     public void setUp() throws Exception {
@@ -173,8 +173,8 @@ public class RestNeuralStatsHandlerIT extends BaseNeuralSearchIT {
         return getNestedValue(map, eventStatName.getName());
     }
 
-    public Object getNestedValue(Map<String, Object> map, DerivedStatName derivedStatName) {
-        return getNestedValue(map, derivedStatName.getName());
+    public Object getNestedValue(Map<String, Object> map, StateStatName stateStatName) {
+        return getNestedValue(map, stateStatName.getName());
     }
 
     private Object getNestedValueHelper(Map<String, Object> map, String[] keys, int depth) {

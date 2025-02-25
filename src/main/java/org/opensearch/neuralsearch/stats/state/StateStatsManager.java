@@ -2,11 +2,9 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.stats;
+package org.opensearch.neuralsearch.stats.state;
 
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
-import org.opensearch.neuralsearch.stats.names.DerivedStatName;
-import org.opensearch.neuralsearch.stats.names.StatType;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.PipelineInfoUtil;
 
@@ -16,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
-public class DerivedStatsManager {
+public class StateStatsManager {
     private static final String AGG_KEY_PREFIX = "all_nodes.";
     public static final String PROCESSORS_KEY = "processors";
     public static final String ALGORITHM_KEY = "algorithm";
@@ -29,11 +27,11 @@ public class DerivedStatsManager {
     public static final String NORMALIZATION_KEY = "normalization";
     public static final String TECHNIQUE_KEY = "technique";
 
-    private static DerivedStatsManager INSTANCE;
+    private static StateStatsManager INSTANCE;
 
-    public static DerivedStatsManager instance() {
+    public static StateStatsManager instance() {
         if (INSTANCE == null) {
-            INSTANCE = new DerivedStatsManager();
+            INSTANCE = new StateStatsManager();
         }
         return INSTANCE;
     }
@@ -42,18 +40,18 @@ public class DerivedStatsManager {
         // Reference to provide derived methods access to node Responses
         Map<String, Long> aggregatedNodeResponses = aggregateNodesResponses(nodeResponses);
 
-        Map<String, Object> computedDerivedStats = new TreeMap<>();
+        Map<String, Object> computedStateStats = new TreeMap<>();
 
         // Initialize empty map with keys so stat names are visible in JSON even if not calculated
-        for (DerivedStatName stat : EnumSet.allOf(DerivedStatName.class)) {
-            if (stat.getStatType() == StatType.DERIVED_INFO_COUNTER) {
-                computedDerivedStats.put(stat.getName(), 0L);
+        for (StateStatName stat : EnumSet.allOf(StateStatName.class)) {
+            if (stat.getStatType() == StateStatType.COUNTER) {
+                computedStateStats.put(stat.getName(), 0L);
             }
         }
 
-        getStats(computedDerivedStats);
-        computedDerivedStats.putAll(aggregatedNodeResponses);
-        return computedDerivedStats;
+        getStats(computedStateStats);
+        computedStateStats.putAll(aggregatedNodeResponses);
+        return computedStateStats;
     }
 
     public Map<String, Long> aggregateNodesResponses(List<Map<String, Long>> nodeResponses) {
@@ -78,7 +76,7 @@ public class DerivedStatsManager {
 
     private void addClusterVersionStat(Map<String, Object> stats) {
         String version = NeuralSearchClusterUtil.instance().getClusterMinVersion().toString();
-        stats.put(DerivedStatName.CLUSTER_VERSION.getName(), version);
+        stats.put(StateStatName.CLUSTER_VERSION.getName(), version);
     }
 
     private void addIngestProcessorStats(Map<String, Object> stats) {
@@ -92,7 +90,7 @@ public class DerivedStatsManager {
                     Map<String, Object> processorConfig = asMap(entry.getValue());
                     switch (processorType) {
                         case TextEmbeddingProcessor.TYPE:
-                            increment(stats, DerivedStatName.TEXT_EMBEDDING_PROCESSORS);
+                            increment(stats, StateStatName.TEXT_EMBEDDING_PROCESSORS);
                             break;
                     }
                 }
@@ -152,10 +150,10 @@ public class DerivedStatsManager {
         Map<String, Object> stats,
         List<Map<String, Object>> processors,
         String processorType,
-        DerivedStatName derivedStatName
+        StateStatName stateStatName
     ) {
         long count = processors.stream().filter(p -> p.containsKey(processorType)).count();
-        incrementBy(stats, derivedStatName.getName(), count);
+        incrementBy(stats, stateStatName.getName(), count);
         // Add additional processor cases here
     }
 
@@ -163,7 +161,7 @@ public class DerivedStatsManager {
         Map<String, Object> stats,
         List<Map<String, Object>> processors,
         String combinationTechnique,
-        DerivedStatName derivedStatName
+        StateStatName stateStatName
     ) {
         // Parses to access combination technique field
         for (Map<String, Object> processorObj : processors) {
@@ -173,14 +171,14 @@ public class DerivedStatsManager {
                 Map<String, Object> combination = asMap(config.get(COMBINATION_KEY));
                 String technique = getValue(combination, TECHNIQUE_KEY, String.class);
                 if (technique != null && technique.equals(combinationTechnique)) {
-                    increment(stats, derivedStatName.getName());
+                    increment(stats, stateStatName.getName());
                 }
             }
         }
     }
 
-    private void increment(Map<String, Object> stats, DerivedStatName derivedStatName) {
-        incrementBy(stats, derivedStatName.getName(), 1L);
+    private void increment(Map<String, Object> stats, StateStatName stateStatName) {
+        incrementBy(stats, stateStatName.getName(), 1L);
     }
 
     private void increment(Map<String, Object> stats, String path) {
