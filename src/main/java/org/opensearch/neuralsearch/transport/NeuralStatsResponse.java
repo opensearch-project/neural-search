@@ -26,6 +26,7 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
 
     private static final String NODES_KEY = "nodes";
     private Map<String, Object> stats;
+    private boolean flatten;
 
     /**
      * Constructor
@@ -36,6 +37,7 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
     public NeuralStatsResponse(StreamInput in) throws IOException {
         super(new ClusterName(in), in.readList(NeuralStatsNodeResponse::readStats), in.readList(FailedNodeException::new));
         stats = new TreeMap<>(in.readMap());
+        flatten = in.readBoolean();
     }
 
     /**
@@ -50,16 +52,19 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
         ClusterName clusterName,
         List<NeuralStatsNodeResponse> nodes,
         List<FailedNodeException> failures,
-        Map<String, Object> stats
+        Map<String, Object> stats,
+        boolean flatten
     ) {
         super(clusterName, nodes, failures);
         this.stats = new TreeMap<>(stats);
+        this.flatten = flatten;
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
         out.writeMap(stats);
+        out.writeBoolean(flatten);
     }
 
     @Override
@@ -74,9 +79,11 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        // Return cluster level stats
-        Map<String, Object> nestedClusterStats = convertFlatToNestedMap(stats);
-        buildNestedMapXContent(builder, nestedClusterStats);
+        Map<String, Object> clusterStats = stats;
+        if (flatten == false) {
+            clusterStats = convertFlatToNestedMap(stats);
+        }
+        buildNestedMapXContent(builder, clusterStats);
 
         // Return node level stats
         String nodeId;
@@ -87,10 +94,13 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
             nodeId = node.getId();
             builder.startObject(nodeId);
 
-            Map<String, Object> downcastedNodesResponse = new HashMap<>(nodesResponse.getStatsMap());
+            Map<String, Object> resultNodeStatsMap = new HashMap<>(nodesResponse.getStatsMap());
 
-            Map<String, Object> nestedMap = convertFlatToNestedMap(downcastedNodesResponse);
-            buildNestedMapXContent(builder, nestedMap);
+            if (flatten == false) {
+                resultNodeStatsMap = convertFlatToNestedMap(resultNodeStatsMap);
+            }
+
+            buildNestedMapXContent(builder, resultNodeStatsMap);
             builder.endObject();
         }
         builder.endObject();

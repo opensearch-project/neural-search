@@ -105,7 +105,13 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         combinedStats.putAll(nodeAggregatedStats);
         combinedStats.putAll(flatStateStats);
 
-        return new NeuralStatsResponse(clusterService.getClusterName(), responses, failures, combinedStats);
+        return new NeuralStatsResponse(
+            clusterService.getClusterName(),
+            responses,
+            failures,
+            combinedStats,
+            request.getNeuralStatsInput().isFlattenResponse()
+        );
     }
 
     @Override

@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.stats;
 
 import lombok.Builder;
 import lombok.Getter;
+import lombok.Setter;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.common.io.stream.Writeable;
@@ -34,23 +35,40 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
     private EnumSet<EventStatName> eventStatNames;
     private EnumSet<StateStatName> stateStatNames;
 
+    @Setter
+    private boolean includeMetadata;
+    @Setter
+    private boolean flattenResponse;
+
     @Builder
-    public NeuralStatsInput(Set<String> nodeIds, EnumSet<EventStatName> eventStatNames, EnumSet<StateStatName> stateStatNames) {
+    public NeuralStatsInput(
+        Set<String> nodeIds,
+        EnumSet<EventStatName> eventStatNames,
+        EnumSet<StateStatName> stateStatNames,
+        boolean includeMetadata,
+        boolean flattenResponse
+    ) {
         this.nodeIds = nodeIds;
         this.eventStatNames = eventStatNames;
         this.stateStatNames = stateStatNames;
+        this.includeMetadata = includeMetadata;
+        this.flattenResponse = flattenResponse;
     }
 
     public NeuralStatsInput() {
         this.nodeIds = new HashSet<>();
         this.eventStatNames = EnumSet.noneOf(EventStatName.class);
         this.stateStatNames = EnumSet.noneOf(StateStatName.class);
+        this.includeMetadata = false;
+        this.flattenResponse = false;
     }
 
     public NeuralStatsInput(StreamInput input) throws IOException {
         nodeIds = input.readBoolean() ? new HashSet<>(input.readStringList()) : new HashSet<>();
         eventStatNames = input.readBoolean() ? input.readEnumSet(EventStatName.class) : EnumSet.noneOf(EventStatName.class);
         stateStatNames = input.readBoolean() ? input.readEnumSet(StateStatName.class) : EnumSet.noneOf(StateStatName.class);
+        includeMetadata = input.readBoolean();
+        flattenResponse = input.readBoolean();
     }
 
     @Override
@@ -58,6 +76,8 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         out.writeOptionalStringCollection(nodeIds);
         writeOptionalEnumSet(out, eventStatNames);
         writeOptionalEnumSet(out, stateStatNames);
+        out.writeBoolean(includeMetadata);
+        out.writeBoolean(flattenResponse);
     }
 
     private void writeOptionalEnumSet(StreamOutput out, EnumSet<?> set) throws IOException {

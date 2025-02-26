@@ -22,6 +22,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -127,7 +129,22 @@ public class RestNeuralStatsHandlerIT extends BaseNeuralSearchIT {
         //
         assertNull(getNestedValue(nodesStats.getFirst(), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getFullPath()));
         assertEquals(0, getNestedValue(stats, StateStatName.TEXT_EMBEDDING_PROCESSORS.getFullPath()));
+    }
 
+    public void test_flatten() throws Exception {
+        Map<String, String> params = new HashMap<>();
+        params.put(RestNeuralStatsHandler.FLATTEN_PARAM, "true");
+
+        Response response = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>(), params);
+
+        String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> stats = parseStatsResponse(responseBody);
+        List<Map<String, Object>> nodesStats = parseNodeStatsResponse(responseBody);
+
+        System.out.println(stats);
+
+        assertEquals(0, nodesStats.getFirst().get(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getFullPath()));
+        assertEquals(0, stats.get(StateStatName.TEXT_EMBEDDING_PROCESSORS.getFullPath()));
     }
 
     protected String uploadTextEmbeddingModel() throws Exception {
@@ -136,6 +153,11 @@ public class RestNeuralStatsHandlerIT extends BaseNeuralSearchIT {
     }
 
     protected Response executeNeuralStatRequest(List<String> nodeIds, List<String> stats) throws IOException {
+        return executeNeuralStatRequest(nodeIds, stats, Collections.emptyMap());
+    }
+
+    protected Response executeNeuralStatRequest(List<String> nodeIds, List<String> stats, Map<String, String> queryParams)
+        throws IOException {
         String nodePrefix = "";
         if (!nodeIds.isEmpty()) {
             nodePrefix = "/" + String.join(",", nodeIds);
@@ -146,7 +168,12 @@ public class RestNeuralStatsHandlerIT extends BaseNeuralSearchIT {
             statsSuffix = "/" + String.join(",", stats);
         }
 
-        Request request = new Request("GET", NeuralSearch.NEURAL_BASE_URI + nodePrefix + "/stats" + statsSuffix);
+        String queryParamString = "?";
+        for (Map.Entry<String, String> queryParam : queryParams.entrySet()) {
+            queryParamString += queryParam.getKey() + "=" + queryParam.getValue() + "&";
+        }
+
+        Request request = new Request("GET", NeuralSearch.NEURAL_BASE_URI + nodePrefix + "/stats" + statsSuffix + queryParamString);
 
         Response response = client().performRequest(request);
         assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));

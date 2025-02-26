@@ -33,6 +33,8 @@ import static org.opensearch.neuralsearch.processor.util.RestActionUtils.splitCo
 @AllArgsConstructor
 public class RestNeuralStatsHandler extends BaseRestHandler {
     private static final String NAME = "neural_stats_action";
+    public static final String FLATTEN_PARAM = "flat_keys";
+    public static final String INCLUDE_METADATA_PARAM = "include_metadata";
 
     private static final Set<String> EVENT_STAT_NAMES = EnumSet.allOf(EventStatName.class)
         .stream()
@@ -108,6 +110,12 @@ public class RestNeuralStatsHandler extends BaseRestHandler {
         }
 
         Optional<String[]> stats = splitCommaSeparatedParam(request, "stat");
+
+        boolean flatten = request.paramAsBoolean(FLATTEN_PARAM, false);
+        neuralStatsInput.setFlattenResponse(flatten);
+
+        boolean includeMetadata = request.paramAsBoolean(INCLUDE_METADATA_PARAM, false);
+        neuralStatsInput.setIncludeMetadata(includeMetadata);
 
         if (stats.isPresent()) {
             System.out.println(Arrays.stream(stats.get()).toList());
