@@ -87,7 +87,7 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
             List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
             int subQueryIndex = 0;
             for (TopDocs topDocs : topDocsPerSubQuery) {
-                numberOfElementsPerSubQuery[subQueryIndex++] += topDocs.totalHits.value;
+                numberOfElementsPerSubQuery[subQueryIndex++] += topDocs.totalHits.value();
             }
         }
 
@@ -151,11 +151,13 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
     }
 
     private static float normalizeSingleScore(final float score, final float standardDeviation, final float mean) {
-        // edge case when there is only one score and min and max scores are same
+        // edge case when there is only one score and z scores are same
         if (Floats.compare(mean, score) == 0) {
             return SINGLE_RESULT_SCORE;
         }
+        // if sd == 0: return 0
         return (score - mean) / standardDeviation;
+        // if nscore < 0: return 0
     }
 
 }

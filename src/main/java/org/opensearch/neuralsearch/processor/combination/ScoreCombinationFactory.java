@@ -29,11 +29,7 @@ public class ScoreCombinationFactory {
         RRFScoreCombinationTechnique.TECHNIQUE_NAME,
         params -> new RRFScoreCombinationTechnique(),
         ArithmeticMeanScoreCombinationWithNegativeSupportTechnique.TECHNIQUE_NAME,
-        params -> new ArithmeticMeanScoreCombinationWithNegativeSupportTechnique(params, scoreCombinationUtil),
-        GeometricMeanScoreCombinationWithNegativeSupportTechnique.TECHNIQUE_NAME,
-        params -> new GeometricMeanScoreCombinationWithNegativeSupportTechnique(params, scoreCombinationUtil),
-        HarmonicMeanScoreCombinationWithNegativeSupportTechnique.TECHNIQUE_NAME,
-        params -> new HarmonicMeanScoreCombinationWithNegativeSupportTechnique(params, scoreCombinationUtil)
+        params -> new ArithmeticMeanScoreCombinationWithNegativeSupportTechnique(params, scoreCombinationUtil)
     );
 
     /**
