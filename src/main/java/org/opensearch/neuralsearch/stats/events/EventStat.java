@@ -11,6 +11,8 @@ public interface EventStat {
 
     public Long getMinutesSinceLastEvent();
 
+    public EventStatData getEventStatData();
+
     /**
      * Increments the supplier if it can be incremented
      */

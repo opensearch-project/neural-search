@@ -21,7 +21,6 @@ import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Set;
 
-// TODO : Not yet implemented
 @Getter
 public class NeuralStatsInput implements ToXContentObject, Writeable {
     public static final String NODE_IDS = "node_ids";
@@ -103,10 +102,6 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         }
         builder.endObject();
         return builder;
-    }
-
-    public boolean retrieveStatsOnAllNodes() {
-        return nodeIds == null || nodeIds.isEmpty();
     }
 
     public boolean retrieveAllStats() {

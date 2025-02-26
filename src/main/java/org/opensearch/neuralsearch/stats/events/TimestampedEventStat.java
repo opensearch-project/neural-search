@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.stats.events;
 import java.util.concurrent.atomic.LongAdder;
 
 public class TimestampedEventStat implements EventStat {
+    private EventStatName eventStatName;
     private long lastEventTimestamp;
     private LongAdder adder;
 
@@ -31,5 +32,14 @@ public class TimestampedEventStat implements EventStat {
     public Long getMinutesSinceLastEvent() {
         // Not yet implemented
         return 0L;
+    }
+
+    public EventStatData getEventStatData() {
+        return EventStatData.builder()
+            .eventStatName(eventStatName)
+            .value(getValue())
+            .trailingIntervalValue(getTrailingIntervalValue())
+            .minutesSinceLastEvent(getMinutesSinceLastEvent())
+            .build();
     }
 }

@@ -13,7 +13,7 @@ import org.opensearch.core.common.io.stream.Writeable;
 public class NeuralStatsAction extends ActionType<NeuralStatsResponse> {
 
     public static final NeuralStatsAction INSTANCE = new NeuralStatsAction();
-    public static final String NAME = "cluster:admin/neural_stats_action"; // TODO : figure this out
+    public static final String NAME = "cluster:admin/neural_stats_action";
 
     /**
      * Constructor

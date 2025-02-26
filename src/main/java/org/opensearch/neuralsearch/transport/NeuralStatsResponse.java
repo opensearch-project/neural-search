@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 /**
  * NeuralStatsResponse consists of the aggregated responses from the nodes
@@ -94,7 +95,10 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
             nodeId = node.getId();
             builder.startObject(nodeId);
 
-            Map<String, Object> resultNodeStatsMap = new HashMap<>(nodesResponse.getStatsMap());
+            Map<String, Object> resultNodeStatsMap = nodesResponse.getStats()
+                .entrySet()
+                .stream()
+                .collect(Collectors.toMap(entry -> entry.getKey().getFullPath(), entry -> entry.getValue().getValue()));
 
             if (flatten == false) {
                 resultNodeStatsMap = convertFlatToNestedMap(resultNodeStatsMap);
@@ -122,21 +126,23 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
     private Map<String, Object> convertFlatToNestedMap(Map<String, Object> map) {
         Map<String, Object> nestedMap = new TreeMap<>();
         for (Map.Entry<String, Object> entry : map.entrySet()) {
-            putNested(nestedMap, entry.getKey(), entry.getValue());
+            createNestedStructure(nestedMap, entry.getKey(), entry.getValue());
         }
         return nestedMap;
     }
 
-    private void putNested(Map<String, Object> map, String path, Object value) {
-        String[] parts = path.split("\\.");
-        Map<String, Object> current = map;
+    private void createNestedStructure(Map<String, Object> targetMap, String dotNotationPath, Object value) {
+        String[] pathParts = dotNotationPath.split("\\.");
+        Map<String, Object> currentLevel = targetMap;
 
-        // Navigate to path in map
-        for (int i = 0; i < parts.length - 1; i++) {
-            current = (Map<String, Object>) current.computeIfAbsent(parts[i], k -> new HashMap<String, Object>());
+        // Navigate through all parts except the last one, creating nested maps as needed
+        for (int i = 0; i < pathParts.length - 1; i++) {
+            String pathPart = pathParts[i];
+            currentLevel = (Map<String, Object>) currentLevel.computeIfAbsent(pathPart, key -> new HashMap<String, Object>());
         }
 
-        // Put object at map path
-        current.put(parts[parts.length - 1], value);
+        // Set the value at the final path location
+        String lastPathPart = pathParts[pathParts.length - 1];
+        currentLevel.put(lastPathPart, value);
     }
 }
