@@ -12,10 +12,8 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 
 public class StateStatsManager {
-    private static final String AGG_KEY_PREFIX = "all_nodes.";
     public static final String PROCESSORS_KEY = "processors";
     public static final String ALGORITHM_KEY = "algorithm";
 
@@ -36,50 +34,52 @@ public class StateStatsManager {
         return INSTANCE;
     }
 
-    public Map<String, Object> getStats(List<Map<String, Long>> nodeResponses) {
+    public Map<StateStatName, StateStat<?>> getStats() {
         // Reference to provide derived methods access to node Responses
-        Map<String, Long> aggregatedNodeResponses = aggregateNodesResponses(nodeResponses);
+        Map<StateStatName, CountableStateStat> countableStateStats = getCountableStats();
+        Map<StateStatName, SettableStateStat<?>> settableStateStats = getSettableStats();
 
-        Map<String, Object> computedStateStats = new TreeMap<>();
+        Map<StateStatName, StateStat<?>> stateStats = new HashMap<>();
+        stateStats.putAll(countableStateStats);
+        stateStats.putAll(settableStateStats);
+        return stateStats;
+    }
 
-        // Initialize empty map with keys so stat names are visible in JSON even if not calculated
+    private Map<StateStatName, CountableStateStat> getCountableStats() {
+        // Initialize empty map with keys so stat names are visible in JSON even if the value is not countedd
+        Map<StateStatName, CountableStateStat> countableStateStats = new HashMap<>();
         for (StateStatName stat : EnumSet.allOf(StateStatName.class)) {
-            if (stat.getStatType() == StateStatType.COUNTER) {
-                computedStateStats.put(stat.getName(), 0L);
+            if (stat.getStatType() == StateStatType.COUNTABLE) {
+                countableStateStats.put(stat, new CountableStateStat());
             }
         }
-
-        getStats(computedStateStats);
-        computedStateStats.putAll(aggregatedNodeResponses);
-        return computedStateStats;
-    }
-
-    public Map<String, Long> aggregateNodesResponses(List<Map<String, Long>> nodeResponses) {
-        Map<String, Long> summedMap = new HashMap<>();
-        for (Map<String, Long> map : nodeResponses) {
-            for (Map.Entry<String, Long> entry : map.entrySet()) {
-                summedMap.merge(AGG_KEY_PREFIX + entry.getKey(), entry.getValue(), Long::sum);
-            }
-        }
-        return summedMap;
-    }
-
-    private void getStats(Map<String, Object> stats) {
-        addClusterVersionStat(stats);
 
         // Parses search pipeline processor configs for processor info
-        addSearchProcessorStats(stats);
+        addSearchProcessorStats(countableStateStats);
 
         // Parses ingest pipeline processor configs for processor info
-        addIngestProcessorStats(stats);
+        addIngestProcessorStats(countableStateStats);
+        return countableStateStats;
     }
 
-    private void addClusterVersionStat(Map<String, Object> stats) {
+    private Map<StateStatName, SettableStateStat<?>> getSettableStats() {
+        Map<StateStatName, SettableStateStat<?>> settableStateStats = new HashMap<>();
+        for (StateStatName stat : EnumSet.allOf(StateStatName.class)) {
+            if (stat.getStatType() == StateStatType.SETTABLE) {
+                settableStateStats.put(stat, new SettableStateStat<>());
+            }
+        }
+
+        addClusterVersionStat(settableStateStats);
+        return settableStateStats;
+    }
+
+    private void addClusterVersionStat(Map<StateStatName, SettableStateStat<?>> stats) {
         String version = NeuralSearchClusterUtil.instance().getClusterMinVersion().toString();
-        stats.put(StateStatName.CLUSTER_VERSION.getName(), version);
+        stats.put(StateStatName.CLUSTER_VERSION, new SettableStateStat<>(version));
     }
 
-    private void addIngestProcessorStats(Map<String, Object> stats) {
+    private void addIngestProcessorStats(Map<StateStatName, CountableStateStat> stats) {
         List<Map<String, Object>> pipelineConfigs = PipelineInfoUtil.instance().getIngestPipelineConfigs();
 
         for (Map<String, Object> pipelineConfig : pipelineConfigs) {
@@ -98,7 +98,7 @@ public class StateStatsManager {
         }
     }
 
-    private void addSearchProcessorStats(Map<String, Object> stats) {
+    private void addSearchProcessorStats(Map<StateStatName, CountableStateStat> stats) {
         List<Map<String, Object>> pipelineConfigs = PipelineInfoUtil.instance().getSearchPipelineConfigs();
 
         System.out.println(pipelineConfigs);
@@ -122,7 +122,7 @@ public class StateStatsManager {
         }
     }
 
-    private void countSearchRequestProcessors(Map<String, Object> stats, List<Map<String, Object>> pipelineConfig) {
+    private void countSearchRequestProcessors(Map<StateStatName, CountableStateStat> stats, List<Map<String, Object>> pipelineConfig) {
         /*
         countProcessors(
             stats,
@@ -135,30 +135,30 @@ public class StateStatsManager {
 
     }
 
-    private void countSearchResponseProcessors(Map<String, Object> stats, List<Map<String, Object>> pipelineConfig) {
+    private void countSearchResponseProcessors(Map<StateStatName, CountableStateStat> stats, List<Map<String, Object>> pipelineConfig) {
         // countProcessors(stats, pipelineConfig, ExplanationResponseProcessor.TYPE, DerivedStatName.SEARCH_EXPLANATION_PROCESSOR_COUNT);
         // Add additional processor cases here
     }
 
-    private void countSearchPhaseResultsProcessors(Map<String, Object> stats, List<Map<String, Object>> pipelineConfig) {
+    private void countSearchPhaseResultsProcessors(Map<StateStatName, CountableStateStat> stats, List<Map<String, Object>> pipelineConfig) {
         // countProcessors(stats, pipelineConfig, RRFProcessor.TYPE, DerivedStatName.SEARCH_RRF_PROCESSOR_COUNT);
 
         // Add additional processor cases here
     }
 
     private void countProcessors(
-        Map<String, Object> stats,
+        Map<StateStatName, CountableStateStat> stats,
         List<Map<String, Object>> processors,
         String processorType,
         StateStatName stateStatName
     ) {
         long count = processors.stream().filter(p -> p.containsKey(processorType)).count();
-        incrementBy(stats, stateStatName.getName(), count);
+        incrementBy(stats, stateStatName, count);
         // Add additional processor cases here
     }
 
     private void countCombinationTechniques(
-        Map<String, Object> stats,
+        Map<StateStatName, CountableStateStat> stats,
         List<Map<String, Object>> processors,
         String combinationTechnique,
         StateStatName stateStatName
@@ -171,24 +171,19 @@ public class StateStatsManager {
                 Map<String, Object> combination = asMap(config.get(COMBINATION_KEY));
                 String technique = getValue(combination, TECHNIQUE_KEY, String.class);
                 if (technique != null && technique.equals(combinationTechnique)) {
-                    increment(stats, stateStatName.getName());
+                    increment(stats, stateStatName);
                 }
             }
         }
     }
 
-    private void increment(Map<String, Object> stats, StateStatName stateStatName) {
-        incrementBy(stats, stateStatName.getName(), 1L);
+    private void increment(Map<StateStatName, CountableStateStat> stats, StateStatName stateStatName) {
+        incrementBy(stats, stateStatName, 1L);
     }
 
-    private void increment(Map<String, Object> stats, String path) {
-        incrementBy(stats, path, 1L);
-    }
-
-    private void incrementBy(Map<String, Object> stats, String path, Long amount) {
-        Object stat = stats.get(path);
-        if (stat instanceof Long) {
-            stats.put(path, (Long) stat + amount);
+    private void incrementBy(Map<StateStatName, CountableStateStat> stats, StateStatName statName, Long amount) {
+        if (stats.containsKey(statName)) {
+            stats.get(statName).incrementBy(amount);
         }
     }
 

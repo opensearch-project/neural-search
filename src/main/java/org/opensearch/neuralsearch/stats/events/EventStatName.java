@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.stats.events;
 
 import lombok.Getter;
+import org.apache.commons.lang.StringUtils;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -42,6 +43,9 @@ public enum EventStatName {
     }
 
     public String getFullPath() {
+        if (StringUtils.isBlank(path)) {
+            return name;
+        }
         return String.join(".", path, name);
     }
 }

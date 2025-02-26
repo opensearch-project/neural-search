@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch.stats.state;
 
-public enum StateStatType {
-    COUNTABLE,
-    SETTABLE;
+public interface StateStat<T> {
+    public T getValue();
 }

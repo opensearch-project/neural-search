@@ -25,7 +25,7 @@ import java.util.TreeMap;
 public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeResponse> implements ToXContentObject {
 
     private static final String NODES_KEY = "nodes";
-    private Map<String, Object> clusterStats;
+    private Map<String, Object> stats;
 
     /**
      * Constructor
@@ -35,7 +35,7 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
      */
     public NeuralStatsResponse(StreamInput in) throws IOException {
         super(new ClusterName(in), in.readList(NeuralStatsNodeResponse::readStats), in.readList(FailedNodeException::new));
-        clusterStats = new TreeMap<>(in.readMap());
+        stats = new TreeMap<>(in.readMap());
     }
 
     /**
@@ -44,22 +44,22 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
      * @param clusterName name of cluster
      * @param nodes List of NeuralStatsNodeResponses
      * @param failures List of failures from nodes
-     * @param clusterStats Cluster level stats only obtained from a single node
+     * @param stats // TODO
      */
     public NeuralStatsResponse(
         ClusterName clusterName,
         List<NeuralStatsNodeResponse> nodes,
         List<FailedNodeException> failures,
-        Map<String, Object> clusterStats
+        Map<String, Object> stats
     ) {
         super(clusterName, nodes, failures);
-        this.clusterStats = new TreeMap<>(clusterStats);
+        this.stats = new TreeMap<>(stats);
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
-        out.writeMap(clusterStats);
+        out.writeMap(stats);
     }
 
     @Override
@@ -75,18 +75,21 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         // Return cluster level stats
-        Map<String, Object> nestedClusterStats = convertFlatToNestedMap(new TreeMap<>(clusterStats));
+        Map<String, Object> nestedClusterStats = convertFlatToNestedMap(stats);
         buildNestedMapXContent(builder, nestedClusterStats);
 
         // Return node level stats
         String nodeId;
         DiscoveryNode node;
         builder.startObject(NODES_KEY);
-        for (NeuralStatsNodeResponse neuralStatsResponse : getNodes()) {
-            node = neuralStatsResponse.getNode();
+        for (NeuralStatsNodeResponse nodesResponse : getNodes()) {
+            node = nodesResponse.getNode();
             nodeId = node.getId();
             builder.startObject(nodeId);
-            Map<String, Object> nestedMap = convertFlatToNestedMap(new TreeMap<>(neuralStatsResponse.getStatsMap()));
+
+            Map<String, Object> downcastedNodesResponse = new HashMap<>(nodesResponse.getStatsMap());
+
+            Map<String, Object> nestedMap = convertFlatToNestedMap(downcastedNodesResponse);
             buildNestedMapXContent(builder, nestedMap);
             builder.endObject();
         }
@@ -117,9 +120,13 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
     private void putNested(Map<String, Object> map, String path, Object value) {
         String[] parts = path.split("\\.");
         Map<String, Object> current = map;
+
+        // Navigate to path in map
         for (int i = 0; i < parts.length - 1; i++) {
             current = (Map<String, Object>) current.computeIfAbsent(parts[i], k -> new HashMap<String, Object>());
         }
+
+        // Put object at map path
         current.put(parts[parts.length - 1], value);
     }
 }
