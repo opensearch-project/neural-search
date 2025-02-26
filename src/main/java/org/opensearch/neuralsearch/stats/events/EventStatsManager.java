@@ -24,8 +24,8 @@ public class EventStatsManager {
     }
 
     public static void increment(EventStatName eventStatName) {
-        if (instance().getStats().containsKey(eventStatName) == false) {
-            instance().getStats().get(eventStatName.getName()).increment();
+        if (instance().getStats().containsKey(eventStatName)) {
+            instance().getStats().get(eventStatName).increment();
         }
     }
 

@@ -12,7 +12,7 @@ import java.util.Set;
 
 @Getter
 public enum EventStatName {
-    TEXT_EMBEDDING_PROCESSOR_EXECUTIONS("text_embedding.executions", "ingest_processor", EventStatType.TIMESTAMPED_COUNTER);
+    TEXT_EMBEDDING_PROCESSOR_EXECUTIONS("text_embedding_executions", "processors.ingest", EventStatType.TIMESTAMPED_COUNTER);
 
     private final String name;
     private final String path;

@@ -18,17 +18,15 @@ import org.opensearch.neuralsearch.stats.events.EventStatName;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
-import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Log4j2
-public class RestEventStatsHandlerIT extends BaseNeuralSearchIT {
+public class RestNeuralStatsHandlerIT extends BaseNeuralSearchIT {
     private static final String INDEX_NAME = "stats_index";
     private static final String INDEX_NAME_2 = "stats_index_2";
     private static final String INDEX_NAME_3 = "stats_index_3";
@@ -88,7 +86,7 @@ public class RestEventStatsHandlerIT extends BaseNeuralSearchIT {
         "processor/chunker/PipelineForCascadedChunker.json"
     );
 
-    public RestEventStatsHandlerIT() throws IOException, URISyntaxException {}
+    public RestNeuralStatsHandlerIT() throws IOException, URISyntaxException {}
 
     @Before
     public void setUp() throws Exception {
@@ -97,27 +95,23 @@ public class RestEventStatsHandlerIT extends BaseNeuralSearchIT {
     }
 
     public void test_textEmbedding() throws Exception {
-        String modelId = null;
-        try {
-            modelId = uploadTextEmbeddingModel();
-            loadModel(modelId);
-            createPipelineProcessor(modelId, INGEST_PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
-            createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", INGEST_PIPELINE_NAME);
-            ingestDocument(INDEX_NAME, INGEST_DOC1);
-            ingestDocument(INDEX_NAME, INGEST_DOC2);
-            ingestDocument(INDEX_NAME, INGEST_DOC3);
-            assertEquals(3, getDocCount(INDEX_NAME));
+        String modelId = uploadTextEmbeddingModel();
+        loadModel(modelId);
+        createPipelineProcessor(modelId, INGEST_PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
+        createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", INGEST_PIPELINE_NAME);
 
-            Response response = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
-            String responseBody = EntityUtils.toString(response.getEntity());
-            List<Map<String, Object>> nodesStats = parseNodeStatsResponse(responseBody);
+        ingestDocument(INDEX_NAME, INGEST_DOC1);
+        ingestDocument(INDEX_NAME, INGEST_DOC2);
+        ingestDocument(INDEX_NAME, INGEST_DOC3);
+        assertEquals(3, getDocCount(INDEX_NAME));
 
-            log.info(nodesStats);
-            assertEquals(3, getNestedValue(nodesStats.getFirst(), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getName()));
+        Response response = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        String responseBody = EntityUtils.toString(response.getEntity());
+        List<Map<String, Object>> nodesStats = parseNodeStatsResponse(responseBody);
 
-        } finally {
-            wipeOfTestResources(INDEX_NAME, INGEST_PIPELINE_NAME, modelId, null);
-        }
+        log.info(nodesStats);
+        assertEquals(3, getNestedValue(nodesStats.getFirst(), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getFullPath()));
+
     }
 
     protected String uploadTextEmbeddingModel() throws Exception {
@@ -195,24 +189,5 @@ public class RestEventStatsHandlerIT extends BaseNeuralSearchIT {
         }
 
         return null;
-    }
-
-    private void createPipelineProcessor(String pipelineConfig, String pipelineName) throws Exception {
-        URL pipelineURLPath = classLoader.getResource(PIPELINE_CONFIGS_BY_NAME.get(pipelineConfig));
-        Objects.requireNonNull(pipelineURLPath);
-        String requestBody = Files.readString(Path.of(pipelineURLPath.toURI()));
-        createPipelineProcessor(requestBody, pipelineName, "", null);
-    }
-
-    private void createTextChunkingIndex(String indexName, String pipelineName) throws Exception {
-        URL indexSettingsURLPath = classLoader.getResource("processor/chunker/TextChunkingIndexSettings.json");
-        Objects.requireNonNull(indexSettingsURLPath);
-        createIndexWithConfiguration(indexName, Files.readString(Path.of(indexSettingsURLPath.toURI())), pipelineName);
-    }
-
-    private String getDocumentFromFilePath(String filePath) throws Exception {
-        URL documentURLPath = classLoader.getResource(filePath);
-        Objects.requireNonNull(documentURLPath);
-        return Files.readString(Path.of(documentURLPath.toURI()));
     }
 }

@@ -14,7 +14,7 @@ import java.util.Set;
 public enum StateStatName {
     // Cluster info
     CLUSTER_VERSION("cluster_version", "", StateStatType.SETTABLE),
-    TEXT_EMBEDDING_PROCESSORS("text_embedding_processors_in_pipelines", "processors", StateStatType.COUNTABLE);
+    TEXT_EMBEDDING_PROCESSORS("text_embedding_processors_in_pipelines", "processors.ingest", StateStatType.COUNTABLE);
 
     private final String name;
     private final String path;
