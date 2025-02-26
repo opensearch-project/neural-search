@@ -21,6 +21,7 @@ import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -107,10 +108,25 @@ public class RestNeuralStatsHandlerIT extends BaseNeuralSearchIT {
 
         Response response = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
         String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> stats = parseStatsResponse(responseBody);
         List<Map<String, Object>> nodesStats = parseNodeStatsResponse(responseBody);
 
         log.info(nodesStats);
-        assertEquals(3, getNestedValue(nodesStats.getFirst(), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getFullPath()));
+        assertEquals(3, getNestedValue(nodesStats.getFirst(), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS));
+        assertEquals(1, getNestedValue(stats, StateStatName.TEXT_EMBEDDING_PROCESSORS));
+
+    }
+
+    public void test_statsFiltering() throws Exception {
+        Response response = executeNeuralStatRequest(new ArrayList<>(), Arrays.asList(StateStatName.TEXT_EMBEDDING_PROCESSORS.getName()));
+
+        String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> stats = parseStatsResponse(responseBody);
+        List<Map<String, Object>> nodesStats = parseNodeStatsResponse(responseBody);
+
+        //
+        assertNull(getNestedValue(nodesStats.getFirst(), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getFullPath()));
+        assertEquals(0, getNestedValue(stats, StateStatName.TEXT_EMBEDDING_PROCESSORS.getFullPath()));
 
     }
 
@@ -164,11 +180,11 @@ public class RestNeuralStatsHandlerIT extends BaseNeuralSearchIT {
     }
 
     public Object getNestedValue(Map<String, Object> map, EventStatName eventStatName) {
-        return getNestedValue(map, eventStatName.getName());
+        return getNestedValue(map, eventStatName.getFullPath());
     }
 
     public Object getNestedValue(Map<String, Object> map, StateStatName stateStatName) {
-        return getNestedValue(map, stateStatName.getName());
+        return getNestedValue(map, stateStatName.getFullPath());
     }
 
     private Object getNestedValueHelper(Map<String, Object> map, String[] keys, int depth) {

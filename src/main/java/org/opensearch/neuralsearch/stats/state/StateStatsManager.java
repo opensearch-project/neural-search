@@ -101,7 +101,6 @@ public class StateStatsManager {
     private void addSearchProcessorStats(Map<StateStatName, CountableStateStat> stats) {
         List<Map<String, Object>> pipelineConfigs = PipelineInfoUtil.instance().getSearchPipelineConfigs();
 
-        System.out.println(pipelineConfigs);
         for (Map<String, Object> pipelineConfig : pipelineConfigs) {
             for (Map.Entry<String, Object> entry : pipelineConfig.entrySet()) {
                 String searchProcessorType = entry.getKey();

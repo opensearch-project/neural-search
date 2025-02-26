@@ -88,6 +88,15 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         // Get state stats
         Map<StateStatName, StateStat<?>> stateStats = stateStatsManager.getStats();
 
+        // Filter state stats
+        if (request.getNeuralStatsInput().retrieveAllStats() == false) {
+            Map<StateStatName, StateStat<?>> filteredStats = new HashMap<>();
+            for (StateStatName stateStatName : request.getNeuralStatsInput().getStateStatNames()) {
+                filteredStats.put(stateStatName, stateStats.get(stateStatName));
+            }
+            stateStats = filteredStats;
+        }
+
         // Convert state stats into <flat path, value>
         Map<String, Object> flatStateStats = stateStats.entrySet()
             .stream()
@@ -114,9 +123,19 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         // Reads from NeuralStats to node level stats on an individual node
         Map<String, Long> statValues = new HashMap<>();
 
-        for (EventStatName eventStatName : eventStatsManager.getStats().keySet()) {
+        // Get all stats case
+        if (request.getRequest().getNeuralStatsInput().retrieveAllStats()) {
+            for (EventStatName eventStatName : eventStatsManager.getStats().keySet()) {
+                statValues.put(eventStatName.getFullPath(), eventStatsManager.getStats().get(eventStatName).getValue());
+            }
+            return new NeuralStatsNodeResponse(clusterService.localNode(), statValues);
+        }
+
+        // Otherwise, filter for requested stats
+        for (EventStatName eventStatName : request.getRequest().getNeuralStatsInput().getEventStatNames()) {
             statValues.put(eventStatName.getFullPath(), eventStatsManager.getStats().get(eventStatName).getValue());
         }
+
         return new NeuralStatsNodeResponse(clusterService.localNode(), statValues);
     }
 

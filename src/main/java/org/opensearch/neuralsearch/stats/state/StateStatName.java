@@ -7,8 +7,9 @@ package org.opensearch.neuralsearch.stats.state;
 import lombok.Getter;
 import org.apache.commons.lang.StringUtils;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.util.Arrays;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Getter
 public enum StateStatName {
@@ -20,23 +21,20 @@ public enum StateStatName {
     private final String path;
     private final StateStatType statType;
 
+    private static final Map<String, StateStatName> BY_NAME = Arrays.stream(values())
+        .collect(Collectors.toMap(stat -> stat.name, stat -> stat));
+
     StateStatName(String name, String path, StateStatType statType) {
         this.name = name;
         this.path = path;
         this.statType = statType;
     }
 
-    /**
-     * Get all stat names
-     *
-     * @return set of all stat names
-     */
-    public static Set<String> getNames() {
-        Set<String> names = new HashSet<>();
-        for (StateStatName eventStatNames : StateStatName.values()) {
-            names.add(eventStatNames.getName());
+    public static StateStatName from(String value) {
+        if (BY_NAME.containsKey(value) == false) {
+            throw new IllegalArgumentException(String.format("State stat not found: %s", value));
         }
-        return names;
+        return BY_NAME.get(value);
     }
 
     @Override

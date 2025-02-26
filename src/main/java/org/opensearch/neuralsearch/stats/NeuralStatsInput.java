@@ -12,45 +12,55 @@ import org.opensearch.core.common.io.stream.Writeable;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.ToXContentObject;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.state.StateStatName;
 
 import java.io.IOException;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.function.Function;
-
-import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
 
 // TODO : Not yet implemented
 @Getter
 public class NeuralStatsInput implements ToXContentObject, Writeable {
     public static final String NODE_IDS = "node_ids";
+    public static final String EVENT_STAT_NAMES = "event_stats";
+    public static final String STATE_STAT_NAMES = "state_stats";
 
     /**
      * Which node's stats will be retrieved.
      */
     private Set<String> nodeIds;
+    private EnumSet<EventStatName> eventStatNames;
+    private EnumSet<StateStatName> stateStatNames;
 
     @Builder
-    public NeuralStatsInput(Set<String> nodeIds) {
+    public NeuralStatsInput(Set<String> nodeIds, EnumSet<EventStatName> eventStatNames, EnumSet<StateStatName> stateStatNames) {
         this.nodeIds = nodeIds;
+        this.eventStatNames = eventStatNames;
+        this.stateStatNames = stateStatNames;
     }
 
     public NeuralStatsInput() {
         this.nodeIds = new HashSet<>();
+        this.eventStatNames = EnumSet.noneOf(EventStatName.class);
+        this.stateStatNames = EnumSet.noneOf(StateStatName.class);
     }
 
     public NeuralStatsInput(StreamInput input) throws IOException {
         nodeIds = input.readBoolean() ? new HashSet<>(input.readStringList()) : new HashSet<>();
+        eventStatNames = input.readBoolean() ? input.readEnumSet(EventStatName.class) : EnumSet.noneOf(EventStatName.class);
+        stateStatNames = input.readBoolean() ? input.readEnumSet(StateStatName.class) : EnumSet.noneOf(StateStatName.class);
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         out.writeOptionalStringCollection(nodeIds);
+        writeOptionalEnumSet(out, eventStatNames);
+        writeOptionalEnumSet(out, stateStatNames);
     }
 
-    private void writeEnumSet(StreamOutput out, EnumSet<?> set) throws IOException {
+    private void writeOptionalEnumSet(StreamOutput out, EnumSet<?> set) throws IOException {
         if (set != null && set.size() > 0) {
             out.writeBoolean(true);
             out.writeEnumSet(set);
@@ -59,55 +69,35 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         }
     }
 
-    public static NeuralStatsInput parse(XContentParser parser) throws IOException {
-        Set<String> nodeIds = new HashSet<>();
-
-        ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.currentToken(), parser);
-        while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
-            String fieldName = parser.currentName();
-            parser.nextToken();
-
-            switch (fieldName) {
-                case NODE_IDS:
-                    parseArrayField(parser, nodeIds);
-                    break;
-                default:
-                    parser.skipChildren();
-                    break;
-            }
-        }
-        return NeuralStatsInput.builder().nodeIds(nodeIds).build();
-    }
-
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
         builder.startObject();
         if (nodeIds != null) {
             builder.field(NODE_IDS, nodeIds);
         }
+        if (eventStatNames != null) {
+            builder.field(EVENT_STAT_NAMES, eventStatNames);
+        }
+        if (stateStatNames != null) {
+            builder.field(STATE_STAT_NAMES, stateStatNames);
+        }
         builder.endObject();
         return builder;
     }
 
     public boolean retrieveStatsOnAllNodes() {
-        return nodeIds == null || nodeIds.size() == 0;
+        return nodeIds == null || nodeIds.isEmpty();
     }
 
-    public static void parseArrayField(XContentParser parser, Set<String> set) throws IOException {
-        parseField(parser, set, null, String.class);
+    public boolean retrieveAllStats() {
+        return retrieveAllEventStats() && retrieveAllStateStats();
     }
 
-    public static <T> void parseField(XContentParser parser, Set<T> set, Function<String, T> function, Class<T> clazz) throws IOException {
-        ensureExpectedToken(XContentParser.Token.START_ARRAY, parser.currentToken(), parser);
-        while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
-            String value = parser.text();
-            if (function != null) {
-                set.add(function.apply(value));
-            } else {
-                if (clazz.isInstance(value)) {
-                    set.add(clazz.cast(value));
-                }
-            }
-        }
+    public boolean retrieveAllEventStats() {
+        return eventStatNames == null || eventStatNames.isEmpty();
+    }
+
+    public boolean retrieveAllStateStats() {
+        return stateStatNames == null || stateStatNames.isEmpty();
     }
 }
