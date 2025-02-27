@@ -246,11 +246,10 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
             return Optional.empty();
         }
 
-        Object lowerBoundsObj = params.get(PARAM_NAME_LOWER_BOUNDS);
-        if (lowerBoundsObj instanceof List<?> == false) {
-            throw new IllegalArgumentException("lower_bounds must be a List");
-        }
-        List<?> lowerBoundsParams = (List<?>) lowerBoundsObj;
+        List<?> lowerBoundsParams = Optional.ofNullable(params.get(PARAM_NAME_LOWER_BOUNDS))
+            .filter(List.class::isInstance)
+            .map(List.class::cast)
+            .orElseThrow(() -> new IllegalArgumentException("lower_bounds must be a List"));
         // number of lower bounds must match the number of sub-queries in a hybrid query
         if (lowerBoundsParams.size() > MAX_NUMBER_OF_SUB_QUERIES) {
             throw new IllegalArgumentException(
@@ -324,7 +323,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
      * Result class to hold lower bound for each sub query
      */
     @Getter
-    public static class LowerBound {
+    static class LowerBound {
         static final float MIN_LOWER_BOUND_SCORE = -10_000f;
         static final float MAX_LOWER_BOUND_SCORE = 10_000f;
         static final float DEFAULT_LOWER_BOUND_SCORE = 0.0f;
