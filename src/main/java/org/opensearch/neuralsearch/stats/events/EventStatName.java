@@ -17,15 +17,15 @@ public enum EventStatName {
 
     private final String name;
     private final String path;
-    private final EventStatType eventStatType;
+    private final EventStatType statType;
 
     private static final Map<String, EventStatName> BY_NAME = Arrays.stream(values())
         .collect(Collectors.toMap(stat -> stat.name, stat -> stat));
 
-    EventStatName(String name, String path, EventStatType eventStatType) {
+    EventStatName(String name, String path, EventStatType statType) {
         this.name = name;
         this.path = path;
-        this.eventStatType = eventStatType;
+        this.statType = statType;
     }
 
     public static EventStatName from(String value) {

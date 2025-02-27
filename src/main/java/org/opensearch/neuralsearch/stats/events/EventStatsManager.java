@@ -34,15 +34,15 @@ public class EventStatsManager {
         this.stats = new ConcurrentSkipListMap<>();
 
         for (EventStatName eventStatName : EnumSet.allOf(EventStatName.class)) {
-            if (eventStatName.getEventStatType() == EventStatType.TIMESTAMPED_COUNTER) {
+            if (eventStatName.getStatType() == EventStatType.TIMESTAMPED_COUNTER) {
                 stats.put(eventStatName, new TimestampedEventStat(eventStatName));
             }
         }
     }
 
-    public Map<EventStatName, EventStatData> getEventStatData(EnumSet<EventStatName> statsToRetrieve) {
+    public Map<EventStatName, EventStatSnapshot> getEventStatData(EnumSet<EventStatName> statsToRetrieve) {
         // Filter stats based on passed in collection
-        Map<EventStatName, EventStatData> eventStatsDataMap = new HashMap<>();
+        Map<EventStatName, EventStatSnapshot> eventStatsDataMap = new HashMap<>();
         for (EventStatName statName : statsToRetrieve) {
             if (stats.containsKey(statName)) {
                 eventStatsDataMap.put(statName, stats.get(statName).getEventStatData());
@@ -50,4 +50,5 @@ public class EventStatsManager {
         }
         return eventStatsDataMap;
     }
+
 }

@@ -10,9 +10,9 @@ import org.opensearch.action.support.nodes.TransportNodesAction;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.inject.Inject;
 import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.neuralsearch.stats.events.EventStatData;
+import org.opensearch.neuralsearch.stats.StatSnapshot;
+import org.opensearch.neuralsearch.stats.events.EventStatSnapshot;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
-import org.opensearch.neuralsearch.stats.state.StateStat;
 import org.opensearch.neuralsearch.stats.state.StateStatName;
 import org.opensearch.neuralsearch.stats.state.StateStatsManager;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
@@ -22,8 +22,10 @@ import org.opensearch.threadpool.ThreadPool;
 import java.io.IOException;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -34,7 +36,7 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
     NeuralStatsResponse,
     NeuralStatsNodeRequest,
     NeuralStatsNodeResponse> {
-    private static final String AGG_KEY_PREFIX = "all_nodes";
+    private static final String ALL_NODES_PREFIX = "all_nodes";
 
     private final EventStatsManager eventStatsManager;
     private final StateStatsManager stateStatsManager;
@@ -80,30 +82,34 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         List<FailedNodeException> failures
     ) {
         // Final object that will hold the stats in format Map<ResponsePath, Value>
-        Map<String, Object> combinedStats = new HashMap<>();
+        Map<String, StatSnapshot<?>> retrievedStats = new HashMap<>();
 
         // Sum the map to aggregate
-        Map<String, Long> nodeAggregatedStats = aggregateNodesResponses(responses);
+        Map<String, StatSnapshot<?>> nodeAggregatedEventStats = aggregateNodesResponses(
+            responses,
+            request.getNeuralStatsInput().getEventStatNames()
+        );
 
         // Add aggregate to summed map
-        combinedStats.putAll(nodeAggregatedStats);
+        retrievedStats.putAll(nodeAggregatedEventStats);
 
         // Get state stats
-        Map<StateStatName, StateStat<?>> stateStats = stateStatsManager.getStats(request.getNeuralStatsInput().getStateStatNames());
+        Map<StateStatName, StatSnapshot<?>> stateStats = stateStatsManager.getStats(request.getNeuralStatsInput().getStateStatNames());
 
         // Convert state stats into <ResponsePath, Value>
-        Map<String, Object> flatStateStats = stateStats.entrySet()
+        Map<String, StatSnapshot<?>> flatStateStats = stateStats.entrySet()
             .stream()
-            .collect(Collectors.toMap(entry -> entry.getKey().getFullPath(), entry -> entry.getValue().getValue()));
+            .collect(Collectors.toMap(entry -> entry.getKey().getFullPath(), Map.Entry::getValue));
 
-        combinedStats.putAll(flatStateStats);
+        retrievedStats.putAll(flatStateStats);
 
         return new NeuralStatsResponse(
             clusterService.getClusterName(),
             responses,
             failures,
-            combinedStats,
-            request.getNeuralStatsInput().isFlattenResponse()
+            retrievedStats,
+            request.getNeuralStatsInput().isFlattenResponse(),
+            request.getNeuralStatsInput().isIncludeMetadata()
         );
     }
 
@@ -121,29 +127,33 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
     protected NeuralStatsNodeResponse nodeOperation(NeuralStatsNodeRequest request) {
         // Reads from NeuralStats to node level stats on an individual node
         EnumSet<EventStatName> eventStatsToRetrieve = request.getRequest().getNeuralStatsInput().getEventStatNames();
-        Map<EventStatName, EventStatData> eventStatDataMap = eventStatsManager.getEventStatData(eventStatsToRetrieve);
+        Map<EventStatName, EventStatSnapshot> eventStatDataMap = eventStatsManager.getEventStatData(eventStatsToRetrieve);
 
         return new NeuralStatsNodeResponse(clusterService.localNode(), eventStatDataMap);
     }
 
-    private Map<String, Long> aggregateNodesResponses(List<NeuralStatsNodeResponse> responses) {
-        // Convert node responses into list of Map<Stat path, stat value>
-        List<Map<String, Long>> nodeResponsesList = responses.stream()
+    private Map<String, StatSnapshot<?>> aggregateNodesResponses(
+        List<NeuralStatsNodeResponse> responses,
+        EnumSet<EventStatName> statsToRetrieve
+    ) {
+        // Convert node responses into list of Map<EventStatName, EventStatData>
+        List<Map<EventStatName, EventStatSnapshot>> nodeEventStatsList = responses.stream()
             .map(NeuralStatsNodeResponse::getStats)
-            .map(
-                map -> map.entrySet()
-                    .stream()
-                    .collect(Collectors.toMap(entry -> entry.getKey().getFullPath(), entry -> entry.getValue().getValue()))
-            )
+            .map(map -> map.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)))
             .toList();
 
-        // Sum the counters values from all nodes
-        Map<String, Long> summedMap = new HashMap<>();
-        for (Map<String, Long> map : nodeResponsesList) {
-            for (Map.Entry<String, Long> entry : map.entrySet()) {
-                summedMap.merge(String.join(".", AGG_KEY_PREFIX, entry.getKey()), entry.getValue(), Long::sum);
+        // Aggregate all events from all responses for all stats to retrieve
+        Map<String, StatSnapshot<?>> aggregatedMap = new HashMap<>();
+        for (EventStatName eventStatName : statsToRetrieve) {
+            Set<EventStatSnapshot> eventStatSnapshotCollection = new HashSet<>();
+            for (Map<EventStatName, EventStatSnapshot> eventStats : nodeEventStatsList) {
+                eventStatSnapshotCollection.add(eventStats.get(eventStatName));
             }
+
+            EventStatSnapshot aggregatedEventSnapshots = EventStatSnapshot.aggregateEventStatData(eventStatSnapshotCollection);
+            aggregatedMap.put(ALL_NODES_PREFIX + "." + eventStatName.getFullPath(), aggregatedEventSnapshots);
         }
-        return summedMap;
+
+        return aggregatedMap;
     }
 }

@@ -11,7 +11,7 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContentFragment;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.neuralsearch.stats.events.EventStatData;
+import org.opensearch.neuralsearch.stats.events.EventStatSnapshot;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 
 import java.io.IOException;
@@ -22,7 +22,7 @@ import java.util.Map;
  */
 public class NeuralStatsNodeResponse extends BaseNodeResponse implements ToXContentFragment {
     @Getter
-    private Map<EventStatName, EventStatData> stats;
+    private Map<EventStatName, EventStatSnapshot> stats;
 
     /**
      * Constructor
@@ -32,7 +32,7 @@ public class NeuralStatsNodeResponse extends BaseNodeResponse implements ToXCont
      */
     public NeuralStatsNodeResponse(StreamInput in) throws IOException {
         super(in);
-        this.stats = in.readMap(input -> input.readEnum(EventStatName.class), EventStatData::new);
+        this.stats = in.readMap(input -> input.readEnum(EventStatName.class), EventStatSnapshot::new);
     }
 
     /**
@@ -41,7 +41,7 @@ public class NeuralStatsNodeResponse extends BaseNodeResponse implements ToXCont
      * @param node node
      * @param stats mapping of stat name to value
      */
-    public NeuralStatsNodeResponse(DiscoveryNode node, Map<EventStatName, EventStatData> stats) {
+    public NeuralStatsNodeResponse(DiscoveryNode node, Map<EventStatName, EventStatSnapshot> stats) {
         super(node);
         this.stats = stats;
     }
@@ -73,7 +73,7 @@ public class NeuralStatsNodeResponse extends BaseNodeResponse implements ToXCont
      * @throws IOException thrown by builder for invalid field
      */
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        for (Map.Entry<EventStatName, EventStatData> entry : stats.entrySet()) {
+        for (Map.Entry<EventStatName, EventStatSnapshot> entry : stats.entrySet()) {
             EventStatName stat = entry.getKey();
             builder.field(stat.getFullPath(), entry.getValue().getValue());
         }
