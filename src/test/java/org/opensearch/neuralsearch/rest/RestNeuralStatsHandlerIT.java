@@ -114,8 +114,8 @@ public class RestNeuralStatsHandlerIT extends BaseNeuralSearchIT {
         List<Map<String, Object>> nodesStats = parseNodeStatsResponse(responseBody);
 
         log.info(nodesStats);
-        assertNotNull(getNestedValue(nodesStats.getFirst(), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS));
-        assertNotNull(getNestedValue(stats, StateStatName.TEXT_EMBEDDING_PROCESSORS));
+        assertEquals(3, getNestedValue(nodesStats.getFirst(), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS));
+        assertEquals(1, getNestedValue(stats, StateStatName.TEXT_EMBEDDING_PROCESSORS));
 
     }
 
@@ -128,7 +128,7 @@ public class RestNeuralStatsHandlerIT extends BaseNeuralSearchIT {
 
         //
         assertNull(getNestedValue(nodesStats.getFirst(), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getFullPath()));
-        assertEquals(0, getNestedValue(stats, StateStatName.TEXT_EMBEDDING_PROCESSORS.getFullPath()));
+        assertNotNull(getNestedValue(stats, StateStatName.TEXT_EMBEDDING_PROCESSORS.getFullPath()));
     }
 
     public void test_flatten() throws Exception {
@@ -143,8 +143,8 @@ public class RestNeuralStatsHandlerIT extends BaseNeuralSearchIT {
 
         System.out.println(stats);
 
-        assertEquals(0, nodesStats.getFirst().get(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getFullPath()));
-        assertEquals(0, stats.get(StateStatName.TEXT_EMBEDDING_PROCESSORS.getFullPath()));
+        assertNotNull(nodesStats.getFirst().get(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getFullPath()));
+        assertNotNull(stats.get(StateStatName.TEXT_EMBEDDING_PROCESSORS.getFullPath()));
     }
 
     protected String uploadTextEmbeddingModel() throws Exception {

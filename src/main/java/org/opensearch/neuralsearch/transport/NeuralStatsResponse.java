@@ -86,7 +86,7 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
         }
         buildNestedMapXContent(builder, clusterStats);
 
-        // Return node level stats
+        // Build node level stats
         String nodeId;
         DiscoveryNode node;
         builder.startObject(NODES_KEY);

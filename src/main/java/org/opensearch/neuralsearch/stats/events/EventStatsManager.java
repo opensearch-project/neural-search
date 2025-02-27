@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.stats.events;
 import lombok.Getter;
 
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentSkipListMap;
 
@@ -37,5 +38,16 @@ public class EventStatsManager {
                 stats.put(eventStatName, new TimestampedEventStat(eventStatName));
             }
         }
+    }
+
+    public Map<EventStatName, EventStatData> getEventStatData(EnumSet<EventStatName> statsToRetrieve) {
+        // Filter stats based on passed in collection
+        Map<EventStatName, EventStatData> eventStatsDataMap = new HashMap<>();
+        for (EventStatName statName : statsToRetrieve) {
+            if (stats.containsKey(statName)) {
+                eventStatsDataMap.put(statName, stats.get(statName).getEventStatData());
+            }
+        }
+        return eventStatsDataMap;
     }
 }

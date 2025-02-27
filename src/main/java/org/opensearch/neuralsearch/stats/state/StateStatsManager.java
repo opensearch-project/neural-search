@@ -12,6 +12,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class StateStatsManager {
     public static final String PROCESSORS_KEY = "processors";
@@ -34,19 +35,26 @@ public class StateStatsManager {
         return INSTANCE;
     }
 
-    public Map<StateStatName, StateStat<?>> getStats() {
-        // Reference to provide derived methods access to node Responses
+    public Map<StateStatName, StateStat<?>> getStats(EnumSet<StateStatName> statsToRetrieve) {
+        // State stats are calculated all at once regardless of filters
         Map<StateStatName, CountableStateStat> countableStateStats = getCountableStats();
         Map<StateStatName, SettableStateStat<?>> settableStateStats = getSettableStats();
 
-        Map<StateStatName, StateStat<?>> stateStats = new HashMap<>();
-        stateStats.putAll(countableStateStats);
-        stateStats.putAll(settableStateStats);
-        return stateStats;
+        Map<StateStatName, StateStat<?>> prefilteredStats = new HashMap<>();
+        prefilteredStats.putAll(countableStateStats);
+        prefilteredStats.putAll(settableStateStats);
+
+        // Filter based on specified stats
+        Map<StateStatName, StateStat<?>> filteredStats = prefilteredStats.entrySet()
+            .stream()
+            .filter(entry -> statsToRetrieve.contains(entry.getKey()))
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        return filteredStats;
     }
 
     private Map<StateStatName, CountableStateStat> getCountableStats() {
-        // Initialize empty map with keys so stat names are visible in JSON even if the value is not countedd
+        // Initialize empty map with keys so stat names are visible in JSON even if the value is not counted
         Map<StateStatName, CountableStateStat> countableStateStats = new HashMap<>();
         for (StateStatName stat : EnumSet.allOf(StateStatName.class)) {
             if (stat.getStatType() == StateStatType.COUNTABLE) {

@@ -104,19 +104,24 @@ public class RestNeuralStatsHandler extends BaseRestHandler {
     NeuralStatsInput createNeuralStatsInputFromRequestParams(RestRequest request) {
         NeuralStatsInput neuralStatsInput = new NeuralStatsInput();
 
+        // Parse specified nodes
         Optional<String[]> nodeIds = splitCommaSeparatedParam(request, "nodeId");
         if (nodeIds.isPresent()) {
             neuralStatsInput.getNodeIds().addAll(Arrays.asList(nodeIds.get()));
         }
 
-        Optional<String[]> stats = splitCommaSeparatedParam(request, "stat");
-
+        // Parse query parameters
         boolean flatten = request.paramAsBoolean(FLATTEN_PARAM, false);
         neuralStatsInput.setFlattenResponse(flatten);
 
         boolean includeMetadata = request.paramAsBoolean(INCLUDE_METADATA_PARAM, false);
         neuralStatsInput.setIncludeMetadata(includeMetadata);
 
+        // Determine which stat names to retrieve based on user parameters
+        Optional<String[]> stats = splitCommaSeparatedParam(request, "stat");
+        boolean retrieveAllStats = true;
+
+        // Add stats to input to retrieve if specified
         if (stats.isPresent()) {
             System.out.println(Arrays.stream(stats.get()).toList());
             for (String stat : stats.get()) {
@@ -125,11 +130,19 @@ public class RestNeuralStatsHandler extends BaseRestHandler {
                 System.out.println(STATE_STAT_NAMES);
 
                 if (EVENT_STAT_NAMES.contains(stat)) {
+                    retrieveAllStats = false;
                     neuralStatsInput.getEventStatNames().add(EventStatName.from(stat));
                 } else if (STATE_STAT_NAMES.contains(stat)) {
+                    retrieveAllStats = false;
                     neuralStatsInput.getStateStatNames().add(StateStatName.from(stat));
                 }
             }
+        }
+
+        // If no stats are specified, retrieve all by default
+        if (retrieveAllStats) {
+            neuralStatsInput.getEventStatNames().addAll(EnumSet.allOf(EventStatName.class));
+            neuralStatsInput.getStateStatNames().addAll(EnumSet.allOf(StateStatName.class));
         }
         return neuralStatsInput;
     }

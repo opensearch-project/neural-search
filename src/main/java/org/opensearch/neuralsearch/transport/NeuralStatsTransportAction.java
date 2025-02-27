@@ -10,7 +10,6 @@ import org.opensearch.action.support.nodes.TransportNodesAction;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.inject.Inject;
 import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.neuralsearch.stats.events.EventStat;
 import org.opensearch.neuralsearch.stats.events.EventStatData;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.state.StateStat;
@@ -21,6 +20,7 @@ import org.opensearch.transport.TransportService;
 import org.opensearch.threadpool.ThreadPool;
 
 import java.io.IOException;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -84,21 +84,14 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
 
         // Sum the map to aggregate
         Map<String, Long> nodeAggregatedStats = aggregateNodesResponses(responses);
+
+        // Add aggregate to summed map
         combinedStats.putAll(nodeAggregatedStats);
 
         // Get state stats
-        Map<StateStatName, StateStat<?>> stateStats = stateStatsManager.getStats();
+        Map<StateStatName, StateStat<?>> stateStats = stateStatsManager.getStats(request.getNeuralStatsInput().getStateStatNames());
 
-        // Filter state stats
-        if (request.getNeuralStatsInput().retrieveAllStats() == false) {
-            Map<StateStatName, StateStat<?>> filteredStats = new HashMap<>();
-            for (StateStatName stateStatName : request.getNeuralStatsInput().getStateStatNames()) {
-                filteredStats.put(stateStatName, stateStats.get(stateStatName));
-            }
-            stateStats = filteredStats;
-        }
-
-        // Convert state stats into <flat path, value>
+        // Convert state stats into <ResponsePath, Value>
         Map<String, Object> flatStateStats = stateStats.entrySet()
             .stream()
             .collect(Collectors.toMap(entry -> entry.getKey().getFullPath(), entry -> entry.getValue().getValue()));
@@ -127,22 +120,10 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
     @Override
     protected NeuralStatsNodeResponse nodeOperation(NeuralStatsNodeRequest request) {
         // Reads from NeuralStats to node level stats on an individual node
-        Map<EventStatName, EventStat> eventStatsMap = eventStatsManager.getStats();
-        Map<EventStatName, EventStatData> eventStatsDataMap = new HashMap<>();
+        EnumSet<EventStatName> eventStatsToRetrieve = request.getRequest().getNeuralStatsInput().getEventStatNames();
+        Map<EventStatName, EventStatData> eventStatDataMap = eventStatsManager.getEventStatData(eventStatsToRetrieve);
 
-        // Get all stats case
-        if (request.getRequest().getNeuralStatsInput().retrieveAllStats()) {
-            for (Map.Entry<EventStatName, EventStat> entry : eventStatsMap.entrySet()) {
-                eventStatsDataMap.put(entry.getKey(), entry.getValue().getEventStatData());
-            }
-            return new NeuralStatsNodeResponse(clusterService.localNode(), eventStatsDataMap);
-        }
-
-        // Otherwise, filter for requested stats
-        for (EventStatName eventStatName : request.getRequest().getNeuralStatsInput().getEventStatNames()) {
-            eventStatsDataMap.put(eventStatName, eventStatsManager.getStats().get(eventStatName).getEventStatData());
-        }
-        return new NeuralStatsNodeResponse(clusterService.localNode(), eventStatsDataMap);
+        return new NeuralStatsNodeResponse(clusterService.localNode(), eventStatDataMap);
     }
 
     private Map<String, Long> aggregateNodesResponses(List<NeuralStatsNodeResponse> responses) {
