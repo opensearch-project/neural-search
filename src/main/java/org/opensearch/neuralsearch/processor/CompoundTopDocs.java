@@ -170,10 +170,10 @@ public class CompoundTopDocs {
             if (thisTopDoc == null) {
                 continue;
             }
-            if (!Objects.equals(thisTopDoc.totalHits, thatTopDoc.totalHits)) {
+            if (Objects.equals(thisTopDoc.totalHits, thatTopDoc.totalHits) == false) {
                 return false;
             }
-            if (!compareScoreDocs(thisTopDoc.scoreDocs, thatTopDoc.scoreDocs)) {
+            if (compareScoreDocs(thisTopDoc.scoreDocs, thatTopDoc.scoreDocs) == false) {
                 return false;
             }
         }
@@ -202,7 +202,7 @@ public class CompoundTopDocs {
             }
             if (firstDoc instanceof FieldDoc firstFieldDoc) {
                 FieldDoc secondFieldDoc = (FieldDoc) secondDoc;
-                if (!Arrays.equals(firstFieldDoc.fields, secondFieldDoc.fields)) {
+                if (Arrays.equals(firstFieldDoc.fields, secondFieldDoc.fields) == false) {
                     return false;
                 }
             }

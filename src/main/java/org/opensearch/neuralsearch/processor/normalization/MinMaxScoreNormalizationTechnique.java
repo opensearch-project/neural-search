@@ -107,7 +107,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
 
     private boolean isLowerBoundsAndSubQueriesCountMismatched(List<TopDocs> topDocsPerSubQuery) {
         return lowerBoundsOptional.isPresent()
-            && !topDocsPerSubQuery.isEmpty()
+            && topDocsPerSubQuery.isEmpty() == false
             && lowerBoundsOptional.get().size() != topDocsPerSubQuery.size();
     }
 
@@ -175,7 +175,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
     private int getNumOfSubqueries(final List<CompoundTopDocs> queryTopDocs) {
         return queryTopDocs.stream()
             .filter(Objects::nonNull)
-            .filter(topDocs -> !topDocs.getTopDocs().isEmpty())
+            .filter(topDocs -> topDocs.getTopDocs().isEmpty() == false)
             .findAny()
             .get()
             .getTopDocs()
@@ -229,7 +229,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         if (Floats.compare(maxScore, minScore) == 0 && Floats.compare(maxScore, score) == 0) {
             return SINGLE_RESULT_SCORE;
         }
-        if (!lowerBound.isEnabled()) {
+        if (lowerBound.isEnabled() == false) {
             return LowerBound.Mode.IGNORE.normalize(score, minScore, maxScore, lowerBound.getMinScore());
         }
         return lowerBound.getMode().normalize(score, minScore, maxScore, lowerBound.getMinScore());
@@ -242,14 +242,15 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
      */
     private Optional<List<Pair<LowerBound.Mode, Float>>> getLowerBounds(final Map<String, Object> params) {
         // validate that the input parameters are in correct format
-        if (Objects.isNull(params) || !params.containsKey(PARAM_NAME_LOWER_BOUNDS)) {
+        if (Objects.isNull(params) || params.containsKey(PARAM_NAME_LOWER_BOUNDS) == false) {
             return Optional.empty();
         }
 
         Object lowerBoundsObj = params.get(PARAM_NAME_LOWER_BOUNDS);
-        if (!(lowerBoundsObj instanceof List<?> lowerBoundsParams)) {
+        if (lowerBoundsObj instanceof List<?> == false) {
             throw new IllegalArgumentException("lower_bounds must be a List");
         }
+        List<?> lowerBoundsParams = (List<?>) lowerBoundsObj;
         // number of lower bounds must match the number of sub-queries in a hybrid query
         if (lowerBoundsParams.size() > MAX_NUMBER_OF_SUB_QUERIES) {
             throw new IllegalArgumentException(
@@ -274,7 +275,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
      * @return a single pair of mode and min score
      */
     private Pair<LowerBound.Mode, Float> parseLowerBound(Object boundObj) {
-        if (!(boundObj instanceof Map)) {
+        if ((boundObj instanceof Map) == false) {
             throw new IllegalArgumentException("each lower bound must be a map");
         }
 

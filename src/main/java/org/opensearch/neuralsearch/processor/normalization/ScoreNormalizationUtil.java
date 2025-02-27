@@ -49,7 +49,7 @@ class ScoreNormalizationUtil {
 
         // check param types
         if (actualParams.keySet().stream().anyMatch(PARAM_NAME_WEIGHTS::equalsIgnoreCase)) {
-            if (!(actualParams.get(PARAM_NAME_WEIGHTS) instanceof List)) {
+            if (actualParams.get(PARAM_NAME_WEIGHTS) instanceof List == false) {
                 throw new IllegalArgumentException(
                     String.format(Locale.ROOT, "parameter [%s] must be a collection of numbers", PARAM_NAME_WEIGHTS)
                 );
@@ -112,7 +112,7 @@ class ScoreNormalizationUtil {
             String paramName = entry.getKey();
             Object paramValue = entry.getValue();
 
-            if (!supportedParametersTopLevel.contains(paramName)) {
+            if (supportedParametersTopLevel.contains(paramName) == false) {
                 hasUnknownParameters = true;
                 continue;
             }
