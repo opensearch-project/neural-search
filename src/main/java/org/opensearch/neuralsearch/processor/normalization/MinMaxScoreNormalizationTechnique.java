@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch.processor.normalization;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -236,18 +235,22 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         return lowerBound.getMode().normalize(score, minScore, maxScore, lowerBound.getMinScore());
     }
 
+    /**
+     * Get lower bounds from input parameters
+     * @param params user provided input parameters for this technique
+     * @return optional list of lower bounds. Can be empty in case lower bounds are not provided
+     */
     private Optional<List<Pair<LowerBound.Mode, Float>>> getLowerBounds(final Map<String, Object> params) {
+        // validate that the input parameters are in correct format
         if (Objects.isNull(params) || !params.containsKey(PARAM_NAME_LOWER_BOUNDS)) {
             return Optional.empty();
         }
-
-        List<Pair<LowerBound.Mode, Float>> lowerBounds = new ArrayList<>();
 
         Object lowerBoundsObj = params.get(PARAM_NAME_LOWER_BOUNDS);
         if (!(lowerBoundsObj instanceof List<?> lowerBoundsParams)) {
             throw new IllegalArgumentException("lower_bounds must be a List");
         }
-
+        // number of lower bounds must match the number of sub-queries in a hybrid query
         if (lowerBoundsParams.size() > MAX_NUMBER_OF_SUB_QUERIES) {
             throw new IllegalArgumentException(
                 String.format(
@@ -258,42 +261,52 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                 )
             );
         }
-
-        for (Object boundObj : lowerBoundsParams) {
-            if (!(boundObj instanceof Map)) {
-                throw new IllegalArgumentException("each lower bound must be a map");
-            }
-
-            @SuppressWarnings("unchecked")
-            Map<String, Object> lowerBound = (Map<String, Object>) boundObj;
-
-            try {
-                LowerBound.Mode mode = LowerBound.Mode.fromString(
-                    Objects.isNull(lowerBound.get(PARAM_NAME_LOWER_BOUND_MODE))
-                        ? ""
-                        : lowerBound.get(PARAM_NAME_LOWER_BOUND_MODE).toString()
-                );
-                float minScore;
-                if (Objects.isNull(lowerBound.get(PARAM_NAME_LOWER_BOUND_MIN_SCORE))) {
-                    minScore = LowerBound.DEFAULT_LOWER_BOUND_SCORE;
-                } else {
-                    minScore = Float.parseFloat(String.valueOf(lowerBound.get(PARAM_NAME_LOWER_BOUND_MIN_SCORE)));
-                }
-
-                Validate.isTrue(
-                    minScore >= LowerBound.MIN_LOWER_BOUND_SCORE && minScore <= LowerBound.MAX_LOWER_BOUND_SCORE,
-                    "min_score must be a valid finite number between %f and %f",
-                    LowerBound.MIN_LOWER_BOUND_SCORE,
-                    LowerBound.MAX_LOWER_BOUND_SCORE
-                );
-
-                lowerBounds.add(ImmutablePair.of(mode, minScore));
-            } catch (NumberFormatException e) {
-                throw new IllegalArgumentException("invalid format for min_score: must be a valid float value", e);
-            }
-        }
+        // parse each lower bound item and put all items in a list
+        List<Pair<LowerBound.Mode, Float>> lowerBounds = lowerBoundsParams.stream().map(this::parseLowerBound).collect(Collectors.toList());
 
         return Optional.of(lowerBounds);
+    }
+
+    @SuppressWarnings("unchecked")
+    /**
+     * Parse each lower bound item and return a pair of mode and min score
+     * @param boundObj lower bound item provided by the client
+     * @return a single pair of mode and min score
+     */
+    private Pair<LowerBound.Mode, Float> parseLowerBound(Object boundObj) {
+        if (!(boundObj instanceof Map)) {
+            throw new IllegalArgumentException("each lower bound must be a map");
+        }
+
+        Map<String, Object> lowerBound = (Map<String, Object>) boundObj;
+
+        String lowerBoundModeValue = Objects.toString(lowerBound.get(PARAM_NAME_LOWER_BOUND_MODE), "");
+        LowerBound.Mode mode = LowerBound.Mode.fromString(lowerBoundModeValue);
+        float minScore = extractAndValidateMinScore(lowerBound);
+
+        return ImmutablePair.of(mode, minScore);
+    }
+
+    private float extractAndValidateMinScore(Map<String, Object> lowerBound) {
+        Object minScoreObj = lowerBound.get(PARAM_NAME_LOWER_BOUND_MIN_SCORE);
+        if (minScoreObj == null) {
+            return LowerBound.DEFAULT_LOWER_BOUND_SCORE;
+        }
+        try {
+            float minScore = LowerBound.DEFAULT_LOWER_BOUND_SCORE;
+            if (Objects.nonNull(lowerBound.get(PARAM_NAME_LOWER_BOUND_MIN_SCORE))) {
+                minScore = Float.parseFloat(String.valueOf(lowerBound.get(PARAM_NAME_LOWER_BOUND_MIN_SCORE)));
+            }
+            Validate.isTrue(
+                minScore >= LowerBound.MIN_LOWER_BOUND_SCORE && minScore <= LowerBound.MAX_LOWER_BOUND_SCORE,
+                "min_score must be a valid finite number between %f and %f",
+                LowerBound.MIN_LOWER_BOUND_SCORE,
+                LowerBound.MAX_LOWER_BOUND_SCORE
+            );
+            return minScore;
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("invalid format for min_score: must be a valid float value", e);
+        }
     }
 
     /**
