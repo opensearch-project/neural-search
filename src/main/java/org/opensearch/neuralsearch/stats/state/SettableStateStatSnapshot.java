@@ -7,7 +7,7 @@ package org.opensearch.neuralsearch.stats.state;
 import lombok.Getter;
 import lombok.Setter;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.neuralsearch.stats.StatSnapshot;
+import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 
 import java.io.IOException;
 
@@ -39,7 +39,7 @@ public class SettableStateStatSnapshot<T> implements StatSnapshot<T> {
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject();
         builder.field(StatSnapshot.VALUE_KEY, getValue());
-        builder.field(StatSnapshot.STAT_TYPE_KEY, statName.getStatType().name());
+        builder.field(StatSnapshot.STAT_TYPE_KEY, statName.getStatType().getName());
         builder.endObject();
         return builder;
     }

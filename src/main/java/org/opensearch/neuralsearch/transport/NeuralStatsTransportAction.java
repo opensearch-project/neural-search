@@ -10,7 +10,7 @@ import org.opensearch.action.support.nodes.TransportNodesAction;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.inject.Inject;
 import org.opensearch.core.common.io.stream.StreamInput;
-import org.opensearch.neuralsearch.stats.StatSnapshot;
+import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 import org.opensearch.neuralsearch.stats.events.EventStatSnapshot;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.state.StateStatName;
@@ -82,7 +82,10 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         List<FailedNodeException> failures
     ) {
         // Final object that will hold the stats in format Map<ResponsePath, Value>
-        Map<String, StatSnapshot<?>> retrievedStats = new HashMap<>();
+        Map<String, StatSnapshot<?>> resultStats = new HashMap<>();
+
+        // Convert node level stats to map
+        Map<String, Map<String, StatSnapshot<?>>> nodeIdToEventStats = processorNodeEventStatsIntoMap(responses);
 
         // Sum the map to aggregate
         Map<String, StatSnapshot<?>> nodeAggregatedEventStats = aggregateNodesResponses(
@@ -91,23 +94,25 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         );
 
         // Add aggregate to summed map
-        retrievedStats.putAll(nodeAggregatedEventStats);
+        resultStats.putAll(nodeAggregatedEventStats);
 
         // Get state stats
         Map<StateStatName, StatSnapshot<?>> stateStats = stateStatsManager.getStats(request.getNeuralStatsInput().getStateStatNames());
 
-        // Convert state stats into <ResponsePath, Value>
+        // Convert stat name keys into flat path strings
         Map<String, StatSnapshot<?>> flatStateStats = stateStats.entrySet()
             .stream()
             .collect(Collectors.toMap(entry -> entry.getKey().getFullPath(), Map.Entry::getValue));
 
-        retrievedStats.putAll(flatStateStats);
+        // Add to map
+        resultStats.putAll(flatStateStats);
 
         return new NeuralStatsResponse(
             clusterService.getClusterName(),
             responses,
             failures,
-            retrievedStats,
+            resultStats,
+            nodeIdToEventStats,
             request.getNeuralStatsInput().isFlattenResponse(),
             request.getNeuralStatsInput().isIncludeMetadata()
         );
@@ -156,4 +161,25 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
 
         return aggregatedMap;
     }
+
+    private Map<String, Map<String, StatSnapshot<?>>> processorNodeEventStatsIntoMap(List<NeuralStatsNodeResponse> nodeResponses) {
+        // Converts list of node responses into Map<NodeId, EventStats>
+        Map<String, Map<String, StatSnapshot<?>>> results = new HashMap<>();
+
+        String nodeId;
+        for (NeuralStatsNodeResponse nodesResponse : nodeResponses) {
+            nodeId = nodesResponse.getNode().getId();
+
+            // Convert StatNames into paths
+            Map<String, StatSnapshot<?>> resultNodeStatsMap = nodesResponse.getStats()
+                .entrySet()
+                .stream()
+                .collect(Collectors.toMap(entry -> entry.getKey().getFullPath(), Map.Entry::getValue));
+
+            // Map each node id to its stats
+            results.put(nodeId, resultNodeStatsMap);
+        }
+        return results;
+    }
+
 }

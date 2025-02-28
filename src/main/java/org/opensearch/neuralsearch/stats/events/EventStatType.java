@@ -4,6 +4,14 @@
  */
 package org.opensearch.neuralsearch.stats.events;
 
-public enum EventStatType {
+import org.opensearch.neuralsearch.stats.common.StatType;
+
+import java.util.Locale;
+
+public enum EventStatType implements StatType {
     TIMESTAMPED_COUNTER;
+
+    public String getName() {
+        return name().toLowerCase(Locale.ROOT);
+    }
 }

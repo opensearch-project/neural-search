@@ -11,7 +11,7 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContentObject;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.neuralsearch.stats.StatSnapshot;
+import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -25,7 +25,8 @@ import java.util.stream.Collectors;
 public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeResponse> implements ToXContentObject {
 
     private static final String NODES_KEY = "nodes";
-    private Map<String, StatSnapshot<?>> stats;
+    private Map<String, StatSnapshot<?>> clusterLevelStats;
+    private Map<String, Map<String, StatSnapshot<?>>> nodeIdToNodeEventStats;
     private boolean flatten;
     private boolean includeMetadata;
 
@@ -37,18 +38,14 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
      */
     public NeuralStatsResponse(StreamInput in) throws IOException {
         super(new ClusterName(in), in.readList(NeuralStatsNodeResponse::readStats), in.readList(FailedNodeException::new));
-        Map<String, Object> inputMap = in.readMap();
+        Map<String, StatSnapshot<?>> castedStats = (Map<String, StatSnapshot<?>>) (Map) in.readMap();
+        Map<String, Map<String, StatSnapshot<?>>> castedNodeIdToNodeEventStats = (Map<String, Map<String, StatSnapshot<?>>>) (Map) in
+            .readMap();
 
-        // Upcast stats from stream
-        Map<String, StatSnapshot<?>> upcastedStats = new HashMap<>();
-        inputMap.forEach((key, value) -> {
-            if (value instanceof StatSnapshot<?>) {
-                upcastedStats.put(key, (StatSnapshot<?>) value);
-            }
-        });
-        this.stats = upcastedStats;
-        flatten = in.readBoolean();
-        includeMetadata = in.readBoolean();
+        this.clusterLevelStats = castedStats;
+        this.nodeIdToNodeEventStats = castedNodeIdToNodeEventStats;
+        this.flatten = in.readBoolean();
+        this.includeMetadata = in.readBoolean();
     }
 
     /**
@@ -57,18 +54,20 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
      * @param clusterName name of cluster
      * @param nodes List of NeuralStatsNodeResponses
      * @param failures List of failures from nodes
-     * @param stats
+     * @param clusterLevelStats
      */
     public NeuralStatsResponse(
         ClusterName clusterName,
         List<NeuralStatsNodeResponse> nodes,
         List<FailedNodeException> failures,
-        Map<String, StatSnapshot<?>> stats,
+        Map<String, StatSnapshot<?>> clusterLevelStats,
+        Map<String, Map<String, StatSnapshot<?>>> nodeIdToNodeEventStats,
         boolean flatten,
         boolean includeMetadata
     ) {
         super(clusterName, nodes, failures);
-        this.stats = stats;
+        this.clusterLevelStats = clusterLevelStats;
+        this.nodeIdToNodeEventStats = nodeIdToNodeEventStats;
         this.flatten = flatten;
         this.includeMetadata = includeMetadata;
     }
@@ -76,8 +75,10 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
-        Map<String, Object> downcastedStats = new HashMap<>(stats);
+        Map<String, Object> downcastedStats = (Map<String, Object>) (Map) (clusterLevelStats);
+        Map<String, Object> downcastedNodeStats = (Map<String, Object>) (Map) (nodeIdToNodeEventStats);
         out.writeMap(downcastedStats);
+        out.writeMap(downcastedNodeStats);
         out.writeBoolean(flatten);
         out.writeBoolean(includeMetadata);
     }
@@ -94,24 +95,19 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        Map<String, Object> finalStats = applyStatOptions(stats);
-        builder.mapContents(finalStats);
+        Map<String, Object> formattedClusterLevelStats = formatStats(clusterLevelStats);
+        builder.mapContents(formattedClusterLevelStats);
 
-        // Build node level stats
-        Map<String, Map<String, Object>> nodeIdToStats = processorNodeStats();
+        Map<String, Object> formattedNodeEventStats = formatNodeEventStats(nodeIdToNodeEventStats);
 
         builder.startObject(NODES_KEY);
-        for (Map.Entry<String, Map<String, Object>> entry : nodeIdToStats.entrySet()) {
-            builder.startObject(entry.getKey());
-            builder.mapContents(entry.getValue());
-            builder.endObject();
-        }
+        builder.mapContents(formattedNodeEventStats);
         builder.endObject();
 
         return builder;
     }
 
-    private Map<String, Object> applyStatOptions(Map<String, StatSnapshot<?>> rawStats) {
+    private Map<String, Object> formatStats(Map<String, StatSnapshot<?>> rawStats) {
         if (flatten) {
             return getFlattenedStats(rawStats);
         }
@@ -120,31 +116,22 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
 
     private Map<String, Object> getFlattenedStats(Map<String, StatSnapshot<?>> rawStats) {
         if (includeMetadata) {
-            return new HashMap<>(rawStats);
+            return (Map<String, Object>) (Map) rawStats;
         }
         return rawStats.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().getValue()));
     }
 
-    private Map<String, Map<String, Object>> processorNodeStats() {
-        Map<String, Map<String, Object>> results = new HashMap<>();
+    private Map<String, Object> formatNodeEventStats(Map<String, Map<String, StatSnapshot<?>>> rawNodeStats) {
+        // Format nested maps for node event stats;
+        Map<String, Object> formattedNodeIdsToNodeEventStats = new HashMap<>();
+        for (Map.Entry<String, Map<String, StatSnapshot<?>>> nodeEventStats : rawNodeStats.entrySet()) {
+            String nodeId = nodeEventStats.getKey();
 
-        String nodeId;
-        for (NeuralStatsNodeResponse nodesResponse : getNodes()) {
-            nodeId = nodesResponse.getNode().getId();
-
-            // Convert StatNames into paths
-            Map<String, StatSnapshot<?>> resultNodeStatsMap = nodesResponse.getStats()
-                .entrySet()
-                .stream()
-                .collect(Collectors.toMap(entry -> entry.getKey().getFullPath(), Map.Entry::getValue));
-
-            // Apply options (flattening, metadata)
-            Map<String, Object> nodeStats = applyStatOptions(resultNodeStatsMap);
-
-            // Map each nodeid to its stats
-            results.put(nodeId, nodeStats);
+            // Format each nested map
+            Map<String, Object> formattedNodeStats = formatStats(nodeEventStats.getValue());
+            formattedNodeIdsToNodeEventStats.put(nodeId, formattedNodeStats);
         }
-        return results;
+        return formattedNodeIdsToNodeEventStats;
     }
 
     private Map<String, Object> writeNestedMapWithDotNotation(Map<String, StatSnapshot<?>> dotMap, boolean includeMetadata) {
@@ -162,7 +149,7 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
                 current = (Map<String, Object>) current.computeIfAbsent(parts[i], k -> new HashMap<>());
             }
 
-            // If include metadata, put object in and it'll be written to xcontent automatically
+            // If include metadata, put object in and it'll be written toXContent via StatSnapshot<T> implementation
             // Otherwise, provide the raw value
             Object value = includeMetadata ? entry.getValue() : entry.getValue().getValue();
             current.put(parts[parts.length - 1], value);

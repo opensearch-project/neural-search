@@ -45,6 +45,8 @@ public class EventStatsManager {
         Map<EventStatName, EventStatSnapshot> eventStatsDataMap = new HashMap<>();
         for (EventStatName statName : statsToRetrieve) {
             if (stats.containsKey(statName)) {
+
+                // Get event data snapshot
                 eventStatsDataMap.put(statName, stats.get(statName).getEventStatData());
             }
         }

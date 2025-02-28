@@ -11,7 +11,7 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.common.io.stream.Writeable;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.neuralsearch.stats.StatSnapshot;
+import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -89,7 +89,7 @@ public class EventStatSnapshot implements Writeable, StatSnapshot<Long> {
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject();
         builder.field(StatSnapshot.VALUE_KEY, value);
-        builder.field(StatSnapshot.STAT_TYPE_KEY, statName.getStatType().name());
+        builder.field(StatSnapshot.STAT_TYPE_KEY, statName.getStatType().getName());
         builder.field(TRAILING_INTERVAL_KEY, trailingIntervalValue);
         builder.field(MINUTES_SINCE_LAST_EVENT_KEY, minutesSinceLastEvent);
         builder.endObject();

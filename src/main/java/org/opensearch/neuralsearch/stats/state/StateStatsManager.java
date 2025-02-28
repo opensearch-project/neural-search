@@ -5,7 +5,7 @@
 package org.opensearch.neuralsearch.stats.state;
 
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
-import org.opensearch.neuralsearch.stats.StatSnapshot;
+import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.PipelineInfoUtil;
 

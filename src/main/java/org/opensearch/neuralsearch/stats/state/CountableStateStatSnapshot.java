@@ -6,7 +6,7 @@ package org.opensearch.neuralsearch.stats.state;
 
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.neuralsearch.stats.StatSnapshot;
+import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.LongAdder;
@@ -40,7 +40,7 @@ public class CountableStateStatSnapshot implements StatSnapshot<Long> {
     public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
         builder.startObject();
         builder.field(StatSnapshot.VALUE_KEY, getValue());
-        builder.field(StatSnapshot.STAT_TYPE_KEY, statName.getStatType().name());
+        builder.field(StatSnapshot.STAT_TYPE_KEY, statName.getStatType().getName());
         builder.endObject();
         return builder;
     }

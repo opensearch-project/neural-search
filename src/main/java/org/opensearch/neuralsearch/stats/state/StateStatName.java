@@ -6,13 +6,14 @@ package org.opensearch.neuralsearch.stats.state;
 
 import lombok.Getter;
 import org.apache.commons.lang.StringUtils;
+import org.opensearch.neuralsearch.stats.common.StatName;
 
 import java.util.Arrays;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 @Getter
-public enum StateStatName {
+public enum StateStatName implements StatName {
     // Cluster info
     CLUSTER_VERSION("cluster_version", "", StateStatType.SETTABLE),
     TEXT_EMBEDDING_PROCESSORS("text_embedding_processors_in_pipelines", "processors.ingest", StateStatType.COUNTABLE);
