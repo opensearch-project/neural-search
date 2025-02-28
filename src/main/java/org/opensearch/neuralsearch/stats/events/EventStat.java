@@ -5,11 +5,11 @@
 package org.opensearch.neuralsearch.stats.events;
 
 public interface EventStat {
-    public Long getValue();
+    public long getValue();
 
-    public Long getTrailingIntervalValue();
+    public long getTrailingIntervalValue();
 
-    public Long getMinutesSinceLastEvent();
+    public long getMinutesSinceLastEvent();
 
     public EventStatSnapshot getEventStatData();
 

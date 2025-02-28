@@ -13,7 +13,11 @@ import java.util.stream.Collectors;
 
 @Getter
 public enum EventStatName {
-    TEXT_EMBEDDING_PROCESSOR_EXECUTIONS("text_embedding_executions", "processors.ingest", EventStatType.TIMESTAMPED_COUNTER);
+    TEXT_EMBEDDING_PROCESSOR_EXECUTIONS("text_embedding_executions", "processors.ingest", EventStatType.TIMESTAMPED_COUNTER),
+    TEST_EVENT_1("test_pasta_1", "test.events.my_event_1", EventStatType.TIMESTAMPED_COUNTER),
+    TEST_EVENT_2("test_sushi_2", "test.events.my_event_1", EventStatType.TIMESTAMPED_COUNTER),
+    TEST_EVENT_3("test_bratwurst_3", "test.events.my_event_2", EventStatType.TIMESTAMPED_COUNTER),
+    TEST_EVENT_4("test_samosa_4", "test.events", EventStatType.TIMESTAMPED_COUNTER);
 
     private final String name;
     private final String path;

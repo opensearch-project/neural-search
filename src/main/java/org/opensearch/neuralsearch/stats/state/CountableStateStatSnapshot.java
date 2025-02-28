@@ -24,10 +24,6 @@ public class CountableStateStatSnapshot implements StatSnapshot<Long> {
         return adder.longValue();
     }
 
-    public void increment() {
-        adder.increment();
-    }
-
     public void incrementBy(Long delta) {
         adder.add(delta);
     }
