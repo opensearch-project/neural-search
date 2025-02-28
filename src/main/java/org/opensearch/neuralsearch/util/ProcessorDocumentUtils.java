@@ -263,7 +263,7 @@ public class ProcessorDocumentUtils {
                 ProcessJsonObjectItem processJsonObjectItem = (ProcessJsonObjectItem) value;
                 Map<String, Object> tempMap = new HashMap<>();
                 unflattenSingleItem(processJsonObjectItem.key, processJsonObjectItem.value, tempMap);
-                targetList.set(targetList.size() - 1, tempMap);
+                processJsonObjectItem.targetMap.putAll(tempMap);
             } else {
                 targetList.add(value);
             }
