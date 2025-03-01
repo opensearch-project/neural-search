@@ -11,25 +11,41 @@ import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 import java.io.IOException;
 import java.util.concurrent.atomic.LongAdder;
 
+/**
+ * A countable stat snapshot for state stats.
+ * Can be updated in place
+ */
 public class CountableStateStatSnapshot implements StatSnapshot<Long> {
     private LongAdder adder;
     private StateStatName statName;
 
+    /**
+     * Creates a new stat snapshot
+     * @param statName the name of the stat it corresponds to
+     */
     public CountableStateStatSnapshot(StateStatName statName) {
         this.statName = statName;
         this.adder = new LongAdder();
     }
 
+    /**
+     * Gets the counter value
+     * @return the counter value
+     */
     public Long getValue() {
         return adder.longValue();
     }
 
+    /**
+     * Increment the counter by a given delta
+     * @param delta the amount ot increment by
+     */
     public void incrementBy(Long delta) {
         adder.add(delta);
     }
 
     /**
-     * Converts to fields xContent
+     * Converts to fields xContent, including stat metadata
      *
      * @param builder XContentBuilder
      * @param params Params
@@ -39,8 +55,8 @@ public class CountableStateStatSnapshot implements StatSnapshot<Long> {
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
         builder.startObject();
-        builder.field(StatSnapshot.VALUE_KEY, getValue());
-        builder.field(StatSnapshot.STAT_TYPE_KEY, statName.getStatType().getName());
+        builder.field(StatSnapshot.VALUE_FIELD, getValue());
+        builder.field(StatSnapshot.STAT_TYPE_FIELD, statName.getStatType().getName());
         builder.endObject();
         return builder;
     }

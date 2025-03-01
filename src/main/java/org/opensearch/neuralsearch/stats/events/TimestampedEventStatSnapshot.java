@@ -16,6 +16,11 @@ import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 import java.io.IOException;
 import java.util.Collection;
 
+/**
+ * A stat snapshot for a timestamped event stat at a point in time
+ * This is generated from an event stat to freeze the ongoing counter and other time related metadata field
+ * These are meant for transport layer/rest layer and not meant to be persisted
+ */
 @Getter
 @Builder
 @AllArgsConstructor
@@ -28,6 +33,11 @@ public class TimestampedEventStatSnapshot implements Writeable, StatSnapshot<Lon
     private Long trailingIntervalValue;
     private Long minutesSinceLastEvent;
 
+    /**
+     * Create a stat new snapshot from an input stream
+     * @param in the input stream
+     * @throws IOException
+     */
     public TimestampedEventStatSnapshot(StreamInput in) throws IOException {
         this.statName = in.readEnum(EventStatName.class);
         this.value = in.readLong();
@@ -35,11 +45,20 @@ public class TimestampedEventStatSnapshot implements Writeable, StatSnapshot<Lon
         this.minutesSinceLastEvent = in.readLong();
     }
 
+    /**
+     * Gets the value of the counter
+     * @return the value of the counter
+     */
     @Override
     public Long getValue() {
         return value;
     }
 
+    /**
+     * Writes the stat snapshot to an output stream
+     * @param out the output stream
+     * @throws IOException
+     */
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         out.writeEnum(statName);
@@ -48,10 +67,18 @@ public class TimestampedEventStatSnapshot implements Writeable, StatSnapshot<Lon
         out.writeLong(minutesSinceLastEvent);
     }
 
+    /**
+     * Static method to aggregate multiple event stats snapshots.
+     * This is intended for combining stat snapshots from multiple nodes to give an cluster level aggregate
+     * for the stat across nodes.
+     * Different metadata fields are aggregated differently
+     * @param snapshots the collection of snapshots
+     * @return
+     */
     public static TimestampedEventStatSnapshot aggregateEventStatData(
-        Collection<TimestampedEventStatSnapshot> timestampedEventStatSnapshotCollection
-    ) {
-        if (timestampedEventStatSnapshotCollection == null || timestampedEventStatSnapshotCollection.isEmpty()) {
+        Collection<TimestampedEventStatSnapshot> snapshots
+    ) throws IllegalArgumentException {
+        if (snapshots == null || snapshots.isEmpty()) {
             return null;
         }
 
@@ -60,12 +87,21 @@ public class TimestampedEventStatSnapshot implements Writeable, StatSnapshot<Lon
         long totalTrailingValue = 0;
         Long minMinutes = null;
 
-        for (TimestampedEventStatSnapshot stat : timestampedEventStatSnapshotCollection) {
+        for (TimestampedEventStatSnapshot stat : snapshots) {
+            // The first stat name is taken. This should never be called across event stats that don't share stat names
             if (name == null) {
                 name = stat.getStatName();
+            } else if (name != stat.getStatName()) {
+                throw new IllegalArgumentException("Should not aggregate snapshots across different stat names");
             }
+
+            // The value is summed
             totalValue += stat.getValue();
+
+            // The trailing value is summed
             totalTrailingValue += stat.getTrailingIntervalValue();
+
+            // Take the min of minutes since last event
             if (minMinutes == null || stat.getMinutesSinceLastEvent() < minMinutes) {
                 minMinutes = stat.getMinutesSinceLastEvent();
             }
@@ -80,7 +116,7 @@ public class TimestampedEventStatSnapshot implements Writeable, StatSnapshot<Lon
     }
 
     /**
-     * Converts to fields xContent
+     * Converts to fields xContent, including stat metadata
      *
      * @param builder XContentBuilder
      * @param params Params
@@ -90,8 +126,8 @@ public class TimestampedEventStatSnapshot implements Writeable, StatSnapshot<Lon
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject();
-        builder.field(StatSnapshot.VALUE_KEY, value);
-        builder.field(StatSnapshot.STAT_TYPE_KEY, statName.getStatType().getName());
+        builder.field(StatSnapshot.VALUE_FIELD, value);
+        builder.field(StatSnapshot.STAT_TYPE_FIELD, statName.getStatType().getName());
         builder.field(TRAILING_INTERVAL_KEY, trailingIntervalValue);
         builder.field(MINUTES_SINCE_LAST_EVENT_KEY, minutesSinceLastEvent);
         builder.endObject();

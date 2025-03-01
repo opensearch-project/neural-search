@@ -80,9 +80,9 @@ public class StateStatsManager {
 
     private Map<StateStatName, SettableStateStatSnapshot<?>> getSettableStats() {
         Map<StateStatName, SettableStateStatSnapshot<?>> settableStateStats = new HashMap<>();
-        for (StateStatName stat : EnumSet.allOf(StateStatName.class)) {
-            if (stat.getStatType() == StateStatType.SETTABLE) {
-                settableStateStats.put(stat, new SettableStateStatSnapshot<>());
+        for (StateStatName statName : EnumSet.allOf(StateStatName.class)) {
+            if (statName.getStatType() == StateStatType.SETTABLE) {
+                settableStateStats.put(statName, new SettableStateStatSnapshot<>(statName));
             }
         }
 

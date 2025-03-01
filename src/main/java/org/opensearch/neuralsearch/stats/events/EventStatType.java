@@ -8,9 +8,16 @@ import org.opensearch.neuralsearch.stats.common.StatType;
 
 import java.util.Locale;
 
+/**
+ * Enum for different kinds of event stat types to track
+ */
 public enum EventStatType implements StatType {
     TIMESTAMPED_COUNTER;
 
+    /**
+     * Gets the name of the stat type, the enum name in lowercase
+     * @return the name of the stat type
+     */
     public String getName() {
         return name().toLowerCase(Locale.ROOT);
     }

@@ -4,6 +4,8 @@
  */
 package org.opensearch.neuralsearch.stats.events;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
@@ -34,12 +36,12 @@ public class TimestampedEventStat implements EventStat {
 
     public void increment() {
         totalCounter.increment();
-        lastEventTimestamp = System.currentTimeMillis();
+        lastEventTimestamp = getCurrentTimeInMillis();
         incrementCurrentBucket();
     }
 
     private void incrementCurrentBucket() {
-        long now = System.currentTimeMillis();
+        long now = getCurrentTimeInMillis();
         long currentBucketTime = now - (now % BUCKET_INTERVAL_MS); // Align to current minute
         int bucketIndex = (int) ((now / BUCKET_INTERVAL_MS) % (INTERVAL_SIZE + 1)); // Determine bucket index
 
@@ -60,7 +62,7 @@ public class TimestampedEventStat implements EventStat {
     }
 
     public long getTrailingIntervalValue() {
-        long now = System.currentTimeMillis();
+        long now = getCurrentTimeInMillis();
         long currentBucketTime = now - (now % BUCKET_INTERVAL_MS); // Start of current minute
 
         long cutoff = now - (INTERVAL_SIZE * BUCKET_INTERVAL_MS); // Cutoff is number of buckets away
@@ -79,13 +81,11 @@ public class TimestampedEventStat implements EventStat {
     }
 
     public long getMinutesSinceLastEvent() {
-        // Not yet implemented
-        long currentTimestamp = System.currentTimeMillis();
-
+        long currentTimestamp = getCurrentTimeInMillis();
         return ((currentTimestamp - lastEventTimestamp) / (1000 * 60));
     }
 
-    public TimestampedEventStatSnapshot getEventStatData() {
+    public TimestampedEventStatSnapshot getEventStatSnapshot() {
         return TimestampedEventStatSnapshot.builder()
             .statName(statName)
             .value(getValue())
@@ -105,6 +105,15 @@ public class TimestampedEventStat implements EventStat {
             buckets = newBuckets;
             lastEventTimestamp = 0;
         }
+    }
+
+    /**
+     * Helper class to get current time in millis. Abstracted for testing purposes
+     * @return current time in millis
+     */
+    @VisibleForTesting
+    protected long getCurrentTimeInMillis() {
+        return System.currentTimeMillis();
     }
 
     private class Bucket {

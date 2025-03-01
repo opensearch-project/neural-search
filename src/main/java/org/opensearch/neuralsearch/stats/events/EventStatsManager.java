@@ -49,7 +49,7 @@ public class EventStatsManager {
         for (EventStatName statName : statsToRetrieve) {
             if (stats.containsKey(statName)) {
                 // Get event data snapshot
-                eventStatsDataMap.put(statName, stats.get(statName).getEventStatData());
+                eventStatsDataMap.put(statName, stats.get(statName).getEventStatSnapshot());
             }
         }
         return eventStatsDataMap;
