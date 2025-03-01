@@ -37,7 +37,7 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
     @Setter
     private boolean includeMetadata;
     @Setter
-    private boolean flattenResponse;
+    private boolean flatten;
 
     @Builder
     public NeuralStatsInput(
@@ -45,13 +45,13 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         EnumSet<EventStatName> eventStatNames,
         EnumSet<StateStatName> stateStatNames,
         boolean includeMetadata,
-        boolean flattenResponse
+        boolean flatten
     ) {
         this.nodeIds = nodeIds;
         this.eventStatNames = eventStatNames;
         this.stateStatNames = stateStatNames;
         this.includeMetadata = includeMetadata;
-        this.flattenResponse = flattenResponse;
+        this.flatten = flatten;
     }
 
     public NeuralStatsInput() {
@@ -59,7 +59,7 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         this.eventStatNames = EnumSet.noneOf(EventStatName.class);
         this.stateStatNames = EnumSet.noneOf(StateStatName.class);
         this.includeMetadata = false;
-        this.flattenResponse = false;
+        this.flatten = false;
     }
 
     public NeuralStatsInput(StreamInput input) throws IOException {
@@ -67,7 +67,7 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         eventStatNames = input.readBoolean() ? input.readEnumSet(EventStatName.class) : EnumSet.noneOf(EventStatName.class);
         stateStatNames = input.readBoolean() ? input.readEnumSet(StateStatName.class) : EnumSet.noneOf(StateStatName.class);
         includeMetadata = input.readBoolean();
-        flattenResponse = input.readBoolean();
+        flatten = input.readBoolean();
     }
 
     @Override
@@ -76,7 +76,7 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         writeOptionalEnumSet(out, eventStatNames);
         writeOptionalEnumSet(out, stateStatNames);
         out.writeBoolean(includeMetadata);
-        out.writeBoolean(flattenResponse);
+        out.writeBoolean(flatten);
     }
 
     private void writeOptionalEnumSet(StreamOutput out, EnumSet<?> set) throws IOException {
@@ -100,19 +100,9 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         if (stateStatNames != null) {
             builder.field(STATE_STAT_NAMES, stateStatNames);
         }
+        builder.field("include_metadata", includeMetadata);
+        builder.field("flat_keys", flatten);
         builder.endObject();
         return builder;
-    }
-
-    public boolean retrieveAllStats() {
-        return retrieveAllEventStats() && retrieveAllStateStats();
-    }
-
-    public boolean retrieveAllEventStats() {
-        return eventStatNames == null || eventStatNames.isEmpty();
-    }
-
-    public boolean retrieveAllStateStats() {
-        return stateStatNames == null || stateStatNames.isEmpty();
     }
 }

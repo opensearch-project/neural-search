@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.stats.state;
 
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.PipelineInfoUtil;
@@ -29,11 +30,17 @@ public class StateStatsManager {
 
     private static StateStatsManager INSTANCE;
 
+    private NeuralSearchSettingsAccessor settingsAccessor;
+
     public static StateStatsManager instance() {
         if (INSTANCE == null) {
-            INSTANCE = new StateStatsManager();
+            INSTANCE = new StateStatsManager(NeuralSearchSettingsAccessor.instance());
         }
         return INSTANCE;
+    }
+
+    public StateStatsManager(NeuralSearchSettingsAccessor settingsAccessor) {
+        this.settingsAccessor = settingsAccessor;
     }
 
     public Map<StateStatName, StatSnapshot<?>> getStats(EnumSet<StateStatName> statsToRetrieve) {

@@ -7,10 +7,12 @@ package org.opensearch.neuralsearch.stats.events;
 public interface EventStat {
     long getValue();
 
-    EventStatSnapshot getEventStatData();
+    TimestampedEventStatSnapshot getEventStatData();
 
     /**
      * Increments the supplier if it can be incremented
      */
     void increment();
+
+    void reset();
 }

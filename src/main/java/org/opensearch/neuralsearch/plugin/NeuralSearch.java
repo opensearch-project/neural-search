@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.plugin;
 
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SEARCH_HYBRID_SEARCH_DISABLED;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER_MAX_DOC_FIELDS;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_STATS_ENABLED;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -16,6 +17,7 @@ import java.util.function.Supplier;
 
 import com.google.common.collect.ImmutableList;
 import org.opensearch.action.ActionRequest;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.transport.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.node.DiscoveryNodes;
@@ -64,8 +66,6 @@ import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.neuralsearch.rest.RestNeuralStatsHandler;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
-import org.opensearch.neuralsearch.stats.state.StateStatsManager;
-import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.transport.NeuralStatsAction;
 import org.opensearch.neuralsearch.transport.NeuralStatsTransportAction;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
@@ -121,11 +121,11 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         NeuralSparseQueryBuilder.initialize(clientAccessor);
         HybridQueryExecutor.initialize(threadPool);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
-        EventStatsManager eventStatsManager = EventStatsManager.instance();
-        StateStatsManager stateStatsManager = StateStatsManager.instance();
-        PipelineInfoUtil.instance().initialize(clusterService);
 
-        return List.of(clientAccessor, eventStatsManager, stateStatsManager);
+        PipelineInfoUtil.instance().initialize(clusterService);
+        NeuralSearchSettingsAccessor.instance().initialize(clusterService, environment.settings());
+
+        return List.of(clientAccessor);
     }
 
     @Override
@@ -147,7 +147,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         IndexNameExpressionResolver indexNameExpressionResolver,
         Supplier<DiscoveryNodes> nodesInCluster
     ) {
-        RestNeuralStatsHandler restNeuralStatsHandler = new RestNeuralStatsHandler();
+        RestNeuralStatsHandler restNeuralStatsHandler = new RestNeuralStatsHandler(NeuralSearchSettingsAccessor.instance());
         return ImmutableList.of(restNeuralStatsHandler);
     }
 
@@ -206,7 +206,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED, RERANKER_MAX_DOC_FIELDS);
+        return List.of(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED, RERANKER_MAX_DOC_FIELDS, NEURAL_STATS_ENABLED);
     }
 
     @Override

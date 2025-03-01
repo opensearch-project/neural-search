@@ -19,7 +19,7 @@ import java.util.Collection;
 @Getter
 @Builder
 @AllArgsConstructor
-public class EventStatSnapshot implements Writeable, StatSnapshot<Long> {
+public class TimestampedEventStatSnapshot implements Writeable, StatSnapshot<Long> {
     public static final String TRAILING_INTERVAL_KEY = "trailing_interval_value";
     public static final String MINUTES_SINCE_LAST_EVENT_KEY = "minutes_since_last_event";
 
@@ -28,7 +28,7 @@ public class EventStatSnapshot implements Writeable, StatSnapshot<Long> {
     private Long trailingIntervalValue;
     private Long minutesSinceLastEvent;
 
-    public EventStatSnapshot(StreamInput in) throws IOException {
+    public TimestampedEventStatSnapshot(StreamInput in) throws IOException {
         this.statName = in.readEnum(EventStatName.class);
         this.value = in.readLong();
         this.trailingIntervalValue = in.readLong();
@@ -48,8 +48,10 @@ public class EventStatSnapshot implements Writeable, StatSnapshot<Long> {
         out.writeLong(minutesSinceLastEvent);
     }
 
-    public static EventStatSnapshot aggregateEventStatData(Collection<EventStatSnapshot> eventStatSnapshotCollection) {
-        if (eventStatSnapshotCollection == null || eventStatSnapshotCollection.isEmpty()) {
+    public static TimestampedEventStatSnapshot aggregateEventStatData(
+        Collection<TimestampedEventStatSnapshot> timestampedEventStatSnapshotCollection
+    ) {
+        if (timestampedEventStatSnapshotCollection == null || timestampedEventStatSnapshotCollection.isEmpty()) {
             return null;
         }
 
@@ -58,7 +60,7 @@ public class EventStatSnapshot implements Writeable, StatSnapshot<Long> {
         long totalTrailingValue = 0;
         Long minMinutes = null;
 
-        for (EventStatSnapshot stat : eventStatSnapshotCollection) {
+        for (TimestampedEventStatSnapshot stat : timestampedEventStatSnapshotCollection) {
             if (name == null) {
                 name = stat.getStatName();
             }
@@ -69,7 +71,7 @@ public class EventStatSnapshot implements Writeable, StatSnapshot<Long> {
             }
         }
 
-        return EventStatSnapshot.builder()
+        return TimestampedEventStatSnapshot.builder()
             .statName(name)
             .value(totalValue)
             .trailingIntervalValue(totalTrailingValue)

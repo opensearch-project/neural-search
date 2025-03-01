@@ -85,13 +85,26 @@ public class TimestampedEventStat implements EventStat {
         return ((currentTimestamp - lastEventTimestamp) / (1000 * 60));
     }
 
-    public EventStatSnapshot getEventStatData() {
-        return EventStatSnapshot.builder()
+    public TimestampedEventStatSnapshot getEventStatData() {
+        return TimestampedEventStatSnapshot.builder()
             .statName(statName)
             .value(getValue())
             .trailingIntervalValue(getTrailingIntervalValue())
             .minutesSinceLastEvent(getMinutesSinceLastEvent())
             .build();
+    }
+
+    public void reset() {
+        Bucket[] newBuckets = new Bucket[INTERVAL_SIZE + 1];
+        for (int i = 0; i < INTERVAL_SIZE + 1; i++) {
+            newBuckets[i] = new Bucket();
+        }
+
+        totalCounter.reset();
+        synchronized (this) {
+            buckets = newBuckets;
+            lastEventTimestamp = 0;
+        }
     }
 
     private class Bucket {

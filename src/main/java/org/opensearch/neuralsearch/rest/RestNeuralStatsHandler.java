@@ -8,12 +8,15 @@ import com.google.common.collect.ImmutableList;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang.StringUtils;
+import org.opensearch.core.rest.RestStatus;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.NeuralStatsInput;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.state.StateStatName;
 import org.opensearch.neuralsearch.transport.NeuralStatsAction;
 import org.opensearch.neuralsearch.transport.NeuralStatsRequest;
 import org.opensearch.rest.BaseRestHandler;
+import org.opensearch.rest.BytesRestResponse;
 import org.opensearch.rest.RestRequest;
 import org.opensearch.rest.action.RestActions;
 import org.opensearch.transport.client.node.NodeClient;
@@ -48,6 +51,8 @@ public class RestNeuralStatsHandler extends BaseRestHandler {
         .map(String::toLowerCase)
         .collect(Collectors.toSet());
 
+    private NeuralSearchSettingsAccessor settingsAccessor;
+
     @Override
     public String getName() {
         return NAME;
@@ -65,6 +70,16 @@ public class RestNeuralStatsHandler extends BaseRestHandler {
 
     @Override
     protected RestChannelConsumer prepareRequest(RestRequest request, NodeClient client) {
+        if (settingsAccessor.getIsStatsEnabled() == false) {
+            // Process params, or else will automatically return a 400 instead of a 403
+            splitCommaSeparatedParam(request, "nodeId");
+            splitCommaSeparatedParam(request, "stat");
+            request.paramAsBoolean(FLATTEN_PARAM, false);
+            request.paramAsBoolean(INCLUDE_METADATA_PARAM, false);
+
+            return channel -> channel.sendResponse(new BytesRestResponse(RestStatus.FORBIDDEN, "Stats endpoint is disabled"));
+        }
+
         // Read inputs and convert to BaseNodesRequest with correct info configured
         NeuralStatsRequest neuralStatsRequest = getRequest(request);
 
@@ -112,7 +127,7 @@ public class RestNeuralStatsHandler extends BaseRestHandler {
 
         // Parse query parameters
         boolean flatten = request.paramAsBoolean(FLATTEN_PARAM, false);
-        neuralStatsInput.setFlattenResponse(flatten);
+        neuralStatsInput.setFlatten(flatten);
 
         boolean includeMetadata = request.paramAsBoolean(INCLUDE_METADATA_PARAM, false);
         neuralStatsInput.setIncludeMetadata(includeMetadata);

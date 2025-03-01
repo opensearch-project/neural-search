@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.rest;
 
 import lombok.extern.log4j.Log4j2;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.junit.After;
 import org.junit.Before;
 import org.opensearch.client.Response;
 import org.opensearch.client.Request;
@@ -95,6 +96,16 @@ public class RestNeuralStatsHandlerIT extends BaseNeuralSearchIT {
     public void setUp() throws Exception {
         super.setUp();
         updateClusterSettings();
+
+        // Only enable stats for this IT to prevent collisions
+        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+
+    }
+
+    @After
+    public void tearDown() throws Exception {
+        super.tearDown();
+        updateClusterSettings("plugins.neural_search.stats_enabled", false);
     }
 
     public void test_textEmbedding() throws Exception {
@@ -108,15 +119,29 @@ public class RestNeuralStatsHandlerIT extends BaseNeuralSearchIT {
         ingestDocument(INDEX_NAME, INGEST_DOC3);
         assertEquals(3, getDocCount(INDEX_NAME));
 
-        Response response = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
-        String responseBody = EntityUtils.toString(response.getEntity());
-        Map<String, Object> stats = parseStatsResponse(responseBody);
-        List<Map<String, Object>> nodesStats = parseNodeStatsResponse(responseBody);
+        Response response;
+        String responseBody;
+        Map<String, Object> stats;
+        List<Map<String, Object>> nodesStats;
+
+        response = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        responseBody = EntityUtils.toString(response.getEntity());
+        stats = parseStatsResponse(responseBody);
+        nodesStats = parseNodeStatsResponse(responseBody);
 
         log.info(nodesStats);
         assertEquals(3, getNestedValue(nodesStats.getFirst(), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS));
         assertEquals(1, getNestedValue(stats, StateStatName.TEXT_EMBEDDING_PROCESSORS));
 
+        updateClusterSettings("plugins.neural_search.stats_enabled", false);
+        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+
+        response = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        responseBody = EntityUtils.toString(response.getEntity());
+        stats = parseStatsResponse(responseBody);
+        nodesStats = parseNodeStatsResponse(responseBody);
+        assertEquals(0, getNestedValue(nodesStats.getFirst(), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS));
+        assertEquals(1, getNestedValue(stats, StateStatName.TEXT_EMBEDDING_PROCESSORS));
     }
 
     public void test_statsFiltering() throws Exception {
