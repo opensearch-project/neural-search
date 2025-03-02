@@ -56,6 +56,7 @@ import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.mapper.TextFieldMapper;
+import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
@@ -82,6 +83,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     static final String TEXT_FIELD_NAME = "field";
     static final String QUERY_TEXT = "Hello world!";
     static final String TERM_QUERY_TEXT = "keyword";
+    static final String FILTER_TERM_QUERY_TEXT = "filterKeyword";
     static final String MODEL_ID = "mfgfgdsfgfdgsde";
     static final int K = 10;
     static final float BOOST = 1.8f;
@@ -434,6 +436,121 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         TermQueryBuilder termQueryBuilder = (TermQueryBuilder) queryTwoSubQueries.queries().get(1);
         assertEquals(TEXT_FIELD_NAME, termQueryBuilder.fieldName());
         assertEquals(TERM_QUERY_TEXT, termQueryBuilder.value());
+    }
+
+    /**
+     * Tests basic query:
+     * {
+     *     "query": {
+     *         "hybrid": {
+     *              "queries": [
+     *                  {
+     *                      "neural": {
+     *                          "text_knn": {
+     *                              "query_text": "Hello world",
+     *                              "model_id": "dcsdcasd",
+     *                              "k": 1
+     *                          }
+     *                      }
+     *                  },
+     *                  {
+     *                      "term": {
+     *                          "text": "keyword"
+     *                      }
+     *                  }
+     *              ]
+     *              "filter": {
+     *                  "term": {
+     *                      "text": "filterKeyword"
+     *                  }
+     *              }
+     *          }
+     *      }
+     * }
+     */
+    @SneakyThrows
+    public void testFromXContent_whenMultipleSubQueriesAndFilter_thenBuildSuccessfully() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startArray("queries")
+            .startObject()
+            .startObject(NeuralQueryBuilder.NAME)
+            .startObject(VECTOR_FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .field(K_FIELD.getPreferredName(), K)
+            .field(BOOST_FIELD.getPreferredName(), BOOST)
+            .endObject()
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject(TermQueryBuilder.NAME)
+            .field(TEXT_FIELD_NAME, TERM_QUERY_TEXT)
+            .endObject()
+            .endObject()
+            .endArray()
+
+            .field("pagination_depth", 10)
+            .startObject("filter")
+            .startObject(TermQueryBuilder.NAME)
+            .field(TEXT_FIELD_NAME, FILTER_TERM_QUERY_TEXT)
+            .endObject()
+            .endObject()
+            .endObject();
+
+        NamedXContentRegistry namedXContentRegistry = new NamedXContentRegistry(
+            List.of(
+                new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(TermQueryBuilder.NAME), TermQueryBuilder::fromXContent),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(NeuralQueryBuilder.NAME),
+                    NeuralQueryBuilder::fromXContent
+                ),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(HybridQueryBuilder.NAME),
+                    HybridQueryBuilder::fromXContent
+                )
+            )
+        );
+        XContentParser contentParser = createParser(
+            namedXContentRegistry,
+            xContentBuilder.contentType().xContent(),
+            BytesReference.bytes(xContentBuilder)
+        );
+        contentParser.nextToken();
+
+        HybridQueryBuilder queryTwoSubQueries = HybridQueryBuilder.fromXContent(contentParser);
+        assertEquals(2, queryTwoSubQueries.queries().size());
+        assertTrue(queryTwoSubQueries.queries().get(0) instanceof NeuralQueryBuilder);
+
+        assertTrue(queryTwoSubQueries.queries().get(1) instanceof BoolQueryBuilder);
+        assertEquals(1, ((BoolQueryBuilder) queryTwoSubQueries.queries().get(1)).must().size());
+        assertTrue(((BoolQueryBuilder) queryTwoSubQueries.queries().get(1)).must().get(0) instanceof TermQueryBuilder);
+        assertEquals(1, ((BoolQueryBuilder) queryTwoSubQueries.queries().get(1)).filter().size());
+
+        assertEquals(10, queryTwoSubQueries.paginationDepth().intValue());
+        // verify knn vector query
+        NeuralQueryBuilder neuralQueryBuilder = (NeuralQueryBuilder) queryTwoSubQueries.queries().get(0);
+        assertEquals(VECTOR_FIELD_NAME, neuralQueryBuilder.fieldName());
+        assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
+        assertEquals(K, (int) neuralQueryBuilder.k());
+        assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
+        assertEquals(BOOST, neuralQueryBuilder.boost(), 0f);
+        assertEquals(
+            new TermQueryBuilder(TEXT_FIELD_NAME, FILTER_TERM_QUERY_TEXT),
+            ((NeuralQueryBuilder) queryTwoSubQueries.queries().get(0)).filter()
+        );
+        // verify term query
+        assertEquals(
+            new TermQueryBuilder(TEXT_FIELD_NAME, TERM_QUERY_TEXT),
+            ((BoolQueryBuilder) queryTwoSubQueries.queries().get(1)).must().get(0)
+        );
+        assertEquals(
+            new TermQueryBuilder(TEXT_FIELD_NAME, FILTER_TERM_QUERY_TEXT),
+            ((BoolQueryBuilder) queryTwoSubQueries.queries().get(1)).filter().get(0)
+        );
     }
 
     @SneakyThrows
@@ -958,6 +1075,25 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         List<QueryBuilder> visitedQueries = new ArrayList<>();
         hybridQueryBuilder.visit(createTestVisitor(visitedQueries));
         assertEquals(3, visitedQueries.size());
+    }
+
+    public void testFilter() {
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(
+            NeuralQueryBuilder.builder().fieldName("test").queryText("test").build()
+        ).add(new NeuralSparseQueryBuilder());
+        // Test for Null filter Case
+        QueryBuilder queryBuilder = hybridQueryBuilder.filter(null);
+        assertEquals(queryBuilder, hybridQueryBuilder);
+
+        // Test for Non-Null filter case and assert every field as expected
+        HybridQueryBuilder updatedHybridQueryBuilder = (HybridQueryBuilder) hybridQueryBuilder.filter(new MatchAllQueryBuilder());
+        assertEquals(updatedHybridQueryBuilder.queryName(), hybridQueryBuilder.queryName());
+        assertEquals(updatedHybridQueryBuilder.paginationDepth(), hybridQueryBuilder.paginationDepth());
+        NeuralQueryBuilder updatedNeuralQueryBuilder = (NeuralQueryBuilder) updatedHybridQueryBuilder.queries().get(0);
+        assertEquals(new MatchAllQueryBuilder(), updatedNeuralQueryBuilder.filter());
+        BoolQueryBuilder updatedNeuralSparseQueryBuilder = (BoolQueryBuilder) updatedHybridQueryBuilder.queries().get(1);
+        assertEquals(new NeuralSparseQueryBuilder(), updatedNeuralSparseQueryBuilder.must().get(0));
+        assertEquals(new MatchAllQueryBuilder(), updatedNeuralSparseQueryBuilder.filter().get(0));
     }
 
     private Map<String, Object> getInnerMap(Object innerObject, String queryName, String fieldName) {

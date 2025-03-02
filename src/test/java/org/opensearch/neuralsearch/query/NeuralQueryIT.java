@@ -177,6 +177,50 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     }
 
     /**
+     * Test basic query with Match Query Builder
+     * {
+     *     "query": {
+     *         "neural": {
+     *             "text_knn": {
+     *                 "query_text": "Hello world",
+     *                 "model_id": "dcsdcasd",
+     *                 "k": 2,
+     *                 "boost": 2.0
+     *             }
+     *             "filter": {
+     *                 "match": {
+     *                     "_id": {
+     *                         "query": "3"
+     *                     }
+     *                 }
+     *             }
+     *         }
+     *     }
+     * }
+     */
+    @SneakyThrows
+    public void testQueryWithBoostAndFilterApplied() {
+        String modelId = null;
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
+        modelId = prepareModel();
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+            .queryText(TEST_QUERY_TEXT)
+            .modelId(modelId)
+            .k(3)
+            .build();
+
+        // Test with a Filter Applied
+        neuralQueryBuilder.filter(new MatchQueryBuilder("_id", "3"));
+        Map<String, Object> searchResponseAsMap = search(TEST_MULTI_DOC_INDEX_NAME, neuralQueryBuilder, 3);
+        assertEquals(1, getHitCount(searchResponseAsMap));
+        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+        assertEquals("3", firstInnerHit.get("_id"));
+        float expectedScore = computeExpectedScore(modelId, testVector, TEST_SPACE_TYPE, TEST_QUERY_TEXT);
+        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
+    }
+
+    /**
      * Tests rescore query:
      * {
      *     "query" : {
