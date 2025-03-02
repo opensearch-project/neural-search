@@ -248,7 +248,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             isComplete = checkComplete(taskQueryResult);
             Thread.sleep(DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND);
         }
-        assertTrue(String.format(Locale.ROOT, "failed to load the model, last task finished with status %s", taskQueryResult.get("state")), isComplete);
+        assertTrue(
+            String.format(Locale.ROOT, "failed to load the model, last task finished with status %s", taskQueryResult.get("state")),
+            isComplete
+        );
     }
 
     /**
