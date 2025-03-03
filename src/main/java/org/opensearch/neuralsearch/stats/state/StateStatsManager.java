@@ -21,15 +21,6 @@ import java.util.stream.Collectors;
  */
 public class StateStatsManager {
     public static final String PROCESSORS_KEY = "processors";
-    public static final String ALGORITHM_KEY = "algorithm";
-
-    // Search Response
-    public static final String REQUEST_PROCESSORS_KEY = "request_processors";
-    public static final String RESPONSE_PROCESSORS_KEY = "response_processors";
-    public static final String PHASE_PROCESSORS_KEY = "phase_results_processors";
-    public static final String COMBINATION_KEY = "combination";
-    public static final String NORMALIZATION_KEY = "normalization";
-    public static final String TECHNIQUE_KEY = "technique";
 
     private static StateStatsManager INSTANCE;
 
@@ -91,11 +82,10 @@ public class StateStatsManager {
             }
         }
 
-        // Parses search pipeline processor configs for processor info
-        addSearchProcessorStats(countableStateStats);
-
         // Parses ingest pipeline processor configs for processor info
         addIngestProcessorStats(countableStateStats);
+
+        // Helpers to parse search pipeline processor configs for processor info would go here
         return countableStateStats;
     }
 
@@ -143,97 +133,6 @@ public class StateStatsManager {
                             increment(stats, StateStatName.TEXT_EMBEDDING_PROCESSORS);
                             break;
                     }
-                }
-            }
-        }
-    }
-
-    /**
-     * Adds ingest processor state stats, mutating the input
-     * @param stats mutable map of state stats that the result will be added to
-     */
-    private void addSearchProcessorStats(Map<StateStatName, CountableStateStatSnapshot> stats) {
-        List<Map<String, Object>> pipelineConfigs = PipelineInfoUtil.instance().getSearchPipelineConfigs();
-
-        for (Map<String, Object> pipelineConfig : pipelineConfigs) {
-            for (Map.Entry<String, Object> entry : pipelineConfig.entrySet()) {
-                String searchProcessorType = entry.getKey();
-                List<Map<String, Object>> processors = asListOfMaps(entry.getValue());
-
-                switch (searchProcessorType) {
-                    case REQUEST_PROCESSORS_KEY:
-                        countSearchRequestProcessors(stats, processors);
-                        break;
-                    case RESPONSE_PROCESSORS_KEY:
-                        countSearchResponseProcessors(stats, processors);
-                        break;
-                    case PHASE_PROCESSORS_KEY:
-                        countSearchPhaseResultsProcessors(stats, processors);
-                        break;
-                }
-            }
-        }
-    }
-
-    private void countSearchRequestProcessors(
-        Map<StateStatName, CountableStateStatSnapshot> stats,
-        List<Map<String, Object>> pipelineConfig
-    ) {
-        /*
-        countProcessors(
-            stats,
-            pipelineConfig,
-            NeuralQueryEnricherProcessor.TYPE,
-            DerivedStatName.SEARCH_NEURAL_QUERY_ENRICHER_PROCESSOR_COUNT
-        );
-        */
-        // Add additional processor cases here
-
-    }
-
-    private void countSearchResponseProcessors(
-        Map<StateStatName, CountableStateStatSnapshot> stats,
-        List<Map<String, Object>> pipelineConfig
-    ) {
-        // countProcessors(stats, pipelineConfig, ExplanationResponseProcessor.TYPE, DerivedStatName.SEARCH_EXPLANATION_PROCESSOR_COUNT);
-        // Add additional processor cases here
-    }
-
-    private void countSearchPhaseResultsProcessors(
-        Map<StateStatName, CountableStateStatSnapshot> stats,
-        List<Map<String, Object>> pipelineConfig
-    ) {
-        // countProcessors(stats, pipelineConfig, RRFProcessor.TYPE, DerivedStatName.SEARCH_RRF_PROCESSOR_COUNT);
-
-        // Add additional processor cases here
-    }
-
-    private void countProcessors(
-        Map<StateStatName, CountableStateStatSnapshot> stats,
-        List<Map<String, Object>> processors,
-        String processorType,
-        StateStatName stateStatName
-    ) {
-        long count = processors.stream().filter(p -> p.containsKey(processorType)).count();
-        incrementBy(stats, stateStatName, count);
-        // Add additional processor cases here
-    }
-
-    private void countCombinationTechniques(
-        Map<StateStatName, CountableStateStatSnapshot> stats,
-        List<Map<String, Object>> processors,
-        String combinationTechnique,
-        StateStatName stateStatName
-    ) {
-        // Parses to access combination technique field
-        for (Map<String, Object> processorObj : processors) {
-            Map<String, Object> processor = asMap(processorObj);
-            for (Object processorConfigObj : processor.values()) {
-                Map<String, Object> config = asMap(processorConfigObj);
-                Map<String, Object> combination = asMap(config.get(COMBINATION_KEY));
-                String technique = getValue(combination, TECHNIQUE_KEY, String.class);
-                if (technique != null && technique.equals(combinationTechnique)) {
-                    increment(stats, stateStatName);
                 }
             }
         }
