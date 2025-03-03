@@ -133,6 +133,12 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         return new NeuralStatsNodeResponse(clusterService.localNode(), eventStatDataMap);
     }
 
+    /**
+     * Helper to aggregate node response event stats to give cluster level aggregate info on node-level stats
+     * @param responses node stat responses
+     * @param statsToRetrieve a list of stats to filter
+     * @return A map associating cluster level aggregated stat name strings with their stat snapshot values
+     */
     private Map<String, StatSnapshot<?>> aggregateNodesResponses(
         List<NeuralStatsNodeResponse> responses,
         EnumSet<EventStatName> statsToRetrieve
@@ -160,6 +166,11 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         return aggregatedMap;
     }
 
+    /**
+     * Helper to convert node responses into a map of node id to event stats
+     * @param nodeResponses node stat responses
+     * @return A map of node id strings to their event stat data
+     */
     private Map<String, Map<String, StatSnapshot<?>>> processorNodeEventStatsIntoMap(List<NeuralStatsNodeResponse> nodeResponses) {
         // Converts list of node responses into Map<NodeId, EventStats>
         Map<String, Map<String, StatSnapshot<?>>> results = new HashMap<>();

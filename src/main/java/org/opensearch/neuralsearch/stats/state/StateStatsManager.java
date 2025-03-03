@@ -16,6 +16,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Manager to generate stat snapshots for cluster level state stats
+ */
 public class StateStatsManager {
     public static final String PROCESSORS_KEY = "processors";
     public static final String ALGORITHM_KEY = "algorithm";
@@ -32,6 +35,10 @@ public class StateStatsManager {
 
     private NeuralSearchSettingsAccessor settingsAccessor;
 
+    /**
+     * Creates or gets the singleton instance
+     * @return singleton instance
+     */
     public static StateStatsManager instance() {
         if (INSTANCE == null) {
             INSTANCE = new StateStatsManager(NeuralSearchSettingsAccessor.instance());
@@ -39,10 +46,20 @@ public class StateStatsManager {
         return INSTANCE;
     }
 
+    /**
+     * Constructor
+     *
+     * @param settingsAccessor settings accessor singleton instance
+     */
     public StateStatsManager(NeuralSearchSettingsAccessor settingsAccessor) {
         this.settingsAccessor = settingsAccessor;
     }
 
+    /**
+     * Calculates and gets state stats
+     * @param statsToRetrieve a set of the enums to retrieve
+     * @return map of stat name to stat snapshot
+     */
     public Map<StateStatName, StatSnapshot<?>> getStats(EnumSet<StateStatName> statsToRetrieve) {
         // State stats are calculated all at once regardless of filters
         Map<StateStatName, CountableStateStatSnapshot> countableStateStats = getCountableStats();
@@ -61,6 +78,10 @@ public class StateStatsManager {
         return filteredStats;
     }
 
+    /**
+     * Calculates and gets state stats
+     * @return map of stat name to stat snapshot
+     */
     private Map<StateStatName, CountableStateStatSnapshot> getCountableStats() {
         // Initialize empty map with keys so stat names are visible in JSON even if the value is not counted
         Map<StateStatName, CountableStateStatSnapshot> countableStateStats = new HashMap<>();
@@ -78,6 +99,10 @@ public class StateStatsManager {
         return countableStateStats;
     }
 
+    /**
+     * Calculates and gets settable state stats
+     * @return map of stat name to stat snapshot
+     */
     private Map<StateStatName, SettableStateStatSnapshot<?>> getSettableStats() {
         Map<StateStatName, SettableStateStatSnapshot<?>> settableStateStats = new HashMap<>();
         for (StateStatName statName : EnumSet.allOf(StateStatName.class)) {
@@ -90,12 +115,20 @@ public class StateStatsManager {
         return settableStateStats;
     }
 
+    /**
+     * Adds cluster version to settable stats, mutating the input
+     * @param stats mutable map of state stats that the result will be added to
+     */
     private void addClusterVersionStat(Map<StateStatName, SettableStateStatSnapshot<?>> stats) {
         StateStatName stateStatName = StateStatName.CLUSTER_VERSION;
         String version = NeuralSearchClusterUtil.instance().getClusterMinVersion().toString();
         stats.put(stateStatName, new SettableStateStatSnapshot<>(stateStatName, version));
     }
 
+    /**
+     * Adds ingest processor state stats, mutating the input
+     * @param stats mutable map of state stats that the result will be added to
+     */
     private void addIngestProcessorStats(Map<StateStatName, CountableStateStatSnapshot> stats) {
         List<Map<String, Object>> pipelineConfigs = PipelineInfoUtil.instance().getIngestPipelineConfigs();
 
@@ -115,6 +148,10 @@ public class StateStatsManager {
         }
     }
 
+    /**
+     * Adds ingest processor state stats, mutating the input
+     * @param stats mutable map of state stats that the result will be added to
+     */
     private void addSearchProcessorStats(Map<StateStatName, CountableStateStatSnapshot> stats) {
         List<Map<String, Object>> pipelineConfigs = PipelineInfoUtil.instance().getSearchPipelineConfigs();
 
@@ -202,6 +239,11 @@ public class StateStatsManager {
         }
     }
 
+    /**
+     * Increments a countable state stat in the given stat name
+     * @param stats map containing the stat to increment
+     * @param stateStatName the identifier for the stat to increment
+     */
     private void increment(Map<StateStatName, CountableStateStatSnapshot> stats, StateStatName stateStatName) {
         incrementBy(stats, stateStatName, 1L);
     }
@@ -212,6 +254,12 @@ public class StateStatsManager {
         }
     }
 
+    /**
+     * Helper to cast generic object into a specific type
+     * Used to parse pipeline processor configs
+     * @param value the object
+     * @return the map
+     */
     @SuppressWarnings("unchecked")
     private <T> T getValue(Map<String, Object> map, String key, Class<T> clazz) {
         if (map == null || key == null) return null;
@@ -219,11 +267,23 @@ public class StateStatsManager {
         return clazz.isInstance(value) ? clazz.cast(value) : null;
     }
 
+    /**
+     * Helper to cast generic object into Map<String, Object>
+     * Used to parse pipeline processor configs
+     * @param value the object
+     * @return the map
+     */
     @SuppressWarnings("unchecked")
     private Map<String, Object> asMap(Object value) {
         return value instanceof Map ? (Map<String, Object>) value : null;
     }
 
+    /**
+     * Helper to cast generic object into a list of Map<String, Object>
+     * Used to parse pipeline processor configs
+     * @param value the object
+     * @return the list of maps
+     */
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> asListOfMaps(Object value) {
         if (value instanceof List) {

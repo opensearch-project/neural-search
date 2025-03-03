@@ -5,9 +5,8 @@
 package org.opensearch.neuralsearch.stats.common;
 
 /**
- * Interface for enums that hold the name of the stat.
- * The stat name is used as the unique identifier for the stat and as a rest path parameter for user filtering.
- * Each stat name should be used to track information and generate a single stat snapshot at a time.
+ * Interface for objects that hold stat name, path, and type information.
+ * The stat name is used as the unique identifier for the stat. It can be used as a request parameter for user filtering.
  */
 public interface StatName {
     /**

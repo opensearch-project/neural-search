@@ -12,8 +12,9 @@ import java.io.IOException;
 
 /**
  * A serializable snapshot of a stat at a given point in time.
- * Holds stat values, type, and metadata for processing and returning across rest layer. These are not meant to be persisted.
- * @param <T> The wrapped value of the stat
+ * Holds stat values, type, and metadata for processing and returning across rest layer.
+ * These are not meant to be persisted.
+ * @param <T> The type of the value of the stat
  */
 public interface StatSnapshot<T> extends ToXContentFragment {
     /**
