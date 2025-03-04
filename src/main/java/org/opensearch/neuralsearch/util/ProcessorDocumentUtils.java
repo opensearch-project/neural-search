@@ -11,6 +11,7 @@ import org.opensearch.common.settings.Settings;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.env.Environment;
 import org.opensearch.index.mapper.MapperService;
+import org.opensearch.neuralsearch.processor.util.ProcessorUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -229,6 +230,62 @@ public class ProcessorDocumentUtils {
         }
 
         return result;
+    }
+
+    /**
+     * Flattens a nested map and then flips each key/value pair.
+     * For a leaf node, the parent's path is prepended to its value.
+     * Finally, the flipped map will have the transformed value as the key,
+     * and the original flattened key as its value.
+     * e.g:
+     * map:
+     * {
+     *     "parent": {
+     *         "level1": {
+     *             "key": "value"
+     *         }
+     *     }
+     * }
+     * returns
+     * {
+     *     "parent.level1.value": "parent.level1.key"
+     * }
+     *
+     * @param map the nested map to process
+     * @return a flattened map with flipped key–value pairs
+     */
+    public static Map<String, String> flattenAndFlip(Map<String, Object> map) {
+        Map<String, String> flippedMap = new HashMap<>();
+        flattenAndFlip("", map, flippedMap);
+        return flippedMap;
+    }
+
+    /**
+     * Recursive helper method that processes the nested map that strictly contains Maps and Strings only.
+     * When a String value is encountered, the parent's path is computed
+     * and prepended to the value. The final mapping is flipped, so that
+     * the new key becomes the computed value and the new value is the flattened key.
+     * In case of duplicate keys, the values are overwritten
+     *
+     * @param path     the current key prefix (initially empty)
+     * @param map        the current map to process
+     * @param flippedMap the resulting map with flipped key–value pairs
+     */
+    private static void flattenAndFlip(String path, Map<String, Object> map, Map<String, String> flippedMap) {
+        for (Map.Entry<String, Object> entry : map.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            String currentKey = path.isEmpty() ? key : path + "." + key;
+            if (value instanceof Map) {
+                flattenAndFlip(currentKey, ProcessorUtils.unsafeCastToObjectMap(value), flippedMap);
+            } else if (value instanceof String) {
+                String traversedPath = currentKey.contains(".") ? currentKey.substring(0, currentKey.lastIndexOf('.')) : "";
+                String currentValue = traversedPath.isEmpty() ? value.toString() : traversedPath + "." + value;
+                flippedMap.put(currentValue, currentKey);
+            } else {
+                throw new IllegalStateException("Unexpected data structure at " + value);
+            }
+        }
     }
 
     private static List<Object> handleList(List<Object> list) {
