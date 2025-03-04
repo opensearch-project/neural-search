@@ -13,11 +13,13 @@ import org.opensearch.test.OpenSearchTestCase;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Map;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 
 public class TimestampedEventStatSnapshotTests extends OpenSearchTestCase {
     private static final EventStatName STAT_NAME = EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS;
@@ -79,7 +81,7 @@ public class TimestampedEventStatSnapshotTests extends OpenSearchTestCase {
 
     public void test_aggregateEventStatDataThrowsException() {
         TimestampedEventStatSnapshot snapshot1 = new TimestampedEventStatSnapshot(STAT_NAME, 100L, 50L, 10L);
-        TimestampedEventStatSnapshot snapshot2 = new TimestampedEventStatSnapshot(EventStatName.NEURAL_QUERY_COUNT, 200L, 100L, 5L);
+        TimestampedEventStatSnapshot snapshot2 = new TimestampedEventStatSnapshot(null, 200L, 100L, 5L);
 
         assertThrows(
             IllegalArgumentException.class,
@@ -89,20 +91,15 @@ public class TimestampedEventStatSnapshotTests extends OpenSearchTestCase {
 
     public void test_toXContent() throws IOException {
         XContentBuilder builder = JsonXContent.contentBuilder();
-
-        // Create a real snapshot with known values
         TimestampedEventStatSnapshot snapshot = new TimestampedEventStatSnapshot(STAT_NAME, 100L, 50L, 10L);
 
-        // Convert to XContent
         snapshot.toXContent(builder, null);
 
-        // Convert to string for assertion
-        String json = builder.toString();
+        Map<String, Object> responseMap = xContentBuilderToMap(builder);
 
-        // Verify the JSON structure contains all expected fields with correct values
-        assertTrue(json.contains("\"value\":100"));
-        assertTrue(json.contains("\"trailing_interval_value\":50"));
-        assertTrue(json.contains("\"minutes_since_last_event\":10"));
-        assertTrue(json.contains("\"stat_type\""));
+        assertEquals(100, responseMap.get("value"));
+        assertEquals(50, responseMap.get("trailing_interval_value"));
+        assertEquals(10, responseMap.get("minutes_since_last_event"));
+        assertEquals(STAT_NAME.getStatType().getName(), responseMap.get("stat_type"));
     }
 }

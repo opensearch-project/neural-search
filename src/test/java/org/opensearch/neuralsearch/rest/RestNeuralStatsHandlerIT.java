@@ -90,6 +90,7 @@ public class RestNeuralStatsHandlerIT extends BaseNeuralSearchIT {
         updateClusterSettings("plugins.neural_search.stats_enabled", false);
         updateClusterSettings("plugins.neural_search.stats_enabled", true);
 
+        // State stats should persist, event stats should be reset
         response = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
         responseBody = EntityUtils.toString(response.getEntity());
         stats = parseStatsResponse(responseBody);
@@ -135,6 +136,7 @@ public class RestNeuralStatsHandlerIT extends BaseNeuralSearchIT {
         Object clusterVersionStatMetadata = getNestedValue(stats, StateStatName.CLUSTER_VERSION.getFullPath());
 
         // Path value should be JSON object (convertible to map)
+        // If metadata wasn't included, path value would be the raw value
         assertTrue(getNestedValue(stats, StateStatName.CLUSTER_VERSION.getFullPath()) instanceof Map);
 
         String statType = ((Map<String, String>) clusterVersionStatMetadata).get(StatSnapshot.STAT_TYPE_FIELD);

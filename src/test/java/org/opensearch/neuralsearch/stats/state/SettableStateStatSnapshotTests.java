@@ -11,6 +11,9 @@ import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.io.IOException;
+import java.util.Map;
+
+import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 
 public class SettableStateStatSnapshotTests extends OpenSearchTestCase {
 
@@ -35,17 +38,12 @@ public class SettableStateStatSnapshotTests extends OpenSearchTestCase {
 
     public void test_toXContent() throws IOException {
         SettableStateStatSnapshot<String> snapshot = new SettableStateStatSnapshot<>(STAT_NAME, SETTABLE_VALUE);
-
         XContentBuilder builder = JsonXContent.contentBuilder();
-
         snapshot.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        String json = builder.toString();
 
-        // Verify the JSON structure
-        String expectedValueJson = String.format("\"%s\":\"%s\"", StatSnapshot.VALUE_FIELD, SETTABLE_VALUE);
-        String expectedTypeJson = String.format("\"%s\":\"%s\"", StatSnapshot.STAT_TYPE_FIELD, STAT_NAME.getStatType().getName());
+        Map<String, Object> responseMap = xContentBuilderToMap(builder);
 
-        assertTrue(json.contains(expectedValueJson));
-        assertTrue(json.contains(expectedTypeJson));
+        assertEquals(SETTABLE_VALUE, responseMap.get(StatSnapshot.VALUE_FIELD));
+        assertEquals(STAT_NAME.getStatType().getName(), responseMap.get(StatSnapshot.STAT_TYPE_FIELD));
     }
 }

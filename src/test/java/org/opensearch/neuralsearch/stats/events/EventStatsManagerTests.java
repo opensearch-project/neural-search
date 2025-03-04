@@ -96,17 +96,14 @@ public class EventStatsManagerTests extends OpenSearchTestCase {
     public void test_reset() {
         // Create multiple mock stats
         TimestampedEventStat mockStat1 = mock(TimestampedEventStat.class);
-        TimestampedEventStat mockStat2 = mock(TimestampedEventStat.class);
 
         // Add mock stats to manager
         eventStatsManager.getStats().clear();
         eventStatsManager.getStats().put(STAT_NAME, mockStat1);
-        eventStatsManager.getStats().put(EventStatName.NEURAL_QUERY_COUNT, mockStat2);
 
         eventStatsManager.reset();
 
         verify(mockStat1, times(1)).reset();
-        verify(mockStat2, times(1)).reset();
     }
 
     public void test_singletonInstanceCreation() {

@@ -17,10 +17,7 @@ import java.util.stream.Collectors;
  */
 @Getter
 public enum EventStatName implements StatName {
-    TEXT_EMBEDDING_PROCESSOR_EXECUTIONS("text_embedding_executions", "processors.ingest", EventStatType.TIMESTAMPED_COUNTER),
-
-    // TODO : NEURAL QUERY COUNTER NOT YET IMPLEMENTED
-    NEURAL_QUERY_COUNT("neural_query_count", "query", EventStatType.TIMESTAMPED_COUNTER);
+    TEXT_EMBEDDING_PROCESSOR_EXECUTIONS("text_embedding_executions", "processors.ingest", EventStatType.TIMESTAMPED_COUNTER);
 
     private final String name;
     private final String path;

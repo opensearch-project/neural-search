@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.transport;
 
+import lombok.Getter;
 import org.opensearch.action.FailedNodeException;
 import org.opensearch.action.support.nodes.BaseNodesResponse;
 import org.opensearch.cluster.ClusterName;
@@ -22,6 +23,7 @@ import java.util.stream.Collectors;
 /**
  * NeuralStatsResponse consists of the aggregated responses from the nodes
  */
+@Getter
 public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeResponse> implements ToXContentObject {
 
     private static final String NODES_KEY = "nodes";
@@ -116,6 +118,7 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
 
     private Map<String, Object> getFlattenedStats(Map<String, StatSnapshot<?>> rawStats) {
         if (includeMetadata) {
+            // Safe downcast to object
             return (Map<String, Object>) (Map) rawStats;
         }
         return rawStats.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().getValue()));

@@ -11,6 +11,9 @@ import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.io.IOException;
+import java.util.Map;
+
+import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 
 public class CountableStateStatSnapshotTests extends OpenSearchTestCase {
     private static final StateStatName STAT_NAME = StateStatName.TEXT_EMBEDDING_PROCESSORS;
@@ -26,17 +29,14 @@ public class CountableStateStatSnapshotTests extends OpenSearchTestCase {
 
     public void test_toXContent() throws IOException {
         CountableStateStatSnapshot snapshot = new CountableStateStatSnapshot(STAT_NAME);
-        snapshot.incrementBy(42L);
+        snapshot.incrementBy(8675309L);
 
         XContentBuilder builder = JsonXContent.contentBuilder();
         snapshot.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        String jsonStr = builder.toString();
 
-        // Verify JSON
-        String expectedValueJson = String.format("\"%s\":42", StatSnapshot.VALUE_FIELD);
-        String expectedTypeJson = String.format("\"%s\":\"%s\"", StatSnapshot.STAT_TYPE_FIELD, STAT_NAME.getStatType().getName());
+        Map<String, Object> responseMap = xContentBuilderToMap(builder);
 
-        assertTrue(jsonStr.contains(expectedValueJson));
-        assertTrue(jsonStr.contains(expectedTypeJson));
+        assertEquals(8675309, responseMap.get(StatSnapshot.VALUE_FIELD));
+        assertEquals(STAT_NAME.getStatType().getName(), responseMap.get(StatSnapshot.STAT_TYPE_FIELD));
     }
 }

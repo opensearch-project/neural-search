@@ -54,7 +54,9 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         ThreadPool threadPool,
         ClusterService clusterService,
         TransportService transportService,
-        ActionFilters actionFilters
+        ActionFilters actionFilters,
+        EventStatsManager eventStatsManager,
+        StateStatsManager stateStatsManager
     ) {
         super(
             NeuralStatsAction.NAME,
@@ -67,8 +69,8 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
             ThreadPool.Names.MANAGEMENT,
             NeuralStatsNodeResponse.class
         );
-        this.eventStatsManager = EventStatsManager.instance();
-        this.stateStatsManager = StateStatsManager.instance();
+        this.eventStatsManager = eventStatsManager;
+        this.stateStatsManager = stateStatsManager;
     }
 
     @Override

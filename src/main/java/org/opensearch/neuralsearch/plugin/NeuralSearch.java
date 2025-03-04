@@ -18,6 +18,8 @@ import java.util.function.Supplier;
 import com.google.common.collect.ImmutableList;
 import org.opensearch.action.ActionRequest;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+import org.opensearch.neuralsearch.stats.state.StateStatsManager;
 import org.opensearch.transport.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.node.DiscoveryNodes;
@@ -125,7 +127,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         PipelineServiceUtil.instance().initialize(clusterService);
         NeuralSearchSettingsAccessor.instance().initialize(clusterService, environment.settings());
 
-        return List.of(clientAccessor);
+        return List.of(clientAccessor, EventStatsManager.instance(), StateStatsManager.instance());
     }
 
     @Override

@@ -15,8 +15,10 @@ import org.opensearch.test.OpenSearchTestCase;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -24,6 +26,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 
 public class NeuralStatsInputTests extends OpenSearchTestCase {
     private static final String NODE_ID_1 = "node1";
@@ -127,13 +130,13 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
 
         XContentBuilder builder = XContentFactory.jsonBuilder();
         input.toXContent(builder, ToXContent.EMPTY_PARAMS);
-        String jsonString = builder.toString();
+        Map<String, Object> responseMap = xContentBuilderToMap(builder);
 
-        assertTrue(jsonString.contains(String.format("\"node_ids\":[\"%s\"]", NODE_ID_1)));
-        assertTrue(jsonString.contains(String.format("\"event_stats\":[\"%s\"]", EVENT_STAT.getName())));
-        assertTrue(jsonString.contains(String.format("\"state_stats\":[\"%s\"]", STATE_STAT.getName())));
-        assertTrue(jsonString.contains("\"include_metadata\":true"));
-        assertTrue(jsonString.contains("\"flat_keys\":true"));
+        assertEquals(Collections.singletonList(NODE_ID_1), responseMap.get("node_ids"));
+        assertEquals(Collections.singletonList(EVENT_STAT.getName()), responseMap.get("event_stats"));
+        assertEquals(Collections.singletonList(STATE_STAT.getName()), responseMap.get("state_stats"));
+        assertEquals(true, responseMap.get("include_metadata"));
+        assertEquals(true, responseMap.get("flat_keys"));
     }
 
     public void test_writeToHandlesEmptyCollections() throws IOException {
