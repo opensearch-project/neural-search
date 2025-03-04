@@ -119,7 +119,7 @@ public class TimestampedEventStat implements EventStat {
      * Gets the StatSnapshot for the event stat data
      * @return
      */
-    public TimestampedEventStatSnapshot getEventStatSnapshot() {
+    public TimestampedEventStatSnapshot getStatSnapshot() {
         return TimestampedEventStatSnapshot.builder()
             .statName(statName)
             .value(getValue())

@@ -126,11 +126,18 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         return new NeuralStatsNodeResponse(in);
     }
 
+    /**
+     * Node operation to retrieve stats from node local event stats manager
+     * @param request the node level request
+     * @return the node level response containing node level event stats
+     */
     @Override
     protected NeuralStatsNodeResponse nodeOperation(NeuralStatsNodeRequest request) {
         // Reads from NeuralStats to node level stats on an individual node
         EnumSet<EventStatName> eventStatsToRetrieve = request.getRequest().getNeuralStatsInput().getEventStatNames();
-        Map<EventStatName, TimestampedEventStatSnapshot> eventStatDataMap = eventStatsManager.getEventStatSnapshots(eventStatsToRetrieve);
+        Map<EventStatName, TimestampedEventStatSnapshot> eventStatDataMap = eventStatsManager.getTimestampedEventStatSnapshots(
+            eventStatsToRetrieve
+        );
 
         return new NeuralStatsNodeResponse(clusterService.localNode(), eventStatDataMap);
     }

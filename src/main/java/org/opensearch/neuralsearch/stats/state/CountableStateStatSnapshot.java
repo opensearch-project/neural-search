@@ -56,7 +56,7 @@ public class CountableStateStatSnapshot implements StatSnapshot<Long> {
     public XContentBuilder toXContent(XContentBuilder builder, ToXContent.Params params) throws IOException {
         builder.startObject();
         builder.field(StatSnapshot.VALUE_FIELD, getValue());
-        builder.field(StatSnapshot.STAT_TYPE_FIELD, statName.getStatType().getName());
+        builder.field(StatSnapshot.STAT_TYPE_FIELD, statName.getStatType().getTypeString());
         builder.endObject();
         return builder;
     }

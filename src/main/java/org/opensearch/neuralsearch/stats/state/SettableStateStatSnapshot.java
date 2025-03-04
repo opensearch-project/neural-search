@@ -54,7 +54,7 @@ public class SettableStateStatSnapshot<T> implements StatSnapshot<T> {
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject();
         builder.field(StatSnapshot.VALUE_FIELD, getValue());
-        builder.field(StatSnapshot.STAT_TYPE_FIELD, statName.getStatType().getName());
+        builder.field(StatSnapshot.STAT_TYPE_FIELD, statName.getStatType().getTypeString());
         builder.endObject();
         return builder;
     }

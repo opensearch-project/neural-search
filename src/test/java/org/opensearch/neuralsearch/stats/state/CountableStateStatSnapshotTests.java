@@ -37,6 +37,6 @@ public class CountableStateStatSnapshotTests extends OpenSearchTestCase {
         Map<String, Object> responseMap = xContentBuilderToMap(builder);
 
         assertEquals(8675309, responseMap.get(StatSnapshot.VALUE_FIELD));
-        assertEquals(STAT_NAME.getStatType().getName(), responseMap.get(StatSnapshot.STAT_TYPE_FIELD));
+        assertEquals(STAT_NAME.getStatType().getTypeString(), responseMap.get(StatSnapshot.STAT_TYPE_FIELD));
     }
 }

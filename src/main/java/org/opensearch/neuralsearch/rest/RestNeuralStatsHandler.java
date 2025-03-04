@@ -41,13 +41,13 @@ public class RestNeuralStatsHandler extends BaseRestHandler {
 
     private static final Set<String> EVENT_STAT_NAMES = EnumSet.allOf(EventStatName.class)
         .stream()
-        .map(EventStatName::getName)
+        .map(EventStatName::getNameString)
         .map(String::toLowerCase)
         .collect(Collectors.toSet());
 
     private static final Set<String> STATE_STAT_NAMES = EnumSet.allOf(StateStatName.class)
         .stream()
-        .map(StateStatName::getName)
+        .map(StateStatName::getNameString)
         .map(String::toLowerCase)
         .collect(Collectors.toSet());
 

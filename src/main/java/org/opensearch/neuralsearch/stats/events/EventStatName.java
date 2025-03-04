@@ -19,21 +19,24 @@ import java.util.stream.Collectors;
 public enum EventStatName implements StatName {
     TEXT_EMBEDDING_PROCESSOR_EXECUTIONS("text_embedding_executions", "processors.ingest", EventStatType.TIMESTAMPED_COUNTER);
 
-    private final String name;
+    private final String nameString;
     private final String path;
     private final EventStatType statType;
 
+    /**
+     * Enum lookup table by nameString
+     */
     private static final Map<String, EventStatName> BY_NAME = Arrays.stream(values())
-        .collect(Collectors.toMap(stat -> stat.name, stat -> stat));
+        .collect(Collectors.toMap(stat -> stat.nameString, stat -> stat));
 
     /**
      * Constructor
-     * @param name the unique name of the stat.
+     * @param nameString the unique name of the stat.
      * @param path the unique path of the stat
      * @param statType the category of stat
      */
-    EventStatName(String name, String path, EventStatType statType) {
-        this.name = name;
+    EventStatName(String nameString, String path, EventStatType statType) {
+        this.nameString = nameString;
         this.path = path;
         this.statType = statType;
     }
@@ -57,13 +60,13 @@ public enum EventStatName implements StatName {
      */
     public String getFullPath() {
         if (StringUtils.isBlank(path)) {
-            return name;
+            return nameString;
         }
-        return String.join(".", path, name);
+        return String.join(".", path, nameString);
     }
 
     @Override
     public String toString() {
-        return getName();
+        return getNameString();
     }
 }

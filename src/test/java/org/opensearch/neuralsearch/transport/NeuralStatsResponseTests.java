@@ -260,6 +260,6 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
 
         // Verify fields
         assertEquals(stateStatSnapshot.getValue(), statMap.get(StatSnapshot.VALUE_FIELD));
-        assertEquals(StateStatName.CLUSTER_VERSION.getStatType().getName(), statMap.get(StatSnapshot.STAT_TYPE_FIELD));
+        assertEquals(StateStatName.CLUSTER_VERSION.getStatType().getTypeString(), statMap.get(StatSnapshot.STAT_TYPE_FIELD));
     }
 }

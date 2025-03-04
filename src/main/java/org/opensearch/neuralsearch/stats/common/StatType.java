@@ -13,5 +13,5 @@ public interface StatType {
      * Get the name of the stat type containing info about the type and how to process it
      * @return name of the stat type
      */
-    String getName();
+    String getTypeString();
 }

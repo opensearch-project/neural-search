@@ -72,21 +72,21 @@ public class EventStatsManagerTests extends OpenSearchTestCase {
         assertEquals(originalValue, newValue);
     }
 
-    public void test_getEventStatSnapshots() {
+    public void test_getTimestampedEventStatSnapshots() {
         TimestampedEventStatSnapshot mockSnapshot = mock(TimestampedEventStatSnapshot.class);
-        when(mockEventStat.getEventStatSnapshot()).thenReturn(mockSnapshot);
+        when(mockEventStat.getStatSnapshot()).thenReturn(mockSnapshot);
 
         eventStatsManager.getStats().put(STAT_NAME, mockEventStat);
 
-        Map<EventStatName, TimestampedEventStatSnapshot> result = eventStatsManager.getEventStatSnapshots(EnumSet.of(STAT_NAME));
+        Map<EventStatName, TimestampedEventStatSnapshot> result = eventStatsManager.getTimestampedEventStatSnapshots(EnumSet.of(STAT_NAME));
 
         assertEquals(1, result.size());
         assertEquals(mockSnapshot, result.get(STAT_NAME));
-        verify(mockEventStat, times(1)).getEventStatSnapshot();
+        verify(mockEventStat, times(1)).getStatSnapshot();
     }
 
-    public void test_getEventStatSnapshotsReturnsEmptyMap() {
-        Map<EventStatName, TimestampedEventStatSnapshot> result = eventStatsManager.getEventStatSnapshots(
+    public void test_getTimestampedEventStatSnapshotsReturnsEmptyMap() {
+        Map<EventStatName, TimestampedEventStatSnapshot> result = eventStatsManager.getTimestampedEventStatSnapshots(
             EnumSet.noneOf(EventStatName.class)
         );
 

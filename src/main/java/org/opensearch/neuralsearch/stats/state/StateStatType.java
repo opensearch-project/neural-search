@@ -19,7 +19,7 @@ public enum StateStatType implements StatType {
      * Gets the name of the stat type, the enum name in lowercase
      * @return the name of the stat type
      */
-    public String getName() {
+    public String getTypeString() {
         return name().toLowerCase(Locale.ROOT);
     }
 }

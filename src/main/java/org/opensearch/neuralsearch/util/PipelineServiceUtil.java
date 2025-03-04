@@ -26,8 +26,8 @@ public class PipelineServiceUtil {
     private static PipelineServiceUtil INSTANCE;
 
     /**
-     * Return instance of the cluster context, must be initialized first for proper usage
-     * @return instance of cluster context
+     * Return instance of the pipeline context, must be initialized first for proper usage
+     * @return instance of pipeline context
      */
     public static synchronized PipelineServiceUtil instance() {
         if (INSTANCE == null) {

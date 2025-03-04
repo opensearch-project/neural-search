@@ -199,7 +199,7 @@ public class NeuralStatsTransportActionTests extends OpenSearchTestCase {
 
         Map<EventStatName, TimestampedEventStatSnapshot> mockStats = new HashMap<>();
         mockStats.put(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS, snapshot2);
-        when(eventStatsManager.getEventStatSnapshots(eventStats)).thenReturn(mockStats);
+        when(eventStatsManager.getTimestampedEventStatSnapshots(eventStats)).thenReturn(mockStats);
 
         NeuralStatsNodeResponse response = transportAction.nodeOperation(nodeRequest);
 
@@ -216,6 +216,6 @@ public class NeuralStatsTransportActionTests extends OpenSearchTestCase {
         assertEquals(15L, stat.getTrailingIntervalValue());
         assertEquals(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS, stat.getStatName());
 
-        verify(eventStatsManager).getEventStatSnapshots(eventStats);
+        verify(eventStatsManager).getTimestampedEventStatSnapshots(eventStats);
     }
 }

@@ -4,6 +4,8 @@
  */
 package org.opensearch.neuralsearch.stats.events;
 
+import org.opensearch.neuralsearch.stats.common.StatSnapshot;
+
 /**
  * Interface for event stats. These contain logic to store and update ongoing event information.
  */
@@ -18,7 +20,7 @@ public interface EventStat {
      * Returns a snapshot of the stat. Used to cross transport layer/rest layer
      * @return
      */
-    TimestampedEventStatSnapshot getEventStatSnapshot();
+    StatSnapshot<?> getStatSnapshot();
 
     /**
      * Increments the stat

@@ -18,7 +18,7 @@ public class StateStatNameTests extends OpenSearchTestCase {
     public static final EnumSet<StateStatName> STATE_STATS = EnumSet.allOf(StateStatName.class);
 
     public void test_from_valid() {
-        String validStatName = StateStatName.TEXT_EMBEDDING_PROCESSORS.getName();
+        String validStatName = StateStatName.TEXT_EMBEDDING_PROCESSORS.getNameString();
         StateStatName result = StateStatName.from(validStatName);
         assertEquals(StateStatName.TEXT_EMBEDDING_PROCESSORS, result);
     }
@@ -30,7 +30,7 @@ public class StateStatNameTests extends OpenSearchTestCase {
     public void test_unique_names() {
         Set<String> names = new HashSet<>();
         for (StateStatName statName : STATE_STATS) {
-            String name = statName.getName().toLowerCase(Locale.ROOT);
+            String name = statName.getNameString().toLowerCase(Locale.ROOT);
             assertFalse(String.format("Checking name uniqueness for %s", name), names.contains(name));
             names.add(name);
         }

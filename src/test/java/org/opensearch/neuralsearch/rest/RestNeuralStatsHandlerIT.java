@@ -100,7 +100,10 @@ public class RestNeuralStatsHandlerIT extends BaseNeuralSearchIT {
     }
 
     public void test_statsFiltering() throws Exception {
-        Response response = executeNeuralStatRequest(new ArrayList<>(), Arrays.asList(StateStatName.TEXT_EMBEDDING_PROCESSORS.getName()));
+        Response response = executeNeuralStatRequest(
+            new ArrayList<>(),
+            Arrays.asList(StateStatName.TEXT_EMBEDDING_PROCESSORS.getNameString())
+        );
 
         String responseBody = EntityUtils.toString(response.getEntity());
         Map<String, Object> stats = parseStatsResponse(responseBody);
@@ -143,7 +146,7 @@ public class RestNeuralStatsHandlerIT extends BaseNeuralSearchIT {
         String valueWithMetadata = ((Map<String, String>) clusterVersionStatMetadata).get(StatSnapshot.VALUE_FIELD);
 
         // Stat type metadata should match
-        assertEquals(StateStatType.SETTABLE.getName(), statType);
+        assertEquals(StateStatType.SETTABLE.getTypeString(), statType);
 
         // Fetch Without metadata
         params.put(RestNeuralStatsHandler.INCLUDE_METADATA_PARAM, "false");

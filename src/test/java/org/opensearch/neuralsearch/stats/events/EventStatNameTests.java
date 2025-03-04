@@ -17,7 +17,7 @@ public class EventStatNameTests extends OpenSearchTestCase {
     public static final EnumSet<EventStatName> EVENT_STATS = EnumSet.allOf(EventStatName.class);
 
     public void test_from_valid() {
-        String validStatName = EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getName();
+        String validStatName = EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getNameString();
         EventStatName result = EventStatName.from(validStatName);
         assertEquals(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS, result);
     }
@@ -29,7 +29,7 @@ public class EventStatNameTests extends OpenSearchTestCase {
     public void test_unique_names() {
         Set<String> names = new HashSet<>();
         for (EventStatName statName : EVENT_STATS) {
-            String name = statName.getName().toLowerCase(Locale.ROOT);
+            String name = statName.getNameString().toLowerCase(Locale.ROOT);
             assertFalse(String.format("Checking name uniqueness for %s", name), names.contains(name));
             names.add(name);
         }

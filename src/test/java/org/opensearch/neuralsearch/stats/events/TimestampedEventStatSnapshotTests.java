@@ -100,6 +100,6 @@ public class TimestampedEventStatSnapshotTests extends OpenSearchTestCase {
         assertEquals(100, responseMap.get("value"));
         assertEquals(50, responseMap.get("trailing_interval_value"));
         assertEquals(10, responseMap.get("minutes_since_last_event"));
-        assertEquals(STAT_NAME.getStatType().getName(), responseMap.get("stat_type"));
+        assertEquals(STAT_NAME.getStatType().getTypeString(), responseMap.get("stat_type"));
     }
 }

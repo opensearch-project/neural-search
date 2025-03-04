@@ -44,6 +44,6 @@ public class SettableStateStatSnapshotTests extends OpenSearchTestCase {
         Map<String, Object> responseMap = xContentBuilderToMap(builder);
 
         assertEquals(SETTABLE_VALUE, responseMap.get(StatSnapshot.VALUE_FIELD));
-        assertEquals(STAT_NAME.getStatType().getName(), responseMap.get(StatSnapshot.STAT_TYPE_FIELD));
+        assertEquals(STAT_NAME.getStatType().getTypeString(), responseMap.get(StatSnapshot.STAT_TYPE_FIELD));
     }
 }

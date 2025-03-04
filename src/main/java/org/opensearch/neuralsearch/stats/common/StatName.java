@@ -13,7 +13,7 @@ public interface StatName {
      * Gets the name of the stat. These must be unique to support user request stat filtering.
      * @return the name of the stat
      */
-    String getName();
+    String getNameString();
 
     /**
      * Gets the path of the stat in dot notation.

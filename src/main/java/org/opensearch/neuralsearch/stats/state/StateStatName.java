@@ -21,21 +21,21 @@ public enum StateStatName implements StatName {
     CLUSTER_VERSION("cluster_version", "", StateStatType.SETTABLE),
     TEXT_EMBEDDING_PROCESSORS("text_embedding_processors_in_pipelines", "processors.ingest", StateStatType.COUNTABLE);
 
-    private final String name;
+    private final String nameString;
     private final String path;
     private final StateStatType statType;
 
     private static final Map<String, StateStatName> BY_NAME = Arrays.stream(values())
-        .collect(Collectors.toMap(stat -> stat.name, stat -> stat));
+        .collect(Collectors.toMap(stat -> stat.nameString, stat -> stat));
 
     /**
      * Constructor
-     * @param name the unique name of the stat.
+     * @param nameString the unique name of the stat.
      * @param path the unique path of the stat
      * @param statType the category of stat
      */
-    StateStatName(String name, String path, StateStatType statType) {
-        this.name = name;
+    StateStatName(String nameString, String path, StateStatType statType) {
+        this.nameString = nameString;
         this.path = path;
         this.statType = statType;
     }
@@ -43,7 +43,7 @@ public enum StateStatName implements StatName {
     /**
      * Gets the StatName associated with a unique string name
      * @throws IllegalArgumentException if stat name does not exist
-     * @param name the string name of the stat
+     * @param value the string name of the stat
      * @return the StatName enum associated with that String name
      */
     public static StateStatName from(String value) {
@@ -59,13 +59,13 @@ public enum StateStatName implements StatName {
      */
     public String getFullPath() {
         if (StringUtils.isBlank(path)) {
-            return name;
+            return nameString;
         }
-        return String.join(".", path, name);
+        return String.join(".", path, nameString);
     }
 
     @Override
     public String toString() {
-        return getName();
+        return getNameString();
     }
 }

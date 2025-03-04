@@ -126,7 +126,7 @@ public class TimestampedEventStatSnapshot implements Writeable, StatSnapshot<Lon
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject();
         builder.field(StatSnapshot.VALUE_FIELD, value);
-        builder.field(StatSnapshot.STAT_TYPE_FIELD, statName.getStatType().getName());
+        builder.field(StatSnapshot.STAT_TYPE_FIELD, statName.getStatType().getTypeString());
         builder.field(TRAILING_INTERVAL_KEY, trailingIntervalValue);
         builder.field(MINUTES_SINCE_LAST_EVENT_KEY, minutesSinceLastEvent);
         builder.endObject();

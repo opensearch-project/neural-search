@@ -133,8 +133,8 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
         Map<String, Object> responseMap = xContentBuilderToMap(builder);
 
         assertEquals(Collections.singletonList(NODE_ID_1), responseMap.get("node_ids"));
-        assertEquals(Collections.singletonList(EVENT_STAT.getName()), responseMap.get("event_stats"));
-        assertEquals(Collections.singletonList(STATE_STAT.getName()), responseMap.get("state_stats"));
+        assertEquals(Collections.singletonList(EVENT_STAT.getNameString()), responseMap.get("event_stats"));
+        assertEquals(Collections.singletonList(STATE_STAT.getNameString()), responseMap.get("state_stats"));
         assertEquals(true, responseMap.get("include_metadata"));
         assertEquals(true, responseMap.get("flat_keys"));
     }

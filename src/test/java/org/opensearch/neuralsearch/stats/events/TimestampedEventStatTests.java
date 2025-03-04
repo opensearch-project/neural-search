@@ -113,7 +113,7 @@ public class TimestampedEventStatTests extends OpenSearchTestCase {
         stat.increment();
         currentTime += BUCKET_INTERVAL_MS * 2;
 
-        TimestampedEventStatSnapshot snapshot = stat.getEventStatSnapshot();
+        TimestampedEventStatSnapshot snapshot = stat.getStatSnapshot();
         assertEquals(3, snapshot.getValue().longValue());
         assertEquals(3, stat.getTrailingIntervalValue());
         assertEquals(2, snapshot.getMinutesSinceLastEvent());

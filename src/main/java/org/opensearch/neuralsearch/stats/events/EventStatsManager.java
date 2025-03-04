@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.stats.events;
 
 import lombok.Getter;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -79,13 +80,16 @@ public class EventStatsManager {
      * @param statsToRetrieve Set of event stat names to retrieve data for
      * @return Map of event stat names to their current snapshots
      */
-    public Map<EventStatName, TimestampedEventStatSnapshot> getEventStatSnapshots(EnumSet<EventStatName> statsToRetrieve) {
+    public Map<EventStatName, TimestampedEventStatSnapshot> getTimestampedEventStatSnapshots(EnumSet<EventStatName> statsToRetrieve) {
         // Filter stats based on passed in collection
         Map<EventStatName, TimestampedEventStatSnapshot> eventStatsDataMap = new HashMap<>();
         for (EventStatName statName : statsToRetrieve) {
-            if (stats.containsKey(statName)) {
-                // Get event data snapshot
-                eventStatsDataMap.put(statName, stats.get(statName).getEventStatSnapshot());
+            if (stats.containsKey(statName) && statName.getStatType() == EventStatType.TIMESTAMPED_COUNTER) {
+                StatSnapshot<?> snapshot = stats.get(statName).getStatSnapshot();
+                if (snapshot instanceof TimestampedEventStatSnapshot) {
+                    // Get event data snapshot
+                    eventStatsDataMap.put(statName, (TimestampedEventStatSnapshot) snapshot);
+                }
             }
         }
         return eventStatsDataMap;
