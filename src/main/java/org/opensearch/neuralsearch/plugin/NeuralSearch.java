@@ -69,7 +69,7 @@ import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
 import org.opensearch.neuralsearch.transport.NeuralStatsAction;
 import org.opensearch.neuralsearch.transport.NeuralStatsTransportAction;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
-import org.opensearch.neuralsearch.util.PipelineInfoUtil;
+import org.opensearch.neuralsearch.util.PipelineServiceUtil;
 import org.opensearch.plugins.ActionPlugin;
 import org.opensearch.plugins.ExtensiblePlugin;
 import org.opensearch.plugins.IngestPlugin;
@@ -122,7 +122,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         HybridQueryExecutor.initialize(threadPool);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
 
-        PipelineInfoUtil.instance().initialize(clusterService);
+        PipelineServiceUtil.instance().initialize(clusterService);
         NeuralSearchSettingsAccessor.instance().initialize(clusterService, environment.settings());
 
         return List.of(clientAccessor);

@@ -36,12 +36,12 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
      * If empty, stats from all nodes will be retrieved.
      */
     private Set<String> nodeIds;
-    
+
     /**
      * Collection of event statistic types to filter.
      */
     private EnumSet<EventStatName> eventStatNames;
-    
+
     /**
      * Collection of state statistic types to filter.
      */
@@ -52,7 +52,7 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
      */
     @Setter
     private boolean includeMetadata;
-    
+
     /**
      * Controls whether the response keys should be flattened.
      */
@@ -61,7 +61,7 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
 
     /**
      * Builder constructor for creating NeuralStatsInput with specific filtering parameters.
-     * 
+     *
      * @param nodeIds node IDs to retrieve stats from
      * @param eventStatNames event stats to retrieve
      * @param stateStatNames state stats to retrieve

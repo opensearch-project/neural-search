@@ -76,8 +76,7 @@ public class TimestampedEventStat implements EventStat {
         long bucketTimestamp = bucket.timestamp.get();
 
         // If bucket is out of date, rotate the bucket timestamp and reset the bucket
-        if (bucketTimestamp != currentBucketTime
-                && bucket.timestamp.compareAndSet(bucketTimestamp, currentBucketTime)) {
+        if (bucketTimestamp != currentBucketTime && bucket.timestamp.compareAndSet(bucketTimestamp, currentBucketTime)) {
             bucket.count.reset();
         }
         bucket.count.add(1);

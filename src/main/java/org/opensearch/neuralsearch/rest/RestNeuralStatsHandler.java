@@ -106,10 +106,6 @@ public class RestNeuralStatsHandler extends BaseRestHandler {
 
         NeuralStatsInput neuralStatsInput = createNeuralStatsInputFromRequestParams(request);
 
-        System.out.println("Contents of NeuralStatsInput");
-        System.out.println(neuralStatsInput.getEventStatNames());
-        System.out.println(neuralStatsInput.getStateStatNames());
-
         NeuralStatsRequest neuralStatsRequest = new NeuralStatsRequest(nodeIdsArr, neuralStatsInput);
         neuralStatsRequest.timeout(request.param("timeout"));
 
@@ -138,11 +134,8 @@ public class RestNeuralStatsHandler extends BaseRestHandler {
 
         // Add stats to input to retrieve if specified
         if (stats.isPresent()) {
-            System.out.println(Arrays.stream(stats.get()).toList());
             for (String stat : stats.get()) {
                 stat = stat.toLowerCase(Locale.ROOT);
-                System.out.println(EVENT_STAT_NAMES);
-                System.out.println(STATE_STAT_NAMES);
 
                 if (EVENT_STAT_NAMES.contains(stat)) {
                     retrieveAllStats = false;
@@ -154,7 +147,7 @@ public class RestNeuralStatsHandler extends BaseRestHandler {
             }
         }
 
-        // If no stats are specified, retrieve all by default
+        // If no stats are specified, add all stats to retrieve all by default
         if (retrieveAllStats) {
             neuralStatsInput.getEventStatNames().addAll(EnumSet.allOf(EventStatName.class));
             neuralStatsInput.getStateStatNames().addAll(EnumSet.allOf(StateStatName.class));

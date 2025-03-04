@@ -36,17 +36,13 @@ public class EventStatsManager {
     }
 
     /**
-     * Increments the counter for a specified event statistic.
+     * Static helper to increments the counter for a specified event statistic on the singleton
      *
      * @param eventStatName The name of the event stat to increment
      */
     public static void increment(EventStatName eventStatName) {
-        boolean enabled = instance().settingsAccessor.getIsStatsEnabled();
-        if (enabled && instance().getStats().containsKey(eventStatName)) {
-            instance().getStats().get(eventStatName).increment();
-        }
+        instance().inc(eventStatName);
     }
-
 
     /**
      * Constructs a new EventStatsManager with the provided settings accessor.
@@ -66,12 +62,24 @@ public class EventStatsManager {
     }
 
     /**
+     *  Instance level method to increment the counter for a specified event statistic.
+     *
+     * @param eventStatName The name of the event stat to increment
+     */
+    public void inc(EventStatName eventStatName) {
+        boolean enabled = settingsAccessor.getIsStatsEnabled();
+        if (enabled && stats.containsKey(eventStatName)) {
+            stats.get(eventStatName).increment();
+        }
+    }
+
+    /**
      * Retrieves snapshots of specified event statistics.
      *
      * @param statsToRetrieve Set of event stat names to retrieve data for
      * @return Map of event stat names to their current snapshots
      */
-    public Map<EventStatName, TimestampedEventStatSnapshot> getEventStatData(EnumSet<EventStatName> statsToRetrieve) {
+    public Map<EventStatName, TimestampedEventStatSnapshot> getEventStatSnapshots(EnumSet<EventStatName> statsToRetrieve) {
         // Filter stats based on passed in collection
         Map<EventStatName, TimestampedEventStatSnapshot> eventStatsDataMap = new HashMap<>();
         for (EventStatName statName : statsToRetrieve) {

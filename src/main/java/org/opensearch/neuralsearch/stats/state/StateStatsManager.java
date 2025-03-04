@@ -8,7 +8,7 @@ import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
-import org.opensearch.neuralsearch.util.PipelineInfoUtil;
+import org.opensearch.neuralsearch.util.PipelineServiceUtil;
 
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -25,6 +25,8 @@ public class StateStatsManager {
     private static StateStatsManager INSTANCE;
 
     private NeuralSearchSettingsAccessor settingsAccessor;
+    private NeuralSearchClusterUtil neuralSearchClusterUtil;
+    private PipelineServiceUtil pipelineServiceUtil;
 
     /**
      * Creates or gets the singleton instance
@@ -32,7 +34,11 @@ public class StateStatsManager {
      */
     public static StateStatsManager instance() {
         if (INSTANCE == null) {
-            INSTANCE = new StateStatsManager(NeuralSearchSettingsAccessor.instance());
+            INSTANCE = new StateStatsManager(
+                NeuralSearchSettingsAccessor.instance(),
+                NeuralSearchClusterUtil.instance(),
+                PipelineServiceUtil.instance()
+            );
         }
         return INSTANCE;
     }
@@ -42,8 +48,14 @@ public class StateStatsManager {
      *
      * @param settingsAccessor settings accessor singleton instance
      */
-    public StateStatsManager(NeuralSearchSettingsAccessor settingsAccessor) {
+    public StateStatsManager(
+        NeuralSearchSettingsAccessor settingsAccessor,
+        NeuralSearchClusterUtil neuralSearchClusterUtil,
+        PipelineServiceUtil pipelineServiceUtil
+    ) {
         this.settingsAccessor = settingsAccessor;
+        this.neuralSearchClusterUtil = neuralSearchClusterUtil;
+        this.pipelineServiceUtil = pipelineServiceUtil;
     }
 
     /**
@@ -111,7 +123,7 @@ public class StateStatsManager {
      */
     private void addClusterVersionStat(Map<StateStatName, SettableStateStatSnapshot<?>> stats) {
         StateStatName stateStatName = StateStatName.CLUSTER_VERSION;
-        String version = NeuralSearchClusterUtil.instance().getClusterMinVersion().toString();
+        String version = neuralSearchClusterUtil.getClusterMinVersion().toString();
         stats.put(stateStatName, new SettableStateStatSnapshot<>(stateStatName, version));
     }
 
@@ -120,7 +132,7 @@ public class StateStatsManager {
      * @param stats mutable map of state stats that the result will be added to
      */
     private void addIngestProcessorStats(Map<StateStatName, CountableStateStatSnapshot> stats) {
-        List<Map<String, Object>> pipelineConfigs = PipelineInfoUtil.instance().getIngestPipelineConfigs();
+        List<Map<String, Object>> pipelineConfigs = pipelineServiceUtil.getIngestPipelineConfigs();
 
         for (Map<String, Object> pipelineConfig : pipelineConfigs) {
             List<Map<String, Object>> ingestProcessors = asListOfMaps(pipelineConfig.get(PROCESSORS_KEY));
@@ -156,7 +168,9 @@ public class StateStatsManager {
     /**
      * Helper to cast generic object into a specific type
      * Used to parse pipeline processor configs
-     * @param value the object
+     * @param map the map
+     * @param key the key
+     * @param clazz the class to cast to
      * @return the map
      */
     @SuppressWarnings("unchecked")

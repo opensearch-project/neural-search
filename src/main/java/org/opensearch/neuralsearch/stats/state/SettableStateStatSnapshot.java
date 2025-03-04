@@ -32,7 +32,6 @@ public class SettableStateStatSnapshot<T> implements StatSnapshot<T> {
         this.value = null;
     }
 
-
     /**
      * Creates a new stat snapshot for a given value
      * @param statName the associated stat name

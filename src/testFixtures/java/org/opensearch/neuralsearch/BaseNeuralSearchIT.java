@@ -59,8 +59,11 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
+import org.opensearch.neuralsearch.plugin.NeuralSearch;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.state.StateStatName;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 import org.opensearch.search.SearchHit;
@@ -1779,5 +1782,93 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             toHttpEntity(String.format(LOCALE, requestBody)),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
+    }
+
+    protected Response executeNeuralStatRequest(List<String> nodeIds, List<String> stats) throws IOException {
+        return executeNeuralStatRequest(nodeIds, stats, Collections.emptyMap());
+    }
+
+    protected Response executeNeuralStatRequest(List<String> nodeIds, List<String> stats, Map<String, String> queryParams)
+        throws IOException {
+        String nodePrefix = "";
+        if (!nodeIds.isEmpty()) {
+            nodePrefix = "/" + String.join(",", nodeIds);
+        }
+
+        String statsSuffix = "";
+        if (!stats.isEmpty()) {
+            statsSuffix = "/" + String.join(",", stats);
+        }
+
+        String queryParamString = "?";
+        for (Map.Entry<String, String> queryParam : queryParams.entrySet()) {
+            queryParamString += queryParam.getKey() + "=" + queryParam.getValue() + "&";
+        }
+
+        Request request = new Request("GET", NeuralSearch.NEURAL_BASE_URI + nodePrefix + "/stats" + statsSuffix + queryParamString);
+
+        Response response = client().performRequest(request);
+        assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        return response;
+    }
+
+    protected Map<String, Object> parseStatsResponse(String responseBody) throws IOException {
+        Map<String, Object> responseMap = createParser(MediaTypeRegistry.getDefaultMediaType().xContent(), responseBody).map();
+        return responseMap;
+    }
+
+    protected List<Map<String, Object>> parseNodeStatsResponse(String responseBody) throws IOException {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> responseMap = (Map<String, Object>) createParser(
+            MediaTypeRegistry.getDefaultMediaType().xContent(),
+            responseBody
+        ).map().get("nodes");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodeResponses = responseMap.keySet()
+            .stream()
+            .map(key -> (Map<String, Object>) responseMap.get(key))
+            .collect(Collectors.toList());
+
+        return nodeResponses;
+    }
+
+    protected Object getNestedValue(Map<String, Object> map, EventStatName eventStatName) {
+        return getNestedValue(map, eventStatName.getFullPath());
+    }
+
+    protected Object getNestedValue(Map<String, Object> map, StateStatName stateStatName) {
+        return getNestedValue(map, stateStatName.getFullPath());
+    }
+
+    protected Object getNestedValue(Map<String, Object> sourceMap, String dotNotationPath) {
+        if (sourceMap == null || dotNotationPath == null || dotNotationPath.isEmpty()) {
+            return null;
+        }
+
+        List<String> pathElements = Arrays.asList(dotNotationPath.split("\\."));
+        return traverseMapByPath(sourceMap, pathElements);
+    }
+
+    private Object traverseMapByPath(Map<String, Object> currentMap, List<String> remainingPath) {
+        if (currentMap == null || remainingPath.isEmpty()) {
+            return null;
+        }
+
+        String currentKey = remainingPath.get(0);
+        Object currentValue = currentMap.get(currentKey);
+
+        // If we've reached the end of the path, return the current value
+        if (remainingPath.size() == 1) {
+            return currentValue;
+        }
+
+        // If there are more keys to process, ensure current value is a map and continue
+        if (currentValue instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> nestedMap = (Map<String, Object>) currentValue;
+            return traverseMapByPath(nestedMap, remainingPath.subList(1, remainingPath.size()));
+        }
+        return null;
     }
 }

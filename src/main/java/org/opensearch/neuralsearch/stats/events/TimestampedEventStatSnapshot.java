@@ -29,9 +29,9 @@ public class TimestampedEventStatSnapshot implements Writeable, StatSnapshot<Lon
     public static final String MINUTES_SINCE_LAST_EVENT_KEY = "minutes_since_last_event";
 
     private EventStatName statName;
-    private Long value;
-    private Long trailingIntervalValue;
-    private Long minutesSinceLastEvent;
+    private long value;
+    private long trailingIntervalValue;
+    private long minutesSinceLastEvent;
 
     /**
      * Create a stat new snapshot from an input stream
@@ -75,9 +75,8 @@ public class TimestampedEventStatSnapshot implements Writeable, StatSnapshot<Lon
      * @param snapshots the collection of snapshots
      * @return
      */
-    public static TimestampedEventStatSnapshot aggregateEventStatData(
-        Collection<TimestampedEventStatSnapshot> snapshots
-    ) throws IllegalArgumentException {
+    public static TimestampedEventStatSnapshot aggregateEventStatSnapshots(Collection<TimestampedEventStatSnapshot> snapshots)
+        throws IllegalArgumentException {
         if (snapshots == null || snapshots.isEmpty()) {
             return null;
         }

@@ -4,7 +4,7 @@
  */
 package org.opensearch.neuralsearch.util;
 
-import lombok.AccessLevel;
+import com.google.common.annotations.VisibleForTesting;
 import lombok.NoArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.cluster.service.ClusterService;
@@ -17,23 +17,23 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Class abstracts information related to underlying OpenSearch cluster
+ * Class abstracts information related to ingest and search pipelines
  */
-@NoArgsConstructor(access = AccessLevel.PRIVATE)
+@NoArgsConstructor
 @Log4j2
-public class PipelineInfoUtil {
+public class PipelineServiceUtil {
     private ClusterService clusterService;
-    private static PipelineInfoUtil instance;
+    private static PipelineServiceUtil INSTANCE;
 
     /**
      * Return instance of the cluster context, must be initialized first for proper usage
      * @return instance of cluster context
      */
-    public static synchronized PipelineInfoUtil instance() {
-        if (instance == null) {
-            instance = new PipelineInfoUtil();
+    public static synchronized PipelineServiceUtil instance() {
+        if (INSTANCE == null) {
+            INSTANCE = new PipelineServiceUtil();
         }
-        return instance;
+        return INSTANCE;
     }
 
     /**
@@ -44,21 +44,37 @@ public class PipelineInfoUtil {
         this.clusterService = clusterService;
     }
 
+    /**
+     * Returns list of search pipeline configs
+     * @return list of search pipeline configs
+     */
     public List<Map<String, Object>> getSearchPipelineConfigs() {
-        List<Map<String, Object>> pipelineConfigs = SearchPipelineService.getPipelines(clusterService.state())
-            .stream()
+        List<Map<String, Object>> pipelineConfigs = getSearchPipelines().stream()
             .map(PipelineConfiguration::getConfigAsMap)
             .collect(Collectors.toList());
 
         return pipelineConfigs;
     }
 
+    /**
+     * Returns list of ingest pipeline configs
+     * @return list of ingest pipeline configs
+     */
     public List<Map<String, Object>> getIngestPipelineConfigs() {
-        List<Map<String, Object>> pipelineConfigs = IngestService.getPipelines(clusterService.state())
-            .stream()
+        List<Map<String, Object>> pipelineConfigs = getIngestPipelines().stream()
             .map(org.opensearch.ingest.PipelineConfiguration::getConfigAsMap)
             .collect(Collectors.toList());
 
         return pipelineConfigs;
+    }
+
+    @VisibleForTesting
+    protected List<org.opensearch.ingest.PipelineConfiguration> getIngestPipelines() {
+        return IngestService.getPipelines(clusterService.state());
+    }
+
+    @VisibleForTesting
+    protected List<org.opensearch.search.pipeline.PipelineConfiguration> getSearchPipelines() {
+        return SearchPipelineService.getPipelines(clusterService.state());
     }
 }
