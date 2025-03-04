@@ -75,6 +75,13 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
+    public void testFilterOnIndexWithSingleShard_whenConcurrentSearchEnabled_thenSuccessful() {
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
+        testRangeQueryAsFilter(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+    }
+
+    @SneakyThrows
     public void testPostFilterOnIndexWithSingleShard_whenConcurrentSearchDisabled_thenSuccessful() {
         updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
@@ -159,6 +166,93 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE),
             null,
             postFilterQuery,
+            null,
+            false,
+            null,
+            0
+        );
+        assertHybridQueryResults(searchResponseAsMap, 1, 0, GTE_OF_RANGE_IN_POST_FILTER_QUERY, LTE_OF_RANGE_IN_POST_FILTER_QUERY);
+    }
+
+    /**{
+        "query": {
+            "hybrid":{
+                "queries":[
+                    "bool":{
+                        "must": [
+                            "match": {
+                                "name": "mission"
+                            },
+                        ],
+                        "filter": [
+                            "range": {
+                                "stock": {
+                                    "gte": 230,
+                                    "lte": 400
+                                }
+                            }
+                        ]
+                    },
+                    "bool":{
+                        "must": [
+                            "term": {
+                                "name": {"value": "part"}
+                            },
+                        ],
+                        "filter": [
+                            "range": {
+                                "stock": {
+                                    "gte": 230,
+                                    "lte": 400
+                                }
+                            }
+                        ]
+                    },
+
+                    "bool":{
+                        "must": [
+                            "range": {
+                                "stock": {
+                                    "gte": 200,
+                                    "lte": 400
+                                }
+                            }
+                        ],
+                        "filter": [
+                            "range": {
+                                "stock": {
+                                    "gte": 230,
+                                    "lte": 400
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    }*/
+    @SneakyThrows
+    private void testRangeQueryAsFilter(String indexName) {
+        QueryBuilder postFilterQuery = createQueryBuilderWithRangeQuery(
+            LTE_OF_RANGE_IN_POST_FILTER_QUERY,
+            GTE_OF_RANGE_IN_POST_FILTER_QUERY
+        );
+        HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
+            "mission",
+            "part",
+            LTE_OF_RANGE_IN_HYBRID_QUERY,
+            GTE_OF_RANGE_IN_HYBRID_QUERY
+        );
+        hybridQueryBuilder = (HybridQueryBuilder) hybridQueryBuilder.filter(postFilterQuery);
+
+        Map<String, Object> searchResponseAsMap = search(
+            indexName,
+            hybridQueryBuilder,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
             null,
             false,
             null,
