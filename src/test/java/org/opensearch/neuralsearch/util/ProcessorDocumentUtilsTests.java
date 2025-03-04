@@ -134,6 +134,25 @@ public class ProcessorDocumentUtilsTests extends OpenSearchQueryTestCase {
         assertEquals(expected, result);
     }
 
+    public void testUnflatten_withListOfObject_thenSuccess() {
+        Map<String, Object> map1 = Map.of("b.c", "d", "f", "h");
+        Map<String, Object> map2 = Map.of("b.c", "e", "f", "i");
+        List<Map<String, Object>> list = Arrays.asList(map1, map2);
+        Map<String, Object> input = Map.of("a", list);
+
+        Map<String, Object> nestedB1 = Map.of("c", "d");
+        Map<String, Object> expectedMap1 = Map.of("b", nestedB1, "f", "h");
+        Map<String, Object> nestedB2 = Map.of("c", "e");
+        Map<String, Object> expectedMap2 = Map.of("b", nestedB2, "f", "i");
+
+        List<Map<String, Object>> expectedList = Arrays.asList(expectedMap1, expectedMap2);
+
+        Map<String, Object> expected = Map.of("a", expectedList);
+
+        Map<String, Object> result = ProcessorDocumentUtils.unflattenJson(input);
+        assertEquals(expected, result);
+    }
+
     public void testUnflatten_withMixedContent_thenSuccess() {
         Map<String, Object> input = Map.of("a.b", "c", "d", "e", "f.g.h", "i");
 
