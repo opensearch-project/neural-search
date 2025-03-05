@@ -106,6 +106,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         "processor/PipelineForTextImageEmbeddingProcessorConfiguration.json",
         ProcessorType.TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING,
         "processor/PipelineConfigurationWithNestedFieldsMapping.json",
+        ProcessorType.TEXT_EMBEDDING_WITH_SKIP_EXISTING,
+        "processor/PipelineConfigurationWithSkipExisting.json",
+        ProcessorType.TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING_WITH_SKIP_EXISTING,
+        "processor/PipelineConfigurationWithNestedFieldsMappingWithSkipExisting.json",
         ProcessorType.SPARSE_ENCODING_PRUNE,
         "processor/SparseEncodingPipelineConfigurationWithPrune.json"
     );
@@ -248,7 +252,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             isComplete = checkComplete(taskQueryResult);
             Thread.sleep(DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND);
         }
-        assertTrue(String.format(Locale.ROOT, "failed to load the model, last task finished with status %s", taskQueryResult.get("state")), isComplete);
+        assertTrue(
+            String.format(Locale.ROOT, "failed to load the model, last task finished with status %s", taskQueryResult.get("state")),
+            isComplete
+        );
     }
 
     /**
@@ -1378,7 +1385,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @param id nullable optional id
      * @throws Exception
      */
-    protected String ingestDocument(String indexName, String ingestDocument, String id) throws Exception {
+    protected String ingestDocument(String indexName, String ingestDocument, String id, boolean isUpdate) throws Exception {
         String endpoint;
         if (StringUtils.isEmpty(id)) {
             endpoint = indexName + "/_doc?refresh";
@@ -1400,7 +1407,11 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         );
 
         String result = (String) map.get("result");
-        assertEquals("created", result);
+        if (isUpdate) {
+            assertEquals("updated", result);
+        } else {
+            assertEquals("created", result);
+        }
         return result;
     }
 
@@ -1411,7 +1422,22 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @throws Exception
      */
     protected String ingestDocument(String indexName, String ingestDocument) throws Exception {
-        return ingestDocument(indexName, ingestDocument, null);
+        return ingestDocument(indexName, ingestDocument, null, false);
+    }
+
+    protected String ingestDocument(String indexName, String ingestDocument, String id) throws Exception {
+        return ingestDocument(indexName, ingestDocument, id, false);
+    }
+
+    /**
+     * Update a document to index using auto generated id
+     * @param indexName name of the index
+     * @param ingestDocument
+     * @param id
+     * @throws Exception
+     */
+    protected String updateDocument(String indexName, String ingestDocument, String id) throws Exception {
+        return ingestDocument(indexName, ingestDocument, id, true);
     }
 
     /**
@@ -1731,6 +1757,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     protected enum ProcessorType {
         TEXT_EMBEDDING,
         TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING,
+        TEXT_EMBEDDING_WITH_SKIP_EXISTING,
+        TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING_WITH_SKIP_EXISTING,
         TEXT_IMAGE_EMBEDDING,
         SPARSE_ENCODING,
         SPARSE_ENCODING_PRUNE
