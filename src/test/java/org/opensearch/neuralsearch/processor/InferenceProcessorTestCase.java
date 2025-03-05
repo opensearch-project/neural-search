@@ -6,11 +6,18 @@ package org.opensearch.neuralsearch.processor;
 
 import com.google.common.collect.ImmutableList;
 import org.apache.commons.lang.math.RandomUtils;
+import org.opensearch.action.get.GetResponse;
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.core.common.bytes.BytesReference;
+import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.get.GetResult;
 import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.IngestDocumentWrapper;
 import org.opensearch.test.OpenSearchTestCase;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -71,5 +78,56 @@ public class InferenceProcessorTestCase extends OpenSearchTestCase {
             result.add(numbers);
         }
         return result;
+    }
+
+    protected Map<String, Object> deepCopy(Map<String, Object> original) {
+        Map<String, Object> copy = new HashMap<>();
+        for (Map.Entry<String, Object> entry : original.entrySet()) {
+            copy.put(entry.getKey(), deepCopyValue(entry.getValue()));
+        }
+        return copy;
+    }
+
+    protected Object deepCopyValue(Object value) {
+        if (value instanceof Map<?, ?>) {
+            Map<String, Object> newMap = new HashMap<>();
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+                newMap.put((String) entry.getKey(), deepCopyValue(entry.getValue()));
+            }
+            return newMap;
+        } else if (value instanceof List<?>) {
+            List<Object> newList = new ArrayList<>();
+            for (Object item : (List<?>) value) {
+                newList.add(deepCopyValue(item));
+            }
+            return newList;
+        } else if (value instanceof String) {
+            return new String((String) value);
+        } else {
+            return value;
+        }
+    }
+
+    protected GetResponse mockEmptyGetResponse() throws IOException {
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .field("_index", "my_index")
+            .field("_id", "1")
+            .field("found", false)
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        return GetResponse.fromXContent(contentParser);
+    }
+
+    protected GetResponse convertToGetResponse(IngestDocument ingestDocument) throws IOException {
+        String index = ingestDocument.getSourceAndMetadata().get("_index").toString();
+        String id = ingestDocument.getSourceAndMetadata().get("_id").toString();
+        Map<String, Object> source = ingestDocument.getSourceAndMetadata();
+        XContentBuilder builder = XContentFactory.jsonBuilder();
+        builder.map(source);
+        BytesReference bytes = BytesReference.bytes(builder);
+        GetResult result = new GetResult(index, id, 0, 1, 1, true, bytes, null, null);
+        return new GetResponse(result);
     }
 }

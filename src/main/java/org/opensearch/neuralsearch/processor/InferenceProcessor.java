@@ -27,6 +27,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.opensearch.common.collect.Tuple;
+import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
@@ -118,7 +119,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
 
     public abstract void doExecute(
         IngestDocument ingestDocument,
-        Map<String, Object> ProcessMap,
+        Map<String, Object> processMap,
         List<String> inferenceList,
         BiConsumer<IngestDocument, Exception> handler
     );
@@ -278,7 +279,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
     }
 
     @SuppressWarnings({ "unchecked" })
-    private List<String> createInferenceList(Map<String, Object> knnKeyMap) {
+    protected List<String> createInferenceList(Map<String, Object> knnKeyMap) {
         List<String> texts = new ArrayList<>();
         knnKeyMap.entrySet().stream().filter(knnMapEntry -> knnMapEntry.getValue() != null).forEach(knnMapEntry -> {
             Object sourceValue = knnMapEntry.getValue();
@@ -579,9 +580,35 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
 
     private List<Map<String, Object>> buildNLPResultForListType(List<String> sourceValue, List<?> results, IndexWrapper indexWrapper) {
         List<Map<String, Object>> keyToResult = new ArrayList<>();
-        IntStream.range(0, sourceValue.size())
+        sourceValue.stream()
+            .filter(Objects::nonNull) // explicit null check is required since sourceValue can contain null values in cases where
+                                      // sourceValue has been filtered
             .forEachOrdered(x -> keyToResult.add(ImmutableMap.of(listTypeNestedMapKey, results.get(indexWrapper.index++))));
         return keyToResult;
+    }
+
+    /**
+     * This method invokes inference call through mlCommonsClientAccessor and populates retrieved embeddings to ingestDocument
+     *
+     * @param ingestDocument ingestDocument to populate embeddings to
+     * @param processMap map indicating the path in ingestDocument to populate embeddings
+     * @param inferenceList list of texts to be model inference
+     * @param handler SourceAndMetadataMap of ingestDocument Document
+     *
+     */
+    protected void makeInferenceCall(
+        IngestDocument ingestDocument,
+        Map<String, Object> processMap,
+        List<String> inferenceList,
+        BiConsumer<IngestDocument, Exception> handler
+    ) {
+        mlCommonsClientAccessor.inferenceSentences(
+            TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
+            ActionListener.wrap(vectors -> {
+                setVectorFieldsToDocument(ingestDocument, processMap, vectors);
+                handler.accept(ingestDocument, null);
+            }, e -> { handler.accept(null, e); })
+        );
     }
 
     @Override
