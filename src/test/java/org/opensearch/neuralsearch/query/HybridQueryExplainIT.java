@@ -79,7 +79,14 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
     public void testExplain_whenMultipleSubqueriesAndOneShard_thenSuccessful() {
         initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
         // create search pipeline with both normalization processor and explain response processor
-        createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), true);
+        createSearchPipeline(
+            NORMALIZATION_SEARCH_PIPELINE,
+            DEFAULT_NORMALIZATION_METHOD,
+            Map.of(),
+            DEFAULT_COMBINATION_METHOD,
+            Map.of(),
+            true
+        );
 
         TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
         TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
@@ -122,71 +129,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
         // explain
         Map<String, Object> searchHit1 = hitsNestedList.get(0);
         Map<String, Object> topLevelExplanationsHit1 = getValueByKey(searchHit1, "_explanation");
-        assertNotNull(topLevelExplanationsHit1);
-        assertEquals((double) searchHit1.get("_score"), (double) topLevelExplanationsHit1.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        String expectedTopLevelDescription = "arithmetic_mean combination of:";
-        assertEquals(expectedTopLevelDescription, topLevelExplanationsHit1.get("description"));
-        List<Map<String, Object>> normalizationExplanationHit1 = getListOfValues(topLevelExplanationsHit1, "details");
-        assertEquals(1, normalizationExplanationHit1.size());
-        Map<String, Object> hit1DetailsForHit1 = normalizationExplanationHit1.get(0);
-        assertEquals(1.0, hit1DetailsForHit1.get("value"));
-        assertEquals("min_max normalization of:", hit1DetailsForHit1.get("description"));
-        assertEquals(1, ((List) hit1DetailsForHit1.get("details")).size());
-
-        Map<String, Object> explanationsHit1 = getListOfValues(hit1DetailsForHit1, "details").get(0);
-        assertEquals("sum of:", explanationsHit1.get("description"));
-        assertEquals(0.343f, (double) explanationsHit1.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals(1, ((List) explanationsHit1.get("details")).size());
-
-        // search hit 2
-        Map<String, Object> searchHit2 = hitsNestedList.get(1);
-        Map<String, Object> topLevelExplanationsHit2 = getValueByKey(searchHit2, "_explanation");
-        assertNotNull(topLevelExplanationsHit2);
-        assertEquals((double) searchHit2.get("_score"), (double) topLevelExplanationsHit2.get("value"), DELTA_FOR_SCORE_ASSERTION);
-
-        assertEquals(expectedTopLevelDescription, topLevelExplanationsHit2.get("description"));
-        List<Map<String, Object>> normalizationExplanationHit2 = getListOfValues(topLevelExplanationsHit2, "details");
-        assertEquals(1, normalizationExplanationHit2.size());
-
-        Map<String, Object> hit1DetailsForHit2 = normalizationExplanationHit2.get(0);
-        assertEquals(1.0, hit1DetailsForHit2.get("value"));
-        assertEquals("min_max normalization of:", hit1DetailsForHit2.get("description"));
-        assertEquals(1, getListOfValues(hit1DetailsForHit2, "details").size());
-
-        Map<String, Object> explanationsHit2 = getListOfValues(hit1DetailsForHit2, "details").get(0);
-        assertEquals(0.13f, (double) explanationsHit2.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals("weight(test-text-field-1:hello in 0) [PerFieldSimilarity], result of:", explanationsHit2.get("description"));
-        assertEquals(1, getListOfValues(explanationsHit2, "details").size());
-
-        Map<String, Object> explanationsHit2Details = getListOfValues(explanationsHit2, "details").get(0);
-        assertEquals(0.13f, (double) explanationsHit2Details.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals("score(freq=1.0), computed as boost * idf * tf from:", explanationsHit2Details.get("description"));
-        assertEquals(2, getListOfValues(explanationsHit2Details, "details").size());
-
-        // search hit 3
-        Map<String, Object> searchHit3 = hitsNestedList.get(1);
-        Map<String, Object> topLevelExplanationsHit3 = getValueByKey(searchHit3, "_explanation");
-        assertNotNull(topLevelExplanationsHit3);
-        assertEquals((double) searchHit2.get("_score"), (double) topLevelExplanationsHit3.get("value"), DELTA_FOR_SCORE_ASSERTION);
-
-        assertEquals(expectedTopLevelDescription, topLevelExplanationsHit3.get("description"));
-        List<Map<String, Object>> normalizationExplanationHit3 = getListOfValues(topLevelExplanationsHit3, "details");
-        assertEquals(1, normalizationExplanationHit3.size());
-
-        Map<String, Object> hit1DetailsForHit3 = normalizationExplanationHit3.get(0);
-        assertEquals(1.0, hit1DetailsForHit3.get("value"));
-        assertEquals("min_max normalization of:", hit1DetailsForHit3.get("description"));
-        assertEquals(1, getListOfValues(hit1DetailsForHit3, "details").size());
-
-        Map<String, Object> explanationsHit3 = getListOfValues(hit1DetailsForHit3, "details").get(0);
-        assertEquals(0.13f, (double) explanationsHit3.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals("weight(test-text-field-1:hello in 0) [PerFieldSimilarity], result of:", explanationsHit3.get("description"));
-        assertEquals(1, getListOfValues(explanationsHit3, "details").size());
-
-        Map<String, Object> explanationsHit3Details = getListOfValues(explanationsHit3, "details").get(0);
-        assertEquals(0.13f, (double) explanationsHit3Details.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals("score(freq=1.0), computed as boost * idf * tf from:", explanationsHit3Details.get("description"));
-        assertEquals(2, getListOfValues(explanationsHit3Details, "details").size());
+        assertExplanation(topLevelExplanationsHit1, searchHit1, hitsNestedList, false);
     }
 
     @SneakyThrows
@@ -195,6 +138,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
         createSearchPipeline(
             NORMALIZATION_SEARCH_PIPELINE,
             NORMALIZATION_TECHNIQUE_L2,
+            Map.of(),
             DEFAULT_COMBINATION_METHOD,
             Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.7f })),
             true
@@ -324,7 +268,14 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
     public void testExplanationResponseProcessor_whenProcessorIsNotConfigured_thenResponseHasQueryExplanations() {
         initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
         // create search pipeline with normalization processor, no explanation response processor
-        createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), false);
+        createSearchPipeline(
+            NORMALIZATION_SEARCH_PIPELINE,
+            DEFAULT_NORMALIZATION_METHOD,
+            Map.of(),
+            DEFAULT_COMBINATION_METHOD,
+            Map.of(),
+            false
+        );
 
         TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
         TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
@@ -472,7 +423,14 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
     public void testExplain_whenLargeNumberOfDocuments_thenSuccessful() {
         initializeIndexIfNotExist(TEST_LARGE_DOCS_INDEX_NAME);
         // create search pipeline with both normalization processor and explain response processor
-        createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), true);
+        createSearchPipeline(
+            NORMALIZATION_SEARCH_PIPELINE,
+            DEFAULT_NORMALIZATION_METHOD,
+            Map.of(),
+            DEFAULT_COMBINATION_METHOD,
+            Map.of(),
+            true
+        );
 
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
@@ -526,7 +484,14 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
     public void testSpecificQueryTypes_whenMultiMatchAndKnn_thenSuccessful() {
         initializeIndexIfNotExist(TEST_LARGE_DOCS_INDEX_NAME);
         // create search pipeline with both normalization processor and explain response processor
-        createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), true);
+        createSearchPipeline(
+            NORMALIZATION_SEARCH_PIPELINE,
+            DEFAULT_NORMALIZATION_METHOD,
+            Map.of(),
+            DEFAULT_COMBINATION_METHOD,
+            Map.of(),
+            true
+        );
 
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
         hybridQueryBuilder.add(QueryBuilders.multiMatchQuery(TEST_QUERY_TEXT3, TEST_TEXT_FIELD_NAME_1, TEST_TEXT_FIELD_NAME_2));
@@ -701,6 +666,154 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
         assertEquals("ConstantScore(FieldExistsQuery [field=test-text-field-1])", explanationsHit4.get("description"));
         assertEquals(0, getListOfValues(explanationsHit4, "details").size());
         assertTrue((double) explanationsHit4.get("value") > 0.0f);
+    }
+
+    @SneakyThrows
+    public void testExplain_whenMinMaxNormalizationWithLowerBounds_thenSuccessful() {
+        initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
+        // create search pipeline with both normalization processor and explain response processor
+        createSearchPipeline(
+            NORMALIZATION_SEARCH_PIPELINE,
+            DEFAULT_NORMALIZATION_METHOD,
+            Map.of(
+                "lower_bounds",
+                List.of(
+                    Map.of("mode", "apply", "min_score", Float.toString(0.01f)),
+                    Map.of("mode", "clip", "min_score", Float.toString(0.0f))
+                )
+            ),
+            DEFAULT_COMBINATION_METHOD,
+            Map.of(),
+            true
+        );
+
+        TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
+        TermQueryBuilder termQueryBuilder3 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT5);
+        BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
+        boolQueryBuilder.should(termQueryBuilder2).should(termQueryBuilder3);
+
+        HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
+        hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder1);
+        hybridQueryBuilderNeuralThenTerm.add(boolQueryBuilder);
+
+        Map<String, Object> searchResponseAsMap1 = search(
+            TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
+            hybridQueryBuilderNeuralThenTerm,
+            null,
+            10,
+            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", "true")
+        );
+        // Assert
+        // search hits
+        assertEquals(3, getHitCount(searchResponseAsMap1));
+
+        List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap1);
+        List<String> ids = new ArrayList<>();
+        List<Double> scores = new ArrayList<>();
+        for (Map<String, Object> oneHit : hitsNestedList) {
+            ids.add((String) oneHit.get("_id"));
+            scores.add((Double) oneHit.get("_score"));
+        }
+
+        assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
+        assertEquals(Set.copyOf(ids).size(), ids.size());
+
+        Map<String, Object> total = getTotalHits(searchResponseAsMap1);
+        assertNotNull(total.get("value"));
+        assertEquals(3, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+
+        // explain
+        Map<String, Object> searchHit1 = hitsNestedList.get(0);
+        Map<String, Object> topLevelExplanationsHit1 = getValueByKey(searchHit1, "_explanation");
+        assertExplanation(topLevelExplanationsHit1, searchHit1, hitsNestedList, true);
+    }
+
+    private void assertExplanation(
+        Map<String, Object> topLevelExplanationsHit1,
+        Map<String, Object> searchHit1,
+        List<Map<String, Object>> hitsNestedList,
+        boolean withLowerBounds
+    ) {
+        assertNotNull(topLevelExplanationsHit1);
+        assertEquals((double) searchHit1.get("_score"), (double) topLevelExplanationsHit1.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        String expectedTopLevelDescription = "arithmetic_mean combination of:";
+        assertEquals(expectedTopLevelDescription, topLevelExplanationsHit1.get("description"));
+        List<Map<String, Object>> normalizationExplanationHit1 = getListOfValues(topLevelExplanationsHit1, "details");
+        assertEquals(1, normalizationExplanationHit1.size());
+        Map<String, Object> hit1DetailsForHit1 = normalizationExplanationHit1.get(0);
+        assertEquals(1.0, hit1DetailsForHit1.get("value"));
+        if (withLowerBounds) {
+            assertEquals("min_max, lower bounds [(apply, 0.01), (clip, 0.0)] normalization of:", hit1DetailsForHit1.get("description"));
+        } else {
+            assertEquals("min_max normalization of:", hit1DetailsForHit1.get("description"));
+        }
+        assertEquals(1, ((List) hit1DetailsForHit1.get("details")).size());
+
+        Map<String, Object> explanationsHit1 = getListOfValues(hit1DetailsForHit1, "details").get(0);
+        assertEquals("sum of:", explanationsHit1.get("description"));
+        assertEquals(0.343f, (double) explanationsHit1.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(1, ((List) explanationsHit1.get("details")).size());
+
+        // search hit 2
+        Map<String, Object> searchHit2 = hitsNestedList.get(1);
+        Map<String, Object> topLevelExplanationsHit2 = getValueByKey(searchHit2, "_explanation");
+        assertNotNull(topLevelExplanationsHit2);
+        assertEquals((double) searchHit2.get("_score"), (double) topLevelExplanationsHit2.get("value"), DELTA_FOR_SCORE_ASSERTION);
+
+        assertEquals(expectedTopLevelDescription, topLevelExplanationsHit2.get("description"));
+        List<Map<String, Object>> normalizationExplanationHit2 = getListOfValues(topLevelExplanationsHit2, "details");
+        assertEquals(1, normalizationExplanationHit2.size());
+
+        Map<String, Object> hit1DetailsForHit2 = normalizationExplanationHit2.get(0);
+        assertEquals(1.0, hit1DetailsForHit2.get("value"));
+        if (withLowerBounds) {
+            assertEquals("min_max, lower bounds [(apply, 0.01), (clip, 0.0)] normalization of:", hit1DetailsForHit2.get("description"));
+        } else {
+            assertEquals("min_max normalization of:", hit1DetailsForHit2.get("description"));
+        }
+        assertEquals(1, getListOfValues(hit1DetailsForHit2, "details").size());
+
+        Map<String, Object> explanationsHit2 = getListOfValues(hit1DetailsForHit2, "details").get(0);
+        assertEquals(0.13f, (double) explanationsHit2.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("weight(test-text-field-1:hello in 0) [PerFieldSimilarity], result of:", explanationsHit2.get("description"));
+        assertEquals(1, getListOfValues(explanationsHit2, "details").size());
+
+        Map<String, Object> explanationsHit2Details = getListOfValues(explanationsHit2, "details").get(0);
+        assertEquals(0.13f, (double) explanationsHit2Details.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("score(freq=1.0), computed as boost * idf * tf from:", explanationsHit2Details.get("description"));
+        assertEquals(2, getListOfValues(explanationsHit2Details, "details").size());
+
+        // search hit 3
+        Map<String, Object> searchHit3 = hitsNestedList.get(1);
+        Map<String, Object> topLevelExplanationsHit3 = getValueByKey(searchHit3, "_explanation");
+        assertNotNull(topLevelExplanationsHit3);
+        assertEquals((double) searchHit2.get("_score"), (double) topLevelExplanationsHit3.get("value"), DELTA_FOR_SCORE_ASSERTION);
+
+        assertEquals(expectedTopLevelDescription, topLevelExplanationsHit3.get("description"));
+        List<Map<String, Object>> normalizationExplanationHit3 = getListOfValues(topLevelExplanationsHit3, "details");
+        assertEquals(1, normalizationExplanationHit3.size());
+
+        Map<String, Object> hit1DetailsForHit3 = normalizationExplanationHit3.get(0);
+        assertEquals(1.0, hit1DetailsForHit3.get("value"));
+        if (withLowerBounds) {
+            assertEquals("min_max, lower bounds [(apply, 0.01), (clip, 0.0)] normalization of:", hit1DetailsForHit3.get("description"));
+        } else {
+            assertEquals("min_max normalization of:", hit1DetailsForHit3.get("description"));
+        }
+        assertEquals(1, getListOfValues(hit1DetailsForHit3, "details").size());
+
+        Map<String, Object> explanationsHit3 = getListOfValues(hit1DetailsForHit3, "details").get(0);
+        assertEquals(0.13f, (double) explanationsHit3.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("weight(test-text-field-1:hello in 0) [PerFieldSimilarity], result of:", explanationsHit3.get("description"));
+        assertEquals(1, getListOfValues(explanationsHit3, "details").size());
+
+        Map<String, Object> explanationsHit3Details = getListOfValues(explanationsHit3, "details").get(0);
+        assertEquals(0.13f, (double) explanationsHit3Details.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("score(freq=1.0), computed as boost * idf * tf from:", explanationsHit3Details.get("description"));
+        assertEquals(2, getListOfValues(explanationsHit3Details, "details").size());
     }
 
     @SneakyThrows

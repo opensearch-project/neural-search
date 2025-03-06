@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.processor.normalization;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -318,6 +319,34 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
         assertTrue(doc1Scores.get(0).getValue().contains("l2 normalization"));
         assertTrue(doc1Scores.get(1).getValue().contains("l2 normalization"));
         assertTrue(doc1Scores.get(2).getValue().contains("l2 normalization"));
+    }
+
+    public void testInvalidParameters() {
+        Map<String, Object> parameters = new HashMap<>();
+        List<Map<String, Object>> lowerBoundsList = List.of(
+            Map.of("min_score", 0.1, "mode", "clip"),
+            Map.of("mode", "ignore", "invalid_param", "value")
+        );
+        parameters.put("lower_bounds", lowerBoundsList);
+
+        try {
+            new L2ScoreNormalizationTechnique(parameters, new ScoreNormalizationUtil());
+            fail("expected IllegalArgumentException was not thrown");
+        } catch (IllegalArgumentException e) {
+            assertEquals("unrecognized parameters in normalization technique", e.getMessage());
+        }
+    }
+
+    public void testUnsupportedTopLevelParameter() {
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("invalid_top_level_param", "value"); // Adding an invalid top-level parameter
+
+        try {
+            new L2ScoreNormalizationTechnique(parameters, new ScoreNormalizationUtil());
+            fail("expected IllegalArgumentException was not thrown");
+        } catch (IllegalArgumentException e) {
+            assertEquals("unrecognized parameters in normalization technique", e.getMessage());
+        }
     }
 
     private float l2Norm(float score, List<Float> scores) {
