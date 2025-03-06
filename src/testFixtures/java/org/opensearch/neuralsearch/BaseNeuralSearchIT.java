@@ -82,6 +82,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_MET
 import static org.opensearch.neuralsearch.util.TestUtils.ML_PLUGIN_SYSTEM_INDEX_PREFIX;
 import static org.opensearch.neuralsearch.util.TestUtils.OPENDISTRO_SECURITY;
 import static org.opensearch.neuralsearch.util.TestUtils.OPENSEARCH_SYSTEM_INDEX_PREFIX;
+import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_LOWER_BOUNDS;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_RETRY;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TIME_OUT_INTERVAL;
@@ -1217,13 +1218,14 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         String combinationMethod,
         final Map<String, String> combinationParams
     ) {
-        createSearchPipeline(pipelineId, normalizationMethod, combinationMethod, combinationParams, false);
+        createSearchPipeline(pipelineId, normalizationMethod, Map.of(), combinationMethod, combinationParams, false);
     }
 
     @SneakyThrows
     protected void createSearchPipeline(
         final String pipelineId,
         final String normalizationMethod,
+        final Map<String, Object> normalizationParams,
         final String combinationMethod,
         final Map<String, String> combinationParams,
         boolean addExplainResponseProcessor
@@ -1235,10 +1237,32 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             .append(NormalizationProcessor.TYPE)
             .append("\": {")
             .append("\"normalization\": {")
-            .append("\"technique\": \"%s\"")
-            .append("},")
-            .append("\"combination\": {")
             .append("\"technique\": \"%s\"");
+        if (Objects.nonNull(normalizationParams) && !normalizationParams.isEmpty()) {
+            stringBuilderForContentBody.append(", \"parameters\": {");
+            if (normalizationParams.containsKey(PARAM_NAME_LOWER_BOUNDS)) {
+                stringBuilderForContentBody.append("\"lower_bounds\": [");
+                List<Map> lowerBounds = (List) normalizationParams.get(PARAM_NAME_LOWER_BOUNDS);
+                for (int i = 0; i < lowerBounds.size(); i++) {
+                    Map<String, String> lowerBound = lowerBounds.get(i);
+                    stringBuilderForContentBody.append("{ ")
+                        .append("\"mode\"")
+                        .append(": \"")
+                        .append(lowerBound.get("mode"))
+                        .append("\",")
+                        .append("\"min_score\"")
+                        .append(": ")
+                        .append(lowerBound.get("min_score"))
+                        .append(" }");
+                    if (i < lowerBounds.size() - 1) {
+                        stringBuilderForContentBody.append(", ");
+                    }
+                }
+                stringBuilderForContentBody.append("]");
+            }
+            stringBuilderForContentBody.append(" }");
+        }
+        stringBuilderForContentBody.append("},").append("\"combination\": {").append("\"technique\": \"%s\"");
         if (Objects.nonNull(combinationParams) && !combinationParams.isEmpty()) {
             stringBuilderForContentBody.append(", \"parameters\": {");
             if (combinationParams.containsKey(PARAM_NAME_WEIGHTS)) {

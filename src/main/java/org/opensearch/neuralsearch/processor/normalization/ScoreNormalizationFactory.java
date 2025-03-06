@@ -19,9 +19,9 @@ public class ScoreNormalizationFactory {
 
     private final Map<String, Function<Map<String, Object>, ScoreNormalizationTechnique>> scoreNormalizationMethodsMap = Map.of(
         MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME,
-        params -> new MinMaxScoreNormalizationTechnique(),
+        params -> new MinMaxScoreNormalizationTechnique(params, scoreNormalizationUtil),
         L2ScoreNormalizationTechnique.TECHNIQUE_NAME,
-        params -> new L2ScoreNormalizationTechnique(),
+        params -> new L2ScoreNormalizationTechnique(params, scoreNormalizationUtil),
         RRFNormalizationTechnique.TECHNIQUE_NAME,
         params -> new RRFNormalizationTechnique(params, scoreNormalizationUtil)
     );

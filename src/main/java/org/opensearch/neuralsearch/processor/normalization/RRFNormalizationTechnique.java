@@ -48,7 +48,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
     private final int rankConstant;
 
     public RRFNormalizationTechnique(final Map<String, Object> params, final ScoreNormalizationUtil scoreNormalizationUtil) {
-        scoreNormalizationUtil.validateParams(params, SUPPORTED_PARAMS);
+        scoreNormalizationUtil.validateParameters(params, SUPPORTED_PARAMS, Map.of());
         rankConstant = getRankConstant(params);
     }
 

@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
@@ -31,6 +32,14 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
     @ToString.Include
     public static final String TECHNIQUE_NAME = "l2";
     private static final float MIN_SCORE = 0.0f;
+
+    public L2ScoreNormalizationTechnique() {
+        this(Map.of(), new ScoreNormalizationUtil());
+    }
+
+    public L2ScoreNormalizationTechnique(final Map<String, Object> params, final ScoreNormalizationUtil scoreNormalizationUtil) {
+        scoreNormalizationUtil.validateParameters(params, Set.of(), Map.of());
+    }
 
     /**
      * L2 normalization method.

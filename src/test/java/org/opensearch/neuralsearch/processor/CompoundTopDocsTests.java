@@ -5,9 +5,11 @@
 package org.opensearch.neuralsearch.processor;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import org.apache.commons.lang3.RandomUtils;
+import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
@@ -86,5 +88,153 @@ public class CompoundTopDocsTests extends OpenSearchQueryTestCase {
         assertNotNull(compoundTopDocsWithNullArray);
         assertNotNull(compoundTopDocsWithNullArray.getScoreDocs());
         assertEquals(0, compoundTopDocsWithNullArray.getScoreDocs().size());
+    }
+
+    public void testEqualsWithIdenticalCompoundTopDocs() {
+        TopDocs topDocs1 = new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(1, 1.0f) });
+        TopDocs topDocs2 = new TopDocs(new TotalHits(2, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(2, 2.0f) });
+        List<TopDocs> topDocsList = Arrays.asList(topDocs1, topDocs2);
+
+        CompoundTopDocs first = new CompoundTopDocs(new TotalHits(3, TotalHits.Relation.EQUAL_TO), topDocsList, false, SEARCH_SHARD);
+        CompoundTopDocs second = new CompoundTopDocs(new TotalHits(3, TotalHits.Relation.EQUAL_TO), topDocsList, false, SEARCH_SHARD);
+
+        assertTrue(first.equals(second));
+        assertTrue(second.equals(first));
+        assertEquals(first.hashCode(), second.hashCode());
+    }
+
+    public void testEqualsWithDifferentScoreDocs() {
+        TopDocs topDocs1 = new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(1, 1.0f) });
+        TopDocs topDocs2 = new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(1, 2.0f) });
+
+        CompoundTopDocs first = new CompoundTopDocs(
+            new TotalHits(1, TotalHits.Relation.EQUAL_TO),
+            Collections.singletonList(topDocs1),
+            false,
+            SEARCH_SHARD
+        );
+        CompoundTopDocs second = new CompoundTopDocs(
+            new TotalHits(1, TotalHits.Relation.EQUAL_TO),
+            Collections.singletonList(topDocs2),
+            false,
+            SEARCH_SHARD
+        );
+
+        assertFalse(first.equals(second));
+        assertFalse(second.equals(first));
+    }
+
+    public void testEqualsWithDifferentTotalHits() {
+        TopDocs topDocs = new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(1, 1.0f) });
+
+        CompoundTopDocs first = new CompoundTopDocs(
+            new TotalHits(1, TotalHits.Relation.EQUAL_TO),
+            Collections.singletonList(topDocs),
+            false,
+            SEARCH_SHARD
+        );
+        CompoundTopDocs second = new CompoundTopDocs(
+            new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+            Collections.singletonList(topDocs),
+            false,
+            SEARCH_SHARD
+        );
+
+        assertFalse(first.equals(second));
+        assertFalse(second.equals(first));
+    }
+
+    public void testEqualsWithDifferentSortEnabled() {
+        Object[] fields = new Object[] { "value1" };
+        ScoreDoc scoreDoc = new FieldDoc(1, 1.0f, fields);  // use FieldDoc when sort is enabled
+        TopDocs topDocs = new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { scoreDoc });
+
+        CompoundTopDocs first = new CompoundTopDocs(
+            new TotalHits(1, TotalHits.Relation.EQUAL_TO),
+            Collections.singletonList(topDocs),
+            true,
+            SEARCH_SHARD
+        );
+
+        // non-sorted case, use regular ScoreDoc
+        TopDocs topDocs2 = new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(1, 1.0f) });
+
+        CompoundTopDocs second = new CompoundTopDocs(
+            new TotalHits(1, TotalHits.Relation.EQUAL_TO),
+            Collections.singletonList(topDocs2),
+            false,
+            SEARCH_SHARD
+        );
+
+        assertNotEquals(first, second);
+        assertNotEquals(second, first);
+    }
+
+    public void testEqualsWithDifferentSearchShards() {
+        TopDocs topDocs = new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(1, 1.0f) });
+
+        CompoundTopDocs first = new CompoundTopDocs(
+            new TotalHits(1, TotalHits.Relation.EQUAL_TO),
+            Collections.singletonList(topDocs),
+            false,
+            SEARCH_SHARD
+        );
+        CompoundTopDocs second = new CompoundTopDocs(
+            new TotalHits(1, TotalHits.Relation.EQUAL_TO),
+            Collections.singletonList(topDocs),
+            false,
+            new SearchShard("my_index", 1, "23456789")
+        );
+
+        assertNotEquals(first, second);
+        assertNotEquals(second, first);
+    }
+
+    public void testEqualsWithFieldDocs() {
+        Object[] fields1 = new Object[] { "value1" };
+        Object[] fields2 = new Object[] { "value1" };
+        TopDocs topDocs1 = new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new FieldDoc[] { new FieldDoc(1, 1.0f, fields1) });
+        TopDocs topDocs2 = new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new FieldDoc[] { new FieldDoc(1, 1.0f, fields2) });
+
+        CompoundTopDocs first = new CompoundTopDocs(
+            new TotalHits(1, TotalHits.Relation.EQUAL_TO),
+            Collections.singletonList(topDocs1),
+            false,
+            SEARCH_SHARD
+        );
+        CompoundTopDocs second = new CompoundTopDocs(
+            new TotalHits(1, TotalHits.Relation.EQUAL_TO),
+            Collections.singletonList(topDocs2),
+            false,
+            SEARCH_SHARD
+        );
+
+        assertEquals(first, second);
+        assertEquals(second, first);
+        assertEquals(first.hashCode(), second.hashCode());
+    }
+
+    public void testEqualsWithNull() {
+        TopDocs topDocs = new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(1, 1.0f) });
+        CompoundTopDocs compoundTopDocs = new CompoundTopDocs(
+            new TotalHits(1, TotalHits.Relation.EQUAL_TO),
+            Collections.singletonList(topDocs),
+            false,
+            SEARCH_SHARD
+        );
+
+        assertNotEquals(null, compoundTopDocs);
+    }
+
+    public void testEqualsWithDifferentClass() {
+        TopDocs topDocs = new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(1, 1.0f) });
+        CompoundTopDocs compoundTopDocs = new CompoundTopDocs(
+            new TotalHits(1, TotalHits.Relation.EQUAL_TO),
+            Collections.singletonList(topDocs),
+            false,
+            SEARCH_SHARD
+        );
+
+        assertNotEquals("not a CompoundTopDocs", compoundTopDocs);
     }
 }

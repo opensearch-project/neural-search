@@ -13,6 +13,7 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryStartStopElement;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
@@ -170,5 +171,79 @@ public class CompoundTopDocs {
         }
         FieldDoc fieldDoc = (FieldDoc) scoreDoc;
         return new FieldDoc(fieldDoc.doc, fieldDoc.score, fieldDoc.fields, fieldDoc.shardIndex);
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) return true;
+        if (other == null || getClass() != other.getClass()) return false;
+        CompoundTopDocs that = (CompoundTopDocs) other;
+
+        if (this.topDocs.size() != that.topDocs.size()) {
+            return false;
+        }
+        for (int i = 0; i < topDocs.size(); i++) {
+            TopDocs thisTopDoc = this.topDocs.get(i);
+            TopDocs thatTopDoc = that.topDocs.get(i);
+            if ((thisTopDoc == null) != (thatTopDoc == null)) {
+                return false;
+            }
+            if (thisTopDoc == null) {
+                continue;
+            }
+            if (Objects.equals(thisTopDoc.totalHits, thatTopDoc.totalHits) == false) {
+                return false;
+            }
+            if (compareScoreDocs(thisTopDoc.scoreDocs, thatTopDoc.scoreDocs) == false) {
+                return false;
+            }
+        }
+        return Objects.equals(totalHits, that.totalHits) && Objects.equals(searchShard, that.searchShard);
+    }
+
+    private boolean compareScoreDocs(ScoreDoc[] first, ScoreDoc[] second) {
+        if (first.length != second.length) {
+            return false;
+        }
+
+        for (int i = 0; i < first.length; i++) {
+            ScoreDoc firstDoc = first[i];
+            ScoreDoc secondDoc = second[i];
+            if ((firstDoc == null) != (secondDoc == null)) {
+                return false;
+            }
+            if (firstDoc == null) {
+                continue;
+            }
+            if (firstDoc.doc != secondDoc.doc || Float.compare(firstDoc.score, secondDoc.score) != 0) {
+                return false;
+            }
+            if (firstDoc instanceof FieldDoc != secondDoc instanceof FieldDoc) {
+                return false;
+            }
+            if (firstDoc instanceof FieldDoc firstFieldDoc) {
+                FieldDoc secondFieldDoc = (FieldDoc) secondDoc;
+                if (Arrays.equals(firstFieldDoc.fields, secondFieldDoc.fields) == false) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public int hashCode() {
+        int result = Objects.hash(totalHits, searchShard);
+        for (TopDocs topDoc : topDocs) {
+            result = 31 * result + topDoc.totalHits.hashCode();
+            for (ScoreDoc scoreDoc : topDoc.scoreDocs) {
+                result = 31 * result + Float.floatToIntBits(scoreDoc.score);
+                result = 31 * result + scoreDoc.doc;
+                if (scoreDoc instanceof FieldDoc fieldDoc && fieldDoc.fields != null) {
+                    result = 31 * result + Arrays.deepHashCode(fieldDoc.fields);
+                }
+            }
+        }
+        return result;
     }
 }
