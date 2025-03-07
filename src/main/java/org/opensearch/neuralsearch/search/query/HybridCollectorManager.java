@@ -11,6 +11,7 @@ import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.CollectorManager;
+import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.ScoreMode;
@@ -25,12 +26,15 @@ import org.opensearch.common.lucene.search.FilteredCollector;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
+import org.opensearch.neuralsearch.search.collector.CollapseDocSourceGroupSelector;
+import org.opensearch.neuralsearch.search.collector.HybridCollapsingTopDocsCollector;
 import org.opensearch.neuralsearch.search.collector.HybridSearchCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopFieldDocSortCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopScoreDocCollector;
 import org.opensearch.neuralsearch.search.collector.SimpleFieldCollector;
 import org.opensearch.neuralsearch.search.collector.PagingFieldCollector;
 import org.opensearch.search.DocValueFormat;
+import org.opensearch.search.collapse.CollapseContext;
 import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.MultiCollectorWrapper;
@@ -75,6 +79,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     @Nullable
     private final FieldDoc after;
     private final SearchContext searchContext;
+    private final CollapseContext collapseContext;
 
     /**
      * Create new instance of HybridCollectorManager depending on the concurrent search beeing enabled or disabled.
@@ -144,16 +149,26 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     }
 
     private Collector getHybridQueryCollector() {
-        if (sortAndFormats == null) {
-            return new HybridTopScoreDocCollector(numHits, hitsThresholdChecker);
+        if (collapseContext != null) {
+            // Collapse is applied
+            return new HybridCollapsingTopDocsCollector(
+                new CollapseDocSourceGroupSelector<>(collapseContext.getFieldName()),
+                collapseContext.getFieldName(),
+                new Sort(new SortField(null, SortField.Type.SCORE)),
+                numHits
+            );
         } else {
-            // Sorting is applied
-            if (after == null) {
-                return new SimpleFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort);
+            if (sortAndFormats == null) {
+                return new HybridTopScoreDocCollector(numHits, hitsThresholdChecker);
             } else {
-                // search_after is applied
-                validateSearchAfterFieldAndSortFormats();
-                return new PagingFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort, after);
+                // Sorting is applied
+                if (after == null) {
+                    return new SimpleFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort);
+                } else {
+                    // search_after is applied
+                    validateSearchAfterFieldAndSortFormats();
+                    return new PagingFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort, after);
+                }
             }
         }
     }
@@ -169,7 +184,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
      * @return search results that can be reduced be the caller
      */
     @Override
-    public ReduceableSearchResult reduce(Collection<Collector> collectors) {
+    public ReduceableSearchResult reduce(Collection<Collector> collectors) throws IOException {
         final List<HybridSearchCollector> hybridSearchCollectors = getHybridSearchCollectors(collectors);
         if (hybridSearchCollectors.isEmpty()) {
             throw new IllegalStateException("cannot collect results of hybrid search query, there are no proper collectors");
@@ -177,7 +192,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         return reduceSearchResults(getSearchResults(hybridSearchCollectors));
     }
 
-    private List<ReduceableSearchResult> getSearchResults(final List<HybridSearchCollector> hybridSearchCollectors) {
+    private List<ReduceableSearchResult> getSearchResults(final List<HybridSearchCollector> hybridSearchCollectors) throws IOException {
         List<ReduceableSearchResult> results = new ArrayList<>();
         DocValueFormat[] docValueFormats = getSortValueFormats(sortAndFormats);
         for (HybridSearchCollector collector : hybridSearchCollectors) {
@@ -188,7 +203,8 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         return results;
     }
 
-    private TopDocsAndMaxScore getTopDocsAndAndMaxScore(final HybridSearchCollector hybridSearchCollector, final boolean isSortEnabled) {
+    private TopDocsAndMaxScore getTopDocsAndAndMaxScore(final HybridSearchCollector hybridSearchCollector, final boolean isSortEnabled)
+        throws IOException {
         List topDocs = hybridSearchCollector.topDocs();
         if (isSortEnabled) {
             return getSortedTopDocsAndMaxScore(topDocs, hybridSearchCollector);
@@ -268,13 +284,15 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                         hybridSearchCollectors.add((HybridSearchCollector) sub);
                     }
                 }
-            } else if (collector instanceof HybridTopScoreDocCollector || collector instanceof HybridTopFieldDocSortCollector) {
-                hybridSearchCollectors.add((HybridSearchCollector) collector);
-            } else if (collector instanceof FilteredCollector
-                && (((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector
-                    || ((FilteredCollector) collector).getCollector() instanceof HybridTopFieldDocSortCollector)) {
-                        hybridSearchCollectors.add((HybridSearchCollector) ((FilteredCollector) collector).getCollector());
-                    }
+            } else if (collector instanceof HybridTopScoreDocCollector
+                || collector instanceof HybridTopFieldDocSortCollector
+                || collector instanceof HybridCollapsingTopDocsCollector) {
+                    hybridSearchCollectors.add((HybridSearchCollector) collector);
+                } else if (collector instanceof FilteredCollector
+                    && (((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector
+                        || ((FilteredCollector) collector).getCollector() instanceof HybridTopFieldDocSortCollector)) {
+                            hybridSearchCollectors.add((HybridSearchCollector) ((FilteredCollector) collector).getCollector());
+                        }
         }
         return hybridSearchCollectors;
     }
@@ -538,7 +556,8 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 filteringWeight,
                 new TopDocsMerger(searchContext.sort()),
                 searchContext.searchAfter(),
-                searchContext
+                searchContext,
+                searchContext.collapse()
             );
             scoreCollector = Objects.requireNonNull(super.newCollector(), "collector for hybrid query cannot be null");
         }
@@ -549,7 +568,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         }
 
         @Override
-        public ReduceableSearchResult reduce(Collection<Collector> collectors) {
+        public ReduceableSearchResult reduce(Collection<Collector> collectors) throws IOException {
             assert collectors.isEmpty() : "reduce on HybridCollectorNonConcurrentManager called with non-empty collectors";
             return super.reduce(List.of(scoreCollector));
         }
@@ -576,7 +595,8 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 filteringWeight,
                 new TopDocsMerger(searchContext.sort()),
                 searchContext.searchAfter(),
-                searchContext
+                searchContext,
+                null
             );
         }
     }
