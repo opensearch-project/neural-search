@@ -34,4 +34,11 @@ public final class NeuralSearchSettings {
         50,
         Setting.Property.NodeScope
     );
+
+    public static final Setting<Boolean> NEURAL_STATS_ENABLED = Setting.boolSetting(
+        "plugins.neural_search.stats_enabled",
+        false,
+        Setting.Property.NodeScope,
+        Setting.Property.Dynamic
+    );
 }

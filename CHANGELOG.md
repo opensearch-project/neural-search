@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 3.x](https://github.com/opensearch-project/neural-search/compare/main...HEAD)
 ### Features
 - Lower bound for min-max normalization technique in hybrid query ([#1195](https://github.com/opensearch-project/neural-search/pull/1195))
+- Add stats API ([#1208](https://github.com/opensearch-project/neural-search/pull/1208))
 ### Enhancements
 ### Bug Fixes
 ### Infrastructure
