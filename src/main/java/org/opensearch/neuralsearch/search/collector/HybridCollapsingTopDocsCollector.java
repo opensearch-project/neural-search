@@ -4,15 +4,18 @@
  */
 package org.opensearch.neuralsearch.search.collector;
 
+import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.FieldComparator;
 import org.apache.lucene.search.FieldDoc;
+import org.apache.lucene.search.HitQueue;
+import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.LeafFieldComparator;
 import org.apache.lucene.search.Pruning;
 import org.apache.lucene.search.Scorable;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.SimpleCollector;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopDocs;
@@ -21,8 +24,8 @@ import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.apache.lucene.search.grouping.GroupSelector;
 import org.apache.lucene.search.grouping.SearchGroup;
 import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.CollectionUtil;
 import org.apache.lucene.util.PriorityQueue;
+import org.opensearch.neuralsearch.query.HybridQueryScorer;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -31,15 +34,18 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 import java.util.TreeSet;
 
-public class HybridCollapsingTopDocsCollector<T> extends SimpleCollector implements HybridSearchCollector {
+@Log4j2
+public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollector, Collector {
     protected final String collapseField;
     private int totalHitCount;
-    private float maxScore;
+    private float maxScore = 0.0f;
     private Sort sort;
     private final GroupSelector<BytesRef> groupSelector;
-    private final int topNGroups;
     private final FieldComparator<?>[] comparators;
     private final LeafFieldComparator[] leafComparators;
     private final int[] reversed;
@@ -47,9 +53,14 @@ public class HybridCollapsingTopDocsCollector<T> extends SimpleCollector impleme
     private final int compIDXEnd;
     protected TreeSet<HybridCollectedSearchGroup<BytesRef>> orderedGroups;
     private int docBase;
-    private int spareSlot;
     private final HashMap<BytesRef, HybridCollectedSearchGroup<BytesRef>> groupMap;
-    private PriorityQueue<ScoreDoc>[] compoundScores;
+    private final HashMap<BytesRef, PriorityQueue<ScoreDoc>[]> groupQueueMap;
+    private final int topNGroups;
+    private PriorityQueue<HybridCollectedSearchGroup> groupQueue;
+    private HashMap<BytesRef, int[]> collectedHitsPerSubQueryMap;
+    private int totalHits;
+    private int spareSlot;
+    private final int numHits;
 
     public HybridCollapsingTopDocsCollector(GroupSelector<BytesRef> groupSelector, String collapseField, Sort groupSort, int topNGroups) {
         this.groupSelector = groupSelector;
@@ -73,53 +84,33 @@ public class HybridCollapsingTopDocsCollector<T> extends SimpleCollector impleme
             }
 
             this.spareSlot = topNGroups;
-            this.groupMap = CollectionUtil.newHashMap(topNGroups);
+            this.groupMap = new HashMap<>();
+            this.groupQueueMap = new HashMap<>();
+            this.collectedHitsPerSubQueryMap = new HashMap<>();
+
+            this.numHits = topNGroups;
         }
     }
 
     @Override
     public List<? extends TopDocs> topDocs() throws IOException {
-        Collection<SearchGroup<BytesRef>> groups = getTopGroups(0);
         List<CollapseTopFieldDocs> topDocsList = new ArrayList<>();
-        if (groups == null) {
-            TotalHits totalHits = new TotalHits(0L, TotalHits.Relation.EQUAL_TO);
-            topDocsList.add(new CollapseTopFieldDocs(this.collapseField, totalHits, new ScoreDoc[0], this.sort.getSort(), new Object[0]));
-            return topDocsList;
-        } else {
-            FieldDoc[] docs = new FieldDoc[groups.size()];
-            Object[] collapseValues = new Object[groups.size()];
-            int scorePos = -1;
-
-            int pos;
-            for (pos = 0; pos < this.sort.getSort().length; ++pos) {
-                SortField sortField = this.sort.getSort()[pos];
-                if (sortField.getType() == SortField.Type.SCORE) {
-                    scorePos = pos;
-                    break;
+        for (int i = 0; i < collectedHitsPerSubQueryMap.size(); i++) {
+            ArrayList<ScoreDoc> scoreDocs = new ArrayList<>();
+            ArrayList<BytesRef> collapseValues = new ArrayList<>();
+            int hitsOnCurrentSubQuery = 0;
+            for (Map.Entry<BytesRef, HybridCollectedSearchGroup<BytesRef>> entry : groupMap.entrySet()) {
+                BytesRef groupValue = entry.getKey();
+                PriorityQueue<ScoreDoc>[] priorityQueueList = groupQueueMap.get(groupValue);
+                for (PriorityQueue<ScoreDoc> pq : priorityQueueList) {
+                    for (ScoreDoc scoreDoc : pq) {
+                        scoreDocs.add(scoreDoc);
+                        collapseValues.add(groupValue);
+                    }
                 }
+                hitsOnCurrentSubQuery += collectedHitsPerSubQueryMap.get(groupValue)[i];
             }
-
-            pos = 0;
-            Iterator<HybridCollectedSearchGroup<BytesRef>> it = this.orderedGroups.iterator();
-
-            for (Iterator var7 = groups.iterator(); var7.hasNext(); ++pos) {
-                SearchGroup<T> group = (SearchGroup) var7.next();
-
-                assert it.hasNext();
-
-                HybridCollectedSearchGroup<T> col = (HybridCollectedSearchGroup) it.next();
-                float score = Float.NaN;
-                if (scorePos != -1) {
-                    score = (Float) group.sortValues[scorePos];
-                }
-
-                docs[pos] = new FieldDoc(col.topDoc, score, group.sortValues);
-                collapseValues[pos] = group.groupValue;
-            }
-
-            TotalHits totalHits = new TotalHits((long) this.totalHitCount, TotalHits.Relation.EQUAL_TO);
-            topDocsList.add(new CollapseTopFieldDocs(this.collapseField, totalHits, docs, this.sort.getSort(), collapseValues));
-            return topDocsList;
+            topDocsList.add(new CollapseTopFieldDocs(collapseField, new TotalHits(hitsOnCurrentSubQuery, TotalHits.Relation.EQUAL_TO), scoreDocs.toArray(), null, collapseValues))
         }
     }
 
@@ -133,151 +124,9 @@ public class HybridCollapsingTopDocsCollector<T> extends SimpleCollector impleme
         return 0;
     }
 
-    public void collect(int doc) throws IOException {
-        this.groupSelector.advanceTo(doc);
-        BytesRef groupValue = this.groupSelector.currentValue();
-        HybridCollectedSearchGroup<BytesRef> group = (HybridCollectedSearchGroup) this.groupMap.get(groupValue);
-        int lastComparatorSlot;
-        int compIDX2;
-        int var8;
-        HybridCollectedSearchGroup prevLast;
-        if (group == null) {
-            LeafFieldComparator[] var12;
-            int var14;
-            LeafFieldComparator fc;
-            if (this.groupMap.size() < this.topNGroups) {
-                prevLast = new HybridCollectedSearchGroup();
-                prevLast.groupValue = this.groupSelector.copyValue();
-                prevLast.comparatorSlot = this.groupMap.size();
-                prevLast.topDoc = this.docBase + doc;
-                var12 = this.leafComparators;
-                compIDX2 = var12.length;
-
-                for (var14 = 0; var14 < compIDX2; ++var14) {
-                    fc = var12[var14];
-                    fc.copy(prevLast.comparatorSlot, doc);
-                }
-
-                this.groupMap.put((BytesRef) prevLast.groupValue, prevLast);
-                /*
-                if (this.groupMap.size() == this.topNGroups) {
-                    this.buildSortedSet();
-                }
-                 */
-
-            } else {
-                prevLast = (HybridCollectedSearchGroup) this.orderedGroups.pollLast();
-
-                assert this.orderedGroups.size() == this.topNGroups - 1;
-
-                this.groupMap.remove(prevLast.groupValue);
-                prevLast.groupValue = this.groupSelector.copyValue();
-                prevLast.topDoc = this.docBase + doc;
-                var12 = this.leafComparators;
-                compIDX2 = var12.length;
-
-                for (var14 = 0; var14 < compIDX2; ++var14) {
-                    fc = var12[var14];
-                    fc.copy(prevLast.comparatorSlot, doc);
-                }
-
-                this.groupMap.put((BytesRef) prevLast.groupValue, prevLast);
-                this.orderedGroups.add(prevLast);
-
-                assert this.orderedGroups.size() == this.topNGroups;
-
-                lastComparatorSlot = ((HybridCollectedSearchGroup) this.orderedGroups.last()).comparatorSlot;
-                LeafFieldComparator[] var15 = this.leafComparators;
-                var14 = var15.length;
-
-                for (var8 = 0; var8 < var14; ++var8) {
-                    fc = var15[var8];
-                    fc.setBottom(lastComparatorSlot);
-                }
-
-            }
-        } else {
-            int compIDX = 0;
-
-            while (true) {
-                this.leafComparators[compIDX].copy(this.spareSlot, doc);
-                lastComparatorSlot = this.reversed[compIDX] * this.comparators[compIDX].compare(group.comparatorSlot, this.spareSlot);
-                if (lastComparatorSlot < 0) {
-                    return;
-                }
-
-                if (lastComparatorSlot > 0) {
-                    for (compIDX2 = compIDX + 1; compIDX2 < this.comparators.length; ++compIDX2) {
-                        this.leafComparators[compIDX2].copy(this.spareSlot, doc);
-                    }
-
-                    if (this.orderedGroups != null) {
-                        prevLast = (HybridCollectedSearchGroup) this.orderedGroups.last();
-                        this.orderedGroups.remove(group);
-
-                        assert this.orderedGroups.size() == this.topNGroups - 1;
-                    } else {
-                        prevLast = null;
-                    }
-
-                    group.topDoc = this.docBase + doc;
-                    lastComparatorSlot = this.spareSlot;
-                    this.spareSlot = group.comparatorSlot;
-                    group.comparatorSlot = lastComparatorSlot;
-                    if (this.orderedGroups != null) {
-                        this.orderedGroups.add(group);
-
-                        assert this.orderedGroups.size() == this.topNGroups;
-
-                        HybridCollectedSearchGroup<?> newLast = (HybridCollectedSearchGroup) this.orderedGroups.last();
-                        if (group == newLast || prevLast != newLast) {
-                            LeafFieldComparator[] var7 = this.leafComparators;
-                            var8 = var7.length;
-
-                            for (int var9 = 0; var9 < var8; ++var9) {
-                                LeafFieldComparator fc = var7[var9];
-                                fc.setBottom(newLast.comparatorSlot);
-                            }
-                        }
-                    }
-
-                    return;
-                }
-
-                if (compIDX == this.compIDXEnd) {
-                    return;
-                }
-
-                ++compIDX;
-            }
-        }
-        totalHitCount++;
-    }
-
     @Override
     public ScoreMode scoreMode() {
         return this.needsScores ? ScoreMode.COMPLETE : ScoreMode.COMPLETE_NO_SCORES;
-    }
-
-    protected void doSetNextReader(LeafReaderContext readerContext) throws IOException {
-        this.docBase = readerContext.docBase;
-
-        for (int i = 0; i < this.comparators.length; ++i) {
-            this.leafComparators[i] = this.comparators[i].getLeafComparator(readerContext);
-        }
-
-        this.groupSelector.setNextReader(readerContext);
-    }
-
-    public void setScorer(Scorable scorer) throws IOException {
-        this.groupSelector.setScorer(scorer);
-        LeafFieldComparator[] var2 = this.leafComparators;
-        int var3 = var2.length;
-
-        for (int var4 = 0; var4 < var3; ++var4) {
-            LeafFieldComparator comparator = var2[var4];
-            comparator.setScorer(scorer);
-        }
     }
 
     public Collection<SearchGroup<BytesRef>> getTopGroups(int groupOffset) throws IOException {
@@ -350,6 +199,94 @@ public class HybridCollapsingTopDocsCollector<T> extends SimpleCollector impleme
             LeafFieldComparator fc = var2[var4];
             fc.setBottom(((HybridCollectedSearchGroup) this.orderedGroups.last()).comparatorSlot);
         }
+    }
 
+    @Override
+    public LeafCollector getLeafCollector(LeafReaderContext context) throws IOException {
+        docBase = context.docBase;
+        groupSelector.setNextReader(context);
+        return new LeafCollector() {
+            HybridQueryScorer compoundQueryScorer;
+
+            @Override
+            public void setScorer(Scorable scorer) throws IOException {
+                if (scorer instanceof HybridQueryScorer) {
+                    log.debug("passed scorer is of type HybridQueryScorer, saving it for collecting documents and scores");
+                    compoundQueryScorer = (HybridQueryScorer) scorer;
+                } else {
+                    compoundQueryScorer = getHybridQueryScorer(scorer);
+                    if (Objects.isNull(compoundQueryScorer)) {
+                        log.error(
+                            String.format(Locale.ROOT, "cannot find scorer of type HybridQueryScorer in a hierarchy of scorer %s", scorer)
+                        );
+                    }
+                }
+            }
+
+            private HybridQueryScorer getHybridQueryScorer(final Scorable scorer) throws IOException {
+                if (scorer == null) {
+                    return null;
+                }
+                if (scorer instanceof HybridQueryScorer) {
+                    return (HybridQueryScorer) scorer;
+                }
+                for (Scorable.ChildScorable childScorable : scorer.getChildren()) {
+                    HybridQueryScorer hybridQueryScorer = getHybridQueryScorer(childScorable.child());
+                    if (Objects.nonNull(hybridQueryScorer)) {
+                        log.debug(
+                            String.format(
+                                Locale.ROOT,
+                                "found hybrid query scorer, it's child of scorer %s",
+                                childScorable.child().getClass().getSimpleName()
+                            )
+                        );
+                        return hybridQueryScorer;
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            public void collect(int doc) throws IOException {
+                groupSelector.advanceTo(doc);
+                BytesRef groupValue = groupSelector.currentValue();
+                HybridCollectedSearchGroup group = groupMap.get(groupValue);
+                float[] subScoresByQuery = compoundQueryScorer.hybridScores();
+                if (group == null) {
+                    initializeQueue(groupValue, subScoresByQuery.length);
+
+                    HybridCollectedSearchGroup newGroup = new HybridCollectedSearchGroup();
+                    newGroup.groupValue = groupSelector.copyValue();
+                    newGroup.topDoc = docBase + doc;
+                    groupMap.put(groupValue, newGroup);
+                }
+
+                for (int i = 0; i < subScoresByQuery.length; i++) {
+                    float score = subScoresByQuery[i];
+                    if (score == 0) {
+                        continue;
+                    }
+
+                    int[] collectedHitsForCurrentSubQuery = collectedHitsPerSubQueryMap.get(groupValue);
+                    collectedHitsForCurrentSubQuery[i]++;
+                    collectedHitsPerSubQueryMap.put(groupValue, collectedHitsForCurrentSubQuery);
+
+                    PriorityQueue<ScoreDoc> pq = groupQueueMap.get(groupValue)[i];
+                    ScoreDoc currentDoc = new ScoreDoc(doc + docBase, score);
+                    maxScore = Math.max(currentDoc.score, maxScore);
+                    pq.insertWithOverflow(currentDoc);
+                }
+                totalHitCount++;
+            }
+
+            private void initializeQueue(BytesRef groupValue, int numSubQueries) {
+                PriorityQueue<ScoreDoc>[] compoundScores = new PriorityQueue[numSubQueries];
+                for (int i = 0; i < numSubQueries; i++) {
+                    compoundScores[i] = new HitQueue(numHits, false);
+                }
+                groupQueueMap.put(groupValue, compoundScores);
+                collectedHitsPerSubQueryMap.put(groupValue, new int[numSubQueries]);
+            }
+        };
     }
 }
