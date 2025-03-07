@@ -30,6 +30,7 @@ import java.util.Objects;
 @Getter
 public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBuilder> {
     private final KNNQueryBuilder knnQueryBuilder;
+    private final String originalQueryText;
 
     /**
      * Creates a new builder instance.
@@ -59,6 +60,7 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
         private Boolean expandNested;
         private Map<String, ?> methodParameters;
         private RescoreContext rescoreContext;
+        private String originalQueryText;
 
         private Builder() {}
 
@@ -107,6 +109,11 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
             return this;
         }
 
+        public Builder originalQueryText(String originalQueryText) {
+            this.originalQueryText = originalQueryText;
+            return this;
+        }
+
         public NeuralKNNQueryBuilder build() {
             KNNQueryBuilder knnBuilder = KNNQueryBuilder.builder()
                 .fieldName(fieldName)
@@ -119,12 +126,13 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
                 .methodParameters(methodParameters)
                 .rescoreContext(rescoreContext)
                 .build();
-            return new NeuralKNNQueryBuilder(knnBuilder);
+            return new NeuralKNNQueryBuilder(knnBuilder, originalQueryText);
         }
     }
 
-    private NeuralKNNQueryBuilder(KNNQueryBuilder knnQueryBuilder) {
+    private NeuralKNNQueryBuilder(KNNQueryBuilder knnQueryBuilder, String originalQueryText) {
         this.knnQueryBuilder = knnQueryBuilder;
+        this.originalQueryText = originalQueryText;
     }
 
     @Override
@@ -143,23 +151,23 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
         if (rewritten == knnQueryBuilder) {
             return this;
         }
-        return new NeuralKNNQueryBuilder((KNNQueryBuilder) rewritten);
+        return new NeuralKNNQueryBuilder((KNNQueryBuilder) rewritten, originalQueryText);
     }
 
     @Override
     protected Query doToQuery(QueryShardContext context) throws IOException {
         Query knnQuery = knnQueryBuilder.toQuery(context);
-        return new NeuralKNNQuery(knnQuery);
+        return new NeuralKNNQuery(knnQuery, originalQueryText);
     }
 
     @Override
     protected boolean doEquals(NeuralKNNQueryBuilder other) {
-        return Objects.equals(knnQueryBuilder, other.knnQueryBuilder);
+        return Objects.equals(knnQueryBuilder, other.knnQueryBuilder) && Objects.equals(originalQueryText, other.originalQueryText);
     }
 
     @Override
     protected int doHashCode() {
-        return Objects.hash(knnQueryBuilder);
+        return Objects.hash(knnQueryBuilder, originalQueryText);
     }
 
     @Override
