@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -71,34 +72,13 @@ public abstract class InferenceFilter {
      * @return The processed value or null if embeddings are reused
      */
 
-    public abstract Object copyEmbeddingForSingleValue(
+    public abstract Object copyEmbedding(
         String embeddingKey,
         Object processValue,
         Object existingValue,
         Object embeddingValue,
         Map<String, Object> sourceAndMetadataMap,
         int index
-    );
-
-    /**
-     * Abstract method to filter and compare lists of values.
-     * If all elements in the list are identical between the new and existing metadata maps, embeddings are copied,
-     * and an empty list is returned to indicate no further processing is required.
-     *
-     * @param embeddingKey The dot-notation path for the embedding field
-     * @param processList The list of values to be checked for potential embedding reuse
-     * @param existingList The list of existing values for comparison
-     * @param embeddingList The list of existing embeddings
-     * @param sourceAndMetadataMap The metadata map of the new document.
-     * @return A processed list or an empty list if embeddings are reused.
-     */
-
-    public abstract List<Object> copyEmbeddingForMultipleValues(
-        String embeddingKey,
-        List<Object> processList,
-        List<Object> existingList,
-        List<Object> embeddingList,
-        Map<String, Object> sourceAndMetadataMap
     );
 
     /**
@@ -155,7 +135,7 @@ public abstract class InferenceFilter {
                 );
                 filteredProcessMap.put(key, filteredInnerMap.isEmpty() ? null : filteredInnerMap);
             } else if (value instanceof List) {
-                List<Object> processedList = filterListValue(
+                Object processedList = filterListValue(
                     currentPath,
                     ProcessorUtils.unsafeCastToObjectList(value),
                     sourceAndMetadataMap,
@@ -194,13 +174,15 @@ public abstract class InferenceFilter {
         List<Object> existingListValue = ProcessorUtils.unsafeCastToObjectList(existingListOptional.get());
         if (existingListValue.getFirst() instanceof List) {
             // in case of nested list, compare and copy by list comparison
-            return copyEmbeddingForMultipleValues(
+            Object processedList = copyEmbedding(
                 embeddingKey,
                 processList,
-                ProcessorUtils.unsafeCastToObjectList(existingListValue.getFirst()),
-                ProcessorUtils.unsafeCastToObjectList(embeddingListOptional.get()),
-                sourceAndMetadataMap
+                existingListValue.getFirst(),
+                embeddingListOptional.get(),
+                sourceAndMetadataMap,
+                -1
             );
+            return Objects.nonNull(processedList) ? ProcessorUtils.unsafeCastToObjectList(processedList) : null;
         } else {
             // in case of List of Maps, compare each map entry in list
             return filterMapValuesInList(
@@ -231,20 +213,22 @@ public abstract class InferenceFilter {
         Map<String, Object> sourceAndMetadataMap
     ) {
         List<Object> filteredList = new ArrayList<>();
-        ListIterator<Object> processListIterator = processList.listIterator();
         ListIterator<Object> existingListIterator = existingList.listIterator();
         ListIterator<Object> embeddingListIterator = embeddingList.listIterator();
         int index = 0;
-        while (processListIterator.hasNext() && existingListIterator.hasNext() && embeddingListIterator.hasNext()) {
-            Object processedItem = copyEmbeddingForSingleValue(
-                embeddingKey,
-                processListIterator.next(),
-                existingListIterator.next(),
-                embeddingListIterator.next(),
-                sourceAndMetadataMap,
-                index++
-            );
-            filteredList.add(processedItem);
+        for (Object processValue : processList) {
+            if (Objects.nonNull(processValue) && existingListIterator.hasNext() && embeddingListIterator.hasNext()) {
+                Object processedItem = copyEmbedding(
+                    embeddingKey,
+                    processValue,
+                    existingListIterator.next(),
+                    embeddingListIterator.next(),
+                    sourceAndMetadataMap,
+                    index
+                );
+                filteredList.add(processedItem);
+            }
+            index++;
         }
         return filteredList;
     }
