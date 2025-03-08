@@ -4,19 +4,25 @@
  */
 package org.opensearch.neuralsearch.processor;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import org.opensearch.action.get.GetAction;
 import org.opensearch.action.get.GetRequest;
+import org.opensearch.action.get.MultiGetAction;
+import org.opensearch.action.get.MultiGetItemResponse;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.IngestDocument;
+import org.opensearch.ingest.IngestDocumentWrapper;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
 import lombok.extern.log4j.Log4j2;
@@ -26,6 +32,7 @@ import org.opensearch.transport.client.OpenSearchClient;
 /**
  * This processor is used for user input data text embedding processing, model_id can be used to indicate which model user use,
  * and field_map can be used to indicate which fields needs text embedding and the corresponding keys for the text embedding results.
+ * If skip_existing flag is on, Get/MultiGet request is made to compare between new document and existing document to skip existing embeddings
  */
 @Log4j2
 public final class TextEmbeddingProcessor extends InferenceProcessor {
@@ -34,8 +41,6 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
     public static final String LIST_TYPE_NESTED_MAP_KEY = "knn";
     public static final String SKIP_EXISTING = "skip_existing";
     public static final boolean DEFAULT_SKIP_EXISTING = false;
-    private static final String INDEX_FIELD = "_index";
-    private static final String ID_FIELD = "_id";
     private final OpenSearchClient openSearchClient;
     private final boolean skipExisting;
     private final TextEmbeddingInferenceFilter textEmbeddingInferenceFilter;
@@ -105,5 +110,45 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
             TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
             ActionListener.wrap(handler::accept, onException)
         );
+    }
+
+    @Override
+    public void batchExecute(List<IngestDocumentWrapper> ingestDocumentWrappers, Consumer<List<IngestDocumentWrapper>> handler) {
+        // skip existing flag is turned off. Call existing batchExecute without filtering
+        if (skipExisting == false) {
+            super.batchExecute(ingestDocumentWrappers, handler);
+            return;
+        }
+        if (ingestDocumentWrappers.isEmpty()) {
+            handler.accept(Collections.emptyList());
+            return;
+        }
+        // if skipExisting flag is turned on, inference texts in each document will be compared with existing documents fetched via
+        // MultiGet. TextEmbeddingInferenceFilter will be used to filter each inference texts
+        openSearchClient.execute(MultiGetAction.INSTANCE, buildMultiGetRequest(ingestDocumentWrappers), ActionListener.wrap(response -> {
+            MultiGetItemResponse[] multiGetItemResponses = response.getResponses();
+            if (multiGetItemResponses == null || multiGetItemResponses.length == 0) {
+                super.batchExecute(ingestDocumentWrappers, handler);
+                return;
+            }
+            Map<String, Map<String, Object>> existingDocuments = createDocumentMap(multiGetItemResponses);
+            if (this.batchSize >= ingestDocumentWrappers.size()) {
+                subBatchExecuteWithFilter(ingestDocumentWrappers, existingDocuments, textEmbeddingInferenceFilter, handler);
+                return;
+            }
+            List<List<IngestDocumentWrapper>> batches = cutBatches(ingestDocumentWrappers);
+            int size = ingestDocumentWrappers.size();
+            AtomicInteger counter = new AtomicInteger(size);
+            List<IngestDocumentWrapper> allResults = Collections.synchronizedList(new ArrayList());
+            for (List<IngestDocumentWrapper> batch : batches) {
+                this.subBatchExecuteWithFilter(batch, existingDocuments, textEmbeddingInferenceFilter, (batchResults) -> {
+                    allResults.addAll(batchResults);
+                    if (counter.addAndGet(-batchResults.size()) == 0) {
+                        handler.accept(allResults);
+                    }
+                    assert counter.get() >= 0 : "counter is negative";
+                });
+            }
+        }, e -> { handler.accept(null); }));
     }
 }

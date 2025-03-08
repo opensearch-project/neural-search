@@ -7,8 +7,6 @@ package org.opensearch.neuralsearch.processor.optimization;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.processor.util.ProcessorUtils;
 
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -47,7 +45,7 @@ public class TextEmbeddingInferenceFilter extends InferenceFilter {
         Optional<Object> existingValueOptional = ProcessorUtils.getValueFromSource(existingSourceAndMetadataMap, textPath);
         Optional<Object> embeddingValueOptional = ProcessorUtils.getValueFromSource(existingSourceAndMetadataMap, embeddingKey);
         if (existingValueOptional.isPresent() && embeddingValueOptional.isPresent()) {
-            return copyEmbeddingForSingleValue(
+            return copyEmbedding(
                 embeddingKey,
                 processValue,
                 existingValueOptional.get(),
@@ -60,14 +58,14 @@ public class TextEmbeddingInferenceFilter extends InferenceFilter {
     }
 
     /**
-     * Copy a single value by checking if the text is identical in both the existing and new document.
+     * Copy a single value by checking if the given texts is identical in both the existing and new document.
      * If the text matches, the corresponding embedding is copied, and null is returned, indicating no further
      * processing is required.
      *
      * @return null if embeddings are reused; the processValue otherwise.
      */
     @Override
-    public Object copyEmbeddingForSingleValue(
+    public Object copyEmbedding(
         String embeddingKey,
         Object processValue,
         Object existingValue,
@@ -82,27 +80,5 @@ public class TextEmbeddingInferenceFilter extends InferenceFilter {
         }
         // processValue and existingValue are different, return processValue to be included in process map
         return processValue;
-    }
-
-    /**
-     * Copy values in list by checking if all texts in list are identical in both the existing and new documents.
-     * If lists are equal, the corresponding embeddings are copied
-     * @return empty list if embeddings are reused; processList otherwise.
-     */
-    @Override
-    public List<Object> copyEmbeddingForMultipleValues(
-        String embeddingKey,
-        List<Object> processList,
-        List<Object> existingList,
-        List<Object> embeddingList,
-        Map<String, Object> sourceAndMetadataMap
-    ) {
-        if (Objects.equals(processList, existingList)) {
-            ProcessorUtils.setValueToSource(sourceAndMetadataMap, embeddingKey, embeddingList);
-            // if successfully copied, return empty list to be filtered out from process map
-            return Collections.emptyList();
-        }
-        // source list and existing list are different, return processList to be included in process map
-        return processList;
     }
 }

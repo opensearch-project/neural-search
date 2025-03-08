@@ -7,6 +7,8 @@ package org.opensearch.neuralsearch.processor;
 import com.google.common.collect.ImmutableList;
 import org.apache.commons.lang.math.RandomUtils;
 import org.opensearch.action.get.GetResponse;
+import org.opensearch.action.get.MultiGetItemResponse;
+import org.opensearch.action.get.MultiGetResponse;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.xcontent.XContentBuilder;
@@ -24,16 +26,20 @@ import java.util.List;
 import java.util.Map;
 
 public class InferenceProcessorTestCase extends OpenSearchTestCase {
-
-    protected List<IngestDocumentWrapper> createIngestDocumentWrappers(int count) {
+    protected List<IngestDocumentWrapper> createIngestDocumentWrappers(int count, String value) {
         List<IngestDocumentWrapper> wrapperList = new ArrayList<>();
-        for (int i = 0; i < count; ++i) {
+        for (int i = 1; i <= count; ++i) {
             Map<String, Object> sourceAndMetadata = new HashMap<>();
-            sourceAndMetadata.put("key1", "value1");
+            sourceAndMetadata.put("key1", value);
             sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+            sourceAndMetadata.put("_id", String.valueOf(i));
             wrapperList.add(new IngestDocumentWrapper(i, new IngestDocument(sourceAndMetadata, new HashMap<>()), null));
         }
         return wrapperList;
+    }
+
+    protected List<IngestDocumentWrapper> createIngestDocumentWrappers(int count) {
+        return createIngestDocumentWrappers(count, "value1");
     }
 
     protected List<List<Float>> createMockVectorWithLength(int size) {
@@ -120,6 +126,10 @@ public class InferenceProcessorTestCase extends OpenSearchTestCase {
         return GetResponse.fromXContent(contentParser);
     }
 
+    protected MultiGetResponse mockEmptyMultiGetItemResponse() throws IOException {
+        return new MultiGetResponse(new MultiGetItemResponse[0]);
+    }
+
     protected GetResponse convertToGetResponse(IngestDocument ingestDocument) throws IOException {
         String index = ingestDocument.getSourceAndMetadata().get("_index").toString();
         String id = ingestDocument.getSourceAndMetadata().get("_id").toString();
@@ -129,5 +139,13 @@ public class InferenceProcessorTestCase extends OpenSearchTestCase {
         BytesReference bytes = BytesReference.bytes(builder);
         GetResult result = new GetResult(index, id, 0, 1, 1, true, bytes, null, null);
         return new GetResponse(result);
+    }
+
+    protected MultiGetResponse convertToMultiGetItemResponse(List<IngestDocumentWrapper> ingestDocuments) throws IOException {
+        MultiGetItemResponse[] multiGetItems = new MultiGetItemResponse[ingestDocuments.size()];
+        for (int i = 0; i < ingestDocuments.size(); i++) {
+            multiGetItems[i] = new MultiGetItemResponse(convertToGetResponse(ingestDocuments.get(i).getIngestDocument()), null);
+        }
+        return new MultiGetResponse(multiGetItems);
     }
 }
