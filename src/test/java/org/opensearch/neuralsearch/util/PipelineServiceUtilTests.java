@@ -20,8 +20,7 @@ import static org.mockito.Mockito.verify;
 public class PipelineServiceUtilTests extends OpenSearchTestCase {
     public void test_getIngestPipelineConfigs_returnsEmptyList() {
         ClusterService mockClusterService = mock(ClusterService.class);
-        PipelineServiceUtil utilSpy = spy(new PipelineServiceUtil());
-        utilSpy.initialize(mockClusterService);
+        PipelineServiceUtil utilSpy = spy(new PipelineServiceUtil(mockClusterService));
 
         doReturn(Collections.emptyList()).when(utilSpy).getIngestPipelines();
 
@@ -33,8 +32,7 @@ public class PipelineServiceUtilTests extends OpenSearchTestCase {
 
     public void test_getSearchPipelineConfigs_returnsEmptyList() {
         ClusterService mockClusterService = mock(ClusterService.class);
-        PipelineServiceUtil utilSpy = spy(new PipelineServiceUtil());
-        utilSpy.initialize(mockClusterService);
+        PipelineServiceUtil utilSpy = spy(new PipelineServiceUtil(mockClusterService));
 
         doReturn(Collections.emptyList()).when(utilSpy).getSearchPipelines();
 

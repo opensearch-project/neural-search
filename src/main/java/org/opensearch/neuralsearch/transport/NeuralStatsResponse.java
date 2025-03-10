@@ -148,7 +148,7 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
             // Navigate to the end of the nested map
             for (int i = 0; i < parts.length - 1; i++) {
                 // This is the only place we're putting things into nestedMap, so this cast is safe
-                // So long as we verify there are no stat path collisions
+                // So long as we verify there are no stat path collisions (done in unit tests)
                 current = (Map<String, Object>) current.computeIfAbsent(parts[i], k -> new HashMap<>());
             }
 

@@ -12,11 +12,7 @@ import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.EnumSet;
 import java.util.Map;
-import java.util.Set;
 
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class EventStatsManagerTests extends OpenSearchTestCase {
@@ -33,25 +29,14 @@ public class EventStatsManagerTests extends OpenSearchTestCase {
     @Before
     public void setup() {
         MockitoAnnotations.openMocks(this);
-        eventStatsManager = new EventStatsManager(mockSettingsAccessor);
-    }
-
-    public void test_constructorInitializesAllEventStats() {
-        EventStatsManager manager = new EventStatsManager(mockSettingsAccessor);
-        Map<EventStatName, EventStat> stats = manager.getStats();
-
-        assertFalse(stats.isEmpty());
-
-        Set<EventStatName> trackedEventStatNames = stats.keySet();
-        Set<EventStatName> expectedEventStatNames = EnumSet.allOf(EventStatName.class);
-
-        assertEquals(expectedEventStatNames, trackedEventStatNames);
+        eventStatsManager = new EventStatsManager();
+        eventStatsManager.initialize(mockSettingsAccessor);
     }
 
     public void test_increment() {
-        when(mockSettingsAccessor.getIsStatsEnabled()).thenReturn(true);
+        when(mockSettingsAccessor.isStatsEnabled()).thenReturn(true);
 
-        EventStat originalStat = eventStatsManager.getStats().get(STAT_NAME);
+        EventStat originalStat = STAT_NAME.getEventStat();
         long originalValue = originalStat.getValue();
 
         eventStatsManager.inc(STAT_NAME);
@@ -61,9 +46,9 @@ public class EventStatsManagerTests extends OpenSearchTestCase {
     }
 
     public void test_incrementWhenStatsDisabled() {
-        when(mockSettingsAccessor.getIsStatsEnabled()).thenReturn(false);
+        when(mockSettingsAccessor.isStatsEnabled()).thenReturn(false);
 
-        EventStat originalStat = eventStatsManager.getStats().get(STAT_NAME);
+        EventStat originalStat = STAT_NAME.getEventStat();
         long originalValue = originalStat.getValue();
 
         eventStatsManager.inc(STAT_NAME);
@@ -73,16 +58,10 @@ public class EventStatsManagerTests extends OpenSearchTestCase {
     }
 
     public void test_getTimestampedEventStatSnapshots() {
-        TimestampedEventStatSnapshot mockSnapshot = mock(TimestampedEventStatSnapshot.class);
-        when(mockEventStat.getStatSnapshot()).thenReturn(mockSnapshot);
-
-        eventStatsManager.getStats().put(STAT_NAME, mockEventStat);
-
         Map<EventStatName, TimestampedEventStatSnapshot> result = eventStatsManager.getTimestampedEventStatSnapshots(EnumSet.of(STAT_NAME));
 
         assertEquals(1, result.size());
-        assertEquals(mockSnapshot, result.get(STAT_NAME));
-        verify(mockEventStat, times(1)).getStatSnapshot();
+        assertNotNull(result.get(STAT_NAME));
     }
 
     public void test_getTimestampedEventStatSnapshotsReturnsEmptyMap() {
@@ -94,16 +73,20 @@ public class EventStatsManagerTests extends OpenSearchTestCase {
     }
 
     public void test_reset() {
-        // Create multiple mock stats
-        TimestampedEventStat mockStat1 = mock(TimestampedEventStat.class);
+        when(mockSettingsAccessor.isStatsEnabled()).thenReturn(true);
+        EventStat originalStat = STAT_NAME.getEventStat();
+        long originalValue = originalStat.getValue();
+        eventStatsManager.inc(STAT_NAME);
+        eventStatsManager.inc(STAT_NAME);
+        eventStatsManager.inc(STAT_NAME);
 
-        // Add mock stats to manager
-        eventStatsManager.getStats().clear();
-        eventStatsManager.getStats().put(STAT_NAME, mockStat1);
+        long newValue = originalStat.getValue();
+        assertEquals(originalValue + 3, newValue);
 
         eventStatsManager.reset();
 
-        verify(mockStat1, times(1)).reset();
+        newValue = originalStat.getValue();
+        assertEquals(newValue, 0);
     }
 
     public void test_singletonInstanceCreation() {

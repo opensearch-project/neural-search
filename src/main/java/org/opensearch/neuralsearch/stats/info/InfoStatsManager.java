@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.stats.state;
+package org.opensearch.neuralsearch.stats.info;
 
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
@@ -17,63 +17,46 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Manager to generate stat snapshots for cluster level state stats
+ * Manager to generate stat snapshots for cluster level info stats
  */
-public class StateStatsManager {
+public class InfoStatsManager {
     public static final String PROCESSORS_KEY = "processors";
 
-    private static StateStatsManager INSTANCE;
-
-    private NeuralSearchSettingsAccessor settingsAccessor;
-    private NeuralSearchClusterUtil neuralSearchClusterUtil;
-    private PipelineServiceUtil pipelineServiceUtil;
-
-    /**
-     * Creates or gets the singleton instance
-     * @return singleton instance
-     */
-    public static StateStatsManager instance() {
-        if (INSTANCE == null) {
-            INSTANCE = new StateStatsManager(
-                NeuralSearchSettingsAccessor.instance(),
-                NeuralSearchClusterUtil.instance(),
-                PipelineServiceUtil.instance()
-            );
-        }
-        return INSTANCE;
-    }
+    private final NeuralSearchClusterUtil neuralSearchClusterUtil;
+    private final NeuralSearchSettingsAccessor settingsAccessor;
+    private final PipelineServiceUtil pipelineServiceUtil;
 
     /**
      * Constructor
      *
      * @param settingsAccessor settings accessor singleton instance
      */
-    public StateStatsManager(
-        NeuralSearchSettingsAccessor settingsAccessor,
+    public InfoStatsManager(
         NeuralSearchClusterUtil neuralSearchClusterUtil,
+        NeuralSearchSettingsAccessor settingsAccessor,
         PipelineServiceUtil pipelineServiceUtil
     ) {
-        this.settingsAccessor = settingsAccessor;
         this.neuralSearchClusterUtil = neuralSearchClusterUtil;
+        this.settingsAccessor = settingsAccessor;
         this.pipelineServiceUtil = pipelineServiceUtil;
     }
 
     /**
-     * Calculates and gets state stats
+     * Calculates and gets info stats
      * @param statsToRetrieve a set of the enums to retrieve
      * @return map of stat name to stat snapshot
      */
-    public Map<StateStatName, StatSnapshot<?>> getStats(EnumSet<StateStatName> statsToRetrieve) {
-        // State stats are calculated all at once regardless of filters
-        Map<StateStatName, CountableStateStatSnapshot> countableStateStats = getCountableStats();
-        Map<StateStatName, SettableStateStatSnapshot<?>> settableStateStats = getSettableStats();
+    public Map<InfoStatName, StatSnapshot<?>> getStats(EnumSet<InfoStatName> statsToRetrieve) {
+        // info stats are calculated all at once regardless of filters
+        Map<InfoStatName, CountableInfoStatSnapshot> countableInfoStats = getCountableStats();
+        Map<InfoStatName, SettableInfoStatSnapshot<?>> settableInfoStats = getSettableStats();
 
-        Map<StateStatName, StatSnapshot<?>> prefilteredStats = new HashMap<>();
-        prefilteredStats.putAll(countableStateStats);
-        prefilteredStats.putAll(settableStateStats);
+        Map<InfoStatName, StatSnapshot<?>> prefilteredStats = new HashMap<>();
+        prefilteredStats.putAll(countableInfoStats);
+        prefilteredStats.putAll(settableInfoStats);
 
         // Filter based on specified stats
-        Map<StateStatName, StatSnapshot<?>> filteredStats = prefilteredStats.entrySet()
+        Map<InfoStatName, StatSnapshot<?>> filteredStats = prefilteredStats.entrySet()
             .stream()
             .filter(entry -> statsToRetrieve.contains(entry.getKey()))
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
@@ -82,56 +65,57 @@ public class StateStatsManager {
     }
 
     /**
-     * Calculates and gets state stats
+     * Calculates and gets info stats
      * @return map of stat name to stat snapshot
      */
-    private Map<StateStatName, CountableStateStatSnapshot> getCountableStats() {
+    private Map<InfoStatName, CountableInfoStatSnapshot> getCountableStats() {
         // Initialize empty map with keys so stat names are visible in JSON even if the value is not counted
-        Map<StateStatName, CountableStateStatSnapshot> countableStateStats = new HashMap<>();
-        for (StateStatName stat : EnumSet.allOf(StateStatName.class)) {
-            if (stat.getStatType() == StateStatType.COUNTABLE) {
-                countableStateStats.put(stat, new CountableStateStatSnapshot(stat));
+        Map<InfoStatName, CountableInfoStatSnapshot> countableInfoStats = new HashMap<>();
+        for (InfoStatName stat : EnumSet.allOf(InfoStatName.class)) {
+            if (stat.getStatType() == InfoStatType.COUNTABLE) {
+                countableInfoStats.put(stat, new CountableInfoStatSnapshot(stat));
             }
         }
 
         // Parses ingest pipeline processor configs for processor info
-        addIngestProcessorStats(countableStateStats);
+        addIngestProcessorStats(countableInfoStats);
 
         // Helpers to parse search pipeline processor configs for processor info would go here
-        return countableStateStats;
+        return countableInfoStats;
     }
 
     /**
-     * Calculates and gets settable state stats
+     * Calculates and gets settable info stats
      * @return map of stat name to stat snapshot
      */
-    private Map<StateStatName, SettableStateStatSnapshot<?>> getSettableStats() {
-        Map<StateStatName, SettableStateStatSnapshot<?>> settableStateStats = new HashMap<>();
-        for (StateStatName statName : EnumSet.allOf(StateStatName.class)) {
-            if (statName.getStatType() == StateStatType.SETTABLE) {
-                settableStateStats.put(statName, new SettableStateStatSnapshot<>(statName));
+    private Map<InfoStatName, SettableInfoStatSnapshot<?>> getSettableStats() {
+        Map<InfoStatName, SettableInfoStatSnapshot<?>> settableInfoStats = new HashMap<>();
+        for (InfoStatName statName : EnumSet.allOf(InfoStatName.class)) {
+            switch (statName.getStatType()) {
+                case InfoStatType.SETTABLE_BOOLEAN -> settableInfoStats.put(statName, new SettableInfoStatSnapshot<Boolean>(statName));
+                case InfoStatType.SETTABLE_STRING -> settableInfoStats.put(statName, new SettableInfoStatSnapshot<String>(statName));
             }
         }
 
-        addClusterVersionStat(settableStateStats);
-        return settableStateStats;
+        addClusterVersionStat(settableInfoStats);
+        return settableInfoStats;
     }
 
     /**
      * Adds cluster version to settable stats, mutating the input
-     * @param stats mutable map of state stats that the result will be added to
+     * @param stats mutable map of info stats that the result will be added to
      */
-    private void addClusterVersionStat(Map<StateStatName, SettableStateStatSnapshot<?>> stats) {
-        StateStatName stateStatName = StateStatName.CLUSTER_VERSION;
+    private void addClusterVersionStat(Map<InfoStatName, SettableInfoStatSnapshot<?>> stats) {
+        InfoStatName infoStatName = InfoStatName.CLUSTER_VERSION;
         String version = neuralSearchClusterUtil.getClusterMinVersion().toString();
-        stats.put(stateStatName, new SettableStateStatSnapshot<>(stateStatName, version));
+        stats.put(infoStatName, new SettableInfoStatSnapshot<>(infoStatName, version));
     }
 
     /**
-     * Adds ingest processor state stats, mutating the input
-     * @param stats mutable map of state stats that the result will be added to
+     * Adds ingest processor info stats, mutating the input
+     * @param stats mutable map of info stats that the result will be added to
      */
-    private void addIngestProcessorStats(Map<StateStatName, CountableStateStatSnapshot> stats) {
+    private void addIngestProcessorStats(Map<InfoStatName, CountableInfoStatSnapshot> stats) {
         List<Map<String, Object>> pipelineConfigs = pipelineServiceUtil.getIngestPipelineConfigs();
 
         for (Map<String, Object> pipelineConfig : pipelineConfigs) {
@@ -142,7 +126,7 @@ public class StateStatsManager {
                     Map<String, Object> processorConfig = asMap(entry.getValue());
                     switch (processorType) {
                         case TextEmbeddingProcessor.TYPE:
-                            increment(stats, StateStatName.TEXT_EMBEDDING_PROCESSORS);
+                            increment(stats, InfoStatName.TEXT_EMBEDDING_PROCESSORS);
                             break;
                     }
                 }
@@ -151,15 +135,15 @@ public class StateStatsManager {
     }
 
     /**
-     * Increments a countable state stat in the given stat name
+     * Increments a countable info stat in the given stat name
      * @param stats map containing the stat to increment
-     * @param stateStatName the identifier for the stat to increment
+     * @param infoStatName the identifier for the stat to increment
      */
-    private void increment(Map<StateStatName, CountableStateStatSnapshot> stats, StateStatName stateStatName) {
-        incrementBy(stats, stateStatName, 1L);
+    private void increment(Map<InfoStatName, CountableInfoStatSnapshot> stats, InfoStatName infoStatName) {
+        incrementBy(stats, infoStatName, 1L);
     }
 
-    private void incrementBy(Map<StateStatName, CountableStateStatSnapshot> stats, StateStatName statName, Long amount) {
+    private void incrementBy(Map<InfoStatName, CountableInfoStatSnapshot> stats, InfoStatName statName, Long amount) {
         if (stats.containsKey(statName)) {
             stats.get(statName).incrementBy(amount);
         }

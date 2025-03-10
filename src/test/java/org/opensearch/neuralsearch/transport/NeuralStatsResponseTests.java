@@ -14,8 +14,8 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.neuralsearch.stats.common.StatSnapshot;
-import org.opensearch.neuralsearch.stats.state.SettableStateStatSnapshot;
-import org.opensearch.neuralsearch.stats.state.StateStatName;
+import org.opensearch.neuralsearch.stats.info.SettableInfoStatSnapshot;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.io.IOException;
@@ -230,12 +230,12 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
 
     public void test_toXContent_withMetadata() throws IOException {
         // Use a real stat snapshot here to use real toXContent functionality
-        SettableStateStatSnapshot<String> stateStatSnapshot = new SettableStateStatSnapshot<>(
-            StateStatName.CLUSTER_VERSION,
+        SettableInfoStatSnapshot<String> infoStatSnapshot = new SettableInfoStatSnapshot<>(
+            InfoStatName.CLUSTER_VERSION,
             "For crying out loud!"
         );
 
-        clusterLevelStats.put("test.nested.stat", stateStatSnapshot);
+        clusterLevelStats.put("test.nested.stat", infoStatSnapshot);
 
         NeuralStatsResponse response = new NeuralStatsResponse(
             clusterName,
@@ -259,7 +259,7 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
         Map<String, Object> statMap = (Map<String, Object>) nestedMap.get("stat");
 
         // Verify fields
-        assertEquals(stateStatSnapshot.getValue(), statMap.get(StatSnapshot.VALUE_FIELD));
-        assertEquals(StateStatName.CLUSTER_VERSION.getStatType().getTypeString(), statMap.get(StatSnapshot.STAT_TYPE_FIELD));
+        assertEquals(infoStatSnapshot.getValue(), statMap.get(StatSnapshot.VALUE_FIELD));
+        assertEquals(InfoStatName.CLUSTER_VERSION.getStatType().getTypeString(), statMap.get(StatSnapshot.STAT_TYPE_FIELD));
     }
 }

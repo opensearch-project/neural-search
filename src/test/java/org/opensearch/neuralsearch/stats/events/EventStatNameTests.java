@@ -16,17 +16,23 @@ import java.util.Set;
 public class EventStatNameTests extends OpenSearchTestCase {
     public static final EnumSet<EventStatName> EVENT_STATS = EnumSet.allOf(EventStatName.class);
 
-    public void test_from_valid() {
+    public void test_fromValid() {
         String validStatName = EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getNameString();
         EventStatName result = EventStatName.from(validStatName);
         assertEquals(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS, result);
     }
 
-    public void test_from_invalid() {
+    public void test_fromInvalid() {
         assertThrows(IllegalArgumentException.class, () -> { EventStatName.from("non_existent_stat"); });
     }
 
-    public void test_unique_names() {
+    public void test_allEnumsHaveNonNullStats() {
+        for (EventStatName statName : EVENT_STATS) {
+            assertNotNull(statName.getEventStat());
+        }
+    }
+
+    public void test_uniqueNames() {
         Set<String> names = new HashSet<>();
         for (EventStatName statName : EVENT_STATS) {
             String name = statName.getNameString().toLowerCase(Locale.ROOT);
@@ -35,7 +41,7 @@ public class EventStatNameTests extends OpenSearchTestCase {
         }
     }
 
-    public void test_unique_paths() {
+    public void test_uniquePaths() {
         Set<String> paths = new HashSet<>();
         for (EventStatName statName : EVENT_STATS) {
             String path = statName.getPath().toLowerCase(Locale.ROOT);

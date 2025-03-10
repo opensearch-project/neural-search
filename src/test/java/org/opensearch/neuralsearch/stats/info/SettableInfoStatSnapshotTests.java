@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.stats.state;
+package org.opensearch.neuralsearch.stats.info;
 
 import org.opensearch.common.xcontent.json.JsonXContent;
 import org.opensearch.core.xcontent.ToXContent;
@@ -15,29 +15,29 @@ import java.util.Map;
 
 import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 
-public class SettableStateStatSnapshotTests extends OpenSearchTestCase {
+public class SettableInfoStatSnapshotTests extends OpenSearchTestCase {
 
-    private static final StateStatName STAT_NAME = StateStatName.CLUSTER_VERSION;
+    private static final InfoStatName STAT_NAME = InfoStatName.CLUSTER_VERSION;
     private static final String SETTABLE_VALUE = "test-value";
 
     public void test_constructorWithoutValue() {
-        SettableStateStatSnapshot<String> snapshot = new SettableStateStatSnapshot<>(STAT_NAME);
+        SettableInfoStatSnapshot<String> snapshot = new SettableInfoStatSnapshot<>(STAT_NAME);
         assertNull(snapshot.getValue());
     }
 
     public void test_constructorWithValue() {
-        SettableStateStatSnapshot<String> snapshot = new SettableStateStatSnapshot<>(STAT_NAME, SETTABLE_VALUE);
+        SettableInfoStatSnapshot<String> snapshot = new SettableInfoStatSnapshot<>(STAT_NAME, SETTABLE_VALUE);
         assertEquals(SETTABLE_VALUE, snapshot.getValue());
     }
 
     public void test_setValueUpdates() {
-        SettableStateStatSnapshot<String> snapshot = new SettableStateStatSnapshot<>(STAT_NAME);
+        SettableInfoStatSnapshot<String> snapshot = new SettableInfoStatSnapshot<>(STAT_NAME);
         snapshot.setValue("new-value");
         assertEquals("new-value", snapshot.getValue());
     }
 
     public void test_toXContent() throws IOException {
-        SettableStateStatSnapshot<String> snapshot = new SettableStateStatSnapshot<>(STAT_NAME, SETTABLE_VALUE);
+        SettableInfoStatSnapshot<String> snapshot = new SettableInfoStatSnapshot<>(STAT_NAME, SETTABLE_VALUE);
         XContentBuilder builder = JsonXContent.contentBuilder();
         snapshot.toXContent(builder, ToXContent.EMPTY_PARAMS);
 

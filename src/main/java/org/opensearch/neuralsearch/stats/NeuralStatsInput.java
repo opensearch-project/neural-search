@@ -14,16 +14,16 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.ToXContentObject;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
-import org.opensearch.neuralsearch.stats.state.StateStatName;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.List;
 
 /**
- * Holds user requester input parameters for retrieving neural stats via rest handler API.
- * It allows filtering statistics by node IDs, event statistic types, and state statistic types.
+ * Entity class to hold input parameters for retrieving neural stats
+ * Responsible for filtering statistics by node IDs, event statistic types, and info stat types.
  */
 @Getter
 public class NeuralStatsInput implements ToXContentObject, Writeable {
@@ -35,7 +35,7 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
      * Collection of node IDs to filter statistics retrieval.
      * If empty, stats from all nodes will be retrieved.
      */
-    private Set<String> nodeIds;
+    private List<String> nodeIds;
 
     /**
      * Collection of event statistic types to filter.
@@ -43,9 +43,9 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
     private EnumSet<EventStatName> eventStatNames;
 
     /**
-     * Collection of state statistic types to filter.
+     * Collection of info stat types to filter.
      */
-    private EnumSet<StateStatName> stateStatNames;
+    private EnumSet<InfoStatName> infoStatNames;
 
     /**
      * Controls whether metadata should be included in the statistics response.
@@ -64,21 +64,21 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
      *
      * @param nodeIds node IDs to retrieve stats from
      * @param eventStatNames event stats to retrieve
-     * @param stateStatNames state stats to retrieve
+     * @param infoStatNames info stats to retrieve
      * @param includeMetadata whether to include metadata
      * @param flatten whether to flatten keys
      */
     @Builder
     public NeuralStatsInput(
-        Set<String> nodeIds,
+        List<String> nodeIds,
         EnumSet<EventStatName> eventStatNames,
-        EnumSet<StateStatName> stateStatNames,
+        EnumSet<InfoStatName> infoStatNames,
         boolean includeMetadata,
         boolean flatten
     ) {
         this.nodeIds = nodeIds;
         this.eventStatNames = eventStatNames;
-        this.stateStatNames = stateStatNames;
+        this.infoStatNames = infoStatNames;
         this.includeMetadata = includeMetadata;
         this.flatten = flatten;
     }
@@ -88,9 +88,9 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
      * By default, metadata is excluded and keys are not flattened.
      */
     public NeuralStatsInput() {
-        this.nodeIds = new HashSet<>();
+        this.nodeIds = new ArrayList<>();
         this.eventStatNames = EnumSet.noneOf(EventStatName.class);
-        this.stateStatNames = EnumSet.noneOf(StateStatName.class);
+        this.infoStatNames = EnumSet.noneOf(InfoStatName.class);
         this.includeMetadata = false;
         this.flatten = false;
     }
@@ -102,9 +102,9 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
      * @throws IOException if there's an error reading from the stream
      */
     public NeuralStatsInput(StreamInput input) throws IOException {
-        nodeIds = input.readBoolean() ? new HashSet<>(input.readStringList()) : new HashSet<>();
+        nodeIds = input.readOptionalStringList();
         eventStatNames = input.readBoolean() ? input.readEnumSet(EventStatName.class) : EnumSet.noneOf(EventStatName.class);
-        stateStatNames = input.readBoolean() ? input.readEnumSet(StateStatName.class) : EnumSet.noneOf(StateStatName.class);
+        infoStatNames = input.readBoolean() ? input.readEnumSet(InfoStatName.class) : EnumSet.noneOf(InfoStatName.class);
         includeMetadata = input.readBoolean();
         flatten = input.readBoolean();
     }
@@ -119,7 +119,7 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
     public void writeTo(StreamOutput out) throws IOException {
         out.writeOptionalStringCollection(nodeIds);
         writeOptionalEnumSet(out, eventStatNames);
-        writeOptionalEnumSet(out, stateStatNames);
+        writeOptionalEnumSet(out, infoStatNames);
         out.writeBoolean(includeMetadata);
         out.writeBoolean(flatten);
     }
@@ -157,8 +157,8 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         if (eventStatNames != null) {
             builder.field(EVENT_STAT_NAMES_FIELD, eventStatNames);
         }
-        if (stateStatNames != null) {
-            builder.field(STATE_STAT_NAMES_FIELD, stateStatNames);
+        if (infoStatNames != null) {
+            builder.field(STATE_STAT_NAMES_FIELD, infoStatNames);
         }
         builder.field("include_metadata", includeMetadata);
         builder.field("flat_keys", flatten);

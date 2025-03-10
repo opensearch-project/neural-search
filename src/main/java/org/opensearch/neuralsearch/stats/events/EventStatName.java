@@ -22,6 +22,7 @@ public enum EventStatName implements StatName {
     private final String nameString;
     private final String path;
     private final EventStatType statType;
+    private EventStat eventStat;
 
     /**
      * Enum lookup table by nameString
@@ -39,6 +40,19 @@ public enum EventStatName implements StatName {
         this.nameString = nameString;
         this.path = path;
         this.statType = statType;
+
+        switch (statType) {
+            case EventStatType.TIMESTAMPED_COUNTER:
+                eventStat = new TimestampedEventStat(this);
+                break;
+        }
+
+        // Validates all event stats are instantiated correctly. This is covered by unit tests as well.
+        if (eventStat == null) {
+            throw new IllegalArgumentException(
+                String.format("Unable to initialize event stat [%s]. Unrecognized event stat type: [%s]", nameString, statType)
+            );
+        }
     }
 
     /**

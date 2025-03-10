@@ -5,14 +5,14 @@
 package org.opensearch.neuralsearch.rest;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
-import org.apache.commons.lang.StringUtils;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.NeuralStatsInput;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
-import org.opensearch.neuralsearch.stats.state.StateStatName;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.neuralsearch.transport.NeuralStatsAction;
 import org.opensearch.neuralsearch.transport.NeuralStatsRequest;
 import org.opensearch.rest.BaseRestHandler;
@@ -30,14 +30,17 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.opensearch.neuralsearch.plugin.NeuralSearch.NEURAL_BASE_URI;
-import static org.opensearch.neuralsearch.processor.util.RestActionUtils.splitCommaSeparatedParam;
 
+/**
+ * Rest action handler for the neural stats API
+ * Calculates info stats and aggregates event stats from nodes and returns them in the response
+ */
 @Log4j2
 @AllArgsConstructor
-public class RestNeuralStatsHandler extends BaseRestHandler {
-    private static final String NAME = "neural_stats_action";
+public class RestNeuralStatsAction extends BaseRestHandler {
     public static final String FLATTEN_PARAM = "flat_keys";
     public static final String INCLUDE_METADATA_PARAM = "include_metadata";
+    private static final String NAME = "neural_stats_action";
 
     private static final Set<String> EVENT_STAT_NAMES = EnumSet.allOf(EventStatName.class)
         .stream()
@@ -45,11 +48,20 @@ public class RestNeuralStatsHandler extends BaseRestHandler {
         .map(String::toLowerCase)
         .collect(Collectors.toSet());
 
-    private static final Set<String> STATE_STAT_NAMES = EnumSet.allOf(StateStatName.class)
+    private static final Set<String> STATE_STAT_NAMES = EnumSet.allOf(InfoStatName.class)
         .stream()
-        .map(StateStatName::getNameString)
+        .map(InfoStatName::getNameString)
         .map(String::toLowerCase)
         .collect(Collectors.toSet());
+
+    private static final List<Route> ROUTES = ImmutableList.of(
+        new Route(RestRequest.Method.GET, NEURAL_BASE_URI + "/{nodeId}/stats/"),
+        new Route(RestRequest.Method.GET, NEURAL_BASE_URI + "/{nodeId}/stats/{stat}"),
+        new Route(RestRequest.Method.GET, NEURAL_BASE_URI + "/stats/"),
+        new Route(RestRequest.Method.GET, NEURAL_BASE_URI + "/stats/{stat}")
+    );
+
+    private static final Set<String> RESPONSE_PARAMS = ImmutableSet.of("nodeId", "stat");
 
     private NeuralSearchSettingsAccessor settingsAccessor;
 
@@ -60,28 +72,22 @@ public class RestNeuralStatsHandler extends BaseRestHandler {
 
     @Override
     public List<Route> routes() {
-        return ImmutableList.of(
-            new Route(RestRequest.Method.GET, NEURAL_BASE_URI + "/{nodeId}/stats/"),
-            new Route(RestRequest.Method.GET, NEURAL_BASE_URI + "/{nodeId}/stats/{stat}"),
-            new Route(RestRequest.Method.GET, NEURAL_BASE_URI + "/stats/"),
-            new Route(RestRequest.Method.GET, NEURAL_BASE_URI + "/stats/{stat}")
-        );
+        return ROUTES;
+    }
+
+    @Override
+    protected Set<String> responseParams() {
+        return RESPONSE_PARAMS;
     }
 
     @Override
     protected RestChannelConsumer prepareRequest(RestRequest request, NodeClient client) {
-        if (settingsAccessor.getIsStatsEnabled() == false) {
-            // Process params, or else will automatically return a 400 instead of a 403
-            splitCommaSeparatedParam(request, "nodeId");
-            splitCommaSeparatedParam(request, "stat");
-            request.paramAsBoolean(FLATTEN_PARAM, false);
-            request.paramAsBoolean(INCLUDE_METADATA_PARAM, false);
-
+        if (settingsAccessor.isStatsEnabled() == false) {
             return channel -> channel.sendResponse(new BytesRestResponse(RestStatus.FORBIDDEN, "Stats endpoint is disabled"));
         }
 
         // Read inputs and convert to BaseNodesRequest with correct info configured
-        NeuralStatsRequest neuralStatsRequest = getRequest(request);
+        NeuralStatsRequest neuralStatsRequest = createNeuralStatsRequest(request);
 
         return channel -> client.execute(
             NeuralStatsAction.INSTANCE,
@@ -96,15 +102,9 @@ public class RestNeuralStatsHandler extends BaseRestHandler {
      * @param request Rest request
      * @return NeuralStatsRequest
      */
-    private NeuralStatsRequest getRequest(RestRequest request) {
-        // parse the nodes the user wants to query
-        String[] nodeIdsArr = null;
-        String nodesIdsStr = request.param("nodeId");
-        if (StringUtils.isNotEmpty(nodesIdsStr)) {
-            nodeIdsArr = nodesIdsStr.split(",");
-        }
-
+    private NeuralStatsRequest createNeuralStatsRequest(RestRequest request) {
         NeuralStatsInput neuralStatsInput = createNeuralStatsInputFromRequestParams(request);
+        String[] nodeIdsArr = neuralStatsInput.getNodeIds().toArray(new String[0]);
 
         NeuralStatsRequest neuralStatsRequest = new NeuralStatsRequest(nodeIdsArr, neuralStatsInput);
         neuralStatsRequest.timeout(request.param("timeout"));
@@ -130,28 +130,48 @@ public class RestNeuralStatsHandler extends BaseRestHandler {
 
         // Determine which stat names to retrieve based on user parameters
         Optional<String[]> stats = splitCommaSeparatedParam(request, "stat");
-        boolean retrieveAllStats = true;
 
-        // Add stats to input to retrieve if specified
-        if (stats.isPresent()) {
-            for (String stat : stats.get()) {
-                stat = stat.toLowerCase(Locale.ROOT);
-
-                if (EVENT_STAT_NAMES.contains(stat)) {
-                    retrieveAllStats = false;
-                    neuralStatsInput.getEventStatNames().add(EventStatName.from(stat));
-                } else if (STATE_STAT_NAMES.contains(stat)) {
-                    retrieveAllStats = false;
-                    neuralStatsInput.getStateStatNames().add(StateStatName.from(stat));
-                }
-            }
+        if (stats.isPresent() == false) {
+            // No specific stats requested, add all stats by default
+            addAllStats(neuralStatsInput);
+            return neuralStatsInput;
         }
 
-        // If no stats are specified, add all stats to retrieve all by default
-        if (retrieveAllStats) {
-            neuralStatsInput.getEventStatNames().addAll(EnumSet.allOf(EventStatName.class));
-            neuralStatsInput.getStateStatNames().addAll(EnumSet.allOf(StateStatName.class));
+        // Process requested stats
+        boolean anyStatAdded = processRequestedStats(stats.get(), neuralStatsInput);
+
+        // If no valid stats were added, fall back to all stats
+        if (anyStatAdded == false) {
+            addAllStats(neuralStatsInput);
         }
+
         return neuralStatsInput;
+    }
+
+    private boolean processRequestedStats(String[] stats, NeuralStatsInput neuralStatsInput) {
+        boolean statAdded = false;
+
+        for (String stat : stats) {
+            String normalizedStat = stat.toLowerCase(Locale.ROOT);
+            if (EVENT_STAT_NAMES.contains(normalizedStat)) {
+                neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
+                statAdded = true;
+            } else if (STATE_STAT_NAMES.contains(normalizedStat)) {
+                neuralStatsInput.getInfoStatNames().add(InfoStatName.from(normalizedStat));
+                statAdded = true;
+            }
+            log.info("Invalid stat name parsed: {}", normalizedStat);
+
+        }
+        return statAdded;
+    }
+
+    private void addAllStats(NeuralStatsInput neuralStatsInput) {
+        neuralStatsInput.getEventStatNames().addAll(EnumSet.allOf(EventStatName.class));
+        neuralStatsInput.getInfoStatNames().addAll(EnumSet.allOf(InfoStatName.class));
+    }
+
+    private Optional<String[]> splitCommaSeparatedParam(RestRequest request, String paramName) {
+        return Optional.ofNullable(request.param(paramName)).map(s -> s.split(","));
     }
 }

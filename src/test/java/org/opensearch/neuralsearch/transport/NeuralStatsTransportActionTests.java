@@ -17,9 +17,9 @@ import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.stats.events.TimestampedEventStatSnapshot;
-import org.opensearch.neuralsearch.stats.state.CountableStateStatSnapshot;
-import org.opensearch.neuralsearch.stats.state.StateStatName;
-import org.opensearch.neuralsearch.stats.state.StateStatsManager;
+import org.opensearch.neuralsearch.stats.info.CountableInfoStatSnapshot;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
+import org.opensearch.neuralsearch.stats.info.InfoStatsManager;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.TransportService;
@@ -53,7 +53,7 @@ public class NeuralStatsTransportActionTests extends OpenSearchTestCase {
     private EventStatsManager eventStatsManager;
 
     @Mock
-    private StateStatsManager stateStatsManager;
+    private InfoStatsManager infoStatsManager;
 
     private NeuralStatsTransportAction transportAction;
     private ClusterName clusterName;
@@ -70,7 +70,7 @@ public class NeuralStatsTransportActionTests extends OpenSearchTestCase {
             transportService,
             actionFilters,
             eventStatsManager,
-            stateStatsManager
+            infoStatsManager
         );
     }
 
@@ -93,9 +93,9 @@ public class NeuralStatsTransportActionTests extends OpenSearchTestCase {
     public void test_newResponseMultipleNodesStateAndEventStats() {
         // Create inputs
         EnumSet<EventStatName> eventStats = EnumSet.of(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS);
-        EnumSet<StateStatName> stateStats = EnumSet.of(StateStatName.TEXT_EMBEDDING_PROCESSORS);
+        EnumSet<InfoStatName> infoStats = EnumSet.of(InfoStatName.TEXT_EMBEDDING_PROCESSORS);
 
-        NeuralStatsInput input = NeuralStatsInput.builder().eventStatNames(eventStats).stateStatNames(stateStats).build();
+        NeuralStatsInput input = NeuralStatsInput.builder().eventStatNames(eventStats).infoStatNames(infoStats).build();
         NeuralStatsRequest request = new NeuralStatsRequest(new String[] {}, input);
 
         // Create multiple nodes
@@ -129,12 +129,12 @@ public class NeuralStatsTransportActionTests extends OpenSearchTestCase {
             new NeuralStatsNodeResponse(node2, nodeStats2)
         );
 
-        // Create state stats
-        CountableStateStatSnapshot stateStatSnapshot = new CountableStateStatSnapshot(StateStatName.TEXT_EMBEDDING_PROCESSORS);
-        stateStatSnapshot.incrementBy(2001L);
-        Map<StateStatName, StatSnapshot<?>> mockStateStats = new HashMap<>();
-        mockStateStats.put(StateStatName.TEXT_EMBEDDING_PROCESSORS, stateStatSnapshot);
-        when(stateStatsManager.getStats(stateStats)).thenReturn(mockStateStats);
+        // Create info stats
+        CountableInfoStatSnapshot infoStatSnapshot = new CountableInfoStatSnapshot(InfoStatName.TEXT_EMBEDDING_PROCESSORS);
+        infoStatSnapshot.incrementBy(2001L);
+        Map<InfoStatName, StatSnapshot<?>> mockInfoStats = new HashMap<>();
+        mockInfoStats.put(InfoStatName.TEXT_EMBEDDING_PROCESSORS, infoStatSnapshot);
+        when(infoStatsManager.getStats(infoStats)).thenReturn(mockInfoStats);
 
         List<FailedNodeException> failures = new ArrayList<>();
 
@@ -169,13 +169,13 @@ public class NeuralStatsTransportActionTests extends OpenSearchTestCase {
         assertEquals(20L, aggregatedStat.getTrailingIntervalValue());
         assertEquals(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS, aggregatedStat.getStatName());
 
-        // Verify state stats
+        // Verify info stats
         Map<String, StatSnapshot<?>> resultStats = response.getClusterLevelStats();
         assertNotNull(resultStats);
 
-        // Verify state stats
-        String stateStatPath = StateStatName.TEXT_EMBEDDING_PROCESSORS.getFullPath();
-        StatSnapshot<?> resultStateSnapshot = resultStats.get(stateStatPath);
+        // Verify info stats
+        String infoStatPath = InfoStatName.TEXT_EMBEDDING_PROCESSORS.getFullPath();
+        StatSnapshot<?> resultStateSnapshot = resultStats.get(infoStatPath);
         assertNotNull(resultStateSnapshot);
         assertEquals(2001L, resultStateSnapshot.getValue());
     }

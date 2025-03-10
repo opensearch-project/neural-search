@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.util;
 
 import com.google.common.annotations.VisibleForTesting;
-import lombok.NoArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.ingest.IngestService;
@@ -19,28 +18,15 @@ import java.util.stream.Collectors;
 /**
  * Class abstracts information related to ingest and search pipelines
  */
-@NoArgsConstructor
 @Log4j2
 public class PipelineServiceUtil {
     private ClusterService clusterService;
-    private static PipelineServiceUtil INSTANCE;
 
     /**
-     * Return instance of the pipeline context, must be initialized first for proper usage
-     * @return instance of pipeline context
-     */
-    public static synchronized PipelineServiceUtil instance() {
-        if (INSTANCE == null) {
-            INSTANCE = new PipelineServiceUtil();
-        }
-        return INSTANCE;
-    }
-
-    /**
-     * Initializes instance of info util by injecting dependencies
+     * Constructor
      * @param clusterService
      */
-    public void initialize(ClusterService clusterService) {
+    public PipelineServiceUtil(ClusterService clusterService) {
         this.clusterService = clusterService;
     }
 

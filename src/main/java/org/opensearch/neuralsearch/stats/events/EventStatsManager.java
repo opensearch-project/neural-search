@@ -4,7 +4,7 @@
  */
 package org.opensearch.neuralsearch.stats.events;
 
-import lombok.Getter;
+import lombok.NoArgsConstructor;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 
@@ -13,13 +13,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Manager class for event counter stats, used to track monotonically increasing counts plus some possible metadata
+ * Singleton manager class for event stats, used to increment and store event stat related data
  * The statistics collection can be enabled or disabled via cluster settings.
  */
+@NoArgsConstructor
 public class EventStatsManager {
-    @Getter
-    private Map<EventStatName, EventStat> stats;
-
     private static EventStatsManager INSTANCE;
     private NeuralSearchSettingsAccessor settingsAccessor;
 
@@ -31,7 +29,7 @@ public class EventStatsManager {
      */
     public static EventStatsManager instance() {
         if (INSTANCE == null) {
-            INSTANCE = new EventStatsManager(NeuralSearchSettingsAccessor.instance());
+            INSTANCE = new EventStatsManager();
         }
         return INSTANCE;
     }
@@ -46,20 +44,11 @@ public class EventStatsManager {
     }
 
     /**
-     * Constructs a new EventStatsManager with the provided settings accessor.
-     * Initializes statistics counters for all defined event types.
-     *
-     * @param settingsAccessor The accessor used to retrieve neural search settings
+     * Initializes dependencies for the EventStats manager
+     * @param settingsAccessor
      */
-    public EventStatsManager(NeuralSearchSettingsAccessor settingsAccessor) {
+    public void initialize(NeuralSearchSettingsAccessor settingsAccessor) {
         this.settingsAccessor = settingsAccessor;
-        this.stats = new HashMap<>();
-
-        for (EventStatName eventStatName : EnumSet.allOf(EventStatName.class)) {
-            if (eventStatName.getStatType() == EventStatType.TIMESTAMPED_COUNTER) {
-                stats.put(eventStatName, new TimestampedEventStat(eventStatName));
-            }
-        }
     }
 
     /**
@@ -68,9 +57,8 @@ public class EventStatsManager {
      * @param eventStatName The name of the event stat to increment
      */
     public void inc(EventStatName eventStatName) {
-        boolean enabled = settingsAccessor.getIsStatsEnabled();
-        if (enabled && stats.containsKey(eventStatName)) {
-            stats.get(eventStatName).increment();
+        if (settingsAccessor.isStatsEnabled()) {
+            eventStatName.getEventStat().increment();
         }
     }
 
@@ -84,8 +72,8 @@ public class EventStatsManager {
         // Filter stats based on passed in collection
         Map<EventStatName, TimestampedEventStatSnapshot> eventStatsDataMap = new HashMap<>();
         for (EventStatName statName : statsToRetrieve) {
-            if (stats.containsKey(statName) && statName.getStatType() == EventStatType.TIMESTAMPED_COUNTER) {
-                StatSnapshot<?> snapshot = stats.get(statName).getStatSnapshot();
+            if (statName.getStatType() == EventStatType.TIMESTAMPED_COUNTER) {
+                StatSnapshot<?> snapshot = statName.getEventStat().getStatSnapshot();
                 if (snapshot instanceof TimestampedEventStatSnapshot) {
                     // Get event data snapshot
                     eventStatsDataMap.put(statName, (TimestampedEventStatSnapshot) snapshot);
@@ -100,8 +88,8 @@ public class EventStatsManager {
      * Called when stats_enabled cluster setting is toggled off
      */
     public void reset() {
-        for (Map.Entry<EventStatName, EventStat> entry : stats.entrySet()) {
-            entry.getValue().reset();
+        for (EventStatName statName : EventStatName.values()) {
+            statName.getEventStat().reset();
         }
     }
 }

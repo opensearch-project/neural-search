@@ -4,7 +4,7 @@
  */
 package org.opensearch.neuralsearch.stats.events;
 
-import org.opensearch.neuralsearch.stats.state.StateStatName;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.ArrayList;
@@ -14,22 +14,22 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-public class StateStatNameTests extends OpenSearchTestCase {
-    public static final EnumSet<StateStatName> STATE_STATS = EnumSet.allOf(StateStatName.class);
+public class InfoStatNameTests extends OpenSearchTestCase {
+    public static final EnumSet<InfoStatName> STATE_STATS = EnumSet.allOf(InfoStatName.class);
 
     public void test_from_valid() {
-        String validStatName = StateStatName.TEXT_EMBEDDING_PROCESSORS.getNameString();
-        StateStatName result = StateStatName.from(validStatName);
-        assertEquals(StateStatName.TEXT_EMBEDDING_PROCESSORS, result);
+        String validStatName = InfoStatName.TEXT_EMBEDDING_PROCESSORS.getNameString();
+        InfoStatName result = InfoStatName.from(validStatName);
+        assertEquals(InfoStatName.TEXT_EMBEDDING_PROCESSORS, result);
     }
 
     public void test_from_invalid() {
-        assertThrows(IllegalArgumentException.class, () -> { StateStatName.from("non_existent_stat"); });
+        assertThrows(IllegalArgumentException.class, () -> { InfoStatName.from("non_existent_stat"); });
     }
 
     public void test_unique_names() {
         Set<String> names = new HashSet<>();
-        for (StateStatName statName : STATE_STATS) {
+        for (InfoStatName statName : STATE_STATS) {
             String name = statName.getNameString().toLowerCase(Locale.ROOT);
             assertFalse(String.format("Checking name uniqueness for %s", name), names.contains(name));
             names.add(name);
@@ -38,7 +38,7 @@ public class StateStatNameTests extends OpenSearchTestCase {
 
     public void test_unique_paths() {
         Set<String> paths = new HashSet<>();
-        for (StateStatName statName : STATE_STATS) {
+        for (InfoStatName statName : STATE_STATS) {
             String path = statName.getPath().toLowerCase(Locale.ROOT);
             assertFalse(String.format("Checking path uniqueness for %s", path), paths.contains(path));
             paths.add(path);
@@ -46,7 +46,7 @@ public class StateStatNameTests extends OpenSearchTestCase {
 
         // Check possible path collisions
         // i.e. a full path is a terminal path that should not have any children
-        for (StateStatName statName : STATE_STATS) {
+        for (InfoStatName statName : STATE_STATS) {
             String path = statName.getFullPath().toLowerCase(Locale.ROOT);
             assertFalse(String.format("Checking full path uniqueness for %s", path), paths.contains(path));
             paths.add(path);
@@ -61,7 +61,7 @@ public class StateStatNameTests extends OpenSearchTestCase {
     public void test_noPathCollisions() {
         // Convert paths to list and sort them
         List<String> sortedPaths = new ArrayList<>();
-        for (StateStatName stat : STATE_STATS) {
+        for (InfoStatName stat : STATE_STATS) {
             sortedPaths.add(stat.getFullPath().toLowerCase(Locale.ROOT));
         }
         sortedPaths.sort(String::compareTo);

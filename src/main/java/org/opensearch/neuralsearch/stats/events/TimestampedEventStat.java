@@ -133,18 +133,12 @@ public class TimestampedEventStat implements EventStat {
      * Used when the cluster setting to enable stats is toggled off
      */
     public void reset() {
-        Bucket[] newBuckets = new Bucket[TRAILING_NUMBER_OF_INTERVALS + 1];
-        for (int i = 0; i < TRAILING_NUMBER_OF_INTERVALS + 1; i++) {
-            newBuckets[i] = new Bucket();
+        for (int i = 0; i < buckets.length; i++) {
+            buckets[i].timestamp.set(0);
+            buckets[i].count.reset();
         }
-
         totalCounter.reset();
-
-        // Synchronized thread call shouldn't have performance hit, this will be called infrequently
-        synchronized (this) {
-            buckets = newBuckets;
-            lastEventTimestamp = 0;
-        }
+        lastEventTimestamp = 0;
     }
 
     /**

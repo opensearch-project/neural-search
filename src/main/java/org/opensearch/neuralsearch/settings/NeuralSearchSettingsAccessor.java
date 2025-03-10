@@ -9,29 +9,24 @@ import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 
+/**
+ * Class handles exposing settings related to neural search and manages callbacks when the settings change
+ */
 public class NeuralSearchSettingsAccessor {
-    private static NeuralSearchSettingsAccessor INSTANCE;
-    private boolean initialized;
-
     @Getter
-    private volatile Boolean isStatsEnabled;
+    private volatile boolean isStatsEnabled;
 
     /**
-     * Return instance of the cluster context, must be initialized first for proper usage
-     * @return instance of cluster context
+     * Constructor, registers callbacks to update settings
+     * @param clusterService
+     * @param settings
      */
-    public static synchronized NeuralSearchSettingsAccessor instance() {
-        if (INSTANCE == null) {
-            INSTANCE = new NeuralSearchSettingsAccessor();
-        }
-        return INSTANCE;
+    public NeuralSearchSettingsAccessor(ClusterService clusterService, Settings settings) {
+        isStatsEnabled = NeuralSearchSettings.NEURAL_STATS_ENABLED.get(settings);
+        registerSettingsCallbacks(clusterService);
     }
 
-    public void initialize(ClusterService clusterService, Settings settings) {
-        if (initialized) return;
-
-        isStatsEnabled = NeuralSearchSettings.NEURAL_STATS_ENABLED.get(settings);
-
+    private void registerSettingsCallbacks(ClusterService clusterService) {
         clusterService.getClusterSettings().addSettingsUpdateConsumer(NeuralSearchSettings.NEURAL_STATS_ENABLED, value -> {
             // If stats are being toggled off, clear and reset all stats
             if (isStatsEnabled && (value == false)) {
@@ -40,5 +35,4 @@ public class NeuralSearchSettingsAccessor {
             isStatsEnabled = value;
         });
     }
-
 }

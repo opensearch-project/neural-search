@@ -2,18 +2,19 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.stats.state;
+package org.opensearch.neuralsearch.stats.info;
 
 import org.opensearch.neuralsearch.stats.common.StatType;
 
 import java.util.Locale;
 
 /**
- * Enum for different kinds of state stat types to track
+ * Enum for different kinds of info stat types to track
  */
-public enum StateStatType implements StatType {
+public enum InfoStatType implements StatType {
     COUNTABLE,
-    SETTABLE;
+    SETTABLE_STRING,
+    SETTABLE_BOOLEAN;
 
     /**
      * Gets the name of the stat type, the enum name in lowercase

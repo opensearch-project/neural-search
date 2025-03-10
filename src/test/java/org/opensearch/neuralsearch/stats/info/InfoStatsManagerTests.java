@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.stats.state;
+package org.opensearch.neuralsearch.stats.info;
 
 import org.junit.Before;
 import org.mockito.Mock;
@@ -21,7 +21,7 @@ import java.util.Set;
 
 import static org.mockito.Mockito.when;
 
-public class StateStatsManagerTests extends OpenSearchTestCase {
+public class InfoStatsManagerTests extends OpenSearchTestCase {
     @Mock
     private NeuralSearchSettingsAccessor mockSettingsAccessor;
     @Mock
@@ -29,28 +29,28 @@ public class StateStatsManagerTests extends OpenSearchTestCase {
     @Mock
     private PipelineServiceUtil mockPipelineServiceUtil;
 
-    private StateStatsManager stateStatsManager;
+    private InfoStatsManager infoStatsManager;
 
     @Before
     public void setup() {
         MockitoAnnotations.openMocks(this);
         when(mockPipelineServiceUtil.getIngestPipelineConfigs()).thenReturn(new ArrayList<>());
         when(mockClusterUtil.getClusterMinVersion()).thenReturn(Version.fromString("3.0.0"));
-        stateStatsManager = new StateStatsManager(mockSettingsAccessor, mockClusterUtil, mockPipelineServiceUtil);
+        infoStatsManager = new InfoStatsManager(mockClusterUtil, mockSettingsAccessor, mockPipelineServiceUtil);
     }
 
     public void test_getStats_returnsAllStats() {
-        Map<StateStatName, StatSnapshot<?>> stats = stateStatsManager.getStats(EnumSet.allOf(StateStatName.class));
-        Set<StateStatName> allStatNames = EnumSet.allOf(StateStatName.class);
+        Map<InfoStatName, StatSnapshot<?>> stats = infoStatsManager.getStats(EnumSet.allOf(InfoStatName.class));
+        Set<InfoStatName> allStatNames = EnumSet.allOf(InfoStatName.class);
 
         assertEquals(allStatNames, stats.keySet());
     }
 
     public void test_getStats_returnsFilteredStats() {
-        Map<StateStatName, StatSnapshot<?>> stats = stateStatsManager.getStats(EnumSet.of(StateStatName.CLUSTER_VERSION));
+        Map<InfoStatName, StatSnapshot<?>> stats = infoStatsManager.getStats(EnumSet.of(InfoStatName.CLUSTER_VERSION));
 
         assertEquals(1, stats.size());
-        assertTrue(stats.containsKey(StateStatName.CLUSTER_VERSION));
-        assertEquals("3.0.0", ((SettableStateStatSnapshot<?>) stats.get(StateStatName.CLUSTER_VERSION)).getValue());
+        assertTrue(stats.containsKey(InfoStatName.CLUSTER_VERSION));
+        assertEquals("3.0.0", ((SettableInfoStatSnapshot<?>) stats.get(InfoStatName.CLUSTER_VERSION)).getValue());
     }
 }

@@ -63,7 +63,7 @@ import org.opensearch.neuralsearch.plugin.NeuralSearch;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
-import org.opensearch.neuralsearch.stats.state.StateStatName;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 import org.opensearch.search.SearchHit;
@@ -1861,8 +1861,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return getNestedValue(map, eventStatName.getFullPath());
     }
 
-    protected Object getNestedValue(Map<String, Object> map, StateStatName stateStatName) {
-        return getNestedValue(map, stateStatName.getFullPath());
+    protected Object getNestedValue(Map<String, Object> map, InfoStatName infoStatName) {
+        return getNestedValue(map, infoStatName.getFullPath());
     }
 
     protected Object getNestedValue(Map<String, Object> sourceMap, String dotNotationPath) {

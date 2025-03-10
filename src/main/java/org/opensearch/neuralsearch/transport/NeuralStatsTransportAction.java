@@ -13,8 +13,8 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 import org.opensearch.neuralsearch.stats.events.TimestampedEventStatSnapshot;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
-import org.opensearch.neuralsearch.stats.state.StateStatName;
-import org.opensearch.neuralsearch.stats.state.StateStatsManager;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
+import org.opensearch.neuralsearch.stats.info.InfoStatsManager;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.transport.TransportService;
 import org.opensearch.threadpool.ThreadPool;
@@ -39,7 +39,7 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
     private static final String ALL_NODES_PREFIX = "all_nodes";
 
     private final EventStatsManager eventStatsManager;
-    private final StateStatsManager stateStatsManager;
+    private final InfoStatsManager infoStatsManager;
 
     /**
      * Constructor
@@ -56,7 +56,7 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         TransportService transportService,
         ActionFilters actionFilters,
         EventStatsManager eventStatsManager,
-        StateStatsManager stateStatsManager
+        InfoStatsManager infoStatsManager
     ) {
         super(
             NeuralStatsAction.NAME,
@@ -70,7 +70,7 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
             NeuralStatsNodeResponse.class
         );
         this.eventStatsManager = eventStatsManager;
-        this.stateStatsManager = stateStatsManager;
+        this.infoStatsManager = infoStatsManager;
     }
 
     @Override
@@ -94,8 +94,8 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         // Add aggregate to summed map
         resultStats.putAll(nodeAggregatedEventStats);
 
-        // Get state stats
-        Map<StateStatName, StatSnapshot<?>> stateStats = stateStatsManager.getStats(request.getNeuralStatsInput().getStateStatNames());
+        // Get info stats
+        Map<InfoStatName, StatSnapshot<?>> stateStats = infoStatsManager.getStats(request.getNeuralStatsInput().getInfoStatNames());
 
         // Convert stat name keys into flat path strings
         Map<String, StatSnapshot<?>> flatStateStats = stateStats.entrySet()

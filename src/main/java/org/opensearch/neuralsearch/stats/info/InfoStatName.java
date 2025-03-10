@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.stats.state;
+package org.opensearch.neuralsearch.stats.info;
 
 import lombok.Getter;
 import org.apache.commons.lang.StringUtils;
@@ -13,19 +13,19 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Enum that contains all state stat names, paths, and types
+ * Enum that contains all info stat names, paths, and types
  */
 @Getter
-public enum StateStatName implements StatName {
+public enum InfoStatName implements StatName {
     // Cluster info
-    CLUSTER_VERSION("cluster_version", "", StateStatType.SETTABLE),
-    TEXT_EMBEDDING_PROCESSORS("text_embedding_processors_in_pipelines", "processors.ingest", StateStatType.COUNTABLE);
+    CLUSTER_VERSION("cluster_version", "", InfoStatType.SETTABLE_STRING),
+    TEXT_EMBEDDING_PROCESSORS("text_embedding_processors_in_pipelines", "processors.ingest", InfoStatType.COUNTABLE);
 
     private final String nameString;
     private final String path;
-    private final StateStatType statType;
+    private final InfoStatType statType;
 
-    private static final Map<String, StateStatName> BY_NAME = Arrays.stream(values())
+    private static final Map<String, InfoStatName> BY_NAME = Arrays.stream(values())
         .collect(Collectors.toMap(stat -> stat.nameString, stat -> stat));
 
     /**
@@ -34,7 +34,7 @@ public enum StateStatName implements StatName {
      * @param path the unique path of the stat
      * @param statType the category of stat
      */
-    StateStatName(String nameString, String path, StateStatType statType) {
+    InfoStatName(String nameString, String path, InfoStatType statType) {
         this.nameString = nameString;
         this.path = path;
         this.statType = statType;
@@ -46,9 +46,9 @@ public enum StateStatName implements StatName {
      * @param value the string name of the stat
      * @return the StatName enum associated with that String name
      */
-    public static StateStatName from(String value) {
+    public static InfoStatName from(String value) {
         if (BY_NAME.containsKey(value) == false) {
-            throw new IllegalArgumentException(String.format("State stat not found: %s", value));
+            throw new IllegalArgumentException(String.format("Info stat not found: %s", value));
         }
         return BY_NAME.get(value);
     }

@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.stats.state;
+package org.opensearch.neuralsearch.stats.info;
 
 import org.opensearch.common.xcontent.json.JsonXContent;
 import org.opensearch.core.xcontent.ToXContent;
@@ -15,11 +15,11 @@ import java.util.Map;
 
 import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 
-public class CountableStateStatSnapshotTests extends OpenSearchTestCase {
-    private static final StateStatName STAT_NAME = StateStatName.TEXT_EMBEDDING_PROCESSORS;
+public class CountableInfoStatSnapshotTests extends OpenSearchTestCase {
+    private static final InfoStatName STAT_NAME = InfoStatName.TEXT_EMBEDDING_PROCESSORS;
 
     public void test_increment() {
-        CountableStateStatSnapshot snapshot = new CountableStateStatSnapshot(STAT_NAME);
+        CountableInfoStatSnapshot snapshot = new CountableInfoStatSnapshot(STAT_NAME);
         assertEquals(0L, snapshot.getValue().longValue());
         snapshot.incrementBy(5L);
         assertEquals(5L, snapshot.getValue().longValue());
@@ -28,7 +28,7 @@ public class CountableStateStatSnapshotTests extends OpenSearchTestCase {
     }
 
     public void test_toXContent() throws IOException {
-        CountableStateStatSnapshot snapshot = new CountableStateStatSnapshot(STAT_NAME);
+        CountableInfoStatSnapshot snapshot = new CountableInfoStatSnapshot(STAT_NAME);
         snapshot.incrementBy(8675309L);
 
         XContentBuilder builder = JsonXContent.contentBuilder();

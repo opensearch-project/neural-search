@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.stats.state;
+package org.opensearch.neuralsearch.stats.info;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -12,22 +12,22 @@ import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 import java.io.IOException;
 
 /**
- * A settable state snapshot used to track Strings, booleans, or other simple serializable objects
+ * A settable info snapshot used to track Strings, booleans, or other simple serializable objects
  * This are meant to be constructed, set, and serialized, not for long storage in memory
  * @param <T> the type of the value to set
  */
-public class SettableStateStatSnapshot<T> implements StatSnapshot<T> {
+public class SettableInfoStatSnapshot<T> implements StatSnapshot<T> {
     @Getter
     @Setter
     private T value;
 
-    private StateStatName statName;
+    private InfoStatName statName;
 
     /**
      * Creates a new stat snapshot with default null value
      * @param statName the associated stat name
      */
-    public SettableStateStatSnapshot(StateStatName statName) {
+    public SettableInfoStatSnapshot(InfoStatName statName) {
         this.statName = statName;
         this.value = null;
     }
@@ -37,7 +37,7 @@ public class SettableStateStatSnapshot<T> implements StatSnapshot<T> {
      * @param statName the associated stat name
      * @param value the initial value to set
      */
-    public SettableStateStatSnapshot(StateStatName statName, T value) {
+    public SettableInfoStatSnapshot(InfoStatName statName, T value) {
         this.statName = statName;
         this.value = value;
     }
