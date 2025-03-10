@@ -18,6 +18,7 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechniq
 import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ZScoreNormalizationTechnique;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 
@@ -50,8 +51,9 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
     ) throws Exception {
         Map<String, Object> normalizationClause = readOptionalMap(NormalizationProcessor.TYPE, tag, config, NORMALIZATION_CLAUSE);
         ScoreNormalizationTechnique normalizationTechnique = ScoreNormalizationFactory.DEFAULT_METHOD;
+        String normalizationTechniqueName = MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME;
         if (Objects.nonNull(normalizationClause)) {
-            String normalizationTechniqueName = readStringProperty(
+            normalizationTechniqueName = readStringProperty(
                 NormalizationProcessor.TYPE,
                 tag,
                 normalizationClause,
@@ -73,6 +75,11 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
                 TECHNIQUE,
                 ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME
             );
+            // case when technique is z score and combination is not arithmetic mean
+            if (normalizationTechniqueName.equals(ZScoreNormalizationTechnique.TECHNIQUE_NAME)
+                && !combinationTechnique.equals(ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME)) {
+                throw new IllegalArgumentException("Z Score supports only arithmetic_mean combination technique");
+            }
             // check for optional combination params
             Map<String, Object> combinationParams = readOptionalMap(NormalizationProcessor.TYPE, tag, combinationClause, PARAMETERS);
             scoreCombinationTechnique = scoreCombinationFactory.createCombination(combinationTechnique, combinationParams);

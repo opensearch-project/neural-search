@@ -273,6 +273,11 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         assertEquals(1.0f, topDocs2.scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION); // doc2 in second subquery
         assertEquals(0.0f, topDocs2.scoreDocs[1].score, DELTA_FOR_SCORE_ASSERTION); // doc1 in second subquery
         assertEquals(1.0f, topDocs3.scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION); // doc1 in third subquery
+
+        // Verify explanation descriptions
+        assertTrue(doc1Scores.get(0).getValue().contains("min_max normalization"));
+        assertTrue(doc1Scores.get(1).getValue().contains("min_max normalization"));
+        assertTrue(doc1Scores.get(2).getValue().contains("min_max normalization"));
     }
 
     public void testLowerBoundsModeFromString_whenValidValues_thenSuccessful() {
