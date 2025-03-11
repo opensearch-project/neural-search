@@ -45,7 +45,9 @@ dependencies {
     testRuntimeOnly('com.jayway.jsonpath:json-path:2.9.0') {
         // OpenSearch core is using slf4j 1.7.36. Therefore, we cannot change the version here.
         exclude group: 'org.slf4j', module: 'slf4j-api'
+        exclude group: 'net.minidev', module: 'json-smart'
     }
+    testRuntimeOnly group: 'net.minidev', name:'json-smart', version: '2.5.2'
     api "org.apache.logging.log4j:log4j-api:${versions.log4j}"
     api "org.apache.logging.log4j:log4j-core:${versions.log4j}"
     api "junit:junit:${versions.junit}"
