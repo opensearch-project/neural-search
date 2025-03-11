@@ -25,9 +25,12 @@ import java.util.stream.Collectors;
  */
 @Getter
 public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeResponse> implements ToXContentObject {
+    public static final String INFO_KEY_PREFIX = "info";
+    public static final String NODES_KEY_PREFIX = "nodes";
+    public static final String AGGREGATED_NODES_KEY_PREFIX = "all_nodes";
 
-    private static final String NODES_KEY = "nodes";
-    private Map<String, StatSnapshot<?>> clusterLevelStats;
+    private Map<String, StatSnapshot<?>> infoStats;
+    private Map<String, StatSnapshot<?>> aggregatedNodeStats;
     private Map<String, Map<String, StatSnapshot<?>>> nodeIdToNodeEventStats;
     private boolean flatten;
     private boolean includeMetadata;
@@ -40,11 +43,13 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
      */
     public NeuralStatsResponse(StreamInput in) throws IOException {
         super(new ClusterName(in), in.readList(NeuralStatsNodeResponse::readStats), in.readList(FailedNodeException::new));
-        Map<String, StatSnapshot<?>> castedStats = (Map<String, StatSnapshot<?>>) (Map) in.readMap();
+        Map<String, StatSnapshot<?>> castedInfoStats = (Map<String, StatSnapshot<?>>) (Map) in.readMap();
+        Map<String, StatSnapshot<?>> castedAggregatedNodeStats = (Map<String, StatSnapshot<?>>) (Map) in.readMap();
         Map<String, Map<String, StatSnapshot<?>>> castedNodeIdToNodeEventStats = (Map<String, Map<String, StatSnapshot<?>>>) (Map) in
             .readMap();
 
-        this.clusterLevelStats = castedStats;
+        this.infoStats = castedInfoStats;
+        this.aggregatedNodeStats = castedAggregatedNodeStats;
         this.nodeIdToNodeEventStats = castedNodeIdToNodeEventStats;
         this.flatten = in.readBoolean();
         this.includeMetadata = in.readBoolean();
@@ -56,19 +61,20 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
      * @param clusterName name of cluster
      * @param nodes List of NeuralStatsNodeResponses
      * @param failures List of failures from nodes
-     * @param clusterLevelStats
      */
     public NeuralStatsResponse(
         ClusterName clusterName,
         List<NeuralStatsNodeResponse> nodes,
         List<FailedNodeException> failures,
-        Map<String, StatSnapshot<?>> clusterLevelStats,
+        Map<String, StatSnapshot<?>> infoStats,
+        Map<String, StatSnapshot<?>> aggregatedNodeStats,
         Map<String, Map<String, StatSnapshot<?>>> nodeIdToNodeEventStats,
         boolean flatten,
         boolean includeMetadata
     ) {
         super(clusterName, nodes, failures);
-        this.clusterLevelStats = clusterLevelStats;
+        this.infoStats = infoStats;
+        this.aggregatedNodeStats = aggregatedNodeStats;
         this.nodeIdToNodeEventStats = nodeIdToNodeEventStats;
         this.flatten = flatten;
         this.includeMetadata = includeMetadata;
@@ -77,10 +83,13 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
-        Map<String, Object> downcastedStats = (Map<String, Object>) (Map) (clusterLevelStats);
-        Map<String, Object> downcastedNodeStats = (Map<String, Object>) (Map) (nodeIdToNodeEventStats);
-        out.writeMap(downcastedStats);
-        out.writeMap(downcastedNodeStats);
+        Map<String, Object> downcastedInfoStats = (Map<String, Object>) (Map) (infoStats);
+        Map<String, Object> downcastedAggregatedNodeStats = (Map<String, Object>) (Map) (aggregatedNodeStats);
+        Map<String, Object> downcastedNodeIdToNodeEventStats = (Map<String, Object>) (Map) (nodeIdToNodeEventStats);
+
+        out.writeMap(downcastedInfoStats);
+        out.writeMap(downcastedAggregatedNodeStats);
+        out.writeMap(downcastedNodeIdToNodeEventStats);
         out.writeBoolean(flatten);
         out.writeBoolean(includeMetadata);
     }
@@ -97,12 +106,18 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        Map<String, Object> formattedClusterLevelStats = formatStats(clusterLevelStats);
-        builder.mapContents(formattedClusterLevelStats);
+        Map<String, Object> formattedInfoStats = formatStats(infoStats);
+        builder.startObject(INFO_KEY_PREFIX);
+        builder.mapContents(formattedInfoStats);
+        builder.endObject();
+
+        Map<String, Object> formattedAggregatedNodeStats = formatStats(aggregatedNodeStats);
+        builder.startObject(AGGREGATED_NODES_KEY_PREFIX);
+        builder.mapContents(formattedAggregatedNodeStats);
+        builder.endObject();
 
         Map<String, Object> formattedNodeEventStats = formatNodeEventStats(nodeIdToNodeEventStats);
-
-        builder.startObject(NODES_KEY);
+        builder.startObject(NODES_KEY_PREFIX);
         builder.mapContents(formattedNodeEventStats);
         builder.endObject();
 

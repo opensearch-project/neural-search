@@ -12,7 +12,7 @@ import java.util.Locale;
  * Enum for different kinds of info stat types to track
  */
 public enum InfoStatType implements StatType {
-    COUNTABLE,
+    INFO_COUNTABLE,
     SETTABLE_STRING,
     SETTABLE_BOOLEAN;
 

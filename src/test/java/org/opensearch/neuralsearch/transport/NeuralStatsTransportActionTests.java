@@ -157,20 +157,21 @@ public class NeuralStatsTransportActionTests extends OpenSearchTestCase {
         StatSnapshot<?> node2Stat = nodeEventStats.get("test-node-2").get(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getFullPath());
         assertEquals(33L, node2Stat.getValue());
 
-        Map<String, StatSnapshot<?>> clusterStats = response.getClusterLevelStats();
-        assertNotNull(clusterStats);
+        Map<String, StatSnapshot<?>> aggregatedNodeStats = response.getAggregatedNodeStats();
+        assertNotNull(aggregatedNodeStats);
 
         // Validate timestamped event stats aggregated correctly
-        String aggregatedStatPath = "all_nodes." + EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getFullPath();
-        TimestampedEventStatSnapshot aggregatedStat = (TimestampedEventStatSnapshot) clusterStats.get(aggregatedStatPath);
+        String aggregatedStatPath = EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getFullPath();
+        TimestampedEventStatSnapshot aggregatedStat = (TimestampedEventStatSnapshot) aggregatedNodeStats.get(aggregatedStatPath);
         assertNotNull(aggregatedStat);
+
         assertEquals(50L, aggregatedStat.getValue().longValue());
         assertEquals(0L, aggregatedStat.getMinutesSinceLastEvent());
         assertEquals(20L, aggregatedStat.getTrailingIntervalValue());
         assertEquals(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS, aggregatedStat.getStatName());
 
         // Verify info stats
-        Map<String, StatSnapshot<?>> resultStats = response.getClusterLevelStats();
+        Map<String, StatSnapshot<?>> resultStats = response.getInfoStats();
         assertNotNull(resultStats);
 
         // Verify info stats

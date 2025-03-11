@@ -13,6 +13,7 @@ import org.opensearch.core.common.io.stream.Writeable;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.ToXContentObject;
 import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.neuralsearch.rest.RestNeuralStatsAction;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
 
@@ -160,8 +161,8 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         if (infoStatNames != null) {
             builder.field(STATE_STAT_NAMES_FIELD, infoStatNames);
         }
-        builder.field("include_metadata", includeMetadata);
-        builder.field("flat_keys", flatten);
+        builder.field(RestNeuralStatsAction.INCLUDE_METADATA_PARAM, includeMetadata);
+        builder.field(RestNeuralStatsAction.FLATTEN_PARAM, flatten);
         builder.endObject();
         return builder;
     }

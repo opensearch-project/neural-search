@@ -36,7 +36,8 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
     private ClusterName clusterName;
     private List<NeuralStatsNodeResponse> nodes;
     private List<FailedNodeException> failures;
-    private Map<String, StatSnapshot<?>> clusterLevelStats;
+    private Map<String, StatSnapshot<?>> infoStats;
+    private Map<String, StatSnapshot<?>> aggregatedNodeStats;
     private Map<String, Map<String, StatSnapshot<?>>> nodeIdToNodeEventStats;
 
     @Mock
@@ -51,14 +52,18 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
         clusterName = new ClusterName("test-cluster");
         nodes = new ArrayList<>();
         failures = new ArrayList<>();
-        clusterLevelStats = new HashMap<>();
+        infoStats = new HashMap<>();
+        aggregatedNodeStats = new HashMap<>();
         nodeIdToNodeEventStats = new HashMap<>();
     }
 
     public void test_constructor() throws IOException {
         when(mockStreamInput.readString()).thenReturn("test-cluster");
         when(mockStreamInput.readList(any())).thenReturn((List) nodes).thenReturn((List) failures);
-        when(mockStreamInput.readMap()).thenReturn((Map) clusterLevelStats).thenReturn((Map) nodeIdToNodeEventStats);
+        when(mockStreamInput.readMap())
+                .thenReturn((Map) infoStats)
+                .thenReturn((Map) aggregatedNodeStats)
+                .thenReturn((Map) nodeIdToNodeEventStats);
 
         // Booleans as bytes
         when(mockStreamInput.readByte()).thenReturn((byte) 1).thenReturn((byte) 0);
@@ -68,7 +73,8 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
         assertEquals("test-cluster", response.getClusterName().value());
         assertEquals(nodes, response.getNodes());
         assertEquals(failures, response.failures());
-        assertEquals(clusterLevelStats, response.getClusterLevelStats());
+        assertEquals(infoStats, response.getInfoStats());
+        assertEquals(aggregatedNodeStats, response.getAggregatedNodeStats());
         assertEquals(nodeIdToNodeEventStats, response.getNodeIdToNodeEventStats());
         assertTrue(response.isFlatten());
         assertFalse(response.isIncludeMetadata());
@@ -79,7 +85,8 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
             clusterName,
             nodes,
             failures,
-            clusterLevelStats,
+            infoStats,
+            aggregatedNodeStats,
             nodeIdToNodeEventStats,
             true,
             false
@@ -94,7 +101,7 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
 
         // 2 calls, one by BaseNodesResponse, one by class under test
         verify(mockStreamOutput, times(2)).writeList(failures);
-        verify(mockStreamOutput, times(2)).writeMap(any());
+        verify(mockStreamOutput, times(3)).writeMap(any());
         verify(mockStreamOutput).writeBoolean(true);
         verify(mockStreamOutput).writeBoolean(false);
     }
@@ -104,7 +111,8 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
             clusterName,
             nodes,
             failures,
-            clusterLevelStats,
+            infoStats,
+            aggregatedNodeStats,
             nodeIdToNodeEventStats,
             false,
             true
@@ -121,16 +129,17 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
         assertTrue(((Map<String, Object>) responseMap.get("nodes")).isEmpty());
     }
 
-    public void test_toXContent_withClusterStats() throws IOException {
+    public void test_toXContent_withInfoStats() throws IOException {
         StatSnapshot<Long> mockSnapshot = mock(StatSnapshot.class);
         when(mockSnapshot.getValue()).thenReturn(42L);
-        clusterLevelStats.put("test.nested.stat", mockSnapshot);
+        infoStats.put("test.nested.stat", mockSnapshot);
 
         NeuralStatsResponse response = new NeuralStatsResponse(
             clusterName,
             nodes,
             failures,
-            clusterLevelStats,
+            infoStats,
+            aggregatedNodeStats,
             nodeIdToNodeEventStats,
             false,
             false
@@ -142,21 +151,23 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
         builder.endObject();
         Map<String, Object> responseMap = xContentBuilderToMap(builder);
 
-        Map<String, Object> testMap = (Map<String, Object>) responseMap.get("test");
+        Map<String, Object> infoMap = (Map<String, Object>) responseMap.get("info");
+        Map<String, Object> testMap = (Map<String, Object>) infoMap.get("test");
         Map<String, Object> nestedMap = (Map<String, Object>) testMap.get("nested");
         assertEquals(42, nestedMap.get("stat"));
     }
 
-    public void test_toXContent_withClusterStats_flattened() throws IOException {
+    public void test_toXContent_withStats_flattened() throws IOException {
         StatSnapshot<Long> mockSnapshot = mock(StatSnapshot.class);
         when(mockSnapshot.getValue()).thenReturn(42L);
-        clusterLevelStats.put("test.nested.stat", mockSnapshot);
+        infoStats.put("test.nested.stat", mockSnapshot);
 
         NeuralStatsResponse response = new NeuralStatsResponse(
             clusterName,
             nodes,
             failures,
-            clusterLevelStats,
+            infoStats,
+            aggregatedNodeStats,
             nodeIdToNodeEventStats,
             true,
             false
@@ -168,7 +179,8 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
         builder.endObject();
         Map<String, Object> responseMap = xContentBuilderToMap(builder);
 
-        assertEquals(42, responseMap.get("test.nested.stat"));
+        Map<String, Object> infoMap = (Map<String, Object>) responseMap.get("info");
+        assertEquals(42, infoMap.get("test.nested.stat"));
     }
 
     public void test_toXContent_withNodeStats() throws IOException {
@@ -182,7 +194,8 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
             clusterName,
             nodes,
             failures,
-            clusterLevelStats,
+            infoStats,
+            aggregatedNodeStats,
             nodeIdToNodeEventStats,
             false,
             false
@@ -211,7 +224,8 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
             clusterName,
             nodes,
             failures,
-            clusterLevelStats,
+            infoStats,
+            aggregatedNodeStats,
             nodeIdToNodeEventStats,
             true,
             false
@@ -235,13 +249,14 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
             "For crying out loud!"
         );
 
-        clusterLevelStats.put("test.nested.stat", infoStatSnapshot);
+        infoStats.put("test.nested.stat", infoStatSnapshot);
 
         NeuralStatsResponse response = new NeuralStatsResponse(
             clusterName,
             nodes,
             failures,
-            clusterLevelStats,
+            infoStats,
+            aggregatedNodeStats,
             nodeIdToNodeEventStats,
             false,
             true
@@ -254,7 +269,8 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
 
         Map<String, Object> responseMap = xContentBuilderToMap(builder);
 
-        Map<String, Object> testMap = (Map<String, Object>) responseMap.get("test");
+        Map<String, Object> infoMap = (Map<String, Object>) responseMap.get("info");
+        Map<String, Object> testMap = (Map<String, Object>) infoMap.get("test");
         Map<String, Object> nestedMap = (Map<String, Object>) testMap.get("nested");
         Map<String, Object> statMap = (Map<String, Object>) nestedMap.get("stat");
 

@@ -9,6 +9,7 @@ import org.apache.commons.lang.StringUtils;
 import org.opensearch.neuralsearch.stats.common.StatName;
 
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -19,7 +20,7 @@ import java.util.stream.Collectors;
 public enum InfoStatName implements StatName {
     // Cluster info
     CLUSTER_VERSION("cluster_version", "", InfoStatType.SETTABLE_STRING),
-    TEXT_EMBEDDING_PROCESSORS("text_embedding_processors_in_pipelines", "processors.ingest", InfoStatType.COUNTABLE);
+    TEXT_EMBEDDING_PROCESSORS("text_embedding_processors_in_pipelines", "processors.ingest", InfoStatType.INFO_COUNTABLE);
 
     private final String nameString;
     private final String path;
@@ -48,7 +49,7 @@ public enum InfoStatName implements StatName {
      */
     public static InfoStatName from(String value) {
         if (BY_NAME.containsKey(value) == false) {
-            throw new IllegalArgumentException(String.format("Info stat not found: %s", value));
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "Info stat not found: %s", value));
         }
         return BY_NAME.get(value);
     }

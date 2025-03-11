@@ -36,8 +36,6 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
     NeuralStatsResponse,
     NeuralStatsNodeRequest,
     NeuralStatsNodeResponse> {
-    private static final String ALL_NODES_PREFIX = "all_nodes";
-
     private final EventStatsManager eventStatsManager;
     private final InfoStatsManager infoStatsManager;
 
@@ -86,30 +84,25 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         Map<String, Map<String, StatSnapshot<?>>> nodeIdToEventStats = processorNodeEventStatsIntoMap(responses);
 
         // Sum the map to aggregate
-        Map<String, StatSnapshot<?>> nodeAggregatedEventStats = aggregateNodesResponses(
+        Map<String, StatSnapshot<?>> aggregatedNodeStats = aggregateNodesResponses(
             responses,
             request.getNeuralStatsInput().getEventStatNames()
         );
 
-        // Add aggregate to summed map
-        resultStats.putAll(nodeAggregatedEventStats);
-
         // Get info stats
-        Map<InfoStatName, StatSnapshot<?>> stateStats = infoStatsManager.getStats(request.getNeuralStatsInput().getInfoStatNames());
+        Map<InfoStatName, StatSnapshot<?>> infoStats = infoStatsManager.getStats(request.getNeuralStatsInput().getInfoStatNames());
 
         // Convert stat name keys into flat path strings
-        Map<String, StatSnapshot<?>> flatStateStats = stateStats.entrySet()
+        Map<String, StatSnapshot<?>> flatInfoStats = infoStats.entrySet()
             .stream()
             .collect(Collectors.toMap(entry -> entry.getKey().getFullPath(), Map.Entry::getValue));
-
-        // Add to map
-        resultStats.putAll(flatStateStats);
 
         return new NeuralStatsResponse(
             clusterService.getClusterName(),
             responses,
             failures,
-            resultStats,
+            flatInfoStats,
+            aggregatedNodeStats,
             nodeIdToEventStats,
             request.getNeuralStatsInput().isFlatten(),
             request.getNeuralStatsInput().isIncludeMetadata()
@@ -152,6 +145,11 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         List<NeuralStatsNodeResponse> responses,
         EnumSet<EventStatName> statsToRetrieve
     ) {
+        // Catch empty nodes responses case.
+        if (responses == null || responses.isEmpty()) {
+            return new HashMap<>();
+        }
+
         // Convert node responses into list of Map<EventStatName, EventStatData>
         List<Map<EventStatName, TimestampedEventStatSnapshot>> nodeEventStatsList = responses.stream()
             .map(NeuralStatsNodeResponse::getStats)
@@ -169,7 +167,11 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
             TimestampedEventStatSnapshot aggregatedEventSnapshots = TimestampedEventStatSnapshot.aggregateEventStatSnapshots(
                 timestampedEventStatSnapshotCollection
             );
-            aggregatedMap.put(ALL_NODES_PREFIX + "." + eventStatName.getFullPath(), aggregatedEventSnapshots);
+
+            // Skip adding null event stats. This happens when a node id parameter is invalid.
+            if (aggregatedEventSnapshots != null) {
+                aggregatedMap.put(eventStatName.getFullPath(), aggregatedEventSnapshots);
+            }
         }
 
         return aggregatedMap;

@@ -5,10 +5,8 @@
 package org.opensearch.neuralsearch.rest;
 
 import lombok.extern.log4j.Log4j2;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.junit.After;
 import org.junit.Before;
-import org.opensearch.client.Response;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.neuralsearch.stats.common.StatSnapshot;
@@ -73,14 +71,12 @@ public class RestNeuralStatsActionIT extends BaseNeuralSearchIT {
         assertEquals(3, getDocCount(INDEX_NAME));
 
         // Get stats request
-        Response response;
         String responseBody;
         Map<String, Object> stats;
         List<Map<String, Object>> nodesStats;
 
-        response = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
-        responseBody = EntityUtils.toString(response.getEntity());
-        stats = parseStatsResponse(responseBody);
+        responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        stats = parseInfoStatsResponse(responseBody);
         nodesStats = parseNodeStatsResponse(responseBody);
 
         // Parse json to get stats
@@ -92,25 +88,22 @@ public class RestNeuralStatsActionIT extends BaseNeuralSearchIT {
         updateClusterSettings("plugins.neural_search.stats_enabled", true);
 
         // info stats should persist, event stats should be reset
-        response = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
-        responseBody = EntityUtils.toString(response.getEntity());
-        stats = parseStatsResponse(responseBody);
+        responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        stats = parseInfoStatsResponse(responseBody);
         nodesStats = parseNodeStatsResponse(responseBody);
         assertEquals(0, getNestedValue(nodesStats.getFirst(), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS));
         assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_EMBEDDING_PROCESSORS));
     }
 
     public void test_statsFiltering() throws Exception {
-        Response response = executeNeuralStatRequest(
+        String responseBody = executeNeuralStatRequest(
             new ArrayList<>(),
             Arrays.asList(InfoStatName.TEXT_EMBEDDING_PROCESSORS.getNameString())
         );
 
-        String responseBody = EntityUtils.toString(response.getEntity());
-        Map<String, Object> stats = parseStatsResponse(responseBody);
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
         List<Map<String, Object>> nodesStats = parseNodeStatsResponse(responseBody);
 
-        //
         assertNull(getNestedValue(nodesStats.getFirst(), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getFullPath()));
         assertNotNull(getNestedValue(stats, InfoStatName.TEXT_EMBEDDING_PROCESSORS.getFullPath()));
     }
@@ -119,10 +112,9 @@ public class RestNeuralStatsActionIT extends BaseNeuralSearchIT {
         Map<String, String> params = new HashMap<>();
         params.put(RestNeuralStatsAction.FLATTEN_PARAM, "true");
 
-        Response response = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>(), params);
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>(), params);
 
-        String responseBody = EntityUtils.toString(response.getEntity());
-        Map<String, Object> stats = parseStatsResponse(responseBody);
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
         List<Map<String, Object>> nodesStats = parseNodeStatsResponse(responseBody);
 
         assertNotNull(nodesStats.getFirst().get(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getFullPath()));
@@ -133,9 +125,8 @@ public class RestNeuralStatsActionIT extends BaseNeuralSearchIT {
         Map<String, String> params = new HashMap<>();
         params.put(RestNeuralStatsAction.INCLUDE_METADATA_PARAM, "true");
 
-        Response response = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>(), params);
-        String responseBody = EntityUtils.toString(response.getEntity());
-        Map<String, Object> stats = parseStatsResponse(responseBody);
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>(), params);
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
 
         Object clusterVersionStatMetadata = getNestedValue(stats, InfoStatName.CLUSTER_VERSION.getFullPath());
 
@@ -152,9 +143,8 @@ public class RestNeuralStatsActionIT extends BaseNeuralSearchIT {
         // Fetch Without metadata
         params.put(RestNeuralStatsAction.INCLUDE_METADATA_PARAM, "false");
 
-        response = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>(), params);
-        responseBody = EntityUtils.toString(response.getEntity());
-        stats = parseStatsResponse(responseBody);
+        responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>(), params);
+        stats = parseInfoStatsResponse(responseBody);
 
         // Path value should be the settable value
         String valueWithoutMetadata = (String) getNestedValue(stats, InfoStatName.CLUSTER_VERSION.getFullPath());

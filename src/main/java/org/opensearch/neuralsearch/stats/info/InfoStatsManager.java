@@ -72,7 +72,7 @@ public class InfoStatsManager {
         // Initialize empty map with keys so stat names are visible in JSON even if the value is not counted
         Map<InfoStatName, CountableInfoStatSnapshot> countableInfoStats = new HashMap<>();
         for (InfoStatName stat : EnumSet.allOf(InfoStatName.class)) {
-            if (stat.getStatType() == InfoStatType.COUNTABLE) {
+            if (stat.getStatType() == InfoStatType.INFO_COUNTABLE) {
                 countableInfoStats.put(stat, new CountableInfoStatSnapshot(stat));
             }
         }

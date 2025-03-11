@@ -9,6 +9,7 @@ import org.apache.commons.lang.StringUtils;
 import org.opensearch.neuralsearch.stats.common.StatName;
 
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -50,7 +51,7 @@ public enum EventStatName implements StatName {
         // Validates all event stats are instantiated correctly. This is covered by unit tests as well.
         if (eventStat == null) {
             throw new IllegalArgumentException(
-                String.format("Unable to initialize event stat [%s]. Unrecognized event stat type: [%s]", nameString, statType)
+                String.format(Locale.ROOT, "Unable to initialize event stat [%s]. Unrecognized event stat type: [%s]", nameString, statType)
             );
         }
     }
@@ -63,7 +64,7 @@ public enum EventStatName implements StatName {
      */
     public static EventStatName from(String name) {
         if (BY_NAME.containsKey(name) == false) {
-            throw new IllegalArgumentException(String.format("Event stat not found: %s", name));
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "Event stat not found: %s", name));
         }
         return BY_NAME.get(name);
     }

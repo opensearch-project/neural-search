@@ -87,6 +87,12 @@ public class TimestampedEventStatSnapshot implements Writeable, StatSnapshot<Lon
         Long minMinutes = null;
 
         for (TimestampedEventStatSnapshot stat : snapshots) {
+            // Mixed version clusters may have nodes that return null stat snapshots not available on older versions.
+            // If so, exclude those from aggregation
+            if (stat == null) {
+                continue;
+            }
+
             // The first stat name is taken. This should never be called across event stats that don't share stat names
             if (name == null) {
                 name = stat.getStatName();

@@ -38,20 +38,20 @@ import static org.opensearch.neuralsearch.plugin.NeuralSearch.NEURAL_BASE_URI;
 @Log4j2
 @AllArgsConstructor
 public class RestNeuralStatsAction extends BaseRestHandler {
-    public static final String FLATTEN_PARAM = "flat_keys";
+    public static final String FLATTEN_PARAM = "flat_stat_paths";
     public static final String INCLUDE_METADATA_PARAM = "include_metadata";
     private static final String NAME = "neural_stats_action";
 
     private static final Set<String> EVENT_STAT_NAMES = EnumSet.allOf(EventStatName.class)
         .stream()
         .map(EventStatName::getNameString)
-        .map(String::toLowerCase)
+        .map(str -> str.toLowerCase(Locale.ROOT))
         .collect(Collectors.toSet());
 
     private static final Set<String> STATE_STAT_NAMES = EnumSet.allOf(InfoStatName.class)
         .stream()
         .map(InfoStatName::getNameString)
-        .map(String::toLowerCase)
+        .map(str -> str.toLowerCase(Locale.ROOT))
         .collect(Collectors.toSet());
 
     private static final List<Route> ROUTES = ImmutableList.of(
@@ -61,7 +61,7 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         new Route(RestRequest.Method.GET, NEURAL_BASE_URI + "/stats/{stat}")
     );
 
-    private static final Set<String> RESPONSE_PARAMS = ImmutableSet.of("nodeId", "stat");
+    private static final Set<String> RESPONSE_PARAMS = ImmutableSet.of("nodeId", "stat", INCLUDE_METADATA_PARAM, FLATTEN_PARAM);
 
     private NeuralSearchSettingsAccessor settingsAccessor;
 

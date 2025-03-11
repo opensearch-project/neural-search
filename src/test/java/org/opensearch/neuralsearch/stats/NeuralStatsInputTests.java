@@ -9,6 +9,7 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.neuralsearch.rest.RestNeuralStatsAction;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.test.OpenSearchTestCase;
@@ -133,8 +134,8 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
         assertEquals(Collections.singletonList(NODE_ID_1), responseMap.get("node_ids"));
         assertEquals(Collections.singletonList(EVENT_STAT.getNameString()), responseMap.get("event_stats"));
         assertEquals(Collections.singletonList(STATE_STAT.getNameString()), responseMap.get("state_stats"));
-        assertEquals(true, responseMap.get("include_metadata"));
-        assertEquals(true, responseMap.get("flat_keys"));
+        assertEquals(true, responseMap.get(RestNeuralStatsAction.INCLUDE_METADATA_PARAM));
+        assertEquals(true, responseMap.get(RestNeuralStatsAction.FLATTEN_PARAM));
     }
 
     public void test_writeToHandlesEmptyCollections() throws IOException {
