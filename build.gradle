@@ -276,7 +276,7 @@ dependencies {
         exclude group: 'org.slf4j', module: 'slf4j-api'
         exclude group: 'net.minidev', module: 'json-smart'
     }
-    runtimeOnly group: 'net.minidev', name:'json-smart', version: '2.5.2'
+    runtimeOnly group: 'net.minidev', name:'json-smart', version: "${versions.json_smart}"
     runtimeOnly("com.fasterxml.jackson.core:jackson-annotations:${versions.jackson}")
     runtimeOnly("com.fasterxml.jackson.core:jackson-databind:${versions.jackson_databind}")
     testFixturesImplementation "org.opensearch:common-utils:${version}"
