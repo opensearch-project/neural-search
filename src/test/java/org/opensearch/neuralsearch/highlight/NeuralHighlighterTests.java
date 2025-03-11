@@ -44,7 +44,7 @@ public class NeuralHighlighterTests extends OpenSearchTestCase {
         super.setUp();
         MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
         highlighter = new NeuralHighlighter();
-        NeuralHighlighter.initialize(mlCommonsClientAccessor);
+        highlighter.initialize(mlCommonsClientAccessor);
         fieldType = new TextFieldMapper.TextFieldType(TEST_FIELD);
 
         // Mock the ML client response with the new highlight format
@@ -108,7 +108,7 @@ public class NeuralHighlighterTests extends OpenSearchTestCase {
 
         IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> highlighter.highlight(context));
         assertNotNull(exception);
-        assertTrue(exception.getMessage().contains("query text is empty"));
+        assertTrue(exception.getMessage().contains("Query text is empty to perform neural highlighting"));
     }
 
     public void testHighlightWithValidInput() {
@@ -170,7 +170,7 @@ public class NeuralHighlighterTests extends OpenSearchTestCase {
         // Setup a custom mock for this test
         MLCommonsClientAccessor customMlClient = mock(MLCommonsClientAccessor.class);
         NeuralHighlighter customHighlighter = new NeuralHighlighter();
-        NeuralHighlighter.initialize(customMlClient);
+        customHighlighter.initialize(customMlClient);
 
         // Mock response with invalid positions
         doAnswer(invocation -> {
@@ -234,7 +234,7 @@ public class NeuralHighlighterTests extends OpenSearchTestCase {
         // Setup a custom mock for this test that simulates an error
         MLCommonsClientAccessor errorMlClient = mock(MLCommonsClientAccessor.class);
         NeuralHighlighter customHighlighter = new NeuralHighlighter();
-        NeuralHighlighter.initialize(errorMlClient);
+        customHighlighter.initialize(errorMlClient);
 
         // Mock response that calls the listener with an error
         doAnswer(invocation -> {
@@ -248,13 +248,33 @@ public class NeuralHighlighterTests extends OpenSearchTestCase {
         FieldHighlightContext context = createHighlightContext(fieldContent, queryText);
 
         // Should throw an exception due to the model error
-        OpenSearchException ose = expectThrows(OpenSearchException.class, () -> customHighlighter.highlight(context));
-        // Just verify that we get an exception, the exact message might vary
-        assertNotNull("Should throw an exception with a message", ose.getMessage());
+        OpenSearchException exception = expectThrows(OpenSearchException.class, () -> customHighlighter.highlight(context));
+        assertNotNull(exception);
+        assertTrue(exception.getMessage().contains("Error during sentence highlighting inference"));
+    }
+
+    /**
+     * Tests that attempting to initialize the NeuralHighlighter more than once
+     * throws an IllegalStateException.
+     */
+    public void testMultipleInitialization() {
+        MLCommonsClientAccessor mlClient1 = mock(MLCommonsClientAccessor.class);
+        MLCommonsClientAccessor mlClient2 = mock(MLCommonsClientAccessor.class);
+
+        NeuralHighlighter testHighlighter = new NeuralHighlighter();
+        testHighlighter.initialize(mlClient1);
+
+        // Attempting to initialize again should throw an exception
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> testHighlighter.initialize(mlClient2));
+
+        assertNotNull(exception);
+        assertEquals("NeuralHighlighter has already been initialized. Multiple initializations are not permitted.", exception.getMessage());
     }
 
     private FieldHighlightContext createHighlightContext(String fieldContent, String queryText) {
-        return createHighlightContext(fieldContent, new NeuralKNNQuery(mock(Query.class), queryText));
+        Query query = mock(Query.class);
+        when(query.toString()).thenReturn(queryText);
+        return createHighlightContext(fieldContent, query);
     }
 
     private FieldHighlightContext createHighlightContext(String fieldContent, Query query) {

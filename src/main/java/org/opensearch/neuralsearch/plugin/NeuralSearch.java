@@ -87,7 +87,12 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     private NormalizationProcessorWorkflow normalizationProcessorWorkflow;
     private final ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
     private final ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();
+    private NeuralHighlighter neuralHighlighter;
     public static final String EXPLANATION_RESPONSE_KEY = "explanation_response";
+
+    public NeuralSearch() {
+        this.neuralHighlighter = new NeuralHighlighter();
+    }
 
     @Override
     public Collection<Object> createComponents(
@@ -106,7 +111,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         NeuralSearchClusterUtil.instance().initialize(clusterService);
         NeuralQueryBuilder.initialize(clientAccessor);
         NeuralSparseQueryBuilder.initialize(clientAccessor);
-        NeuralHighlighter.initialize(clientAccessor);
+        neuralHighlighter.initialize(clientAccessor);
         HybridQueryExecutor.initialize(threadPool);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
         return List.of(clientAccessor);
@@ -214,6 +219,6 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
      */
     @Override
     public Map<String, Highlighter> getHighlighters() {
-        return Collections.singletonMap(NeuralHighlighter.NAME, new NeuralHighlighter());
+        return Collections.singletonMap(NeuralHighlighter.NAME, neuralHighlighter);
     }
 }
