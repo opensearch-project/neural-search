@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.stats.events;
 
+import org.opensearch.neuralsearch.rest.RestNeuralStatsAction;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.test.OpenSearchTestCase;
 
@@ -17,26 +18,28 @@ import java.util.Set;
 public class InfoStatNameTests extends OpenSearchTestCase {
     public static final EnumSet<InfoStatName> STATE_STATS = EnumSet.allOf(InfoStatName.class);
 
-    public void test_from_valid() {
+    public void test_fromValid() {
         String validStatName = InfoStatName.TEXT_EMBEDDING_PROCESSORS.getNameString();
         InfoStatName result = InfoStatName.from(validStatName);
         assertEquals(InfoStatName.TEXT_EMBEDDING_PROCESSORS, result);
     }
 
-    public void test_from_invalid() {
+    public void test_fromInvalid() {
         assertThrows(IllegalArgumentException.class, () -> { InfoStatName.from("non_existent_stat"); });
     }
 
-    public void test_unique_names() {
+    public void test_validNames() {
+
         Set<String> names = new HashSet<>();
         for (InfoStatName statName : STATE_STATS) {
             String name = statName.getNameString().toLowerCase(Locale.ROOT);
             assertFalse(String.format("Checking name uniqueness for %s", name), names.contains(name));
+            assertTrue(RestNeuralStatsAction.isValidParamString(name));
             names.add(name);
         }
     }
 
-    public void test_unique_paths() {
+    public void test_uniquePaths() {
         Set<String> paths = new HashSet<>();
         for (InfoStatName statName : STATE_STATS) {
             String path = statName.getPath().toLowerCase(Locale.ROOT);

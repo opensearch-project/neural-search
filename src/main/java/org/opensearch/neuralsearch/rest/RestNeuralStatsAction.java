@@ -38,8 +38,26 @@ import static org.opensearch.neuralsearch.plugin.NeuralSearch.NEURAL_BASE_URI;
 @Log4j2
 @AllArgsConstructor
 public class RestNeuralStatsAction extends BaseRestHandler {
+    /**
+     * Query parameter name to request flattened stat paths as keys
+     */
     public static final String FLATTEN_PARAM = "flat_stat_paths";
+
+    /**
+     * Query parameter name to include metadata
+     */
     public static final String INCLUDE_METADATA_PARAM = "include_metadata";
+
+    /**
+     * Regex for valid params, containing only alphanumeric, -, or _
+     */
+    public static final String PARAM_REGEX = "^[A-Za-z0-9-_]+$";
+
+    /**
+     * Max length for an individual query or path param
+     */
+    public static final int MAX_PARAM_LENGTH = 255;
+
     private static final String NAME = "neural_stats_action";
 
     private static final Set<String> EVENT_STAT_NAMES = EnumSet.allOf(EventStatName.class)
@@ -62,6 +80,10 @@ public class RestNeuralStatsAction extends BaseRestHandler {
     );
 
     private static final Set<String> RESPONSE_PARAMS = ImmutableSet.of("nodeId", "stat", INCLUDE_METADATA_PARAM, FLATTEN_PARAM);
+
+    public static boolean isValidParamString(String name) {
+        return name.matches(PARAM_REGEX) && name.length() < MAX_PARAM_LENGTH;
+    }
 
     private NeuralSearchSettingsAccessor settingsAccessor;
 
@@ -118,7 +140,9 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         // Parse specified nodes
         Optional<String[]> nodeIds = splitCommaSeparatedParam(request, "nodeId");
         if (nodeIds.isPresent()) {
-            neuralStatsInput.getNodeIds().addAll(Arrays.asList(nodeIds.get()));
+            // Ignore node ids that don't pattern match
+            List<String> validFormatNodeIds = Arrays.stream(nodeIds.get()).filter(this::isValidNodeId).toList();
+            neuralStatsInput.getNodeIds().addAll(validFormatNodeIds);
         }
 
         // Parse query parameters
@@ -152,7 +176,13 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         boolean statAdded = false;
 
         for (String stat : stats) {
+            // Validate parameter
             String normalizedStat = stat.toLowerCase(Locale.ROOT);
+            if (isValidParamString(normalizedStat) == false) {
+                log.info("Invalid stat name parameter format: {}", normalizedStat);
+                continue;
+            }
+
             if (EVENT_STAT_NAMES.contains(normalizedStat)) {
                 neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
                 statAdded = true;
@@ -160,8 +190,7 @@ public class RestNeuralStatsAction extends BaseRestHandler {
                 neuralStatsInput.getInfoStatNames().add(InfoStatName.from(normalizedStat));
                 statAdded = true;
             }
-            log.info("Invalid stat name parsed: {}", normalizedStat);
-
+            log.info("Non-existent stat name parsed: {}", normalizedStat);
         }
         return statAdded;
     }
@@ -173,5 +202,10 @@ public class RestNeuralStatsAction extends BaseRestHandler {
 
     private Optional<String[]> splitCommaSeparatedParam(RestRequest request, String paramName) {
         return Optional.ofNullable(request.param(paramName)).map(s -> s.split(","));
+    }
+
+    private boolean isValidNodeId(String nodeId) {
+        // Validate node id parameter
+        return isValidParamString(nodeId) && nodeId.length() == 22;
     }
 }
