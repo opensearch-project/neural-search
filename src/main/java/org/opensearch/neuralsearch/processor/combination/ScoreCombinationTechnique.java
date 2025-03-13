@@ -12,4 +12,6 @@ public interface ScoreCombinationTechnique {
      * @return combined score
      */
     float combine(final float[] scores);
+
+    String techniqueName();
 }
