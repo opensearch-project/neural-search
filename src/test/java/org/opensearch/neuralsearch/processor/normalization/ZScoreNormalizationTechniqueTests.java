@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.processor.normalization;
 
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
@@ -259,8 +260,8 @@ public class ZScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase {
                 // mean = (2.0 + 7.0 + 8.0)/3 = 5.667
                 // std dev = sqrt(((2.0 - 5.667)² + (7.0 - 5.667)² + (8.0 - 5.667)²)/3) = 2.625
                 new ScoreDoc(1, 2.0f),  // Z-score = (2.0 - 5.667)/2.625 = -1.397 --> 0.001f
-                new ScoreDoc(2, 7.0f),  // Z-score = (7.0 - 5.667)/2.625 = 0.508
-                new ScoreDoc(3, 8.0f)   // Z-score = (8.0 - 5.667)/2.625 = 0.889
+                new ScoreDoc(2, 7.0f),  // Z-score = (7.0 - 5.667)/2.625 = 0.41478074
+                new ScoreDoc(3, 8.0f)   // Z-score = (8.0 - 5.667)/2.625 = 0.72586626
             }
         );
 
@@ -273,7 +274,7 @@ public class ZScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase {
                 // std dev = sqrt(((4.0 - 6.333)² + (5.0 - 6.333)² + (10.0 - 6.333)²)/3) = 2.625
                 new ScoreDoc(2, 4.0f),  // Z-score = (4.0 - 6.333)/2.625 = -0.889 --> 0.001f
                 new ScoreDoc(1, 5.0f),   //// Z-score = (5.0 - 6.333)/2.625 = -0.508 --> 0.001f
-                new ScoreDoc(3, 10.0f) // Z-score = (10.0 - 6.333)/2.625 = 1.397
+                new ScoreDoc(3, 10.0f) // Z-score = (10.0 - 6.333)/2.625 = 1.1406468
             }
         );
 
@@ -316,7 +317,7 @@ public class ZScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         assertEquals(3, doc2Scores.size());
 
         // Verify zscore normalized scores for document 2
-        assertEquals(0.508f, doc2Scores.get(0).getKey(), DELTA_FOR_ASSERTION); // First subquery
+        assertEquals(0.41478074f, doc2Scores.get(0).getKey(), DELTA_FOR_ASSERTION); // First subquery
         assertEquals(0.001f, doc2Scores.get(1).getKey(), DELTA_FOR_ASSERTION); // Second subquery
         assertEquals(0.0000f, doc2Scores.get(2).getKey(), DELTA_FOR_ASSERTION); // Third subquery (doc2 not present)
 
@@ -327,17 +328,17 @@ public class ZScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         assertEquals(3, doc3Scores.size());
 
         // Verify zscore normalized scores for document 2
-        assertEquals(0.889f, doc3Scores.get(0).getKey(), DELTA_FOR_ASSERTION); // First subquery
-        assertEquals(1.397f, doc3Scores.get(1).getKey(), DELTA_FOR_ASSERTION); // Second subquery
+        assertEquals(0.72586626f, doc3Scores.get(0).getKey(), DELTA_FOR_ASSERTION); // First subquery
+        assertEquals(1.1406468f, doc3Scores.get(1).getKey(), DELTA_FOR_ASSERTION); // Second subquery
         assertEquals(0.0000f, doc3Scores.get(2).getKey(), DELTA_FOR_ASSERTION); // Third subquery (doc2 not present)
 
         // Verify that original ScoreDoc scores were updated with z score normalized values
         assertEquals(0.001f, topDocs1.scoreDocs[0].score, DELTA_FOR_ASSERTION); // doc1 in first subquery
-        assertEquals(0.508f, topDocs1.scoreDocs[1].score, DELTA_FOR_ASSERTION); // doc2 in first subquery
-        assertEquals(0.889f, topDocs1.scoreDocs[2].score, DELTA_FOR_ASSERTION); // doc3 in first subquery
+        assertEquals(0.41478074f, topDocs1.scoreDocs[1].score, DELTA_FOR_ASSERTION); // doc2 in first subquery
+        assertEquals(0.72586626f, topDocs1.scoreDocs[2].score, DELTA_FOR_ASSERTION); // doc3 in first subquery
         assertEquals(0.001f, topDocs2.scoreDocs[0].score, DELTA_FOR_ASSERTION); // doc2 in second subquery
         assertEquals(0.001f, topDocs2.scoreDocs[1].score, DELTA_FOR_ASSERTION); // doc1 in second subquery
-        assertEquals(1.397f, topDocs2.scoreDocs[2].score, DELTA_FOR_ASSERTION); // doc3 in second subquery
+        assertEquals(1.1406468f, topDocs2.scoreDocs[2].score, DELTA_FOR_ASSERTION); // doc3 in second subquery
         assertEquals(1.0000f, topDocs3.scoreDocs[0].score, DELTA_FOR_ASSERTION); // doc1 in third subquery
 
         // Verify explanation descriptions
@@ -347,18 +348,23 @@ public class ZScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     }
 
     private float zscoreNorm(float score, List<Float> scores) {
-        // Calculate mean
-        float mean = (float) scores.stream().mapToDouble(Float::doubleValue).average().orElse(0.0);
+        DescriptiveStatistics stats = new DescriptiveStatistics();
 
-        // Calculate standard deviation
-        float standardDeviation = (float) Math.sqrt(scores.stream().mapToDouble(s -> Math.pow(s - mean, 2)).average().orElse(0.0));
+        // Add all scores to DescriptiveStatistics
+        for (Float s : scores) {
+            stats.addValue(s);
+        }
+
+        // Calculate mean and standard deviation
+        double mean = stats.getMean();
+        double standardDeviation = stats.getStandardDeviation();
 
         // Handle case when standard deviation is 0
-        if (Float.compare(standardDeviation, 0.0f) == 0) {
+        if (Double.compare(standardDeviation, 0.0) == 0) {
             return 0.0f;
         }
 
-        float normalizedScore = (score - mean) / standardDeviation;
+        float normalizedScore = (float) ((score - mean) / standardDeviation);
 
         return normalizedScore <= 0.0f ? 0.001f : normalizedScore;
     }
