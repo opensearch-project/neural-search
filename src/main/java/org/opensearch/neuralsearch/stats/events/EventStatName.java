@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
  */
 @Getter
 public enum EventStatName implements StatName {
-    TEXT_EMBEDDING_PROCESSOR_EXECUTIONS("text_embedding_executions", "processors.ingest", EventStatType.TIMESTAMPED_COUNTER);
+    TEXT_EMBEDDING_PROCESSOR_EXECUTIONS("text_embedding_executions", "processors.ingest", EventStatType.TIMESTAMPED_EVENT_COUNTER);
 
     private final String nameString;
     private final String path;
@@ -43,7 +43,7 @@ public enum EventStatName implements StatName {
         this.statType = statType;
 
         switch (statType) {
-            case EventStatType.TIMESTAMPED_COUNTER:
+            case EventStatType.TIMESTAMPED_EVENT_COUNTER:
                 eventStat = new TimestampedEventStat(this);
                 break;
         }

@@ -81,8 +81,13 @@ public class RestNeuralStatsAction extends BaseRestHandler {
 
     private static final Set<String> RESPONSE_PARAMS = ImmutableSet.of("nodeId", "stat", INCLUDE_METADATA_PARAM, FLATTEN_PARAM);
 
-    public static boolean isValidParamString(String name) {
-        return name.matches(PARAM_REGEX) && name.length() < MAX_PARAM_LENGTH;
+    /**
+     * Validates a param string if its under the max length and matches simple string pattern
+     * @param param the string to validate
+     * @return whether it's valid
+     */
+    public static boolean isValidParamString(String param) {
+        return param.matches(PARAM_REGEX) && param.length() < MAX_PARAM_LENGTH;
     }
 
     private NeuralSearchSettingsAccessor settingsAccessor;
@@ -134,7 +139,7 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         return neuralStatsRequest;
     }
 
-    NeuralStatsInput createNeuralStatsInputFromRequestParams(RestRequest request) {
+    private NeuralStatsInput createNeuralStatsInputFromRequestParams(RestRequest request) {
         NeuralStatsInput neuralStatsInput = new NeuralStatsInput();
 
         // Parse specified nodes

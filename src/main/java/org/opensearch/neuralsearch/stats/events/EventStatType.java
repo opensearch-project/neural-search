@@ -12,7 +12,7 @@ import java.util.Locale;
  * Enum for different kinds of event stat types to track
  */
 public enum EventStatType implements StatType {
-    TIMESTAMPED_COUNTER;
+    TIMESTAMPED_EVENT_COUNTER;
 
     /**
      * Gets the name of the stat type, the enum name in lowercase

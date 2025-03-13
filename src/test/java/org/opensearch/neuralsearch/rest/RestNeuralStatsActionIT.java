@@ -7,7 +7,12 @@ package org.opensearch.neuralsearch.rest;
 import lombok.extern.log4j.Log4j2;
 import org.junit.After;
 import org.junit.Before;
+import org.opensearch.client.Request;
+import org.opensearch.client.Response;
+import org.opensearch.client.ResponseException;
+import org.opensearch.core.rest.RestStatus;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.plugin.NeuralSearch;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
@@ -55,6 +60,14 @@ public class RestNeuralStatsActionIT extends BaseNeuralSearchIT {
     public void tearDown() throws Exception {
         super.tearDown();
         updateClusterSettings(NeuralSearchSettings.NEURAL_STATS_ENABLED.getKey(), false);
+    }
+
+    public void test_statsDisabledIsForbidden() throws Exception {
+        updateClusterSettings("plugins.neural_search.stats_enabled", false);
+        Request request = new Request("GET", NeuralSearch.NEURAL_BASE_URI + "/stats");
+
+        ResponseException response = expectThrows(ResponseException.class, () -> client().performRequest(request));
+        assertEquals(RestStatus.FORBIDDEN, RestStatus.fromCode(response.getResponse().getStatusLine().getStatusCode()));
     }
 
     public void test_textEmbedding() throws Exception {
@@ -138,7 +151,7 @@ public class RestNeuralStatsActionIT extends BaseNeuralSearchIT {
         String valueWithMetadata = ((Map<String, String>) clusterVersionStatMetadata).get(StatSnapshot.VALUE_FIELD);
 
         // Stat type metadata should match
-        assertEquals(InfoStatType.SETTABLE_STRING.getTypeString(), statType);
+        assertEquals(InfoStatType.INFO_STRING.getTypeString(), statType);
 
         // Fetch Without metadata
         params.put(RestNeuralStatsAction.INCLUDE_METADATA_PARAM, "false");

@@ -12,9 +12,9 @@ import java.util.Locale;
  * Enum for different kinds of info stat types to track
  */
 public enum InfoStatType implements StatType {
-    INFO_COUNTABLE,
-    SETTABLE_STRING,
-    SETTABLE_BOOLEAN;
+    INFO_COUNTER,
+    INFO_STRING,
+    INFO_BOOLEAN;
 
     /**
      * Gets the name of the stat type, the enum name in lowercase

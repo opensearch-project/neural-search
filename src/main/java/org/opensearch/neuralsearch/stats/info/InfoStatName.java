@@ -19,8 +19,8 @@ import java.util.stream.Collectors;
 @Getter
 public enum InfoStatName implements StatName {
     // Cluster info
-    CLUSTER_VERSION("cluster_version", "", InfoStatType.SETTABLE_STRING),
-    TEXT_EMBEDDING_PROCESSORS("text_embedding_processors_in_pipelines", "processors.ingest", InfoStatType.INFO_COUNTABLE);
+    CLUSTER_VERSION("cluster_version", "", InfoStatType.INFO_STRING),
+    TEXT_EMBEDDING_PROCESSORS("text_embedding_processors_in_pipelines", "processors.ingest", InfoStatType.INFO_COUNTER);
 
     private final String nameString;
     private final String path;

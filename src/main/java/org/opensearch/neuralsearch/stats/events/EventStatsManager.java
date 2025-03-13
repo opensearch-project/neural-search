@@ -72,7 +72,7 @@ public class EventStatsManager {
         // Filter stats based on passed in collection
         Map<EventStatName, TimestampedEventStatSnapshot> eventStatsDataMap = new HashMap<>();
         for (EventStatName statName : statsToRetrieve) {
-            if (statName.getStatType() == EventStatType.TIMESTAMPED_COUNTER) {
+            if (statName.getStatType() == EventStatType.TIMESTAMPED_EVENT_COUNTER) {
                 StatSnapshot<?> snapshot = statName.getEventStat().getStatSnapshot();
                 if (snapshot instanceof TimestampedEventStatSnapshot) {
                     // Get event data snapshot
