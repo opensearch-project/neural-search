@@ -21,7 +21,6 @@ import java.util.Map;
 public class QueryTextExtractorRegistry {
 
     private final Map<Class<? extends Query>, QueryTextExtractor> extractors = new HashMap<>();
-    private final GenericQueryTextExtractor fallbackExtractor = new GenericQueryTextExtractor();
 
     /**
      * Creates a new registry with default extractors
@@ -58,11 +57,9 @@ public class QueryTextExtractorRegistry {
      * @param query The query to extract text from
      * @param fieldName The name of the field being highlighted
      * @return The extracted query text
-     * @throws IllegalArgumentException if the extracted query text is empty
+     * @throws IllegalArgumentException if no suitable extractor is found or the extracted query text is empty
      */
     public String extractQueryText(Query query, String fieldName) {
-        log.debug("Extracting query text from query type: {}", query.getClass().getName());
-
         // Find the most specific extractor for this query type
         Class<?> queryClass = query.getClass();
         QueryTextExtractor extractor;
@@ -80,19 +77,12 @@ public class QueryTextExtractorRegistry {
             }
         }
 
-        // Use the extractor if found, otherwise use fallback
-        String queryText;
-        if (extractor != null) {
-            queryText = extractor.extractQueryText(query, fieldName);
-        } else {
-            queryText = fallbackExtractor.extractQueryText(query, fieldName);
-            log.info("Extracted query text using fallback extractor: {}", queryText);
+        // If no extractor found, throw an exception
+        if (extractor == null) {
+            log.warn("No extractor found for query type: {}", queryClass.getName());
+            return null;
         }
 
-        if (queryText.isEmpty()) {
-            throw new IllegalArgumentException("Query text is empty to perform neural highlighting");
-        }
-
-        return queryText;
+        return extractor.extractQueryText(query, fieldName);
     }
 }

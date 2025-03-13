@@ -12,17 +12,12 @@ import org.opensearch.search.fetch.subphase.highlight.HighlightField;
 import org.opensearch.search.fetch.subphase.highlight.Highlighter;
 import org.opensearch.core.common.text.Text;
 
-import java.util.Set;
-
 /**
  * Neural highlighter that uses ML models to identify relevant text spans for highlighting
  */
 @Log4j2
 public class NeuralHighlighter implements Highlighter {
     public static final String NAME = "neural";
-
-    // Set of field types that can be highlighted
-    private static final Set<String> SUPPORTED_FIELD_TYPES = Set.of("text");
 
     private NeuralHighlighterManager neuralHighlighterManager;
 
@@ -33,22 +28,16 @@ public class NeuralHighlighter implements Highlighter {
         this.neuralHighlighterManager = new NeuralHighlighterManager(mlClient);
     }
 
-    /**
-     * Determines if this highlighter can highlight the given field type
-     *
-     * @param fieldType The field type to check
-     * @return True if this highlighter can highlight the field
-     */
     @Override
     public boolean canHighlight(MappedFieldType fieldType) {
-        return SUPPORTED_FIELD_TYPES.contains(fieldType.typeName());
+        return true;
     }
 
     /**
      * Highlights a field using neural highlighting
      *
      * @param fieldContext The field context containing the query and field information
-     * @return The highlighted field
+     * @return The highlighted field or null if highlighting is not possible
      */
     @Override
     public HighlightField highlight(FieldHighlightContext fieldContext) {
@@ -59,14 +48,19 @@ public class NeuralHighlighter implements Highlighter {
         // Extract field text
         String fieldText = neuralHighlighterManager.getFieldText(fieldContext);
 
-        // Extract query text
-        String searchQuery = neuralHighlighterManager.extractOriginalQuery(fieldContext.query, fieldContext.fieldName);
-
         // Get model ID
         String modelId = neuralHighlighterManager.getModelId(fieldContext.field.fieldOptions().options());
 
-        // Get highlighted text
-        String highlightedText = neuralHighlighterManager.getHighlightedSentences(modelId, searchQuery, fieldText);
+        // Try to extract query text
+        String originalQueryText = neuralHighlighterManager.extractOriginalQuery(fieldContext.query, fieldContext.fieldName);
+
+        if (originalQueryText == null || originalQueryText.isEmpty()) {
+            log.warn("No query text found for field {}", fieldContext.fieldName);
+            return null;
+        }
+
+        // Get highlighted text - allow any exceptions from this call to propagate
+        String highlightedText = neuralHighlighterManager.getHighlightedSentences(modelId, originalQueryText, fieldText);
 
         // Create highlight field
         Text[] fragments = new Text[] { new Text(highlightedText) };
