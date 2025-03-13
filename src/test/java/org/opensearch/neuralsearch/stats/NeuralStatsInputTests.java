@@ -68,14 +68,12 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
         StreamInput mockInput = mock(StreamInput.class);
 
         // Have to return the readByte since readBoolean can't be mocked
-        when(mockInput.readByte()).thenReturn((byte) 1)   // true for eventStats
-            .thenReturn((byte) 1)   // true for infoStats
-            .thenReturn((byte) 1)   // true for includeMetadata
+        when(mockInput.readByte()).thenReturn((byte) 1)   // true for includeMetadata
             .thenReturn((byte) 1);  // true for flatten
 
         when(mockInput.readOptionalStringList()).thenReturn(Arrays.asList(NODE_ID_1, NODE_ID_2));
-        when(mockInput.readEnumSet(EventStatName.class)).thenReturn(EnumSet.of(EVENT_STAT));
-        when(mockInput.readEnumSet(InfoStatName.class)).thenReturn(EnumSet.of(STATE_STAT));
+        when(mockInput.readOptionalEnumSet(EventStatName.class)).thenReturn(EnumSet.of(EVENT_STAT));
+        when(mockInput.readOptionalEnumSet(InfoStatName.class)).thenReturn(EnumSet.of(STATE_STAT));
 
         NeuralStatsInput input = new NeuralStatsInput(mockInput);
 
@@ -85,9 +83,9 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
         assertTrue(input.isIncludeMetadata());
         assertTrue(input.isFlatten());
 
-        verify(mockInput, times(4)).readByte();
+        verify(mockInput, times(2)).readByte();
         verify(mockInput, times(1)).readOptionalStringList();
-        verify(mockInput, times(2)).readEnumSet(any());
+        verify(mockInput, times(2)).readOptionalEnumSet(any());
     }
 
     public void test_writeToOutputs() throws IOException {
@@ -107,11 +105,11 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
         input.writeTo(mockOutput);
 
         verify(mockOutput).writeOptionalStringCollection(nodeIds);
+        verify(mockOutput).writeOptionalEnumSet(eventStats);
+        verify(mockOutput).writeOptionalEnumSet(infoStats);
 
-        // 4 boolean writes, 2 for each enum set, 1 for flatten, 1 for include metadata
-        verify(mockOutput, times(4)).writeBoolean(true);
-        verify(mockOutput).writeEnumSet(eventStats);
-        verify(mockOutput).writeEnumSet(infoStats);
+        // 2 boolean writes, 1 for flatten, 1 for include metadata
+        verify(mockOutput, times(2)).writeBoolean(true);
     }
 
     public void test_toXContent() throws IOException {
@@ -145,8 +143,9 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
         input.writeTo(mockOutput);
 
         verify(mockOutput).writeOptionalStringCollection(any(List.class));
+        verify(mockOutput, times(2)).writeOptionalEnumSet(any(EnumSet.class));
 
         // 4 boolean writes, 2 for each enum set, 1 for flatten, 1 for include metadata
-        verify(mockOutput, times(4)).writeBoolean(false);
+        verify(mockOutput, times(2)).writeBoolean(false);
     }
 }

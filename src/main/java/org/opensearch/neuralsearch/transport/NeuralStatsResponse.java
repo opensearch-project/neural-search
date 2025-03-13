@@ -58,9 +58,14 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
     /**
      * Constructor
      *
-     * @param clusterName name of cluster
-     * @param nodes List of NeuralStatsNodeResponses
-     * @param failures List of failures from nodes
+     * @param clusterName the cluster name
+     * @param nodes the nodes responses
+     * @param failures the failures
+     * @param infoStats the cluster level info stats
+     * @param aggregatedNodeStats the cluster level aggregated node stats
+     * @param nodeIdToNodeEventStats the node id to node event stats
+     * @param flatten whether to flatten keys
+     * @param includeMetadata whether to include metadata
      */
     public NeuralStatsResponse(
         ClusterName clusterName,

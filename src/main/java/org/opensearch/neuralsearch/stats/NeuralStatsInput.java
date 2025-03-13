@@ -104,8 +104,8 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
      */
     public NeuralStatsInput(StreamInput input) throws IOException {
         nodeIds = input.readOptionalStringList();
-        eventStatNames = input.readBoolean() ? input.readEnumSet(EventStatName.class) : EnumSet.noneOf(EventStatName.class);
-        infoStatNames = input.readBoolean() ? input.readEnumSet(InfoStatName.class) : EnumSet.noneOf(InfoStatName.class);
+        eventStatNames = input.readOptionalEnumSet(EventStatName.class);
+        infoStatNames = input.readOptionalEnumSet(InfoStatName.class);
         includeMetadata = input.readBoolean();
         flatten = input.readBoolean();
     }
@@ -119,26 +119,10 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         out.writeOptionalStringCollection(nodeIds);
-        writeOptionalEnumSet(out, eventStatNames);
-        writeOptionalEnumSet(out, infoStatNames);
+        out.writeOptionalEnumSet(eventStatNames);
+        out.writeOptionalEnumSet(infoStatNames);
         out.writeBoolean(includeMetadata);
         out.writeBoolean(flatten);
-    }
-
-    /**
-     * Helper method to write an EnumSet to a StreamOutput with a presence flag.
-     *
-     * @param out the StreamOutput to write to
-     * @param set the EnumSet to write
-     * @throws IOException If there's an error writing to the stream
-     */
-    private void writeOptionalEnumSet(StreamOutput out, EnumSet<?> set) throws IOException {
-        if (set != null && set.size() > 0) {
-            out.writeBoolean(true);
-            out.writeEnumSet(set);
-        } else {
-            out.writeBoolean(false);
-        }
     }
 
     /**

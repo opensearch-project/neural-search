@@ -33,7 +33,7 @@ public class InfoStatNameTests extends OpenSearchTestCase {
         Set<String> names = new HashSet<>();
         for (InfoStatName statName : STATE_STATS) {
             String name = statName.getNameString().toLowerCase(Locale.ROOT);
-            assertFalse(String.format("Checking name uniqueness for %s", name), names.contains(name));
+            assertFalse(String.format(Locale.ROOT, "Checking name uniqueness for %s", name), names.contains(name));
             assertTrue(RestNeuralStatsAction.isValidParamString(name));
             names.add(name);
         }
@@ -43,7 +43,7 @@ public class InfoStatNameTests extends OpenSearchTestCase {
         Set<String> paths = new HashSet<>();
         for (InfoStatName statName : STATE_STATS) {
             String path = statName.getPath().toLowerCase(Locale.ROOT);
-            assertFalse(String.format("Checking path uniqueness for %s", path), paths.contains(path));
+            assertFalse(String.format(Locale.ROOT, "Checking path uniqueness for %s", path), paths.contains(path));
             paths.add(path);
         }
 
@@ -51,7 +51,7 @@ public class InfoStatNameTests extends OpenSearchTestCase {
         // i.e. a full path is a terminal path that should not have any children
         for (InfoStatName statName : STATE_STATS) {
             String path = statName.getFullPath().toLowerCase(Locale.ROOT);
-            assertFalse(String.format("Checking full path uniqueness for %s", path), paths.contains(path));
+            assertFalse(String.format(Locale.ROOT, "Checking full path uniqueness for %s", path), paths.contains(path));
             paths.add(path);
         }
     }
@@ -77,7 +77,7 @@ public class InfoStatNameTests extends OpenSearchTestCase {
 
             // Check for prefix collision
             assertFalse(
-                String.format("Path collision found: %s is a prefix of %s", currentPath, nextPath),
+                String.format(Locale.ROOT, "Path collision found: %s is a prefix of %s", currentPath, nextPath),
                 isPathPrefixOf(currentPath, nextPath)
             );
         }
