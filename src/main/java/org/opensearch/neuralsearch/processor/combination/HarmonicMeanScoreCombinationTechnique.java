@@ -56,6 +56,11 @@ public class HarmonicMeanScoreCombinationTechnique implements ScoreCombinationTe
     }
 
     @Override
+    public String techniqueName() {
+        return TECHNIQUE_NAME;
+    }
+
+    @Override
     public String describe() {
         return describeCombinationTechnique(TECHNIQUE_NAME, weights);
     }

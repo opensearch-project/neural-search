@@ -260,6 +260,7 @@ dependencies {
     api group: 'org.opensearch', name:'opensearch-ml-client', version: "${opensearch_build}"
     testFixturesImplementation "org.opensearch.test:framework:${opensearch_version}"
     implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.14.0'
+    implementation group: 'org.apache.commons', name: 'commons-math3', version: '3.6.1'
     // ml-common excluded reflection for runtime so we need to add it by ourselves.
     // https://github.com/opensearch-project/ml-commons/commit/464bfe34c66d7a729a00dd457f03587ea4e504d9
     // TODO: Remove following three lines of dependencies if ml-common include them in their jar

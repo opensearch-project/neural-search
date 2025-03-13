@@ -77,6 +77,9 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
             Map<String, Object> combinationParams = readOptionalMap(NormalizationProcessor.TYPE, tag, combinationClause, PARAMETERS);
             scoreCombinationTechnique = scoreCombinationFactory.createCombination(combinationTechnique, combinationParams);
         }
+
+        normalizationTechnique.validateCombinationTechnique(scoreCombinationTechnique);
+
         log.info(
             "Creating search phase results processor of type [{}] with normalization [{}] and combination [{}]",
             NormalizationProcessor.TYPE,
