@@ -61,6 +61,11 @@ def versionsBelow2_13 = versionsBelow2_12 + "2.12"
 def versionsBelow2_14 = versionsBelow2_13 + "2.13"
 def versionsBelow2_15 = versionsBelow2_14 + "2.14"
 def versionsBelow2_16 = versionsBelow2_15 + "2.15"
+def versionsBelow2_17 = versionsBelow2_16 + "2.16"
+def versionsBelow2_18 = versionsBelow2_17 + "2.17"
+def versionsBelow2_19 = versionsBelow2_18 + "2.18"
+def versionsBelow2_20 = versionsBelow2_19 + "2.19"
+def versionsBelow3_0 = versionsBelow2_20 + "2.20"
 
 // Task to run BWC tests against the old cluster
 task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
@@ -111,6 +116,13 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
     if (versionsBelow2_16.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.BatchIngestionIT.*"
+        }
+    }
+
+    // Excluding stats tests because we introduce this feature in 3.0
+    if (versionsBelow3_0.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.RestNeuralStatsActionIT.*"
         }
     }
 
@@ -176,6 +188,13 @@ task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
     if (versionsBelow2_16.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.BatchIngestionIT.*"
+        }
+    }
+
+    // Excluding stats tests because we introduce this feature in 3.0
+    if (versionsBelow3_0.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.RestNeuralStatsActionIT.*"
         }
     }
 
