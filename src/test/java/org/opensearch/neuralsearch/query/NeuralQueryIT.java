@@ -177,6 +177,91 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     }
 
     /**
+     * Tests neural highlighting with a neural query:
+     * {
+     *     "query": {
+     *         "neural": {
+     *             "test-knn-vector-1": {
+     *                 "query_text": "Hello world",
+     *                 "model_id": "text-embedding-model-id",
+     *                 "k": 1
+     *             }
+     *         }
+     *     },
+     *     "highlight": {
+     *         "fields": {
+     *             "test-text-field": {
+     *                 "type": "neural"
+     *             }
+     *         },
+     *         "options": {
+     *             "model_id": "sentence-highlighting-model-id"
+     *         }
+     *     }
+     * }
+     * This test verifies that neural highlighting correctly identifies and highlights
+     * relevant portions of text in the search results using a sentence highlighting model.
+     */
+    public void testNeuralQueryWithNeuralHighlighting() {
+        String textEmbeddingModelId = prepareModel();
+        initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+            .queryText(TEST_QUERY_TEXT)
+            .modelId(textEmbeddingModelId)
+            .k(1)
+            .build();
+
+        // Add a document with text field for highlighting
+        addKnnDoc(
+            TEST_BASIC_INDEX_NAME,
+            "highlight-test",
+            Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+            Collections.singletonList(Floats.asList(testVector).toArray()),
+            Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+            Collections.singletonList("This is a sample text for neural highlighting. It contains some content that should be highlighted.")
+        );
+
+        String sentenceHighlightingModelId = prepareSentenceHighlightingModel();
+
+        // Perform search with neural highlighting
+        Map<String, Object> searchResponse;
+        try {
+            searchResponse = searchWithNeuralHighlight(
+                TEST_BASIC_INDEX_NAME,
+                neuralQueryBuilder,
+                10,
+                TEST_TEXT_FIELD_NAME_1,
+                sentenceHighlightingModelId
+            );
+        } catch (Exception e) {
+            fail("Failed to perform search with neural highlighting: " + e.getMessage());
+            return;
+        }
+
+        // Verify highlight results
+        Map<String, Object> firstHit = getFirstInnerHit(searchResponse);
+        assertNotNull("Search response should contain hits", firstHit);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> highlight = (Map<String, Object>) firstHit.get("highlight");
+        assertNotNull("Hit should contain highlight section", highlight);
+
+        @SuppressWarnings("unchecked")
+        List<String> highlightedFields = (List<String>) highlight.get(TEST_TEXT_FIELD_NAME_1);
+        assertNotNull("Highlight should contain the requested field", highlightedFields);
+
+        String highlightedText = highlightedFields.get(0);
+        assertTrue(
+            "Highlighted text should contain content from the original text",
+            highlightedText.contains("neural highlighting")
+                || highlightedText.contains("sample text")
+                || highlightedText.contains("highlighted")
+                || highlightedText.contains("This is a sample text for document 1")
+        );
+    }
+
+    /**
      * Tests rescore query:
      * {
      *     "query" : {
@@ -413,7 +498,9 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 TEST_BASIC_INDEX_NAME,
                 "1",
                 Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector).toArray())
+                Collections.singletonList(Floats.asList(testVector).toArray()),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+                Collections.singletonList("This is a sample text for document 1. It should be indexed and available for highlighting.")
             );
             assertEquals(1, getDocCount(TEST_BASIC_INDEX_NAME));
         }
