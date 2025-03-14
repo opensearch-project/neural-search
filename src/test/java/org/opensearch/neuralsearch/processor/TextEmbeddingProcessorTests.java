@@ -41,6 +41,9 @@ import org.opensearch.OpenSearchParseException;
 import org.opensearch.action.get.GetAction;
 import org.opensearch.action.get.GetRequest;
 import org.opensearch.action.get.GetResponse;
+import org.opensearch.action.get.MultiGetAction;
+import org.opensearch.action.get.MultiGetRequest;
+import org.opensearch.action.get.MultiGetResponse;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
@@ -125,12 +128,13 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
     }
 
     @SneakyThrows
-    private TextEmbeddingProcessor createInstanceWithLevel1MapConfig(int batchSize) {
+    private TextEmbeddingProcessor createInstanceWithLevel1MapConfig(int batchSize, boolean skipExisting) {
         Map<String, Processor.Factory> registry = new HashMap<>();
         Map<String, Object> config = new HashMap<>();
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
         config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1_knn", "key2", "key2_knn"));
         config.put(AbstractBatchingProcessor.BATCH_SIZE_FIELD, batchSize);
+        config.put(TextEmbeddingProcessor.SKIP_EXISTING, skipExisting);
         return (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
     }
 
@@ -1099,7 +1103,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
     public void test_batchExecute_successful() {
         final int docCount = 5;
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
-        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(docCount);
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(docCount, false);
 
         List<List<Float>> modelTensorList = createMockVectorWithLength(10);
         doAnswer(invocation -> {
@@ -1122,7 +1126,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
     public void test_batchExecute_exception() {
         final int docCount = 5;
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
-        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(docCount);
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(docCount, false);
         doAnswer(invocation -> {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
             listener.onFailure(new RuntimeException());
@@ -1137,6 +1141,25 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         for (int i = 0; i < docCount; ++i) {
             assertEquals(ingestDocumentWrappers.get(i).getIngestDocument(), resultCallback.getValue().get(i).getIngestDocument());
             assertNotNull(resultCallback.getValue().get(i).getException());
+        }
+    }
+
+    public void test_batchExecute_withSkipExisting_exception() {
+        final int docCount = 5;
+        List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
+        List<IngestDocumentWrapper> updateDocumentWrappers = createIngestDocumentWrappers(docCount);
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(docCount, true);
+        Consumer resultHandler = mock(Consumer.class);
+        TextInferenceRequest ingestRequest = TextInferenceRequest.builder()
+            .modelId("mockModelID")
+            .inputTexts(List.of("value1", "value1", "value1", "value1", "value1"))
+            .build();
+        mockVectorCreation(ingestRequest, ingestRequest);
+        mockFailedUpdateMultipleDocuments(ingestDocumentWrappers);
+        processor.batchExecute(ingestDocumentWrappers, resultHandler);
+        processor.batchExecute(updateDocumentWrappers, resultHandler);
+        for (IngestDocumentWrapper updateDocumentWrapper : updateDocumentWrappers) {
+            assertNotNull(updateDocumentWrapper.getException());
         }
     }
 
@@ -2010,6 +2033,71 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         assertEquals(ingestVectors.size(), updateVectors.size());
     }
 
+    public void test_batchExecute_no_update_successful() {
+        final int docCount = 5;
+        List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
+        List<IngestDocumentWrapper> updateDocumentWrappers = createIngestDocumentWrappers(docCount);
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(docCount, true);
+        Consumer resultHandler = mock(Consumer.class);
+        TextInferenceRequest ingestRequest = TextInferenceRequest.builder()
+            .modelId("mockModelID")
+            .inputTexts(List.of("value1", "value1", "value1", "value1", "value1"))
+            .build();
+        mockVectorCreation(ingestRequest, null);
+        mockUpdateMultipleDocuments(ingestDocumentWrappers);
+        processor.batchExecute(ingestDocumentWrappers, resultHandler);
+        processor.batchExecute(updateDocumentWrappers, resultHandler);
+        for (int i = 0; i < docCount; ++i) {
+            assertEquals(
+                ingestDocumentWrappers.get(i).getIngestDocument().getSourceAndMetadata().get("key1"),
+                updateDocumentWrappers.get(i).getIngestDocument().getSourceAndMetadata().get("key1")
+            );
+            verifyEqualEmbedding(
+                (List<Number>) ingestDocumentWrappers.get(i).getIngestDocument().getSourceAndMetadata().get("key1_knn"),
+                (List<Number>) updateDocumentWrappers.get(i).getIngestDocument().getSourceAndMetadata().get("key1_knn")
+            );
+        }
+        verify(openSearchClient, times(2)).execute(isA(MultiGetAction.class), isA(MultiGetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(1)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        assertEquals(ingestRequest.getInputTexts(), inferenceRequestCaptor.getValue().getInputTexts());
+    }
+
+    public void test_batchExecute_with_update_successful() {
+        final int docCount = 5;
+        List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
+        List<IngestDocumentWrapper> updateDocumentWrappers = createIngestDocumentWrappers(docCount, "newValue");
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(docCount, true);
+        Consumer resultHandler = mock(Consumer.class);
+        TextInferenceRequest ingestRequest = TextInferenceRequest.builder()
+            .modelId("mockModelID")
+            .inputTexts(List.of("value1", "value1", "value1", "value1", "value1"))
+            .build();
+        TextInferenceRequest updateRequest = TextInferenceRequest.builder()
+            .modelId("mockModelID")
+            .inputTexts(List.of("newValue", "newValue", "newValue", "newValue", "newValue"))
+            .build();
+        mockVectorCreation(ingestRequest, updateRequest);
+        mockUpdateMultipleDocuments(ingestDocumentWrappers);
+        processor.batchExecute(ingestDocumentWrappers, resultHandler);
+        processor.batchExecute(updateDocumentWrappers, resultHandler);
+        for (int i = 0; i < docCount; ++i) {
+            List<Number> ingestVectors = (List<Number>) ingestDocumentWrappers.get(i)
+                .getIngestDocument()
+                .getSourceAndMetadata()
+                .get("key1_knn");
+            List<Number> updateVectors = (List<Number>) updateDocumentWrappers.get(i)
+                .getIngestDocument()
+                .getSourceAndMetadata()
+                .get("key1_knn");
+            assertEquals(ingestVectors.size(), updateVectors.size());
+        }
+        verify(openSearchClient, times(2)).execute(isA(MultiGetAction.class), isA(MultiGetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(2)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        List<TextInferenceRequest> requests = inferenceRequestCaptor.getAllValues();
+        assertEquals(ingestRequest.getInputTexts(), requests.get(0).getInputTexts());
+        assertEquals(updateRequest.getInputTexts(), requests.get(1).getInputTexts());
+    }
+
     public void testParsingNestedField_whenNestedFieldsConfigured_thenSuccessful() {
         Map<String, Object> config = createNestedMapConfiguration();
         TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
@@ -2310,6 +2398,30 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
             listener.onResponse(convertToGetResponse(ingestDocument)); // returns previously ingested document for update action
             return null;
         }).when(openSearchClient).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+    }
+
+    private void mockUpdateMultipleDocuments(List<IngestDocumentWrapper> ingestDocuments) {
+        doAnswer(invocation -> {
+            ActionListener<MultiGetResponse> listener = invocation.getArgument(2);
+            listener.onResponse(mockEmptyMultiGetItemResponse()); // returns empty result for ingest action
+            return null;
+        }).doAnswer(invocation -> {
+            ActionListener<MultiGetResponse> listener = invocation.getArgument(2);
+            listener.onResponse(convertToMultiGetItemResponse(ingestDocuments)); // returns previously ingested document for update action
+            return null;
+        }).when(openSearchClient).execute(isA(MultiGetAction.class), isA(MultiGetRequest.class), isA(ActionListener.class));
+    }
+
+    private void mockFailedUpdateMultipleDocuments(List<IngestDocumentWrapper> ingestDocuments) {
+        doAnswer(invocation -> {
+            ActionListener<MultiGetResponse> listener = invocation.getArgument(2);
+            listener.onResponse(mockEmptyMultiGetItemResponse()); // returns empty result for ingest action
+            return null;
+        }).doAnswer(invocation -> {
+            ActionListener<MultiGetResponse> listener = invocation.getArgument(2);
+            listener.onFailure(new RuntimeException()); // throw exception on update
+            return null;
+        }).when(openSearchClient).execute(isA(MultiGetAction.class), isA(MultiGetRequest.class), isA(ActionListener.class));
     }
 
     private void mockVectorCreation(TextInferenceRequest ingestRequest, TextInferenceRequest updateRequest) {

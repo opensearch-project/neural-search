@@ -1,0 +1,34 @@
+{
+  "description": "text embedding pipeline for hybrid",
+  "processors": [
+    {
+      "drop": {
+        "if": "ctx.text.contains('drop')"
+      }
+    },
+    {
+      "fail": {
+        "if": "ctx.text.contains('fail')",
+        "message": "fail"
+      }
+    },
+    {
+      "text_embedding": {
+        "model_id": "%s",
+        "batch_size": 2,
+        "field_map": {
+          "title": "title_knn",
+          "favor_list": "favor_list_knn",
+          "favorites": {
+            "game": "game_knn",
+            "movie": "movie_knn"
+          },
+          "nested_passages": {
+            "text": "embedding"
+          }
+        },
+        "skip_existing": true
+      }
+    }
+  ]
+}
