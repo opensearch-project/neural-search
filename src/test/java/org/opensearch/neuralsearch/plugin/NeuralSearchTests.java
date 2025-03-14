@@ -198,4 +198,8 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         assertEquals("Unexpected number of executor builders are registered", 1, executorBuilders.size());
         assertTrue(executorBuilders.get(0) instanceof FixedExecutorBuilder);
     }
+
+    public void testGetMappers_shouldReturnEmptyMap() {
+        assertTrue(plugin.getMappers().isEmpty());
+    }
 }
