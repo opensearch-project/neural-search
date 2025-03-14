@@ -104,7 +104,7 @@ public class NeuralHighlighterManager {
      * @return Formatted text with highlighting
      */
     public String getHighlightedSentences(String modelId, String question, String context) {
-        List<Map<String, Object>> result = fetchHighlightingResults(modelId, question, context);
+        List<Map<String, Object>> result = fetchModelResults(modelId, question, context);
         if (result == null) {
             return StringUtils.EMPTY;
         }
@@ -120,7 +120,7 @@ public class NeuralHighlighterManager {
      * @param context The document text
      * @return The highlighting results
      */
-    public List<Map<String, Object>> fetchHighlightingResults(String modelId, String question, String context) {
+    public List<Map<String, Object>> fetchModelResults(String modelId, String question, String context) {
 
         CountDownLatch latch = new CountDownLatch(1);
         AtomicReference<List<Map<String, Object>>> resultRef = new AtomicReference<>();
@@ -165,44 +165,31 @@ public class NeuralHighlighterManager {
      * @return Formatted text with highlighting
      */
     public String applyHighlighting(String context, List<Map<String, Object>> highlightResults) {
-        // Collect all valid highlight positions
         List<int[]> validHighlights = new ArrayList<>();
 
-        // Process each highlight result
-        for (Map<String, Object> result : highlightResults) {
-            if (result == null) {
-                continue;
-            }
+        if (highlightResults != null && !highlightResults.isEmpty()) {
+            Map<String, Object> result = highlightResults.getFirst();
+            if (result != null) {
+                // Get the "highlights" list from the result
+                Object highlightsObj = result.get(MODEL_INFERENCE_RESULT_KEY);
 
-            // Get the "highlights" list from the result
-            Object highlightsObj = result.get(MODEL_INFERENCE_RESULT_KEY);
+                if (highlightsObj instanceof List<?> highlightsList) {
+                    for (Object item : highlightsList) {
+                        if (item instanceof Map<?, ?> map) {
+                            Map<String, Object> safeMap = new java.util.HashMap<>();
+                            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                                safeMap.put(entry.getKey().toString(), entry.getValue());
+                            }
 
-            // Safely check if the object is a List
-            if (!(highlightsObj instanceof List<?> highlightsList)) {
-                continue;
-            }
+                            // Extract and validate positions
+                            Object startObj = safeMap.get(MODEL_INFERENCE_RESULT_START_KEY);
+                            Object endObj = safeMap.get(MODEL_INFERENCE_RESULT_END_KEY);
 
-            // Process the list safely
-            if (highlightsList.isEmpty()) {
-                continue;
-            }
-
-            // Process each item in the list, checking if it's a Map
-            for (Object item : highlightsList) {
-                if (item instanceof Map<?, ?> map) {
-                    // Create a type-safe map
-                    Map<String, Object> safeMap = new java.util.HashMap<>();
-                    for (Map.Entry<?, ?> entry : map.entrySet()) {
-                        safeMap.put(entry.getKey().toString(), entry.getValue());
-                    }
-
-                    // Extract and validate positions
-                    Object startObj = safeMap.get(MODEL_INFERENCE_RESULT_START_KEY);
-                    Object endObj = safeMap.get(MODEL_INFERENCE_RESULT_END_KEY);
-
-                    int[] positions = validateHighlightPositions(startObj, endObj, context.length());
-                    if (positions != null) {
-                        validHighlights.add(positions);
+                            int[] positions = validateHighlightPositions(startObj, endObj, context.length());
+                            if (positions != null) {
+                                validHighlights.add(positions);
+                            }
+                        }
                     }
                 }
             }
@@ -216,7 +203,6 @@ public class NeuralHighlighterManager {
         // Sort highlights by start position (ascending)
         validHighlights.sort(Comparator.comparingInt(pos -> pos[0]));
 
-        // Construct the highlighted text in O(n) time
         return constructHighlightedText(context, validHighlights);
     }
 
@@ -273,7 +259,7 @@ public class NeuralHighlighterManager {
         }
 
         List<int[]> merged = new ArrayList<>();
-        int[] current = highlights.get(0);
+        int[] current = highlights.getFirst();
         merged.add(current);
 
         for (int i = 1; i < highlights.size(); i++) {

@@ -214,7 +214,7 @@ public class NeuralHighlighterManagerTests extends OpenSearchTestCase {
         assertEquals("Should only apply valid highlights", "<em>This</em> is a test string", result);
     }
 
-    public void testFetchHighlightingResultsWithTimeout() throws Exception {
+    public void testFetchModelResultsWithTimeout() throws Exception {
         // Create a custom mock that delays the response
         MLCommonsClientAccessor delayedMlClient = mock(MLCommonsClientAccessor.class);
         NeuralHighlighterManager customManager = new NeuralHighlighterManager(delayedMlClient);
@@ -259,7 +259,7 @@ public class NeuralHighlighterManagerTests extends OpenSearchTestCase {
         // Call the method in a separate thread so we can interrupt it
         Thread testThread = new Thread(() -> {
             try {
-                customManager.fetchHighlightingResults(MODEL_ID, TEST_QUERY, TEST_CONTENT);
+                customManager.fetchModelResults(MODEL_ID, TEST_QUERY, TEST_CONTENT);
                 fail("Should have been interrupted");
             } catch (OpenSearchException e) {
                 // Expected exception
