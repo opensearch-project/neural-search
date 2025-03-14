@@ -17,7 +17,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
-import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
@@ -25,7 +24,6 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import com.google.common.annotations.VisibleForTesting;
 
 import lombok.extern.log4j.Log4j2;
-import org.opensearch.neuralsearch.util.ProcessorDocumentUtils;
 
 /**
  * This processor is used for user input data text and image embedding processing, model_id can be used to indicate which model user use,
@@ -107,7 +105,6 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
     @Override
     public void execute(final IngestDocument ingestDocument, final BiConsumer<IngestDocument, Exception> handler) {
         try {
-            validateEmbeddingFieldsValue(ingestDocument);
             Map<String, String> knnMap = buildMapWithKnnKeyAndOriginalValue(ingestDocument);
             Map<String, String> inferenceMap = createInferences(knnMap);
             if (inferenceMap.isEmpty()) {
@@ -171,20 +168,6 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put(knnKey, modelTensorList);
         return result;
-    }
-
-    private void validateEmbeddingFieldsValue(final IngestDocument ingestDocument) {
-        Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
-        String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
-        ProcessorDocumentUtils.validateMapTypeValue(
-            FIELD_MAP_FIELD,
-            sourceAndMetadataMap,
-            fieldMap,
-            indexName,
-            clusterService,
-            environment,
-            false
-        );
     }
 
     @Override

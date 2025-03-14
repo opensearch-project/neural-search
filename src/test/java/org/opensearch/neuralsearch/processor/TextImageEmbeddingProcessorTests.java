@@ -185,7 +185,9 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
         sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         sourceAndMetadata.put("key1", "value1");
         sourceAndMetadata.put("my_text_field", "value2");
-        sourceAndMetadata.put("key3", "value3");
+        sourceAndMetadata.put("text", "");
+        sourceAndMetadata.put("image", null);
+        sourceAndMetadata.put("key5", Map.of("inner_field", "innerValue1"));
         sourceAndMetadata.put("image_field", "base64_of_image_1234567890");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextImageEmbeddingProcessor processor = createInstance();
