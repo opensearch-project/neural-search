@@ -250,6 +250,7 @@ def knnJarDirectory = "$buildDir/dependencies/opensearch-knn"
 
 dependencies {
     api "org.opensearch:opensearch:${opensearch_version}"
+    implementation group: 'org.opensearch.plugin', name:'mapper-extras-client', version: "${opensearch_version}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-job-scheduler', version: "${opensearch_build}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-knn', version: "${opensearch_build}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-ml-plugin', version: "${opensearch_build}"
