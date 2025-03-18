@@ -12,6 +12,7 @@ import java.util.Objects;
 
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
+import org.opensearch.neuralsearch.processor.ValidateNormalizationDTO;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
@@ -78,7 +79,10 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
             scoreCombinationTechnique = scoreCombinationFactory.createCombination(combinationTechnique, combinationParams);
         }
 
-        normalizationTechnique.validateCombinationTechnique(scoreCombinationTechnique);
+        ValidateNormalizationDTO validateDTO = ValidateNormalizationDTO.builder()
+            .scoreCombinationTechnique(scoreCombinationTechnique)
+            .build();
+        scoreNormalizationFactory.validateNormalizationTechnique(normalizationTechnique, validateDTO);
 
         log.info(
             "Creating search phase results processor of type [{}] with normalization [{}] and combination [{}]",

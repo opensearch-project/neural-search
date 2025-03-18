@@ -19,18 +19,12 @@ import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 
 import com.google.common.primitives.Floats;
-import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.combination.GeometricMeanScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.combination.HarmonicMeanScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 
-import java.util.List;
-import java.util.Objects;
-
 import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.getDocIdAtQueryForNormalization;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getNumOfSubqueries;
 
 /**
  * Abstracts normalization of scores based on z score method
@@ -85,21 +79,8 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
     }
 
     @Override
-    public void validateCombinationTechnique(ScoreCombinationTechnique combinationTechnique) throws IllegalArgumentException {
-        switch (combinationTechnique.techniqueName()) {
-            case ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME:
-                // This is the supported technique, so we do nothing
-                break;
-            case GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME:
-                throw new IllegalArgumentException("Z Score does not support geometric mean combination technique");
-            case HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME:
-                throw new IllegalArgumentException("Z Score does not support harmonic mean combination technique");
-            default:
-                throw new IllegalArgumentException(
-                    "Z Score does not support the provided combination technique {}: Supported technique is arithmetic_mean"
-                        + combinationTechnique.techniqueName()
-                );
-        }
+    public String techniqueName() {
+        return TECHNIQUE_NAME;
     }
 
     @Override
@@ -143,41 +124,31 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
         return getDocIdAtQueryForNormalization(normalizedScores, this);
     }
 
-    private int getNumOfSubqueries(final List<CompoundTopDocs> queryTopDocs) {
-        return queryTopDocs.stream()
-            .filter(Objects::nonNull)
-            .filter(topDocs -> !topDocs.getTopDocs().isEmpty())
-            .findAny()
-            .get()
-            .getTopDocs()
-            .size();
-    }
+    private static float[] calculateMaxScorePerSubquery(final List<CompoundTopDocs> queryTopDocs, final int numOfSubqueries) {
+        DescriptiveStatistics[] statsPerSubquery = calculateStatsPerSubquery(queryTopDocs, numOfSubqueries);
 
-    private static float[] calculateMaxScorePerSubquery(final List<CompoundTopDocs> queryTopDocs, final int numOfScores) {
-        DescriptiveStatistics[] statsPerSubquery = calculateStatsPerSubquery(queryTopDocs, numOfScores);
-
-        float[] maxPerSubQuery = new float[numOfScores];
-        for (int i = 0; i < numOfScores; i++) {
+        float[] maxPerSubQuery = new float[numOfSubqueries];
+        for (int i = 0; i < numOfSubqueries; i++) {
             maxPerSubQuery[i] = (float) statsPerSubquery[i].getMax();
         }
 
         return maxPerSubQuery;
     }
 
-    private static float[] calculateMinScorePerSubquery(final List<CompoundTopDocs> queryTopDocs, final int numOfScores) {
-        DescriptiveStatistics[] statsPerSubquery = calculateStatsPerSubquery(queryTopDocs, numOfScores);
+    private static float[] calculateMinScorePerSubquery(final List<CompoundTopDocs> queryTopDocs, final int numOfSubqueries) {
+        DescriptiveStatistics[] statsPerSubquery = calculateStatsPerSubquery(queryTopDocs, numOfSubqueries);
 
-        float[] minPerSubQuery = new float[numOfScores];
-        for (int i = 0; i < numOfScores; i++) {
+        float[] minPerSubQuery = new float[numOfSubqueries];
+        for (int i = 0; i < numOfSubqueries; i++) {
             minPerSubQuery[i] = (float) statsPerSubquery[i].getMin();
         }
 
         return minPerSubQuery;
     }
 
-    private static DescriptiveStatistics[] calculateStatsPerSubquery(final List<CompoundTopDocs> queryTopDocs, final int numOfScores) {
-        DescriptiveStatistics[] statsPerSubquery = new DescriptiveStatistics[numOfScores];
-        for (int i = 0; i < numOfScores; i++) {
+    private static DescriptiveStatistics[] calculateStatsPerSubquery(final List<CompoundTopDocs> queryTopDocs, final int numOfSubqueries) {
+        DescriptiveStatistics[] statsPerSubquery = new DescriptiveStatistics[numOfSubqueries];
+        for (int i = 0; i < numOfSubqueries; i++) {
             statsPerSubquery[i] = new DescriptiveStatistics();
         }
 
@@ -197,22 +168,22 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
         return statsPerSubquery;
     }
 
-    private static float[] calculateMeanPerSubquery(final List<CompoundTopDocs> queryTopDocs, final int numOfScores) {
-        DescriptiveStatistics[] statsPerSubquery = calculateStatsPerSubquery(queryTopDocs, numOfScores);
+    private static float[] calculateMeanPerSubquery(final List<CompoundTopDocs> queryTopDocs, final int numOfSubqueries) {
+        DescriptiveStatistics[] statsPerSubquery = calculateStatsPerSubquery(queryTopDocs, numOfSubqueries);
 
-        float[] meanPerSubQuery = new float[numOfScores];
-        for (int i = 0; i < numOfScores; i++) {
+        float[] meanPerSubQuery = new float[numOfSubqueries];
+        for (int i = 0; i < numOfSubqueries; i++) {
             meanPerSubQuery[i] = (float) statsPerSubquery[i].getMean();
         }
 
         return meanPerSubQuery;
     }
 
-    private static float[] calculateStandardDeviationPerSubquery(final List<CompoundTopDocs> queryTopDocs, final int numOfScores) {
-        DescriptiveStatistics[] statsPerSubquery = calculateStatsPerSubquery(queryTopDocs, numOfScores);
+    private static float[] calculateStandardDeviationPerSubquery(final List<CompoundTopDocs> queryTopDocs, final int numOfSubqueries) {
+        DescriptiveStatistics[] statsPerSubquery = calculateStatsPerSubquery(queryTopDocs, numOfSubqueries);
 
-        float[] stdPerSubQuery = new float[numOfScores];
-        for (int i = 0; i < numOfScores; i++) {
+        float[] stdPerSubQuery = new float[numOfSubqueries];
+        for (int i = 0; i < numOfSubqueries; i++) {
             stdPerSubQuery[i] = (float) statsPerSubquery[i].getStandardDeviation();
         }
 

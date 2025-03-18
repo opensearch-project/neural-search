@@ -311,7 +311,9 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
         org.hamcrest.MatcherAssert.assertThat(
             exceptionWithHP.getMessage(),
             allOf(
-                containsString("Z Score does not support harmonic mean combination technique"),
+                containsString(
+                    "provided combination technique harmonic_mean is not supported for normalization technique z_score. Supported techniques are: arithmetic_mean"
+                ),
                 containsString("illegal_argument_exception")
             )
         );
@@ -331,7 +333,9 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
         org.hamcrest.MatcherAssert.assertThat(
             exceptionWithGP.getMessage(),
             allOf(
-                containsString("Z Score does not support geometric mean combination technique\""),
+                containsString(
+                    "provided combination technique geometric_mean is not supported for normalization technique z_score. Supported techniques are: arithmetic_mean"
+                ),
                 containsString("illegal_argument_exception")
             )
         );

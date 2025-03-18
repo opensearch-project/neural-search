@@ -18,15 +18,12 @@ import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 
 import lombok.ToString;
-import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.combination.GeometricMeanScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.combination.HarmonicMeanScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 
 import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.getDocIdAtQueryForNormalization;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getNumOfSubqueries;
 
 /**
  * Abstracts normalization of scores based on L2 method
@@ -74,18 +71,8 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
     }
 
     @Override
-    public void validateCombinationTechnique(ScoreCombinationTechnique combinationTechnique) {
-        switch (combinationTechnique.techniqueName()) {
-            case ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME, GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-                HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME:
-                // These are the supported technique, so we do nothing
-                break;
-            default:
-                throw new IllegalArgumentException(
-                    "Z Score does not support the provided combination technique {}: Supported techniques are arithmetic_mean, geometric_mean and harmonic_mean"
-                        + combinationTechnique.techniqueName()
-                );
-        }
+    public String techniqueName() {
+        return TECHNIQUE_NAME;
     }
 
     @Override
@@ -127,13 +114,7 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
         // find any non-empty compound top docs, it's either empty if shard does not have any results for all of sub-queries,
         // or it has results for all the sub-queries. In edge case of shard having results only for one sub-query, there will be TopDocs for
         // rest of sub-queries with zero total hits
-        int numOfSubqueries = queryTopDocs.stream()
-            .filter(Objects::nonNull)
-            .filter(topDocs -> topDocs.getTopDocs().size() > 0)
-            .findAny()
-            .get()
-            .getTopDocs()
-            .size();
+        int numOfSubqueries = getNumOfSubqueries(queryTopDocs);
         float[] l2Norms = new float[numOfSubqueries];
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
             if (Objects.isNull(compoundQueryTopDocs)) {

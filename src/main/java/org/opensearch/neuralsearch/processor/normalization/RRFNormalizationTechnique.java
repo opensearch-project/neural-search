@@ -24,10 +24,6 @@ import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import lombok.ToString;
 import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 import org.opensearch.neuralsearch.processor.SearchShard;
-import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.combination.GeometricMeanScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.combination.HarmonicMeanScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
@@ -81,18 +77,8 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
     }
 
     @Override
-    public void validateCombinationTechnique(ScoreCombinationTechnique combinationTechnique) {
-        switch (combinationTechnique.techniqueName()) {
-            case ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME, GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-                HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME:
-                // These are the supported technique, so we do nothing
-                break;
-            default:
-                throw new IllegalArgumentException(
-                    "Z Score does not support the provided combination technique {}: Supported techniques are arithmetic_mean, geometric_mean and harmonic_mean"
-                        + combinationTechnique.techniqueName()
-                );
-        }
+    public String techniqueName() {
+        return TECHNIQUE_NAME;
     }
 
     @Override

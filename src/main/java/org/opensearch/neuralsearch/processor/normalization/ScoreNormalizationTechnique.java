@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.processor.normalization;
 
 import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
-import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 
 /**
  * Abstracts normalization of scores in query search results.
@@ -21,5 +20,5 @@ public interface ScoreNormalizationTechnique {
      */
     void normalize(final NormalizeScoresDTO normalizeScoresDTO);
 
-    void validateCombinationTechnique(final ScoreCombinationTechnique combinationTechnique) throws IllegalArgumentException;
+    String techniqueName();
 }

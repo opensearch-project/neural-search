@@ -27,15 +27,12 @@ import com.google.common.primitives.Floats;
 
 import lombok.ToString;
 import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
-import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.combination.GeometricMeanScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.combination.HarmonicMeanScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 
 import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.getDocIdAtQueryForNormalization;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getNumOfSubqueries;
 import static org.opensearch.neuralsearch.query.HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES;
 
 /**
@@ -131,18 +128,8 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
     }
 
     @Override
-    public void validateCombinationTechnique(ScoreCombinationTechnique combinationTechnique) {
-        switch (combinationTechnique.techniqueName()) {
-            case ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME, GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-                HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME:
-                // These are the supported technique, so we do nothing
-                break;
-            default:
-                throw new IllegalArgumentException(
-                    "Z Score does not support the provided combination technique {}: Supported techniques are arithmetic_mean, geometric_mean and harmonic_mean"
-                        + combinationTechnique.techniqueName()
-                );
-        }
+    public String techniqueName() {
+        return TECHNIQUE_NAME;
     }
 
     @Override
@@ -189,16 +176,6 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
             }
         }
         return getDocIdAtQueryForNormalization(normalizedScores, this);
-    }
-
-    private int getNumOfSubqueries(final List<CompoundTopDocs> queryTopDocs) {
-        return queryTopDocs.stream()
-            .filter(Objects::nonNull)
-            .filter(topDocs -> topDocs.getTopDocs().isEmpty() == false)
-            .findAny()
-            .get()
-            .getTopDocs()
-            .size();
     }
 
     private float[] getMaxScores(final List<CompoundTopDocs> queryTopDocs, final int numOfSubqueries) {
