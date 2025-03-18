@@ -9,6 +9,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 
 /**
  * DTO object to hold data required for validation.
@@ -16,7 +17,9 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechniq
 @AllArgsConstructor
 @Builder
 @Getter
-public class ValidateNormalizationDTO {
+public class TechniqueCompatibilityCheckDTO {
     @NonNull
     private ScoreCombinationTechnique scoreCombinationTechnique;
+    @NonNull
+    private ScoreNormalizationTechnique scoreNormalizationTechnique;
 }
