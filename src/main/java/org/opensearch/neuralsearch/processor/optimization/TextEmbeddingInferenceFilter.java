@@ -7,7 +7,6 @@ package org.opensearch.neuralsearch.processor.optimization;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.processor.util.ProcessorUtils;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -47,7 +46,7 @@ public class TextEmbeddingInferenceFilter extends InferenceFilter {
         Optional<Object> existingValueOptional = ProcessorUtils.getValueFromSource(existingSourceAndMetadataMap, textPath);
         Optional<Object> embeddingValueOptional = ProcessorUtils.getValueFromSource(existingSourceAndMetadataMap, embeddingKey);
         if (existingValueOptional.isPresent() && embeddingValueOptional.isPresent()) {
-            return copyEmbeddingForSingleValue(
+            return copyEmbeddingForSingleObject(
                 embeddingKey,
                 processValue,
                 existingValueOptional.get(),
@@ -67,7 +66,7 @@ public class TextEmbeddingInferenceFilter extends InferenceFilter {
      * @return null if embeddings are reused; the processValue otherwise.
      */
     @Override
-    public Object copyEmbeddingForSingleValue(
+    public Object copyEmbeddingForSingleObject(
         String embeddingKey,
         Object processValue,
         Object existingValue,
@@ -90,7 +89,7 @@ public class TextEmbeddingInferenceFilter extends InferenceFilter {
      * @return empty list if embeddings are reused; processList otherwise.
      */
     @Override
-    public List<Object> copyEmbeddingForMultipleValues(
+    public List<Object> copyEmbeddingForListObject(
         String embeddingKey,
         List<Object> processList,
         List<Object> existingList,
@@ -99,8 +98,8 @@ public class TextEmbeddingInferenceFilter extends InferenceFilter {
     ) {
         if (Objects.equals(processList, existingList)) {
             ProcessorUtils.setValueToSource(sourceAndMetadataMap, embeddingKey, embeddingList);
-            // if successfully copied, return empty list to be filtered out from process map
-            return Collections.emptyList();
+            // if successfully copied, return null to be filtered out from process map
+            return null;
         }
         // source list and existing list are different, return processList to be included in process map
         return processList;
