@@ -1,0 +1,14 @@
+{
+  "name": "sentence_highlighting_qa_model",
+  "version": "1.0.0",
+  "function_name": "QUESTION_ANSWERING",
+  "description": "Sentence highlighting question answering model for testing",
+  "model_format": "TORCH_SCRIPT",
+  "model_group_id": "%s",
+  "model_content_hash_value": "84eddafdc1b23c13b2e4bbeb9d137aa7ae6b1aab37b91f99f4d9f9beb322a049",
+  "url": "https://github.com/opensearch-project/ml-commons/blob/main/ml-algorithms/src/test/resources/org/opensearch/ml/engine/algorithms/question_answering/sentence_highlighting_qa_model_pt.zip?raw=true",
+  "model_config": {
+    "model_type": "sentence_highlighting",
+    "framework_type": "huggingface_transformers"
+  }
+}
