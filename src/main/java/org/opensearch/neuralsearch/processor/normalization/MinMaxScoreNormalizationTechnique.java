@@ -32,6 +32,7 @@ import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 
 import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.getDocIdAtQueryForNormalization;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getNumOfSubqueries;
 import static org.opensearch.neuralsearch.query.HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES;
 
 /**
@@ -127,6 +128,11 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
     }
 
     @Override
+    public String techniqueName() {
+        return TECHNIQUE_NAME;
+    }
+
+    @Override
     public String describe() {
         return lowerBoundsOptional.map(lb -> {
             String lowerBounds = lb.stream()
@@ -170,16 +176,6 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
             }
         }
         return getDocIdAtQueryForNormalization(normalizedScores, this);
-    }
-
-    private int getNumOfSubqueries(final List<CompoundTopDocs> queryTopDocs) {
-        return queryTopDocs.stream()
-            .filter(Objects::nonNull)
-            .filter(topDocs -> topDocs.getTopDocs().isEmpty() == false)
-            .findAny()
-            .get()
-            .getTopDocs()
-            .size();
     }
 
     private float[] getMaxScores(final List<CompoundTopDocs> queryTopDocs, final int numOfSubqueries) {

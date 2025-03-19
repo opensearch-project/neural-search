@@ -38,6 +38,11 @@ public class RRFScoreCombinationTechnique implements ScoreCombinationTechnique, 
     }
 
     @Override
+    public String techniqueName() {
+        return TECHNIQUE_NAME;
+    }
+
+    @Override
     public String describe() {
         return describeCombinationTechnique(TECHNIQUE_NAME, List.of());
     }
