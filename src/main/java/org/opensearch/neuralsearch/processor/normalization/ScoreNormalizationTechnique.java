@@ -20,4 +20,8 @@ public interface ScoreNormalizationTechnique {
      */
     void normalize(final NormalizeScoresDTO normalizeScoresDTO);
 
+    /**
+     * Returns the name of the normalization technique.
+     */
+    String techniqueName();
 }

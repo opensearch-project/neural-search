@@ -6,10 +6,12 @@ package org.opensearch.neuralsearch.processor.util;
 
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.search.SearchHit;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Stack;
 
@@ -208,5 +210,21 @@ public class ProcessorUtils {
         }
 
         return false;
+    }
+
+    /**
+     * Returns the number of subqueries that are present in the queryTopDocs. This is useful to determine
+     * if the queryTopDocs are empty or not
+     * @param queryTopDocs
+     * @return
+     */
+    public static int getNumOfSubqueries(final List<CompoundTopDocs> queryTopDocs) {
+        return queryTopDocs.stream()
+            .filter(Objects::nonNull)
+            .filter(topDocs -> !topDocs.getTopDocs().isEmpty())
+            .findAny()
+            .get()
+            .getTopDocs()
+            .size();
     }
 }

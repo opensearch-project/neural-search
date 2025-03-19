@@ -77,6 +77,11 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
     }
 
     @Override
+    public String techniqueName() {
+        return TECHNIQUE_NAME;
+    }
+
+    @Override
     public Map<DocIdAtSearchShard, ExplanationDetails> explain(List<CompoundTopDocs> queryTopDocs) {
         Map<DocIdAtSearchShard, List<Float>> normalizedScores = new HashMap<>();
 

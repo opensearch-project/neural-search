@@ -36,6 +36,8 @@ import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
 import org.opensearch.Version;
+import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.transport.client.Client;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.io.stream.BytesStreamOutput;
@@ -77,9 +79,12 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
     private static final Float MIN_SCORE = 0.985f;
     private static final float BOOST = 1.8f;
     private static final String QUERY_NAME = "queryName";
+    private static final String TERM_QUERY_FIELD_NAME = "termQueryFiledName";
+    private static final String TERM_QUERY_FIELD_VALUE = "termQueryFiledValue";
     private static final Supplier<float[]> TEST_VECTOR_SUPPLIER = () -> new float[10];
 
     private static final QueryBuilder TEST_FILTER = new MatchAllQueryBuilder();
+    private static final QueryBuilder ADDITIONAL_TEST_FILTER = new TermQueryBuilder(TERM_QUERY_FIELD_NAME, TERM_QUERY_FIELD_VALUE);
 
     @SneakyThrows
     public void testFromXContent_whenBuiltWithDefaults_thenBuildSuccessfully() {
@@ -761,6 +766,29 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
             .methodParameters(methodParameters1)
             .rescoreContext(rescoreContext1)
             .build();
+    }
+
+    public void testFilter_whenAddBoolQueryBuilderToNeuralQueryBuilder_thenFilterSuccessful() {
+        // Test for Null Case
+        NeuralQueryBuilder neuralQueryBuilder = getBaselineNeuralQueryBuilder();
+        QueryBuilder updatedNeuralQueryBuilder = neuralQueryBuilder.filter(null);
+        assertEquals(neuralQueryBuilder, updatedNeuralQueryBuilder);
+
+        // Test for valid case
+        neuralQueryBuilder = getBaselineNeuralQueryBuilder();
+        updatedNeuralQueryBuilder = neuralQueryBuilder.filter(ADDITIONAL_TEST_FILTER);
+        BoolQueryBuilder expectedUpdatedQueryFilter = new BoolQueryBuilder();
+        expectedUpdatedQueryFilter.must(TEST_FILTER);
+        expectedUpdatedQueryFilter.filter(ADDITIONAL_TEST_FILTER);
+        assertEquals(neuralQueryBuilder, updatedNeuralQueryBuilder);
+        assertEquals(expectedUpdatedQueryFilter, neuralQueryBuilder.filter());
+
+        // Test for queryBuilder without filter initialized where filter function would
+        // simply assign filter to its filter field.
+        neuralQueryBuilder = NeuralQueryBuilder.builder().fieldName(FIELD_NAME).queryText(QUERY_TEXT).modelId(MODEL_ID).k(K).build();
+        updatedNeuralQueryBuilder = neuralQueryBuilder.filter(TEST_FILTER);
+        assertEquals(neuralQueryBuilder, updatedNeuralQueryBuilder);
+        assertEquals(TEST_FILTER, neuralQueryBuilder.filter());
     }
 
     @SneakyThrows

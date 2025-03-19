@@ -23,6 +23,7 @@ import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 
 import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.getDocIdAtQueryForNormalization;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getNumOfSubqueries;
 
 /**
  * Abstracts normalization of scores based on L2 method
@@ -70,6 +71,11 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
     }
 
     @Override
+    public String techniqueName() {
+        return TECHNIQUE_NAME;
+    }
+
+    @Override
     public String describe() {
         return String.format(Locale.ROOT, "%s", TECHNIQUE_NAME);
     }
@@ -108,13 +114,7 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
         // find any non-empty compound top docs, it's either empty if shard does not have any results for all of sub-queries,
         // or it has results for all the sub-queries. In edge case of shard having results only for one sub-query, there will be TopDocs for
         // rest of sub-queries with zero total hits
-        int numOfSubqueries = queryTopDocs.stream()
-            .filter(Objects::nonNull)
-            .filter(topDocs -> topDocs.getTopDocs().size() > 0)
-            .findAny()
-            .get()
-            .getTopDocs()
-            .size();
+        int numOfSubqueries = getNumOfSubqueries(queryTopDocs);
         float[] l2Norms = new float[numOfSubqueries];
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
             if (Objects.isNull(compoundQueryTopDocs)) {
