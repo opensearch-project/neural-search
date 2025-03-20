@@ -497,6 +497,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 .expandNested(expandNested())
                 .methodParameters(methodParameters())
                 .rescoreContext(rescoreContext())
+                .originalQueryText(queryText())
                 .build();
         }
 

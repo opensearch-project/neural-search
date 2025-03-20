@@ -903,6 +903,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
             .rescoreContext(neuralQueryBuilder.rescoreContext())
             .vector(TEST_VECTOR_SUPPLIER.get())
             .expandNested(Boolean.TRUE)
+            .originalQueryText(QUERY_TEXT)
             .build();
 
         QueryBuilder queryBuilder = neuralQueryBuilder.doRewrite(null);
