@@ -99,11 +99,11 @@ public class SemanticHighlighterIT extends BaseNeuralSearchIT {
          */
         MatchQueryBuilder matchQuery = new MatchQueryBuilder(TEST_TEXT_FIELD_NAME, TEST_QUERY_TEXT);
         Map<String, Object> searchResponse = searchWithSemanticHighlighter(
-                TEST_BASIC_INDEX_NAME,
-                matchQuery,
-                10,
-                TEST_TEXT_FIELD_NAME,
-                sentenceHighlightingModelId
+            TEST_BASIC_INDEX_NAME,
+            matchQuery,
+            10,
+            TEST_TEXT_FIELD_NAME,
+            sentenceHighlightingModelId
         );
         verifyHighlightResults(searchResponse, TEST_QUERY_TEXT);
 
@@ -128,11 +128,11 @@ public class SemanticHighlighterIT extends BaseNeuralSearchIT {
          */
         TermQueryBuilder termQuery = new TermQueryBuilder(TEST_TEXT_FIELD_NAME, "intelligence");
         searchResponse = searchWithSemanticHighlighter(
-                TEST_BASIC_INDEX_NAME,
-                termQuery,
-                10,
-                TEST_TEXT_FIELD_NAME,
-                sentenceHighlightingModelId
+            TEST_BASIC_INDEX_NAME,
+            termQuery,
+            10,
+            TEST_TEXT_FIELD_NAME,
+            sentenceHighlightingModelId
         );
         verifyHighlightResults(searchResponse, "intelligence");
 
@@ -161,16 +161,15 @@ public class SemanticHighlighterIT extends BaseNeuralSearchIT {
          *     }
          * }
          */
-        BoolQueryBuilder boolQuery = new BoolQueryBuilder()
-                .must(new MatchQueryBuilder(TEST_TEXT_FIELD_NAME, "artificial"))
-                .must(new MatchQueryBuilder(TEST_TEXT_FIELD_NAME, "intelligence"))
-                .should(new MatchQueryBuilder(TEST_TEXT_FIELD_NAME, "learning"));
+        BoolQueryBuilder boolQuery = new BoolQueryBuilder().must(new MatchQueryBuilder(TEST_TEXT_FIELD_NAME, "artificial"))
+            .must(new MatchQueryBuilder(TEST_TEXT_FIELD_NAME, "intelligence"))
+            .should(new MatchQueryBuilder(TEST_TEXT_FIELD_NAME, "learning"));
         searchResponse = searchWithSemanticHighlighter(
-                TEST_BASIC_INDEX_NAME,
-                boolQuery,
-                10,
-                TEST_TEXT_FIELD_NAME,
-                sentenceHighlightingModelId
+            TEST_BASIC_INDEX_NAME,
+            boolQuery,
+            10,
+            TEST_TEXT_FIELD_NAME,
+            sentenceHighlightingModelId
         );
         verifyHighlightResults(searchResponse, "artificial intelligence");
 
@@ -194,14 +193,13 @@ public class SemanticHighlighterIT extends BaseNeuralSearchIT {
          *     }
          * }
          */
-        QueryStringQueryBuilder queryString = new QueryStringQueryBuilder("artificial AND intelligence")
-                .defaultField(TEST_TEXT_FIELD_NAME);
+        QueryStringQueryBuilder queryString = new QueryStringQueryBuilder("artificial AND intelligence").defaultField(TEST_TEXT_FIELD_NAME);
         searchResponse = searchWithSemanticHighlighter(
-                TEST_BASIC_INDEX_NAME,
-                queryString,
-                10,
-                TEST_TEXT_FIELD_NAME,
-                sentenceHighlightingModelId
+            TEST_BASIC_INDEX_NAME,
+            queryString,
+            10,
+            TEST_TEXT_FIELD_NAME,
+            sentenceHighlightingModelId
         );
         verifyHighlightResults(searchResponse, "artificial intelligence");
 
@@ -229,17 +227,17 @@ public class SemanticHighlighterIT extends BaseNeuralSearchIT {
          * }
          */
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-                .fieldName(TEST_KNN_VECTOR_FIELD_NAME)
-                .queryText(TEST_QUERY_TEXT)
-                .modelId(textEmbeddingModelId)
-                .k(1)
-                .build();
+            .fieldName(TEST_KNN_VECTOR_FIELD_NAME)
+            .queryText(TEST_QUERY_TEXT)
+            .modelId(textEmbeddingModelId)
+            .k(1)
+            .build();
         searchResponse = searchWithSemanticHighlighter(
-                TEST_BASIC_INDEX_NAME,
-                neuralQueryBuilder,
-                10,
-                TEST_TEXT_FIELD_NAME,
-                sentenceHighlightingModelId
+            TEST_BASIC_INDEX_NAME,
+            neuralQueryBuilder,
+            10,
+            TEST_TEXT_FIELD_NAME,
+            sentenceHighlightingModelId
         );
         verifyHighlightResults(searchResponse, TEST_QUERY_TEXT);
 
@@ -278,20 +276,20 @@ public class SemanticHighlighterIT extends BaseNeuralSearchIT {
          */
         MatchQueryBuilder hybridMatchQuery = new MatchQueryBuilder(TEST_TEXT_FIELD_NAME, TEST_QUERY_TEXT);
         NeuralQueryBuilder hybridNeuralQuery = NeuralQueryBuilder.builder()
-                .fieldName(TEST_KNN_VECTOR_FIELD_NAME)
-                .queryText("AI applications")
-                .modelId(textEmbeddingModelId)
-                .k(1)
-                .build();
+            .fieldName(TEST_KNN_VECTOR_FIELD_NAME)
+            .queryText("AI applications")
+            .modelId(textEmbeddingModelId)
+            .k(1)
+            .build();
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().query(
-                new BoolQueryBuilder().should(hybridMatchQuery).should(hybridNeuralQuery)
+            new BoolQueryBuilder().should(hybridMatchQuery).should(hybridNeuralQuery)
         );
         searchResponse = searchWithSemanticHighlighter(
-                TEST_BASIC_INDEX_NAME,
-                searchSourceBuilder.query(),
-                10,
-                TEST_TEXT_FIELD_NAME,
-                sentenceHighlightingModelId
+            TEST_BASIC_INDEX_NAME,
+            searchSourceBuilder.query(),
+            10,
+            TEST_TEXT_FIELD_NAME,
+            sentenceHighlightingModelId
         );
         verifyHighlightResults(searchResponse, "artificial intelligence");
     }
