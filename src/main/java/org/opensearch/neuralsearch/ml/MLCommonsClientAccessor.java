@@ -9,6 +9,7 @@ import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -31,6 +32,8 @@ import org.opensearch.neuralsearch.processor.MapInferenceRequest;
 import org.opensearch.neuralsearch.processor.SimilarityInferenceRequest;
 import org.opensearch.neuralsearch.processor.TextInferenceRequest;
 import org.opensearch.neuralsearch.util.RetryUtil;
+import org.opensearch.ml.common.dataset.QuestionAnsweringInputDataSet;
+import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
 
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -252,6 +255,51 @@ public class MLCommonsClientAccessor {
         ));
     }
 
+    /**
+     * Process the highlighting output from ML model response.
+     * Converts the model output into a list of maps containing highlighting information.
+     */
+    private List<Map<String, Object>> processHighlightingOutput(ModelTensorOutput modelTensorOutput) {
+        List<Map<String, Object>> results = new ArrayList<>();
+
+        try {
+            final List<ModelTensors> tensorOutputList = modelTensorOutput.getMlModelOutputs();
+
+            if (CollectionUtils.isEmpty(tensorOutputList)) {
+                return results;
+            }
+
+            for (ModelTensors tensors : tensorOutputList) {
+                List<ModelTensor> tensorsList = tensors.getMlModelTensors();
+
+                if (CollectionUtils.isEmpty(tensorsList)) {
+                    log.warn("No tensors in model output");
+                    continue;
+                }
+
+                // Process each tensor in the output
+                for (ModelTensor tensor : tensorsList) {
+                    Map<String, ?> dataMap = tensor.getDataAsMap(); // it stored in "result" in string type
+                    if (dataMap != null && !dataMap.isEmpty()) {
+                        // Cast the map to Map<String, Object> - this is safe as we're only reading from it
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> typedDataMap = (Map<String, Object>) dataMap;
+                        results.add(typedDataMap);
+                    }
+                }
+            }
+
+            // If no results were found, add an empty map to maintain consistent response format
+            if (results.isEmpty()) {
+                results.add(Collections.emptyMap());
+            }
+
+            return results;
+        } catch (Exception e) {
+            throw new IllegalStateException("Error processing sentence highlighting output", e);
+        }
+    }
+
     private MLInput createMLMultimodalInput(final List<String> targetResponseFilters, final Map<String, String> input) {
         List<String> inputText = new ArrayList<>();
         inputText.add(input.get(INPUT_TEXT));
@@ -261,5 +309,52 @@ public class MLCommonsClientAccessor {
         final ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
         final MLInputDataset inputDataset = new TextDocsInputDataSet(inputText, modelResultFilter);
         return new MLInput(FunctionName.TEXT_EMBEDDING, null, inputDataset);
+    }
+
+    /**
+     * Retryable method to perform sentence highlighting inference.
+     * This method will retry up to 3 times if a retryable exception occurs.
+     */
+    private void retryableInferenceSentenceHighlighting(
+        final SentenceHighlightingRequest inferenceRequest,
+        final int retryTime,
+        final ActionListener<List<Map<String, Object>>> listener
+    ) {
+        try {
+            MLInputDataset inputDataset = new QuestionAnsweringInputDataSet(inferenceRequest.getQuestion(), inferenceRequest.getContext());
+            MLInput mlInput = new MLInput(FunctionName.QUESTION_ANSWERING, null, inputDataset);
+
+            mlClient.predict(inferenceRequest.getModelId(), mlInput, ActionListener.wrap(mlOutput -> {
+                try {
+                    List<Map<String, Object>> result = processHighlightingOutput((ModelTensorOutput) mlOutput);
+                    listener.onResponse(result);
+                } catch (Exception e) {
+                    listener.onFailure(e);
+                }
+            },
+                e -> RetryUtil.handleRetryOrFailure(
+                    e,
+                    retryTime,
+                    () -> retryableInferenceSentenceHighlighting(inferenceRequest, retryTime + 1, listener),
+                    listener
+                )
+            ));
+        } catch (Exception e) {
+            listener.onFailure(e);
+        }
+    }
+
+    /**
+     * Performs sentence highlighting inference using the provided model.
+     * This method will highlight relevant sentences in the context based on the question.
+     *
+     * @param inferenceRequest the request containing the question and context for highlighting
+     * @param listener the listener to be called with the highlighting results
+     */
+    public void inferenceSentenceHighlighting(
+        @NonNull final SentenceHighlightingRequest inferenceRequest,
+        @NonNull final ActionListener<List<Map<String, Object>>> listener
+    ) {
+        retryableInferenceSentenceHighlighting(inferenceRequest, 0, listener);
     }
 }

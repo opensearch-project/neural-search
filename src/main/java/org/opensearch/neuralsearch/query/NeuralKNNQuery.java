@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.query;
 
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.QueryVisitor;
@@ -19,12 +20,10 @@ import java.util.Objects;
  * Delegates core operations to the underlying KNN query.
  */
 @Getter
+@RequiredArgsConstructor
 public class NeuralKNNQuery extends Query {
     private final Query knnQuery;
-
-    public NeuralKNNQuery(Query knnQuery) {
-        this.knnQuery = knnQuery;
-    }
+    private final String originalQueryText;
 
     @Override
     public String toString(String field) {
@@ -49,7 +48,7 @@ public class NeuralKNNQuery extends Query {
         if (rewritten == knnQuery) {
             return this;
         }
-        return new NeuralKNNQuery(rewritten);
+        return new NeuralKNNQuery(rewritten, originalQueryText);
     }
 
     @Override
@@ -57,11 +56,11 @@ public class NeuralKNNQuery extends Query {
         if (this == other) return true;
         if (other == null || getClass() != other.getClass()) return false;
         NeuralKNNQuery that = (NeuralKNNQuery) other;
-        return Objects.equals(knnQuery, that.knnQuery);
+        return Objects.equals(knnQuery, that.knnQuery) && Objects.equals(originalQueryText, that.originalQueryText);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(knnQuery);
+        return Objects.hash(knnQuery, originalQueryText);
     }
 }
