@@ -27,6 +27,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getValueFromSource;
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.mappingExistsInSource;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.setValueToSource;
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.validateRerankCriteria;
 
 public class ProcessorUtilsTests extends OpenSearchTestCase {
@@ -213,4 +214,19 @@ public class ProcessorUtilsTests extends OpenSearchTestCase {
         assertFalse("The ml map no longer has the score `info` mapping ", innerMLMap.containsKey("info"));
     }
 
+    public void testSetValueToSource_returnsExpectedValues_WithExistingKeys() {
+        String targetPath = "ml.newField";
+        String targetValue = "newValue";
+        setUpValidSourceMap();
+        setValueToSource(sourceMap, targetPath, targetValue);
+        Map<String, Object> innerMLMap = (Map<String, Object>) sourceMap.get("ml");
+        assertEquals(targetValue, innerMLMap.get("newField"));
+    }
+
+    public void testGetValueToSource_returnsExpectedValues_WithNonExistingPath() {
+        String targetField = "ml.wrong";
+        setUpValidSourceMap();
+        Optional<Object> result = getValueFromSource(sourceMap, targetField);
+        assertTrue(result.isEmpty());
+    }
 }
