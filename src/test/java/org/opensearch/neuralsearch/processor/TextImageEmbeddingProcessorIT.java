@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import org.junit.Before;
+import org.opensearch.client.ResponseException;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 /**
@@ -21,17 +22,13 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
     private static final String INGEST_DOCUMENT = "{\n"
         + "  \"title\": \"This is a good day\",\n"
         + "  \"description\": \"daily logging\",\n"
-        + "  \"passage_text\": \"A very nice day today\",\n"
+        + "  \"passage_text\": \"passage_text_value\",\n"
+        + "  \"text\": \"\",\n"
+        + "  \"image\": null,\n"
         + "  \"favorites\": {\n"
         + "    \"game\": \"overwatch\",\n"
         + "    \"movie\": null\n"
         + "  }\n"
-        + "}\n";
-
-    private static final String INGEST_DOCUMENT_UNMAPPED_FIELDS = "{\n"
-        + "  \"title\": \"This is a good day\",\n"
-        + "  \"description\": \"daily logging\",\n"
-        + "  \"some_random_field\": \"Today is a sunny weather\"\n"
         + "}\n";
 
     @Before
@@ -51,11 +48,22 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
             ingestDocument(INDEX_NAME, INGEST_DOCUMENT);
             assertEquals(1, getDocCount(INDEX_NAME));
             // verify doc without mapping
-            ingestDocument(INDEX_NAME, INGEST_DOCUMENT_UNMAPPED_FIELDS);
+            String documentWithUnmappedFields;
+            documentWithUnmappedFields = INGEST_DOCUMENT.replace("passage_text", "random_field_1");
+            ingestDocument(INDEX_NAME, documentWithUnmappedFields);
             assertEquals(2, getDocCount(INDEX_NAME));
         } finally {
             wipeOfTestResources(INDEX_NAME, PIPELINE_NAME, modelId, null);
         }
+    }
+
+    public void testEmbeddingProcessor_whenIngestingDocumentWithNullMappingValue_thenThrowException() throws Exception {
+        String modelId = uploadModel();
+        loadModel(modelId);
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
+        createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
+
+        expectThrows(ResponseException.class, () -> ingestDocument(INDEX_NAME, INGEST_DOCUMENT.replace("\"passage_text_value\"", "null")));
     }
 
     private String uploadModel() throws Exception {
