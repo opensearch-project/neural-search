@@ -306,12 +306,12 @@ public class ProcessorUtils {
      */
     public static int getNumOfSubqueries(final List<CompoundTopDocs> queryTopDocs) {
         return queryTopDocs.stream()
-                .filter(Objects::nonNull)
-                .filter(topDocs -> !topDocs.getTopDocs().isEmpty())
-                .findAny()
-                .get()
-                .getTopDocs()
-                .size();
+            .filter(Objects::nonNull)
+            .filter(topDocs -> !topDocs.getTopDocs().isEmpty())
+            .findAny()
+            .get()
+            .getTopDocs()
+            .size();
     }
 
     // This method should be used only when you are certain the object is a `Map<String, Object>`.
