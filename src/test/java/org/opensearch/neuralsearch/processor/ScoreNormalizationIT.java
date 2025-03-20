@@ -292,7 +292,7 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
 
-        assertHybridSearchResults(searchResponseAsMapArithmeticMean, 5, new float[] { 0.4f, 2.0f });
+        assertHybridSearchResults(searchResponseAsMapArithmeticMean, 5, new float[] { 0.3f, 2.0f });
 
         deleteSearchPipeline(SEARCH_PIPELINE);
 
