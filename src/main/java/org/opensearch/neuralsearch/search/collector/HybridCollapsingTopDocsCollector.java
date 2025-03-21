@@ -8,7 +8,6 @@ import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.FieldComparator;
-import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.HitQueue;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.LeafFieldComparator;
@@ -30,6 +29,7 @@ import org.opensearch.neuralsearch.query.HybridQueryScorer;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -55,6 +55,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
     private int docBase;
     private final HashMap<BytesRef, HybridCollectedSearchGroup<BytesRef>> groupMap;
     private final HashMap<BytesRef, PriorityQueue<ScoreDoc>[]> groupQueueMap;
+
     private final int topNGroups;
     private PriorityQueue<HybridCollectedSearchGroup> groupQueue;
     private HashMap<BytesRef, int[]> collectedHitsPerSubQueryMap;
@@ -95,23 +96,47 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
     @Override
     public List<? extends TopDocs> topDocs() throws IOException {
         List<CollapseTopFieldDocs> topDocsList = new ArrayList<>();
-        for (int i = 0; i < collectedHitsPerSubQueryMap.size(); i++) {
+        if (collectedHitsPerSubQueryMap.isEmpty()) {
+            return Collections.EMPTY_LIST;
+        }
+        // Get num sub queries, there is probably a better way to do this
+        int numSubQueries = 0;
+        for (Map.Entry<BytesRef, int[]> entry : collectedHitsPerSubQueryMap.entrySet()) {
+            numSubQueries = entry.getValue().length;
+            break;
+        }
+
+        for (int i = 0; i < numSubQueries; i++) {
             ArrayList<ScoreDoc> scoreDocs = new ArrayList<>();
             ArrayList<BytesRef> collapseValues = new ArrayList<>();
             int hitsOnCurrentSubQuery = 0;
             for (Map.Entry<BytesRef, HybridCollectedSearchGroup<BytesRef>> entry : groupMap.entrySet()) {
                 BytesRef groupValue = entry.getKey();
-                PriorityQueue<ScoreDoc>[] priorityQueueList = groupQueueMap.get(groupValue);
-                for (PriorityQueue<ScoreDoc> pq : priorityQueueList) {
-                    for (ScoreDoc scoreDoc : pq) {
-                        scoreDocs.add(scoreDoc);
+                PriorityQueue<ScoreDoc> priorityQueue = groupQueueMap.get(groupValue)[i];
+
+                // Hard coded 10 for now
+                for (int j = 0; j < 10; j++) {
+                    if (priorityQueue.size() > 0) {
+                        scoreDocs.add(priorityQueue.pop());
                         collapseValues.add(groupValue);
+                    } else {
+                        // Break if queue is empty
+                        break;
                     }
                 }
                 hitsOnCurrentSubQuery += collectedHitsPerSubQueryMap.get(groupValue)[i];
             }
-            topDocsList.add(new CollapseTopFieldDocs(collapseField, new TotalHits(hitsOnCurrentSubQuery, TotalHits.Relation.EQUAL_TO), scoreDocs.toArray(), null, collapseValues))
+            topDocsList.add(
+                new CollapseTopFieldDocs(
+                    collapseField,
+                    new TotalHits(hitsOnCurrentSubQuery, TotalHits.Relation.EQUAL_TO),
+                    scoreDocs.toArray(new ScoreDoc[0]),
+                    sort.getSort(),
+                    collapseValues.toArray(new BytesRef[0])
+                )
+            );
         }
+        return topDocsList;
     }
 
     @Override

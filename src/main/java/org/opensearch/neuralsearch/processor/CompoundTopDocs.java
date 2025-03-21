@@ -21,6 +21,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.extern.log4j.Log4j2;
+import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.opensearch.search.SearchShardTarget;
 import org.opensearch.search.query.QuerySearchResult;
 
@@ -87,7 +88,10 @@ public class CompoundTopDocs {
         final SearchShardTarget searchShardTarget = querySearchResult.getSearchShardTarget();
         SearchShard searchShard = SearchShard.createSearchShard(searchShardTarget);
         boolean isSortEnabled = false;
-        if (topDocs instanceof TopFieldDocs) {
+        boolean isCollapseEnabled = false;
+        if (topDocs instanceof CollapseTopFieldDocs) {
+            isCollapseEnabled = true;
+        } else if (topDocs instanceof TopFieldDocs) {
             isSortEnabled = true;
         }
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
@@ -105,7 +109,16 @@ public class CompoundTopDocs {
                 ScoreDoc[] subQueryScores = scoreDocList.toArray(new ScoreDoc[0]);
                 TotalHits totalHits = new TotalHits(subQueryScores.length, TotalHits.Relation.EQUAL_TO);
                 TopDocs subQueryTopDocs;
-                if (isSortEnabled) {
+                if (isCollapseEnabled) {
+                    CollapseTopFieldDocs collapseTopFieldDocs = (CollapseTopFieldDocs) topDocs;
+                    subQueryTopDocs = new CollapseTopFieldDocs(
+                        collapseTopFieldDocs.field,
+                        totalHits,
+                        subQueryScores,
+                        collapseTopFieldDocs.fields,
+                        collapseTopFieldDocs.collapseValues
+                    );
+                } else if (isSortEnabled) {
                     subQueryTopDocs = new TopFieldDocs(totalHits, subQueryScores, ((TopFieldDocs) topDocs).fields);
                 } else {
                     subQueryTopDocs = new TopDocs(totalHits, subQueryScores);

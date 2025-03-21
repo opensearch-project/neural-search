@@ -21,6 +21,7 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.FieldDoc;
+import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.lucene.search.FilteredCollector;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
@@ -198,7 +199,11 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         for (HybridSearchCollector collector : hybridSearchCollectors) {
             boolean isSortEnabled = docValueFormats != null;
             TopDocsAndMaxScore topDocsAndMaxScore = getTopDocsAndAndMaxScore(collector, isSortEnabled);
-            results.add((QuerySearchResult result) -> reduceCollectorResults(result, topDocsAndMaxScore, docValueFormats));
+            boolean collapseEnabled = collector instanceof HybridCollapsingTopDocsCollector;
+            if (collapseEnabled) {
+                docValueFormats = new DocValueFormat[0];
+            }
+            results.add((QuerySearchResult result) -> reduceCollectorResults(result, topDocsAndMaxScore, new DocValueFormat[0]));
         }
         return results;
     }
@@ -345,7 +350,12 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     }
 
     private TopDocs getNewTopDocs(final TotalHits totalHits, final List<TopDocs> topDocs) {
+        boolean isCollapseEnabled = topDocs.get(0) instanceof CollapseTopFieldDocs;
         ScoreDoc[] scoreDocs = new ScoreDoc[0];
+        ArrayList<Object> collapseValues = new ArrayList<>();
+        String collapseField = "";
+        ArrayList<FieldDoc> fieldDocs = new ArrayList<>();
+        ArrayList<SortField> sortFields = new ArrayList<>();
         if (Objects.nonNull(topDocs)) {
             // for a single shard case we need to do score processing at coordinator level.
             // this is workaround for current core behaviour, for single shard fetch phase is executed
@@ -371,18 +381,54 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             // doc_id | magic_number_2
             // ...
             // doc_id | magic_number_1
-            List<ScoreDoc> result = new ArrayList<>();
-            result.add(createStartStopElementForHybridSearchResults(delimiterDocId));
-            for (TopDocs topDoc : topDocs) {
-                if (Objects.isNull(topDoc) || Objects.isNull(topDoc.scoreDocs)) {
-                    result.add(createDelimiterElementForHybridSearchResults(delimiterDocId));
-                    continue;
+
+            if (isCollapseEnabled) {
+                List<FieldDoc> result = new ArrayList<>();
+                Object[] fields = new Object[0];
+                result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, fields));
+                for (TopDocs topDoc : topDocs) {
+                    CollapseTopFieldDocs collapseTopFieldDoc = (CollapseTopFieldDocs) topDoc;
+                    collapseField = collapseTopFieldDoc.field;
+                    sortFields.addAll(Arrays.asList(collapseTopFieldDoc.fields));
+                    if (Objects.isNull(topDoc) || Objects.isNull(topDoc.scoreDocs)) {
+                        result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, fields));
+                        continue;
+                    }
+
+                    List<FieldDoc> fieldDocsPerQuery = new ArrayList<>();
+                    for (ScoreDoc scoreDoc : collapseTopFieldDoc.scoreDocs) {
+                        fieldDocsPerQuery.add(new FieldDoc(scoreDoc.doc, scoreDoc.score));
+                    }
+
+                    result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, fields));
+                    result.addAll(fieldDocsPerQuery);
+                    collapseValues.addAll(Arrays.asList(collapseTopFieldDoc.collapseValues));
                 }
-                result.add(createDelimiterElementForHybridSearchResults(delimiterDocId));
-                result.addAll(Arrays.asList(topDoc.scoreDocs));
+                result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, fields));
+                fieldDocs.addAll(result);
+            } else {
+                List<ScoreDoc> result = new ArrayList<>();
+                result.add(createStartStopElementForHybridSearchResults(delimiterDocId));
+                for (TopDocs topDoc : topDocs) {
+                    if (Objects.isNull(topDoc) || Objects.isNull(topDoc.scoreDocs)) {
+                        result.add(createDelimiterElementForHybridSearchResults(delimiterDocId));
+                        continue;
+                    }
+                    result.add(createDelimiterElementForHybridSearchResults(delimiterDocId));
+                    result.addAll(Arrays.asList(topDoc.scoreDocs));
+                }
+                result.add(createStartStopElementForHybridSearchResults(delimiterDocId));
+                scoreDocs = result.stream().map(doc -> new ScoreDoc(doc.doc, doc.score, doc.shardIndex)).toArray(ScoreDoc[]::new);
             }
-            result.add(createStartStopElementForHybridSearchResults(delimiterDocId));
-            scoreDocs = result.stream().map(doc -> new ScoreDoc(doc.doc, doc.score, doc.shardIndex)).toArray(ScoreDoc[]::new);
+        }
+        if (isCollapseEnabled) {
+            return new CollapseTopFieldDocs(
+                collapseField,
+                totalHits,
+                fieldDocs.toArray(new FieldDoc[0]),
+                sortFields.toArray(new SortField[0]),
+                collapseValues.toArray(new Object[0])
+            );
         }
         return new TopDocs(totalHits, scoreDocs);
     }
