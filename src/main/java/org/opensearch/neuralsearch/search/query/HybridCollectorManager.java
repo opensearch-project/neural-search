@@ -22,6 +22,7 @@ import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
+import org.apache.lucene.util.BytesRef;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.lucene.search.FilteredCollector;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
@@ -54,6 +55,8 @@ import java.util.Objects;
 
 import static org.apache.lucene.search.TotalHits.Relation;
 
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createCollapseValueDelimiterElementForHybridSearchResults;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createCollapseValueStartStopElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createDelimiterElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createFieldDocStartStopElementForHybridSearchResults;
@@ -386,6 +389,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 List<FieldDoc> result = new ArrayList<>();
                 Object[] fields = new Object[0];
                 result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, fields));
+                collapseValues.add(new BytesRef(createCollapseValueStartStopElementForHybridSearchResults()));
                 for (TopDocs topDoc : topDocs) {
                     CollapseTopFieldDocs collapseTopFieldDoc = (CollapseTopFieldDocs) topDoc;
                     collapseField = collapseTopFieldDoc.field;
@@ -397,14 +401,16 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
 
                     List<FieldDoc> fieldDocsPerQuery = new ArrayList<>();
                     for (ScoreDoc scoreDoc : collapseTopFieldDoc.scoreDocs) {
-                        fieldDocsPerQuery.add(new FieldDoc(scoreDoc.doc, scoreDoc.score));
+                        fieldDocsPerQuery.add(new FieldDoc(scoreDoc.doc, scoreDoc.score, new Object[0]));
                     }
-
                     result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, fields));
                     result.addAll(fieldDocsPerQuery);
                     collapseValues.addAll(Arrays.asList(collapseTopFieldDoc.collapseValues));
+                    collapseValues.add(new BytesRef(createCollapseValueDelimiterElementForHybridSearchResults()));
+
                 }
                 result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, fields));
+                collapseValues.add(new BytesRef(createCollapseValueStartStopElementForHybridSearchResults()));
                 fieldDocs.addAll(result);
             } else {
                 List<ScoreDoc> result = new ArrayList<>();

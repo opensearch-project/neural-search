@@ -377,7 +377,7 @@ public class ScoreCombiner {
         final Map<Integer, Float> combinedNormalizedScoresByDocId
     ) {
         Collection<Integer> sortedDocsIds;
-        if (sort != null) {
+        if (sort != null && sort.getSort()[0].getType() != SortField.Type.SCORE) {
             List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
             sortedDocsIds = getSortedDocIdsBySortCriteria(getTopFieldDocs(sort, topDocsPerSubQuery), sort);
         } else {
