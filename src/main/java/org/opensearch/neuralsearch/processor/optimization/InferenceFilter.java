@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -59,8 +60,8 @@ public abstract class InferenceFilter {
     );
 
     /**
-     * Abstract helper method to filter individual values based on the existing and new metadata maps.
-     * Implementations should provide logic to compare values and determine if embeddings can be reused.
+     * Abstract helper method to filter individual objects based on the existing and new metadata maps.
+     * Implementations should provide logic to compare objects and determine if embeddings can be reused.
      *
      * @param embeddingKey The dot-notation path for the embedding field
      * @param processValue The value to be checked for potential embedding reuse
@@ -71,7 +72,7 @@ public abstract class InferenceFilter {
      * @return The processed value or null if embeddings are reused
      */
 
-    public abstract Object copyEmbeddingForSingleValue(
+    public abstract Object copyEmbeddingForSingleObject(
         String embeddingKey,
         Object processValue,
         Object existingValue,
@@ -81,9 +82,9 @@ public abstract class InferenceFilter {
     );
 
     /**
-     * Abstract method to filter and compare lists of values.
-     * If all elements in the list are identical between the new and existing metadata maps, embeddings are copied,
-     * and an empty list is returned to indicate no further processing is required.
+     * Abstract method to filter and compare lists of objects.
+     * If all objects in the list are identical between the new and existing metadata maps, embeddings are copied,
+     * and null is returned to indicate no further processing is required.
      *
      * @param embeddingKey The dot-notation path for the embedding field
      * @param processList The list of values to be checked for potential embedding reuse
@@ -93,7 +94,7 @@ public abstract class InferenceFilter {
      * @return A processed list or an empty list if embeddings are reused.
      */
 
-    public abstract List<Object> copyEmbeddingForMultipleValues(
+    public abstract List<Object> copyEmbeddingForListObject(
         String embeddingKey,
         List<Object> processList,
         List<Object> existingList,
@@ -194,7 +195,7 @@ public abstract class InferenceFilter {
         List<Object> existingListValue = ProcessorUtils.unsafeCastToObjectList(existingListOptional.get());
         if (existingListValue.getFirst() instanceof List) {
             // in case of nested list, compare and copy by list comparison
-            return copyEmbeddingForMultipleValues(
+            return copyEmbeddingForListObject(
                 embeddingKey,
                 processList,
                 ProcessorUtils.unsafeCastToObjectList(existingListValue.getFirst()),
@@ -235,16 +236,19 @@ public abstract class InferenceFilter {
         ListIterator<Object> existingListIterator = existingList.listIterator();
         ListIterator<Object> embeddingListIterator = embeddingList.listIterator();
         int index = 0;
-        while (processListIterator.hasNext() && existingListIterator.hasNext() && embeddingListIterator.hasNext()) {
-            Object processedItem = copyEmbeddingForSingleValue(
-                embeddingKey,
-                processListIterator.next(),
-                existingListIterator.next(),
-                embeddingListIterator.next(),
-                sourceAndMetadataMap,
-                index++
-            );
-            filteredList.add(processedItem);
+        for (Object processValue : processList) {
+            if (Objects.nonNull(processValue) && existingListIterator.hasNext() && embeddingListIterator.hasNext()) {
+                Object processedItem = copyEmbeddingForSingleObject(
+                    embeddingKey,
+                    processValue,
+                    existingListIterator.next(),
+                    embeddingListIterator.next(),
+                    sourceAndMetadataMap,
+                    index
+                );
+                filteredList.add(processedItem);
+            }
+            index++;
         }
         return filteredList;
     }
