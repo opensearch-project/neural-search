@@ -10,6 +10,7 @@ import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.isNull;
@@ -17,6 +18,7 @@ import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.isA;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
@@ -32,10 +34,17 @@ import java.util.stream.IntStream;
 import org.apache.commons.lang3.tuple.Pair;
 import org.junit.Before;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.OpenSearchParseException;
+import org.opensearch.action.get.GetAction;
+import org.opensearch.action.get.GetRequest;
+import org.opensearch.action.get.GetResponse;
+import org.opensearch.action.get.MultiGetAction;
+import org.opensearch.action.get.MultiGetRequest;
+import org.opensearch.action.get.MultiGetResponse;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
@@ -52,6 +61,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
 import lombok.SneakyThrows;
+import org.opensearch.transport.client.OpenSearchClient;
 
 public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
 
@@ -67,6 +77,10 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
     protected static final String TEXT_VALUE_2 = "text_value2";
     protected static final String TEXT_VALUE_3 = "text_value3";
     protected static final String TEXT_FIELD_2 = "abc";
+
+    @Mock
+    private OpenSearchClient openSearchClient;
+
     @Mock
     private MLCommonsClientAccessor mlCommonsClientAccessor;
 
@@ -77,6 +91,10 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
 
     @InjectMocks
     private TextEmbeddingProcessorFactory textEmbeddingProcessorFactory;
+
+    @Captor
+    private ArgumentCaptor<TextInferenceRequest> inferenceRequestCaptor;
+
     private static final String PROCESSOR_TAG = "mockTag";
     private static final String DESCRIPTION = "mockDescription";
 
@@ -88,7 +106,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
     }
 
     @SneakyThrows
-    private TextEmbeddingProcessor createInstanceWithLevel2MapConfig() {
+    private TextEmbeddingProcessor createInstanceWithLevel2MapConfig(boolean skipExisting) {
         Map<String, Processor.Factory> registry = new HashMap<>();
         Map<String, Object> config = new HashMap<>();
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
@@ -96,25 +114,114 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
             TextEmbeddingProcessor.FIELD_MAP_FIELD,
             ImmutableMap.of("key1", ImmutableMap.of("test1", "test1_knn"), "key2", ImmutableMap.of("test3", CHILD_LEVEL_2_KNN_FIELD))
         );
+        config.put(TextEmbeddingProcessor.SKIP_EXISTING, skipExisting);
         return (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
     }
 
     @SneakyThrows
-    private TextEmbeddingProcessor createInstanceWithLevel1MapConfig() {
+    private TextEmbeddingProcessor createInstanceWithLevel1MapConfig(boolean skipExisting) {
         Map<String, Processor.Factory> registry = new HashMap<>();
         Map<String, Object> config = new HashMap<>();
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
         config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1_knn", "key2", "key2_knn"));
+        config.put(TextEmbeddingProcessor.SKIP_EXISTING, skipExisting);
         return (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
     }
 
     @SneakyThrows
-    private TextEmbeddingProcessor createInstanceWithLevel1MapConfig(int batchSize) {
+    private TextEmbeddingProcessor createInstanceWithLevel1MapConfig(int batchSize, boolean skipExisting) {
         Map<String, Processor.Factory> registry = new HashMap<>();
         Map<String, Object> config = new HashMap<>();
         config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
         config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1_knn", "key2", "key2_knn"));
         config.put(AbstractBatchingProcessor.BATCH_SIZE_FIELD, batchSize);
+        config.put(TextEmbeddingProcessor.SKIP_EXISTING, skipExisting);
+        return (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+    }
+
+    @SneakyThrows
+    private TextEmbeddingProcessor createInstanceWithNestedLevelConfig(boolean skipExisting) {
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
+        config.put(TextEmbeddingProcessor.SKIP_EXISTING, skipExisting);
+        config.put(
+            TextEmbeddingProcessor.FIELD_MAP_FIELD,
+            ImmutableMap.of(
+                String.join(".", Arrays.asList(PARENT_FIELD, CHILD_FIELD_LEVEL_1, CHILD_FIELD_LEVEL_2)),
+                CHILD_LEVEL_2_KNN_FIELD
+            )
+        );
+        return (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+    }
+
+    @SneakyThrows
+    private TextEmbeddingProcessor createInstanceWithNestedMappingsConfig(boolean skipExisting) {
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
+        config.put(TextEmbeddingProcessor.SKIP_EXISTING, skipExisting);
+        config.put(
+            TextEmbeddingProcessor.FIELD_MAP_FIELD,
+            ImmutableMap.of(
+                String.join(".", Arrays.asList(PARENT_FIELD, CHILD_FIELD_LEVEL_1, CHILD_FIELD_LEVEL_2)),
+                CHILD_LEVEL_2_KNN_FIELD
+            )
+        );
+        return (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+    }
+
+    @SneakyThrows
+    private TextEmbeddingProcessor createInstanceWithNestedSourceAndDestinationConfig(boolean skipExisting) {
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
+        config.put(TextEmbeddingProcessor.SKIP_EXISTING, skipExisting);
+        config.put(
+            TextEmbeddingProcessor.FIELD_MAP_FIELD,
+            ImmutableMap.of(
+                String.join(".", Arrays.asList(PARENT_FIELD, CHILD_FIELD_LEVEL_1, CHILD_1_TEXT_FIELD)),
+                CHILD_FIELD_LEVEL_2 + "." + CHILD_LEVEL_2_KNN_FIELD
+            )
+        );
+        return (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+    }
+
+    @SneakyThrows
+    private TextEmbeddingProcessor createInstanceWithNestedMapConfig(boolean skipExisting) {
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
+        config.put(TextEmbeddingProcessor.SKIP_EXISTING, skipExisting);
+        config.put(
+            TextEmbeddingProcessor.FIELD_MAP_FIELD,
+            ImmutableMap.of(
+                String.join(".", Arrays.asList(PARENT_FIELD, CHILD_FIELD_LEVEL_1)),
+                Map.of(CHILD_FIELD_LEVEL_2, CHILD_LEVEL_2_KNN_FIELD)
+            )
+        );
+        return (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+    }
+
+    @SneakyThrows
+    private TextEmbeddingProcessor createInstanceWithNestedSourceAndDestinationMapConfig(boolean skipExisting) {
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = buildObjMap(
+            Pair.of(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId"),
+            Pair.of(
+                TextEmbeddingProcessor.FIELD_MAP_FIELD,
+                buildObjMap(
+                    Pair.of(
+                        PARENT_FIELD,
+                        Map.of(
+                            CHILD_FIELD_LEVEL_1,
+                            Map.of(CHILD_1_TEXT_FIELD, String.join(".", CHILD_FIELD_LEVEL_2, CHILD_LEVEL_2_KNN_FIELD))
+                        )
+                    )
+                )
+            ),
+            Pair.of(TextEmbeddingProcessor.SKIP_EXISTING, skipExisting)
+        );
         return (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
     }
 
@@ -152,7 +259,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         sourceAndMetadata.put("key1", "value1");
         sourceAndMetadata.put("key2", "value2");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig();
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(false);
 
         List<List<Float>> modelTensorList = createMockVectorResult();
         doAnswer(invocation -> {
@@ -174,7 +281,9 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         Map<String, Processor.Factory> registry = new HashMap<>();
         MLCommonsClientAccessor accessor = mock(MLCommonsClientAccessor.class);
+        OpenSearchClient openSearchClient = mock(OpenSearchClient.class);
         TextEmbeddingProcessorFactory textEmbeddingProcessorFactory = new TextEmbeddingProcessorFactory(
+            openSearchClient,
             accessor,
             environment,
             clusterService
@@ -203,7 +312,9 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         Map<String, Processor.Factory> registry = new HashMap<>();
         MLCommonsClientAccessor accessor = mock(MLCommonsClientAccessor.class);
+        OpenSearchClient openSearchClient = mock(OpenSearchClient.class);
         TextEmbeddingProcessorFactory textEmbeddingProcessorFactory = new TextEmbeddingProcessorFactory(
+            openSearchClient,
             accessor,
             environment,
             clusterService
@@ -233,7 +344,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         sourceAndMetadata.put("key1", list1);
         sourceAndMetadata.put("key2", list2);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig();
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(false);
 
         List<List<Float>> modelTensorList = createMockVectorResult();
         doAnswer(invocation -> {
@@ -252,7 +363,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         sourceAndMetadata.put("key1", "    ");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig();
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(false);
 
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
@@ -265,7 +376,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         sourceAndMetadata.put("key1", list1);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig();
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(false);
 
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
@@ -278,7 +389,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         sourceAndMetadata.put("key2", list2);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig();
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(false);
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
         verify(handler).accept(isNull(), any(IllegalArgumentException.class));
@@ -293,7 +404,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         sourceAndMetadata.put("key2", list);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig();
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(false);
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
         verify(handler).accept(isNull(), any(IllegalArgumentException.class));
@@ -309,7 +420,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         sourceAndMetadata.put("key1", map1);
         sourceAndMetadata.put("key2", map2);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextEmbeddingProcessor processor = createInstanceWithLevel2MapConfig();
+        TextEmbeddingProcessor processor = createInstanceWithLevel2MapConfig(false);
 
         List<List<Float>> modelTensorList = createMockVectorResult();
         doAnswer(invocation -> {
@@ -335,22 +446,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         sourceAndMetadata.put(PARENT_FIELD, childLevel1);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
 
-        Map<String, Processor.Factory> registry = new HashMap<>();
-        Map<String, Object> config = new HashMap<>();
-        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
-        config.put(
-            TextEmbeddingProcessor.FIELD_MAP_FIELD,
-            ImmutableMap.of(
-                String.join(".", Arrays.asList(PARENT_FIELD, CHILD_FIELD_LEVEL_1, CHILD_FIELD_LEVEL_2)),
-                CHILD_LEVEL_2_KNN_FIELD
-            )
-        );
-        TextEmbeddingProcessor processor = (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(
-            registry,
-            PROCESSOR_TAG,
-            DESCRIPTION,
-            config
-        );
+        TextEmbeddingProcessor processor = createInstanceWithNestedLevelConfig(false);
 
         List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(1, 100, 0.0f, 1.0f);
         doAnswer(invocation -> {
@@ -395,22 +491,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         sourceAndMetadata.put(PARENT_FIELD, childLevel1);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
 
-        Map<String, Processor.Factory> registry = new HashMap<>();
-        Map<String, Object> config = new HashMap<>();
-        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
-        config.put(
-            TextEmbeddingProcessor.FIELD_MAP_FIELD,
-            ImmutableMap.of(
-                String.join(".", Arrays.asList(PARENT_FIELD, CHILD_FIELD_LEVEL_1, CHILD_1_TEXT_FIELD)),
-                CHILD_FIELD_LEVEL_2 + "." + CHILD_LEVEL_2_KNN_FIELD
-            )
-        );
-        TextEmbeddingProcessor processor = (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(
-            registry,
-            PROCESSOR_TAG,
-            DESCRIPTION,
-            config
-        );
+        TextEmbeddingProcessor processor = createInstanceWithNestedSourceAndDestinationConfig(false);
 
         List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(1, 100, 0.0f, 1.0f);
         doAnswer(invocation -> {
@@ -453,22 +534,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         sourceAndMetadata.put(PARENT_FIELD, childLevel1);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
 
-        Map<String, Processor.Factory> registry = new HashMap<>();
-        Map<String, Object> config = new HashMap<>();
-        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
-        config.put(
-            TextEmbeddingProcessor.FIELD_MAP_FIELD,
-            ImmutableMap.of(
-                String.join(".", Arrays.asList(PARENT_FIELD, CHILD_FIELD_LEVEL_1, CHILD_1_TEXT_FIELD)),
-                CHILD_FIELD_LEVEL_2 + "." + CHILD_LEVEL_2_KNN_FIELD
-            )
-        );
-        TextEmbeddingProcessor processor = (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(
-            registry,
-            PROCESSOR_TAG,
-            DESCRIPTION,
-            config
-        );
+        TextEmbeddingProcessor processor = createInstanceWithNestedSourceAndDestinationConfig(false);
 
         List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(1, 100, 0.0f, 1.0f);
         doAnswer(invocation -> {
@@ -526,28 +592,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         );
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
 
-        Map<String, Processor.Factory> registry = new HashMap<>();
-        Map<String, Object> config = buildObjMap(
-            Pair.of(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId"),
-            Pair.of(
-                TextEmbeddingProcessor.FIELD_MAP_FIELD,
-                buildObjMap(
-                    Pair.of(
-                        PARENT_FIELD,
-                        Map.of(
-                            CHILD_FIELD_LEVEL_1,
-                            Map.of(CHILD_1_TEXT_FIELD, String.join(".", CHILD_FIELD_LEVEL_2, CHILD_LEVEL_2_KNN_FIELD))
-                        )
-                    )
-                )
-            )
-        );
-        TextEmbeddingProcessor processor = (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(
-            registry,
-            PROCESSOR_TAG,
-            DESCRIPTION,
-            config
-        );
+        TextEmbeddingProcessor processor = createInstanceWithNestedSourceAndDestinationMapConfig(false);
 
         List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(2, 100, 0.0f, 1.0f);
         doAnswer(invocation -> {
@@ -588,22 +633,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         sourceAndMetadata.put(PARENT_FIELD, childLevel1);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
 
-        Map<String, Processor.Factory> registry = new HashMap<>();
-        Map<String, Object> config = new HashMap<>();
-        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
-        config.put(
-            TextEmbeddingProcessor.FIELD_MAP_FIELD,
-            ImmutableMap.of(
-                String.join(".", Arrays.asList(PARENT_FIELD, CHILD_FIELD_LEVEL_1)),
-                Map.of(CHILD_FIELD_LEVEL_2, CHILD_LEVEL_2_KNN_FIELD)
-            )
-        );
-        TextEmbeddingProcessor processor = (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(
-            registry,
-            PROCESSOR_TAG,
-            DESCRIPTION,
-            config
-        );
+        TextEmbeddingProcessor processor = createInstanceWithNestedMapConfig(false);
 
         List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(1, 100, 0.0f, 1.0f);
         doAnswer(invocation -> {
@@ -634,7 +664,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         sourceAndMetadata.put("key1", map1);
         sourceAndMetadata.put("key2", map2);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextEmbeddingProcessor processor = createInstanceWithLevel2MapConfig();
+        TextEmbeddingProcessor processor = createInstanceWithLevel2MapConfig(false);
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
         verify(handler).accept(isNull(), any(IllegalArgumentException.class));
@@ -648,7 +678,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         sourceAndMetadata.put("key1", map1);
         sourceAndMetadata.put("key2", map2);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextEmbeddingProcessor processor = createInstanceWithLevel2MapConfig();
+        TextEmbeddingProcessor processor = createInstanceWithLevel2MapConfig(false);
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
         verify(handler).accept(isNull(), any(IllegalArgumentException.class));
@@ -661,7 +691,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         sourceAndMetadata.put("key1", "hello world");
         sourceAndMetadata.put("key2", ret);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig();
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(false);
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
         verify(handler).accept(isNull(), any(IllegalArgumentException.class));
@@ -673,7 +703,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         sourceAndMetadata.put("key1", "value1");
         sourceAndMetadata.put("key2", "value2");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig();
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(false);
 
         doAnswer(invocation -> {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
@@ -704,7 +734,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put("key2", map1);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextEmbeddingProcessor processor = createInstanceWithLevel2MapConfig();
+        TextEmbeddingProcessor processor = createInstanceWithLevel2MapConfig(false);
         IngestDocument document = processor.execute(ingestDocument);
         assert document.getSourceAndMetadata().containsKey("key2");
     }
@@ -722,13 +752,13 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         }).when(mlCommonsClientAccessor).inferenceSentences(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
 
         BiConsumer handler = mock(BiConsumer.class);
-        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig();
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(false);
         processor.execute(ingestDocument, handler);
         verify(handler).accept(isNull(), any(IllegalArgumentException.class));
     }
 
     public void testGetType_successful() {
-        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig();
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(false);
         assert processor.getType().equals(TextEmbeddingProcessor.TYPE);
     }
 
@@ -1074,7 +1104,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
     public void test_batchExecute_successful() {
         final int docCount = 5;
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
-        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(docCount);
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(docCount, false);
 
         List<List<Float>> modelTensorList = createMockVectorWithLength(10);
         doAnswer(invocation -> {
@@ -1097,7 +1127,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
     public void test_batchExecute_exception() {
         final int docCount = 5;
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
-        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(docCount);
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(docCount, false);
         doAnswer(invocation -> {
             ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
             listener.onFailure(new RuntimeException());
@@ -1113,6 +1143,981 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
             assertEquals(ingestDocumentWrappers.get(i).getIngestDocument(), resultCallback.getValue().get(i).getIngestDocument());
             assertNotNull(resultCallback.getValue().get(i).getException());
         }
+    }
+
+    public void test_batchExecute_withSkipExisting_exception() {
+        final int docCount = 5;
+        List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
+        List<IngestDocumentWrapper> updateDocumentWrappers = createIngestDocumentWrappers(docCount);
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(docCount, true);
+        Consumer resultHandler = mock(Consumer.class);
+        ArgumentCaptor<List<IngestDocumentWrapper>> resultCallback = ArgumentCaptor.forClass(List.class);
+        TextInferenceRequest ingestRequest = TextInferenceRequest.builder()
+            .modelId("mockModelID")
+            .inputTexts(List.of("value1", "value1", "value1", "value1", "value1"))
+            .build();
+        mockVectorCreation(ingestRequest, ingestRequest);
+        mockFailedUpdateMultipleDocuments(ingestDocumentWrappers);
+        processor.batchExecute(ingestDocumentWrappers, resultHandler);
+        processor.batchExecute(updateDocumentWrappers, resultHandler);
+        for (IngestDocumentWrapper updateDocumentWrapper : updateDocumentWrappers) {
+            assertNotNull(updateDocumentWrapper.getException());
+        }
+        verify(resultHandler, times(2)).accept(resultCallback.capture());
+    }
+
+    public void test_subBatchExecute_emptyIngestDocumentWrapper_successful() {
+        List<IngestDocumentWrapper> ingestDocumentWrappers = Collections.emptyList();
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(1, false);
+        Consumer resultHandler = mock(Consumer.class);
+        processor.subBatchExecute(ingestDocumentWrappers, resultHandler);
+        ArgumentCaptor<List<IngestDocumentWrapper>> resultCallback = ArgumentCaptor.forClass(List.class);
+        verify(resultHandler).accept(resultCallback.capture());
+    }
+
+    public void test_subBatchExecute_emptyInferenceList_successful() {
+        List<IngestDocumentWrapper> ingestDocumentWrappers = new ArrayList<>();
+        ingestDocumentWrappers.add(new IngestDocumentWrapper(0, null, null));
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(1, false);
+        Consumer resultHandler = mock(Consumer.class);
+        processor.subBatchExecute(ingestDocumentWrappers, resultHandler);
+        ArgumentCaptor<List<IngestDocumentWrapper>> resultCallback = ArgumentCaptor.forClass(List.class);
+        verify(resultHandler).accept(resultCallback.capture());
+    }
+
+    @SneakyThrows
+    public void testExecute_when_initial_ingest_with_skip_existing_flag_successful() {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        sourceAndMetadata.put("_id", "1");
+        sourceAndMetadata.put("key1", "value1");
+        sourceAndMetadata.put("key2", "value2");
+        List<String> inferenceList = Arrays.asList("value1", "value2");
+        TextInferenceRequest request = TextInferenceRequest.builder().modelId("mockModelId").inputTexts(inferenceList).build();
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(true);
+
+        GetResponse response = mockEmptyGetResponse();
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(2);
+            listener.onResponse(response);
+            return null;
+        }).when(openSearchClient).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+
+        List<List<Float>> modelTensorList = createMockVectorResult();
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
+            listener.onResponse(modelTensorList);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(isA(TextInferenceRequest.class), isA(ActionListener.class));
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(any(IngestDocument.class), isNull());
+        verify(openSearchClient, times(1)).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(1)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        assertEquals(request.getInputTexts(), inferenceRequestCaptor.getValue().getInputTexts());
+    }
+
+    @SneakyThrows
+    public void testExecute_with_no_update_with_skip_existing_flag_successful() {
+        Map<String, Object> ingestSourceAndMetadata = new HashMap<>();
+        ingestSourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        ingestSourceAndMetadata.put("_id", "1");
+        ingestSourceAndMetadata.put("key1", "value1");
+        ingestSourceAndMetadata.put("key2", "value2");
+        IngestDocument ingestDocument = new IngestDocument(ingestSourceAndMetadata, new HashMap<>());
+        List<String> inferenceList = Arrays.asList("value1", "value2");
+        TextInferenceRequest ingestRequest = TextInferenceRequest.builder().modelId("mockModelId").inputTexts(inferenceList).build();
+        Map<String, Object> updateSourceAndMetadata = deepCopy(ingestSourceAndMetadata); // no change
+        IngestDocument updateDocument = new IngestDocument(updateSourceAndMetadata, new HashMap<>());
+
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(true);
+        mockUpdateDocument(ingestDocument);
+        mockVectorCreation(ingestRequest, null);
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler); // insert document
+        processor.execute(updateDocument, handler); // update document
+
+        verify(handler, times(2)).accept(any(IngestDocument.class), isNull());
+        verify(openSearchClient, times(2)).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(1)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        assertEquals(ingestRequest.getInputTexts(), inferenceRequestCaptor.getValue().getInputTexts());
+        List key1insertVectors = (List) ingestDocument.getSourceAndMetadata().get("key1_knn");
+        List key1updateVectors = (List) updateDocument.getSourceAndMetadata().get("key1_knn");
+        List key2insertVectors = (List) ingestDocument.getSourceAndMetadata().get("key2_knn");
+        List key2updateVectors = (List) updateDocument.getSourceAndMetadata().get("key2_knn");
+        verifyEqualEmbedding(key1insertVectors, key1updateVectors);
+        verifyEqualEmbedding(key2insertVectors, key2updateVectors);
+    }
+
+    public void testExecute_with_updated_field_skip_existing_flag_successful() {
+        Map<String, Object> ingestSourceAndMetadata = new HashMap<>();
+        ingestSourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        ingestSourceAndMetadata.put("_id", "1");
+        ingestSourceAndMetadata.put("key1", "value1");
+        ingestSourceAndMetadata.put("key2", "value2");
+        List<String> inferenceList = Arrays.asList("value1", "value2");
+        TextInferenceRequest ingestRequest = TextInferenceRequest.builder().modelId("mockModelId").inputTexts(inferenceList).build();
+        IngestDocument ingestDocument = new IngestDocument(ingestSourceAndMetadata, new HashMap<>());
+
+        Map<String, Object> updateSourceAndMetadata = deepCopy(ingestSourceAndMetadata);
+        updateSourceAndMetadata.put("key2", "newValue"); // updated
+        List<String> filteredInferenceList = List.of("newValue");
+        TextInferenceRequest updateRequest = TextInferenceRequest.builder()
+            .modelId("mockModelId")
+            .inputTexts(filteredInferenceList)
+            .build();
+        IngestDocument updateDocument = new IngestDocument(updateSourceAndMetadata, new HashMap<>());
+
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(true);
+        mockUpdateDocument(ingestDocument);
+        mockVectorCreation(ingestRequest, updateRequest);
+
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler); // insert
+        processor.execute(updateDocument, handler); // update
+
+        verify(handler, times(2)).accept(any(IngestDocument.class), isNull());
+        verify(openSearchClient, times(2)).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(2)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        List<TextInferenceRequest> requests = inferenceRequestCaptor.getAllValues();
+        assertEquals(ingestRequest.getInputTexts(), requests.get(0).getInputTexts());
+        assertEquals(updateRequest.getInputTexts(), requests.get(1).getInputTexts());
+
+        List key1insertVectors = (List) ingestDocument.getSourceAndMetadata().get("key1_knn");
+        List key1updateVectors = (List) updateDocument.getSourceAndMetadata().get("key1_knn");
+        List key2insertVectors = (List) ingestDocument.getSourceAndMetadata().get("key2_knn");
+        List key2updateVectors = (List) updateDocument.getSourceAndMetadata().get("key2_knn");
+        verifyEqualEmbedding(key1insertVectors, key1updateVectors);
+        assertEquals(key2insertVectors.size(), key2updateVectors.size());
+    }
+
+    public void testExecute_withListTypeInput_no_update_skip_existing_flag_successful() {
+        List<String> list1 = ImmutableList.of("test1", "test2", "test3");
+        List<String> list2 = ImmutableList.of("test4", "test5", "test6");
+        Map<String, Object> ingestSourceAndMetadata = new HashMap<>();
+        ingestSourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        ingestSourceAndMetadata.put("_id", "1");
+        ingestSourceAndMetadata.put("key1", list1);
+        ingestSourceAndMetadata.put("key2", list2);
+        List<String> inferenceList = Arrays.asList("test1", "test2", "test3", "test4", "test5", "test6");
+        TextInferenceRequest ingestRequest = TextInferenceRequest.builder().modelId("mockModelId").inputTexts(inferenceList).build();
+        IngestDocument ingestDocument = new IngestDocument(ingestSourceAndMetadata, new HashMap<>());
+
+        Map<String, Object> updateSourceAndMetadata = deepCopy(ingestSourceAndMetadata);
+        IngestDocument updateDocument = new IngestDocument(updateSourceAndMetadata, new HashMap<>());
+
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(true);
+        mockUpdateDocument(ingestDocument);
+        mockVectorCreation(ingestRequest, null);
+
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        processor.execute(updateDocument, handler);
+
+        verify(handler, times(2)).accept(any(IngestDocument.class), isNull());
+        verify(openSearchClient, times(2)).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(1)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        assertEquals(ingestRequest.getInputTexts(), inferenceRequestCaptor.getValue().getInputTexts());
+        List key1insertVectors = (List) ingestDocument.getSourceAndMetadata().get("key1_knn");
+        List key1updateVectors = (List) updateDocument.getSourceAndMetadata().get("key1_knn");
+        List key2insertVectors = (List) ingestDocument.getSourceAndMetadata().get("key2_knn");
+        List key2updateVectors = (List) updateDocument.getSourceAndMetadata().get("key2_knn");
+        verifyEqualEmbeddingInMap(key1insertVectors, key1updateVectors);
+        verifyEqualEmbeddingInMap(key2insertVectors, key2updateVectors);
+    }
+
+    public void testExecute_withListTypeInput_with_update_skip_existing_flag_successful() {
+        List<String> list1 = ImmutableList.of("test1", "test2", "test3");
+        List<String> list2 = ImmutableList.of("test4", "test5", "test6");
+        Map<String, Object> ingestSourceAndMetadata = new HashMap<>();
+        ingestSourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        ingestSourceAndMetadata.put("_id", "1");
+        ingestSourceAndMetadata.put("key1", list1);
+        ingestSourceAndMetadata.put("key2", list2);
+        List<String> inferenceList = Arrays.asList("test1", "test2", "test3", "test4", "test5", "test6");
+        IngestDocument ingestDocument = new IngestDocument(ingestSourceAndMetadata, new HashMap<>());
+        TextInferenceRequest ingestRequest = TextInferenceRequest.builder().modelId("mockModelId").inputTexts(inferenceList).build();
+
+        Map<String, Object> updateSourceAndMetadata = deepCopy(ingestSourceAndMetadata);
+        updateSourceAndMetadata.put("key1", ImmutableList.of("test1", "newValue1", "newValue2"));
+        updateSourceAndMetadata.put("key2", ImmutableList.of("newValue3", "test5", "test6"));
+        List<String> filteredInferenceList = Arrays.asList("test1", "newValue1", "newValue2", "newValue3", "test5", "test6");
+        IngestDocument updateDocument = new IngestDocument(updateSourceAndMetadata, new HashMap<>());
+        TextInferenceRequest updateRequest = TextInferenceRequest.builder()
+            .modelId("mockModelId")
+            .inputTexts(filteredInferenceList)
+            .build();
+
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(true);
+        mockUpdateDocument(ingestDocument);
+        mockVectorCreation(ingestRequest, updateRequest);
+
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        processor.execute(updateDocument, handler);
+
+        verify(handler, times(2)).accept(any(IngestDocument.class), isNull());
+        verify(openSearchClient, times(2)).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(2)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        List<TextInferenceRequest> requests = inferenceRequestCaptor.getAllValues();
+        assertEquals(ingestRequest.getInputTexts(), requests.get(0).getInputTexts());
+        assertEquals(updateRequest.getInputTexts(), requests.get(1).getInputTexts());
+        List key1insertVectors = (List) ingestDocument.getSourceAndMetadata().get("key1_knn");
+        List key1updateVectors = (List) updateDocument.getSourceAndMetadata().get("key1_knn");
+        List key2insertVectors = (List) ingestDocument.getSourceAndMetadata().get("key2_knn");
+        List key2updateVectors = (List) updateDocument.getSourceAndMetadata().get("key2_knn");
+        assertEquals(key1insertVectors.size(), key1updateVectors.size());
+        assertEquals(key2insertVectors.size(), key2updateVectors.size());
+    }
+
+    public void testExecute_withNestedListTypeInput_no_update_skip_existing_flag_successful() {
+        Map<String, List<String>> map1 = new HashMap<>();
+        map1.put("test1", ImmutableList.of("test1", "test2", "test3"));
+        Map<String, List<String>> map2 = new HashMap<>();
+        map2.put("test3", ImmutableList.of("test4", "test5", "test6"));
+        Map<String, Object> ingestSourceAndMetadata = new HashMap<>();
+        ingestSourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        ingestSourceAndMetadata.put("_id", "1");
+        ingestSourceAndMetadata.put("key1", map1);
+        ingestSourceAndMetadata.put("key2", map2);
+        List<String> inferenceList = Arrays.asList("test1", "test2", "test3", "test4", "test5", "test6");
+        IngestDocument ingestDocument = new IngestDocument(ingestSourceAndMetadata, new HashMap<>());
+        TextInferenceRequest ingestRequest = TextInferenceRequest.builder().modelId("mockModelId").inputTexts(inferenceList).build();
+
+        Map<String, Object> updateSourceAndMetadata = deepCopy(ingestSourceAndMetadata);
+        IngestDocument updateDocument = new IngestDocument(updateSourceAndMetadata, new HashMap<>());
+
+        TextEmbeddingProcessor processor = createInstanceWithLevel2MapConfig(true);
+        mockUpdateDocument(ingestDocument);
+        mockVectorCreation(ingestRequest, null);
+
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        processor.execute(updateDocument, handler);
+
+        verify(handler, times(2)).accept(any(IngestDocument.class), isNull());
+        verify(openSearchClient, times(2)).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(1)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        assertEquals(ingestRequest.getInputTexts(), inferenceRequestCaptor.getValue().getInputTexts());
+        List key1IngestVectors = ((List) ((Map) ingestDocument.getSourceAndMetadata().get("key1")).get("test1_knn"));
+        List key1UpdateVectors = ((List) ((Map) updateDocument.getSourceAndMetadata().get("key1")).get("test1_knn"));
+        List key2IngestVectors = ((List) ((Map) ingestDocument.getSourceAndMetadata().get("key2")).get("test3_knn"));
+        List key2UpdateVectors = ((List) ((Map) updateDocument.getSourceAndMetadata().get("key2")).get("test3_knn"));
+        assertEquals(key1IngestVectors.size(), key1UpdateVectors.size());
+        assertEquals(key2IngestVectors.size(), key2UpdateVectors.size());
+        verifyEqualEmbeddingInMap(key1IngestVectors, key1UpdateVectors);
+        verifyEqualEmbeddingInMap(key2IngestVectors, key2UpdateVectors);
+    }
+
+    public void testExecute_withNestedListTypeInput_with_update_skip_existing_flag_successful() {
+        Map<String, List<String>> map1 = new HashMap<>();
+        map1.put("test1", ImmutableList.of("test1", "test2", "test3"));
+        Map<String, List<String>> map2 = new HashMap<>();
+        map2.put("test3", ImmutableList.of("test4", "test5", "test6"));
+        Map<String, Object> ingestSourceAndMetadata = new HashMap<>();
+        ingestSourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        ingestSourceAndMetadata.put("_id", "1");
+        ingestSourceAndMetadata.put("key1", map1);
+        ingestSourceAndMetadata.put("key2", map2);
+        List<String> inferenceList = Arrays.asList("test1", "test2", "test3", "test4", "test5", "test6");
+        IngestDocument ingestDocument = new IngestDocument(ingestSourceAndMetadata, new HashMap<>());
+        TextInferenceRequest ingestRequest = TextInferenceRequest.builder().modelId("mockModelId").inputTexts(inferenceList).build();
+
+        Map<String, Object> updateSourceAndMetadata = deepCopy(ingestSourceAndMetadata);
+        ((Map) updateSourceAndMetadata.get("key1")).put("test1", ImmutableList.of("test1", "newValue1", "newValue2"));
+        ((Map) updateSourceAndMetadata.get("key2")).put("test3", ImmutableList.of("newValue3", "test5", "test6"));
+
+        List<String> filteredInferenceList = Arrays.asList("test1", "newValue1", "newValue2", "newValue3", "test5", "test6");
+        IngestDocument updateDocument = new IngestDocument(updateSourceAndMetadata, new HashMap<>());
+        TextInferenceRequest updateRequest = TextInferenceRequest.builder()
+            .modelId("mockModelId")
+            .inputTexts(filteredInferenceList)
+            .build();
+
+        TextEmbeddingProcessor processor = createInstanceWithLevel2MapConfig(true);
+        mockUpdateDocument(ingestDocument);
+        mockVectorCreation(ingestRequest, updateRequest);
+
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        processor.execute(updateDocument, handler);
+
+        verify(handler, times(2)).accept(any(IngestDocument.class), isNull());
+        verify(openSearchClient, times(2)).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(2)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        List<TextInferenceRequest> requests = inferenceRequestCaptor.getAllValues();
+        assertEquals(ingestRequest.getInputTexts(), requests.get(0).getInputTexts());
+        assertEquals(updateRequest.getInputTexts(), requests.get(1).getInputTexts());
+
+        List key1IngestVectors = ((List) ((Map) ingestDocument.getSourceAndMetadata().get("key1")).get("test1_knn"));
+        List key1UpdateVectors = ((List) ((Map) updateDocument.getSourceAndMetadata().get("key1")).get("test1_knn"));
+        List key2IngestVectors = ((List) ((Map) ingestDocument.getSourceAndMetadata().get("key2")).get("test3_knn"));
+        List key2UpdateVectors = ((List) ((Map) updateDocument.getSourceAndMetadata().get("key2")).get("test3_knn"));
+        assertEquals(key1IngestVectors.size(), key1UpdateVectors.size());
+        assertEquals(key2IngestVectors.size(), key2UpdateVectors.size());
+    }
+
+    public void testExecute_withMapTypeInput_no_update_skip_existing_flag_successful() {
+        Map<String, String> map1 = new HashMap<>();
+        map1.put("test1", "test2");
+        Map<String, String> map2 = new HashMap<>();
+        map2.put("test3", "test4");
+        Map<String, Object> ingestSourceAndMetadata = new HashMap<>();
+        ingestSourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        ingestSourceAndMetadata.put("_id", "1");
+        ingestSourceAndMetadata.put("key1", map1);
+        ingestSourceAndMetadata.put("key2", map2);
+        List<String> inferenceList = Arrays.asList("test2", "test4");
+        TextInferenceRequest request = TextInferenceRequest.builder().modelId("mockModelId").inputTexts(inferenceList).build();
+        IngestDocument ingestDocument = new IngestDocument(ingestSourceAndMetadata, new HashMap<>());
+        TextEmbeddingProcessor processor = createInstanceWithLevel2MapConfig(true);
+        Map<String, Object> updateSourceAndMetadata = deepCopy(ingestSourceAndMetadata);
+        IngestDocument updateDocument = new IngestDocument(updateSourceAndMetadata, new HashMap<>());
+
+        mockUpdateDocument(ingestDocument);
+        mockVectorCreation(request, null);
+
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        processor.execute(updateDocument, handler);
+
+        verify(handler, times(2)).accept(any(IngestDocument.class), isNull());
+        verify(openSearchClient, times(2)).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(1)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        assertEquals(request.getInputTexts(), inferenceRequestCaptor.getValue().getInputTexts());
+        List test1KnnInsertVectors = (List) ((Map) ingestDocument.getSourceAndMetadata().get("key1")).get("test1_knn");
+        List test1KnnUpdateVectors = (List) ((Map) updateDocument.getSourceAndMetadata().get("key1")).get("test1_knn");
+        List test3KnnInsertVectors = (List) ((Map) ingestDocument.getSourceAndMetadata().get("key2")).get("test3_knn");
+        List test3KnnUpdateVectors = (List) ((Map) updateDocument.getSourceAndMetadata().get("key2")).get("test3_knn");
+        verifyEqualEmbedding(test1KnnInsertVectors, test1KnnUpdateVectors);
+        verifyEqualEmbedding(test3KnnInsertVectors, test3KnnUpdateVectors);
+    }
+
+    public void testExecute_withMapTypeInput_with_update_successful() {
+        Map<String, String> map1 = new HashMap<>();
+        map1.put("test1", "test2");
+        Map<String, String> map2 = new HashMap<>();
+        map2.put("test3", "test4");
+        Map<String, Object> ingestSourceAndMetadata = new HashMap<>();
+        ingestSourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        ingestSourceAndMetadata.put("_id", "1");
+        ingestSourceAndMetadata.put("key1", map1);
+        ingestSourceAndMetadata.put("key2", map2);
+        List<String> inferenceList = Arrays.asList("test2", "test4");
+        IngestDocument ingestDocument = new IngestDocument(ingestSourceAndMetadata, new HashMap<>());
+        TextInferenceRequest ingestRequest = TextInferenceRequest.builder().modelId("mockModelId").inputTexts(inferenceList).build();
+        TextEmbeddingProcessor processor = createInstanceWithLevel2MapConfig(true);
+        Map<String, Object> updateSourceAndMetadata = deepCopy(ingestSourceAndMetadata);
+        ((Map) updateSourceAndMetadata.get("key1")).put("test1", "newValue1");
+        List<String> filteredInferenceList = Arrays.asList("newValue1");
+        IngestDocument updateDocument = new IngestDocument(updateSourceAndMetadata, new HashMap<>());
+        TextInferenceRequest updateRequest = TextInferenceRequest.builder()
+            .modelId("mockModelId")
+            .inputTexts(filteredInferenceList)
+            .build();
+
+        mockUpdateDocument(ingestDocument);
+        mockVectorCreation(ingestRequest, updateRequest);
+
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        processor.execute(updateDocument, handler);
+
+        verify(handler, times(2)).accept(any(IngestDocument.class), isNull());
+        verify(openSearchClient, times(2)).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(2)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        List<TextInferenceRequest> requests = inferenceRequestCaptor.getAllValues();
+        assertEquals(ingestRequest.getInputTexts(), requests.get(0).getInputTexts());
+        assertEquals(updateRequest.getInputTexts(), requests.get(1).getInputTexts());
+        List test1KnnInsertVectors = (List) ((Map) ingestDocument.getSourceAndMetadata().get("key2")).get("test3_knn");
+        List test1KnnUpdateVectors = (List) ((Map) updateDocument.getSourceAndMetadata().get("key2")).get("test3_knn");
+        verifyEqualEmbedding(test1KnnInsertVectors, test1KnnUpdateVectors);
+    }
+
+    @SneakyThrows
+    public void testNestedFieldInMapping_withMapTypeInput_no_update_successful() {
+        Map<String, Object> ingestSourceAndMetadata = new HashMap<>();
+        ingestSourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        ingestSourceAndMetadata.put("_id", "1");
+        Map<String, String> childLevel2 = new HashMap<>();
+        childLevel2.put(CHILD_FIELD_LEVEL_2, CHILD_LEVEL_2_TEXT_FIELD_VALUE);
+        Map<String, Object> childLevel1 = new HashMap<>();
+        childLevel1.put(CHILD_FIELD_LEVEL_1, childLevel2);
+        ingestSourceAndMetadata.put(PARENT_FIELD, childLevel1);
+        List<String> inferenceList = Arrays.asList(CHILD_LEVEL_2_TEXT_FIELD_VALUE);
+        IngestDocument ingestDocument = new IngestDocument(ingestSourceAndMetadata, new HashMap<>());
+        TextInferenceRequest request = TextInferenceRequest.builder().modelId("mockModelId").inputTexts(inferenceList).build();
+        Map<String, Object> updateSourceAndMetadata = deepCopy(ingestSourceAndMetadata);
+        IngestDocument updateDocument = new IngestDocument(updateSourceAndMetadata, new HashMap<>());
+        TextEmbeddingProcessor processor = createInstanceWithNestedLevelConfig(true);
+
+        mockUpdateDocument(ingestDocument);
+        mockVectorCreation(request, null);
+
+        processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
+        processor.execute(updateDocument, (BiConsumer) (doc, ex) -> {});
+
+        verify(openSearchClient, times(2)).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(1)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        assertEquals(request.getInputTexts(), inferenceRequestCaptor.getValue().getInputTexts());
+        List test3KnnInsertVectors = (List) (((Map) ((Map) ingestDocument.getSourceAndMetadata().get(PARENT_FIELD)).get(
+            CHILD_FIELD_LEVEL_1
+        ))).get(CHILD_LEVEL_2_KNN_FIELD);
+        List test3KnnUpdateVectors = (List) (((Map) ((Map) updateDocument.getSourceAndMetadata().get(PARENT_FIELD)).get(
+            CHILD_FIELD_LEVEL_1
+        ))).get(CHILD_LEVEL_2_KNN_FIELD);
+        verifyEqualEmbedding(test3KnnInsertVectors, test3KnnUpdateVectors);
+    }
+
+    @SneakyThrows
+    public void testNestedFieldInMapping_withMapTypeInput_with_update_successful() {
+        Map<String, Object> ingestSourceAndMetadata = new HashMap<>();
+        ingestSourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        ingestSourceAndMetadata.put("_id", "1");
+        Map<String, String> childLevel2 = new HashMap<>();
+        childLevel2.put(CHILD_FIELD_LEVEL_2, CHILD_LEVEL_2_TEXT_FIELD_VALUE);
+        Map<String, Object> childLevel1 = new HashMap<>();
+        childLevel1.put(CHILD_FIELD_LEVEL_1, childLevel2);
+        ingestSourceAndMetadata.put(PARENT_FIELD, childLevel1);
+        List<String> inferenceList = Arrays.asList(CHILD_LEVEL_2_TEXT_FIELD_VALUE);
+        IngestDocument ingestDocument = new IngestDocument(ingestSourceAndMetadata, new HashMap<>());
+        TextInferenceRequest ingestRequest = TextInferenceRequest.builder().modelId("mockModelId").inputTexts(inferenceList).build();
+        Map<String, Object> updateSourceAndMetadata = deepCopy(ingestSourceAndMetadata);
+        ((Map) ((Map) updateSourceAndMetadata.get(PARENT_FIELD)).get(CHILD_FIELD_LEVEL_1)).put(CHILD_FIELD_LEVEL_2, "newValue");
+        List<String> filteredInferenceList = Arrays.asList("newValue");
+        IngestDocument updateDocument = new IngestDocument(updateSourceAndMetadata, new HashMap<>());
+        TextInferenceRequest updateRequest = TextInferenceRequest.builder()
+            .modelId("mockModelId")
+            .inputTexts(filteredInferenceList)
+            .build();
+
+        TextEmbeddingProcessor processor = createInstanceWithNestedMappingsConfig(true);
+
+        mockUpdateDocument(ingestDocument);
+        mockVectorCreation(ingestRequest, updateRequest);
+
+        processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
+        processor.execute(updateDocument, (BiConsumer) (doc, ex) -> {});
+
+        verify(openSearchClient, times(2)).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(2)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        List<TextInferenceRequest> requests = inferenceRequestCaptor.getAllValues();
+        assertEquals(ingestRequest.getInputTexts(), requests.get(0).getInputTexts());
+        assertEquals(updateRequest.getInputTexts(), requests.get(1).getInputTexts());
+        List test3KnnInsertVectors = (List) (((Map) ((Map) ingestDocument.getSourceAndMetadata().get(PARENT_FIELD)).get(
+            CHILD_FIELD_LEVEL_1
+        ))).get(CHILD_LEVEL_2_KNN_FIELD);
+        List test3KnnUpdateVectors = (List) (((Map) ((Map) updateDocument.getSourceAndMetadata().get(PARENT_FIELD)).get(
+            CHILD_FIELD_LEVEL_1
+        ))).get(CHILD_LEVEL_2_KNN_FIELD);
+        assertEquals(test3KnnInsertVectors.size(), test3KnnUpdateVectors.size());
+    }
+
+    @SneakyThrows
+    public void testNestedFieldInMappingForSourceAndDestination_withIngestDocumentHasTheDestinationStructure_no_update_thenSuccessful() {
+        /*
+        modeling following document:
+          parent:
+           child_level_1:
+               child_level_1_text_field: "text"
+               child_level_2:
+                   child_level_2_text_field: "abc"
+         */
+        Map<String, Object> ingestSourceAndMetadata = new HashMap<>();
+        ingestSourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        ingestSourceAndMetadata.put("_id", "1");
+        Map<String, String> childLevel2NestedField = new HashMap<>();
+        childLevel2NestedField.put(CHILD_LEVEL_2_TEXT_FIELD_VALUE, TEXT_FIELD_2);
+        Map<String, Object> childLevel2 = new HashMap<>();
+        childLevel2.put(CHILD_FIELD_LEVEL_2, childLevel2NestedField);
+        childLevel2.put(CHILD_1_TEXT_FIELD, TEXT_VALUE_1);
+        Map<String, Object> childLevel1 = new HashMap<>();
+        childLevel1.put(CHILD_FIELD_LEVEL_1, childLevel2);
+        ingestSourceAndMetadata.put(PARENT_FIELD, childLevel1);
+        List<String> inferenceList = Arrays.asList(TEXT_VALUE_1);
+        IngestDocument ingestDocument = new IngestDocument(ingestSourceAndMetadata, new HashMap<>());
+        TextInferenceRequest request = TextInferenceRequest.builder().modelId("mockModelId").inputTexts(inferenceList).build();
+        Map<String, Object> updateSourceAndMetadata = deepCopy(ingestSourceAndMetadata);
+        IngestDocument updateDocument = new IngestDocument(updateSourceAndMetadata, new HashMap<>());
+
+        TextEmbeddingProcessor processor = createInstanceWithNestedSourceAndDestinationConfig(true);
+
+        mockUpdateDocument(ingestDocument);
+        mockVectorCreation(request, null);
+
+        processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
+        processor.execute(updateDocument, (BiConsumer) (doc, ex) -> {});
+
+        verify(openSearchClient, times(2)).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(1)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        assertEquals(request.getInputTexts(), inferenceRequestCaptor.getValue().getInputTexts());
+        Map nestedIngestMap = (Map) (((Map) ((Map) ingestDocument.getSourceAndMetadata().get(PARENT_FIELD)).get(CHILD_FIELD_LEVEL_1))).get(
+            CHILD_FIELD_LEVEL_2
+        );
+        Map nestedUpdateMap = (Map) (((Map) ((Map) updateDocument.getSourceAndMetadata().get(PARENT_FIELD)).get(CHILD_FIELD_LEVEL_1))).get(
+            CHILD_FIELD_LEVEL_2
+        );
+        List test3KnnIngestVectors = (List) nestedIngestMap.get(CHILD_LEVEL_2_KNN_FIELD);
+        List test3KnnUpdateVectors = (List) nestedUpdateMap.get(CHILD_LEVEL_2_KNN_FIELD);
+
+        verifyEqualEmbedding(test3KnnIngestVectors, test3KnnUpdateVectors);
+    }
+
+    @SneakyThrows
+    public void testNestedFieldInMappingForSourceAndDestination_withIngestDocumentHasTheDestinationStructure_with_update_thenSuccessful() {
+        /*
+        modeling following document:
+          parent:
+           child_level_1:
+               child_level_1_text_field: "text"
+               child_level_2:
+                   child_level_2_text_field: "abc"
+         */
+        Map<String, Object> ingestSourceAndMetadata = new HashMap<>();
+        ingestSourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        ingestSourceAndMetadata.put("_id", "1");
+        Map<String, String> childLevel2NestedField = new HashMap<>();
+        childLevel2NestedField.put(CHILD_LEVEL_2_TEXT_FIELD_VALUE, TEXT_FIELD_2);
+        Map<String, Object> childLevel2 = new HashMap<>();
+        childLevel2.put(CHILD_FIELD_LEVEL_2, childLevel2NestedField);
+        childLevel2.put(CHILD_1_TEXT_FIELD, TEXT_VALUE_1);
+        Map<String, Object> childLevel1 = new HashMap<>();
+        childLevel1.put(CHILD_FIELD_LEVEL_1, childLevel2);
+        ingestSourceAndMetadata.put(PARENT_FIELD, childLevel1);
+        List<String> inferenceList = Arrays.asList(TEXT_VALUE_1);
+        IngestDocument ingestDocument = new IngestDocument(ingestSourceAndMetadata, new HashMap<>());
+        TextInferenceRequest ingestRequest = TextInferenceRequest.builder().modelId("mockModelId").inputTexts(inferenceList).build();
+        Map<String, Object> updateSourceAndMetadata = deepCopy(ingestSourceAndMetadata);
+        ((Map) ((Map) updateSourceAndMetadata.get(PARENT_FIELD)).get(CHILD_FIELD_LEVEL_1)).put(CHILD_1_TEXT_FIELD, "newValue");
+        IngestDocument updateDocument = new IngestDocument(updateSourceAndMetadata, new HashMap<>());
+        List<String> filteredInferenceList = Arrays.asList("newValue");
+        TextInferenceRequest updateRequest = TextInferenceRequest.builder()
+            .modelId("mockModelId")
+            .inputTexts(filteredInferenceList)
+            .build();
+        TextEmbeddingProcessor processor = createInstanceWithNestedSourceAndDestinationConfig(true);
+
+        mockUpdateDocument(ingestDocument);
+        mockVectorCreation(ingestRequest, updateRequest);
+
+        processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
+        processor.execute(updateDocument, (BiConsumer) (doc, ex) -> {});
+
+        verify(openSearchClient, times(2)).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(2)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        List<TextInferenceRequest> requests = inferenceRequestCaptor.getAllValues();
+        assertEquals(ingestRequest.getInputTexts(), requests.get(0).getInputTexts());
+        assertEquals(updateRequest.getInputTexts(), requests.get(1).getInputTexts());
+        Map nestedIngestMap = (Map) (((Map) ((Map) ingestDocument.getSourceAndMetadata().get(PARENT_FIELD)).get(CHILD_FIELD_LEVEL_1))).get(
+            CHILD_FIELD_LEVEL_2
+        );
+        Map nestedUpdateMap = (Map) (((Map) ((Map) updateDocument.getSourceAndMetadata().get(PARENT_FIELD)).get(CHILD_FIELD_LEVEL_1))).get(
+            CHILD_FIELD_LEVEL_2
+        );
+        List test3KnnIngestVectors = (List) nestedIngestMap.get(CHILD_LEVEL_2_KNN_FIELD);
+        List test3KnnUpdateVectors = (List) nestedUpdateMap.get(CHILD_LEVEL_2_KNN_FIELD);
+
+        assertEquals(test3KnnIngestVectors.size(), test3KnnUpdateVectors.size());
+    }
+
+    @SneakyThrows
+    public void testNestedFieldInMappingForSourceAndDestination_withIngestDocumentWithoutDestinationStructure_no_update_thenSuccessful() {
+        /*
+        modeling following document:
+          parent:
+           child_level_1:
+               child_level_1_text_field: "text"
+        */
+        Map<String, Object> ingestSourceAndMetadata = new HashMap<>();
+        ingestSourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        ingestSourceAndMetadata.put("_id", "1");
+        Map<String, Object> childLevel2 = new HashMap<>();
+        childLevel2.put(CHILD_1_TEXT_FIELD, TEXT_VALUE_1);
+        Map<String, Object> childLevel1 = new HashMap<>();
+        childLevel1.put(CHILD_FIELD_LEVEL_1, childLevel2);
+        ingestSourceAndMetadata.put(PARENT_FIELD, childLevel1);
+        IngestDocument ingestDocument = new IngestDocument(ingestSourceAndMetadata, new HashMap<>());
+        Map<String, Object> updateSourceAndMetadata = deepCopy(ingestSourceAndMetadata);
+        IngestDocument updateDocument = new IngestDocument(updateSourceAndMetadata, new HashMap<>());
+        List<String> inferenceList = Arrays.asList(TEXT_VALUE_1);
+        TextInferenceRequest request = TextInferenceRequest.builder().modelId("mockModelId").inputTexts(inferenceList).build();
+        TextEmbeddingProcessor processor = createInstanceWithNestedSourceAndDestinationConfig(true);
+        mockUpdateDocument(ingestDocument);
+        mockVectorCreation(request, null);
+
+        processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
+        processor.execute(updateDocument, (BiConsumer) (doc, ex) -> {});
+
+        verify(openSearchClient, times(2)).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(1)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        assertEquals(request.getInputTexts(), inferenceRequestCaptor.getValue().getInputTexts());
+        Map parent1AfterProcessor = (Map) ingestDocument.getSourceAndMetadata().get(PARENT_FIELD);
+        Map childLevel1Actual = (Map) parent1AfterProcessor.get(CHILD_FIELD_LEVEL_1);
+        Map child2Actual = (Map) childLevel1Actual.get(CHILD_FIELD_LEVEL_2);
+        Map updateParent1AfterProcessor = (Map) updateDocument.getSourceAndMetadata().get(PARENT_FIELD);
+        Map updateChildLevel1Actual = (Map) updateParent1AfterProcessor.get(CHILD_FIELD_LEVEL_1);
+        Map updateChild2Actual = (Map) updateChildLevel1Actual.get(CHILD_FIELD_LEVEL_2);
+        List ingestVectors = (List) child2Actual.get(CHILD_LEVEL_2_KNN_FIELD);
+        List updateVectors = (List) updateChild2Actual.get(CHILD_LEVEL_2_KNN_FIELD);
+        verifyEqualEmbedding(ingestVectors, updateVectors);
+
+    }
+
+    @SneakyThrows
+    public void testNestedFieldInMappingForSourceAndDestination_withIngestDocumentWithoutDestinationStructure_with_update_thenSuccessful() {
+        /*
+        modeling following document:
+          parent:
+           child_level_1:
+               child_level_1_text_field: "text"
+        */
+        Map<String, Object> ingestSourceAndMetadata = new HashMap<>();
+        ingestSourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        ingestSourceAndMetadata.put("_id", "1");
+        Map<String, Object> childLevel2 = new HashMap<>();
+        childLevel2.put(CHILD_1_TEXT_FIELD, TEXT_VALUE_1);
+        Map<String, Object> childLevel1 = new HashMap<>();
+        childLevel1.put(CHILD_FIELD_LEVEL_1, childLevel2);
+        ingestSourceAndMetadata.put(PARENT_FIELD, childLevel1);
+        IngestDocument ingestDocument = new IngestDocument(ingestSourceAndMetadata, new HashMap<>());
+        List<String> inferenceList = Arrays.asList(TEXT_VALUE_1);
+        TextInferenceRequest ingestRequest = TextInferenceRequest.builder().modelId("mockModelId").inputTexts(inferenceList).build();
+        Map<String, Object> updateSourceAndMetadata = deepCopy(ingestSourceAndMetadata);
+        ((Map) ((Map) updateSourceAndMetadata.get(PARENT_FIELD)).get(CHILD_FIELD_LEVEL_1)).put(CHILD_1_TEXT_FIELD, "newValue");
+        IngestDocument updateDocument = new IngestDocument(updateSourceAndMetadata, new HashMap<>());
+        List<String> filteredInferenceList = Arrays.asList("newValue");
+        TextInferenceRequest updateRequest = TextInferenceRequest.builder()
+            .modelId("mockModelId")
+            .inputTexts(filteredInferenceList)
+            .build();
+        TextEmbeddingProcessor processor = createInstanceWithNestedSourceAndDestinationConfig(true);
+        mockUpdateDocument(ingestDocument);
+        mockVectorCreation(ingestRequest, updateRequest);
+
+        processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
+        processor.execute(updateDocument, (BiConsumer) (doc, ex) -> {});
+
+        verify(openSearchClient, times(2)).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(2)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        List<TextInferenceRequest> requests = inferenceRequestCaptor.getAllValues();
+        assertEquals(ingestRequest.getInputTexts(), requests.get(0).getInputTexts());
+        assertEquals(updateRequest.getInputTexts(), requests.get(1).getInputTexts());
+        Map parent1AfterProcessor = (Map) ingestDocument.getSourceAndMetadata().get(PARENT_FIELD);
+        Map childLevel1Actual = (Map) parent1AfterProcessor.get(CHILD_FIELD_LEVEL_1);
+        Map child2Actual = (Map) childLevel1Actual.get(CHILD_FIELD_LEVEL_2);
+        Map updateParent1AfterProcessor = (Map) updateDocument.getSourceAndMetadata().get(PARENT_FIELD);
+        Map updateChildLevel1Actual = (Map) updateParent1AfterProcessor.get(CHILD_FIELD_LEVEL_1);
+        Map updateChild2Actual = (Map) updateChildLevel1Actual.get(CHILD_FIELD_LEVEL_2);
+        List ingestVectors = (List) child2Actual.get(CHILD_LEVEL_2_KNN_FIELD);
+        List updateVectors = (List) updateChild2Actual.get(CHILD_LEVEL_2_KNN_FIELD);
+        assertEquals(ingestVectors.size(), updateVectors.size());
+
+    }
+
+    @SneakyThrows
+    @SuppressWarnings("unchecked")
+    public void testNestedFieldInMappingForListWithNestedObj_withIngestDocumentWithoutDestinationStructure_no_update_theSuccessful() {
+        /*
+        modeling following document:
+          parent: [
+           {
+               child_level_1:
+                   child_1_text_field: "text_value",
+           },
+           {
+               child_level_1:
+                   child_1_text_field: "text_value",
+                   child_2_text_field: "text_value2",
+                   child_3_text_field: "text_value3",
+           }
+
+          ]
+        */
+        Map<String, Object> child1Level2 = buildObjMap(Pair.of(CHILD_1_TEXT_FIELD, TEXT_VALUE_1));
+        Map<String, Object> child1Level1 = buildObjMap(Pair.of(CHILD_FIELD_LEVEL_1, child1Level2));
+        Map<String, Object> child2Level2 = buildObjMap(
+            Pair.of(CHILD_1_TEXT_FIELD, TEXT_VALUE_1),
+            Pair.of(CHILD_2_TEXT_FIELD, TEXT_VALUE_2),
+            Pair.of(CHILD_3_TEXT_FIELD, TEXT_VALUE_3)
+        );
+        Map<String, Object> child2Level1 = buildObjMap(Pair.of(CHILD_FIELD_LEVEL_1, child2Level2));
+        Map<String, Object> sourceAndMetadata = buildObjMap(
+            Pair.of(PARENT_FIELD, Arrays.asList(child1Level1, child2Level1)),
+            Pair.of(IndexFieldMapper.NAME, "my_index"),
+            Pair.of("_id", "1")
+        );
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        Map<String, Object> updateSourceAndMetadata = deepCopy(sourceAndMetadata);
+        IngestDocument updateDocument = new IngestDocument(updateSourceAndMetadata, new HashMap<>());
+
+        TextEmbeddingProcessor processor = createInstanceWithNestedSourceAndDestinationMapConfig(true);
+        List<String> inferenceList = Arrays.asList(TEXT_VALUE_1, TEXT_VALUE_1);
+        TextInferenceRequest request = TextInferenceRequest.builder().modelId("mockModelId").inputTexts(inferenceList).build();
+        mockUpdateDocument(ingestDocument);
+        mockVectorCreation(request, null);
+
+        processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
+        processor.execute(updateDocument, (BiConsumer) (doc, ex) -> {});
+
+        List<Map<String, Object>> parentAfterIngestProcessor = (List<Map<String, Object>>) ingestDocument.getSourceAndMetadata()
+            .get(PARENT_FIELD);
+
+        List<Map<String, Object>> parentAfterUpdateProcessor = (List<Map<String, Object>>) updateDocument.getSourceAndMetadata()
+            .get(PARENT_FIELD);
+        List<List<Number>> insertVectors = new ArrayList<>();
+        List<List<Number>> updateVectors = new ArrayList<>();
+        for (Map<String, Object> childActual : parentAfterIngestProcessor) {
+            Map<String, Object> childLevel1Actual = (Map<String, Object>) childActual.get(CHILD_FIELD_LEVEL_1);
+            assertEquals(TEXT_VALUE_1, childLevel1Actual.get(CHILD_1_TEXT_FIELD));
+            assertNotNull(childLevel1Actual.get(CHILD_FIELD_LEVEL_2));
+            Map<String, Object> childLevel2Actual = (Map<String, Object>) childLevel1Actual.get(CHILD_FIELD_LEVEL_2);
+            insertVectors.add((List<Number>) childLevel2Actual.get(CHILD_LEVEL_2_KNN_FIELD));
+        }
+
+        for (Map<String, Object> childActual : parentAfterUpdateProcessor) {
+            Map<String, Object> childLevel1Actual = (Map<String, Object>) childActual.get(CHILD_FIELD_LEVEL_1);
+            assertEquals(TEXT_VALUE_1, childLevel1Actual.get(CHILD_1_TEXT_FIELD));
+            assertNotNull(childLevel1Actual.get(CHILD_FIELD_LEVEL_2));
+            Map<String, Object> childLevel2Actual = (Map<String, Object>) childLevel1Actual.get(CHILD_FIELD_LEVEL_2);
+            updateVectors.add((List<Number>) childLevel2Actual.get(CHILD_LEVEL_2_KNN_FIELD));
+        }
+        verify(openSearchClient, times(2)).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(1)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        assertEquals(request.getInputTexts(), inferenceRequestCaptor.getValue().getInputTexts());
+        verifyEqualEmbeddingInNestedList(insertVectors, updateVectors);
+    }
+
+    @SneakyThrows
+    @SuppressWarnings("unchecked")
+    public void testNestedFieldInMappingForListWithNestedObj_withIngestDocumentWithoutDestinationStructure_with_update_theSuccessful() {
+        /*
+        modeling following document:
+          parent: [
+           {
+               child_level_1:
+                   child_1_text_field: "text_value",
+           },
+           {
+               child_level_1:
+                   child_1_text_field: "text_value",
+                   child_2_text_field: "text_value2",
+                   child_3_text_field: "text_value3",
+           }
+
+          ]
+        */
+        Map<String, Object> child1Level2 = buildObjMap(Pair.of(CHILD_1_TEXT_FIELD, TEXT_VALUE_1));
+        Map<String, Object> child1Level1 = buildObjMap(Pair.of(CHILD_FIELD_LEVEL_1, child1Level2));
+        Map<String, Object> child2Level2 = buildObjMap(
+            Pair.of(CHILD_1_TEXT_FIELD, TEXT_VALUE_1),
+            Pair.of(CHILD_2_TEXT_FIELD, TEXT_VALUE_2),
+            Pair.of(CHILD_3_TEXT_FIELD, TEXT_VALUE_3)
+        );
+        Map<String, Object> child2Level1 = buildObjMap(Pair.of(CHILD_FIELD_LEVEL_1, child2Level2));
+        Map<String, Object> sourceAndMetadata = buildObjMap(
+            Pair.of(PARENT_FIELD, Arrays.asList(child1Level1, child2Level1)),
+            Pair.of(IndexFieldMapper.NAME, "my_index"),
+            Pair.of("_id", "1")
+        );
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        Map<String, Object> updateSourceAndMetadata = deepCopy(sourceAndMetadata);
+        ((Map) ((Map) ((List) updateSourceAndMetadata.get(PARENT_FIELD)).get(0)).get(CHILD_FIELD_LEVEL_1)).put(
+            CHILD_1_TEXT_FIELD,
+            "newValue"
+        );
+        IngestDocument updateDocument = new IngestDocument(updateSourceAndMetadata, new HashMap<>());
+
+        TextEmbeddingProcessor processor = createInstanceWithNestedSourceAndDestinationMapConfig(true);
+        List<String> inferenceList = Arrays.asList(TEXT_VALUE_1, TEXT_VALUE_1);
+        TextInferenceRequest ingestRequest = TextInferenceRequest.builder().modelId("mockModelID").inputTexts(inferenceList).build();
+        List<String> filteredInferenceList = Arrays.asList("newValue");
+        TextInferenceRequest updateRequest = TextInferenceRequest.builder()
+            .modelId("mockModelID")
+            .inputTexts(filteredInferenceList)
+            .build();
+        mockUpdateDocument(ingestDocument);
+        mockVectorCreation(ingestRequest, updateRequest);
+
+        processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
+        processor.execute(updateDocument, (BiConsumer) (doc, ex) -> {});
+
+        List<Map<String, Object>> parentAfterIngestProcessor = (List<Map<String, Object>>) ingestDocument.getSourceAndMetadata()
+            .get(PARENT_FIELD);
+
+        List<Map<String, Object>> parentAfterUpdateProcessor = (List<Map<String, Object>>) updateDocument.getSourceAndMetadata()
+            .get(PARENT_FIELD);
+        List<List<Number>> insertVectors = new ArrayList<>();
+        List<List<Number>> updateVectors = new ArrayList<>();
+        for (Map<String, Object> childActual : parentAfterIngestProcessor) {
+            Map<String, Object> childLevel1Actual = (Map<String, Object>) childActual.get(CHILD_FIELD_LEVEL_1);
+            assertNotNull(childLevel1Actual.get(CHILD_FIELD_LEVEL_2));
+            Map<String, Object> childLevel2Actual = (Map<String, Object>) childLevel1Actual.get(CHILD_FIELD_LEVEL_2);
+            insertVectors.add((List<Number>) childLevel2Actual.get(CHILD_LEVEL_2_KNN_FIELD));
+        }
+
+        for (Map<String, Object> childActual : parentAfterUpdateProcessor) {
+            Map<String, Object> childLevel1Actual = (Map<String, Object>) childActual.get(CHILD_FIELD_LEVEL_1);
+            assertNotNull(childLevel1Actual.get(CHILD_FIELD_LEVEL_2));
+            Map<String, Object> childLevel2Actual = (Map<String, Object>) childLevel1Actual.get(CHILD_FIELD_LEVEL_2);
+            updateVectors.add((List<Number>) childLevel2Actual.get(CHILD_LEVEL_2_KNN_FIELD));
+        }
+        verify(openSearchClient, times(2)).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(2)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        List<TextInferenceRequest> requests = inferenceRequestCaptor.getAllValues();
+        assertEquals(ingestRequest.getInputTexts(), requests.get(0).getInputTexts());
+        assertEquals(updateRequest.getInputTexts(), requests.get(1).getInputTexts());
+        assertEquals(insertVectors.get(0).size(), updateVectors.get(0).size());
+        verifyEqualEmbedding(insertVectors.get(1), updateVectors.get(1));
+    }
+
+    @SneakyThrows
+    public void testNestedFieldInMappingMixedSyntax_withMapTypeInput_no_update_successful() {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        sourceAndMetadata.put("_id", "1");
+        Map<String, String> childLevel2 = new HashMap<>();
+        childLevel2.put(CHILD_FIELD_LEVEL_2, CHILD_LEVEL_2_TEXT_FIELD_VALUE);
+        Map<String, Object> childLevel1 = new HashMap<>();
+        childLevel1.put(CHILD_FIELD_LEVEL_1, childLevel2);
+        sourceAndMetadata.put(PARENT_FIELD, childLevel1);
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        Map<String, Object> updateSourceAndMetadata = deepCopy(sourceAndMetadata);
+        IngestDocument updateDocument = new IngestDocument(updateSourceAndMetadata, new HashMap<>());
+
+        TextEmbeddingProcessor processor = createInstanceWithNestedMapConfig(true);
+        List<String> inferenceList = Arrays.asList(CHILD_LEVEL_2_TEXT_FIELD_VALUE);
+        TextInferenceRequest request = TextInferenceRequest.builder().modelId("mockModelID").inputTexts(inferenceList).build();
+        mockUpdateDocument(ingestDocument);
+        mockVectorCreation(request, null);
+
+        processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
+        processor.execute(updateDocument, (BiConsumer) (doc, ex) -> {});
+        Map childLevel1AfterIngestProcessor = (Map) ingestDocument.getSourceAndMetadata().get(PARENT_FIELD);
+        Map childLevel2AfterIngestProcessor = (Map) childLevel1AfterIngestProcessor.get(CHILD_FIELD_LEVEL_1);
+        assertEquals(CHILD_LEVEL_2_TEXT_FIELD_VALUE, childLevel2AfterIngestProcessor.get(CHILD_FIELD_LEVEL_2));
+        assertNotNull(childLevel2AfterIngestProcessor.get(CHILD_LEVEL_2_KNN_FIELD));
+        List ingestVectors = (List) childLevel2AfterIngestProcessor.get(CHILD_LEVEL_2_KNN_FIELD);
+        Map childLevel1AfterUpdatetProcessor = (Map) updateDocument.getSourceAndMetadata().get(PARENT_FIELD);
+        Map childLevel2AfterUpdateProcessor = (Map) childLevel1AfterUpdatetProcessor.get(CHILD_FIELD_LEVEL_1);
+        assertEquals(CHILD_LEVEL_2_TEXT_FIELD_VALUE, childLevel2AfterIngestProcessor.get(CHILD_FIELD_LEVEL_2));
+        assertNotNull(childLevel2AfterUpdateProcessor.get(CHILD_LEVEL_2_KNN_FIELD));
+        List updateVectors = (List) childLevel2AfterUpdateProcessor.get(CHILD_LEVEL_2_KNN_FIELD);
+        verify(openSearchClient, times(2)).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(1)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        assertEquals(request.getInputTexts(), inferenceRequestCaptor.getValue().getInputTexts());
+        verifyEqualEmbedding(ingestVectors, updateVectors);
+    }
+
+    @SneakyThrows
+    public void testNestedFieldInMappingMixedSyntax_withMapTypeInput_with_update_successful() {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        sourceAndMetadata.put("_id", "1");
+        Map<String, String> childLevel2 = new HashMap<>();
+        childLevel2.put(CHILD_FIELD_LEVEL_2, CHILD_LEVEL_2_TEXT_FIELD_VALUE);
+        Map<String, Object> childLevel1 = new HashMap<>();
+        childLevel1.put(CHILD_FIELD_LEVEL_1, childLevel2);
+        sourceAndMetadata.put(PARENT_FIELD, childLevel1);
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        Map<String, Object> updateSourceAndMetadata = deepCopy(sourceAndMetadata);
+        ((Map) ((Map) updateSourceAndMetadata.get(PARENT_FIELD)).get(CHILD_FIELD_LEVEL_1)).put(CHILD_FIELD_LEVEL_2, "newValue");
+        IngestDocument updateDocument = new IngestDocument(updateSourceAndMetadata, new HashMap<>());
+
+        TextEmbeddingProcessor processor = createInstanceWithNestedMapConfig(true);
+        List<String> inferenceList = Arrays.asList(CHILD_LEVEL_2_TEXT_FIELD_VALUE);
+        TextInferenceRequest ingestRequest = TextInferenceRequest.builder().modelId("mockModelID").inputTexts(inferenceList).build();
+        List<String> filteredInferenceList = Arrays.asList("newValue");
+        TextInferenceRequest updateRequest = TextInferenceRequest.builder()
+            .modelId("mockModelID")
+            .inputTexts(filteredInferenceList)
+            .build();
+        mockUpdateDocument(ingestDocument);
+        mockVectorCreation(ingestRequest, updateRequest);
+
+        processor.execute(ingestDocument, (BiConsumer) (doc, ex) -> {});
+        processor.execute(updateDocument, (BiConsumer) (doc, ex) -> {});
+        Map childLevel1AfterIngestProcessor = (Map) ingestDocument.getSourceAndMetadata().get(PARENT_FIELD);
+        Map childLevel2AfterIngestProcessor = (Map) childLevel1AfterIngestProcessor.get(CHILD_FIELD_LEVEL_1);
+        assertEquals(CHILD_LEVEL_2_TEXT_FIELD_VALUE, childLevel2AfterIngestProcessor.get(CHILD_FIELD_LEVEL_2));
+        assertNotNull(childLevel2AfterIngestProcessor.get(CHILD_LEVEL_2_KNN_FIELD));
+        List ingestVectors = (List) childLevel2AfterIngestProcessor.get(CHILD_LEVEL_2_KNN_FIELD);
+        Map childLevel1AfterUpdateProcessor = (Map) updateDocument.getSourceAndMetadata().get(PARENT_FIELD);
+        Map childLevel2AfterUpdateProcessor = (Map) childLevel1AfterUpdateProcessor.get(CHILD_FIELD_LEVEL_1);
+        assertEquals(CHILD_LEVEL_2_TEXT_FIELD_VALUE, childLevel2AfterIngestProcessor.get(CHILD_FIELD_LEVEL_2));
+        assertNotNull(childLevel2AfterUpdateProcessor.get(CHILD_LEVEL_2_KNN_FIELD));
+        List updateVectors = (List) childLevel2AfterUpdateProcessor.get(CHILD_LEVEL_2_KNN_FIELD);
+        verify(openSearchClient, times(2)).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(2)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        List<TextInferenceRequest> requests = inferenceRequestCaptor.getAllValues();
+        assertEquals(ingestRequest.getInputTexts(), requests.get(0).getInputTexts());
+        assertEquals(updateRequest.getInputTexts(), requests.get(1).getInputTexts());
+        assertEquals(ingestVectors.size(), updateVectors.size());
+    }
+
+    public void test_batchExecute_no_update_successful() {
+        final int docCount = 5;
+        List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
+        List<IngestDocumentWrapper> updateDocumentWrappers = createIngestDocumentWrappers(docCount);
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(docCount, true);
+        Consumer resultHandler = mock(Consumer.class);
+        TextInferenceRequest ingestRequest = TextInferenceRequest.builder()
+            .modelId("mockModelID")
+            .inputTexts(List.of("value1", "value1", "value1", "value1", "value1"))
+            .build();
+        mockVectorCreation(ingestRequest, null);
+        mockUpdateMultipleDocuments(ingestDocumentWrappers);
+        processor.batchExecute(ingestDocumentWrappers, resultHandler);
+        processor.batchExecute(updateDocumentWrappers, resultHandler);
+        for (int i = 0; i < docCount; ++i) {
+            assertEquals(
+                ingestDocumentWrappers.get(i).getIngestDocument().getSourceAndMetadata().get("key1"),
+                updateDocumentWrappers.get(i).getIngestDocument().getSourceAndMetadata().get("key1")
+            );
+            verifyEqualEmbedding(
+                (List<Number>) ingestDocumentWrappers.get(i).getIngestDocument().getSourceAndMetadata().get("key1_knn"),
+                (List<Number>) updateDocumentWrappers.get(i).getIngestDocument().getSourceAndMetadata().get("key1_knn")
+            );
+        }
+        verify(openSearchClient, times(2)).execute(isA(MultiGetAction.class), isA(MultiGetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(1)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        assertEquals(ingestRequest.getInputTexts(), inferenceRequestCaptor.getValue().getInputTexts());
+    }
+
+    public void test_batchExecute_with_update_successful() {
+        final int docCount = 5;
+        List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
+        List<IngestDocumentWrapper> updateDocumentWrappers = createIngestDocumentWrappers(docCount, "newValue");
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(docCount, true);
+        Consumer resultHandler = mock(Consumer.class);
+        TextInferenceRequest ingestRequest = TextInferenceRequest.builder()
+            .modelId("mockModelID")
+            .inputTexts(List.of("value1", "value1", "value1", "value1", "value1"))
+            .build();
+        TextInferenceRequest updateRequest = TextInferenceRequest.builder()
+            .modelId("mockModelID")
+            .inputTexts(List.of("newValue", "newValue", "newValue", "newValue", "newValue"))
+            .build();
+        mockVectorCreation(ingestRequest, updateRequest);
+        mockUpdateMultipleDocuments(ingestDocumentWrappers);
+        processor.batchExecute(ingestDocumentWrappers, resultHandler);
+        processor.batchExecute(updateDocumentWrappers, resultHandler);
+        for (int i = 0; i < docCount; ++i) {
+            List<Number> ingestVectors = (List<Number>) ingestDocumentWrappers.get(i)
+                .getIngestDocument()
+                .getSourceAndMetadata()
+                .get("key1_knn");
+            List<Number> updateVectors = (List<Number>) updateDocumentWrappers.get(i)
+                .getIngestDocument()
+                .getSourceAndMetadata()
+                .get("key1_knn");
+            assertEquals(ingestVectors.size(), updateVectors.size());
+        }
+        verify(openSearchClient, times(2)).execute(isA(MultiGetAction.class), isA(MultiGetRequest.class), isA(ActionListener.class));
+        verify(mlCommonsClientAccessor, times(2)).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        List<TextInferenceRequest> requests = inferenceRequestCaptor.getAllValues();
+        assertEquals(ingestRequest.getInputTexts(), requests.get(0).getInputTexts());
+        assertEquals(updateRequest.getInputTexts(), requests.get(1).getInputTexts());
     }
 
     public void testParsingNestedField_whenNestedFieldsConfigured_thenSuccessful() {
@@ -1403,5 +2408,89 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         Map<String, Object> nestedList = buildObjMap(Pair.of("nestedField", Arrays.asList(nestedObj1, nestedObj2)));
         Map<String, Object> nestedList1 = buildObjMap(Pair.of("nestedField", nestedList));
         return new IngestDocument(nestedList1, new HashMap<>());
+    }
+
+    private void mockUpdateDocument(IngestDocument ingestDocument) {
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(2);
+            listener.onResponse(mockEmptyGetResponse()); // returns empty result for ingest action
+            return null;
+        }).doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(2);
+            listener.onResponse(convertToGetResponse(ingestDocument)); // returns previously ingested document for update action
+            return null;
+        }).when(openSearchClient).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+    }
+
+    private void mockUpdateMultipleDocuments(List<IngestDocumentWrapper> ingestDocuments) {
+        doAnswer(invocation -> {
+            ActionListener<MultiGetResponse> listener = invocation.getArgument(2);
+            listener.onResponse(mockEmptyMultiGetItemResponse()); // returns empty result for ingest action
+            return null;
+        }).doAnswer(invocation -> {
+            ActionListener<MultiGetResponse> listener = invocation.getArgument(2);
+            listener.onResponse(convertToMultiGetItemResponse(ingestDocuments)); // returns previously ingested document for update action
+            return null;
+        }).when(openSearchClient).execute(isA(MultiGetAction.class), isA(MultiGetRequest.class), isA(ActionListener.class));
+    }
+
+    private void mockFailedUpdateMultipleDocuments(List<IngestDocumentWrapper> ingestDocuments) {
+        doAnswer(invocation -> {
+            ActionListener<MultiGetResponse> listener = invocation.getArgument(2);
+            listener.onResponse(mockEmptyMultiGetItemResponse()); // returns empty result for ingest action
+            return null;
+        }).doAnswer(invocation -> {
+            ActionListener<MultiGetResponse> listener = invocation.getArgument(2);
+            listener.onFailure(new RuntimeException()); // throw exception on update
+            return null;
+        }).when(openSearchClient).execute(isA(MultiGetAction.class), isA(MultiGetRequest.class), isA(ActionListener.class));
+    }
+
+    private void mockVectorCreation(TextInferenceRequest ingestRequest, TextInferenceRequest updateRequest) {
+        doAnswer(invocation -> {
+            int numVectors = ingestRequest.getInputTexts().size();
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
+            listener.onResponse(createRandomOneDimensionalMockVector(numVectors, 2, 0.0f, 1.0f));
+            return null;
+        }).doAnswer(invocation -> {
+            int numVectors = updateRequest.getInputTexts().size();
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
+            listener.onResponse(createRandomOneDimensionalMockVector(numVectors, 2, 0.0f, 1.0f));
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(isA(TextInferenceRequest.class), isA(ActionListener.class));
+    }
+
+    private void verifyEqualEmbedding(List<Number> insertVectors, List<Number> updateVectors) {
+        assertEquals(insertVectors.size(), updateVectors.size());
+        for (int i = 0; i < insertVectors.size(); i++) {
+            assertEquals(insertVectors.get(i).floatValue(), updateVectors.get(i).floatValue(), 0.0000001f);
+        }
+    }
+
+    private void verifyEqualEmbeddingInMap(List<Map> insertVectors, List<Map> updateVectors) {
+        assertEquals(insertVectors.size(), updateVectors.size());
+
+        for (int i = 0; i < insertVectors.size(); i++) {
+            Map<String, List> insertMap = insertVectors.get(i);
+            Map<String, List> updateMap = updateVectors.get(i);
+            for (Map.Entry<String, List> entry : insertMap.entrySet()) {
+                List<Number> insertValue = entry.getValue();
+                List<Number> updateValue = updateMap.get(entry.getKey());
+                for (int j = 0; j < insertValue.size(); j++) {
+                    assertEquals(insertValue.get(j).floatValue(), updateValue.get(j).floatValue(), 0.0000001f);
+                }
+            }
+        }
+    }
+
+    private void verifyEqualEmbeddingInNestedList(List<List<Number>> insertVectors, List<List<Number>> updateVectors) {
+        assertEquals(insertVectors.size(), updateVectors.size());
+        for (int i = 0; i < insertVectors.size(); i++) {
+            List<Number> insertVector = insertVectors.get(i);
+            List<Number> updateVector = updateVectors.get(i);
+            for (int j = 0; j < insertVectors.size(); j++) {
+                assertEquals(insertVector.get(j).floatValue(), updateVector.get(j).floatValue(), 0.0000001f);
+            }
+        }
     }
 }
