@@ -7,12 +7,12 @@ package org.opensearch.neuralsearch.processor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
@@ -26,7 +26,12 @@ import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
+import org.opensearch.action.get.GetResponse;
+import org.opensearch.action.get.MultiGetItemResponse;
+import org.opensearch.action.get.MultiGetRequest;
+import org.opensearch.action.get.MultiGetResponse;
 import org.opensearch.common.collect.Tuple;
+import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
@@ -41,6 +46,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.processor.optimization.InferenceFilter;
 import org.opensearch.neuralsearch.util.ProcessorDocumentUtils;
 
 /**
@@ -53,6 +59,8 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
 
     public static final String MODEL_ID_FIELD = "model_id";
     public static final String FIELD_MAP_FIELD = "field_map";
+    public static final String INDEX_FIELD = "_index";
+    public static final String ID_FIELD = "_id";
     private static final BiFunction<Object, Object, Object> REMAPPING_FUNCTION = (v1, v2) -> {
         if (v1 instanceof Collection && v2 instanceof Collection) {
             ((Collection) v1).addAll((Collection) v2);
@@ -118,7 +126,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
 
     public abstract void doExecute(
         IngestDocument ingestDocument,
-        Map<String, Object> ProcessMap,
+        Map<String, Object> processMap,
         List<String> inferenceList,
         BiConsumer<IngestDocument, Exception> handler
     );
@@ -168,49 +176,74 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
      */
     abstract void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException);
 
+    /**
+     * This is the function which does actual inference work for subBatchExecute interface.
+     * @param ingestDocumentWrappers a list of IngestDocuments in a batch.
+     * @param handler a callback handler to handle inference results which is a list of objects.
+     */
     @Override
     public void subBatchExecute(List<IngestDocumentWrapper> ingestDocumentWrappers, Consumer<List<IngestDocumentWrapper>> handler) {
-        if (CollectionUtils.isEmpty(ingestDocumentWrappers)) {
-            handler.accept(Collections.emptyList());
-            return;
-        }
+        try {
+            if (CollectionUtils.isEmpty(ingestDocumentWrappers)) {
+                handler.accept(ingestDocumentWrappers);
+                return;
+            }
 
-        List<DataForInference> dataForInferences = getDataForInference(ingestDocumentWrappers);
-        List<String> inferenceList = constructInferenceTexts(dataForInferences);
-        if (inferenceList.isEmpty()) {
-            handler.accept(ingestDocumentWrappers);
-            return;
+            List<DataForInference> dataForInferences = getDataForInference(ingestDocumentWrappers);
+            List<String> inferenceList = constructInferenceTexts(dataForInferences);
+            if (inferenceList.isEmpty()) {
+                handler.accept(ingestDocumentWrappers);
+                return;
+            }
+            doSubBatchExecute(ingestDocumentWrappers, inferenceList, dataForInferences, handler);
+        } catch (Exception e) {
+            updateWithExceptions(ingestDocumentWrappers, handler, e);
         }
+    }
+
+    /**
+     * This is a helper function for subBatchExecute, which invokes doBatchExecute for given inference list.
+     * @param ingestDocumentWrappers a list of IngestDocuments in a batch.
+     * @param inferenceList a list of String for inference.
+     * @param dataForInferences a list of data for inference, which includes ingestDocumentWrapper, processMap, inferenceList.
+     */
+    protected void doSubBatchExecute(
+        List<IngestDocumentWrapper> ingestDocumentWrappers,
+        List<String> inferenceList,
+        List<DataForInference> dataForInferences,
+        Consumer<List<IngestDocumentWrapper>> handler
+    ) {
         Tuple<List<String>, Map<Integer, Integer>> sortedResult = sortByLengthAndReturnOriginalOrder(inferenceList);
         inferenceList = sortedResult.v1();
         Map<Integer, Integer> originalOrder = sortedResult.v2();
         doBatchExecute(inferenceList, results -> {
-            int startIndex = 0;
-            results = restoreToOriginalOrder(results, originalOrder);
-            for (DataForInference dataForInference : dataForInferences) {
-                if (dataForInference.getIngestDocumentWrapper().getException() != null
-                    || CollectionUtils.isEmpty(dataForInference.getInferenceList())) {
-                    continue;
-                }
-                List<?> inferenceResults = results.subList(startIndex, startIndex + dataForInference.getInferenceList().size());
-                startIndex += dataForInference.getInferenceList().size();
-                setVectorFieldsToDocument(
-                    dataForInference.getIngestDocumentWrapper().getIngestDocument(),
-                    dataForInference.getProcessMap(),
-                    inferenceResults
-                );
-            }
+            batchExecuteHandler(results, ingestDocumentWrappers, dataForInferences, originalOrder, handler);
             handler.accept(ingestDocumentWrappers);
-        }, exception -> {
-            for (IngestDocumentWrapper ingestDocumentWrapper : ingestDocumentWrappers) {
-                // The IngestDocumentWrapper might already run into exception and not sent for inference. So here we only
-                // set exception to IngestDocumentWrapper which doesn't have exception before.
-                if (ingestDocumentWrapper.getException() == null) {
-                    ingestDocumentWrapper.update(ingestDocumentWrapper.getIngestDocument(), exception);
-                }
+        }, exception -> { updateWithExceptions(ingestDocumentWrappers, handler, exception); });
+    }
+
+    private void batchExecuteHandler(
+        List<?> results,
+        List<IngestDocumentWrapper> ingestDocumentWrappers,
+        List<DataForInference> dataForInferences,
+        Map<Integer, Integer> originalOrder,
+        Consumer<List<IngestDocumentWrapper>> handler
+    ) {
+        int startIndex = 0;
+        results = restoreToOriginalOrder(results, originalOrder);
+        for (DataForInference dataForInference : dataForInferences) {
+            if (dataForInference.getIngestDocumentWrapper().getException() != null
+                || CollectionUtils.isEmpty(dataForInference.getInferenceList())) {
+                continue;
             }
-            handler.accept(ingestDocumentWrappers);
-        });
+            List<?> inferenceResults = results.subList(startIndex, startIndex + dataForInference.getInferenceList().size());
+            startIndex += dataForInference.getInferenceList().size();
+            setVectorFieldsToDocument(
+                dataForInference.getIngestDocumentWrapper().getIngestDocument(),
+                dataForInference.getProcessMap(),
+                inferenceResults
+            );
+        }
     }
 
     private Tuple<List<String>, Map<Integer, Integer>> sortByLengthAndReturnOriginalOrder(List<String> inferenceList) {
@@ -237,7 +270,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         return sortedResults;
     }
 
-    private List<String> constructInferenceTexts(List<DataForInference> dataForInferences) {
+    protected List<String> constructInferenceTexts(List<DataForInference> dataForInferences) {
         List<String> inferenceTexts = new ArrayList<>();
         for (DataForInference dataForInference : dataForInferences) {
             if (dataForInference.getIngestDocumentWrapper().getException() != null
@@ -249,7 +282,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         return inferenceTexts;
     }
 
-    private List<DataForInference> getDataForInference(List<IngestDocumentWrapper> ingestDocumentWrappers) {
+    protected List<DataForInference> getDataForInference(List<IngestDocumentWrapper> ingestDocumentWrappers) {
         List<DataForInference> dataForInferences = new ArrayList<>();
         for (IngestDocumentWrapper ingestDocumentWrapper : ingestDocumentWrappers) {
             Map<String, Object> processMap = null;
@@ -271,14 +304,14 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
 
     @Getter
     @AllArgsConstructor
-    private static class DataForInference {
+    protected static class DataForInference {
         private final IngestDocumentWrapper ingestDocumentWrapper;
         private final Map<String, Object> processMap;
         private final List<String> inferenceList;
     }
 
     @SuppressWarnings({ "unchecked" })
-    private List<String> createInferenceList(Map<String, Object> knnKeyMap) {
+    protected List<String> createInferenceList(Map<String, Object> knnKeyMap) {
         List<String> texts = new ArrayList<>();
         knnKeyMap.entrySet().stream().filter(knnMapEntry -> knnMapEntry.getValue() != null).forEach(knnMapEntry -> {
             Object sourceValue = knnMapEntry.getValue();
@@ -414,6 +447,36 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         nlpResult.forEach(ingestDocument::setFieldValue);
     }
 
+    /**
+     * This method creates a MultiGetRequest from a list of ingest documents to be fetched for comparison
+     * @param dataForInferences, list of data for inferences
+     * */
+    protected MultiGetRequest buildMultiGetRequest(List<DataForInference> dataForInferences) {
+        MultiGetRequest multiGetRequest = new MultiGetRequest();
+        for (DataForInference dataForInference : dataForInferences) {
+            Object index = dataForInference.getIngestDocumentWrapper().getIngestDocument().getSourceAndMetadata().get(INDEX_FIELD);
+            Object id = dataForInference.getIngestDocumentWrapper().getIngestDocument().getSourceAndMetadata().get(ID_FIELD);
+            if (Objects.nonNull(index) && Objects.nonNull(id)) {
+                multiGetRequest.add(index.toString(), id.toString());
+            }
+        }
+        return multiGetRequest;
+    }
+
+    /**
+     * This method creates a map of documents from MultiGetItemResponse where the key is document ID and value is corresponding document
+     * @param multiGetItemResponses, array of responses from Multi Get Request
+     * */
+    protected Map<String, Map<String, Object>> createDocumentMap(MultiGetItemResponse[] multiGetItemResponses) {
+        Map<String, Map<String, Object>> existingDocuments = new HashMap<>();
+        for (MultiGetItemResponse item : multiGetItemResponses) {
+            String id = item.getId();
+            Map<String, Object> existingDocument = item.getResponse().getSourceAsMap();
+            existingDocuments.put(id, existingDocument);
+        }
+        return existingDocuments;
+    }
+
     @SuppressWarnings({ "unchecked" })
     @VisibleForTesting
     Map<String, Object> buildNLPResult(Map<String, Object> processorMap, List<?> results, Map<String, Object> sourceAndMetadataMap) {
@@ -503,6 +566,28 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         }
     }
 
+    // This method updates each ingestDocument with exceptions and accepts ingestDocumentWrappers.
+    // Ingestion fails when exception occurs while updating
+    protected void updateWithExceptions(
+        List<IngestDocumentWrapper> ingestDocumentWrappers,
+        Consumer<List<IngestDocumentWrapper>> handler,
+        Exception e
+    ) {
+        try {
+            for (IngestDocumentWrapper ingestDocumentWrapper : ingestDocumentWrappers) {
+                // The IngestDocumentWrapper might have already run into exception. So here we only
+                // set exception to IngestDocumentWrapper which doesn't have exception before.
+                if (ingestDocumentWrapper.getException() == null) {
+                    ingestDocumentWrapper.update(ingestDocumentWrapper.getIngestDocument(), e);
+                }
+            }
+            handler.accept(ingestDocumentWrappers);
+        } catch (Exception ex) {
+            log.error(String.format(Locale.ROOT, "updating ingestDocumentWrappers with exceptions failed with error: [%s]", ex));
+            handler.accept(null);
+        }
+    }
+
     private void processMapEntryValue(
         List<?> results,
         IndexWrapper indexWrapper,
@@ -579,9 +664,125 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
 
     private List<Map<String, Object>> buildNLPResultForListType(List<String> sourceValue, List<?> results, IndexWrapper indexWrapper) {
         List<Map<String, Object>> keyToResult = new ArrayList<>();
-        IntStream.range(0, sourceValue.size())
+        sourceValue.stream()
+            .filter(Objects::nonNull) // explicit null check is required since sourceValue can contain null values in cases where
+            // sourceValue has been filtered
             .forEachOrdered(x -> keyToResult.add(ImmutableMap.of(listTypeNestedMapKey, results.get(indexWrapper.index++))));
         return keyToResult;
+    }
+
+    // This method validates and filters given inferenceList and processMap after response is successfully retrieved from get operation.
+    protected void getResponseHandler(
+        GetResponse response,
+        IngestDocument ingestDocument,
+        Map<String, Object> processMap,
+        List<String> inferenceList,
+        BiConsumer<IngestDocument, Exception> handler,
+        InferenceFilter inferenceFilter
+    ) {
+        final Map<String, Object> existingDocument = response.getSourceAsMap();
+        if (existingDocument == null || existingDocument.isEmpty()) {
+            makeInferenceCall(ingestDocument, processMap, inferenceList, handler);
+            return;
+        }
+        // filter given ProcessMap by comparing existing document with ingestDocument
+        Map<String, Object> filteredProcessMap = inferenceFilter.filter(
+            existingDocument,
+            ingestDocument.getSourceAndMetadata(),
+            processMap
+        );
+        // create inference list based on filtered ProcessMap
+        List<String> filteredInferenceList = createInferenceList(filteredProcessMap).stream()
+            .filter(Objects::nonNull)
+            .collect(Collectors.toList());
+        if (filteredInferenceList.isEmpty()) {
+            handler.accept(ingestDocument, null);
+        } else {
+            makeInferenceCall(ingestDocument, filteredProcessMap, filteredInferenceList, handler);
+        }
+    }
+
+    // This method validates and filters given inferenceList and dataForInferences after response is successfully retrieved from multi-get
+    // operation.
+    protected void multiGetResponseHandler(
+        MultiGetResponse response,
+        List<IngestDocumentWrapper> ingestDocumentWrappers,
+        List<String> inferenceList,
+        List<DataForInference> dataForInferences,
+        Consumer<List<IngestDocumentWrapper>> handler,
+        InferenceFilter inferenceFilter
+    ) {
+        MultiGetItemResponse[] multiGetItemResponses = response.getResponses();
+        if (multiGetItemResponses == null || multiGetItemResponses.length == 0) {
+            doSubBatchExecute(ingestDocumentWrappers, inferenceList, dataForInferences, handler);
+            return;
+        }
+        // create a map of documents with key: doc_id and value: doc
+        Map<String, Map<String, Object>> existingDocuments = createDocumentMap(multiGetItemResponses);
+        List<DataForInference> filteredDataForInference = filterDataForInference(inferenceFilter, dataForInferences, existingDocuments);
+        List<String> filteredInferenceList = constructInferenceTexts(filteredDataForInference);
+        if (filteredInferenceList.isEmpty()) {
+            handler.accept(ingestDocumentWrappers);
+            return;
+        }
+        doSubBatchExecute(ingestDocumentWrappers, filteredInferenceList, filteredDataForInference, handler);
+    }
+
+    // This is a helper method to filter the given list of dataForInferences by comparing its documents with existingDocuments with
+    // given inferenceFilter
+    protected List<DataForInference> filterDataForInference(
+        InferenceFilter inferenceFilter,
+        List<DataForInference> dataForInferences,
+        Map<String, Map<String, Object>> existingDocuments
+    ) {
+        List<DataForInference> filteredDataForInference = new ArrayList<>();
+        for (DataForInference dataForInference : dataForInferences) {
+            IngestDocumentWrapper ingestDocumentWrapper = dataForInference.getIngestDocumentWrapper();
+            Map<String, Object> processMap = dataForInference.getProcessMap();
+            Map<String, Object> document = ingestDocumentWrapper.getIngestDocument().getSourceAndMetadata();
+            Object id = document.get(ID_FIELD);
+            // insert non-filtered dataForInference if existing document does not exist
+            if (Objects.isNull(id) || existingDocuments.containsKey(id.toString()) == false) {
+                filteredDataForInference.add(dataForInference);
+                continue;
+            }
+            // filter dataForInference when existing document exists
+            String docId = id.toString();
+            Map<String, Object> existingDocument = existingDocuments.get(docId);
+            Map<String, Object> filteredProcessMap = inferenceFilter.filter(existingDocument, document, processMap);
+            List<String> filteredInferenceList = createInferenceList(filteredProcessMap);
+            filteredDataForInference.add(new DataForInference(ingestDocumentWrapper, filteredProcessMap, filteredInferenceList));
+        }
+        return filteredDataForInference;
+    }
+
+    // form and return a list of IngestDocumentWrapper in given list of DataForInference
+    protected List<IngestDocumentWrapper> getIngestDocumentWrappers(List<DataForInference> dataForInferences) {
+        return dataForInferences.stream().map(DataForInference::getIngestDocumentWrapper).toList();
+    }
+
+    /**
+     * This method invokes inference call through mlCommonsClientAccessor and populates retrieved embeddings to ingestDocument
+     *
+     * @param ingestDocument ingestDocument to populate embeddings to
+     * @param processMap map indicating the path in ingestDocument to populate embeddings
+     * @param inferenceList list of texts to be model inference
+     * @param handler SourceAndMetadataMap of ingestDocument Document
+     *
+     */
+    protected void makeInferenceCall(
+        IngestDocument ingestDocument,
+        Map<String, Object> processMap,
+        List<String> inferenceList,
+        BiConsumer<IngestDocument, Exception> handler
+    ) {
+        mlCommonsClientAccessor.inferenceSentences(
+            TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
+            ActionListener.wrap(vectors -> {
+                setVectorFieldsToDocument(ingestDocument, processMap, vectors);
+                handler.accept(ingestDocument, null);
+            }, e -> { handler.accept(null, e); })
+        );
     }
 
     @Override

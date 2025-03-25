@@ -1,0 +1,25 @@
+{
+  "title": "This is a good day",
+  "text": "%s",
+  "description": "daily logging",
+  "favor_list": [
+    "test",
+    "hello",
+    "mock"
+  ],
+  "favorites": {
+    "game": "overwatch",
+    "movie": null
+  },
+  "nested_passages": [
+    {
+      "text_not_for_embedding": "test"
+    },
+    {
+      "text": "bye"
+    },
+    {
+      "text": "world"
+    }
+  ]
+}

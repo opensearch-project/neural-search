@@ -9,6 +9,8 @@ import org.opensearch.core.action.ActionListener;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.search.SearchHit;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -117,7 +119,7 @@ public class ProcessorUtils {
             if (key.equals(lastKey)) {
                 break;
             }
-            currentMap = (Map<String, Object>) currentMap.get(key);
+            currentMap = unsafeCastToObjectMap(currentMap.get(key));
         }
 
         // Remove the last key this is guaranteed
@@ -132,8 +134,7 @@ public class ProcessorUtils {
             parentMap = currentParentMapWithChild.v1();
             key = currentParentMapWithChild.v2();
 
-            @SuppressWarnings("unchecked")
-            Map<String, Object> innerMap = (Map<String, Object>) parentMap.get(key);
+            Map<String, Object> innerMap = unsafeCastToObjectMap(parentMap.get(key));
 
             if (innerMap != null && innerMap.isEmpty()) {
                 parentMap.remove(key);
@@ -142,35 +143,120 @@ public class ProcessorUtils {
     }
 
     /**
-     * Returns the mapping associated with a path to a value, otherwise
+     * Returns the list of all mappings associated with a path to a value, otherwise
      * returns an empty optional when it encounters a dead end.
-     * <hr>
      * When the targetField has the form (key[.key]) it will iterate through
-     * the map to see if a mapping exists.
+     * the map to see if a mapping exists. If result is an instance of List, a nested List is returned
      *
+     * single value e.g:
+     * given
+     * map:
+     *    level1: {level2: value}
+     * targetField:
+     *    level1.level2
+     * returns value
+     *
+     * multiple value e.g:
+     * given
+     * map:
+     *    level1: [{level2: value1}, {level2:value2}]
+     * targetField:
+     *    level1.level2
+     * returns [value1, value2]
+     *
+     * list value e.g:
+     * given
+     * map:
+     *    level1: level2: [value1, value2]
+     * targetField:
+     *    level1.level2
+     * returns [[value1, value2]]
      * @param sourceAsMap The Source map (a map of maps) to iterate through
      * @param targetField The path to take to get the desired mapping
      * @return A possible result within an optional
      */
     public static Optional<Object> getValueFromSource(final Map<String, Object> sourceAsMap, final String targetField) {
         String[] keys = targetField.split("\\.");
-        Optional<Object> currentValue = Optional.of(sourceAsMap);
+        Object current = sourceAsMap;
 
-        for (String key : keys) {
-            currentValue = currentValue.flatMap(value -> {
-                if (!(value instanceof Map<?, ?>)) {
+        for (int i = 0; i < keys.length; i++) {
+            String key = keys[i];
+            if (current instanceof Map) {
+                current = unsafeCastToObjectMap(current).get(key);
+                // If it's the last key and the value is a List<String>, wrap it inside another list
+                if (i == keys.length - 1 && current instanceof List) {
+                    if (unsafeCastToObjectList(current).isEmpty() == false
+                        && unsafeCastToObjectList(current).getFirst() instanceof String) {
+                        return Optional.of(List.of(current));
+                    }
+                }
+            } else if (current instanceof List) {
+                List<Object> results = parseList(unsafeCastToObjectList(current), key);
+                if (results.isEmpty()) {
                     return Optional.empty();
                 }
-                Map<String, Object> currentMap = (Map<String, Object>) value;
-                return Optional.ofNullable(currentMap.get(key));
-            });
-
-            if (currentValue.isEmpty()) {
+                current = results;
+            } else {
                 return Optional.empty();
             }
         }
+        return Optional.ofNullable(current);
+    }
 
-        return currentValue;
+    // iterate each Map Object in given list and return a list of map values with given key
+    private static List<Object> parseList(List<Object> list, String key) {
+        List<Object> result = new ArrayList<>();
+        for (Object item : list) {
+            if (item instanceof Map) {
+                Object value = unsafeCastToObjectMap(item).get(key);
+                if (value != null) {
+                    result.add(value);
+                }
+            }
+        }
+        return result;
+    }
+
+    public static void setValueToSource(Map<String, Object> sourceAsMap, String targetKey, Object targetValue) {
+        setValueToSource(sourceAsMap, targetKey, targetValue, -1);
+    }
+
+    /**
+     * Inserts or updates a value in a nested map structure, with optional support for list traversal.
+     * This method navigates through the provided sourceAsMap using the dot-delimited key path
+     * specified by targetKey. Intermediate maps are created as needed. When a List is encountered,
+     * the provided index is used to select the element from the list. The selected element must be a map to
+     * continue the traversal.
+     * Once the final map in the path is reached, the method sets the value for the last key.
+     *
+     * @param sourceAsMap The Source map (a map of maps) to iterate through
+     * @param targetKey   he path to key to insert the desired targetValue
+     * @param targetValue the value to set at the specified key path
+     * @param index       the index to use when a list is encountered during traversal; if list processing is not needed,
+     *                    -1 is passed in
+     */
+
+    public static void setValueToSource(Map<String, Object> sourceAsMap, String targetKey, Object targetValue, int index) {
+        if (Objects.isNull(sourceAsMap) || Objects.isNull(targetKey)) return;
+
+        String[] keys = targetKey.split("\\.");
+        Map<String, Object> current = sourceAsMap;
+
+        for (int i = 0; i < keys.length - 1; i++) {
+            Object next = current.computeIfAbsent(keys[i], k -> new HashMap<>());
+            if (next instanceof ArrayList<?> list) {
+                if (index < 0 || index >= list.size()) return;
+                if (list.get(index) instanceof Map) {
+                    current = unsafeCastToObjectMap(list.get(index));
+                }
+            } else if (next instanceof Map) {
+                current = unsafeCastToObjectMap(next);
+            } else {
+                throw new IllegalStateException("Unexpected data structure at " + keys[i]);
+            }
+        }
+        String lastKey = keys[keys.length - 1];
+        current.put(lastKey, targetValue);
     }
 
     /**
@@ -227,4 +313,19 @@ public class ProcessorUtils {
             .getTopDocs()
             .size();
     }
+
+    // This method should be used only when you are certain the object is a `Map<String, Object>`.
+    // It is recommended to use this method as a last resort.
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> unsafeCastToObjectMap(Object obj) {
+        return (Map<String, Object>) obj;
+    }
+
+    // This method should be used only when you are certain the object is a `List<Object>`.
+    // It is recommended to use this method as a last resort.
+    @SuppressWarnings("unchecked")
+    public static List<Object> unsafeCastToObjectList(Object obj) {
+        return (List<Object>) obj;
+    }
+
 }
