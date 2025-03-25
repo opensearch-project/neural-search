@@ -102,6 +102,8 @@ public class CompoundTopDocs {
         // skipping first two elements, it's a start-stop element and delimiter for first series
         List<TopDocs> topDocsList = new ArrayList<>();
         List<ScoreDoc> scoreDocList = new ArrayList<>();
+        List<Object> collapseValueList = new ArrayList<>();
+        int collapseIndex = 2;
         for (int index = 2; index < scoreDocs.length; index++) {
             // getting first element of score's series
             ScoreDoc scoreDoc = scoreDocs[index];
@@ -116,8 +118,9 @@ public class CompoundTopDocs {
                         totalHits,
                         subQueryScores,
                         collapseTopFieldDocs.fields,
-                        collapseTopFieldDocs.collapseValues
+                        collapseValueList.toArray(new Object[0])
                     );
+                    collapseValueList.clear();
                 } else if (isSortEnabled) {
                     subQueryTopDocs = new TopFieldDocs(totalHits, subQueryScores, ((TopFieldDocs) topDocs).fields);
                 } else {
@@ -127,7 +130,12 @@ public class CompoundTopDocs {
                 scoreDocList.clear();
             } else {
                 scoreDocList.add(scoreDoc);
+                if (isCollapseEnabled) {
+                    CollapseTopFieldDocs collapseTopFieldDocs = (CollapseTopFieldDocs) topDocs;
+                    collapseValueList.add(collapseTopFieldDocs.collapseValues[collapseIndex]);
+                }
             }
+            collapseIndex++;
         }
         initialize(topDocs.totalHits, topDocsList, isSortEnabled, searchShard);
     }

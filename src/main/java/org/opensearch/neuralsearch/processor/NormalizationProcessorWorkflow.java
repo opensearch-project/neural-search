@@ -195,6 +195,20 @@ public class NormalizationProcessorWorkflow {
         return queryTopDocs;
     }
 
+    private BytesRef getCollapseValue(ScoreDoc scoreDoc, CompoundTopDocs compoundTopDocs) {
+        for (TopDocs topDocs : compoundTopDocs.getTopDocs()) {
+            CollapseTopFieldDocs collapseTopFieldDocs = (CollapseTopFieldDocs) topDocs;
+            ScoreDoc[] scoreDocs = collapseTopFieldDocs.scoreDocs;
+            for (int i = 0; i < scoreDocs.length; i++) {
+                ScoreDoc currentScoreDoc = scoreDocs[i];
+                if (scoreDoc.doc == currentScoreDoc.doc) {
+                    return (BytesRef) collapseTopFieldDocs.collapseValues[i];
+                }
+            }
+        }
+        return null;
+    }
+
     private void updateOriginalQueryResults(final CombineScoresDto combineScoresDTO, final boolean isFetchPhaseExecuted) {
         final List<QuerySearchResult> querySearchResults = combineScoresDTO.getQuerySearchResults();
         final List<CompoundTopDocs> queryTopDocs = getCompoundTopDocs(combineScoresDTO, querySearchResults);
@@ -208,25 +222,22 @@ public class NormalizationProcessorWorkflow {
         String collapseField = "";
         if (isCollapseEnabled) {
             for (int i = 0; i < querySearchResults.size(); i++) {
-                QuerySearchResult querySearchResult = querySearchResults.get(i);
                 CompoundTopDocs updatedTopDocs = queryTopDocs.get(i);
                 List<ScoreDoc> updatedScoreDocs = updatedTopDocs.getScoreDocs();
                 collapseField = ((CollapseTopFieldDocs) updatedTopDocs.getTopDocs().getFirst()).field;
-                Object[] objectCollapseValues = ((CollapseTopFieldDocs) updatedTopDocs.getTopDocs().getFirst()).collapseValues;
-                BytesRef[] collapseValues = new BytesRef[objectCollapseValues.length];
-                for (int collapseIndex = 0; collapseIndex < collapseValues.length; collapseIndex++) {
-                    collapseValues[collapseIndex] = (BytesRef) objectCollapseValues[collapseIndex];
-                }
                 for (int j = 0; j < updatedScoreDocs.size(); j++) {
                     ScoreDoc scoreDoc = updatedScoreDocs.get(j);
-                    BytesRef collapseValue = collapseValues[j];
+                    BytesRef collapseValue = getCollapseValue(scoreDoc, updatedTopDocs);
+                    if (collapseValue == null) {
+                        continue;
+                    }
                     ScoreDoc currentBestScoreDoc = collapseValueToTopScoreDocMap.get(collapseValue);
                     if (currentBestScoreDoc == null) {
-                        collapseValueToTopScoreDocMap.put(collapseValue, scoreDoc);
-                        collapseValueToShardMap.put(collapseValue, i);
+                        collapseValueToTopScoreDocMap.put(BytesRef.deepCopyOf(collapseValue), scoreDoc);
+                        collapseValueToShardMap.put(BytesRef.deepCopyOf(collapseValue), i);
                     } else if (scoreDoc.score > currentBestScoreDoc.score) {
-                        collapseValueToTopScoreDocMap.put(collapseValue, scoreDoc);
-                        collapseValueToShardMap.put(collapseValue, i);
+                        collapseValueToTopScoreDocMap.put(BytesRef.deepCopyOf(collapseValue), scoreDoc);
+                        collapseValueToShardMap.put(BytesRef.deepCopyOf(collapseValue), i);
                     }
                 }
             }
@@ -244,7 +255,7 @@ public class NormalizationProcessorWorkflow {
                         BytesRef collapseValue = entry.getKey();
                         if (scoreDoc.equals(entry.getValue()) && index == collapseValueToShardMap.get(collapseValue)) {
                             newScoreDocs.add(new FieldDoc(scoreDoc.doc, scoreDoc.score, new Object[] { scoreDoc.score }));
-                            collapseValues.add(collapseValue);
+                            collapseValues.add(BytesRef.deepCopyOf(collapseValue));
                         }
                     }
                 }

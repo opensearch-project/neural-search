@@ -202,10 +202,6 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         for (HybridSearchCollector collector : hybridSearchCollectors) {
             boolean isSortEnabled = docValueFormats != null;
             TopDocsAndMaxScore topDocsAndMaxScore = getTopDocsAndAndMaxScore(collector, isSortEnabled);
-            boolean collapseEnabled = collector instanceof HybridCollapsingTopDocsCollector;
-            if (collapseEnabled) {
-                docValueFormats = new DocValueFormat[0];
-            }
             results.add((QuerySearchResult result) -> reduceCollectorResults(result, topDocsAndMaxScore, new DocValueFormat[0]));
         }
         return results;
@@ -405,8 +401,8 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                     }
                     result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, fields));
                     result.addAll(fieldDocsPerQuery);
-                    collapseValues.addAll(Arrays.asList(collapseTopFieldDoc.collapseValues));
                     collapseValues.add(new BytesRef(createCollapseValueDelimiterElementForHybridSearchResults()));
+                    collapseValues.addAll(Arrays.asList(collapseTopFieldDoc.collapseValues));
 
                 }
                 result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, fields));
