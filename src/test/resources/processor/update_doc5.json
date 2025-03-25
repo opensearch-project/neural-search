@@ -1,0 +1,24 @@
+{
+  "title": "This is a good day",
+  "description": "daily logging",
+  "favor_list": [
+    "key",
+    "hey",
+    "click"
+  ],
+  "favorites": {
+    "game": "cossacks",
+    "movie": "matrix"
+  },
+  "nested_passages":[
+    {
+      "level_2":
+      {
+        "level_3_text": "joker"
+      }
+    },
+    {
+      "level_2.level_3_text": "superman"
+    }
+  ]
+}

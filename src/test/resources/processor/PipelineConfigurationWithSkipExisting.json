@@ -1,0 +1,23 @@
+{
+  "description": "text embedding pipeline for optimized inference call",
+  "processors": [
+    {
+      "text_embedding": {
+        "model_id": "%s",
+        "batch_size": "%d",
+        "field_map": {
+          "title": "title_knn",
+          "favor_list": "favor_list_knn",
+          "favorites": {
+            "game": "game_knn",
+            "movie": "movie_knn"
+          },
+          "nested_passages": {
+            "text": "embedding"
+          }
+        },
+        "skip_existing": true
+      }
+    }
+  ]
+}
