@@ -935,7 +935,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 indexName,
                 buildIndexConfiguration(
                     Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)),
-                    List.of(TEST_NESTED_TYPE_FIELD_NAME_1),
+                    List.of(List.of(TEST_NESTED_TYPE_FIELD_NAME_1)),
                     1
                 ),
                 ""
@@ -971,7 +971,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 indexName,
                 buildIndexConfiguration(
                     Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)),
-                    List.of(TEST_NESTED_TYPE_FIELD_NAME_1),
+                    List.of(List.of(TEST_NESTED_TYPE_FIELD_NAME_1)),
                     SINGLE_SHARD
                 ),
                 ""
@@ -986,7 +986,10 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 List.of(),
                 List.of(),
                 List.of(TEST_NESTED_TYPE_FIELD_NAME_1),
-                List.of(Map.of(NESTED_FIELD_1, NESTED_FIELD_1_VALUE, NESTED_FIELD_2, NESTED_FIELD_2_VALUE))
+                Map.of(
+                    TEST_NESTED_TYPE_FIELD_NAME_1,
+                    List.of(Map.of(NESTED_FIELD_1, NESTED_FIELD_1_VALUE, NESTED_FIELD_2, NESTED_FIELD_2_VALUE))
+                )
             );
         }
 
@@ -1186,7 +1189,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         List<String> keywordFields = keywordField == null ? List.of() : List.of(keywordField);
         List<String> keywordValues = keywordFieldValue == null ? List.of() : List.of(keywordFieldValue);
 
-        addKnnDoc(
+        indexTheDocument(
             indexName,
             docId,
             List.of(),
@@ -1194,13 +1197,16 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             List.of(),
             List.of(),
             List.of(),
-            List.of(),
+            Map.of(),
             intFields,
             intValues,
             keywordFields,
             keywordValues,
             List.of(),
-            List.of()
+            List.of(),
+            List.of(),
+            List.of(),
+            null
         );
     }
 }

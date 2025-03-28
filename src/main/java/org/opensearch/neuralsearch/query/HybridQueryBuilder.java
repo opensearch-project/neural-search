@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -24,6 +25,7 @@ import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.query.AbstractQueryBuilder;
+import org.opensearch.index.query.InnerHitContextBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
@@ -357,6 +359,16 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         QueryBuilderVisitor subVisitor = visitor.getChildVisitor(Occur.MUST);
         for (QueryBuilder subQueryBuilder : queries) {
             subQueryBuilder.visit(subVisitor);
+        }
+    }
+
+    /**
+     * method that redirects inner_hits builder to the corresponding subquery builder.
+     */
+    @Override
+    protected void extractInnerHitBuilders(Map<String, InnerHitContextBuilder> innerHits) {
+        for (QueryBuilder queryBuilder : queries) {
+            InnerHitContextBuilder.extractInnerHits(queryBuilder, innerHits);
         }
     }
 }
