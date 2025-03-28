@@ -20,6 +20,7 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.transport.client.OpenSearchClient;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -28,8 +29,10 @@ public class SparseEncodingEmbeddingProcessorFactoryTests extends OpenSearchTest
     private static final String PROCESSOR_TAG = "mockTag";
     private static final String DESCRIPTION = "mockDescription";
     private static final String MODEL_ID = "testModelId";
+    private static final String SKIP_EXISTING = "skip_existing";
     private static final int BATCH_SIZE = 1;
 
+    private OpenSearchClient openSearchClient;
     private MLCommonsClientAccessor clientAccessor;
     private Environment environment;
     private ClusterService clusterService;
@@ -37,10 +40,11 @@ public class SparseEncodingEmbeddingProcessorFactoryTests extends OpenSearchTest
 
     @Before
     public void setup() {
+        openSearchClient = mock(OpenSearchClient.class);
         clientAccessor = mock(MLCommonsClientAccessor.class);
         environment = mock(Environment.class);
         clusterService = mock(ClusterService.class);
-        sparseEncodingProcessorFactory = new SparseEncodingProcessorFactory(clientAccessor, environment, clusterService);
+        sparseEncodingProcessorFactory = new SparseEncodingProcessorFactory(openSearchClient, clientAccessor, environment, clusterService);
     }
 
     @SneakyThrows
@@ -178,5 +182,26 @@ public class SparseEncodingEmbeddingProcessorFactoryTests extends OpenSearchTest
             () -> sparseEncodingProcessorFactory.create(Map.of(), PROCESSOR_TAG, DESCRIPTION, config)
         );
         assertEquals("prune_ratio field is not supported when prune_type is not provided", exception.getMessage());
+    }
+
+    @SneakyThrows
+    public void testCreateProcessor_whenSkipExistingPassed_thenSuccessful() {
+        Map<String, Object> config = new HashMap<>();
+        config.put(MODEL_ID_FIELD, MODEL_ID);
+        config.put(FIELD_MAP_FIELD, Map.of("a", "b"));
+        config.put(SKIP_EXISTING, true);
+        SparseEncodingProcessor processor = (SparseEncodingProcessor) sparseEncodingProcessorFactory.create(
+            Map.of(),
+            PROCESSOR_TAG,
+            DESCRIPTION,
+            config
+        );
+
+        assertNotNull(processor);
+        assertEquals(TYPE, processor.getType());
+        assertEquals(PROCESSOR_TAG, processor.getTag());
+        assertEquals(DESCRIPTION, processor.getDescription());
+        assertEquals(PruneType.NONE, processor.getPruneType());
+        assertEquals(0f, processor.getPruneRatio(), 1e-6);
     }
 }

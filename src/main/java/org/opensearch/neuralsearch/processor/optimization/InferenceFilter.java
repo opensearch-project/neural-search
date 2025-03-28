@@ -113,12 +113,12 @@ public abstract class InferenceFilter {
      * @param processMap The current map being processed.
      * @return A filtered map containing only elements that require new embeddings.
      */
-    public Map<String, Object> filter(
+    public Map<String, Object> filterAndCopyExistingEmbeddings(
         Map<String, Object> existingSourceAndMetadataMap,
         Map<String, Object> sourceAndMetadataMap,
         Map<String, Object> processMap
     ) {
-        return filter(existingSourceAndMetadataMap, sourceAndMetadataMap, processMap, "");
+        return filterAndCopyExistingEmbeddings(existingSourceAndMetadataMap, sourceAndMetadataMap, processMap, "");
     }
 
     /**
@@ -135,7 +135,7 @@ public abstract class InferenceFilter {
      * traversedPath would be dot-separated string of level1.level2.level3
      * @return A filtered map containing only elements that require new embeddings
      */
-    private Map<String, Object> filter(
+    private Map<String, Object> filterAndCopyExistingEmbeddings(
         Map<String, Object> existingSourceAndMetadataMap,
         Map<String, Object> sourceAndMetadataMap,
         Map<String, Object> processMap,
@@ -148,7 +148,7 @@ public abstract class InferenceFilter {
             Object value = entry.getValue();
             String currentPath = traversedPath.isEmpty() ? key : traversedPath + "." + key;
             if (value instanceof Map) {
-                Map<String, Object> filteredInnerMap = filter(
+                Map<String, Object> filteredInnerMap = filterAndCopyExistingEmbeddings(
                     existingSourceAndMetadataMap,
                     sourceAndMetadataMap,
                     ProcessorUtils.unsafeCastToObjectMap(value),
