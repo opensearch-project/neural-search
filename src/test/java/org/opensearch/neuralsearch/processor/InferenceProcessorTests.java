@@ -200,7 +200,7 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
         ) {}
 
         @Override
-        void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException) {
+        protected void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException) {
             // use to verify if doBatchExecute is called from InferenceProcessor
             clientAccessor.inferenceSentences(TEXT_INFERENCE_REQUEST, ActionListener.wrap(results -> {}, ex -> {}));
             allInferenceInputs.add(inferenceList);

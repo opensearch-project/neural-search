@@ -59,6 +59,7 @@ import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
+import org.opensearch.neuralsearch.highlight.SemanticHighlighter;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
@@ -82,6 +83,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_MET
 import static org.opensearch.neuralsearch.util.TestUtils.ML_PLUGIN_SYSTEM_INDEX_PREFIX;
 import static org.opensearch.neuralsearch.util.TestUtils.OPENDISTRO_SECURITY;
 import static org.opensearch.neuralsearch.util.TestUtils.OPENSEARCH_SYSTEM_INDEX_PREFIX;
+import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_LOWER_BOUNDS;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_RETRY;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TIME_OUT_INTERVAL;
@@ -102,10 +104,16 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         "processor/PipelineConfiguration.json",
         ProcessorType.SPARSE_ENCODING,
         "processor/SparseEncodingPipelineConfiguration.json",
+        ProcessorType.SPARSE_ENCODING_WITH_SKIP_EXISTING,
+        "processor/SparseEncodingPipelineConfigurationWithSkipExisting.json",
         ProcessorType.TEXT_IMAGE_EMBEDDING,
         "processor/PipelineForTextImageEmbeddingProcessorConfiguration.json",
         ProcessorType.TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING,
         "processor/PipelineConfigurationWithNestedFieldsMapping.json",
+        ProcessorType.TEXT_EMBEDDING_WITH_SKIP_EXISTING,
+        "processor/PipelineConfigurationWithSkipExisting.json",
+        ProcessorType.TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING_WITH_SKIP_EXISTING,
+        "processor/PipelineConfigurationWithNestedFieldsMappingWithSkipExisting.json",
         ProcessorType.SPARSE_ENCODING_PRUNE,
         "processor/SparseEncodingPipelineConfigurationWithPrune.json"
     );
@@ -276,6 +284,16 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     protected String prepareSparseEncodingModel() {
         String requestBody = Files.readString(
             Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
+        );
+        String modelId = registerModelGroupAndUploadModel(requestBody);
+        loadModel(modelId);
+        return modelId;
+    }
+
+    @SneakyThrows
+    protected String prepareSentenceHighlightingModel() {
+        String requestBody = Files.readString(
+            Path.of(Objects.requireNonNull(classLoader.getResource("processor/UploadSentenceHighlightingModelRequestBody.json")).toURI())
         );
         String modelId = registerModelGroupAndUploadModel(requestBody);
         loadModel(modelId);
@@ -594,6 +612,63 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         List<Object> searchAfter,
         int from
     ) {
+        return search(
+            index,
+            queryBuilder,
+            rescorer,
+            resultSize,
+            requestParams,
+            aggs,
+            postFilterBuilder,
+            sortBuilders,
+            trackScores,
+            searchAfter,
+            from,
+            null,
+            null,
+            null,
+            null
+        );
+    }
+
+    /**
+     * Execute a search request with all possible parameters including highlighting and source filtering
+     *
+     * @param index Index to search against
+     * @param queryBuilder queryBuilder to produce source of query
+     * @param rescorer used for rescorer query builder
+     * @param resultSize number of results to return in the search
+     * @param requestParams additional request params for search
+     * @param aggs aggregations to include in the search
+     * @param postFilterBuilder post filter query builder
+     * @param sortBuilders sort builders for the search
+     * @param trackScores whether to track scores
+     * @param searchAfter search after parameters
+     * @param from from parameter for pagination
+     * @param highlightFields map of field names to highlight configurations
+     * @param highlightOptions global highlight options
+     * @param sourceIncludes list of fields to include in _source
+     * @param sourceExcludes list of fields to exclude from _source
+     * @return Search results represented as a map
+     */
+    @SneakyThrows
+    protected Map<String, Object> search(
+        String index,
+        QueryBuilder queryBuilder,
+        QueryBuilder rescorer,
+        int resultSize,
+        Map<String, String> requestParams,
+        List<Object> aggs,
+        QueryBuilder postFilterBuilder,
+        List<SortBuilder<?>> sortBuilders,
+        boolean trackScores,
+        List<Object> searchAfter,
+        int from,
+        Map<String, Map<String, Object>> highlightFields,
+        Map<String, Object> highlightOptions,
+        List<String> sourceIncludes,
+        List<String> sourceExcludes
+    ) {
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
         builder.field("from", from);
         if (queryBuilder != null) {
@@ -636,6 +711,32 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             builder.endArray();
         }
 
+        // Add highlight configuration if provided
+        if ((highlightFields != null && !highlightFields.isEmpty()) || (highlightOptions != null && !highlightOptions.isEmpty())) {
+            builder.startObject("highlight");
+
+            // Add highlight fields
+            if (highlightFields != null && !highlightFields.isEmpty()) {
+                builder.startObject("fields");
+                for (Map.Entry<String, Map<String, Object>> fieldEntry : highlightFields.entrySet()) {
+                    builder.startObject(fieldEntry.getKey());
+                    for (Map.Entry<String, Object> configEntry : fieldEntry.getValue().entrySet()) {
+                        builder.field(configEntry.getKey(), configEntry.getValue());
+                    }
+                    builder.endObject();
+                }
+                builder.endObject();
+            }
+
+            // Add global highlight options
+            if (highlightOptions != null && !highlightOptions.isEmpty()) {
+                builder.field("options");
+                builder.map(highlightOptions);
+            }
+
+            builder.endObject();
+        }
+
         builder.endObject();
 
         Request request = new Request("GET", "/" + index + "/_search?timeout=1000s");
@@ -650,6 +751,90 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         String responseBody = EntityUtils.toString(response.getEntity());
         logger.info(responseBody);
         return XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
+    }
+
+    /**
+     * Execute a search request with neural highlighting and source filtering
+     *
+     * @param index Index to search against
+     * @param queryBuilder queryBuilder to produce source of query
+     * @param resultSize number of results to return in the search
+     * @param fieldToHighlight field name to apply neural highlighting to
+     * @param modelId model ID to use for neural highlighting
+     * @param sourceExcludes list of fields to exclude from _source
+     * @return Search results represented as a map
+     */
+    @SneakyThrows
+    protected Map<String, Object> searchWithSemanticHighlighterAndSourceFiltering(
+        final String index,
+        final QueryBuilder queryBuilder,
+        final int resultSize,
+        final String fieldToHighlight,
+        final String modelId,
+        final List<String> sourceExcludes
+    ) {
+        Map<String, Map<String, Object>> highlightFields = Map.of(fieldToHighlight, Map.of("type", "neural"));
+
+        Map<String, Object> highlightOptions = Map.of("model_id", modelId);
+
+        return search(
+            index,
+            queryBuilder,
+            null,
+            resultSize,
+            Map.of(),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            highlightFields,
+            highlightOptions,
+            null,
+            sourceExcludes
+        );
+    }
+
+    /**
+     * Execute a search request with neural highlighting
+     *
+     * @param index Index to search against
+     * @param queryBuilder queryBuilder to produce source of query
+     * @param resultSize number of results to return in the search
+     * @param fieldToHighlight field name to apply neural highlighting to
+     * @param modelId model ID to use for neural highlighting
+     * @return Search results represented as a map
+     */
+    @SneakyThrows
+    protected Map<String, Object> searchWithSemanticHighlighter(
+        final String index,
+        final QueryBuilder queryBuilder,
+        final int resultSize,
+        final String fieldToHighlight,
+        final String modelId
+    ) {
+        Map<String, Map<String, Object>> highlightFields = Map.of(fieldToHighlight, Map.of("type", SemanticHighlighter.NAME));
+
+        Map<String, Object> highlightOptions = Map.of("model_id", modelId);
+
+        return search(
+            index,
+            queryBuilder,
+            null,
+            resultSize,
+            Map.of(),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            highlightFields,
+            highlightOptions,
+            null,
+            null
+        );
     }
 
     /**
@@ -1299,13 +1484,14 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         String combinationMethod,
         final Map<String, String> combinationParams
     ) {
-        createSearchPipeline(pipelineId, normalizationMethod, combinationMethod, combinationParams, false);
+        createSearchPipeline(pipelineId, normalizationMethod, Map.of(), combinationMethod, combinationParams, false);
     }
 
     @SneakyThrows
     protected void createSearchPipeline(
         final String pipelineId,
         final String normalizationMethod,
+        final Map<String, Object> normalizationParams,
         final String combinationMethod,
         final Map<String, String> combinationParams,
         boolean addExplainResponseProcessor
@@ -1317,10 +1503,32 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             .append(NormalizationProcessor.TYPE)
             .append("\": {")
             .append("\"normalization\": {")
-            .append("\"technique\": \"%s\"")
-            .append("},")
-            .append("\"combination\": {")
             .append("\"technique\": \"%s\"");
+        if (Objects.nonNull(normalizationParams) && !normalizationParams.isEmpty()) {
+            stringBuilderForContentBody.append(", \"parameters\": {");
+            if (normalizationParams.containsKey(PARAM_NAME_LOWER_BOUNDS)) {
+                stringBuilderForContentBody.append("\"lower_bounds\": [");
+                List<Map> lowerBounds = (List) normalizationParams.get(PARAM_NAME_LOWER_BOUNDS);
+                for (int i = 0; i < lowerBounds.size(); i++) {
+                    Map<String, String> lowerBound = lowerBounds.get(i);
+                    stringBuilderForContentBody.append("{ ")
+                        .append("\"mode\"")
+                        .append(": \"")
+                        .append(lowerBound.get("mode"))
+                        .append("\",")
+                        .append("\"min_score\"")
+                        .append(": ")
+                        .append(lowerBound.get("min_score"))
+                        .append(" }");
+                    if (i < lowerBounds.size() - 1) {
+                        stringBuilderForContentBody.append(", ");
+                    }
+                }
+                stringBuilderForContentBody.append("]");
+            }
+            stringBuilderForContentBody.append(" }");
+        }
+        stringBuilderForContentBody.append("},").append("\"combination\": {").append("\"technique\": \"%s\"");
         if (Objects.nonNull(combinationParams) && !combinationParams.isEmpty()) {
             stringBuilderForContentBody.append(", \"parameters\": {");
             if (combinationParams.containsKey(PARAM_NAME_WEIGHTS)) {
@@ -1463,7 +1671,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @param id nullable optional id
      * @throws Exception
      */
-    protected String ingestDocument(String indexName, String ingestDocument, String id) throws Exception {
+    protected String ingestDocument(String indexName, String ingestDocument, String id, boolean isUpdate) throws Exception {
         String endpoint;
         if (StringUtils.isEmpty(id)) {
             endpoint = indexName + "/_doc?refresh";
@@ -1485,7 +1693,11 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         );
 
         String result = (String) map.get("result");
-        assertEquals("created", result);
+        if (isUpdate) {
+            assertEquals("updated", result);
+        } else {
+            assertEquals("created", result);
+        }
         return result;
     }
 
@@ -1496,7 +1708,22 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @throws Exception
      */
     protected String ingestDocument(String indexName, String ingestDocument) throws Exception {
-        return ingestDocument(indexName, ingestDocument, null);
+        return ingestDocument(indexName, ingestDocument, null, false);
+    }
+
+    protected String ingestDocument(String indexName, String ingestDocument, String id) throws Exception {
+        return ingestDocument(indexName, ingestDocument, id, false);
+    }
+
+    /**
+     * Update a document to index using auto generated id
+     * @param indexName name of the index
+     * @param ingestDocument
+     * @param id
+     * @throws Exception
+     */
+    protected String updateDocument(String indexName, String ingestDocument, String id) throws Exception {
+        return ingestDocument(indexName, ingestDocument, id, true);
     }
 
     /**
@@ -1816,8 +2043,11 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     protected enum ProcessorType {
         TEXT_EMBEDDING,
         TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING,
+        TEXT_EMBEDDING_WITH_SKIP_EXISTING,
+        TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING_WITH_SKIP_EXISTING,
         TEXT_IMAGE_EMBEDDING,
         SPARSE_ENCODING,
+        SPARSE_ENCODING_WITH_SKIP_EXISTING,
         SPARSE_ENCODING_PRUNE
     }
 
@@ -1859,6 +2089,96 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             null,
             toHttpEntity(String.format(LOCALE, requestBody)),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+    }
+
+    /**
+     * Execute a search request with all possible parameters including highlighting
+     *
+     * @param index Index to search against
+     * @param queryBuilder queryBuilder to produce source of query
+     * @param rescorer used for rescorer query builder
+     * @param resultSize number of results to return in the search
+     * @param requestParams additional request params for search
+     * @param aggs aggregations to include in the search
+     * @param postFilterBuilder post filter query builder
+     * @param sortBuilders sort builders for the search
+     * @param trackScores whether to track scores
+     * @param searchAfter search after parameters
+     * @param from from parameter for pagination
+     * @param highlightFields map of field names to highlight configurations
+     * @param highlightOptions global highlight options
+     * @return Search results represented as a map
+     */
+    @SneakyThrows
+    protected Map<String, Object> search(
+        String index,
+        QueryBuilder queryBuilder,
+        QueryBuilder rescorer,
+        int resultSize,
+        Map<String, String> requestParams,
+        List<Object> aggs,
+        QueryBuilder postFilterBuilder,
+        List<SortBuilder<?>> sortBuilders,
+        boolean trackScores,
+        List<Object> searchAfter,
+        int from,
+        Map<String, Map<String, Object>> highlightFields,
+        Map<String, Object> highlightOptions
+    ) {
+        return search(
+            index,
+            queryBuilder,
+            rescorer,
+            resultSize,
+            requestParams,
+            aggs,
+            postFilterBuilder,
+            sortBuilders,
+            trackScores,
+            searchAfter,
+            from,
+            highlightFields,
+            highlightOptions,
+            null,
+            null
+        );
+    }
+
+    /**
+     * Execute a search request with highlighting
+     *
+     * @param index Index to search against
+     * @param queryBuilder queryBuilder to produce source of query
+     * @param resultSize number of results to return in the search
+     * @param highlightFields map of field names to highlight configurations
+     * @param highlightOptions global highlight options
+     * @return Search results represented as a map
+     */
+    @SneakyThrows
+    protected Map<String, Object> searchWithHighlight(
+        final String index,
+        final QueryBuilder queryBuilder,
+        final int resultSize,
+        final Map<String, Map<String, Object>> highlightFields,
+        final Map<String, Object> highlightOptions
+    ) {
+        return search(
+            index,
+            queryBuilder,
+            null,
+            resultSize,
+            Map.of(),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            highlightFields,
+            highlightOptions,
+            null,
+            null
         );
     }
 }

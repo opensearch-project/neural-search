@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
@@ -22,6 +23,7 @@ import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 
 import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.getDocIdAtQueryForNormalization;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getNumOfSubqueries;
 
 /**
  * Abstracts normalization of scores based on L2 method
@@ -31,6 +33,14 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
     @ToString.Include
     public static final String TECHNIQUE_NAME = "l2";
     private static final float MIN_SCORE = 0.0f;
+
+    public L2ScoreNormalizationTechnique() {
+        this(Map.of(), new ScoreNormalizationUtil());
+    }
+
+    public L2ScoreNormalizationTechnique(final Map<String, Object> params, final ScoreNormalizationUtil scoreNormalizationUtil) {
+        scoreNormalizationUtil.validateParameters(params, Set.of(), Map.of());
+    }
 
     /**
      * L2 normalization method.
@@ -58,6 +68,11 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
                 }
             }
         }
+    }
+
+    @Override
+    public String techniqueName() {
+        return TECHNIQUE_NAME;
     }
 
     @Override
@@ -99,13 +114,7 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
         // find any non-empty compound top docs, it's either empty if shard does not have any results for all of sub-queries,
         // or it has results for all the sub-queries. In edge case of shard having results only for one sub-query, there will be TopDocs for
         // rest of sub-queries with zero total hits
-        int numOfSubqueries = queryTopDocs.stream()
-            .filter(Objects::nonNull)
-            .filter(topDocs -> topDocs.getTopDocs().size() > 0)
-            .findAny()
-            .get()
-            .getTopDocs()
-            .size();
+        int numOfSubqueries = getNumOfSubqueries(queryTopDocs);
         float[] l2Norms = new float[numOfSubqueries];
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
             if (Objects.isNull(compoundQueryTopDocs)) {

@@ -134,6 +134,25 @@ public class ProcessorDocumentUtilsTests extends OpenSearchQueryTestCase {
         assertEquals(expected, result);
     }
 
+    public void testUnflatten_withListOfObject_thenSuccess() {
+        Map<String, Object> map1 = Map.of("b.c", "d", "f", "h");
+        Map<String, Object> map2 = Map.of("b.c", "e", "f", "i");
+        List<Map<String, Object>> list = Arrays.asList(map1, map2);
+        Map<String, Object> input = Map.of("a", list);
+
+        Map<String, Object> nestedB1 = Map.of("c", "d");
+        Map<String, Object> expectedMap1 = Map.of("b", nestedB1, "f", "h");
+        Map<String, Object> nestedB2 = Map.of("c", "e");
+        Map<String, Object> expectedMap2 = Map.of("b", nestedB2, "f", "i");
+
+        List<Map<String, Object>> expectedList = Arrays.asList(expectedMap1, expectedMap2);
+
+        Map<String, Object> expected = Map.of("a", expectedList);
+
+        Map<String, Object> result = ProcessorDocumentUtils.unflattenJson(input);
+        assertEquals(expected, result);
+    }
+
     public void testUnflatten_withMixedContent_thenSuccess() {
         Map<String, Object> input = Map.of("a.b", "c", "d", "e", "f.g.h", "i");
 
@@ -223,5 +242,52 @@ public class ProcessorDocumentUtilsTests extends OpenSearchQueryTestCase {
         );
         assert (illegalArgumentException.getMessage()
             .contains(String.format(Locale.ROOT, "Field name '%s' contains invalid dot usage", fieldName)));
+    }
+
+    public void testFlattenAndFlip_withMultipleLevelsSeparatedByDots_thenSuccess() {
+        /*
+         * parent
+         *    child_level1
+         *           child_leve1_text_field: child_level2.text_field_knn
+         * */
+        Map<String, Object> childLevel1 = Map.of("child_leve1_text_field", "child_level2.text_field_knn");
+        Map<String, Object> parentMap = Map.of("child_level1", childLevel1);
+        Map<String, Object> nestedMap = Map.of("parent", parentMap);
+
+        Map<String, String> expected = Map.of(
+            "parent.child_level1.child_level2.text_field_knn",
+            "parent.child_level1.child_leve1_text_field"
+        );
+
+        Map<String, String> actual = ProcessorDocumentUtils.flattenAndFlip(nestedMap);
+        assertEquals(expected, actual);
+    }
+
+    public void testFlattenAndFlip_withMultipleLevelsWithNestedMaps_thenSuccess() {
+        /*
+        * parent
+        *    child_level1
+        *       child_level2
+        *           child_level2_text: child_level2_knn
+        *       child_level3
+        *           child_level4:
+        *               child_level4_text:child_level4_knn
+        * */
+        Map<String, String> childLevel4 = Map.of("child_level4_text", "child_level4_knn");
+        Map<String, Object> childLevel3 = Map.of("child_level4", childLevel4);
+        Map<String, String> childLevel2 = Map.of("child_level2_text", "child_level2_knn");
+        Map<String, Object> childLevel1 = Map.of("child_level2", childLevel2, "child_level3", childLevel3);
+        Map<String, Object> parentMap = Map.of("child_level1", childLevel1);
+        Map<String, Object> nestedMap = Map.of("parent", parentMap);
+
+        Map<String, String> expected = Map.of(
+            "parent.child_level1.child_level2.child_level2_knn",
+            "parent.child_level1.child_level2.child_level2_text",
+            "parent.child_level1.child_level3.child_level4.child_level4_knn",
+            "parent.child_level1.child_level3.child_level4.child_level4_text"
+        );
+
+        Map<String, String> actual = ProcessorDocumentUtils.flattenAndFlip(nestedMap);
+        assertEquals(expected, actual);
     }
 }

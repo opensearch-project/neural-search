@@ -309,6 +309,24 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         RescoreParser.streamOutput(out, rescoreContext);
     }
 
+    /**
+     * Add a filter to Neural Query Builder
+     * @param filterToBeAdded filter to be added
+     * @return return itself with underlying filter combined with passed in filter
+     */
+    public QueryBuilder filter(QueryBuilder filterToBeAdded) {
+        if (validateFilterParams(filterToBeAdded) == false) {
+            return this;
+        }
+        if (filter == null) {
+            filter = filterToBeAdded;
+        } else {
+            filter = filter.filter(filterToBeAdded);
+        }
+        return this;
+
+    }
+
     @Override
     protected void doXContent(XContentBuilder xContentBuilder, Params params) throws IOException {
         xContentBuilder.startObject(NAME);
@@ -479,6 +497,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 .expandNested(expandNested())
                 .methodParameters(methodParameters())
                 .rescoreContext(rescoreContext())
+                .originalQueryText(queryText())
                 .build();
         }
 

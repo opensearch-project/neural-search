@@ -23,6 +23,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_MET
 import org.opensearch.knn.index.query.rescore.RescoreContext;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+import org.opensearch.index.query.QueryBuilder;
 
 public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
     private static final String PIPELINE_NAME = "nlp-hybrid-pipeline";
@@ -72,9 +73,15 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
                 modelId = getModelId(getIngestionPipeline(pipelineName), TEXT_EMBEDDING_PROCESSOR);
                 loadModel(modelId);
                 addDocuments(getIndexNameForTest(), false);
-                HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null, null);
+                HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null, null, null);
                 validateTestIndex(getIndexNameForTest(), searchPipelineName, hybridQueryBuilder);
-                hybridQueryBuilder = getQueryBuilder(modelId, Boolean.FALSE, Map.of("ef_search", 100), RescoreContext.getDefault());
+                hybridQueryBuilder = getQueryBuilder(
+                    modelId,
+                    Boolean.FALSE,
+                    Map.of("ef_search", 100),
+                    RescoreContext.getDefault(),
+                    new MatchQueryBuilder("_id", "5")
+                );
                 validateTestIndex(getIndexNameForTest(), searchPipelineName, hybridQueryBuilder);
             } finally {
                 wipeOfTestResources(getIndexNameForTest(), pipelineName, modelId, searchPipelineName);
@@ -120,7 +127,8 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         final String modelId,
         final Boolean expandNestedDocs,
         final Map<String, ?> methodParameters,
-        final RescoreContext rescoreContext
+        final RescoreContext rescoreContext,
+        final QueryBuilder filter
     ) {
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
             .fieldName("passage_embedding")
@@ -143,6 +151,10 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
         hybridQueryBuilder.add(matchQueryBuilder);
         hybridQueryBuilder.add(neuralQueryBuilder);
+
+        if (filter != null) {
+            hybridQueryBuilder.filter(filter);
+        }
 
         return hybridQueryBuilder;
     }

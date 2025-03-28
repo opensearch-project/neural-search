@@ -48,7 +48,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
     private final int rankConstant;
 
     public RRFNormalizationTechnique(final Map<String, Object> params, final ScoreNormalizationUtil scoreNormalizationUtil) {
-        scoreNormalizationUtil.validateParams(params, SUPPORTED_PARAMS);
+        scoreNormalizationUtil.validateParameters(params, SUPPORTED_PARAMS, Map.of());
         rankConstant = getRankConstant(params);
     }
 
@@ -74,6 +74,11 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
     @Override
     public String describe() {
         return String.format(Locale.ROOT, "%s, rank_constant [%s]", TECHNIQUE_NAME, rankConstant);
+    }
+
+    @Override
+    public String techniqueName() {
+        return TECHNIQUE_NAME;
     }
 
     @Override

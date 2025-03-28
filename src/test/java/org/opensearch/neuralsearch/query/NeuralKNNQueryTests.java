@@ -19,7 +19,8 @@ public class NeuralKNNQueryTests extends OpenSearchTestCase {
 
     public void testNeuralKNNQuery() throws IOException {
         Query mockKnnQuery = mock(Query.class);
-        NeuralKNNQuery query = new NeuralKNNQuery(mockKnnQuery);
+        String originalQueryText = "test query";
+        NeuralKNNQuery query = new NeuralKNNQuery(mockKnnQuery, originalQueryText);
 
         // Test toString
         when(mockKnnQuery.toString("field")).thenReturn("test_query");
@@ -31,8 +32,16 @@ public class NeuralKNNQueryTests extends OpenSearchTestCase {
         verify(mockKnnQuery).createWeight(any(), any(), anyFloat());
 
         // Test equals and hashCode
-        NeuralKNNQuery query2 = new NeuralKNNQuery(mockKnnQuery);
+        NeuralKNNQuery query2 = new NeuralKNNQuery(mockKnnQuery, originalQueryText);
         assertEquals("Same underlying query should be equal", query, query2);
         assertEquals("Same underlying query should have same hash code", query.hashCode(), query2.hashCode());
+
+        // Test originalQueryText getter
+        assertEquals("Original query text should match", originalQueryText, query.getOriginalQueryText());
+
+        // Test not equals with different originalQueryText
+        NeuralKNNQuery query3 = new NeuralKNNQuery(mockKnnQuery, "different query");
+        assertNotEquals("Different original query text should not be equal", query, query3);
+        assertNotEquals("Different original query text should have different hash code", query.hashCode(), query3.hashCode());
     }
 }

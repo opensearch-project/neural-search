@@ -30,6 +30,7 @@ import org.opensearch.ml.common.output.model.ModelTensor;
 import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
 import org.opensearch.neuralsearch.constants.TestCommonConstants;
+import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.transport.NodeNotConnectedException;
 
@@ -175,7 +176,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     }
 
     public void testInferenceSentencesWithMapResult_whenValidInput_thenSuccess() {
-        final Map<String, String> map = Map.of("key", "value");
+        final Map<String, Object> map = Map.of("key", "value");
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
@@ -380,6 +381,139 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         Mockito.verifyNoMoreInteractions(similarityResultListener);
     }
 
+    /**
+     * Tests successful sentence highlighting inference with valid input.
+     */
+    public void testInferenceSentenceHighlighting_whenValidInput_thenSuccess() {
+        final ActionListener<List<Map<String, Object>>> resultListener = mock(ActionListener.class);
+        final Map<String, Object> highlights = Map.of(
+            "highlights",
+            List.of(
+                Map.of(
+                    "start",
+                    0.0,
+                    "end",
+                    67.0,
+                    "text",
+                    "Global temperatures have risen significantly over the past century.",
+                    "position",
+                    0.0
+                ),
+                Map.of("start", 68.0, "end", 115.0, "text", "Polar ice caps are melting at an alarming rate.", "position", 1.0)
+            )
+        );
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createModelTensorOutput(highlights));
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentenceHighlighting(
+            SentenceHighlightingRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .question("What are the impacts of climate change?")
+                .context(
+                    "Global temperatures have risen significantly over the past century. Polar ice caps are melting at an alarming rate."
+                )
+                .build(),
+            resultListener
+        );
+
+        Mockito.verify(client)
+            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        Mockito.verify(resultListener).onResponse(List.of(highlights));
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    /**
+     * Tests sentence highlighting inference when no highlights are found.
+     */
+    public void testInferenceSentenceHighlighting_whenEmptyHighlights_thenReturnEmptyList() {
+        final ActionListener<List<Map<String, Object>>> resultListener = mock(ActionListener.class);
+        final Map<String, Object> emptyHighlights = Map.of("highlights", Collections.emptyList());
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createModelTensorOutput(emptyHighlights));
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentenceHighlighting(
+            SentenceHighlightingRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .question("test question")
+                .context("test context")
+                .build(),
+            resultListener
+        );
+
+        Mockito.verify(client)
+            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        Mockito.verify(resultListener).onResponse(List.of(emptyHighlights));
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    /**
+     * Tests sentence highlighting inference retry behavior on connection issues.
+     */
+    public void testInferenceSentenceHighlighting_whenNodeNotConnectedException_thenRetry() {
+        final ActionListener<List<Map<String, Object>>> resultListener = mock(ActionListener.class);
+        final NodeNotConnectedException nodeNotConnectedException = new NodeNotConnectedException(
+            mock(DiscoveryNode.class),
+            "Node not connected"
+        );
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onFailure(nodeNotConnectedException);
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentenceHighlighting(
+            SentenceHighlightingRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .question("test question")
+                .context("test context")
+                .build(),
+            resultListener
+        );
+
+        // Verify client.predict is called 4 times (1 initial + 3 retries)
+        Mockito.verify(client, times(4))
+            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        Mockito.verify(resultListener).onFailure(nodeNotConnectedException);
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    /**
+     * Tests sentence highlighting inference failure with non-retryable exceptions.
+     */
+    public void testInferenceSentenceHighlighting_whenNotRetryableException_thenFail() {
+        final ActionListener<List<Map<String, Object>>> resultListener = mock(ActionListener.class);
+        final IllegalStateException illegalStateException = new IllegalStateException("Illegal state");
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onFailure(illegalStateException);
+            return null;
+        }).when(client).predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentenceHighlighting(
+            SentenceHighlightingRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .question("test question")
+                .context("test context")
+                .build(),
+            resultListener
+        );
+
+        Mockito.verify(client, times(1))
+            .predict(Mockito.eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        Mockito.verify(resultListener).onFailure(illegalStateException);
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
     private ModelTensorOutput createModelTensorOutput(final Float[] output) {
         final List<ModelTensors> tensorsList = new ArrayList<>();
         final List<ModelTensor> mlModelTensorList = new ArrayList<>();
@@ -398,7 +532,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         return new ModelTensorOutput(tensorsList);
     }
 
-    private ModelTensorOutput createModelTensorOutput(final Map<String, String> map) {
+    private ModelTensorOutput createModelTensorOutput(final Map<String, Object> map) {
         final List<ModelTensors> tensorsList = new ArrayList<>();
         final List<ModelTensor> mlModelTensorList = new ArrayList<>();
         final ModelTensor tensor = new ModelTensor("response", null, null, null, null, null, map);

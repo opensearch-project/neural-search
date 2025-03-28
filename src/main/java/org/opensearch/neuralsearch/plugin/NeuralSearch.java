@@ -9,11 +9,16 @@ import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
+import org.opensearch.ml.client.MachineLearningNodeClient;
+import org.opensearch.neuralsearch.highlight.SemanticHighlighter;
+import org.opensearch.neuralsearch.highlight.SemanticHighlighterEngine;
+import org.opensearch.neuralsearch.highlight.extractor.QueryTextExtractorRegistry;
 import org.opensearch.transport.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.service.ClusterService;
@@ -25,7 +30,6 @@ import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
 import org.opensearch.ingest.Processor;
-import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.executors.HybridQueryExecutor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
@@ -65,6 +69,7 @@ import org.opensearch.plugins.SearchPipelinePlugin;
 import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.repositories.RepositoriesService;
 import org.opensearch.script.ScriptService;
+import org.opensearch.search.fetch.subphase.highlight.Highlighter;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
@@ -84,7 +89,12 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     private NormalizationProcessorWorkflow normalizationProcessorWorkflow;
     private final ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
     private final ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();
+    private final SemanticHighlighter semanticHighlighter;
     public static final String EXPLANATION_RESPONSE_KEY = "explanation_response";
+
+    public NeuralSearch() {
+        this.semanticHighlighter = new SemanticHighlighter();
+    }
 
     @Override
     public Collection<Object> createComponents(
@@ -103,6 +113,9 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         NeuralSearchClusterUtil.instance().initialize(clusterService);
         NeuralQueryBuilder.initialize(clientAccessor);
         NeuralSparseQueryBuilder.initialize(clientAccessor);
+        QueryTextExtractorRegistry queryTextExtractorRegistry = new QueryTextExtractorRegistry();
+        SemanticHighlighterEngine semanticHighlighterEngine = new SemanticHighlighterEngine(clientAccessor, queryTextExtractorRegistry);
+        semanticHighlighter.initialize(semanticHighlighterEngine);
         HybridQueryExecutor.initialize(threadPool);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
         return List.of(clientAccessor);
@@ -127,9 +140,19 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         clientAccessor = new MLCommonsClientAccessor(new MachineLearningNodeClient(parameters.client));
         return Map.of(
             TextEmbeddingProcessor.TYPE,
-            new TextEmbeddingProcessorFactory(clientAccessor, parameters.env, parameters.ingestService.getClusterService()),
+            new TextEmbeddingProcessorFactory(
+                parameters.client,
+                clientAccessor,
+                parameters.env,
+                parameters.ingestService.getClusterService()
+            ),
             SparseEncodingProcessor.TYPE,
-            new SparseEncodingProcessorFactory(clientAccessor, parameters.env, parameters.ingestService.getClusterService()),
+            new SparseEncodingProcessorFactory(
+                parameters.client,
+                clientAccessor,
+                parameters.env,
+                parameters.ingestService.getClusterService()
+            ),
             TextImageEmbeddingProcessor.TYPE,
             new TextImageEmbeddingProcessorFactory(clientAccessor, parameters.env, parameters.ingestService.getClusterService()),
             TextChunkingProcessor.TYPE,
@@ -203,5 +226,13 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
                 parser -> RerankSearchExtBuilder.parse(parser)
             )
         );
+    }
+
+    /**
+     * Register semantic highlighter
+     */
+    @Override
+    public Map<String, Highlighter> getHighlighters() {
+        return Collections.singletonMap(SemanticHighlighter.NAME, semanticHighlighter);
     }
 }

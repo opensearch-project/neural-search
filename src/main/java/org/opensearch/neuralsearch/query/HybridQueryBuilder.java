@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -53,13 +54,14 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     public static final String NAME = "hybrid";
 
     private static final ParseField QUERIES_FIELD = new ParseField("queries");
+    private static final ParseField FILTER_FIELD = new ParseField("filter");
     private static final ParseField PAGINATION_DEPTH_FIELD = new ParseField("pagination_depth");
 
     private final List<QueryBuilder> queries = new ArrayList<>();
 
     private Integer paginationDepth;
 
-    static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
+    public static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
     private static final int LOWER_BOUND_OF_PAGINATION_DEPTH = 0;
 
     public HybridQueryBuilder(StreamInput in) throws IOException {
@@ -93,6 +95,26 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             throw new IllegalArgumentException(String.format(Locale.ROOT, "inner %s query clause cannot be null", NAME));
         }
         queries.add(queryBuilder);
+        return this;
+    }
+
+    /**
+     * Function to support filter on HybridQueryBuilder filter.
+     * If the filter is null, then we do nothing and return.
+     * Otherwise, we push down the filter to queries list.
+     * @param filter the filter parameter
+     * @return HybridQueryBuilder itself
+     */
+    public QueryBuilder filter(QueryBuilder filter) {
+        if (validateFilterParams(filter) == false) {
+            return this;
+        }
+        ListIterator<QueryBuilder> iterator = queries.listIterator();
+        while (iterator.hasNext()) {
+            QueryBuilder query = iterator.next();
+            // set the query again because query.filter(filter) can return new query.
+            iterator.set(query.filter(filter));
+        }
         return this;
     }
 
@@ -157,6 +179,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      *                       }
      *                    }
      *               ]
+     *               "filter":
+     *                  "term": {
+     *                      "text": "keyword"
+     *                  }
      *          }
      *     }
      * }
@@ -170,6 +196,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
 
         Integer paginationDepth = null;
         final List<QueryBuilder> queries = new ArrayList<>();
+        QueryBuilder filter = null;
         String queryName = null;
 
         String currentFieldName = null;
@@ -180,6 +207,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             } else if (token == XContentParser.Token.START_OBJECT) {
                 if (QUERIES_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     queries.add(parseInnerQueryBuilder(parser));
+                } else if (FILTER_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    filter = parseInnerQueryBuilder(parser);
                 } else {
                     log.error(String.format(Locale.ROOT, "[%s] query does not support [%s]", NAME, currentFieldName));
                     throw new ParsingException(
@@ -242,7 +271,11 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             compoundQueryBuilder.paginationDepth(paginationDepth);
         }
         for (QueryBuilder query : queries) {
-            compoundQueryBuilder.add(query);
+            if (filter == null) {
+                compoundQueryBuilder.add(query);
+            } else {
+                compoundQueryBuilder.add(query.filter(filter));
+            }
         }
         return compoundQueryBuilder;
     }
