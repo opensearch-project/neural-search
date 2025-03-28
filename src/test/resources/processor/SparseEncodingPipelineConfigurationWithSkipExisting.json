@@ -1,0 +1,20 @@
+{
+  "description": "An example sparse Encoding pipeline",
+  "processors" : [
+    {
+      "sparse_encoding": {
+        "model_id": "%s",
+        "batch_size": "%d",
+        "field_map": {
+          "title": "title_sparse",
+          "favor_list": "favor_list_sparse",
+          "favorites": {
+            "game": "game_sparse",
+            "movie": "movie_sparse"
+          }
+        },
+        "skip_existing": true
+      }
+    }
+  ]
+}
