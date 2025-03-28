@@ -11,6 +11,7 @@ import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.FIELD
 import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.MODEL_ID_FIELD;
 import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.EMBEDDING_FIELD;
 import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.IMAGE_FIELD_NAME;
+import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.SKIP_EXISTING;
 import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.TEXT_FIELD_NAME;
 
 import java.util.HashMap;
@@ -23,12 +24,14 @@ import org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor;
 import org.opensearch.test.OpenSearchTestCase;
 
 import lombok.SneakyThrows;
+import org.opensearch.transport.client.OpenSearchClient;
 
 public class TextImageEmbeddingProcessorFactoryTests extends OpenSearchTestCase {
 
     @SneakyThrows
-    public void testNormalizationProcessor_whenAllParamsPassed_thenSuccessful() {
+    public void testTextImageEmbeddingProcessor_whenAllParamsPassed_thenSuccessful() {
         TextImageEmbeddingProcessorFactory textImageEmbeddingProcessorFactory = new TextImageEmbeddingProcessorFactory(
+            mock(OpenSearchClient.class),
             mock(MLCommonsClientAccessor.class),
             mock(Environment.class),
             mock(ClusterService.class)
@@ -42,6 +45,7 @@ public class TextImageEmbeddingProcessorFactoryTests extends OpenSearchTestCase 
         config.put(MODEL_ID_FIELD, "1234567678");
         config.put(EMBEDDING_FIELD, "embedding_field");
         config.put(FIELD_MAP_FIELD, Map.of(TEXT_FIELD_NAME, "my_text_field", IMAGE_FIELD_NAME, "my_image_field"));
+        config.put(SKIP_EXISTING, true);
         TextImageEmbeddingProcessor inferenceProcessor = (TextImageEmbeddingProcessor) textImageEmbeddingProcessorFactory.create(
             processorFactories,
             tag,
@@ -53,8 +57,9 @@ public class TextImageEmbeddingProcessorFactoryTests extends OpenSearchTestCase 
     }
 
     @SneakyThrows
-    public void testNormalizationProcessor_whenOnlyOneParamSet_thenSuccessful() {
+    public void testTextImageEmbeddingProcessor_whenOnlyOneParamSet_thenSuccessful() {
         TextImageEmbeddingProcessorFactory textImageEmbeddingProcessorFactory = new TextImageEmbeddingProcessorFactory(
+            mock(OpenSearchClient.class),
             mock(MLCommonsClientAccessor.class),
             mock(Environment.class),
             mock(ClusterService.class)
@@ -92,8 +97,9 @@ public class TextImageEmbeddingProcessorFactoryTests extends OpenSearchTestCase 
     }
 
     @SneakyThrows
-    public void testNormalizationProcessor_whenMixOfParamsOrEmptyParams_thenFail() {
+    public void testTextImageEmbeddingProcessor_whenMixOfParamsOrEmptyParams_thenFail() {
         TextImageEmbeddingProcessorFactory textImageEmbeddingProcessorFactory = new TextImageEmbeddingProcessorFactory(
+            mock(OpenSearchClient.class),
             mock(MLCommonsClientAccessor.class),
             mock(Environment.class),
             mock(ClusterService.class)

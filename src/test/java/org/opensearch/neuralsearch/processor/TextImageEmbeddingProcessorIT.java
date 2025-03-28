@@ -79,4 +79,24 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
         reindex(fromIndexName, toIndexName);
         assertEquals(1, getDocCount(toIndexName));
     }
+
+    public void testEmbeddingProcessor_whenSkipExisting_updateWithNoChange_thenSuccessful() throws Exception {
+        String modelId = uploadModel();
+        loadModel(modelId);
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING_WITH_SKIP_EXISTING);
+        createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
+        ingestDocument(INDEX_NAME, INGEST_DOCUMENT, "1");
+        updateDocument(INDEX_NAME, INGEST_DOCUMENT, "1");
+        assertEquals(1, getDocCount(INDEX_NAME));
+    }
+
+    public void testEmbeddingProcessor_whenSkipExisting_updateWithChange_thenSuccessful() throws Exception {
+        String modelId = uploadModel();
+        loadModel(modelId);
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING_WITH_SKIP_EXISTING);
+        createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
+        ingestDocument(INDEX_NAME, INGEST_DOCUMENT, "1");
+        updateDocument(INDEX_NAME, INGEST_DOCUMENT.replace("\"This is a good day\"", "\"This is a great day\""), "1");
+        assertEquals(1, getDocCount(INDEX_NAME));
+    }
 }
