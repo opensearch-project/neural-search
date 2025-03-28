@@ -83,4 +83,42 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
         reindex(fromIndexName, toIndexName);
         assertEquals(1, getDocCount(toIndexName));
     }
+
+    public void testSparseEncodingProcessorWithSkipExistingUpdateWithNoChange() throws Exception {
+        String modelId = null;
+        modelId = prepareSparseEncodingModel();
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING_WITH_SKIP_EXISTING);
+        createIndexWithPipeline(INDEX_NAME, "SparseEncodingIndexMappings.json", PIPELINE_NAME);
+        ingestDocument(INDEX_NAME, INGEST_DOCUMENT, "1");
+        updateDocument(INDEX_NAME, INGEST_DOCUMENT, "1");
+        assertEquals(1, getDocCount(INDEX_NAME));
+        assertEquals(2, getDocById(INDEX_NAME, "1").get("_version"));
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
+        neuralSparseQueryBuilder.fieldName("title_sparse");
+        neuralSparseQueryBuilder.queryTokensSupplier(() -> Map.of("good", 1.0f, "a", 2.0f));
+        Map<String, Object> searchResponse = search(INDEX_NAME, neuralSparseQueryBuilder, 2);
+        assertFalse(searchResponse.isEmpty());
+        double maxScore = (Double) ((Map) searchResponse.get("hits")).get("max_score");
+        assertEquals(4.4433594, maxScore, 1e-3);
+    }
+
+    public void testSparseEncodingProcessorWithSkipExistingUpdateWithChange() throws Exception {
+        String modelId = null;
+        modelId = prepareSparseEncodingModel();
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING_WITH_SKIP_EXISTING);
+        createIndexWithPipeline(INDEX_NAME, "SparseEncodingIndexMappings.json", PIPELINE_NAME);
+        ingestDocument(INDEX_NAME, INGEST_DOCUMENT.replace("\"This is a good day\"", "\"This is a bad day\""), "1");
+        updateDocument(INDEX_NAME, INGEST_DOCUMENT, "1");
+        assertEquals(1, getDocCount(INDEX_NAME));
+        assertEquals(2, getDocById(INDEX_NAME, "1").get("_version"));
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
+        neuralSparseQueryBuilder.fieldName("title_sparse");
+        neuralSparseQueryBuilder.queryTokensSupplier(() -> Map.of("good", 1.0f, "a", 2.0f));
+        Map<String, Object> searchResponse = search(INDEX_NAME, neuralSparseQueryBuilder, 2);
+        assertFalse(searchResponse.isEmpty());
+        double maxScore = (Double) ((Map) searchResponse.get("hits")).get("max_score");
+        assertEquals(4.4433594, maxScore, 1e-3);
+    }
 }

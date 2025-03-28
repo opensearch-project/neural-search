@@ -4,13 +4,16 @@
  */
 package org.opensearch.neuralsearch.processor.factory;
 
+import static org.opensearch.ingest.ConfigurationUtils.readBooleanProperty;
 import static org.opensearch.ingest.ConfigurationUtils.readMap;
 import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
 import static org.opensearch.ingest.ConfigurationUtils.readOptionalStringProperty;
 import static org.opensearch.ingest.ConfigurationUtils.readDoubleProperty;
+import static org.opensearch.neuralsearch.processor.SparseEncodingProcessor.DEFAULT_SKIP_EXISTING;
 import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.MODEL_ID_FIELD;
 import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.FIELD_MAP_FIELD;
 import static org.opensearch.neuralsearch.processor.SparseEncodingProcessor.TYPE;
+import static org.opensearch.neuralsearch.processor.SparseEncodingProcessor.SKIP_EXISTING;
 
 import java.util.Locale;
 import java.util.Map;
@@ -22,29 +25,39 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.processor.optimization.TextEmbeddingInferenceFilter;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.neuralsearch.util.prune.PruneType;
+import org.opensearch.transport.client.OpenSearchClient;
 
 /**
  * Factory for sparse encoding ingest processor for ingestion pipeline. Instantiates processor based on user provided input.
  */
 @Log4j2
 public class SparseEncodingProcessorFactory extends AbstractBatchingProcessor.Factory {
+    private final OpenSearchClient openSearchClient;
     private final MLCommonsClientAccessor clientAccessor;
     private final Environment environment;
     private final ClusterService clusterService;
 
-    public SparseEncodingProcessorFactory(MLCommonsClientAccessor clientAccessor, Environment environment, ClusterService clusterService) {
+    public SparseEncodingProcessorFactory(
+        OpenSearchClient openSearchClient,
+        MLCommonsClientAccessor clientAccessor,
+        Environment environment,
+        ClusterService clusterService
+    ) {
         super(TYPE);
         this.clientAccessor = clientAccessor;
         this.environment = environment;
         this.clusterService = clusterService;
+        this.openSearchClient = openSearchClient;
     }
 
     @Override
     protected AbstractBatchingProcessor newProcessor(String tag, String description, int batchSize, Map<String, Object> config) {
         String modelId = readStringProperty(TYPE, tag, config, MODEL_ID_FIELD);
         Map<String, Object> fieldMap = readMap(TYPE, tag, config, FIELD_MAP_FIELD);
+        boolean skipExisting = readBooleanProperty(TYPE, tag, config, SKIP_EXISTING, DEFAULT_SKIP_EXISTING);
         // if the field is miss, will return PruneType.None
         PruneType pruneType = PruneType.fromString(readOptionalStringProperty(TYPE, tag, config, PruneUtils.PRUNE_TYPE_FIELD));
         float pruneRatio = 0;
@@ -74,8 +87,11 @@ public class SparseEncodingProcessorFactory extends AbstractBatchingProcessor.Fa
             batchSize,
             modelId,
             fieldMap,
+            skipExisting,
+            skipExisting ? new TextEmbeddingInferenceFilter(fieldMap) : null,
             pruneType,
             pruneRatio,
+            openSearchClient,
             clientAccessor,
             environment,
             clusterService

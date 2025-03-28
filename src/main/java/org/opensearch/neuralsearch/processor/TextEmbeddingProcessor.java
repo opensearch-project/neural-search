@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.processor;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -33,10 +34,6 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
 
     public static final String TYPE = "text_embedding";
     public static final String LIST_TYPE_NESTED_MAP_KEY = "knn";
-    public static final String SKIP_EXISTING = "skip_existing";
-    public static final boolean DEFAULT_SKIP_EXISTING = false;
-    private static final String INDEX_FIELD = "_index";
-    private static final String ID_FIELD = "_id";
     private final OpenSearchClient openSearchClient;
     private final boolean skipExisting;
     private final TextEmbeddingInferenceFilter textEmbeddingInferenceFilter;
@@ -69,17 +66,28 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
     ) {
         // skip existing flag is turned off. Call model inference without filtering
         if (skipExisting == false) {
-            makeInferenceCall(ingestDocument, processMap, inferenceList, handler);
+            generateAndSetInference(ingestDocument, processMap, inferenceList, handler);
             return;
         }
         // if skipExisting flag is turned on, eligible inference texts will be compared and filtered after embeddings are copied
-        String index = ingestDocument.getSourceAndMetadata().get(INDEX_FIELD).toString();
-        String id = ingestDocument.getSourceAndMetadata().get(ID_FIELD).toString();
+        Object index = ingestDocument.getSourceAndMetadata().get(INDEX_FIELD);
+        Object id = ingestDocument.getSourceAndMetadata().get(ID_FIELD);
+        if (Objects.isNull(index) || Objects.isNull(id)) {
+            generateAndSetInference(ingestDocument, processMap, inferenceList, handler);
+            return;
+        }
         openSearchClient.execute(
             GetAction.INSTANCE,
-            new GetRequest(index, id),
+            new GetRequest(index.toString(), id.toString()),
             ActionListener.wrap(
-                response -> getResponseHandler(response, ingestDocument, processMap, inferenceList, handler, textEmbeddingInferenceFilter),
+                response -> reuseOrGenerateEmbedding(
+                    response,
+                    ingestDocument,
+                    processMap,
+                    inferenceList,
+                    handler,
+                    textEmbeddingInferenceFilter
+                ),
                 e -> {
                     handler.accept(null, e);
                 }
@@ -119,7 +127,7 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
                 MultiGetAction.INSTANCE,
                 buildMultiGetRequest(dataForInferences),
                 ActionListener.wrap(
-                    response -> multiGetResponseHandler(
+                    response -> reuseOrGenerateEmbedding(
                         response,
                         ingestDocumentWrappers,
                         inferenceList,

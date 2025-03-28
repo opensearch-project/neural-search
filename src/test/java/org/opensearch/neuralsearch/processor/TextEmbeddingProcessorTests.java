@@ -1219,6 +1219,25 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
     }
 
     @SneakyThrows
+    public void testExecute_when_initial_ingest_null_id_with_skip_existing_flag_successful() {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        sourceAndMetadata.put("key1", "value1");
+        sourceAndMetadata.put("key2", "value2");
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(true);
+        List<List<Float>> modelTensorList = createMockVectorResult();
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
+            listener.onResponse(modelTensorList);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(isA(TextInferenceRequest.class), isA(ActionListener.class));
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(any(IngestDocument.class), isNull());
+    }
+
+    @SneakyThrows
     public void testExecute_with_no_update_with_skip_existing_flag_successful() {
         Map<String, Object> ingestSourceAndMetadata = new HashMap<>();
         ingestSourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");

@@ -104,6 +104,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         "processor/PipelineConfiguration.json",
         ProcessorType.SPARSE_ENCODING,
         "processor/SparseEncodingPipelineConfiguration.json",
+        ProcessorType.SPARSE_ENCODING_WITH_SKIP_EXISTING,
+        "processor/SparseEncodingPipelineConfigurationWithSkipExisting.json",
         ProcessorType.TEXT_IMAGE_EMBEDDING,
         "processor/PipelineForTextImageEmbeddingProcessorConfiguration.json",
         ProcessorType.TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING,
@@ -1963,6 +1965,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING_WITH_SKIP_EXISTING,
         TEXT_IMAGE_EMBEDDING,
         SPARSE_ENCODING,
+        SPARSE_ENCODING_WITH_SKIP_EXISTING,
         SPARSE_ENCODING_PRUNE
     }
 

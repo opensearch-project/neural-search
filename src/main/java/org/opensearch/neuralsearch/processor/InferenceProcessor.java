@@ -48,6 +48,9 @@ import com.google.common.collect.ImmutableMap;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.processor.optimization.InferenceFilter;
 import org.opensearch.neuralsearch.util.ProcessorDocumentUtils;
+import org.opensearch.neuralsearch.util.TokenWeightUtil;
+import org.opensearch.neuralsearch.util.prune.PruneType;
+import org.opensearch.neuralsearch.util.prune.PruneUtils;
 
 /**
  * The abstract class for text processing use cases. Users provide a field name map and a model id.
@@ -61,6 +64,8 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
     public static final String FIELD_MAP_FIELD = "field_map";
     public static final String INDEX_FIELD = "_index";
     public static final String ID_FIELD = "_id";
+    public static final String SKIP_EXISTING = "skip_existing";
+    public static final boolean DEFAULT_SKIP_EXISTING = false;
     private static final BiFunction<Object, Object, Object> REMAPPING_FUNCTION = (v1, v2) -> {
         if (v1 instanceof Collection && v2 instanceof Collection) {
             ((Collection) v1).addAll((Collection) v2);
@@ -672,7 +677,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
     }
 
     // This method validates and filters given inferenceList and processMap after response is successfully retrieved from get operation.
-    protected void getResponseHandler(
+    protected void reuseOrGenerateEmbedding(
         GetResponse response,
         IngestDocument ingestDocument,
         Map<String, Object> processMap,
@@ -682,11 +687,11 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
     ) {
         final Map<String, Object> existingDocument = response.getSourceAsMap();
         if (existingDocument == null || existingDocument.isEmpty()) {
-            makeInferenceCall(ingestDocument, processMap, inferenceList, handler);
+            generateAndSetInference(ingestDocument, processMap, inferenceList, handler);
             return;
         }
         // filter given ProcessMap by comparing existing document with ingestDocument
-        Map<String, Object> filteredProcessMap = inferenceFilter.filter(
+        Map<String, Object> filteredProcessMap = inferenceFilter.filterAndCopyExistingEmbeddings(
             existingDocument,
             ingestDocument.getSourceAndMetadata(),
             processMap
@@ -698,13 +703,13 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         if (filteredInferenceList.isEmpty()) {
             handler.accept(ingestDocument, null);
         } else {
-            makeInferenceCall(ingestDocument, filteredProcessMap, filteredInferenceList, handler);
+            generateAndSetInference(ingestDocument, filteredProcessMap, filteredInferenceList, handler);
         }
     }
 
     // This method validates and filters given inferenceList and dataForInferences after response is successfully retrieved from multi-get
     // operation.
-    protected void multiGetResponseHandler(
+    protected void reuseOrGenerateEmbedding(
         MultiGetResponse response,
         List<IngestDocumentWrapper> ingestDocumentWrappers,
         List<String> inferenceList,
@@ -749,7 +754,11 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
             // filter dataForInference when existing document exists
             String docId = id.toString();
             Map<String, Object> existingDocument = existingDocuments.get(docId);
-            Map<String, Object> filteredProcessMap = inferenceFilter.filter(existingDocument, document, processMap);
+            Map<String, Object> filteredProcessMap = inferenceFilter.filterAndCopyExistingEmbeddings(
+                existingDocument,
+                document,
+                processMap
+            );
             List<String> filteredInferenceList = createInferenceList(filteredProcessMap);
             filteredDataForInference.add(new DataForInference(ingestDocumentWrapper, filteredProcessMap, filteredInferenceList));
         }
@@ -770,7 +779,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
      * @param handler SourceAndMetadataMap of ingestDocument Document
      *
      */
-    protected void makeInferenceCall(
+    protected void generateAndSetInference(
         IngestDocument ingestDocument,
         Map<String, Object> processMap,
         List<String> inferenceList,
@@ -780,6 +789,38 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
             TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
             ActionListener.wrap(vectors -> {
                 setVectorFieldsToDocument(ingestDocument, processMap, vectors);
+                handler.accept(ingestDocument, null);
+            }, e -> { handler.accept(null, e); })
+        );
+    }
+
+    /**
+     * This method invokes inference call that returns results as map through mlCommonsClientAccessor and populates retrieved embeddings to ingestDocument
+     *
+     * @param ingestDocument ingestDocument to populate embeddings to
+     * @param processMap map indicating the path in ingestDocument to populate embeddings
+     * @param inferenceList list of texts to be model inference
+     * @param pruneType    The type of prune strategy to use
+     * @param pruneRatio   The ratio or threshold for prune
+     * @param handler handler for accepting IngestionDocument
+     *
+     */
+    protected void generateAndSetMapInference(
+        IngestDocument ingestDocument,
+        Map<String, Object> processMap,
+        List<String> inferenceList,
+        PruneType pruneType,
+        float pruneRatio,
+        BiConsumer<IngestDocument, Exception> handler
+    ) {
+        mlCommonsClientAccessor.inferenceSentencesWithMapResult(
+            TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
+            ActionListener.wrap(resultMaps -> {
+                List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps)
+                    .stream()
+                    .map(vector -> PruneUtils.pruneSparseVector(pruneType, pruneRatio, vector))
+                    .toList();
+                setVectorFieldsToDocument(ingestDocument, processMap, sparseVectors);
                 handler.accept(ingestDocument, null);
             }, e -> { handler.accept(null, e); })
         );
