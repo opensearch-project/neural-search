@@ -164,7 +164,11 @@ public class TextEmbeddingInferenceFilterTests extends OpenSearchTestCase {
         Map<String, Object> existingMap = new HashMap<>();
         existingMap.put("outerField", existingNestedMap);
 
-        Map<String, Object> result = nestedTextEmbeddingInferenceFilter.filter(existingMap, sourceAndMetadataMap, processMap);
+        Map<String, Object> result = nestedTextEmbeddingInferenceFilter.filterAndCopyExistingEmbeddings(
+            existingMap,
+            sourceAndMetadataMap,
+            processMap
+        );
 
         assertNull(((Map) result.get("outerField")).get("embeddingField"));
         assertEquals(Arrays.asList(0.1, 0.2, 0.3), ((Map) sourceAndMetadataMap.get("outerField")).get("embeddingField"));
@@ -182,7 +186,11 @@ public class TextEmbeddingInferenceFilterTests extends OpenSearchTestCase {
         Map<String, Object> existingMap = new HashMap<>();
         existingMap.put("outerField", existingNestedMap);
 
-        Map<String, Object> result = nestedTextEmbeddingInferenceFilter.filter(existingMap, sourceAndMetadataMap, processMap);
+        Map<String, Object> result = nestedTextEmbeddingInferenceFilter.filterAndCopyExistingEmbeddings(
+            existingMap,
+            sourceAndMetadataMap,
+            processMap
+        );
 
         assertFalse(result.isEmpty());
         assertEquals("New Text", ((Map<String, Object>) result.get("outerField")).get("embeddingField"));
@@ -202,7 +210,11 @@ public class TextEmbeddingInferenceFilterTests extends OpenSearchTestCase {
         Map<String, Object> existingMap = new HashMap<>();
         existingMap.put("outerField", existingNestedMap);
 
-        Map<String, Object> result = nestedTextEmbeddingInferenceFilter.filter(existingMap, sourceAndMetadataMap, processMap);
+        Map<String, Object> result = nestedTextEmbeddingInferenceFilter.filterAndCopyExistingEmbeddings(
+            existingMap,
+            sourceAndMetadataMap,
+            processMap
+        );
 
         assertNull(((Map) result.get("outerField")).get("embeddingField"));
         assertEquals(Arrays.asList(0.1, 0.2, 0.3), ((List) ((Map) sourceAndMetadataMap.get("outerField")).get("embeddingField")).get(0));
@@ -222,7 +234,11 @@ public class TextEmbeddingInferenceFilterTests extends OpenSearchTestCase {
         Map<String, Object> existingMap = new HashMap<>();
         existingMap.put("outerField", existingNestedMap);
 
-        Map<String, Object> result = nestedTextEmbeddingInferenceFilter.filter(existingMap, sourceAndMetadataMap, processMap);
+        Map<String, Object> result = nestedTextEmbeddingInferenceFilter.filterAndCopyExistingEmbeddings(
+            existingMap,
+            sourceAndMetadataMap,
+            processMap
+        );
 
         assertEquals(2, ((List) ((Map) result.get("outerField")).get("embeddingField")).size());
         assertNull(sourceAndMetadataMap.get("outerField"));
