@@ -65,7 +65,11 @@ import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 import org.opensearch.search.SearchHit;
+import org.opensearch.search.sort.FieldSortBuilder;
+import org.opensearch.search.sort.ScoreSortBuilder;
 import org.opensearch.search.sort.SortBuilder;
+import org.opensearch.search.sort.SortBuilders;
+import org.opensearch.search.sort.SortOrder;
 import org.opensearch.test.ClusterServiceUtils;
 import org.opensearch.threadpool.TestThreadPool;
 import org.opensearch.threadpool.ThreadPool;
@@ -1111,7 +1115,14 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return innerHits;
     }
 
-    protected Map<String, ArrayList<Integer>> getInnerHitsCountOfNestedField(List<Object> innerHits, List<String> fieldNames) {
+    /**
+     * Get Total count of each inner hit field
+     *
+     * @param innerHits List of inner hits
+     * @param  fieldNames list of field Names of which total count need to be retrived
+     * @return Map of fieldName to totalCount of inner_hit from each individual hit
+     */
+    protected Map<String, ArrayList<Integer>> getInnerHitsTotalCountOfNestedField(List<Object> innerHits, List<String> fieldNames) {
         Map<String, ArrayList<Integer>> totalCountPerFieldMap = new HashMap<>();
         for (Object innerHit : innerHits) {
             Map<String, Object> hits = (Map<String, Object>) innerHit;
@@ -1130,6 +1141,89 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             }
         }
         return totalCountPerFieldMap;
+    }
+
+    /**
+     * Get count of each inner hit field
+     *
+     * @param innerHits List of inner hits
+     * @param  fieldNames list of field Names of which total count need to be retrived
+     * @return Map of fieldName to count of inner_hit from each individual hit
+     */
+    protected Map<String, ArrayList<Integer>> getInnerHitsCountOfNestedField(List<Object> innerHits, List<String> fieldNames) {
+        Map<String, ArrayList<Integer>> countPerFieldMap = new HashMap<>();
+        for (Object innerHit : innerHits) {
+            Map<String, Object> hits = (Map<String, Object>) innerHit;
+            for (String fieldName : fieldNames) {
+                Map<String, Object> searchHits = (Map<String, Object>) hits.get(fieldName);
+                Map<String, Object> fieldHits = (Map<String, Object>) searchHits.get("hits");
+                List<Object> innerHitsOfField = (List<Object>) fieldHits.get("hits");
+                if (countPerFieldMap.containsKey(fieldName)) {
+                    ArrayList<Integer> count = countPerFieldMap.get(fieldName);
+                    count.add(innerHitsOfField.size());
+                    countPerFieldMap.put(fieldName, count);
+                } else {
+                    countPerFieldMap.put(fieldName, new ArrayList<>(Arrays.asList(innerHitsOfField.size())));
+                }
+
+            }
+        }
+        return countPerFieldMap;
+    }
+
+    /**
+     * Create Sort Builders to be applied with QueryBuilder
+     *
+     * @param fieldSortOrderMap Map of fieldName of the sort and its order
+     * @param  isSortByScore boolean flag to notify if sort condition is on _score
+     * @return List of SortBuilders
+     */
+    protected List<SortBuilder<?>> createSortBuilders(Map<String, SortOrder> fieldSortOrderMap, boolean isSortByScore) {
+        List<SortBuilder<?>> sortBuilders = new ArrayList<>();
+        if (fieldSortOrderMap != null) {
+            for (Map.Entry<String, SortOrder> entry : fieldSortOrderMap.entrySet()) {
+                FieldSortBuilder fieldSortBuilder = SortBuilders.fieldSort(entry.getKey()).order(entry.getValue());
+                sortBuilders.add(fieldSortBuilder);
+            }
+        }
+
+        if (isSortByScore) {
+            ScoreSortBuilder scoreSortBuilder = SortBuilders.scoreSort().order(SortOrder.ASC);
+            sortBuilders.add(scoreSortBuilder);
+        }
+        return sortBuilders;
+    }
+
+    /**
+     * Get Sort values of field for each inner_hit
+     *
+     * @param innerHits List of inner hits
+     * @param  fieldNames list of field Names of which sort values need to be retrived
+     * @return Map of fieldName to List of sortValues from each individual hit
+     */
+    protected Map<String, ArrayList<List<Object>>> getInnerHitsSortValueOfNestedField(List<Object> innerHits, List<String> fieldNames) {
+        Map<String, ArrayList<List<Object>>> countPerFieldMap = new HashMap<>();
+        for (Object innerHit : innerHits) {
+            Map<String, Object> hits = (Map<String, Object>) innerHit;
+            for (String fieldName : fieldNames) {
+                Map<String, Object> searchHits = (Map<String, Object>) hits.get(fieldName);
+                Map<String, Object> fieldHits = (Map<String, Object>) searchHits.get("hits");
+                List<Object> internalHits = (List<Object>) fieldHits.get("hits");
+                for (Object internalHit : internalHits) {
+                    Map<String, Object> internalHit1 = (Map<String, Object>) internalHit;
+                    List<Object> sorts = (List<Object>) internalHit1.get("sort");
+                    if (countPerFieldMap.containsKey(fieldName)) {
+                        ArrayList<List<Object>> sortPerField = countPerFieldMap.get(fieldName);
+                        sortPerField.add(sorts);
+                        countPerFieldMap.put(fieldName, sortPerField);
+                    } else {
+                        countPerFieldMap.put(fieldName, new ArrayList<>(Arrays.asList(sorts)));
+                    }
+                }
+
+            }
+        }
+        return countPerFieldMap;
     }
 
     /**

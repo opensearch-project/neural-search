@@ -10,14 +10,17 @@ import org.junit.Before;
 import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.NestedQueryBuilder;
+import org.opensearch.join.query.HasChildQueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+import org.opensearch.search.sort.SortOrder;
 
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Supplier;
+import java.util.stream.IntStream;
 
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
@@ -29,19 +32,21 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
     private static final String TEST_MULTI_DOC_WITH_PARENT_CHILD_INDEX_NAME = "test-hybrid-index-parent-child-field";
     private static final String TEST_MULTI_DOC_WITH_NESTED_PARENT_CHILD_INDEX_NAME = "test-hybrid-index-nested-parent-child-field";
 
-    private static final String TEST_NESTED_TYPE_FIELD_NAME_1 = "user";
-    private static final String TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1 = "name";
-    private static final String TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2 = "age";
-    private static final String TEST_NESTED_TYPE_FIELD_NAME_2 = "location";
-    private static final String TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1 = "state";
-    private static final String TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2 = "place";
-    private static final String TEST_PARENT_CHILD_FIELD_NAME_1 = "my_join_field";
-    private static final String TEST_PARENT_CHILD_TYPE_FIELD_NAME_1 = "join";
+    private static final String TEST_NESTED_FIELD_NAME_1 = "user";
+    private static final String TEST_USER_INNER_NAME_NESTED_FIELD = "name";
+    private static final String TEST_USER_INNER_AGE_NESTED_FIELD = "age";
+    private static final String TEST_NESTED_FIELD_NAME_2 = "location";
+    private static final String TEST_LOCATION_INNER_STATE_NESTED_FIELD = "state";
+    private static final String TEST_LOCATION_INNER_PLACE_NESTED_FIELD = "place";
+    private static final String TEST_PARENT_CHILD_MY_JOIN_FIELD_FIELD = "my_join_field";
+    private static final String TEST_PARENT_CHILD_TYPE_JOIN = "join";
     private static final String TEST_PARENT_CHILD_RELATION_FIELD_NAME_1 = "parent";
     private static final String TEST_PARENT_CHILD_RELATION_FIELD_NAME_2 = "child";
+    private static final String TEST_PARENT_CHILD_TEXT_FIELD_NAME = "text";
+    private static final String TEST_PARENT_CHILD_TEXT_FIELD_VALUE_1 = "This is a parent document";
+    private static final String TEST_PARENT_CHILD_TEXT_FIELD_VALUE_2 = "This is a child document";
+    private static final String TEST_PARENT_CHILD_INNER_HITS_FIELD_NAME = "child";
     private static final String NORMALIZATION_SEARCH_PIPELINE = "normalization-search-pipeline";
-
-    static final Supplier<float[]> TEST_VECTOR_SUPPLIER = () -> new float[768];
 
     @Before
     public void setUp() throws Exception {
@@ -86,14 +91,14 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
 
         List<Object> hitsNestedList = getInnerHitsFromSearchHits(searchResponseAsMap);
         assertEquals(2, getHitCount(searchResponseAsMap));
-        Map<String, ArrayList<Integer>> innerHitCountPerFieldName = getInnerHitsCountOfNestedField(
+        Map<String, ArrayList<Integer>> innerHitCountPerFieldName = getInnerHitsTotalCountOfNestedField(
             hitsNestedList,
-            List.of(TEST_NESTED_TYPE_FIELD_NAME_1, TEST_NESTED_TYPE_FIELD_NAME_2)
+            List.of(TEST_NESTED_FIELD_NAME_1, TEST_NESTED_FIELD_NAME_2)
         );
-        assertEquals(2, innerHitCountPerFieldName.get(TEST_NESTED_TYPE_FIELD_NAME_1).get(0).intValue());
-        assertEquals(3, innerHitCountPerFieldName.get(TEST_NESTED_TYPE_FIELD_NAME_2).get(0).intValue());
-        assertEquals(1, innerHitCountPerFieldName.get(TEST_NESTED_TYPE_FIELD_NAME_1).get(1).intValue());
-        assertEquals(0, innerHitCountPerFieldName.get(TEST_NESTED_TYPE_FIELD_NAME_2).get(1).intValue());
+        assertEquals(2, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_1).get(0).intValue());
+        assertEquals(3, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_2).get(0).intValue());
+        assertEquals(1, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_1).get(1).intValue());
+        assertEquals(0, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_2).get(1).intValue());
     }
 
     @SneakyThrows
@@ -101,9 +106,88 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
         initializeIndexIfNotExist(TEST_MULTI_DOC_WITH_PARENT_CHILD_INDEX_NAME);
         createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of());
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-
+        HasChildQueryBuilder hasChildQueryBuilder = new HasChildQueryBuilder(
+            "child",
+            new MatchQueryBuilder("text", "child"),
+            ScoreMode.Avg
+        );
+        hasChildQueryBuilder.innerHit(new InnerHitBuilder());
+        hybridQueryBuilder.add(hasChildQueryBuilder);
         Map<String, Object> searchResponseAsMap = search(
             TEST_MULTI_DOC_WITH_PARENT_CHILD_INDEX_NAME,
+            hybridQueryBuilder,
+            null,
+            10,
+            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE)
+        );
+
+        List<Object> hitsNestedList = getInnerHitsFromSearchHits(searchResponseAsMap);
+        assertEquals(1, getHitCount(searchResponseAsMap));
+        Map<String, ArrayList<Integer>> innerHitCountPerFieldName = getInnerHitsTotalCountOfNestedField(
+            hitsNestedList,
+            List.of(TEST_PARENT_CHILD_INNER_HITS_FIELD_NAME)
+        );
+        assertEquals(1, innerHitCountPerFieldName.get(TEST_PARENT_CHILD_INNER_HITS_FIELD_NAME).get(0).intValue());
+    }
+
+    @SneakyThrows
+    public void testInnerHits_whenMultipleSubqueriesOnNestedAndParentChildFields_thenSuccessful() {
+        initializeIndexIfNotExist(TEST_MULTI_DOC_WITH_NESTED_PARENT_CHILD_INDEX_NAME);
+        createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of());
+        NestedQueryBuilder nestedQueryBuilder = new NestedQueryBuilder("user", new MatchQueryBuilder("user.name", "John"), ScoreMode.Avg);
+        nestedQueryBuilder.innerHit(new InnerHitBuilder());
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        HasChildQueryBuilder hasChildQueryBuilder = new HasChildQueryBuilder("child", nestedQueryBuilder, ScoreMode.Avg);
+        hasChildQueryBuilder.innerHit(new InnerHitBuilder());
+        hybridQueryBuilder.add(hasChildQueryBuilder);
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_WITH_NESTED_PARENT_CHILD_INDEX_NAME,
+            hybridQueryBuilder,
+            null,
+            10,
+            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE)
+        );
+
+        List<Object> hitsNestedList = getInnerHitsFromSearchHits(searchResponseAsMap);
+        assertEquals(1, getHitCount(searchResponseAsMap));
+        Map<String, ArrayList<Integer>> innerHitCountPerFieldName = getInnerHitsTotalCountOfNestedField(
+            hitsNestedList,
+            List.of(TEST_PARENT_CHILD_INNER_HITS_FIELD_NAME)
+        );
+        assertEquals(1, innerHitCountPerFieldName.get(TEST_PARENT_CHILD_INNER_HITS_FIELD_NAME).get(0).intValue());
+        Map<String, Object> childInnerHit = (Map<String, Object>) hitsNestedList.get(0);
+        Map<String, Object> childHit = (Map<String, Object>) childInnerHit.get(TEST_PARENT_CHILD_INNER_HITS_FIELD_NAME);
+        List<Object> childInnerHits = getInnerHitsFromSearchHits(childHit);
+        Map<String, ArrayList<Integer>> childInnerHitCountPerFieldName = getInnerHitsTotalCountOfNestedField(
+            childInnerHits,
+            List.of(TEST_NESTED_FIELD_NAME_1)
+        );
+        assertEquals(1, childInnerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_1).get(0).intValue());
+    }
+
+    @SneakyThrows
+    public void testInnerHits_withSortingAndPagination_thenSuccessful() {
+        initializeIndexIfNotExist(TEST_MULTI_DOC_WITH_NESTED_FIELDS_MULTIPLE_SHARD_INDEX_NAME);
+        createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of());
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        NestedQueryBuilder nestedQueryBuilder1 = new NestedQueryBuilder("user", new MatchQueryBuilder("user.name", "John"), ScoreMode.Avg);
+
+        InnerHitBuilder innerHitBuilder = new InnerHitBuilder();
+        innerHitBuilder.setFrom(1);
+        nestedQueryBuilder1.innerHit(innerHitBuilder);
+        NestedQueryBuilder nestedQueryBuilder2 = new NestedQueryBuilder(
+            "location",
+            new MatchQueryBuilder("location.state", "California"),
+            ScoreMode.Avg
+        );
+        InnerHitBuilder innerHitBuilder1 = new InnerHitBuilder();
+        innerHitBuilder1.setSorts(createSortBuilders(Map.of("_doc", SortOrder.DESC), false));
+        nestedQueryBuilder2.innerHit(innerHitBuilder1);
+        hybridQueryBuilder.add(nestedQueryBuilder1);
+        hybridQueryBuilder.add(nestedQueryBuilder2);
+
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_WITH_NESTED_FIELDS_MULTIPLE_SHARD_INDEX_NAME,
             hybridQueryBuilder,
             null,
             10,
@@ -114,23 +198,24 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
         assertEquals(2, getHitCount(searchResponseAsMap));
         Map<String, ArrayList<Integer>> innerHitCountPerFieldName = getInnerHitsCountOfNestedField(
             hitsNestedList,
-            List.of(TEST_NESTED_TYPE_FIELD_NAME_1, TEST_NESTED_TYPE_FIELD_NAME_2)
+            List.of(TEST_NESTED_FIELD_NAME_1, TEST_NESTED_FIELD_NAME_2)
         );
-        assertEquals(2, innerHitCountPerFieldName.get(TEST_NESTED_TYPE_FIELD_NAME_1).get(0).intValue());
-        assertEquals(3, innerHitCountPerFieldName.get(TEST_NESTED_TYPE_FIELD_NAME_2).get(0).intValue());
-        assertEquals(1, innerHitCountPerFieldName.get(TEST_NESTED_TYPE_FIELD_NAME_1).get(1).intValue());
-        assertEquals(0, innerHitCountPerFieldName.get(TEST_NESTED_TYPE_FIELD_NAME_2).get(1).intValue());
-    }
+        assertEquals(1, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_1).get(0).intValue());
+        assertEquals(3, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_2).get(0).intValue());
+        assertEquals(0, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_1).get(1).intValue());
+        assertEquals(0, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_2).get(1).intValue());
 
-    @SneakyThrows
-    public void testInnerHits_whenMultipleSubqueriesAndMultipleShards_thenSuccessful() {}
+        Map<String, ArrayList<List<Object>>> sortsPerField = getInnerHitsSortValueOfNestedField(
+            hitsNestedList,
+            List.of(TEST_NESTED_FIELD_NAME_2)
+        );
 
-    @SneakyThrows
-    public void testInnerHitsSort_whenMultipleSubqueriesAndMultipleShards_thenSuccessful() {}
-
-    @SneakyThrows
-    public void testPaginationWithInnerHits_whenMultipleSubqueriesAndMultipleShards_thenSuccessful() {
-
+        ArrayList<List<Object>> locationSorts = sortsPerField.get(TEST_NESTED_FIELD_NAME_2);
+        assertTrue(
+            IntStream.range(0, locationSorts.size() - 1)
+                .mapToObj(i -> new AbstractMap.SimpleEntry<>(locationSorts.get(i).get(0), locationSorts.get(i + 1).get(0)))
+                .allMatch(pair -> ((Comparable<Object>) pair.getKey()).compareTo(pair.getValue()) > 0)
+        );
     }
 
     @SneakyThrows
@@ -143,16 +228,8 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
                 buildIndexConfiguration(
                     Collections.emptyList(),
                     List.of(
-                        List.of(
-                            TEST_NESTED_TYPE_FIELD_NAME_1,
-                            TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1,
-                            TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2
-                        ),
-                        List.of(
-                            TEST_NESTED_TYPE_FIELD_NAME_2,
-                            TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                            TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2
-                        )
+                        List.of(TEST_NESTED_FIELD_NAME_1, TEST_USER_INNER_NAME_NESTED_FIELD, TEST_USER_INNER_AGE_NESTED_FIELD),
+                        List.of(TEST_NESTED_FIELD_NAME_2, TEST_LOCATION_INNER_STATE_NESTED_FIELD, TEST_LOCATION_INNER_PLACE_NESTED_FIELD)
                     ),
                     1
                 ),
@@ -168,16 +245,8 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
                 buildIndexConfiguration(
                     Collections.emptyList(),
                     List.of(
-                        List.of(
-                            TEST_NESTED_TYPE_FIELD_NAME_1,
-                            TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1,
-                            TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2
-                        ),
-                        List.of(
-                            TEST_NESTED_TYPE_FIELD_NAME_2,
-                            TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                            TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2
-                        )
+                        List.of(TEST_NESTED_FIELD_NAME_1, TEST_USER_INNER_NAME_NESTED_FIELD, TEST_USER_INNER_AGE_NESTED_FIELD),
+                        List.of(TEST_NESTED_FIELD_NAME_2, TEST_LOCATION_INNER_STATE_NESTED_FIELD, TEST_LOCATION_INNER_PLACE_NESTED_FIELD)
                     ),
                     3
                 ),
@@ -192,7 +261,7 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
                 buildIndexConfiguration(
                     Collections.emptyList(),
                     Collections.emptyList(),
-                    List.of(List.of(TEST_PARENT_CHILD_TYPE_FIELD_NAME_1, TEST_PARENT_CHILD_TYPE_FIELD_NAME_1)),
+                    List.of(List.of(TEST_PARENT_CHILD_MY_JOIN_FIELD_FIELD, TEST_PARENT_CHILD_TYPE_JOIN)),
                     Collections.emptyList(),
                     Collections.emptyList(),
                     Collections.emptyList(),
@@ -211,18 +280,10 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
                 buildIndexConfiguration(
                     Collections.emptyList(),
                     List.of(
-                        List.of(
-                            TEST_NESTED_TYPE_FIELD_NAME_1,
-                            TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1,
-                            TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2
-                        ),
-                        List.of(
-                            TEST_NESTED_TYPE_FIELD_NAME_2,
-                            TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                            TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2
-                        )
+                        List.of(TEST_NESTED_FIELD_NAME_1, TEST_USER_INNER_NAME_NESTED_FIELD, TEST_USER_INNER_AGE_NESTED_FIELD),
+                        List.of(TEST_NESTED_FIELD_NAME_2, TEST_LOCATION_INNER_STATE_NESTED_FIELD, TEST_LOCATION_INNER_PLACE_NESTED_FIELD)
                     ),
-                    List.of(List.of(TEST_PARENT_CHILD_TYPE_FIELD_NAME_1, TEST_PARENT_CHILD_TYPE_FIELD_NAME_1)),
+                    List.of(List.of(TEST_PARENT_CHILD_MY_JOIN_FIELD_FIELD, TEST_PARENT_CHILD_TYPE_JOIN)),
                     Collections.emptyList(),
                     Collections.emptyList(),
                     Collections.emptyList(),
@@ -243,55 +304,25 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
             Collections.emptyList(),
             Collections.emptyList(),
             Collections.emptyList(),
-            List.of(TEST_NESTED_TYPE_FIELD_NAME_1, TEST_NESTED_TYPE_FIELD_NAME_2),
+            List.of(TEST_NESTED_FIELD_NAME_1, TEST_NESTED_FIELD_NAME_2),
             Map.of(
-                TEST_NESTED_TYPE_FIELD_NAME_1,
+                TEST_NESTED_FIELD_NAME_1,
                 Arrays.asList(
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "John Alder", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "50"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "John snow", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "23"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "Harry Styles", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "20"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "Michael Jackson", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "67"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "Marry Jane", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "90"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "Tom Hanks", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "5")
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "John Alder", TEST_USER_INNER_AGE_NESTED_FIELD, "50"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "John snow", TEST_USER_INNER_AGE_NESTED_FIELD, "23"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "Harry Styles", TEST_USER_INNER_AGE_NESTED_FIELD, "20"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "Michael Jackson", TEST_USER_INNER_AGE_NESTED_FIELD, "67"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "Marry Jane", TEST_USER_INNER_AGE_NESTED_FIELD, "90"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "Tom Hanks", TEST_USER_INNER_AGE_NESTED_FIELD, "5")
                 ),
-                TEST_NESTED_TYPE_FIELD_NAME_2,
+                TEST_NESTED_FIELD_NAME_2,
                 Arrays.asList(
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "California",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "San Diego"
-                    ),
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "North Carolina",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "Charlotte"
-                    ),
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "California",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "Los Angeles"
-                    ),
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "New York",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "New York"
-                    ),
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "Oregon",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "Portland"
-                    ),
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "California",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "Fresno"
-                    )
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "California", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "San Diego"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "North Carolina", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Charlotte"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "California", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Los Angeles"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "New York", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "New York"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "Oregon", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Portland"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "California", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Fresno")
                 )
             )
         );
@@ -302,50 +333,25 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
             Collections.emptyList(),
             Collections.emptyList(),
             Collections.emptyList(),
-            List.of(TEST_NESTED_TYPE_FIELD_NAME_1, TEST_NESTED_TYPE_FIELD_NAME_2),
+            List.of(TEST_NESTED_FIELD_NAME_1, TEST_NESTED_FIELD_NAME_2),
             Map.of(
-                TEST_NESTED_TYPE_FIELD_NAME_1,
+                TEST_NESTED_FIELD_NAME_1,
                 Arrays.asList(
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "John Carry", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "34"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "Dwayne Rock", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "28"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "Leonardo Di Caprio", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "22"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "Jack Sparrow", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "47"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "Will Smith", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "45"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "Brad Pitt", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "39")
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "John Carry", TEST_USER_INNER_AGE_NESTED_FIELD, "34"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "Dwayne Rock", TEST_USER_INNER_AGE_NESTED_FIELD, "28"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "Leonardo Di Caprio", TEST_USER_INNER_AGE_NESTED_FIELD, "22"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "Jack Sparrow", TEST_USER_INNER_AGE_NESTED_FIELD, "47"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "Will Smith", TEST_USER_INNER_AGE_NESTED_FIELD, "45"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "Brad Pitt", TEST_USER_INNER_AGE_NESTED_FIELD, "39")
                 ),
-                TEST_NESTED_TYPE_FIELD_NAME_2,
+                TEST_NESTED_FIELD_NAME_2,
                 Arrays.asList(
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "Illinois",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "Chicago"
-                    ),
-                    Map.of(TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1, "Texas", TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2, "Dallas"),
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "Arizona",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "Phoenix"
-                    ),
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "Florida",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "Orlando"
-                    ),
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "Virginia",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "Redmond"
-                    ),
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "Washington",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "Seattle"
-                    )
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "Illinois", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Chicago"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "Texas", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Dallas"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "Arizona", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Phoenix"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "Florida", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Orlando"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "Virginia", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Redmond"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "Washington", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Seattle")
                 )
             )
         );
@@ -359,8 +365,8 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
             "1",
             Collections.emptyList(),
             Collections.emptyList(),
-            Collections.emptyList(),
-            Collections.emptyList(),
+            List.of(TEST_PARENT_CHILD_TEXT_FIELD_NAME),
+            List.of(TEST_PARENT_CHILD_TEXT_FIELD_VALUE_1),
             Collections.emptyList(),
             Map.of(),
             Collections.emptyList(),
@@ -369,7 +375,7 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
             Collections.emptyList(),
             Collections.emptyList(),
             Collections.emptyList(),
-            List.of(TEST_PARENT_CHILD_FIELD_NAME_1),
+            List.of(TEST_PARENT_CHILD_MY_JOIN_FIELD_FIELD),
             List.of(TEST_PARENT_CHILD_RELATION_FIELD_NAME_1),
             null
         );
@@ -379,8 +385,8 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
             "2",
             Collections.emptyList(),
             Collections.emptyList(),
-            Collections.emptyList(),
-            Collections.emptyList(),
+            List.of(TEST_PARENT_CHILD_TEXT_FIELD_NAME),
+            List.of(TEST_PARENT_CHILD_TEXT_FIELD_VALUE_2),
             Collections.emptyList(),
             Map.of(),
             Collections.emptyList(),
@@ -389,7 +395,7 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
             Collections.emptyList(),
             Collections.emptyList(),
             Collections.emptyList(),
-            List.of(TEST_PARENT_CHILD_FIELD_NAME_1),
+            List.of(TEST_PARENT_CHILD_MY_JOIN_FIELD_FIELD),
             List.of(TEST_PARENT_CHILD_RELATION_FIELD_NAME_2),
             "1"
         );
@@ -401,57 +407,27 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
             "1",
             Collections.emptyList(),
             Collections.emptyList(),
-            Collections.emptyList(),
-            Collections.emptyList(),
-            List.of(TEST_NESTED_TYPE_FIELD_NAME_1, TEST_NESTED_TYPE_FIELD_NAME_2),
+            List.of(TEST_PARENT_CHILD_TEXT_FIELD_NAME),
+            List.of(TEST_PARENT_CHILD_TEXT_FIELD_VALUE_1),
+            List.of(TEST_NESTED_FIELD_NAME_1, TEST_NESTED_FIELD_NAME_2),
             Map.of(
-                TEST_NESTED_TYPE_FIELD_NAME_1,
+                TEST_NESTED_FIELD_NAME_1,
                 Arrays.asList(
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "John Alder", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "50"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "John snow", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "23"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "Harry Styles", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "20"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "Michael Jackson", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "67"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "Marry Jane", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "90"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "Tom Hanks", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "5")
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "John Alder", TEST_USER_INNER_AGE_NESTED_FIELD, "50"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "John snow", TEST_USER_INNER_AGE_NESTED_FIELD, "23"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "Harry Styles", TEST_USER_INNER_AGE_NESTED_FIELD, "20"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "Michael Jackson", TEST_USER_INNER_AGE_NESTED_FIELD, "67"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "Marry Jane", TEST_USER_INNER_AGE_NESTED_FIELD, "90"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "Tom Hanks", TEST_USER_INNER_AGE_NESTED_FIELD, "5")
                 ),
-                TEST_NESTED_TYPE_FIELD_NAME_2,
+                TEST_NESTED_FIELD_NAME_2,
                 Arrays.asList(
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "California",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "San Diego"
-                    ),
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "North Carolina",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "Charlotte"
-                    ),
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "California",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "Los Angeles"
-                    ),
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "New York",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "New York"
-                    ),
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "Oregon",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "Portland"
-                    ),
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "California",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "Fresno"
-                    )
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "California", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "San Diego"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "North Carolina", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Charlotte"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "California", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Los Angeles"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "New York", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "New York"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "Oregon", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Portland"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "California", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Fresno")
                 )
             ),
             Collections.emptyList(),
@@ -460,7 +436,7 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
             Collections.emptyList(),
             Collections.emptyList(),
             Collections.emptyList(),
-            List.of(TEST_PARENT_CHILD_FIELD_NAME_1),
+            List.of(TEST_PARENT_CHILD_MY_JOIN_FIELD_FIELD),
             List.of(TEST_PARENT_CHILD_RELATION_FIELD_NAME_1),
             null
         );
@@ -470,52 +446,27 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
             "2",
             Collections.emptyList(),
             Collections.emptyList(),
-            Collections.emptyList(),
-            Collections.emptyList(),
-            List.of(TEST_NESTED_TYPE_FIELD_NAME_1, TEST_NESTED_TYPE_FIELD_NAME_2),
+            List.of(TEST_PARENT_CHILD_TEXT_FIELD_NAME),
+            List.of(TEST_PARENT_CHILD_TEXT_FIELD_VALUE_2),
+            List.of(TEST_NESTED_FIELD_NAME_1, TEST_NESTED_FIELD_NAME_2),
             Map.of(
-                TEST_NESTED_TYPE_FIELD_NAME_1,
+                TEST_NESTED_FIELD_NAME_1,
                 Arrays.asList(
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "John Carry", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "34"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "Dwayne Rock", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "28"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "Leonardo Di Caprio", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "22"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "Jack Sparrow", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "47"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "Will Smith", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "45"),
-                    Map.of(TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_1, "Brad Pitt", TEST_USER_INNER_NESTED_TYPE_FIELD_NAME_2, "39")
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "John Carry", TEST_USER_INNER_AGE_NESTED_FIELD, "34"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "Dwayne Rock", TEST_USER_INNER_AGE_NESTED_FIELD, "28"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "Leonardo Di Caprio", TEST_USER_INNER_AGE_NESTED_FIELD, "22"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "Jack Sparrow", TEST_USER_INNER_AGE_NESTED_FIELD, "47"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "Will Smith", TEST_USER_INNER_AGE_NESTED_FIELD, "45"),
+                    Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "Brad Pitt", TEST_USER_INNER_AGE_NESTED_FIELD, "39")
                 ),
-                TEST_NESTED_TYPE_FIELD_NAME_2,
+                TEST_NESTED_FIELD_NAME_2,
                 Arrays.asList(
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "Illinois",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "Chicago"
-                    ),
-                    Map.of(TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1, "Texas", TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2, "Dallas"),
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "Arizona",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "Phoenix"
-                    ),
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "Florida",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "Orlando"
-                    ),
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "Virginia",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "Redmond"
-                    ),
-                    Map.of(
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_1,
-                        "Washington",
-                        TEST_LOCATION_INNER_NESTED_TYPE_FIELD_NAME_2,
-                        "Seattle"
-                    )
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "Illinois", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Chicago"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "Texas", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Dallas"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "Arizona", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Phoenix"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "Florida", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Orlando"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "Virginia", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Redmond"),
+                    Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "Washington", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "Seattle")
                 )
             ),
             Collections.emptyList(),
@@ -524,7 +475,7 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
             Collections.emptyList(),
             Collections.emptyList(),
             Collections.emptyList(),
-            List.of(TEST_PARENT_CHILD_FIELD_NAME_1),
+            List.of(TEST_PARENT_CHILD_MY_JOIN_FIELD_FIELD),
             List.of(TEST_PARENT_CHILD_RELATION_FIELD_NAME_2),
             "1"
         );

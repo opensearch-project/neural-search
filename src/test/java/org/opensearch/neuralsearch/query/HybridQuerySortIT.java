@@ -24,10 +24,6 @@ import static org.opensearch.neuralsearch.util.TestUtils.assertHitResultsFromQue
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
 import org.opensearch.search.sort.SortOrder;
-import org.opensearch.search.sort.SortBuilder;
-import org.opensearch.search.sort.SortBuilders;
-import org.opensearch.search.sort.ScoreSortBuilder;
-import org.opensearch.search.sort.FieldSortBuilder;
 
 public class HybridQuerySortIT extends BaseNeuralSearchIT {
     private static final String TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS = "test-hybrid-sort-multi-doc-index-multiple-shards";
@@ -616,22 +612,6 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
         hybridQueryBuilder.add(matchQueryBuilder).add(termQueryBuilder).add(rangeQueryBuilder);
         return hybridQueryBuilder;
-    }
-
-    private List<SortBuilder<?>> createSortBuilders(Map<String, SortOrder> fieldSortOrderMap, boolean isSortByScore) {
-        List<SortBuilder<?>> sortBuilders = new ArrayList<>();
-        if (fieldSortOrderMap != null) {
-            for (Map.Entry<String, SortOrder> entry : fieldSortOrderMap.entrySet()) {
-                FieldSortBuilder fieldSortBuilder = SortBuilders.fieldSort(entry.getKey()).order(entry.getValue());
-                sortBuilders.add(fieldSortBuilder);
-            }
-        }
-
-        if (isSortByScore) {
-            ScoreSortBuilder scoreSortBuilder = SortBuilders.scoreSort().order(SortOrder.ASC);
-            sortBuilders.add(scoreSortBuilder);
-        }
-        return sortBuilders;
     }
 
     private void assertStockValueWithSortOrderInHybridQueryResults(
