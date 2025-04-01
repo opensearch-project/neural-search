@@ -14,6 +14,9 @@ import java.util.Set;
 import java.util.function.BiConsumer;
 
 import org.apache.commons.lang3.StringUtils;
+import org.opensearch.action.get.GetAction;
+import org.opensearch.action.get.GetRequest;
+import org.opensearch.action.get.GetResponse;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
@@ -24,6 +27,8 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import com.google.common.annotations.VisibleForTesting;
 
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.processor.optimization.TextImageEmbeddingInferenceFilter;
+import org.opensearch.transport.client.OpenSearchClient;
 
 /**
  * This processor is used for user input data text and image embedding processing, model_id can be used to indicate which model user use,
@@ -35,19 +40,24 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
     public static final String TYPE = "text_image_embedding";
     public static final String MODEL_ID_FIELD = "model_id";
     public static final String EMBEDDING_FIELD = "embedding";
+    public static final boolean DEFAULT_SKIP_EXISTING = false;
+    public static final String SKIP_EXISTING = "skip_existing";
     public static final String FIELD_MAP_FIELD = "field_map";
     public static final String TEXT_FIELD_NAME = "text";
     public static final String IMAGE_FIELD_NAME = "image";
     public static final String INPUT_TEXT = "inputText";
     public static final String INPUT_IMAGE = "inputImage";
+    private static final String INDEX_FIELD = "_index";
+    private static final String ID_FIELD = "_id";
     private static final Set<String> VALID_FIELD_NAMES = Set.of(TEXT_FIELD_NAME, IMAGE_FIELD_NAME);
 
     private final String modelId;
     private final String embedding;
     private final Map<String, String> fieldMap;
-
+    private final boolean skipExisting;
+    private final OpenSearchClient openSearchClient;
     private final MLCommonsClientAccessor mlCommonsClientAccessor;
-
+    private final TextImageEmbeddingInferenceFilter inferenceFilter;
     private final Environment environment;
     private final ClusterService clusterService;
 
@@ -57,6 +67,9 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
         final String modelId,
         final String embedding,
         final Map<String, String> fieldMap,
+        final boolean skipExisting,
+        final TextImageEmbeddingInferenceFilter inferenceFilter,
+        final OpenSearchClient openSearchClient,
         final MLCommonsClientAccessor clientAccessor,
         final Environment environment,
         final ClusterService clusterService
@@ -71,6 +84,9 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
         this.mlCommonsClientAccessor = clientAccessor;
         this.environment = environment;
         this.clusterService = clusterService;
+        this.skipExisting = skipExisting;
+        this.inferenceFilter = inferenceFilter;
+        this.openSearchClient = openSearchClient;
     }
 
     private void validateEmbeddingConfiguration(final Map<String, String> fieldMap) {
@@ -109,15 +125,28 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
             Map<String, String> inferenceMap = createInferences(knnMap);
             if (inferenceMap.isEmpty()) {
                 handler.accept(ingestDocument, null);
-            } else {
-                mlCommonsClientAccessor.inferenceSentencesMap(
-                    MapInferenceRequest.builder().modelId(this.modelId).inputObjects(inferenceMap).build(),
-                    ActionListener.wrap(vectors -> {
-                        setVectorFieldsToDocument(ingestDocument, vectors);
-                        handler.accept(ingestDocument, null);
-                    }, e -> { handler.accept(null, e); })
-                );
+                return;
             }
+            if (skipExisting == false) {
+                generateAndSetInference(ingestDocument, inferenceMap, handler);
+                return;
+            }
+            // if skipExisting flag is turned on, eligible inference text and images will be compared and filtered after embeddings are
+            // copied
+            Object index = ingestDocument.getSourceAndMetadata().get(INDEX_FIELD);
+            Object id = ingestDocument.getSourceAndMetadata().get(ID_FIELD);
+            if (Objects.isNull(index) || Objects.isNull(id)) {
+                generateAndSetInference(ingestDocument, inferenceMap, handler);
+                return;
+            }
+            openSearchClient.execute(
+                GetAction.INSTANCE,
+                new GetRequest(index.toString(), id.toString()),
+                ActionListener.wrap(
+                    response -> reuseOrGenerateEmbedding(response, ingestDocument, knnMap, inferenceMap, handler),
+                    e -> handler.accept(null, e)
+                )
+            );
         } catch (Exception e) {
             handler.accept(null, e);
         }
@@ -173,5 +202,56 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
     @Override
     public String getType() {
         return TYPE;
+    }
+
+    /**
+     * This method invokes inference call through mlCommonsClientAccessor and populates retrieved embeddings to ingestDocument
+     *
+     * @param ingestDocument ingestDocument to populate embeddings to
+     * @param inferenceMap map indicating the path in ingestDocument to populate embeddings
+     * @param handler SourceAndMetadataMap of ingestDocument Document
+     *
+     */
+    private void generateAndSetInference(
+        IngestDocument ingestDocument,
+        Map<String, String> inferenceMap,
+        BiConsumer<IngestDocument, Exception> handler
+    ) {
+        mlCommonsClientAccessor.inferenceSentencesMap(
+            MapInferenceRequest.builder().modelId(this.modelId).inputObjects(inferenceMap).build(),
+            ActionListener.wrap(vectors -> {
+                setVectorFieldsToDocument(ingestDocument, vectors);
+                handler.accept(ingestDocument, null);
+            }, e -> { handler.accept(null, e); })
+        );
+    }
+
+    // This method validates and filters given knnMap and inferenceMap after response is successfully retrieved from get operation.
+    private void reuseOrGenerateEmbedding(
+        GetResponse response,
+        IngestDocument ingestDocument,
+        Map<String, String> knnMap,
+        Map<String, String> inferenceMap,
+        BiConsumer<IngestDocument, Exception> handler
+    ) {
+        final Map<String, Object> existingDocument = response.getSourceAsMap();
+        if (existingDocument == null || existingDocument.isEmpty()) {
+            generateAndSetInference(ingestDocument, inferenceMap, handler);
+            return;
+        }
+        // filter given knnMap by comparing existing document with ingestDocument
+        Map<String, String> filteredKnnMap = inferenceFilter.filterAndCopyExistingEmbeddings(
+            ingestDocument,
+            existingDocument,
+            knnMap,
+            embedding
+        );
+        // create inference map based on filtered knnMap
+        Map<String, String> filteredInferenceMap = createInferences(filteredKnnMap);
+        if (filteredInferenceMap.isEmpty()) {
+            handler.accept(ingestDocument, null);
+        } else {
+            generateAndSetInference(ingestDocument, filteredInferenceMap, handler);
+        }
     }
 }
