@@ -712,7 +712,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                 indexName,
                 buildIndexConfiguration(
                     Collections.emptyList(),
-                    Collections.emptyList(),
+                    Collections.emptyMap(),
                     Collections.singletonList(INTEGER_FIELD_1_STOCK),
                     Collections.singletonList(KEYWORD_FIELD_2_CATEGORY),
                     Collections.emptyList(),

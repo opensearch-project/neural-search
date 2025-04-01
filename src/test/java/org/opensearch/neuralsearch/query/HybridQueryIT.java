@@ -935,7 +935,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 indexName,
                 buildIndexConfiguration(
                     Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)),
-                    List.of(List.of(TEST_NESTED_TYPE_FIELD_NAME_1)),
+                    Map.of(TEST_NESTED_TYPE_FIELD_NAME_1, Map.of()),
                     1
                 ),
                 ""
@@ -948,7 +948,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 indexName,
                 buildIndexConfiguration(
                     Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)),
-                    List.of(),
+                    Map.of(),
                     1
                 ),
                 ""
@@ -971,7 +971,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 indexName,
                 buildIndexConfiguration(
                     Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)),
-                    List.of(List.of(TEST_NESTED_TYPE_FIELD_NAME_1)),
+                    Map.of(TEST_NESTED_TYPE_FIELD_NAME_1, Map.of()),
                     SINGLE_SHARD
                 ),
                 ""
@@ -998,7 +998,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 indexName,
                 buildIndexConfiguration(
                     List.of(),
-                    List.of(),
+                    Map.of(),
                     List.of(INTEGER_FIELD_PRICE),
                     List.of(KEYWORD_FIELD_1),
                     List.of(),
@@ -1052,7 +1052,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         if (TEST_INDEX_WITH_KEYWORDS_THREE_SHARDS.equals(indexName) && !indexExists(TEST_INDEX_WITH_KEYWORDS_THREE_SHARDS)) {
             createIndexWithConfiguration(
                 indexName,
-                buildIndexConfiguration(List.of(), List.of(), List.of(INTEGER_FIELD_PRICE), List.of(KEYWORD_FIELD_1), List.of(), 3),
+                buildIndexConfiguration(List.of(), Map.of(), List.of(INTEGER_FIELD_PRICE), List.of(KEYWORD_FIELD_1), List.of(), 3),
                 ""
             );
             addDocWithKeywordsAndIntFields(
@@ -1106,7 +1106,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 indexName,
                 buildIndexConfiguration(
                     List.of(),
-                    List.of(),
+                    Map.of(),
                     List.of(INTEGER_FIELD_PRICE),
                     List.of(KEYWORD_FIELD_1),
                     List.of(),

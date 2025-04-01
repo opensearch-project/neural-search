@@ -105,7 +105,7 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
                 indexName,
                 buildIndexConfiguration(
                     List.of(),
-                    List.of(List.of(NESTED_TYPE_FIELD_USER, NESTED_FIELD_FIRSTNAME, NESTED_FIELD_LASTNAME)),
+                    Map.of(NESTED_TYPE_FIELD_USER, Map.of(NESTED_FIELD_FIRSTNAME, "keyword", NESTED_FIELD_LASTNAME, "keyword")),
                     List.of(INTEGER_FIELD_DOCINDEX),
                     List.of(KEYWORD_FIELD_DOCKEYWORD),
                     List.of(DATE_FIELD),

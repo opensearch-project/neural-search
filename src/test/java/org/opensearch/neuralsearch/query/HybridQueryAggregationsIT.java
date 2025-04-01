@@ -482,7 +482,7 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 index,
                 buildIndexConfiguration(
                     List.of(new KNNFieldConfig("location", 2, TEST_SPACE_TYPE)),
-                    List.of(),
+                    Map.of(),
                     List.of(),
                     List.of(),
                     List.of(FLOAT_FIELD_NAME_IMDB),
@@ -702,7 +702,7 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
             && !indexExists(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS)) {
             createIndexWithConfiguration(
                 indexName,
-                buildIndexConfiguration(List.of(), List.of(), List.of(INTEGER_FIELD_1), List.of(KEYWORD_FIELD_1), List.of(DATE_FIELD_1), 3),
+                buildIndexConfiguration(List.of(), Map.of(), List.of(INTEGER_FIELD_1), List.of(KEYWORD_FIELD_1), List.of(DATE_FIELD_1), 3),
                 ""
             );
 
@@ -828,7 +828,7 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
         if (!indexExists(indexName)) {
             createIndexWithConfiguration(
                 indexName,
-                buildIndexConfiguration(List.of(), List.of(), List.of(INTEGER_FIELD_1), List.of(KEYWORD_FIELD_1), List.of(), 1),
+                buildIndexConfiguration(List.of(), Map.of(), List.of(INTEGER_FIELD_1), List.of(KEYWORD_FIELD_1), List.of(), 1),
                 ""
             );
 

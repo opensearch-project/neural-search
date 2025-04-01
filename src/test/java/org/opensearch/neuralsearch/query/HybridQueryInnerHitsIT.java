@@ -18,6 +18,7 @@ import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.IntStream;
@@ -220,38 +221,24 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     private void initializeIndexIfNotExist(String indexName) {
-
+        Map<String, Map<String, String>> nestedFields = new HashMap<>();
+        nestedFields.put(
+            TEST_NESTED_FIELD_NAME_1,
+            Map.of(TEST_USER_INNER_NAME_NESTED_FIELD, "text", TEST_USER_INNER_AGE_NESTED_FIELD, "integer")
+        );
+        nestedFields.put(
+            TEST_NESTED_FIELD_NAME_2,
+            Map.of(TEST_LOCATION_INNER_STATE_NESTED_FIELD, "text", TEST_LOCATION_INNER_PLACE_NESTED_FIELD, "text")
+        );
         if ((TEST_MULTI_DOC_WITH_NESTED_FIELDS_SINGLE_SHARD_INDEX_NAME.equals(indexName)
             && !indexExists(TEST_MULTI_DOC_WITH_NESTED_FIELDS_SINGLE_SHARD_INDEX_NAME))) {
-            createIndexWithConfiguration(
-                indexName,
-                buildIndexConfiguration(
-                    Collections.emptyList(),
-                    List.of(
-                        List.of(TEST_NESTED_FIELD_NAME_1, TEST_USER_INNER_NAME_NESTED_FIELD, TEST_USER_INNER_AGE_NESTED_FIELD),
-                        List.of(TEST_NESTED_FIELD_NAME_2, TEST_LOCATION_INNER_STATE_NESTED_FIELD, TEST_LOCATION_INNER_PLACE_NESTED_FIELD)
-                    ),
-                    1
-                ),
-                ""
-            );
+            createIndexWithConfiguration(indexName, buildIndexConfiguration(Collections.emptyList(), nestedFields, 1), "");
             addNestedDocsToIndex(TEST_MULTI_DOC_WITH_NESTED_FIELDS_SINGLE_SHARD_INDEX_NAME);
         }
 
         if ((TEST_MULTI_DOC_WITH_NESTED_FIELDS_MULTIPLE_SHARD_INDEX_NAME.equals(indexName)
             && !indexExists(TEST_MULTI_DOC_WITH_NESTED_FIELDS_MULTIPLE_SHARD_INDEX_NAME))) {
-            createIndexWithConfiguration(
-                indexName,
-                buildIndexConfiguration(
-                    Collections.emptyList(),
-                    List.of(
-                        List.of(TEST_NESTED_FIELD_NAME_1, TEST_USER_INNER_NAME_NESTED_FIELD, TEST_USER_INNER_AGE_NESTED_FIELD),
-                        List.of(TEST_NESTED_FIELD_NAME_2, TEST_LOCATION_INNER_STATE_NESTED_FIELD, TEST_LOCATION_INNER_PLACE_NESTED_FIELD)
-                    ),
-                    3
-                ),
-                ""
-            );
+            createIndexWithConfiguration(indexName, buildIndexConfiguration(Collections.emptyList(), nestedFields, 3), "");
             addNestedDocsToIndex(TEST_MULTI_DOC_WITH_NESTED_FIELDS_MULTIPLE_SHARD_INDEX_NAME);
         }
 
@@ -260,7 +247,7 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
                 indexName,
                 buildIndexConfiguration(
                     Collections.emptyList(),
-                    Collections.emptyList(),
+                    Collections.emptyMap(),
                     List.of(List.of(TEST_PARENT_CHILD_MY_JOIN_FIELD_FIELD, TEST_PARENT_CHILD_TYPE_JOIN)),
                     Collections.emptyList(),
                     Collections.emptyList(),
@@ -279,10 +266,7 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
                 indexName,
                 buildIndexConfiguration(
                     Collections.emptyList(),
-                    List.of(
-                        List.of(TEST_NESTED_FIELD_NAME_1, TEST_USER_INNER_NAME_NESTED_FIELD, TEST_USER_INNER_AGE_NESTED_FIELD),
-                        List.of(TEST_NESTED_FIELD_NAME_2, TEST_LOCATION_INNER_STATE_NESTED_FIELD, TEST_LOCATION_INNER_PLACE_NESTED_FIELD)
-                    ),
+                    nestedFields,
                     List.of(List.of(TEST_PARENT_CHILD_MY_JOIN_FIELD_FIELD, TEST_PARENT_CHILD_TYPE_JOIN)),
                     Collections.emptyList(),
                     Collections.emptyList(),

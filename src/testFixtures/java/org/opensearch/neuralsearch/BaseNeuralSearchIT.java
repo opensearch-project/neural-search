@@ -755,7 +755,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
 
         String responseBody = EntityUtils.toString(response.getEntity());
-        logger.info(responseBody);
         return XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
     }
 
@@ -1330,13 +1329,13 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     @SneakyThrows
     protected String buildIndexConfiguration(final List<KNNFieldConfig> knnFieldConfigs, final int numberOfShards) {
-        return buildIndexConfiguration(knnFieldConfigs, Collections.emptyList(), numberOfShards);
+        return buildIndexConfiguration(knnFieldConfigs, Collections.emptyMap(), numberOfShards);
     }
 
     @SneakyThrows
     protected String buildIndexConfiguration(
         final List<KNNFieldConfig> knnFieldConfigs,
-        final List<List<String>> nestedFields,
+        final Map<String, Map<String, String>> nestedFields,
         final int numberOfShards
     ) {
         return buildIndexConfiguration(
@@ -1352,7 +1351,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     @SneakyThrows
     protected String buildIndexConfiguration(
         final List<KNNFieldConfig> knnFieldConfigs,
-        final List<List<String>> nestedFields,
+        final Map<String, Map<String, String>> nestedFields,
         final List<String> intFields,
         final List<String> keywordFields,
         final List<String> dateFields,
@@ -1373,7 +1372,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     @SneakyThrows
     protected String buildIndexConfiguration(
         final List<KNNFieldConfig> knnFieldConfigs,
-        final List<List<String>> nestedFields,
+        final Map<String, Map<String, String>> nestedFields,
         final List<List<String>> parentChildFields,
         final List<String> intFields,
         final List<String> floatFields,
@@ -1410,16 +1409,15 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             xContentBuilder.endObject();
         }
 
-        // treat the list in a manner that first element is always the type name and all others are keywords
         if (nestedFields.isEmpty() == false) {
-            for (List<String> nestedField : nestedFields) {
-                String nestedFieldName = nestedField.get(0);
+            for (Map.Entry<String, Map<String, String>> nestedField : nestedFields.entrySet()) {
+                String nestedFieldName = nestedField.getKey();
                 xContentBuilder.startObject(nestedFieldName).field("type", "nested");
-                if (nestedField.size() > 1) {
+                Map<String, String> innerFieldsMap = nestedField.getValue();
+                if (innerFieldsMap.isEmpty() == false) {
                     xContentBuilder.startObject("properties");
-                    for (int i = 1; i < nestedField.size(); i++) {
-                        String innerNestedTypeField = nestedField.get(i);
-                        xContentBuilder.startObject(innerNestedTypeField).field("type", "text").endObject();
+                    for (Map.Entry<String, String> innerFields : innerFieldsMap.entrySet()) {
+                        xContentBuilder.startObject(innerFields.getKey()).field("type", innerFields.getValue()).endObject();
                     }
                     xContentBuilder.endObject();
                 }

@@ -432,7 +432,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
                 indexName,
                 buildIndexConfiguration(
                     List.of(),
-                    List.of(),
+                    Map.of(),
                     List.of(INTEGER_FIELD_1_STOCK),
                     List.of(KEYWORD_FIELD_2_CATEGORY),
                     List.of(),
