@@ -1,0 +1,16 @@
+{
+  "description": "text image embedding pipeline",
+  "processors": [
+    {
+      "text_image_embedding": {
+        "model_id": "%s",
+        "embedding": "passage_embedding",
+        "field_map": {
+          "text": "passage_text",
+          "image": "passage_image"
+        },
+        "skip_existing": true
+      }
+    }
+  ]
+}
