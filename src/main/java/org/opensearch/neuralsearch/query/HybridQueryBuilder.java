@@ -396,7 +396,12 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     /**
-     * method that redirects inner_hits builder to the corresponding subquery builder.
+     * Extracts the inner hits from the hybrid query tree structure.
+     * While it extracts inner hits, child inner hits are inlined into the inner hit builder they belong to.
+     * This implementation handles inner hits for all sub-queries within the hybrid query.
+     *
+     * @param innerHits the map to collect inner hit contexts, where the key is the inner hit name
+     *                   and the value is the corresponding inner hit context builder
      */
     @Override
     protected void extractInnerHitBuilders(Map<String, InnerHitContextBuilder> innerHits) {
