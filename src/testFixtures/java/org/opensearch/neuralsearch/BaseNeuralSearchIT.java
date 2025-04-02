@@ -1117,59 +1117,39 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     /**
-     * Get Total count of each inner hit field
+     * Get Total and actual count of each inner hit field
      *
      * @param innerHits List of inner hits
      * @param  fieldNames list of field Names of which total count need to be retrived
      * @return Map of fieldName to totalCount of inner_hit from each individual hit
      */
-    protected Map<String, ArrayList<Integer>> getInnerHitsTotalCountOfNestedField(List<Object> innerHits, List<String> fieldNames) {
-        Map<String, ArrayList<Integer>> totalCountPerFieldMap = new HashMap<>();
+    protected Map<String, Map<String, ArrayList<Integer>>> getInnerHitsCountsOfNestedField(
+        List<Object> innerHits,
+        List<String> fieldNames
+    ) {
+        Map<String, Map<String, ArrayList<Integer>>> countsPerFieldMap = new HashMap<>();
+
         for (Object innerHit : innerHits) {
             Map<String, Object> hits = (Map<String, Object>) innerHit;
             for (String fieldName : fieldNames) {
                 Map<String, Object> searchHits = (Map<String, Object>) hits.get(fieldName);
                 Map<String, Object> fieldHits = (Map<String, Object>) searchHits.get("hits");
+
                 Map<String, Object> total = (Map<String, Object>) fieldHits.get("total");
-                if (totalCountPerFieldMap.containsKey(fieldName)) {
-                    ArrayList<Integer> count = totalCountPerFieldMap.get(fieldName);
-                    count.add((Integer) total.get("value"));
-                    totalCountPerFieldMap.put(fieldName, count);
-                } else {
-                    totalCountPerFieldMap.put(fieldName, new ArrayList<>(Arrays.asList((Integer) total.get("value"))));
-                }
+                int totalCount = (Integer) total.get("value");
 
-            }
-        }
-        return totalCountPerFieldMap;
-    }
-
-    /**
-     * Get count of each inner hit field
-     *
-     * @param innerHits List of inner hits
-     * @param  fieldNames list of field Names of which total count need to be retrived
-     * @return Map of fieldName to count of inner_hit from each individual hit
-     */
-    protected Map<String, ArrayList<Integer>> getInnerHitsCountOfNestedField(List<Object> innerHits, List<String> fieldNames) {
-        Map<String, ArrayList<Integer>> countPerFieldMap = new HashMap<>();
-        for (Object innerHit : innerHits) {
-            Map<String, Object> hits = (Map<String, Object>) innerHit;
-            for (String fieldName : fieldNames) {
-                Map<String, Object> searchHits = (Map<String, Object>) hits.get(fieldName);
-                Map<String, Object> fieldHits = (Map<String, Object>) searchHits.get("hits");
                 List<Object> innerHitsOfField = (List<Object>) fieldHits.get("hits");
-                if (countPerFieldMap.containsKey(fieldName)) {
-                    ArrayList<Integer> count = countPerFieldMap.get(fieldName);
-                    count.add(innerHitsOfField.size());
-                    countPerFieldMap.put(fieldName, count);
-                } else {
-                    countPerFieldMap.put(fieldName, new ArrayList<>(Arrays.asList(innerHitsOfField.size())));
-                }
+                int actualCount = innerHitsOfField.size();
 
+                countsPerFieldMap.computeIfAbsent(fieldName, k -> new HashMap<>())
+                    .computeIfAbsent("total", k -> new ArrayList<>())
+                    .add(totalCount);
+                countsPerFieldMap.computeIfAbsent(fieldName, k -> new HashMap<>())
+                    .computeIfAbsent("actual", k -> new ArrayList<>())
+                    .add(actualCount);
             }
         }
-        return countPerFieldMap;
+        return countsPerFieldMap;
     }
 
     /**

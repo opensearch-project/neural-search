@@ -72,7 +72,6 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
         testInnerHits_whenMultipleSubqueriesOnNestedFields_thenSuccessful(TEST_MULTI_DOC_WITH_NESTED_FIELDS_MULTIPLE_SHARD_INDEX_NAME);
     }
 
-    @SneakyThrows
     private void testInnerHits_whenMultipleSubqueriesOnNestedFields_thenSuccessful(String indexName) {
         initializeIndexIfNotExist(indexName);
         createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of());
@@ -98,17 +97,16 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
 
         List<Object> hitsNestedList = getInnerHitsFromSearchHits(searchResponseAsMap);
         assertEquals(2, getHitCount(searchResponseAsMap));
-        Map<String, ArrayList<Integer>> innerHitCountPerFieldName = getInnerHitsTotalCountOfNestedField(
+        Map<String, Map<String, ArrayList<Integer>>> innerHitCountPerFieldName = getInnerHitsCountsOfNestedField(
             hitsNestedList,
             List.of(TEST_NESTED_FIELD_NAME_1, TEST_NESTED_FIELD_NAME_2)
         );
-        assertEquals(2, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_1).get(0).intValue());
-        assertEquals(3, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_2).get(0).intValue());
-        assertEquals(1, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_1).get(1).intValue());
-        assertEquals(0, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_2).get(1).intValue());
+        assertEquals(2, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_1).get("total").get(0).intValue());
+        assertEquals(3, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_2).get("total").get(0).intValue());
+        assertEquals(1, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_1).get("total").get(1).intValue());
+        assertEquals(0, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_2).get("total").get(1).intValue());
     }
 
-    @SneakyThrows
     public void testInnerHits_whenMultipleSubqueriesOnParentChildFields_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_WITH_PARENT_CHILD_INDEX_NAME);
         createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of());
@@ -130,11 +128,11 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
 
         List<Object> hitsNestedList = getInnerHitsFromSearchHits(searchResponseAsMap);
         assertEquals(1, getHitCount(searchResponseAsMap));
-        Map<String, ArrayList<Integer>> innerHitCountPerFieldName = getInnerHitsTotalCountOfNestedField(
+        Map<String, Map<String, ArrayList<Integer>>> innerHitCountPerFieldName = getInnerHitsCountsOfNestedField(
             hitsNestedList,
             List.of(TEST_PARENT_CHILD_INNER_HITS_FIELD_NAME)
         );
-        assertEquals(1, innerHitCountPerFieldName.get(TEST_PARENT_CHILD_INNER_HITS_FIELD_NAME).get(0).intValue());
+        assertEquals(1, innerHitCountPerFieldName.get(TEST_PARENT_CHILD_INNER_HITS_FIELD_NAME).get("total").get(0).intValue());
     }
 
     @SneakyThrows
@@ -157,19 +155,19 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
 
         List<Object> hitsNestedList = getInnerHitsFromSearchHits(searchResponseAsMap);
         assertEquals(1, getHitCount(searchResponseAsMap));
-        Map<String, ArrayList<Integer>> innerHitCountPerFieldName = getInnerHitsTotalCountOfNestedField(
+        Map<String, Map<String, ArrayList<Integer>>> innerHitCountPerFieldName = getInnerHitsCountsOfNestedField(
             hitsNestedList,
             List.of(TEST_PARENT_CHILD_INNER_HITS_FIELD_NAME)
         );
-        assertEquals(1, innerHitCountPerFieldName.get(TEST_PARENT_CHILD_INNER_HITS_FIELD_NAME).get(0).intValue());
+        assertEquals(1, innerHitCountPerFieldName.get(TEST_PARENT_CHILD_INNER_HITS_FIELD_NAME).get("total").get(0).intValue());
         Map<String, Object> childInnerHit = (Map<String, Object>) hitsNestedList.get(0);
         Map<String, Object> childHit = (Map<String, Object>) childInnerHit.get(TEST_PARENT_CHILD_INNER_HITS_FIELD_NAME);
         List<Object> childInnerHits = getInnerHitsFromSearchHits(childHit);
-        Map<String, ArrayList<Integer>> childInnerHitCountPerFieldName = getInnerHitsTotalCountOfNestedField(
+        Map<String, Map<String, ArrayList<Integer>>> childInnerHitCountPerFieldName = getInnerHitsCountsOfNestedField(
             childInnerHits,
             List.of(TEST_NESTED_FIELD_NAME_1)
         );
-        assertEquals(1, childInnerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_1).get(0).intValue());
+        assertEquals(1, childInnerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_1).get("total").get(0).intValue());
     }
 
     @SneakyThrows
@@ -203,14 +201,14 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
 
         List<Object> hitsNestedList = getInnerHitsFromSearchHits(searchResponseAsMap);
         assertEquals(2, getHitCount(searchResponseAsMap));
-        Map<String, ArrayList<Integer>> innerHitCountPerFieldName = getInnerHitsCountOfNestedField(
+        Map<String, Map<String, ArrayList<Integer>>> innerHitCountPerFieldName = getInnerHitsCountsOfNestedField(
             hitsNestedList,
             List.of(TEST_NESTED_FIELD_NAME_1, TEST_NESTED_FIELD_NAME_2)
         );
-        assertEquals(1, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_1).get(0).intValue());
-        assertEquals(3, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_2).get(0).intValue());
-        assertEquals(0, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_1).get(1).intValue());
-        assertEquals(0, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_2).get(1).intValue());
+        assertEquals(1, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_1).get("actual").get(0).intValue());
+        assertEquals(3, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_2).get("actual").get(0).intValue());
+        assertEquals(0, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_1).get("actual").get(1).intValue());
+        assertEquals(0, innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_2).get("actual").get(1).intValue());
 
         Map<String, ArrayList<List<Object>>> sortsPerField = getInnerHitsSortValueOfNestedField(
             hitsNestedList,
@@ -262,7 +260,7 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
             List.of(TEST_NESTED_FIELD_NAME_1, TEST_NESTED_FIELD_NAME_2)
         );
 
-        Map<String, ArrayList<Integer>> innerHitCountPerFieldName = getInnerHitsCountOfNestedField(
+        Map<String, Map<String, ArrayList<Integer>>> innerHitCountPerFieldName = getInnerHitsCountsOfNestedField(
             nestedHitsList,
             List.of(TEST_NESTED_FIELD_NAME_1, TEST_NESTED_FIELD_NAME_2)
         );
@@ -317,7 +315,7 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
         assertEquals(scoreOfInnerHits.get(TEST_NESTED_FIELD_NAME_1).get(0), (double) child1Details.get("value"), DELTA_FOR_SCORE_ASSERTION);
         assertEquals(
             "Score based on "
-                + innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_1).get(0)
+                + innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_1).get("total").get(0)
                 + " child docs in range from 0 to 11, using score mode Max",
             child1Details.get("description")
         );
@@ -327,7 +325,7 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
         assertEquals(scoreOfInnerHits.get(TEST_NESTED_FIELD_NAME_2).get(0), (double) child2Details.get("value"), DELTA_FOR_SCORE_ASSERTION);
         assertEquals(
             "Score based on "
-                + innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_2).get(0)
+                + innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_2).get("total").get(0)
                 + " child docs in range from 0 to 11, using score mode Max",
             child2Details.get("description")
         );
