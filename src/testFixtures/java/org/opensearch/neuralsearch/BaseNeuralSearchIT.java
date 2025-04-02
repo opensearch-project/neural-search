@@ -1228,6 +1228,38 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     /**
+     * Get scores of each inner hit field
+     *
+     * @param innerHits List of inner hits
+     * @param  fieldNames list of field Names of which total count need to be retrived
+     * @return Map of fieldName to scores of inner_hit from each individual hit
+     */
+    protected Map<String, ArrayList<Double>> getInnerHitsScoresPerFieldList(List<Object> innerHits, List<String> fieldNames) {
+        Map<String, ArrayList<Double>> scoresPerFieldMap = new HashMap<>();
+        for (Object innerHit : innerHits) {
+            Map<String, Object> hits = (Map<String, Object>) innerHit;
+            for (String fieldName : fieldNames) {
+                Map<String, Object> searchHits = (Map<String, Object>) hits.get(fieldName);
+                Map<String, Object> fieldHits = (Map<String, Object>) searchHits.get("hits");
+                List<Object> innerHitsOfField = (List<Object>) fieldHits.get("hits");
+                for (Object ih : innerHitsOfField) {
+                    Map<String, Object> ihMap = (Map<String, Object>) ih;
+                    Double score = (Double) ihMap.get("_score");
+                    if (scoresPerFieldMap.containsKey(fieldName)) {
+                        ArrayList<Double> scores = scoresPerFieldMap.get(fieldName);
+                        scores.add(score);
+                        scoresPerFieldMap.put(fieldName, scores);
+                    } else {
+                        scoresPerFieldMap.put(fieldName, new ArrayList<>(Arrays.asList(score)));
+                    }
+                }
+
+            }
+        }
+        return scoresPerFieldMap;
+    }
+
+    /**
      * Parse the total number of hits from the search
      *
      * @param searchResponseAsMap Complete search response as a map

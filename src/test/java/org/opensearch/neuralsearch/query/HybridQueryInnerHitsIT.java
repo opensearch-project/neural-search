@@ -25,6 +25,12 @@ import java.util.stream.IntStream;
 
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
+import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
+import static org.opensearch.neuralsearch.util.TestUtils.RELATION_EQUAL_TO;
+import static org.opensearch.neuralsearch.util.TestUtils.getMaxScore;
+import static org.opensearch.neuralsearch.util.TestUtils.getNestedHits;
+import static org.opensearch.neuralsearch.util.TestUtils.getTotalHits;
+import static org.opensearch.neuralsearch.util.TestUtils.getValueByKey;
 
 public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
     private static final String TEST_MULTI_DOC_WITH_NESTED_FIELDS_SINGLE_SHARD_INDEX_NAME = "test-hybrid-index-nested-field-single-shard";
@@ -217,6 +223,115 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
                 .mapToObj(i -> new AbstractMap.SimpleEntry<>(locationSorts.get(i).get(0), locationSorts.get(i + 1).get(0)))
                 .allMatch(pair -> ((Comparable<Object>) pair.getKey()).compareTo(pair.getValue()) > 0)
         );
+    }
+
+    @SneakyThrows
+    public void testInnerHitsWithExplain_whenMultipleSubqueriesOnNestedFields_thenSuccessful() {
+        initializeIndexIfNotExist(TEST_MULTI_DOC_WITH_NESTED_FIELDS_MULTIPLE_SHARD_INDEX_NAME);
+        createSearchPipeline(
+            NORMALIZATION_SEARCH_PIPELINE,
+            DEFAULT_NORMALIZATION_METHOD,
+            Map.of(),
+            DEFAULT_COMBINATION_METHOD,
+            Map.of(),
+            true
+        );
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        NestedQueryBuilder nestedQueryBuilder1 = new NestedQueryBuilder("user", new MatchQueryBuilder("user.name", "John"), ScoreMode.Max);
+        nestedQueryBuilder1.innerHit(new InnerHitBuilder());
+        NestedQueryBuilder nestedQueryBuilder2 = new NestedQueryBuilder(
+            "location",
+            new MatchQueryBuilder("location.state", "California"),
+            ScoreMode.Max
+        );
+        nestedQueryBuilder2.innerHit(new InnerHitBuilder());
+        hybridQueryBuilder.add(nestedQueryBuilder1);
+        hybridQueryBuilder.add(nestedQueryBuilder2);
+
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_WITH_NESTED_FIELDS_MULTIPLE_SHARD_INDEX_NAME,
+            hybridQueryBuilder,
+            null,
+            10,
+            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
+        );
+
+        List<Object> nestedHitsList = getInnerHitsFromSearchHits(searchResponseAsMap);
+        Map<String, ArrayList<Double>> scoreOfInnerHits = getInnerHitsScoresPerFieldList(
+            nestedHitsList,
+            List.of(TEST_NESTED_FIELD_NAME_1, TEST_NESTED_FIELD_NAME_2)
+        );
+
+        Map<String, ArrayList<Integer>> innerHitCountPerFieldName = getInnerHitsCountOfNestedField(
+            nestedHitsList,
+            List.of(TEST_NESTED_FIELD_NAME_1, TEST_NESTED_FIELD_NAME_2)
+        );
+        // Assert
+        // basic sanity check for search hits
+        assertEquals(2, getHitCount(searchResponseAsMap));
+        assertTrue(getMaxScore(searchResponseAsMap).isPresent());
+        float actualMaxScore = getMaxScore(searchResponseAsMap).get();
+        assertTrue(actualMaxScore > 0);
+        Map<String, Object> total = getTotalHits(searchResponseAsMap);
+        assertNotNull(total.get("value"));
+        assertEquals(2, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+
+        // explain, hit 1
+        List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
+        Map<String, Object> searchHit1 = hitsNestedList.get(0);
+        Map<String, Object> explanationForHit1 = getValueByKey(searchHit1, "_explanation");
+        assertNotNull(explanationForHit1);
+        assertEquals((double) searchHit1.get("_score"), (double) explanationForHit1.get("value"), DELTA_FOR_SCORE_ASSERTION);
+
+        // top level explanation
+        String expectedTopLevelDescription = "arithmetic_mean combination of:";
+        assertEquals(expectedTopLevelDescription, explanationForHit1.get("description"));
+
+        // Normalization explanation
+        List<Map<String, Object>> hit1Details = getListOfValues(explanationForHit1, "details");
+        assertEquals(1, hit1Details.size());
+        Map<String, Object> hit1DetailsForHit1 = hit1Details.get(0);
+        assertEquals(0.001f, (double) hit1DetailsForHit1.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("min_max normalization of:", hit1DetailsForHit1.get("description"));
+        assertEquals(1, ((List) hit1DetailsForHit1.get("details")).size());
+
+        // Combination explanation
+        List<Map<String, Object>> hit1CombinationDetails = getListOfValues(hit1DetailsForHit1, "details");
+        assertEquals(1, hit1CombinationDetails.size());
+        Map<String, Object> internalCombinationDetailsForHit1 = hit1CombinationDetails.get(0);
+        assertEquals(
+            scoreOfInnerHits.get(TEST_NESTED_FIELD_NAME_1).get(0),
+            (double) internalCombinationDetailsForHit1.get("value"),
+            DELTA_FOR_SCORE_ASSERTION
+        );
+        assertEquals("combined score of:", internalCombinationDetailsForHit1.get("description"));
+        assertEquals(2, ((List) internalCombinationDetailsForHit1.get("details")).size());
+
+        // InnerHitsChild explanation
+        List<Map<String, Object>> hit1ChildDetails = getListOfValues(internalCombinationDetailsForHit1, "details");
+        assertEquals(2, hit1ChildDetails.size());
+
+        Map<String, Object> child1Details = hit1ChildDetails.get(0);
+        assertEquals(scoreOfInnerHits.get(TEST_NESTED_FIELD_NAME_1).get(0), (double) child1Details.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(
+            "Score based on "
+                + innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_1).get(0)
+                + " child docs in range from 0 to 11, using score mode Max",
+            child1Details.get("description")
+        );
+        assertEquals(1, ((List) child1Details.get("details")).size());
+
+        Map<String, Object> child2Details = hit1ChildDetails.get(1);
+        assertEquals(scoreOfInnerHits.get(TEST_NESTED_FIELD_NAME_2).get(0), (double) child2Details.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(
+            "Score based on "
+                + innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_2).get(0)
+                + " child docs in range from 0 to 11, using score mode Max",
+            child2Details.get("description")
+        );
+        assertEquals(1, ((List) child2Details.get("details")).size());
     }
 
     @SneakyThrows
