@@ -222,7 +222,9 @@ public class SemanticHighlighterIT extends BaseNeuralSearchIT {
          *         },
          *         "options": {
          *             "model_id": "sentence-highlighting-model-id"
-         *         }
+         *         },
+         *         "pre_tags": ["<test>"],
+         *         "post_tags": ["</test>"]
          *     }
          * }
          */
@@ -232,6 +234,8 @@ public class SemanticHighlighterIT extends BaseNeuralSearchIT {
             .modelId(textEmbeddingModelId)
             .k(1)
             .build();
+
+        // First test with default highlighting tags
         searchResponse = searchWithSemanticHighlighter(
             TEST_BASIC_INDEX_NAME,
             neuralQueryBuilder,
@@ -239,6 +243,40 @@ public class SemanticHighlighterIT extends BaseNeuralSearchIT {
             TEST_TEXT_FIELD_NAME,
             sentenceHighlightingModelId
         );
+        verifyHighlightResults(searchResponse, TEST_QUERY_TEXT);
+
+        // Then test with custom highlighting tags
+        Map<String, Map<String, Object>> customHighlightFields = Map.of(TEST_TEXT_FIELD_NAME, Map.of("type", "semantic"));
+        Map<String, Object> customHighlightOptions = Map.of("model_id", sentenceHighlightingModelId);
+
+        searchResponse = searchWithHighlight(
+            TEST_BASIC_INDEX_NAME,
+            neuralQueryBuilder,
+            10,
+            customHighlightFields,
+            customHighlightOptions,
+            new String[] { "<test>" },
+            new String[] { "</test>" }
+        );
+
+        // Verify results with custom tags
+        Map<String, Object> customTagsHit = getFirstInnerHit(searchResponse);
+        assertNotNull("Search response should contain hits", customTagsHit);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> customHighlight = (Map<String, Object>) customTagsHit.get("highlight");
+        assertNotNull("Hit should contain highlight section", customHighlight);
+
+        @SuppressWarnings("unchecked")
+        List<String> customHighlightedFields = (List<String>) customHighlight.get(TEST_TEXT_FIELD_NAME);
+        assertNotNull("Highlight should contain the requested field", customHighlightedFields);
+        assertFalse("Highlighted fields should not be empty", customHighlightedFields.isEmpty());
+
+        String customHighlightedText = customHighlightedFields.getFirst();
+        assertTrue("Text should contain custom opening tag", customHighlightedText.contains("<test>"));
+        assertTrue("Text should contain custom closing tag", customHighlightedText.contains("</test>"));
+        assertFalse("Text should not contain default opening tag", customHighlightedText.contains("<em>"));
+        assertFalse("Text should not contain default closing tag", customHighlightedText.contains("</em>"));
         verifyHighlightResults(searchResponse, TEST_QUERY_TEXT);
 
         // 6. Test Hybrid Query

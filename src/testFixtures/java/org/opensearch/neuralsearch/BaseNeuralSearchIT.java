@@ -2288,4 +2288,44 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             null
         );
     }
+
+    /**
+     * Execute a search request with highlighting and custom tags
+     *
+     * @param index Index to search against
+     * @param queryBuilder queryBuilder to produce source of query
+     * @param resultSize number of results to return in the search
+     * @param highlightFields map of field names to highlight configurations
+     * @param highlightOptions global highlight options
+     * @param preTags array of pre-tags for highlighting
+     * @param postTags array of post-tags for highlighting
+     * @return Search results represented as a map
+     */
+    protected Map<String, Object> searchWithHighlight(
+        final String index,
+        final QueryBuilder queryBuilder,
+        final int resultSize,
+        final Map<String, Map<String, Object>> highlightFields,
+        final Map<String, Object> highlightOptions,
+        final String[] preTags,
+        final String[] postTags
+    ) {
+        return search(
+            index,
+            queryBuilder,
+            null,
+            resultSize,
+            Map.of(),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            highlightFields,
+            highlightOptions,
+            Arrays.asList(preTags),
+            Arrays.asList(postTags)
+        );
+    }
 }
