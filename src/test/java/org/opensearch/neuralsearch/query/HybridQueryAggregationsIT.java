@@ -482,6 +482,7 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 index,
                 buildIndexConfiguration(
                     List.of(new KNNFieldConfig("location", 2, TEST_SPACE_TYPE)),
+                    Map.of(),
                     List.of(),
                     List.of(),
                     List.of(FLOAT_FIELD_NAME_IMDB),
@@ -701,11 +702,11 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
             && !indexExists(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS)) {
             createIndexWithConfiguration(
                 indexName,
-                buildIndexConfiguration(List.of(), List.of(), List.of(INTEGER_FIELD_1), List.of(KEYWORD_FIELD_1), List.of(DATE_FIELD_1), 3),
+                buildIndexConfiguration(List.of(), Map.of(), List.of(INTEGER_FIELD_1), List.of(KEYWORD_FIELD_1), List.of(DATE_FIELD_1), 3),
                 ""
             );
 
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "1",
                 List.of(),
@@ -713,15 +714,18 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT1),
                 List.of(),
-                List.of(),
+                Map.of(),
                 List.of(INTEGER_FIELD_1, INTEGER_FIELD_PRICE),
                 List.of(INTEGER_FIELD_1_VALUE, INTEGER_FIELD_PRICE_1_VALUE),
                 List.of(KEYWORD_FIELD_1),
                 List.of(KEYWORD_FIELD_1_VALUE),
                 List.of(DATE_FIELD_1),
-                List.of(DATE_FIELD_1_VALUE)
+                List.of(DATE_FIELD_1_VALUE),
+                List.of(),
+                List.of(),
+                null
             );
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "2",
                 List.of(),
@@ -729,15 +733,18 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT3),
                 List.of(),
-                List.of(),
+                Map.of(),
                 List.of(INTEGER_FIELD_1, INTEGER_FIELD_PRICE),
                 List.of(INTEGER_FIELD_2_VALUE, INTEGER_FIELD_PRICE_2_VALUE),
                 List.of(),
                 List.of(),
                 List.of(DATE_FIELD_1),
-                List.of(DATE_FIELD_2_VALUE)
+                List.of(DATE_FIELD_2_VALUE),
+                List.of(),
+                List.of(),
+                null
             );
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "3",
                 List.of(),
@@ -745,15 +752,18 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT2),
                 List.of(),
-                List.of(),
+                Map.of(),
                 List.of(INTEGER_FIELD_PRICE),
                 List.of(INTEGER_FIELD_PRICE_3_VALUE),
                 List.of(KEYWORD_FIELD_1),
                 List.of(KEYWORD_FIELD_2_VALUE),
                 List.of(DATE_FIELD_1),
-                List.of(DATE_FIELD_3_VALUE)
+                List.of(DATE_FIELD_3_VALUE),
+                List.of(),
+                List.of(),
+                null
             );
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "4",
                 List.of(),
@@ -761,15 +771,18 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT4),
                 List.of(),
-                List.of(),
+                Map.of(),
                 List.of(INTEGER_FIELD_1, INTEGER_FIELD_PRICE),
                 List.of(INTEGER_FIELD_3_VALUE, INTEGER_FIELD_PRICE_4_VALUE),
                 List.of(KEYWORD_FIELD_1),
                 List.of(KEYWORD_FIELD_3_VALUE),
                 List.of(DATE_FIELD_1),
-                List.of(DATE_FIELD_2_VALUE)
+                List.of(DATE_FIELD_2_VALUE),
+                List.of(),
+                List.of(),
+                null
             );
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "5",
                 List.of(),
@@ -777,15 +790,18 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT5),
                 List.of(),
-                List.of(),
+                Map.of(),
                 List.of(INTEGER_FIELD_1, INTEGER_FIELD_PRICE),
                 List.of(INTEGER_FIELD_3_VALUE, INTEGER_FIELD_PRICE_5_VALUE),
                 List.of(KEYWORD_FIELD_1),
                 List.of(KEYWORD_FIELD_4_VALUE),
                 List.of(DATE_FIELD_1),
-                List.of(DATE_FIELD_4_VALUE)
+                List.of(DATE_FIELD_4_VALUE),
+                List.of(),
+                List.of(),
+                null
             );
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "6",
                 List.of(),
@@ -793,13 +809,16 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT6),
                 List.of(),
-                List.of(),
+                Map.of(),
                 List.of(INTEGER_FIELD_1, INTEGER_FIELD_PRICE),
                 List.of(INTEGER_FIELD_4_VALUE, INTEGER_FIELD_PRICE_6_VALUE),
                 List.of(KEYWORD_FIELD_1),
                 List.of(KEYWORD_FIELD_4_VALUE),
                 List.of(DATE_FIELD_1),
-                List.of(DATE_FIELD_4_VALUE)
+                List.of(DATE_FIELD_4_VALUE),
+                List.of(),
+                List.of(),
+                null
             );
         }
     }
@@ -809,11 +828,11 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
         if (!indexExists(indexName)) {
             createIndexWithConfiguration(
                 indexName,
-                buildIndexConfiguration(List.of(), List.of(), List.of(INTEGER_FIELD_1), List.of(KEYWORD_FIELD_1), List.of(), 1),
+                buildIndexConfiguration(List.of(), Map.of(), List.of(INTEGER_FIELD_1), List.of(KEYWORD_FIELD_1), List.of(), 1),
                 ""
             );
 
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "1",
                 List.of(),
@@ -821,16 +840,19 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT1),
                 List.of(),
-                List.of(),
+                Map.of(),
                 List.of(INTEGER_FIELD_1),
                 List.of(INTEGER_FIELD_1_VALUE),
                 List.of(),
                 List.of(),
                 List.of(),
-                List.of()
+                List.of(),
+                List.of(),
+                List.of(),
+                null
             );
 
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "2",
                 List.of(),
@@ -838,13 +860,16 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT3),
                 List.of(),
-                List.of(),
+                Map.of(),
                 List.of(INTEGER_FIELD_1),
                 List.of(INTEGER_FIELD_2_VALUE),
                 List.of(),
                 List.of(),
                 List.of(),
-                List.of()
+                List.of(),
+                List.of(),
+                List.of(),
+                null
             );
         }
     }

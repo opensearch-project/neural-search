@@ -858,7 +858,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
                 indexName,
                 buildIndexConfiguration(
                     Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)),
-                    List.of(TEST_NESTED_TYPE_FIELD_NAME_1),
+                    Map.of(TEST_NESTED_TYPE_FIELD_NAME_1, Map.of()),
                     1
                 ),
                 ""
@@ -871,7 +871,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
                 indexName,
                 buildIndexConfiguration(
                     Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)),
-                    List.of(),
+                    Map.of(),
                     1
                 ),
                 ""
