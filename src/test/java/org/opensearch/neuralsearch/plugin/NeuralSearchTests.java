@@ -9,6 +9,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -17,6 +18,7 @@ import org.junit.Before;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.concurrent.OpenSearchExecutors;
@@ -36,6 +38,7 @@ import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.plugins.SearchPipelinePlugin;
 import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.plugins.SearchPlugin.SearchExtSpec;
@@ -79,6 +82,15 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
     public void testCreateComponents() {
         // clientAccessor can not be null, and this is the only way to access it from this test
         plugin.getProcessors(ingestParameters);
+
+        Settings settings = Settings.builder().build();
+        Environment environment = mock(Environment.class);
+        when(environment.settings()).thenReturn(settings);
+
+        // Mock ClusterSettings
+        ClusterSettings clusterSettings = new ClusterSettings(settings, Collections.singleton(NeuralSearchSettings.NEURAL_STATS_ENABLED));
+        when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
+
         Collection<Object> components = plugin.createComponents(
             null,
             clusterService,
@@ -86,14 +98,14 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
             null,
             null,
             null,
-            null,
+            environment,
             null,
             null,
             null,
             null
         );
 
-        assertEquals(1, components.size());
+        assertEquals(3, components.size());
     }
 
     public void testQuerySpecs() {
@@ -163,7 +175,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
     public void testGetSettings() {
         List<Setting<?>> settings = plugin.getSettings();
 
-        assertEquals(2, settings.size());
+        assertEquals(3, settings.size());
     }
 
     public void testRequestProcessors() {

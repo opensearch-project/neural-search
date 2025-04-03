@@ -60,8 +60,12 @@ import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.neuralsearch.highlight.SemanticHighlighter;
+import org.opensearch.neuralsearch.plugin.NeuralSearch;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
+import org.opensearch.neuralsearch.transport.NeuralStatsResponse;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 import org.opensearch.search.SearchHit;
@@ -181,6 +185,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         updateClusterSettings("plugins.ml_commons.native_memory_threshold", 100);
         updateClusterSettings("plugins.ml_commons.jvm_heap_memory_threshold", 95);
         updateClusterSettings("plugins.ml_commons.allow_registering_model_via_url", true);
+
     }
 
     @SneakyThrows
@@ -2210,6 +2215,99 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             toHttpEntity(String.format(LOCALE, requestBody)),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
+    }
+
+    protected String executeNeuralStatRequest(List<String> nodeIds, List<String> stats) throws IOException, ParseException {
+        return executeNeuralStatRequest(nodeIds, stats, Collections.emptyMap());
+    }
+
+    protected String executeNeuralStatRequest(List<String> nodeIds, List<String> stats, Map<String, String> queryParams) throws IOException,
+        ParseException {
+        String nodePrefix = "";
+        if (!nodeIds.isEmpty()) {
+            nodePrefix = "/" + String.join(",", nodeIds);
+        }
+
+        String statsSuffix = "";
+        if (!stats.isEmpty()) {
+            statsSuffix = "/" + String.join(",", stats);
+        }
+
+        String queryParamString = "?";
+        for (Map.Entry<String, String> queryParam : queryParams.entrySet()) {
+            queryParamString += queryParam.getKey() + "=" + queryParam.getValue() + "&";
+        }
+
+        Request request = new Request("GET", NeuralSearch.NEURAL_BASE_URI + nodePrefix + "/stats" + statsSuffix + queryParamString);
+
+        Response response = client().performRequest(request);
+        assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        return EntityUtils.toString(response.getEntity());
+    }
+
+    protected Map<String, Object> parseInfoStatsResponse(String responseBody) throws IOException {
+        Map<String, Object> responseMap = createParser(MediaTypeRegistry.getDefaultMediaType().xContent(), responseBody).map();
+        return (Map<String, Object>) responseMap.get(NeuralStatsResponse.INFO_KEY_PREFIX);
+    }
+
+    protected Map<String, Object> parseAggregatedNodeStatsResponse(String responseBody) throws IOException {
+        Map<String, Object> responseMap = createParser(MediaTypeRegistry.getDefaultMediaType().xContent(), responseBody).map();
+        return (Map<String, Object>) responseMap.get(NeuralStatsResponse.AGGREGATED_NODES_KEY_PREFIX);
+    }
+
+    protected List<Map<String, Object>> parseNodeStatsResponse(String responseBody) throws IOException {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> responseMap = (Map<String, Object>) createParser(
+            MediaTypeRegistry.getDefaultMediaType().xContent(),
+            responseBody
+        ).map().get("nodes");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodeResponses = responseMap.keySet()
+            .stream()
+            .map(key -> (Map<String, Object>) responseMap.get(key))
+            .collect(Collectors.toList());
+
+        return nodeResponses;
+    }
+
+    protected Object getNestedValue(Map<String, Object> map, EventStatName eventStatName) {
+        return getNestedValue(map, eventStatName.getFullPath());
+    }
+
+    protected Object getNestedValue(Map<String, Object> map, InfoStatName infoStatName) {
+        return getNestedValue(map, infoStatName.getFullPath());
+    }
+
+    protected Object getNestedValue(Map<String, Object> sourceMap, String dotNotationPath) {
+        if (sourceMap == null || dotNotationPath == null || dotNotationPath.isEmpty()) {
+            return null;
+        }
+
+        List<String> pathElements = Arrays.asList(dotNotationPath.split("\\."));
+        return traverseMapByPath(sourceMap, pathElements);
+    }
+
+    private Object traverseMapByPath(Map<String, Object> currentMap, List<String> remainingPath) {
+        if (currentMap == null || remainingPath.isEmpty()) {
+            return null;
+        }
+
+        String currentKey = remainingPath.get(0);
+        Object currentValue = currentMap.get(currentKey);
+
+        // If we've reached the end of the path, return the current value
+        if (remainingPath.size() == 1) {
+            return currentValue;
+        }
+
+        // If there are more keys to process, ensure current value is a map and continue
+        if (currentValue instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> nestedMap = (Map<String, Object>) currentValue;
+            return traverseMapByPath(nestedMap, remainingPath.subList(1, remainingPath.size()));
+        }
+        return null;
     }
 
     /**

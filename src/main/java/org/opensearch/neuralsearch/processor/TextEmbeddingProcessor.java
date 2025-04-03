@@ -24,6 +24,8 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.processor.optimization.TextEmbeddingInferenceFilter;
 import org.opensearch.transport.client.OpenSearchClient;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
 
 /**
  * This processor is used for user input data text embedding processing, model_id can be used to indicate which model user use,
@@ -64,6 +66,7 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
         List<String> inferenceList,
         BiConsumer<IngestDocument, Exception> handler
     ) {
+        EventStatsManager.increment(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS);
         // skip existing flag is turned off. Call model inference without filtering
         if (skipExisting == false) {
             generateAndSetInference(ingestDocument, processMap, inferenceList, handler);
