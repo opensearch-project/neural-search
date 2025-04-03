@@ -61,6 +61,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
 import lombok.SneakyThrows;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.transport.client.OpenSearchClient;
 
 public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
@@ -83,9 +85,10 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
 
     @Mock
     private MLCommonsClientAccessor mlCommonsClientAccessor;
-
     @Mock
     private Environment environment;
+    @Mock
+    private NeuralSearchSettingsAccessor settingsAccessor;
 
     private ClusterService clusterService = mock(ClusterService.class, RETURNS_DEEP_STUBS);
 
@@ -103,6 +106,9 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         MockitoAnnotations.openMocks(this);
         Settings settings = Settings.builder().put("index.mapping.depth.limit", 20).build();
         when(clusterService.state().metadata().index(anyString()).getSettings()).thenReturn(settings);
+
+        when(settingsAccessor.isStatsEnabled()).thenReturn(true);
+        EventStatsManager.instance().initialize(settingsAccessor);
     }
 
     @SneakyThrows
