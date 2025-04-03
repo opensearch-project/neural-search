@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.plugin;
 
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SEARCH_HYBRID_SEARCH_DISABLED;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER_MAX_DOC_FIELDS;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_STATS_ENABLED;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -19,12 +20,22 @@ import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.highlight.SemanticHighlighter;
 import org.opensearch.neuralsearch.highlight.SemanticHighlighterEngine;
 import org.opensearch.neuralsearch.highlight.extractor.QueryTextExtractorRegistry;
+import com.google.common.collect.ImmutableList;
+import org.opensearch.action.ActionRequest;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+import org.opensearch.neuralsearch.stats.info.InfoStatsManager;
 import org.opensearch.transport.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+import org.opensearch.cluster.node.DiscoveryNodes;
 import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.settings.ClusterSettings;
+import org.opensearch.common.settings.IndexScopedSettings;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.common.settings.SettingsFilter;
 import org.opensearch.common.util.FeatureFlags;
+import org.opensearch.core.action.ActionResponse;
 import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.env.Environment;
@@ -59,8 +70,12 @@ import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
+import org.opensearch.neuralsearch.rest.RestNeuralStatsAction;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
+import org.opensearch.neuralsearch.transport.NeuralStatsAction;
+import org.opensearch.neuralsearch.transport.NeuralStatsTransportAction;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
+import org.opensearch.neuralsearch.util.PipelineServiceUtil;
 import org.opensearch.plugins.ActionPlugin;
 import org.opensearch.plugins.ExtensiblePlugin;
 import org.opensearch.plugins.IngestPlugin;
@@ -68,6 +83,8 @@ import org.opensearch.plugins.Plugin;
 import org.opensearch.plugins.SearchPipelinePlugin;
 import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.repositories.RepositoriesService;
+import org.opensearch.rest.RestController;
+import org.opensearch.rest.RestHandler;
 import org.opensearch.script.ScriptService;
 import org.opensearch.search.fetch.subphase.highlight.Highlighter;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
@@ -87,10 +104,14 @@ import lombok.extern.log4j.Log4j2;
 public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, IngestPlugin, ExtensiblePlugin, SearchPipelinePlugin {
     private MLCommonsClientAccessor clientAccessor;
     private NormalizationProcessorWorkflow normalizationProcessorWorkflow;
+    private NeuralSearchSettingsAccessor settingsAccessor;
+    private PipelineServiceUtil pipelineServiceUtil;
+    private InfoStatsManager infoStatsManager;
     private final ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
     private final ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();
     private final SemanticHighlighter semanticHighlighter;
     public static final String EXPLANATION_RESPONSE_KEY = "explanation_response";
+    public static final String NEURAL_BASE_URI = "/_plugins/_neural";
 
     public NeuralSearch() {
         this.semanticHighlighter = new SemanticHighlighter();
@@ -121,7 +142,11 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         semanticHighlighter.initialize(semanticHighlighterEngine);
         HybridQueryExecutor.initialize(threadPool);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
-        return List.of(clientAccessor);
+        settingsAccessor = new NeuralSearchSettingsAccessor(clusterService, environment.settings());
+        pipelineServiceUtil = new PipelineServiceUtil(clusterService);
+        infoStatsManager = new InfoStatsManager(NeuralSearchClusterUtil.instance(), settingsAccessor, pipelineServiceUtil);
+        EventStatsManager.instance().initialize(settingsAccessor);
+        return List.of(clientAccessor, EventStatsManager.instance(), infoStatsManager);
     }
 
     @Override
@@ -131,6 +156,25 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
             new QuerySpec<>(HybridQueryBuilder.NAME, HybridQueryBuilder::new, HybridQueryBuilder::fromXContent),
             new QuerySpec<>(NeuralSparseQueryBuilder.NAME, NeuralSparseQueryBuilder::new, NeuralSparseQueryBuilder::fromXContent)
         );
+    }
+
+    @Override
+    public List<RestHandler> getRestHandlers(
+        Settings settings,
+        RestController restController,
+        ClusterSettings clusterSettings,
+        IndexScopedSettings indexScopedSettings,
+        SettingsFilter settingsFilter,
+        IndexNameExpressionResolver indexNameExpressionResolver,
+        Supplier<DiscoveryNodes> nodesInCluster
+    ) {
+        RestNeuralStatsAction restNeuralStatsAction = new RestNeuralStatsAction(settingsAccessor);
+        return ImmutableList.of(restNeuralStatsAction);
+    }
+
+    @Override
+    public List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
+        return Arrays.asList(new ActionHandler<>(NeuralStatsAction.INSTANCE, NeuralStatsTransportAction.class));
     }
 
     @Override
@@ -198,7 +242,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED, RERANKER_MAX_DOC_FIELDS);
+        return List.of(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED, RERANKER_MAX_DOC_FIELDS, NEURAL_STATS_ENABLED);
     }
 
     @Override
