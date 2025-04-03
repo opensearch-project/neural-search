@@ -60,8 +60,18 @@ public class SemanticHighlighter implements Highlighter {
             return null;
         }
 
+        // The pre- and post- tags are provided by the user or defaulted to <em> and </em>
+        String[] preTags = fieldContext.field.fieldOptions().preTags();
+        String[] postTags = fieldContext.field.fieldOptions().postTags();
+
         // Get highlighted text - allow any exceptions from this call to propagate
-        String highlightedResponse = semanticHighlighterEngine.getHighlightedSentences(modelId, originalQueryText, fieldText);
+        String highlightedResponse = semanticHighlighterEngine.getHighlightedSentences(
+            modelId,
+            originalQueryText,
+            fieldText,
+            preTags[0],
+            postTags[0]
+        );
 
         if (highlightedResponse == null || highlightedResponse.isEmpty()) {
             log.warn("No highlighted text found for field {}", fieldContext.fieldName);

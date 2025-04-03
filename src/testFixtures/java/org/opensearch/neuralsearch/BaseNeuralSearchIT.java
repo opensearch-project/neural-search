@@ -653,8 +653,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @param from from parameter for pagination
      * @param highlightFields map of field names to highlight configurations
      * @param highlightOptions global highlight options
-     * @param sourceIncludes list of fields to include in _source
-     * @param sourceExcludes list of fields to exclude from _source
+     * @param preTags pre tag for highlight
+     * @param postTags post tag for highlight
      * @return Search results represented as a map
      */
     @SneakyThrows
@@ -672,8 +672,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         int from,
         Map<String, Map<String, Object>> highlightFields,
         Map<String, Object> highlightOptions,
-        List<String> sourceIncludes,
-        List<String> sourceExcludes
+        List<String> preTags,
+        List<String> postTags
     ) {
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
         builder.field("from", from);
@@ -739,7 +739,20 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
                 builder.field("options");
                 builder.map(highlightOptions);
             }
-
+            if (preTags != null && !preTags.isEmpty()) {
+                builder.startArray("pre_tags");
+                for (String preTag : preTags) {
+                    builder.value(preTag);
+                }
+                builder.endArray();
+            }
+            if (postTags != null && !postTags.isEmpty()) {
+                builder.startArray("post_tags");
+                for (String postTag : postTags) {
+                    builder.value(postTag);
+                }
+                builder.endArray();
+            }
             builder.endObject();
         }
 
@@ -2286,6 +2299,46 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             highlightOptions,
             null,
             null
+        );
+    }
+
+    /**
+     * Execute a search request with highlighting and custom tags
+     *
+     * @param index Index to search against
+     * @param queryBuilder queryBuilder to produce source of query
+     * @param resultSize number of results to return in the search
+     * @param highlightFields map of field names to highlight configurations
+     * @param highlightOptions global highlight options
+     * @param preTags array of pre-tags for highlighting
+     * @param postTags array of post-tags for highlighting
+     * @return Search results represented as a map
+     */
+    protected Map<String, Object> searchWithHighlight(
+        final String index,
+        final QueryBuilder queryBuilder,
+        final int resultSize,
+        final Map<String, Map<String, Object>> highlightFields,
+        final Map<String, Object> highlightOptions,
+        final String[] preTags,
+        final String[] postTags
+    ) {
+        return search(
+            index,
+            queryBuilder,
+            null,
+            resultSize,
+            Map.of(),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            highlightFields,
+            highlightOptions,
+            Arrays.asList(preTags),
+            Arrays.asList(postTags)
         );
     }
 }

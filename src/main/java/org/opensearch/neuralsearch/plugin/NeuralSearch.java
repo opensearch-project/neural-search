@@ -114,7 +114,10 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
         NeuralQueryBuilder.initialize(clientAccessor);
         NeuralSparseQueryBuilder.initialize(clientAccessor);
         QueryTextExtractorRegistry queryTextExtractorRegistry = new QueryTextExtractorRegistry();
-        SemanticHighlighterEngine semanticHighlighterEngine = new SemanticHighlighterEngine(clientAccessor, queryTextExtractorRegistry);
+        SemanticHighlighterEngine semanticHighlighterEngine = SemanticHighlighterEngine.builder()
+            .mlCommonsClient(clientAccessor)
+            .queryTextExtractorRegistry(queryTextExtractorRegistry)
+            .build();
         semanticHighlighter.initialize(semanticHighlighterEngine);
         HybridQueryExecutor.initialize(threadPool);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
