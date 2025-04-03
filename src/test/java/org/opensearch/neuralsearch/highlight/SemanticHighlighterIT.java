@@ -33,6 +33,10 @@ public class SemanticHighlighterIT extends BaseNeuralSearchIT {
     private static final String TEST_CONTENT = "Machine learning is a field of artificial intelligence that uses statistical techniques. "
         + "Natural language processing is a branch of artificial intelligence that helps computers understand human language. "
         + "Deep learning is a subset of machine learning that uses neural networks with many layers.";
+    private static final String DEFAULT_PRE_TAG = "<em>";
+    private static final String DEFAULT_POST_TAG = "</em>";
+    private static final String CUSTOM_PRE_TAG = "<test>";
+    private static final String CUSTOM_POST_TAG = "</test>";
     private final float[] testVector = createRandomVector(TEST_DIMENSION);
 
     @Before
@@ -73,7 +77,7 @@ public class SemanticHighlighterIT extends BaseNeuralSearchIT {
      * 5. Neural Query
      * 6. Hybrid Query
      */
-    public void testQueriesWithSemanticHighlighter() throws Exception {
+    public void testQueriesWithSemanticHighlighter() {
         // Set up models for the test
         String textEmbeddingModelId = prepareModel();
         String sentenceHighlightingModelId = prepareSentenceHighlightingModel();
@@ -255,8 +259,8 @@ public class SemanticHighlighterIT extends BaseNeuralSearchIT {
             10,
             customHighlightFields,
             customHighlightOptions,
-            new String[] { "<test>" },
-            new String[] { "</test>" }
+            new String[] { CUSTOM_PRE_TAG },
+            new String[] { CUSTOM_POST_TAG }
         );
 
         // Verify results with custom tags
@@ -273,10 +277,10 @@ public class SemanticHighlighterIT extends BaseNeuralSearchIT {
         assertFalse("Highlighted fields should not be empty", customHighlightedFields.isEmpty());
 
         String customHighlightedText = customHighlightedFields.getFirst();
-        assertTrue("Text should contain custom opening tag", customHighlightedText.contains("<test>"));
-        assertTrue("Text should contain custom closing tag", customHighlightedText.contains("</test>"));
-        assertFalse("Text should not contain default opening tag", customHighlightedText.contains("<em>"));
-        assertFalse("Text should not contain default closing tag", customHighlightedText.contains("</em>"));
+        assertTrue("Text should contain custom opening tag", customHighlightedText.contains(CUSTOM_PRE_TAG));
+        assertTrue("Text should contain custom closing tag", customHighlightedText.contains(CUSTOM_POST_TAG));
+        assertFalse("Text should not contain default opening tag", customHighlightedText.contains(DEFAULT_PRE_TAG));
+        assertFalse("Text should not contain default closing tag", customHighlightedText.contains(DEFAULT_POST_TAG));
         verifyHighlightResults(searchResponse, TEST_QUERY_TEXT);
 
         // 6. Test Hybrid Query
@@ -361,10 +365,9 @@ public class SemanticHighlighterIT extends BaseNeuralSearchIT {
 
         assertTrue("Highlighted text should contain semantically relevant content for query: " + expectedContent, hasRelevantContent);
 
-        // Verify the highlight tags are present
-        assertTrue(
-            "Highlighted text should contain proper highlight tags",
-            highlightedText.contains("<em>") && highlightedText.contains("</em>")
-        );
+        // Verify the highlight tags are present - either default tags or custom tags
+        boolean hasDefaultTags = highlightedText.contains(DEFAULT_PRE_TAG) && highlightedText.contains(DEFAULT_POST_TAG);
+        boolean hasCustomTags = highlightedText.contains(CUSTOM_PRE_TAG) && highlightedText.contains(CUSTOM_POST_TAG);
+        assertTrue("Highlighted text should contain either default or custom highlight tags", hasDefaultTags || hasCustomTags);
     }
 }
