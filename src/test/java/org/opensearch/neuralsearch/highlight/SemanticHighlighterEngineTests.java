@@ -45,7 +45,10 @@ public class SemanticHighlighterEngineTests extends OpenSearchTestCase {
         super.setUp();
         mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
         queryTextExtractorRegistry = new QueryTextExtractorRegistry();
-        highlighterEngine = new SemanticHighlighterEngine(mlCommonsClientAccessor, queryTextExtractorRegistry);
+        highlighterEngine = SemanticHighlighterEngine.builder()
+            .mlCommonsClient(mlCommonsClientAccessor)
+            .queryTextExtractorRegistry(queryTextExtractorRegistry)
+            .build();
 
         // Setup default mock behavior
         setupDefaultMockBehavior();
@@ -123,7 +126,7 @@ public class SemanticHighlighterEngineTests extends OpenSearchTestCase {
     }
 
     public void testGetHighlightedSentences() {
-        String result = highlighterEngine.getHighlightedSentences(MODEL_ID, TEST_QUERY, TEST_CONTENT);
+        String result = highlighterEngine.getHighlightedSentences(MODEL_ID, TEST_QUERY, TEST_CONTENT, "<em>", "</em>");
 
         assertNotNull("Should return highlighted text", result);
         assertTrue("Should contain highlighting tags", result.contains("<em>") && result.contains("</em>"));
@@ -149,7 +152,7 @@ public class SemanticHighlighterEngineTests extends OpenSearchTestCase {
         resultMap.put("highlights", highlightsList);
 
         String text = "This is a test string";
-        String result = highlighterEngine.applyHighlighting(text, resultMap);
+        String result = highlighterEngine.applyHighlighting(text, resultMap, "<em>", "</em>");
 
         assertEquals("Should apply highlights correctly", "<em>This</em> is <em>a te</em>st string", result);
     }
@@ -170,7 +173,10 @@ public class SemanticHighlighterEngineTests extends OpenSearchTestCase {
         highlightsList.add(highlight1);
         resultMap.put("highlights", highlightsList);
 
-        OpenSearchException exception = expectThrows(OpenSearchException.class, () -> highlighterEngine.applyHighlighting(text, resultMap));
+        OpenSearchException exception = expectThrows(
+            OpenSearchException.class,
+            () -> highlighterEngine.applyHighlighting(text, resultMap, "<em>", "</em>")
+        );
         assertEquals(
             "Should throw correct error message for invalid positions",
             String.format(
@@ -188,7 +194,7 @@ public class SemanticHighlighterEngineTests extends OpenSearchTestCase {
         highlight2.put("end", 100);
         highlightsList.add(highlight2);
 
-        exception = expectThrows(OpenSearchException.class, () -> highlighterEngine.applyHighlighting(text, resultMap));
+        exception = expectThrows(OpenSearchException.class, () -> highlighterEngine.applyHighlighting(text, resultMap, "<em>", "</em>"));
         assertEquals(
             "Should throw correct error message for invalid positions",
             String.format(
@@ -206,7 +212,7 @@ public class SemanticHighlighterEngineTests extends OpenSearchTestCase {
         highlight3.put("end", 5);
         highlightsList.add(highlight3);
 
-        exception = expectThrows(OpenSearchException.class, () -> highlighterEngine.applyHighlighting(text, resultMap));
+        exception = expectThrows(OpenSearchException.class, () -> highlighterEngine.applyHighlighting(text, resultMap, "<em>", "</em>"));
         assertEquals(
             "Should throw correct error message for invalid positions",
             String.format(
@@ -238,20 +244,15 @@ public class SemanticHighlighterEngineTests extends OpenSearchTestCase {
 
         resultMap.put("highlights", highlightsList);
 
-        OpenSearchException exception = expectThrows(OpenSearchException.class, () -> highlighterEngine.applyHighlighting(text, resultMap));
+        OpenSearchException exception = expectThrows(
+            OpenSearchException.class,
+            () -> highlighterEngine.applyHighlighting(text, resultMap, "<em>", "</em>")
+        );
         assertEquals(
             "Should throw correct error message for unsorted positions",
             "Internal error while applying semantic highlight: received unsorted highlights from model",
             exception.getMessage()
         );
-        // Verify that sorted positions work correctly
-        highlightsList.clear();
-        // Add highlights in sorted order
-        highlightsList.add(highlight2);  // start=0
-        highlightsList.add(highlight1);  // start=8
-
-        String result = highlighterEngine.applyHighlighting(text, resultMap);
-        assertEquals("Should successfully highlight with sorted positions", "<em>This</em> is <em>a</em> test string", result);
     }
 
     public void testApplyHighlightingWithInvalidHighlightMap() {
@@ -268,7 +269,10 @@ public class SemanticHighlighterEngineTests extends OpenSearchTestCase {
         resultMap.put("highlights", highlightsList);
 
         String text = "This is a test string";
-        ClassCastException exception = expectThrows(ClassCastException.class, () -> highlighterEngine.applyHighlighting(text, resultMap));
+        ClassCastException exception = expectThrows(
+            ClassCastException.class,
+            () -> highlighterEngine.applyHighlighting(text, resultMap, "<em>", "</em>")
+        );
         assertTrue(exception.getMessage().contains("cannot be cast to class java.lang.Number"));
     }
 
@@ -286,7 +290,10 @@ public class SemanticHighlighterEngineTests extends OpenSearchTestCase {
         resultMap.put("highlights", highlightsList);
 
         String text = "This is a test string";
-        OpenSearchException exception = expectThrows(OpenSearchException.class, () -> highlighterEngine.applyHighlighting(text, resultMap));
+        OpenSearchException exception = expectThrows(
+            OpenSearchException.class,
+            () -> highlighterEngine.applyHighlighting(text, resultMap, "<em>", "</em>")
+        );
         assertTrue(exception.getMessage().contains("Missing start or end position"));
     }
 
@@ -296,17 +303,31 @@ public class SemanticHighlighterEngineTests extends OpenSearchTestCase {
         resultMap.put("highlights", new ArrayList<>());
 
         String text = "This is a test string";
-        String result = highlighterEngine.applyHighlighting(text, resultMap);
+        String result = highlighterEngine.applyHighlighting(text, resultMap, "<em>", "</em>");
         assertEquals("Should return original text when no highlights", text, result);
     }
 
     public void testApplyHighlightingWithMissingHighlightsKey() {
-        // Test with missing highlights key
         Map<String, Object> resultMap = new HashMap<>();
-        // No highlights key
-
         String text = "This is a test string";
-        String result = highlighterEngine.applyHighlighting(text, resultMap);
+        String result = highlighterEngine.applyHighlighting(text, resultMap, "<em>", "</em>");
         assertNull("Should return null when highlights key is missing", result);
+    }
+
+    public void testCustomTags() {
+        // Test with custom tags
+        String result = highlighterEngine.getHighlightedSentences(MODEL_ID, TEST_QUERY, TEST_CONTENT, "<mark>", "</mark>");
+        assertNotNull("Should return highlighted text", result);
+        assertTrue("Should contain custom highlighting tags", result.contains("<mark>") && result.contains("</mark>"));
+        assertFalse("Should not contain default highlighting tags", result.contains("<em>") || result.contains("</em>"));
+
+        // Test with different custom tags
+        result = highlighterEngine.getHighlightedSentences(MODEL_ID, TEST_QUERY, TEST_CONTENT, "<span class='highlight'>", "</span>");
+        assertNotNull("Should return highlighted text", result);
+        assertTrue(
+            "Should contain new custom highlighting tags",
+            result.contains("<span class='highlight'>") && result.contains("</span>")
+        );
+        assertFalse("Should not contain previous highlighting tags", result.contains("<mark>") || result.contains("</mark>"));
     }
 }
