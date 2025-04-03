@@ -285,6 +285,7 @@ dependencies {
     testFixturesCompileOnly group: 'com.google.guava', name: 'guava', version:'32.1.3-jre'
     testFixturesImplementation fileTree(dir: knnJarDirectory, include: ["opensearch-knn-${opensearch_build}.jar", "remote-index-build-client-${opensearch_build}.jar"])
     testImplementation fileTree(dir: knnJarDirectory, include: ["opensearch-knn-${opensearch_build}.jar", "remote-index-build-client-${opensearch_build}.jar"])
+    testImplementation "org.opensearch.plugin:parent-join-client:${opensearch_version}"
 }
 
 // In order to add the jar to the classpath, we need to unzip the

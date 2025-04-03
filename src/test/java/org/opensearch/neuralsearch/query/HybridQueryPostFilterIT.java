@@ -432,7 +432,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
                 indexName,
                 buildIndexConfiguration(
                     List.of(),
-                    List.of(),
+                    Map.of(),
                     List.of(INTEGER_FIELD_1_STOCK),
                     List.of(KEYWORD_FIELD_2_CATEGORY),
                     List.of(),
@@ -441,7 +441,7 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
                 ""
             );
 
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "1",
                 List.of(),
@@ -449,16 +449,19 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEXT_FIELD_1_NAME),
                 Collections.singletonList(TEXT_FIELD_VALUE_2_DUNES),
                 List.of(),
-                List.of(),
+                Map.of(),
                 List.of(INTEGER_FIELD_1_STOCK),
                 List.of(INTEGER_FIELD_STOCK_1_25),
                 List.of(KEYWORD_FIELD_2_CATEGORY),
                 List.of(KEYWORD_FIELD_CATEGORY_1_DRAMA),
                 List.of(),
-                List.of()
+                List.of(),
+                List.of(),
+                List.of(),
+                null
             );
 
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "2",
                 List.of(),
@@ -466,16 +469,19 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEXT_FIELD_1_NAME),
                 Collections.singletonList(TEXT_FIELD_VALUE_1_DUNES),
                 List.of(),
-                List.of(),
+                Map.of(),
                 List.of(INTEGER_FIELD_1_STOCK),
                 List.of(INTEGER_FIELD_STOCK_2_22),
                 List.of(KEYWORD_FIELD_2_CATEGORY),
                 List.of(KEYWORD_FIELD_CATEGORY_1_DRAMA),
                 List.of(),
-                List.of()
+                List.of(),
+                List.of(),
+                List.of(),
+                null
             );
 
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "3",
                 List.of(),
@@ -483,16 +489,19 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEXT_FIELD_1_NAME),
                 Collections.singletonList(TEXT_FIELD_VALUE_3_MI_1),
                 List.of(),
-                List.of(),
+                Map.of(),
                 List.of(INTEGER_FIELD_1_STOCK),
                 List.of(INTEGER_FIELD_STOCK_3_256),
                 List.of(KEYWORD_FIELD_2_CATEGORY),
                 List.of(KEYWORD_FIELD_CATEGORY_2_ACTION),
                 List.of(),
-                List.of()
+                List.of(),
+                List.of(),
+                List.of(),
+                null
             );
 
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "4",
                 List.of(),
@@ -500,16 +509,19 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEXT_FIELD_1_NAME),
                 Collections.singletonList(TEXT_FIELD_VALUE_4_MI_2),
                 List.of(),
-                List.of(),
+                Map.of(),
                 List.of(INTEGER_FIELD_1_STOCK),
                 List.of(INTEGER_FIELD_STOCK_4_25),
                 List.of(KEYWORD_FIELD_2_CATEGORY),
                 List.of(KEYWORD_FIELD_CATEGORY_2_ACTION),
                 List.of(),
-                List.of()
+                List.of(),
+                List.of(),
+                List.of(),
+                null
             );
 
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "5",
                 List.of(),
@@ -517,16 +529,19 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEXT_FIELD_1_NAME),
                 Collections.singletonList(TEXT_FIELD_VALUE_5_TERMINAL),
                 List.of(),
-                List.of(),
+                Map.of(),
                 List.of(INTEGER_FIELD_1_STOCK),
                 List.of(INTEGER_FIELD_STOCK_5_20),
                 List.of(KEYWORD_FIELD_2_CATEGORY),
                 List.of(KEYWORD_FIELD_CATEGORY_1_DRAMA),
                 List.of(),
-                List.of()
+                List.of(),
+                List.of(),
+                List.of(),
+                null
             );
 
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "6",
                 List.of(),
@@ -534,13 +549,16 @@ public class HybridQueryPostFilterIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEXT_FIELD_1_NAME),
                 Collections.singletonList(TEXT_FIELD_VALUE_6_AVENGERS),
                 List.of(),
-                List.of(),
+                Map.of(),
                 List.of(INTEGER_FIELD_1_STOCK),
                 List.of(INTEGER_FIELD_STOCK_5_20),
                 List.of(KEYWORD_FIELD_2_CATEGORY),
                 List.of(KEYWORD_FIELD_CATEGORY_3_SCI_FI),
                 List.of(),
-                List.of()
+                List.of(),
+                List.of(),
+                List.of(),
+                null
             );
         }
     }

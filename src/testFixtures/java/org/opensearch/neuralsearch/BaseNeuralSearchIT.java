@@ -65,7 +65,11 @@ import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 import org.opensearch.search.SearchHit;
+import org.opensearch.search.sort.FieldSortBuilder;
+import org.opensearch.search.sort.ScoreSortBuilder;
 import org.opensearch.search.sort.SortBuilder;
+import org.opensearch.search.sort.SortBuilders;
+import org.opensearch.search.sort.SortOrder;
 import org.opensearch.test.ClusterServiceUtils;
 import org.opensearch.threadpool.TestThreadPool;
 import org.opensearch.threadpool.ThreadPool;
@@ -859,7 +863,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final List<String> textFieldNames,
         final List<String> texts
     ) {
-        addKnnDoc(index, docId, vectorFieldNames, vectors, textFieldNames, texts, Collections.emptyList(), Collections.emptyList());
+        addKnnDoc(index, docId, vectorFieldNames, vectors, textFieldNames, texts, Collections.emptyList(), Collections.emptyMap());
     }
 
     @SneakyThrows
@@ -871,9 +875,9 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         List<String> textFieldNames,
         List<String> texts,
         List<String> nestedFieldNames,
-        List<Map<String, String>> nestedFields
+        Map<String, List<Map<String, String>>> nestedFields
     ) {
-        addKnnDoc(
+        indexTheDocument(
             index,
             docId,
             vectorFieldNames,
@@ -887,7 +891,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             Collections.emptyList(),
             Collections.emptyList(),
             Collections.emptyList(),
-            Collections.emptyList()
+            Collections.emptyList(),
+            Collections.emptyList(),
+            Collections.emptyList(),
+            null
         );
     }
 
@@ -904,7 +911,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @param nestedFields List of fields and values corresponding to those fields
      */
     @SneakyThrows
-    protected void addKnnDoc(
+    protected void indexTheDocument(
         final String index,
         final String docId,
         final List<String> vectorFieldNames,
@@ -912,13 +919,16 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final List<String> textFieldNames,
         final List<String> texts,
         final List<String> nestedFieldNames,
-        final List<Map<String, String>> nestedFields,
+        final Map<String, List<Map<String, String>>> nestedFields,
         final List<String> integerFieldNames,
         final List<Integer> integerFieldValues,
         final List<String> keywordFieldNames,
         final List<String> keywordFieldValues,
         final List<String> dateFieldNames,
-        final List<String> dateFieldValues
+        final List<String> dateFieldValues,
+        final List<String> parentChildFieldNames,
+        final List<String> parentChildFieldValues,
+        final String routing
     ) {
         Request request = new Request("POST", "/" + index + "/_doc/" + docId + "?refresh=true");
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
@@ -932,12 +942,35 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
         for (int i = 0; i < nestedFieldNames.size(); i++) {
             builder.field(nestedFieldNames.get(i));
-            builder.startObject();
-            Map<String, String> nestedValues = nestedFields.get(i);
-            for (Map.Entry<String, String> entry : nestedValues.entrySet()) {
-                builder.field(entry.getKey(), entry.getValue());
+            builder.startArray();
+
+            List<Map<String, String>> nestedValues = nestedFields.get(nestedFieldNames.get(i));
+            for (Map<String, String> fieldValues : nestedValues) {
+                builder.startObject();
+                for (Map.Entry<String, String> entry : fieldValues.entrySet()) {
+                    builder.field(entry.getKey(), entry.getValue());
+                }
+                builder.endObject();
             }
-            builder.endObject();
+
+            builder.endArray();
+        }
+
+        if (parentChildFieldNames.isEmpty() == false && parentChildFieldValues.isEmpty() == false) {
+            if (Objects.isNull(routing) == false) {
+                request = new Request("POST", "/" + index + "/_doc/" + docId + "?routing=" + routing + "&refresh=true");
+            }
+            for (int i = 0; i < parentChildFieldNames.size(); i++) {
+                String fieldName = parentChildFieldNames.get(i);
+                String typeOfFieldName = parentChildFieldValues.get(i);
+
+                if (Objects.isNull(routing)) {
+                    builder.field(fieldName, typeOfFieldName);
+                } else {
+                    builder.startObject(fieldName).field("name", typeOfFieldName).field("parent", routing).endObject();
+                }
+
+            }
         }
 
         for (int i = 0; i < integerFieldNames.size(); i++) {
@@ -1066,6 +1099,147 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     /**
+     * Get InnerHits from the search hits
+     *
+     * @param searchResponseAsMap Complete search response as a map
+     * @return list of innerHits where each element in the hit corresponds to a SearchHit
+     */
+    @SuppressWarnings("unchecked")
+    protected List<Object> getInnerHitsFromSearchHits(final Map<String, Object> searchResponseAsMap) {
+        Map<String, Object> hits1map = (Map<String, Object>) searchResponseAsMap.get("hits");
+        List<Map<String, Object>> hits2List = (List<Map<String, Object>>) hits1map.get("hits");
+        assertTrue(hits2List.size() > 0);
+        List<Object> innerHits = new ArrayList<>();
+        for (Map<String, Object> hitObject : hits2List) {
+            innerHits.add(hitObject.get("inner_hits"));
+        }
+        return innerHits;
+    }
+
+    /**
+     * Get Total and actual count of each inner hit field
+     *
+     * @param innerHits List of inner hits
+     * @param  fieldNames list of field Names of which total count need to be retrived
+     * @return Map of fieldName to totalCount of inner_hit from each individual hit
+     */
+    protected Map<String, Map<String, ArrayList<Integer>>> getInnerHitsCountsOfNestedField(
+        List<Object> innerHits,
+        List<String> fieldNames
+    ) {
+        Map<String, Map<String, ArrayList<Integer>>> countsPerFieldMap = new HashMap<>();
+
+        for (Object innerHit : innerHits) {
+            Map<String, Object> hits = (Map<String, Object>) innerHit;
+            for (String fieldName : fieldNames) {
+                Map<String, Object> searchHits = (Map<String, Object>) hits.get(fieldName);
+                Map<String, Object> fieldHits = (Map<String, Object>) searchHits.get("hits");
+
+                Map<String, Object> total = (Map<String, Object>) fieldHits.get("total");
+                int totalCount = (Integer) total.get("value");
+
+                List<Object> innerHitsOfField = (List<Object>) fieldHits.get("hits");
+                int actualCount = innerHitsOfField.size();
+
+                countsPerFieldMap.computeIfAbsent(fieldName, k -> new HashMap<>())
+                    .computeIfAbsent("total", k -> new ArrayList<>())
+                    .add(totalCount);
+                countsPerFieldMap.computeIfAbsent(fieldName, k -> new HashMap<>())
+                    .computeIfAbsent("actual", k -> new ArrayList<>())
+                    .add(actualCount);
+            }
+        }
+        return countsPerFieldMap;
+    }
+
+    /**
+     * Create Sort Builders to be applied with QueryBuilder
+     *
+     * @param fieldSortOrderMap Map of fieldName of the sort and its order
+     * @param  isSortByScore boolean flag to notify if sort condition is on _score
+     * @return List of SortBuilders
+     */
+    protected List<SortBuilder<?>> createSortBuilders(Map<String, SortOrder> fieldSortOrderMap, boolean isSortByScore) {
+        List<SortBuilder<?>> sortBuilders = new ArrayList<>();
+        if (fieldSortOrderMap != null) {
+            for (Map.Entry<String, SortOrder> entry : fieldSortOrderMap.entrySet()) {
+                FieldSortBuilder fieldSortBuilder = SortBuilders.fieldSort(entry.getKey()).order(entry.getValue());
+                sortBuilders.add(fieldSortBuilder);
+            }
+        }
+
+        if (isSortByScore) {
+            ScoreSortBuilder scoreSortBuilder = SortBuilders.scoreSort().order(SortOrder.ASC);
+            sortBuilders.add(scoreSortBuilder);
+        }
+        return sortBuilders;
+    }
+
+    /**
+     * Get Sort values of field for each inner_hit
+     *
+     * @param innerHits List of inner hits
+     * @param  fieldNames list of field Names of which sort values need to be retrived
+     * @return Map of fieldName to List of sortValues from each individual hit
+     */
+    protected Map<String, ArrayList<List<Object>>> getInnerHitsSortValueOfNestedField(List<Object> innerHits, List<String> fieldNames) {
+        Map<String, ArrayList<List<Object>>> countPerFieldMap = new HashMap<>();
+        for (Object innerHit : innerHits) {
+            Map<String, Object> hits = (Map<String, Object>) innerHit;
+            for (String fieldName : fieldNames) {
+                Map<String, Object> searchHits = (Map<String, Object>) hits.get(fieldName);
+                Map<String, Object> fieldHits = (Map<String, Object>) searchHits.get("hits");
+                List<Object> internalHits = (List<Object>) fieldHits.get("hits");
+                for (Object internalHit : internalHits) {
+                    Map<String, Object> internalHit1 = (Map<String, Object>) internalHit;
+                    List<Object> sorts = (List<Object>) internalHit1.get("sort");
+                    if (countPerFieldMap.containsKey(fieldName)) {
+                        ArrayList<List<Object>> sortPerField = countPerFieldMap.get(fieldName);
+                        sortPerField.add(sorts);
+                        countPerFieldMap.put(fieldName, sortPerField);
+                    } else {
+                        countPerFieldMap.put(fieldName, new ArrayList<>(Arrays.asList(sorts)));
+                    }
+                }
+
+            }
+        }
+        return countPerFieldMap;
+    }
+
+    /**
+     * Get scores of each inner hit field
+     *
+     * @param innerHits List of inner hits
+     * @param  fieldNames list of field Names of which total count need to be retrived
+     * @return Map of fieldName to scores of inner_hit from each individual hit
+     */
+    protected Map<String, ArrayList<Double>> getInnerHitsScoresPerFieldList(List<Object> innerHits, List<String> fieldNames) {
+        Map<String, ArrayList<Double>> scoresPerFieldMap = new HashMap<>();
+        for (Object innerHit : innerHits) {
+            Map<String, Object> hits = (Map<String, Object>) innerHit;
+            for (String fieldName : fieldNames) {
+                Map<String, Object> searchHits = (Map<String, Object>) hits.get(fieldName);
+                Map<String, Object> fieldHits = (Map<String, Object>) searchHits.get("hits");
+                List<Object> innerHitsOfField = (List<Object>) fieldHits.get("hits");
+                for (Object ih : innerHitsOfField) {
+                    Map<String, Object> ihMap = (Map<String, Object>) ih;
+                    Double score = (Double) ihMap.get("_score");
+                    if (scoresPerFieldMap.containsKey(fieldName)) {
+                        ArrayList<Double> scores = scoresPerFieldMap.get(fieldName);
+                        scores.add(score);
+                        scoresPerFieldMap.put(fieldName, scores);
+                    } else {
+                        scoresPerFieldMap.put(fieldName, new ArrayList<>(Arrays.asList(score)));
+                    }
+                }
+
+            }
+        }
+        return scoresPerFieldMap;
+    }
+
+    /**
      * Parse the total number of hits from the search
      *
      * @param searchResponseAsMap Complete search response as a map
@@ -1167,13 +1341,13 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     @SneakyThrows
     protected String buildIndexConfiguration(final List<KNNFieldConfig> knnFieldConfigs, final int numberOfShards) {
-        return buildIndexConfiguration(knnFieldConfigs, Collections.emptyList(), numberOfShards);
+        return buildIndexConfiguration(knnFieldConfigs, Collections.emptyMap(), numberOfShards);
     }
 
     @SneakyThrows
     protected String buildIndexConfiguration(
         final List<KNNFieldConfig> knnFieldConfigs,
-        final List<String> nestedFields,
+        final Map<String, Map<String, String>> nestedFields,
         final int numberOfShards
     ) {
         return buildIndexConfiguration(
@@ -1189,7 +1363,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     @SneakyThrows
     protected String buildIndexConfiguration(
         final List<KNNFieldConfig> knnFieldConfigs,
-        final List<String> nestedFields,
+        final Map<String, Map<String, String>> nestedFields,
         final List<String> intFields,
         final List<String> keywordFields,
         final List<String> dateFields,
@@ -1198,6 +1372,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return buildIndexConfiguration(
             knnFieldConfigs,
             nestedFields,
+            Collections.emptyList(),
             intFields,
             Collections.emptyList(),
             keywordFields,
@@ -1209,7 +1384,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     @SneakyThrows
     protected String buildIndexConfiguration(
         final List<KNNFieldConfig> knnFieldConfigs,
-        final List<String> nestedFields,
+        final Map<String, Map<String, String>> nestedFields,
+        final List<List<String>> parentChildFields,
         final List<String> intFields,
         final List<String> floatFields,
         final List<String> keywordFields,
@@ -1236,19 +1412,29 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
                 .endObject()
                 .endObject();
         }
-        // treat the list in a manner that first element is always the type name and all others are keywords
-        if (!nestedFields.isEmpty()) {
-            String nestedFieldName = nestedFields.get(0);
-            xContentBuilder.startObject(nestedFieldName).field("type", "nested");
-            if (nestedFields.size() > 1) {
-                xContentBuilder.startObject("properties");
-                for (int i = 1; i < nestedFields.size(); i++) {
-                    String innerNestedTypeField = nestedFields.get(i);
-                    xContentBuilder.startObject(innerNestedTypeField).field("type", "keyword").endObject();
+
+        for (List<String> parentChildFieldNames : parentChildFields) {
+            String fieldName = parentChildFieldNames.get(0);
+            String type = parentChildFieldNames.get(1);
+            xContentBuilder.startObject(fieldName).field("type", type);
+            xContentBuilder.startObject("relations").field("parent", "child").endObject();
+            xContentBuilder.endObject();
+        }
+
+        if (nestedFields.isEmpty() == false) {
+            for (Map.Entry<String, Map<String, String>> nestedField : nestedFields.entrySet()) {
+                String nestedFieldName = nestedField.getKey();
+                xContentBuilder.startObject(nestedFieldName).field("type", "nested");
+                Map<String, String> innerFieldsMap = nestedField.getValue();
+                if (innerFieldsMap.isEmpty() == false) {
+                    xContentBuilder.startObject("properties");
+                    for (Map.Entry<String, String> innerFields : innerFieldsMap.entrySet()) {
+                        xContentBuilder.startObject(innerFields.getKey()).field("type", innerFields.getValue()).endObject();
+                    }
+                    xContentBuilder.endObject();
                 }
                 xContentBuilder.endObject();
             }
-            xContentBuilder.endObject();
         }
 
         for (String intField : intFields) {
