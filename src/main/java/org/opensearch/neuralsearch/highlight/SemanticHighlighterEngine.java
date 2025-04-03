@@ -13,6 +13,7 @@ import org.opensearch.search.fetch.subphase.highlight.FieldHighlightContext;
 import org.opensearch.neuralsearch.highlight.extractor.QueryTextExtractorRegistry;
 import org.opensearch.action.support.PlainActionFuture;
 import lombok.NonNull;
+import lombok.Builder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,24 +25,18 @@ import java.util.Objects;
  * Engine class for semantic highlighting operations
  */
 @Log4j2
+@Builder
 public class SemanticHighlighterEngine {
     private static final String MODEL_ID_FIELD = "model_id";
-    private static final String DEFAULT_PRE_TAG = "<em>";
-    private static final String DEFAULT_POST_TAG = "</em>";
     private static final String MODEL_INFERENCE_RESULT_KEY = "highlights";
     private static final String MODEL_INFERENCE_RESULT_START_KEY = "start";
     private static final String MODEL_INFERENCE_RESULT_END_KEY = "end";
 
+    @NonNull
     private final MLCommonsClientAccessor mlCommonsClient;
-    private final QueryTextExtractorRegistry queryTextExtractorRegistry;
 
-    public SemanticHighlighterEngine(
-        @NonNull MLCommonsClientAccessor mlCommonsClient,
-        @NonNull QueryTextExtractorRegistry queryTextExtractorRegistry
-    ) {
-        this.mlCommonsClient = mlCommonsClient;
-        this.queryTextExtractorRegistry = queryTextExtractorRegistry;
-    }
+    @NonNull
+    private final QueryTextExtractorRegistry queryTextExtractorRegistry;
 
     /**
      * Gets the field text from the document
@@ -116,15 +111,17 @@ public class SemanticHighlighterEngine {
      * @param modelId The ID of the model to use
      * @param question The search query
      * @param context The document text
+     * @param preTag The pre tag to use for highlighting
+     * @param postTag The post tag to use for highlighting
      * @return Formatted text with highlighting
      */
-    public String getHighlightedSentences(String modelId, String question, String context) {
+    public String getHighlightedSentences(String modelId, String question, String context, String preTag, String postTag) {
         List<Map<String, Object>> results = fetchModelResults(modelId, question, context);
         if (results == null || results.isEmpty()) {
             return null;
         }
 
-        return applyHighlighting(context, results.getFirst());
+        return applyHighlighting(context, results.getFirst(), preTag, postTag);
     }
 
     /**
@@ -168,10 +165,12 @@ public class SemanticHighlighterEngine {
      *
      * @param context The original document text
      * @param highlightResult The highlighting result from the ML model
+     * @param preTag The pre tag to use for highlighting
+     * @param postTag The post tag to use for highlighting
      * @return Formatted text with highlighting
      * @throws IllegalArgumentException if highlight positions are invalid
      */
-    public String applyHighlighting(String context, Map<String, Object> highlightResult) {
+    public String applyHighlighting(String context, Map<String, Object> highlightResult, String preTag, String postTag) {
         // Get the "highlights" list from the result
         Object highlightsObj = highlightResult.get(MODEL_INFERENCE_RESULT_KEY);
 
@@ -216,7 +215,7 @@ public class SemanticHighlighterEngine {
             }
         }
 
-        return constructHighlightedText(context, validHighlights);
+        return constructHighlightedText(context, validHighlights, preTag, postTag);
     }
 
     /**
@@ -246,9 +245,11 @@ public class SemanticHighlighterEngine {
      *
      * @param text The original text
      * @param highlights The list of valid highlight positions in pairs [start1, end1, start2, end2, ...]
+     * @param preTag The pre tag to use for highlighting
+     * @param postTag The post tag to use for highlighting
      * @return The highlighted text
      */
-    private String constructHighlightedText(String text, List<Integer> highlights) {
+    private String constructHighlightedText(String text, List<Integer> highlights, String preTag, String postTag) {
         StringBuilder result = new StringBuilder();
         int currentPos = 0;
 
@@ -264,9 +265,9 @@ public class SemanticHighlighterEngine {
             }
 
             // Add the highlighted text with highlight tags
-            result.append(DEFAULT_PRE_TAG);
+            result.append(preTag);
             result.append(text, start, end);
-            result.append(DEFAULT_POST_TAG);
+            result.append(postTag);
 
             // Update current position to end of this highlight
             currentPos = end;
