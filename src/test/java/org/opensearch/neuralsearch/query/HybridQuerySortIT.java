@@ -24,10 +24,6 @@ import static org.opensearch.neuralsearch.util.TestUtils.assertHitResultsFromQue
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
 import org.opensearch.search.sort.SortOrder;
-import org.opensearch.search.sort.SortBuilder;
-import org.opensearch.search.sort.SortBuilders;
-import org.opensearch.search.sort.ScoreSortBuilder;
-import org.opensearch.search.sort.FieldSortBuilder;
 
 public class HybridQuerySortIT extends BaseNeuralSearchIT {
     private static final String TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS = "test-hybrid-sort-multi-doc-index-multiple-shards";
@@ -618,22 +614,6 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
         return hybridQueryBuilder;
     }
 
-    private List<SortBuilder<?>> createSortBuilders(Map<String, SortOrder> fieldSortOrderMap, boolean isSortByScore) {
-        List<SortBuilder<?>> sortBuilders = new ArrayList<>();
-        if (fieldSortOrderMap != null) {
-            for (Map.Entry<String, SortOrder> entry : fieldSortOrderMap.entrySet()) {
-                FieldSortBuilder fieldSortBuilder = SortBuilders.fieldSort(entry.getKey()).order(entry.getValue());
-                sortBuilders.add(fieldSortBuilder);
-            }
-        }
-
-        if (isSortByScore) {
-            ScoreSortBuilder scoreSortBuilder = SortBuilders.scoreSort().order(SortOrder.ASC);
-            sortBuilders.add(scoreSortBuilder);
-        }
-        return sortBuilders;
-    }
-
     private void assertStockValueWithSortOrderInHybridQueryResults(
         List<Map<String, Object>> hitsNestedList,
         SortOrder sortOrder,
@@ -732,7 +712,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                 indexName,
                 buildIndexConfiguration(
                     Collections.emptyList(),
-                    Collections.emptyList(),
+                    Collections.emptyMap(),
                     Collections.singletonList(INTEGER_FIELD_1_STOCK),
                     Collections.singletonList(KEYWORD_FIELD_2_CATEGORY),
                     Collections.emptyList(),
@@ -741,7 +721,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                 ""
             );
 
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "1",
                 Collections.emptyList(),
@@ -749,16 +729,19 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEXT_FIELD_1_NAME),
                 Collections.singletonList(TEXT_FIELD_VALUE_2_DUNES),
                 Collections.emptyList(),
-                Collections.emptyList(),
+                Collections.emptyMap(),
                 Collections.singletonList(INTEGER_FIELD_1_STOCK),
                 Collections.singletonList(INTEGER_FIELD_STOCK_1_25),
                 Collections.singletonList(KEYWORD_FIELD_2_CATEGORY),
                 Collections.singletonList(KEYWORD_FIELD_CATEGORY_1_DRAMA),
                 Collections.emptyList(),
-                Collections.emptyList()
+                Collections.emptyList(),
+                List.of(),
+                List.of(),
+                null
             );
 
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "2",
                 Collections.emptyList(),
@@ -766,16 +749,19 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEXT_FIELD_1_NAME),
                 Collections.singletonList(TEXT_FIELD_VALUE_1_DUNES),
                 Collections.emptyList(),
-                Collections.emptyList(),
+                Collections.emptyMap(),
                 Collections.singletonList(INTEGER_FIELD_1_STOCK),
                 Collections.singletonList(INTEGER_FIELD_STOCK_2_22),
                 Collections.singletonList(KEYWORD_FIELD_2_CATEGORY),
                 Collections.singletonList(KEYWORD_FIELD_CATEGORY_1_DRAMA),
                 Collections.emptyList(),
-                Collections.emptyList()
+                Collections.emptyList(),
+                List.of(),
+                List.of(),
+                null
             );
 
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "3",
                 Collections.emptyList(),
@@ -783,16 +769,19 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEXT_FIELD_1_NAME),
                 Collections.singletonList(TEXT_FIELD_VALUE_3_MI_1),
                 Collections.emptyList(),
-                Collections.emptyList(),
+                Collections.emptyMap(),
                 Collections.singletonList(INTEGER_FIELD_1_STOCK),
                 Collections.singletonList(INTEGER_FIELD_STOCK_3_256),
                 Collections.singletonList(KEYWORD_FIELD_2_CATEGORY),
                 Collections.singletonList(KEYWORD_FIELD_CATEGORY_2_ACTION),
                 Collections.emptyList(),
-                Collections.emptyList()
+                Collections.emptyList(),
+                List.of(),
+                List.of(),
+                null
             );
 
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "4",
                 List.of(),
@@ -800,16 +789,19 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEXT_FIELD_1_NAME),
                 Collections.singletonList(TEXT_FIELD_VALUE_4_MI_2),
                 List.of(),
-                List.of(),
+                Map.of(),
                 List.of(INTEGER_FIELD_1_STOCK),
                 List.of(INTEGER_FIELD_STOCK_4_25),
                 List.of(KEYWORD_FIELD_2_CATEGORY),
                 List.of(KEYWORD_FIELD_CATEGORY_2_ACTION),
                 List.of(),
-                List.of()
+                List.of(),
+                List.of(),
+                List.of(),
+                null
             );
 
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "5",
                 List.of(),
@@ -817,16 +809,19 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEXT_FIELD_1_NAME),
                 Collections.singletonList(TEXT_FIELD_VALUE_5_TERMINAL),
                 List.of(),
-                List.of(),
+                Map.of(),
                 List.of(INTEGER_FIELD_1_STOCK),
                 List.of(INTEGER_FIELD_STOCK_5_20),
                 List.of(KEYWORD_FIELD_2_CATEGORY),
                 List.of(KEYWORD_FIELD_CATEGORY_1_DRAMA),
                 List.of(),
-                List.of()
+                List.of(),
+                List.of(),
+                List.of(),
+                null
             );
 
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "6",
                 List.of(),
@@ -834,13 +829,16 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEXT_FIELD_1_NAME),
                 Collections.singletonList(TEXT_FIELD_VALUE_6_AVENGERS),
                 List.of(),
-                List.of(),
+                Map.of(),
                 List.of(INTEGER_FIELD_1_STOCK),
                 List.of(INTEGER_FIELD_STOCK_5_20),
                 List.of(KEYWORD_FIELD_2_CATEGORY),
                 List.of(KEYWORD_FIELD_CATEGORY_3_SCI_FI),
                 List.of(),
-                List.of()
+                List.of(),
+                List.of(),
+                List.of(),
+                null
             );
         }
     }

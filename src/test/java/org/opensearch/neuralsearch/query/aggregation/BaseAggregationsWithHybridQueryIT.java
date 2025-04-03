@@ -105,7 +105,7 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
                 indexName,
                 buildIndexConfiguration(
                     List.of(),
-                    List.of(NESTED_TYPE_FIELD_USER, NESTED_FIELD_FIRSTNAME, NESTED_FIELD_LASTNAME),
+                    Map.of(NESTED_TYPE_FIELD_USER, Map.of(NESTED_FIELD_FIRSTNAME, "keyword", NESTED_FIELD_LASTNAME, "keyword")),
                     List.of(INTEGER_FIELD_DOCINDEX),
                     List.of(KEYWORD_FIELD_DOCKEYWORD),
                     List.of(DATE_FIELD),
@@ -114,7 +114,7 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
                 ""
             );
 
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "1",
                 List.of(),
@@ -122,15 +122,21 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT1),
                 List.of(NESTED_TYPE_FIELD_USER),
-                List.of(Map.of(NESTED_FIELD_FIRSTNAME, NESTED_FIELD_FIRSTNAME_JOHN, NESTED_FIELD_LASTNAME, NESTED_FIELD_LASTNAME_BLACK)),
+                Map.of(
+                    NESTED_TYPE_FIELD_USER,
+                    List.of(Map.of(NESTED_FIELD_FIRSTNAME, NESTED_FIELD_FIRSTNAME_JOHN, NESTED_FIELD_LASTNAME, NESTED_FIELD_LASTNAME_BLACK))
+                ),
                 List.of(INTEGER_FIELD_DOCINDEX, INTEGER_FIELD_PRICE),
                 List.of(INTEGER_FIELD_DOCINDEX_1234, INTEGER_FIELD_PRICE_130),
                 List.of(KEYWORD_FIELD_DOCKEYWORD),
                 List.of(KEYWORD_FIELD_DOCKEYWORD_WORKABLE),
                 List.of(DATE_FIELD),
-                List.of(DATE_FIELD_01031995)
+                List.of(DATE_FIELD_01031995),
+                List.of(),
+                List.of(),
+                null
             );
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "2",
                 List.of(),
@@ -138,15 +144,23 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT3),
                 List.of(NESTED_TYPE_FIELD_USER),
-                List.of(Map.of(NESTED_FIELD_FIRSTNAME, NESTED_FIELD_FIRSTNAME_FRODO, NESTED_FIELD_LASTNAME, NESTED_FIELD_LASTNAME_BAGGINS)),
+                Map.of(
+                    NESTED_TYPE_FIELD_USER,
+                    List.of(
+                        Map.of(NESTED_FIELD_FIRSTNAME, NESTED_FIELD_FIRSTNAME_FRODO, NESTED_FIELD_LASTNAME, NESTED_FIELD_LASTNAME_BAGGINS)
+                    )
+                ),
                 List.of(INTEGER_FIELD_DOCINDEX, INTEGER_FIELD_PRICE),
                 List.of(INTEGER_FIELD_DOCINDEX_2345, INTEGER_FIELD_PRICE_100),
                 List.of(),
                 List.of(),
                 List.of(DATE_FIELD),
-                List.of(DATE_FIELD_05022015)
+                List.of(DATE_FIELD_05022015),
+                List.of(),
+                List.of(),
+                null
             );
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "3",
                 List.of(),
@@ -154,15 +168,23 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT2),
                 List.of(NESTED_TYPE_FIELD_USER),
-                List.of(Map.of(NESTED_FIELD_FIRSTNAME, NESTED_FIELD_FIRSTNAME_MOHAMMED, NESTED_FIELD_LASTNAME, NESTED_FIELD_LASTNAME_EZAB)),
+                Map.of(
+                    NESTED_TYPE_FIELD_USER,
+                    List.of(
+                        Map.of(NESTED_FIELD_FIRSTNAME, NESTED_FIELD_FIRSTNAME_MOHAMMED, NESTED_FIELD_LASTNAME, NESTED_FIELD_LASTNAME_EZAB)
+                    )
+                ),
                 List.of(INTEGER_FIELD_PRICE),
                 List.of(INTEGER_FIELD_PRICE_200),
                 List.of(KEYWORD_FIELD_DOCKEYWORD),
                 List.of(KEYWORD_FIELD_DOCKEYWORD_ANGRY),
                 List.of(DATE_FIELD),
-                List.of(DATE_FIELD_07232007)
+                List.of(DATE_FIELD_07232007),
+                List.of(),
+                List.of(),
+                null
             );
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "4",
                 List.of(),
@@ -170,15 +192,21 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT4),
                 List.of(NESTED_TYPE_FIELD_USER),
-                List.of(Map.of(NESTED_FIELD_FIRSTNAME, NESTED_FIELD_FIRSTNAME_SUN, NESTED_FIELD_LASTNAME, NESTED_FIELD_LASTNAME_WUKONG)),
+                Map.of(
+                    NESTED_TYPE_FIELD_USER,
+                    List.of(Map.of(NESTED_FIELD_FIRSTNAME, NESTED_FIELD_FIRSTNAME_SUN, NESTED_FIELD_LASTNAME, NESTED_FIELD_LASTNAME_WUKONG))
+                ),
                 List.of(INTEGER_FIELD_DOCINDEX, INTEGER_FIELD_PRICE),
                 List.of(INTEGER_FIELD_DOCINDEX_3456, INTEGER_FIELD_PRICE_25),
                 List.of(KEYWORD_FIELD_DOCKEYWORD),
                 List.of(KEYWORD_FIELD_DOCKEYWORD_LIKABLE),
                 List.of(DATE_FIELD),
-                List.of(DATE_FIELD_05022015)
+                List.of(DATE_FIELD_05022015),
+                List.of(),
+                List.of(),
+                null
             );
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "5",
                 List.of(),
@@ -186,15 +214,18 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT5),
                 List.of(),
-                List.of(),
+                Map.of(),
                 List.of(INTEGER_FIELD_DOCINDEX, INTEGER_FIELD_PRICE),
                 List.of(INTEGER_FIELD_DOCINDEX_3456, INTEGER_FIELD_PRICE_30),
                 List.of(KEYWORD_FIELD_DOCKEYWORD),
                 List.of(KEYWORD_FIELD_DOCKEYWORD_ENTIRE),
                 List.of(DATE_FIELD),
-                List.of(DATE_FIELD_08212012)
+                List.of(DATE_FIELD_08212012),
+                List.of(),
+                List.of(),
+                null
             );
-            addKnnDoc(
+            indexTheDocument(
                 indexName,
                 "6",
                 List.of(),
@@ -202,13 +233,21 @@ public class BaseAggregationsWithHybridQueryIT extends BaseNeuralSearchIT {
                 Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
                 Collections.singletonList(TEST_DOC_TEXT6),
                 List.of(NESTED_TYPE_FIELD_USER),
-                List.of(Map.of(NESTED_FIELD_FIRSTNAME, NESTED_FIELD_FIRSTNAME_VASILISA, NESTED_FIELD_LASTNAME, NESTED_FIELD_LASTNAME_WISE)),
+                Map.of(
+                    NESTED_TYPE_FIELD_USER,
+                    List.of(
+                        Map.of(NESTED_FIELD_FIRSTNAME, NESTED_FIELD_FIRSTNAME_VASILISA, NESTED_FIELD_LASTNAME, NESTED_FIELD_LASTNAME_WISE)
+                    )
+                ),
                 List.of(INTEGER_FIELD_DOCINDEX, INTEGER_FIELD_PRICE),
                 List.of(INTEGER_FIELD_DOCINDEX_4567, INTEGER_FIELD_PRICE_350),
                 List.of(KEYWORD_FIELD_DOCKEYWORD),
                 List.of(KEYWORD_FIELD_DOCKEYWORD_ENTIRE),
                 List.of(DATE_FIELD),
-                List.of(DATE_FIELD_08212012)
+                List.of(DATE_FIELD_08212012),
+                List.of(),
+                List.of(),
+                null
             );
         }
     }

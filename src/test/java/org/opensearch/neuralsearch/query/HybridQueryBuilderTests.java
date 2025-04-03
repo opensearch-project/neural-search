@@ -18,6 +18,7 @@ import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.K_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MODEL_ID_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TEXT_FIELD;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -31,6 +32,7 @@ import java.util.stream.Collectors;
 import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.search.join.ScoreMode;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.Version;
@@ -56,8 +58,12 @@ import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.mapper.TextFieldMapper;
+import org.opensearch.index.query.InnerHitBuilder;
+import org.opensearch.index.query.InnerHitContextBuilder;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
+import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
@@ -1094,6 +1100,48 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         BoolQueryBuilder updatedNeuralSparseQueryBuilder = (BoolQueryBuilder) updatedHybridQueryBuilder.queries().get(1);
         assertEquals(new NeuralSparseQueryBuilder(), updatedNeuralSparseQueryBuilder.must().get(0));
         assertEquals(new MatchAllQueryBuilder(), updatedNeuralSparseQueryBuilder.filter().get(0));
+    }
+
+    public void testExtractInnerHitsBuilders() {
+        NestedQueryBuilder nestedQueryBuilder1 = new NestedQueryBuilder(
+            "path1",
+            new MatchQueryBuilder("testFieldName1", "testValue1"),
+            ScoreMode.Max
+        );
+        nestedQueryBuilder1.innerHit(new InnerHitBuilder());
+        NestedQueryBuilder nestedQueryBuilder2 = new NestedQueryBuilder(
+            "path2",
+            new MatchQueryBuilder("testFieldName2", "testValue2"),
+            ScoreMode.Max
+        );
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(nestedQueryBuilder1).add(nestedQueryBuilder2);
+        Map<String, InnerHitContextBuilder> innerHitsMap = new HashMap<>();
+        hybridQueryBuilder.extractInnerHitBuilders(innerHitsMap);
+        assertEquals("path1", innerHitsMap.keySet().iterator().next());
+        assertEquals(1, innerHitsMap.size());
+    }
+
+    public void testExtractInnerHitsBuilders_whenMultipleInnerHitsOnSamePath_thenFail() {
+        InnerHitBuilder innerHitBuilder = new InnerHitBuilder();
+        NestedQueryBuilder nestedQueryBuilder1 = new NestedQueryBuilder(
+            "path1",
+            new MatchQueryBuilder("testFieldName1", "testValue1"),
+            ScoreMode.Max
+        );
+        nestedQueryBuilder1.innerHit(innerHitBuilder);
+        NestedQueryBuilder nestedQueryBuilder2 = new NestedQueryBuilder(
+            "path1",
+            new MatchQueryBuilder("testFieldName1", "testValue2"),
+            ScoreMode.Max
+        );
+        nestedQueryBuilder2.innerHit(innerHitBuilder);
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(nestedQueryBuilder1).add(nestedQueryBuilder2);
+        Map<String, InnerHitContextBuilder> innerHitsMap = new HashMap<>();
+        IllegalArgumentException e = expectThrows(
+            IllegalArgumentException.class,
+            () -> hybridQueryBuilder.extractInnerHitBuilders(innerHitsMap)
+        );
+        assertEquals("[inner_hits] already contains an entry for key [path1]", e.getMessage());
     }
 
     private Map<String, Object> getInnerMap(Object innerObject, String queryName, String fieldName) {
