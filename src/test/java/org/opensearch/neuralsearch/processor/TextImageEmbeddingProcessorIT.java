@@ -61,6 +61,15 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
         expectThrows(ResponseException.class, () -> ingestDocument(INDEX_NAME, INGEST_DOCUMENT.replace("\"passage_text_value\"", "null")));
     }
 
+    public void testEmbeddingProcessor_whenIngestingDocumentWithEmptyMappingValue_thenThrowException() throws Exception {
+        String modelId = uploadModel();
+        loadModel(modelId);
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
+        createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
+
+        expectThrows(ResponseException.class, () -> ingestDocument(INDEX_NAME, INGEST_DOCUMENT.replace("\"passage_text_value\"", "")));
+    }
+
     private String uploadModel() throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
         return registerModelGroupAndUploadModel(requestBody);
