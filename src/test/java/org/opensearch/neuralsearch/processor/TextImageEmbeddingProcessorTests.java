@@ -323,11 +323,9 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
     }
 
     public void testExecute_mapHasNonStringValue_throwIllegalArgumentException() {
-        Map<String, String> map1 = ImmutableMap.of("test1", "test2");
-        Map<String, Double> map2 = ImmutableMap.of("test3", 209.3D);
         Map<String, Object> sourceAndMetadata = new HashMap<>();
-        sourceAndMetadata.put("key1", map1);
-        sourceAndMetadata.put("my_text_field", map2);
+        sourceAndMetadata.put("key1", "test2");
+        sourceAndMetadata.put("my_text_field", 209.3D);
         sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextImageEmbeddingProcessor processor = createInstance(false);
@@ -337,11 +335,9 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
     }
 
     public void testExecute_mapHasEmptyStringValue_throwIllegalArgumentException() {
-        Map<String, String> map1 = ImmutableMap.of("test1", "test2");
-        Map<String, String> map2 = ImmutableMap.of("test3", "   ");
         Map<String, Object> sourceAndMetadata = new HashMap<>();
-        sourceAndMetadata.put("key1", map1);
-        sourceAndMetadata.put("my_text_field", map2);
+        sourceAndMetadata.put("key1", "test2");
+        sourceAndMetadata.put("my_text_field", "");
         sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextImageEmbeddingProcessor processor = createInstance(false);
