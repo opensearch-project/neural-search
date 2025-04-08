@@ -5,7 +5,7 @@
   "description": "Sentence highlighting question answering model for testing",
   "model_format": "TORCH_SCRIPT",
   "model_group_id": "%s",
-  "model_content_hash_value": "84eddafdc1b23c13b2e4bbeb9d137aa7ae6b1aab37b91f99f4d9f9beb322a049",
+  "model_content_hash_value": "15e97d44ca59f6cd3e977398e38a9cea401eb87f360b92ca9dd8b30afd41f926",
   "url": "https://github.com/opensearch-project/ml-commons/blob/main/ml-algorithms/src/test/resources/org/opensearch/ml/engine/algorithms/question_answering/sentence_highlighting_qa_model_pt.zip?raw=true",
   "model_config": {
     "model_type": "sentence_highlighting",
