@@ -183,8 +183,26 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
             if (!sourceAndMetadataMap.containsKey(originalKey)) {
                 continue;
             }
-            if (!(sourceAndMetadataMap.get(originalKey) instanceof String)) {
-                throw new IllegalArgumentException("Unsupported format of the field in the document, value must be a string");
+
+            Object metaValue = sourceAndMetadataMap.get(originalKey);
+            if (Objects.isNull(metaValue)) {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.getDefault(),
+                        "Unsupported format of the field in the document, %s value must be a non-empty string. Currently it is null",
+                        originalKey
+                    )
+                );
+            } else if ((metaValue instanceof String) == false || Objects.isNull(metaValue) || StringUtils.isBlank((String) metaValue)) {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.getDefault(),
+                        "Unsupported format of the field in the document, %s value must be a non-empty string. Currently it is '%s'. Type is %s",
+                        originalKey,
+                        metaValue,
+                        metaValue.getClass()
+                    )
+                );
             }
             mapWithKnnKeys.put(originalKey, (String) sourceAndMetadataMap.get(originalKey));
         }
