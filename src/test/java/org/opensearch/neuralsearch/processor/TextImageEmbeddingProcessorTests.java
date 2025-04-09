@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
@@ -323,31 +324,76 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
     }
 
     public void testExecute_mapHasNonStringValue_throwIllegalArgumentException() {
-        Map<String, String> map1 = ImmutableMap.of("test1", "test2");
-        Map<String, Double> map2 = ImmutableMap.of("test3", 209.3D);
         Map<String, Object> sourceAndMetadata = new HashMap<>();
-        sourceAndMetadata.put("key1", map1);
-        sourceAndMetadata.put("my_text_field", map2);
+        sourceAndMetadata.put("key1", "test2");
+        sourceAndMetadata.put("my_text_field", 209.3D);
         sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextImageEmbeddingProcessor processor = createInstance(false);
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
-        verify(handler).accept(isNull(), any(IllegalArgumentException.class));
+
+        ArgumentCaptor<Throwable> argumentCaptor = ArgumentCaptor.forClass(Throwable.class);
+        verify(handler).accept(isNull(), argumentCaptor.capture());
+
+        Throwable capturedException = argumentCaptor.getValue();
+        assertTrue(capturedException instanceof IllegalArgumentException);
+        final String desiredExceptionMessage = String.format(
+            Locale.getDefault(),
+            "Unsupported format of the field in the document, %s value must be a non-empty string. Currently it is '%s'. Type is %s",
+            "my_text_field",
+            209.3D,
+            Double.class
+        );
+        assertEquals(desiredExceptionMessage, capturedException.getMessage());
     }
 
     public void testExecute_mapHasEmptyStringValue_throwIllegalArgumentException() {
-        Map<String, String> map1 = ImmutableMap.of("test1", "test2");
-        Map<String, String> map2 = ImmutableMap.of("test3", "   ");
         Map<String, Object> sourceAndMetadata = new HashMap<>();
-        sourceAndMetadata.put("key1", map1);
-        sourceAndMetadata.put("my_text_field", map2);
+        sourceAndMetadata.put("key1", "test2");
+        sourceAndMetadata.put("my_text_field", "");
         sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         TextImageEmbeddingProcessor processor = createInstance(false);
         BiConsumer handler = mock(BiConsumer.class);
         processor.execute(ingestDocument, handler);
-        verify(handler).accept(isNull(), any(IllegalArgumentException.class));
+
+        ArgumentCaptor<Throwable> argumentCaptor = ArgumentCaptor.forClass(Throwable.class);
+        verify(handler).accept(isNull(), argumentCaptor.capture());
+
+        Throwable capturedException = argumentCaptor.getValue();
+        assertTrue(capturedException instanceof IllegalArgumentException);
+        final String desiredExceptionMessage = String.format(
+            Locale.getDefault(),
+            "Unsupported format of the field in the document, %s value must be a non-empty string. Currently it is '%s'. Type is %s",
+            "my_text_field",
+            "",
+            "".getClass()
+        );
+        assertEquals(desiredExceptionMessage, capturedException.getMessage());
+    }
+
+    public void testExecute_mapHasNullValue_throwIllegalArgumentException() {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put("key1", "test2");
+        sourceAndMetadata.put("my_text_field", null);
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        TextImageEmbeddingProcessor processor = createInstance(false);
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+
+        ArgumentCaptor<Throwable> argumentCaptor = ArgumentCaptor.forClass(Throwable.class);
+        verify(handler).accept(isNull(), argumentCaptor.capture());
+
+        Throwable capturedException = argumentCaptor.getValue();
+        assertTrue(capturedException instanceof IllegalArgumentException);
+        final String desiredExceptionMessage = String.format(
+            Locale.getDefault(),
+            "Unsupported format of the field in the document, %s value must be a non-empty string. Currently it is null",
+            "my_text_field"
+        );
+        assertEquals(desiredExceptionMessage, capturedException.getMessage());
     }
 
     public void testExecute_hybridTypeInput_successful() throws Exception {
