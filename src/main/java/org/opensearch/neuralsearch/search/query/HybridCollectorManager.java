@@ -158,7 +158,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             return new HybridCollapsingTopDocsCollector(
                 new CollapseDocSourceGroupSelector<>(collapseContext.getFieldName()),
                 collapseContext.getFieldName(),
-                new Sort(new SortField(null, SortField.Type.SCORE)),
+                sortAndFormats.sort == null ? new Sort(new SortField(null, SortField.Type.SCORE)) : sortAndFormats.sort,
                 numHits
             );
         } else {

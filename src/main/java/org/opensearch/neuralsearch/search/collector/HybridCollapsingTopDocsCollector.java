@@ -8,7 +8,7 @@ import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.FieldComparator;
-import org.apache.lucene.search.HitQueue;
+import org.apache.lucene.search.FieldValueHitQueue;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.Pruning;
 import org.apache.lucene.search.Scorable;
@@ -45,7 +45,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
     private final boolean needsScores;
     private int docBase;
     private final ConcurrentHashMap<BytesRef, HybridCollectedSearchGroup<BytesRef>> groupMap;
-    private final ConcurrentHashMap<BytesRef, PriorityQueue<ScoreDoc>[]> groupQueueMap;
+    private final ConcurrentHashMap<BytesRef, FieldValueHitQueue<FieldValueHitQueue.Entry>[]> groupQueueMap;
     private PriorityQueue<HybridCollectedSearchGroup> groupQueue;
     private ConcurrentHashMap<BytesRef, int[]> collectedHitsPerSubQueryMap;
     private final int numHits;
@@ -95,7 +95,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
             int hitsOnCurrentSubQuery = 0;
             for (Map.Entry<BytesRef, HybridCollectedSearchGroup<BytesRef>> entry : groupMap.entrySet()) {
                 BytesRef groupValue = entry.getKey();
-                PriorityQueue<ScoreDoc> priorityQueue = groupQueueMap.get(groupValue)[i];
+                FieldValueHitQueue<FieldValueHitQueue.Entry> priorityQueue = groupQueueMap.get(groupValue)[i];
 
                 // Hard coded 10 for now
                 for (int j = 0; j < 10; j++) {
@@ -207,18 +207,22 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     collectedHitsForCurrentSubQuery[i]++;
                     collectedHitsPerSubQueryMap.put(groupValue, collectedHitsForCurrentSubQuery);
 
-                    PriorityQueue<ScoreDoc> pq = groupQueueMap.get(groupValue)[i];
-                    ScoreDoc currentDoc = new ScoreDoc(doc + docBase, score);
-                    maxScore = Math.max(currentDoc.score, maxScore);
+                    FieldValueHitQueue<FieldValueHitQueue.Entry> pq = groupQueueMap.get(groupValue)[i];
+                    FieldValueHitQueue.Entry currentDoc = new FieldValueHitQueue.Entry(
+                        collectedHitsForCurrentSubQuery[i] - 1,
+                        doc + docBase
+                    );
+                    currentDoc.score = score;
+                    maxScore = Math.max(score, maxScore);
                     pq.insertWithOverflow(currentDoc);
                 }
                 totalHitCount++;
             }
 
             private void initializeQueue(BytesRef groupValue, int numSubQueries) {
-                PriorityQueue<ScoreDoc>[] compoundScores = new PriorityQueue[numSubQueries];
+                FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores = new FieldValueHitQueue[numSubQueries];
                 for (int i = 0; i < numSubQueries; i++) {
-                    compoundScores[i] = new HitQueue(numHits, false);
+                    compoundScores[i] = FieldValueHitQueue.create(sort.getSort(), numHits);
                 }
                 groupQueueMap.put(BytesRef.deepCopyOf(groupValue), compoundScores);
                 collectedHitsPerSubQueryMap.put(BytesRef.deepCopyOf(groupValue), new int[numSubQueries]);
