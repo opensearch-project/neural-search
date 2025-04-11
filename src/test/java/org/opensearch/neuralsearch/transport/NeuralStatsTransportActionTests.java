@@ -20,6 +20,8 @@ import org.opensearch.neuralsearch.stats.events.TimestampedEventStatSnapshot;
 import org.opensearch.neuralsearch.stats.info.CountableInfoStatSnapshot;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.neuralsearch.stats.info.InfoStatsManager;
+import org.opensearch.neuralsearch.stats.metrics.MetricStatName;
+import org.opensearch.neuralsearch.stats.metrics.MetricStatsManager;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.transport.TransportService;
@@ -55,6 +57,9 @@ public class NeuralStatsTransportActionTests extends OpenSearchTestCase {
     @Mock
     private InfoStatsManager infoStatsManager;
 
+    @Mock
+    private MetricStatsManager metricStatsManager;
+
     private NeuralStatsTransportAction transportAction;
     private ClusterName clusterName;
 
@@ -70,7 +75,8 @@ public class NeuralStatsTransportActionTests extends OpenSearchTestCase {
             transportService,
             actionFilters,
             eventStatsManager,
-            infoStatsManager
+            infoStatsManager,
+            metricStatsManager
         );
     }
 
@@ -116,6 +122,7 @@ public class NeuralStatsTransportActionTests extends OpenSearchTestCase {
         // Create inputs
         EnumSet<EventStatName> eventStats = EnumSet.of(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS);
         EnumSet<InfoStatName> infoStats = EnumSet.of(InfoStatName.TEXT_EMBEDDING_PROCESSORS);
+        EnumSet<MetricStatName> metricStatNames = EnumSet.noneOf(MetricStatName.class);
 
         NeuralStatsInput input = NeuralStatsInput.builder()
             .eventStatNames(eventStats)
@@ -123,6 +130,7 @@ public class NeuralStatsTransportActionTests extends OpenSearchTestCase {
             .includeIndividualNodes(true)
             .includeAllNodes(true)
             .includeInfo(true)
+            .metricStatNames(metricStatNames)
             .build();
         NeuralStatsRequest request = new NeuralStatsRequest(new String[] {}, input);
 
@@ -153,8 +161,8 @@ public class NeuralStatsTransportActionTests extends OpenSearchTestCase {
         nodeStats2.put(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS, snapshot2);
 
         List<NeuralStatsNodeResponse> responses = Arrays.asList(
-            new NeuralStatsNodeResponse(node1, nodeStats1),
-            new NeuralStatsNodeResponse(node2, nodeStats2)
+            new NeuralStatsNodeResponse(node1, nodeStats1, new HashMap<>()),
+            new NeuralStatsNodeResponse(node2, nodeStats2, new HashMap<>())
         );
 
         // Create info stats
@@ -250,8 +258,8 @@ public class NeuralStatsTransportActionTests extends OpenSearchTestCase {
         nodeStats2.put(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS, snapshot2);
 
         List<NeuralStatsNodeResponse> responses = Arrays.asList(
-            new NeuralStatsNodeResponse(node1, nodeStats1),
-            new NeuralStatsNodeResponse(node2, nodeStats2)
+            new NeuralStatsNodeResponse(node1, nodeStats1, Map.of()),
+            new NeuralStatsNodeResponse(node2, nodeStats2, Map.of())
         );
 
         // Create info stats
@@ -322,7 +330,7 @@ public class NeuralStatsTransportActionTests extends OpenSearchTestCase {
         assertNotNull(response);
         assertEquals(localNode, response.getNode());
 
-        Map<EventStatName, TimestampedEventStatSnapshot> responseStats = response.getStats();
+        Map<EventStatName, TimestampedEventStatSnapshot> responseStats = response.getEventStats();
         assertFalse(responseStats.isEmpty());
 
         TimestampedEventStatSnapshot stat = responseStats.get(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS);

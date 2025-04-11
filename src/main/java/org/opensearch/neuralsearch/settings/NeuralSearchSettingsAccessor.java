@@ -7,7 +7,12 @@ package org.opensearch.neuralsearch.settings;
 import lombok.Getter;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.neuralsearch.sparse.cache.CircuitBreakerManager;
+import org.opensearch.neuralsearch.sparse.cache.MemoryUsageManager;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_LIMIT;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_OVERHEAD;
 
 /**
  * Class handles exposing settings related to neural search and manages callbacks when the settings change
@@ -41,5 +46,10 @@ public class NeuralSearchSettingsAccessor {
         clusterService.getClusterSettings().addSettingsUpdateConsumer(NeuralSearchSettings.AGENTIC_SEARCH_ENABLED, value -> {
             isAgenticSearchEnabled = value;
         });
+        clusterService.getClusterSettings()
+            .addSettingsUpdateConsumer(NEURAL_CIRCUIT_BREAKER_LIMIT, NEURAL_CIRCUIT_BREAKER_OVERHEAD, (limit, overhead) -> {
+                CircuitBreakerManager.setLimitAndOverhead(limit, overhead);
+                MemoryUsageManager.getInstance().setLimit(limit);
+            });
     }
 }

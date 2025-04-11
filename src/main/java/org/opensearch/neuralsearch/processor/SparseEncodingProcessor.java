@@ -4,25 +4,35 @@
  */
 package org.opensearch.neuralsearch.processor;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import lombok.Data;
 import lombok.Getter;
 import org.opensearch.action.get.GetAction;
 import org.opensearch.action.get.GetRequest;
 import org.opensearch.action.get.MultiGetAction;
 import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.collect.Tuple;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.IngestDocumentWrapper;
+import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
+import org.opensearch.ml.common.input.parameter.textembedding.SparseEmbeddingFormat;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.optimization.TextEmbeddingInferenceFilter;
+import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.util.prune.PruneType;
@@ -47,6 +57,9 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
     private final OpenSearchClient openSearchClient;
     private final boolean skipExisting;
     private final TextEmbeddingInferenceFilter textEmbeddingInferenceFilter;
+    private static final AsymmetricTextEmbeddingParameters tokenIdParameter = AsymmetricTextEmbeddingParameters.builder()
+        .sparseEmbeddingFormat(SparseEmbeddingFormat.TOKEN_ID)
+        .build();
 
     @Getter
     private final PruneType pruneType;
@@ -122,9 +135,113 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
     }
 
     @Override
+    protected void doSubBatchExecute(
+        List<IngestDocumentWrapper> ingestDocumentWrappers,
+        List<String> inferenceList,
+        List<DataForInference> dataForInferences,
+        Consumer<List<IngestDocumentWrapper>> handler
+    ) {
+        if (CollectionUtils.isEmpty(ingestDocumentWrappers)) {
+            handler.accept(ingestDocumentWrappers);
+            return;
+        }
+        // https://tiny.amazon.com/imoy8qta ingest documents in a batch belong to the same index
+        Object indexObj = ingestDocumentWrappers.getFirst().getIngestDocument().getSourceAndMetadata().get(INDEX_FIELD);
+        String index = indexObj == null ? null : indexObj.toString();
+        Set<String> sparseAnnFields = SparseFieldUtils.getSparseAnnFields(index);
+        if (sparseAnnFields.isEmpty()) {
+            super.doSubBatchExecute(ingestDocumentWrappers, inferenceList, dataForInferences, handler);
+            return;
+        }
+        SplitDataResponse splitDataResponse = splitData(dataForInferences, sparseAnnFields);
+        AtomicInteger counter = new AtomicInteger(0);
+        if (splitDataResponse.tokenIdDataForInference.isEmpty()) {
+            super.doSubBatchExecute(ingestDocumentWrappers, inferenceList, dataForInferences, handler);
+            return;
+        } else {
+            counter.incrementAndGet();
+        }
+        if (!splitDataResponse.wordDataForInference.isEmpty()) {
+            counter.incrementAndGet();
+        }
+        List<Exception> exceptions = Collections.synchronizedList(new ArrayList<>());
+        if (!splitDataResponse.tokenIdDataForInference.isEmpty()) {
+            doBatchExecuteWithType(
+                splitDataResponse.tokenIdResponseInferenceList,
+                splitDataResponse.tokenIdDataForInference,
+                SparseEmbeddingFormat.TOKEN_ID,
+                getCountDownBatchDataHandler(counter, ingestDocumentWrappers, exceptions, handler)
+            );
+        }
+        if (!splitDataResponse.wordDataForInference.isEmpty()) {
+            doBatchExecuteWithType(
+                splitDataResponse.wordResponseInferenceList,
+                splitDataResponse.wordDataForInference,
+                SparseEmbeddingFormat.WORD,
+                getCountDownBatchDataHandler(counter, ingestDocumentWrappers, exceptions, handler)
+            );
+        }
+    }
+
+    private void doBatchExecuteWithType(
+        List<String> inferenceList,
+        List<DataForInference> dataForInferences,
+        SparseEmbeddingFormat format,
+        BiConsumer<List<DataForInference>, Exception> handler
+    ) {
+        Tuple<List<String>, Map<Integer, Integer>> sortedResult = sortByLengthAndReturnOriginalOrder(inferenceList);
+        inferenceList = sortedResult.v1();
+        Map<Integer, Integer> originalOrder = sortedResult.v2();
+        final AsymmetricTextEmbeddingParameters parameters = format == SparseEmbeddingFormat.TOKEN_ID ? tokenIdParameter : null;
+        mlCommonsClientAccessor.inferenceSentencesWithMapResult(
+            TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
+            parameters,
+            ActionListener.wrap(resultMaps -> {
+                List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps)
+                    .stream()
+                    .map(vector -> PruneUtils.pruneSparseVector(pruneType, pruneRatio, vector))
+                    .toList();
+                batchExecuteHandler(sparseVectors, dataForInferences, originalOrder);
+                handler.accept(dataForInferences, null);
+            }, exception -> { handler.accept(dataForInferences, exception); })
+        );
+    }
+
+    private SplitDataResponse splitData(List<DataForInference> dataForInferences, Set<String> sparseAnnFields) {
+        SplitDataResponse splitDataResponse = new SplitDataResponse();
+        for (DataForInference dataForInference : dataForInferences) {
+            Map<String, Object> tokenIdProcessMap = new HashMap<>();
+            Map<String, Object> wordProcessMap = new HashMap<>();
+            for (Map.Entry<String, Object> entry : dataForInference.getProcessMap().entrySet()) {
+                if (isSparseAnnField(sparseAnnFields, entry.getKey())) {
+                    tokenIdProcessMap.put(entry.getKey(), entry.getValue());
+                } else {
+                    wordProcessMap.put(entry.getKey(), entry.getValue());
+                }
+            }
+            List<String> tokenIdList = createInferenceList(tokenIdProcessMap);
+            List<String> wordList = createInferenceList(wordProcessMap);
+            splitDataResponse.tokenIdResponseInferenceList.addAll(tokenIdList);
+            splitDataResponse.wordResponseInferenceList.addAll(wordList);
+            if (!tokenIdList.isEmpty()) {
+                splitDataResponse.tokenIdDataForInference.add(
+                    new DataForInference(dataForInference.getIngestDocumentWrapper(), tokenIdProcessMap, tokenIdList)
+                );
+            }
+            if (!wordList.isEmpty()) {
+                splitDataResponse.wordDataForInference.add(
+                    new DataForInference(dataForInference.getIngestDocumentWrapper(), wordProcessMap, wordList)
+                );
+            }
+        }
+        return splitDataResponse;
+    }
+
+    @Override
     public void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException) {
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(
             TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
+            null,
             ActionListener.wrap(resultMaps -> {
                 List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps)
                     .stream()
@@ -177,5 +294,119 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         } catch (Exception e) {
             updateWithExceptions(ingestDocumentWrappers, handler, e);
         }
+    }
+
+    private void generateAndSetMapInference(
+        IngestDocument ingestDocument,
+        Map<String, Object> processMap,
+        List<String> inferenceList,
+        PruneType pruneType,
+        float pruneRatio,
+        BiConsumer<IngestDocument, Exception> handler
+    ) {
+        Object indexObj = ingestDocument.getSourceAndMetadata().get(INDEX_FIELD);
+        String index = indexObj == null ? null : indexObj.toString();
+        Set<String> sparseAnnFields = SparseFieldUtils.getSparseAnnFields(index);
+        Map<String, Object> tokenIdProcessMap = new HashMap<>();
+        Map<String, Object> wordProcessMap = new HashMap<>();
+        for (Map.Entry<String, Object> entry : processMap.entrySet()) {
+            if (isSparseAnnField(sparseAnnFields, entry.getKey())) {
+                tokenIdProcessMap.put(entry.getKey(), entry.getValue());
+            } else {
+                wordProcessMap.put(entry.getKey(), entry.getValue());
+            }
+        }
+        AtomicInteger counter = new AtomicInteger(0);
+        if (tokenIdProcessMap.isEmpty()) {
+            generateAndSetMapInference(ingestDocument, processMap, inferenceList, pruneType, pruneRatio, null, handler);
+            return;
+        } else {
+            counter.incrementAndGet();
+        }
+        if (!wordProcessMap.isEmpty()) {
+            counter.incrementAndGet();
+        }
+        if (counter.get() == 0) {
+            handler.accept(ingestDocument, null);
+            return;
+        }
+        List<Exception> exceptions = Collections.synchronizedList(new ArrayList<>());
+        if (!tokenIdProcessMap.isEmpty()) {
+            List<String> updatedInferenceList = createInferenceList(tokenIdProcessMap);
+            generateAndSetMapInference(
+                ingestDocument,
+                tokenIdProcessMap,
+                updatedInferenceList,
+                pruneType,
+                pruneRatio,
+                tokenIdParameter,
+                getCountDownHandler(counter, exceptions, handler)
+            );
+        }
+        if (!wordProcessMap.isEmpty()) {
+            List<String> updatedInferenceList = createInferenceList(wordProcessMap);
+            generateAndSetMapInference(
+                ingestDocument,
+                wordProcessMap,
+                updatedInferenceList,
+                pruneType,
+                pruneRatio,
+                null,
+                getCountDownHandler(counter, exceptions, handler)
+            );
+        }
+    }
+
+    private BiConsumer<IngestDocument, Exception> getCountDownHandler(
+        AtomicInteger counter,
+        List<Exception> exceptions,
+        BiConsumer<IngestDocument, Exception> originalHandler
+    ) {
+        return (ingestDocument, e) -> {
+            if (e != null) {
+                exceptions.add(e);
+            }
+            if (counter.decrementAndGet() == 0) {
+                if (!exceptions.isEmpty()) {
+                    originalHandler.accept(null, exceptions.getFirst());
+                } else {
+                    originalHandler.accept(ingestDocument, null);
+                }
+            }
+        };
+    }
+
+    private BiConsumer<List<DataForInference>, Exception> getCountDownBatchDataHandler(
+        AtomicInteger counter,
+        List<IngestDocumentWrapper> ingestDocumentWrappers,
+        List<Exception> exceptions,
+        Consumer<List<IngestDocumentWrapper>> handler
+    ) {
+        return (dataForInferences, e) -> {
+            if (e != null) {
+                exceptions.add(e);
+            }
+            if (counter.decrementAndGet() == 0) {
+                if (!exceptions.isEmpty()) {
+                    updateWithExceptions(ingestDocumentWrappers, handler, exceptions.getFirst());
+                } else {
+                    handler.accept(ingestDocumentWrappers);
+                }
+            }
+        };
+    }
+
+    private boolean isSparseAnnField(Set<String> sparseAnnFields, String field) {
+        // we don't support nested sparse ann field
+        int nestedDotIndex = field.indexOf('.');
+        return nestedDotIndex == -1 && sparseAnnFields.contains(field);
+    }
+
+    @Data
+    private static class SplitDataResponse {
+        private List<String> tokenIdResponseInferenceList = new ArrayList<>();
+        private List<String> wordResponseInferenceList = new ArrayList<>();
+        private List<DataForInference> tokenIdDataForInference = new ArrayList<>();
+        private List<DataForInference> wordDataForInference = new ArrayList<>();
     }
 }

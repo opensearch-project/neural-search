@@ -15,6 +15,7 @@ import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.NeuralStatsInput;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
+import org.opensearch.neuralsearch.stats.metrics.MetricStatName;
 import org.opensearch.neuralsearch.transport.NeuralStatsAction;
 import org.opensearch.neuralsearch.transport.NeuralStatsRequest;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
@@ -98,6 +99,12 @@ public class RestNeuralStatsAction extends BaseRestHandler {
     private static final Set<String> INFO_STAT_NAMES = EnumSet.allOf(InfoStatName.class)
         .stream()
         .map(InfoStatName::getNameString)
+        .map(str -> str.toLowerCase(Locale.ROOT))
+        .collect(Collectors.toSet());
+
+    private static final Set<String> METRIC_STAT_NAMES = EnumSet.allOf(MetricStatName.class)
+        .stream()
+        .map(MetricStatName::getNameString)
         .map(str -> str.toLowerCase(Locale.ROOT))
         .collect(Collectors.toSet());
 
@@ -223,26 +230,32 @@ public class RestNeuralStatsAction extends BaseRestHandler {
 
         String[] stats = optionalStats.get();
         Set<String> invalidStatNames = new HashSet<>();
-        boolean includeEvents = neuralStatsInput.isIncludeEvents();
+        boolean includeEventsAndMetrics = neuralStatsInput.includeEventsAndMetrics();
         boolean includeInfo = neuralStatsInput.isIncludeInfo();
 
         for (String stat : stats) {
             // Validate parameter
             String normalizedStat = stat.toLowerCase(Locale.ROOT);
-            if (isValidParamString(normalizedStat) == false || isValidEventOrInfoStatName(normalizedStat) == false) {
+            if (!isValidParamString(normalizedStat) || !isValidEventOrInfoStatName(normalizedStat)) {
                 invalidStatNames.add(normalizedStat);
                 continue;
             }
-
             if (includeInfo && InfoStatName.isValidName(normalizedStat)) {
                 InfoStatName infoStatName = InfoStatName.from(normalizedStat);
                 if (infoStatName.version().onOrBefore(minClusterVersion)) {
                     neuralStatsInput.getInfoStatNames().add(InfoStatName.from(normalizedStat));
                 }
-            } else if (includeEvents && EventStatName.isValidName(normalizedStat)) {
-                EventStatName eventStatName = EventStatName.from(normalizedStat);
-                if (eventStatName.version().onOrBefore(minClusterVersion)) {
-                    neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
+            } else if (includeEventsAndMetrics) {
+                if (EventStatName.isValidName(normalizedStat)) {
+                    EventStatName eventStatName = EventStatName.from(normalizedStat);
+                    if (eventStatName.version().onOrBefore(minClusterVersion)) {
+                        neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
+                    }
+                } else if (MetricStatName.isValidName(normalizedStat)) {
+                    MetricStatName metricStatName = MetricStatName.from(normalizedStat);
+                    if (metricStatName.version().onOrBefore(minClusterVersion)) {
+                        neuralStatsInput.getMetricStatNames().add(MetricStatName.from(normalizedStat));
+                    }
                 }
             }
         }
@@ -261,11 +274,11 @@ public class RestNeuralStatsAction extends BaseRestHandler {
             if (neuralStatsInput.isIncludeInfo()) {
                 neuralStatsInput.getInfoStatNames().addAll(EnumSet.allOf(InfoStatName.class));
             }
-            if (neuralStatsInput.isIncludeEvents()) {
+            if (neuralStatsInput.includeEventsAndMetrics()) {
                 neuralStatsInput.getEventStatNames().addAll(EnumSet.allOf(EventStatName.class));
+                neuralStatsInput.getMetricStatNames().addAll(EnumSet.allOf(MetricStatName.class));
             }
         } else {
-            // Use a separate case here to save on version comparison if not necessary
             if (neuralStatsInput.isIncludeInfo()) {
                 neuralStatsInput.getInfoStatNames()
                     .addAll(
@@ -275,13 +288,20 @@ public class RestNeuralStatsAction extends BaseRestHandler {
                             .collect(Collectors.toCollection(() -> EnumSet.noneOf(InfoStatName.class)))
                     );
             }
-            if (neuralStatsInput.isIncludeEvents()) {
+            if (neuralStatsInput.includeEventsAndMetrics()) {
                 neuralStatsInput.getEventStatNames()
                     .addAll(
                         EnumSet.allOf(EventStatName.class)
                             .stream()
                             .filter(statName -> statName.version().onOrBefore(minVersion))
                             .collect(Collectors.toCollection(() -> EnumSet.noneOf(EventStatName.class)))
+                    );
+                neuralStatsInput.getMetricStatNames()
+                    .addAll(
+                        EnumSet.allOf(MetricStatName.class)
+                            .stream()
+                            .filter(statName -> statName.version().onOrBefore(minVersion))
+                            .collect(Collectors.toCollection(() -> EnumSet.noneOf(MetricStatName.class)))
                     );
             }
         }
@@ -299,4 +319,5 @@ public class RestNeuralStatsAction extends BaseRestHandler {
     private boolean isValidEventOrInfoStatName(String statName) {
         return InfoStatName.isValidName(statName) || EventStatName.isValidName(statName);
     }
+
 }

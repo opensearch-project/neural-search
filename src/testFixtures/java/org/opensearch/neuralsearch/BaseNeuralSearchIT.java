@@ -1289,10 +1289,18 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     @SneakyThrows
     protected void bulkIngest(final String ingestBulkPayload, final String pipeline) {
+        bulkIngest(ingestBulkPayload, pipeline, null);
+    }
+
+    @SneakyThrows
+    protected void bulkIngest(final String ingestBulkPayload, final String pipeline, final String routing) {
         Map<String, String> params = new HashMap<>();
         params.put("refresh", "true");
         if (Objects.nonNull(pipeline)) {
             params.put("pipeline", pipeline);
+        }
+        if (Objects.nonNull(routing)) {
+            params.put("routing", routing);
         }
         Response response = makeRequest(
             client(),

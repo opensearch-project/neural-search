@@ -49,6 +49,7 @@ import java.util.function.Consumer;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -199,7 +200,7 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
 
             verify(mlCommonsClientAccessor, times(1)).getModels(any(), any(), any());
             verify(mlCommonsClientAccessor, times(1)).inferenceSentences(any(), any());
-            verify(mlCommonsClientAccessor, times(1)).inferenceSentencesWithMapResult(any(), any());
+            verify(mlCommonsClientAccessor, times(1)).inferenceSentencesWithMapResult(any(), isNull(), any());
         });
 
         // prepare ingest doc 2 to test we can reuse the model config fetched before
@@ -213,7 +214,7 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
             // No more invocation of getModel API but still invoke inference function.
             verify(mlCommonsClientAccessor, times(1)).getModels(any(), any(), any());
             verify(mlCommonsClientAccessor, times(2)).inferenceSentences(any(), any());
-            verify(mlCommonsClientAccessor, times(2)).inferenceSentencesWithMapResult(any(), any());
+            verify(mlCommonsClientAccessor, times(2)).inferenceSentencesWithMapResult(any(), isNull(), any());
         });
     }
 
@@ -279,7 +280,7 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
 
             verify(mlCommonsClientAccessor, times(1)).getModels(any(), any(), any());
             verify(mlCommonsClientAccessor, times(1)).inferenceSentences(any(), any());
-            verify(mlCommonsClientAccessor, times(1)).inferenceSentencesWithMapResult(any(), any());
+            verify(mlCommonsClientAccessor, times(1)).inferenceSentencesWithMapResult(any(), isNull(), any());
         });
 
         // ingest the doc again to verify it should reuse the existing embedding
@@ -309,7 +310,7 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
             // No more inference for the dense model since we reuse the existing embedding for it
             verify(mlCommonsClientAccessor, times(1)).inferenceSentences(any(), any());
             // Still inference for the sparse model since we don't reuse the existing embedding for it
-            verify(mlCommonsClientAccessor, times(2)).inferenceSentencesWithMapResult(any(), any());
+            verify(mlCommonsClientAccessor, times(2)).inferenceSentencesWithMapResult(any(), isNull(), any());
         });
     }
 
@@ -387,7 +388,7 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
 
         verify(mlCommonsClientAccessor, times(1)).getModels(any(), any(), any());
         verify(mlCommonsClientAccessor, times(1)).inferenceSentences(any(), any());
-        verify(mlCommonsClientAccessor, times(1)).inferenceSentencesWithMapResult(any(), any());
+        verify(mlCommonsClientAccessor, times(1)).inferenceSentencesWithMapResult(any(), isNull(), any());
 
         final List<IngestDocumentWrapper> ingestedDocs = handlerCaptor.getValue();
 
@@ -471,7 +472,7 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
 
         verify(mlCommonsClientAccessor, times(1)).getModels(any(), any(), any());
         verify(mlCommonsClientAccessor, times(1)).inferenceSentences(any(), any());
-        verify(mlCommonsClientAccessor, times(1)).inferenceSentencesWithMapResult(any(), any());
+        verify(mlCommonsClientAccessor, times(1)).inferenceSentencesWithMapResult(any(), isNull(), any());
 
         final List<IngestDocumentWrapper> ingestedDocs = handlerCaptor.getValue();
 
@@ -506,7 +507,7 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
         // reuse dense embedding since the original value is not changed
         verify(mlCommonsClientAccessor, times(1)).inferenceSentences(any(), any());
         // generate sparse embedding again since the original value is updated
-        verify(mlCommonsClientAccessor, times(2)).inferenceSentencesWithMapResult(any(), any());
+        verify(mlCommonsClientAccessor, times(2)).inferenceSentencesWithMapResult(any(), isNull(), any());
     }
 
     public void testSubBatchExecute_whenModelNotFound_thenAddExceptionToDocProperly() throws URISyntaxException, IOException {
@@ -579,7 +580,7 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
             assertEquals("sparse model should be the model id 2", DUMMY_MODEL_ID_2, modelId);
             listener.onResponse(List.of(Map.of("response", List.of(Map.of("high score token", 1.0)))));
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), any());
+        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), isNull(), any());
 
         // Call the method
         semanticFieldProcessor.subBatchExecute(List.of(ingestDocumentWrapper1, ingestDocumentWrapper2), handler);
@@ -590,7 +591,7 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
 
         verify(mlCommonsClientAccessor, times(1)).getModels(any(), any(), any());
         verify(mlCommonsClientAccessor, times(1)).inferenceSentences(any(), any());
-        verify(mlCommonsClientAccessor, times(1)).inferenceSentencesWithMapResult(any(), any());
+        verify(mlCommonsClientAccessor, times(1)).inferenceSentencesWithMapResult(any(), isNull(), any());
 
         final List<IngestDocumentWrapper> ingestedDocs = handlerCaptor.getValue();
 
@@ -630,7 +631,7 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
             assertEquals("sparse model should be the model id 2", DUMMY_MODEL_ID_2, modelId);
             listener.onResponse(List.of(Map.of("response", List.of(Map.of("high score token", 1.0, "low score token", 0.1)))));
             return null;
-        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), any());
+        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), isNull(), any());
 
     }
 

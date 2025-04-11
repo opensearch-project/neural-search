@@ -6,25 +6,29 @@ package org.opensearch.neuralsearch.sparse.cache;
 
 import lombok.SneakyThrows;
 import org.apache.lucene.index.SegmentInfo;
-import org.junit.After;
 import org.junit.Before;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.core.common.breaker.CircuitBreaker;
 import org.opensearch.core.common.breaker.CircuitBreakingException;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
+import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorWriter;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 
 import java.util.function.Consumer;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.when;
 
 public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
 
@@ -33,6 +37,8 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
     private CacheKey cacheKey;
     @Mock
     private SegmentInfo segmentInfo;
+    private RamBytesRecorder mockGlobalRamBytesRecorder;
+    private ForwardIndexCacheItem cacheItem;
 
     @Before
     @Override
@@ -41,19 +47,14 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         super.setUp();
         MockitoAnnotations.openMocks(this);
         cacheKey = prepareUniqueCacheKey(segmentInfo);
-    }
-
-    @After
-    @Override
-    public void tearDown() throws Exception {
-        ForwardIndexCache.getInstance().removeIndex(cacheKey);
-        super.tearDown();
+        segmentInfo = TestsPrepareUtils.prepareSegmentInfo();
+        mockGlobalRamBytesRecorder = mock(RamBytesRecorder.class);
+        when(mockGlobalRamBytesRecorder.record(anyLong())).thenReturn(true);
+        cacheItem = new ForwardIndexCacheItem(cacheKey, testDocCount, mockGlobalRamBytesRecorder);
     }
 
     @SneakyThrows
     public void test_readerRead_withOutOfBoundVector() {
-        ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
-
         SparseVectorReader reader = cacheItem.getReader();
         SparseVector readVector = reader.read(testDocCount + 11);
 
@@ -62,8 +63,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void test_writerInsert_withValidVector() {
-        ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
-
         SparseVectorReader reader = cacheItem.getReader();
         SparseVectorWriter writer = cacheItem.getWriter();
 
@@ -81,8 +80,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void test_writerInsert_withOutOfBoundVector() {
-        ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
-
         SparseVectorReader reader = cacheItem.getReader();
         SparseVectorWriter writer = cacheItem.getWriter();
 
@@ -100,8 +97,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void test_writerInsert_withNullVector() {
-        ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
-
         SparseVectorReader reader = cacheItem.getReader();
         SparseVectorWriter writer = cacheItem.getWriter();
 
@@ -117,8 +112,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void test_writerInsert_skipsDuplicates() {
-        ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
-
         SparseVectorReader reader = cacheItem.getReader();
         SparseVectorWriter writer = cacheItem.getWriter();
 
@@ -132,35 +125,27 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
     }
 
     @SneakyThrows
-    public void test_writerInsert_whenCircuitBreakerThrowException() {
-        doThrow(new CircuitBreakingException("Memory limit exceeded", CircuitBreaker.Durability.PERMANENT)).when(mockedCircuitBreaker)
-            .addEstimateBytesAndMaybeBreak(anyLong(), anyString());
-
-        ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
-
+    public void test_writerInsert_whenRecordIsFalse() {
+        when(mockGlobalRamBytesRecorder.record(anyLong())).thenReturn(false);
         SparseVectorReader reader = cacheItem.getReader();
         SparseVectorWriter writer = cacheItem.getWriter();
-
-        // Test initial state - all vectors should be null
-        for (int i = 0; i < testDocCount; i++) {
-            assertNull("Vector should be null initially", reader.read(i));
-        }
 
         SparseVector vector = createVector(1, 2, 3, 4);
         writer.insert(0, vector);
 
         SparseVector readVector = reader.read(0);
         assertNull("Read vector should be null", readVector);
+        verify(mockGlobalRamBytesRecorder, times(2)).record(anyLong());
     }
 
     @SneakyThrows
     public void test_ramBytesUsed_withDifferentVectorSize() {
         int docCount1 = 10, docCount2 = 20;
-        ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, docCount1);
+        ForwardIndexCacheItem cacheItem = new ForwardIndexCacheItem(cacheKey, docCount1, mockGlobalRamBytesRecorder);
         long ramBytesUsed1 = cacheItem.ramBytesUsed();
 
         ForwardIndexCache.getInstance().removeIndex(cacheKey);
-        cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, docCount2);
+        cacheItem = new ForwardIndexCacheItem(cacheKey, docCount2, mockGlobalRamBytesRecorder);
         long ramBytesUsed2 = cacheItem.ramBytesUsed();
 
         assertTrue("Initial RAM usage should increase when the size of forward index increases", ramBytesUsed2 > ramBytesUsed1);
@@ -168,7 +153,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void test_writerErase_withOutOfBoundVector() {
-        ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
         CacheableSparseVectorWriter writer = cacheItem.getWriter();
 
         long bytesFreed = writer.erase(testDocCount + 1);
@@ -177,7 +161,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void test_writerErase_withNullVector() {
-        ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
         CacheableSparseVectorWriter writer = cacheItem.getWriter();
 
         long bytesFreed = writer.erase(0);
@@ -186,7 +169,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void test_writerErase_withValidVector() {
-        ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
         SparseVectorReader reader = cacheItem.getReader();
         CacheableSparseVectorWriter writer = cacheItem.getWriter();
 
@@ -207,12 +189,11 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         assertEquals("RAM usage should decrease by vector size", initialRam - vectorSize, cacheItem.ramBytesUsed());
 
         // Verify CircuitBreakerManager was called to release bytes
-        verify(mockedCircuitBreaker).addWithoutBreaking(-vectorSize);
+        verify(mockGlobalRamBytesRecorder).safeRecord(eq(-vectorSize), any());
     }
 
     @SneakyThrows
     public void test_writerErase_withAlreadyErasedVector() {
-        ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
         SparseVectorReader reader = cacheItem.getReader();
         CacheableSparseVectorWriter writer = cacheItem.getWriter();
 
@@ -230,7 +211,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void test_writerErase_withMultipleVectors() {
-        ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
         SparseVectorReader reader = cacheItem.getReader();
         CacheableSparseVectorWriter writer = cacheItem.getWriter();
 
@@ -254,8 +234,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void test_ramBytesUsed_withInsertedVector() {
-        ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
-
         long initialRam = cacheItem.ramBytesUsed();
         SparseVectorWriter writer = cacheItem.getWriter();
         SparseVector vector1 = createVector(1, 2, 3, 4);
@@ -272,10 +250,10 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
     }
 
     public void test_create_withMultipleIndices() {
-        ForwardIndexCacheItem cacheItem1 = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
+        ForwardIndexCacheItem cacheItem1 = new ForwardIndexCacheItem(cacheKey, testDocCount, mockGlobalRamBytesRecorder);
 
         CacheKey cacheKey2 = prepareUniqueCacheKey(segmentInfo);
-        ForwardIndexCacheItem cacheItem2 = ForwardIndexCache.getInstance().getOrCreate(cacheKey2, testDocCount);
+        ForwardIndexCacheItem cacheItem2 = new ForwardIndexCacheItem(cacheKey2, testDocCount, mockGlobalRamBytesRecorder);
 
         assertNotSame("Should be different index instances", cacheItem1, cacheItem2);
         ForwardIndexCache.getInstance().removeIndex(cacheKey2);
@@ -283,7 +261,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void test_getWriter_withCircuitBreakerHandler() {
-        ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
         Consumer<Long> mockHandler = mock(Consumer.class);
         SparseVectorWriter writer = cacheItem.getWriter(mockHandler);
         SparseVectorReader reader = cacheItem.getReader();
@@ -319,7 +296,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void test_writerInsert_withCircuitBreakerHandler_whenCircuitBreakerDoesNotTrip() {
-        ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
         Consumer<Long> mockHandler = mock(Consumer.class);
         SparseVectorWriter writer = cacheItem.getWriter(mockHandler);
         SparseVectorReader reader = cacheItem.getReader();

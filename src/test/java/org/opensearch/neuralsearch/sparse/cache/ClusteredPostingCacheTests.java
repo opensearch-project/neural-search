@@ -15,6 +15,7 @@ import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import java.util.List;
 
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 public class ClusteredPostingCacheTests extends AbstractSparseTestBase {
@@ -25,6 +26,7 @@ public class ClusteredPostingCacheTests extends AbstractSparseTestBase {
     private long emptyClusteredPostingCacheSize;
     private long emptyClusteredPostingCacheItemSize;
     private ClusteredPostingCache clusteredPostingCache;
+    private RamBytesRecorder globalRecorder;
 
     /**
      * Set up the test environment before each test.
@@ -36,10 +38,10 @@ public class ClusteredPostingCacheTests extends AbstractSparseTestBase {
     public void setUp() {
         super.setUp();
         clusteredPostingCache = ClusteredPostingCache.getInstance();
-
         emptyClusteredPostingCacheSize = clusteredPostingCache.ramBytesUsed();
         CacheKey cacheKey = new CacheKey(TestsPrepareUtils.prepareSegmentInfo(), TestsPrepareUtils.prepareKeyFieldInfo());
-        emptyClusteredPostingCacheItemSize = new ClusteredPostingCacheItem(cacheKey).ramBytesUsed();
+        globalRecorder = mock(RamBytesRecorder.class);
+        emptyClusteredPostingCacheItemSize = new ClusteredPostingCacheItem(cacheKey, globalRecorder).ramBytesUsed();
     }
 
     /**

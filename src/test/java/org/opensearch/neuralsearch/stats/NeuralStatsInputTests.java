@@ -104,7 +104,7 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
 
         verify(mockInput, times(5)).readBoolean();
         verify(mockInput, times(1)).readOptionalStringList();
-        verify(mockInput, times(2)).readOptionalEnumSet(any());
+        verify(mockInput, times(3)).readOptionalEnumSet(any());
     }
 
     public void test_writeToOutputs() throws IOException {
@@ -171,7 +171,9 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
         input.writeTo(mockOutput);
 
         verify(mockOutput).writeOptionalStringCollection(any(List.class));
-        verify(mockOutput, times(2)).writeOptionalEnumSet(any(EnumSet.class));
+        verify(mockOutput, times(3)).writeOptionalEnumSet(any(EnumSet.class));
+
+        // 5 boolean writes, 3 for each enum set, 1 for flatten, 1 for include metadata
         verify(mockOutput, times(2)).writeBoolean(false);
         verify(mockOutput, times(3)).writeBoolean(true);
     }

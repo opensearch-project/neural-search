@@ -6,7 +6,6 @@ package org.opensearch.neuralsearch.sparse.cache;
 
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
-import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.neuralsearch.sparse.accessor.ClusteredPosting;
@@ -18,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 /**
@@ -26,12 +24,11 @@ import java.util.function.Consumer;
  * It is used by the SparsePostingsConsumer and SparsePostingsReader classes.
  */
 @Log4j2
-public class ClusteredPostingCacheItem implements ClusteredPosting, Accountable {
+public class ClusteredPostingCacheItem extends AccountableTracker implements ClusteredPosting {
 
-    private static final String CIRCUIT_BREAKER_LABEL = "Cache Clustered Posting";
     private final CacheKey cacheKey;
     private final Map<BytesRef, PostingClusters> clusteredPostings = new ConcurrentHashMap<>();
-    private final AtomicLong usedRamBytes = new AtomicLong(RamUsageEstimator.shallowSizeOf(clusteredPostings));
+    private final RamBytesRecorder globalTracker;
     @Getter
     private final ClusteredPostingReader reader = new CacheClusteredPostingReader();
     @Getter
@@ -46,14 +43,11 @@ public class ClusteredPostingCacheItem implements ClusteredPosting, Accountable 
         return new CacheClusteredPostingWriter(circuitBreakerHandler);
     }
 
-    public ClusteredPostingCacheItem(CacheKey cacheKey) {
+    public ClusteredPostingCacheItem(CacheKey cacheKey, RamBytesRecorder globalTracker) {
         this.cacheKey = cacheKey;
-        CircuitBreakerManager.addWithoutBreaking(usedRamBytes.get());
-    }
-
-    @Override
-    public long ramBytesUsed() {
-        return usedRamBytes.get();
+        this.globalTracker = globalTracker;
+        recordUsedBytes(RamUsageEstimator.shallowSizeOf(clusteredPostings));
+        globalTracker.safeRecord(ramBytesUsed(), CircuitBreakerManager::addWithoutBreaking);
     }
 
     private class CacheClusteredPostingReader implements ClusteredPostingReader {
@@ -106,15 +100,13 @@ public class ClusteredPostingCacheItem implements ClusteredPosting, Accountable 
             // BytesRef.bytes is never null
             long ramBytesUsed = postingClusters.ramBytesUsed() + RamUsageEstimator.shallowSizeOf(clonedTerm) + clonedTerm.bytes.length;
 
-            // TODO: avoid excessive log produced by circuit breaker
-            if (!CircuitBreakerManager.addMemoryUsage(ramBytesUsed, CIRCUIT_BREAKER_LABEL)) {
+            if (!globalTracker.record(ramBytesUsed)) {
                 if (circuitBreakerTriggerHandler != null) {
                     circuitBreakerTriggerHandler.accept(ramBytesUsed);
                 }
 
                 // Try again after eviction
-                if (!CircuitBreakerManager.addMemoryUsage(ramBytesUsed, CIRCUIT_BREAKER_LABEL)) {
-                    log.warn("Failed to add to cache even after eviction, term will not be cached");
+                if (!globalTracker.record(ramBytesUsed)) {
                     return;
                 }
             }
@@ -127,9 +119,9 @@ public class ClusteredPostingCacheItem implements ClusteredPosting, Accountable 
 
             // Only update memory usage if we actually inserted a new entry
             if (existingClusters == null) {
-                usedRamBytes.addAndGet(ramBytesUsed);
+                recordUsedBytes(ramBytesUsed);
             } else {
-                CircuitBreakerManager.releaseBytes(ramBytesUsed);
+                globalTracker.safeRecord(-ramBytesUsed, CircuitBreakerManager::addWithoutBreaking);
             }
         }
 
@@ -146,8 +138,8 @@ public class ClusteredPostingCacheItem implements ClusteredPosting, Accountable 
             BytesRef clonedTerm = term.clone();
             long ramBytesReleased = postingClusters.ramBytesUsed() + RamUsageEstimator.shallowSizeOf(clonedTerm) + clonedTerm.bytes.length;
             if (clusteredPostings.remove(clonedTerm) != null) {
-                usedRamBytes.addAndGet(-ramBytesReleased);
-                CircuitBreakerManager.releaseBytes(ramBytesReleased);
+                recordUsedBytes(-ramBytesReleased);
+                globalTracker.safeRecord(-ramBytesReleased, CircuitBreakerManager::addWithoutBreaking);
                 return ramBytesReleased;
             }
             return 0;

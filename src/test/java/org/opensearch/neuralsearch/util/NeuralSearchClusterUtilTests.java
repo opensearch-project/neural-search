@@ -149,4 +149,13 @@ public class NeuralSearchClusterUtilTests extends OpenSearchTestCase {
         );
         assertEquals("No valid index found to extract mapping", exception.getMessage());
     }
+
+    public void testGetClusterService_thenSuccess() {
+        ClusterService clusterService = mockClusterService(Version.V_2_3_0);
+        final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
+        final NeuralSearchClusterUtil neuralSearchClusterUtil = NeuralSearchClusterUtil.instance();
+        neuralSearchClusterUtil.initialize(clusterService, indexNameExpressionResolver);
+
+        assertSame(clusterService, neuralSearchClusterUtil.getClusterService());
+    }
 }
