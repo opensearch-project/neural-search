@@ -748,6 +748,7 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
             } else {
                 mlCommonsClientAccessor.inferenceSentencesWithMapResult(
                     textInferenceRequest,
+                    null,
                     (ActionListener<List<Map<String, ?>>>) listener
                 );
             }

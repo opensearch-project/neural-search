@@ -32,6 +32,7 @@ import org.opensearch.ml.common.dataset.TextSimilarityInputDataSet;
 import org.opensearch.ml.common.dataset.remote.RemoteInferenceInputDataSet;
 import org.opensearch.ml.common.input.MLInput;
 import org.opensearch.ml.common.input.execute.agent.AgentMLInput;
+import org.opensearch.ml.common.input.parameter.MLAlgoParams;
 import org.opensearch.ml.common.output.MLOutput;
 import org.opensearch.ml.common.output.model.ModelResultFilter;
 import org.opensearch.ml.common.output.model.ModelTensor;
@@ -113,15 +114,16 @@ public class MLCommonsClientAccessor {
 
     public void inferenceSentencesWithMapResult(
         @NonNull final TextInferenceRequest inferenceRequest,
+        MLAlgoParams mlAlgoParams,
         @NonNull final ActionListener<List<Map<String, ?>>> listener
     ) {
-        retryableInference(
-            inferenceRequest,
-            0,
-            () -> createMLTextInput(null, inferenceRequest.getInputTexts()),
-            this::buildMapResultFromResponse,
-            listener
-        );
+        retryableInference(inferenceRequest, 0, () -> {
+            MLInput input = createMLTextInput(null, inferenceRequest.getInputTexts());
+            if (mlAlgoParams != null) {
+                input.setParameters(mlAlgoParams);
+            }
+            return input;
+        }, this::buildMapResultFromResponse, listener);
     }
 
     /**

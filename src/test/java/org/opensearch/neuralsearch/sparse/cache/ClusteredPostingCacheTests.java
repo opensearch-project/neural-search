@@ -26,6 +26,7 @@ public class ClusteredPostingCacheTests extends AbstractSparseTestBase {
     private long emptyClusteredPostingCacheSize;
     private long emptyClusteredPostingCacheItemSize;
     private ClusteredPostingCache clusteredPostingCache;
+    private RamBytesRecorder globalRecorder;
 
     /**
      * Set up the test environment before each test.

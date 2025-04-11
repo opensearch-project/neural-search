@@ -128,6 +128,9 @@ import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.threadpool.ExecutorBuilder;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.watcher.ResourceWatcherService;
+import org.opensearch.neuralsearch.rest.RestNeuralSparseWarmupHandler;
+import org.opensearch.neuralsearch.transport.NeuralSparseWarmupAction;
+import org.opensearch.neuralsearch.transport.NeuralSparseWarmupTransportAction;
 
 import lombok.extern.log4j.Log4j2;
 
