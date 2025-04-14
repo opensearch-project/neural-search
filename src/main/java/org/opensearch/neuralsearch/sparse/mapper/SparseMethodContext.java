@@ -63,7 +63,7 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
             key = methodEntry.getKey();
             value = methodEntry.getValue();
             if (NAME_FIELD.equals(key)) {
-                name = key;
+                name = (String) value;
             } else if (LAMBDA_FIELD.equals(key)) {
                 lambda = (int) value;
             } else if (ALPHA_FIELD.equals(key)) {
