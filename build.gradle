@@ -60,6 +60,7 @@ apply plugin: 'java-test-fixtures'
 apply plugin: 'idea'
 apply plugin: 'opensearch.opensearchplugin'
 apply plugin: 'opensearch.pluginzip'
+apply plugin: 'opensearch.java-agent'
 apply plugin: 'jacoco'
 apply plugin: "com.diffplug.spotless"
 apply plugin: 'io.freefair.lombok'
