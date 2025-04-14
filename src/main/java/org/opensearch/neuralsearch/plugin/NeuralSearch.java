@@ -15,6 +15,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
+import org.opensearch.index.IndexSettings;
+import org.opensearch.index.codec.CodecServiceFactory;
 import org.opensearch.index.mapper.Mapper;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.highlight.SemanticHighlighter;
@@ -23,17 +25,17 @@ import org.opensearch.neuralsearch.highlight.extractor.QueryTextExtractorRegistr
 import com.google.common.collect.ImmutableList;
 import org.opensearch.action.ActionRequest;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.sparse.SparseSettings;
+import org.opensearch.neuralsearch.sparse.codec.SparseCodecService;
 import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.stats.info.InfoStatsManager;
-<<<<<<< HEAD
 import org.opensearch.index.mapper.Mapper;
 import org.opensearch.index.mapper.MappingTransformer;
 import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
 import org.opensearch.neuralsearch.mappingtransformer.SemanticMappingTransformer;
 import org.opensearch.neuralsearch.processor.factory.SemanticFieldProcessorFactory;
-=======
->>>>>>> 5402bc9f (Add FieldMapper for sparse tokens (#10))
+import org.opensearch.plugins.EnginePlugin;
 import org.opensearch.plugins.MapperPlugin;
 import org.opensearch.transport.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
@@ -118,7 +120,8 @@ public class NeuralSearch extends Plugin
         SearchPlugin,
         IngestPlugin,
         ExtensiblePlugin,
-        SearchPipelinePlugin {
+        SearchPipelinePlugin,
+        EnginePlugin {
     private MLCommonsClientAccessor clientAccessor;
     private NamedXContentRegistry xContentRegistry;
     private NormalizationProcessorWorkflow normalizationProcessorWorkflow;
@@ -251,7 +254,12 @@ public class NeuralSearch extends Plugin
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(RERANKER_MAX_DOC_FIELDS, NEURAL_STATS_ENABLED);
+        return List.of(
+            NEURAL_SEARCH_HYBRID_SEARCH_DISABLED,
+            RERANKER_MAX_DOC_FIELDS,
+            NEURAL_STATS_ENABLED,
+            SparseSettings.IS_SPARSE_INDEX_SETTING
+        );
     }
 
     @Override
@@ -290,8 +298,11 @@ public class NeuralSearch extends Plugin
     }
 
     @Override
-    public Map<String, Mapper.TypeParser> getMappers() {
-        return Collections.singletonMap(SparseTokensFieldMapper.CONTENT_TYPE, SparseTokensFieldMapper.PARSER);
+    public Optional<CodecServiceFactory> getCustomCodecServiceFactory(IndexSettings indexSettings) {
+        if (indexSettings.getValue(SparseSettings.IS_SPARSE_INDEX_SETTING)) {
+            return Optional.of((config) -> new SparseCodecService(config, indexSettings));
+        }
+        return Optional.empty();
     }
 
     /**
@@ -304,7 +315,7 @@ public class NeuralSearch extends Plugin
 
     @Override
     public Map<String, Mapper.TypeParser> getMappers() {
-        return Map.of(SemanticFieldMapper.CONTENT_TYPE, new SemanticFieldMapper.TypeParser());
+        return Map.of(SemanticFieldMapper.CONTENT_TYPE, new SemanticFieldMapper.TypeParser(), SparseTokensFieldMapper.CONTENT_TYPE, SparseTokensFieldMapper.PARSER);
     }
 
     @Override
