@@ -4,4 +4,9 @@ grant {
     permission java.lang.RuntimePermission "accessDeclaredMembers";
     permission java.lang.reflect.ReflectPermission "suppressAccessChecks";
     permission java.lang.RuntimePermission "setContextClassLoader";
+
+    // for accessing Unix domain socket on windows
+    permission java.net.NetPermission "accessUnixDomainSocket";
+    // temporary for testing..
+    permission java.net.SocketPermission "*", "connect,resolve";
 };
