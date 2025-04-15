@@ -12,6 +12,7 @@ import java.nio.file.Path
 apply plugin: 'opensearch.testclusters'
 apply plugin: 'opensearch.build'
 apply plugin: 'opensearch.rest-test'
+apply plugin: 'opensearch.java-agent'
 apply plugin: 'io.freefair.lombok'
 
 // Disable a few tasks that come with build
