@@ -7,12 +7,15 @@ package org.opensearch.neuralsearch.plugin;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SEARCH_HYBRID_SEARCH_DISABLED;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SEARCH_HYBRID_SEARCH_DISABLED_KEY;
 
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.Before;
 import org.mockito.Mock;
@@ -21,6 +24,7 @@ import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.common.util.FeatureFlags;
 import org.opensearch.common.util.concurrent.OpenSearchExecutors;
 import org.opensearch.env.Environment;
 import org.opensearch.indices.IndicesService;
@@ -77,6 +81,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         searchParameters = new SearchPipelinePlugin.Parameters(null, null, null, null, null, null, searchPipelineService, null, null, null);
         ingestParameters = new Processor.Parameters(null, null, null, null, null, null, ingestService, null, null, null);
         when(threadPool.executor(anyString())).thenReturn(OpenSearchExecutors.newDirectExecutorService());
+        FeatureFlags.registerFeatureFlag(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED);
     }
 
     public void testCreateComponents() {
@@ -117,20 +122,20 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         assertTrue(querySpecs.stream().anyMatch(spec -> HybridQueryBuilder.NAME.equals(spec.getName().getPreferredName())));
     }
 
-    @AwaitsFix(bugUrl = "https://github.com/opensearch-project/OpenSearch/issues/17940")
-    public void testQueryPhaseSearcher() {
+    public void testQueryPhaseSearcher() throws Exception {
         Optional<QueryPhaseSearcher> queryPhaseSearcherWithFeatureFlagDisabled = plugin.getQueryPhaseSearcher();
-
         assertNotNull(queryPhaseSearcherWithFeatureFlagDisabled);
         assertFalse(queryPhaseSearcherWithFeatureFlagDisabled.isEmpty());
         assertTrue(queryPhaseSearcherWithFeatureFlagDisabled.get() instanceof HybridQueryPhaseSearcher);
 
-        initFeatureFlags();
-
-        Optional<QueryPhaseSearcher> queryPhaseSearcher = plugin.getQueryPhaseSearcher();
+        /*
+        Enabling feature flag should disable ability to build HybridQueryPhaseSearcher
+         */
+        AtomicReference<Optional<QueryPhaseSearcher>> queryPhaseSearcher = new AtomicReference<>();
+        FeatureFlags.TestUtils.with(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED_KEY, () -> queryPhaseSearcher.set(plugin.getQueryPhaseSearcher()));
 
         assertNotNull(queryPhaseSearcher);
-        assertTrue(queryPhaseSearcher.isEmpty());
+        assertTrue(queryPhaseSearcher.get().isEmpty());
     }
 
     public void testProcessors() {

@@ -242,7 +242,12 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED, RERANKER_MAX_DOC_FIELDS, NEURAL_STATS_ENABLED);
+        return List.of(RERANKER_MAX_DOC_FIELDS, NEURAL_STATS_ENABLED);
+    }
+
+    @Override
+    public List<Setting<Boolean>> getFeatureFlags() {
+        return List.of(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED);
     }
 
     @Override
