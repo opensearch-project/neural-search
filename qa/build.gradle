@@ -13,6 +13,7 @@ apply plugin: 'opensearch.testclusters'
 apply plugin: 'opensearch.build'
 apply plugin: 'opensearch.rest-test'
 apply plugin: 'io.freefair.lombok'
+apply plugin: 'opensearch.java-agent'
 
 // Disable a few tasks that come with build
 build.enabled = false
