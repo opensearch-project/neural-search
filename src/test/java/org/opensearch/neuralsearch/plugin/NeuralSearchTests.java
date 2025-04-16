@@ -81,7 +81,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         searchParameters = new SearchPipelinePlugin.Parameters(null, null, null, null, null, null, searchPipelineService, null, null, null);
         ingestParameters = new Processor.Parameters(null, null, null, null, null, null, ingestService, null, null, null);
         when(threadPool.executor(anyString())).thenReturn(OpenSearchExecutors.newDirectExecutorService());
-        FeatureFlags.registerFeatureFlag(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED);
+        FeatureFlags.initializeFeatureFlags(Settings.EMPTY, List.of(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED));
     }
 
     public void testCreateComponents() {
