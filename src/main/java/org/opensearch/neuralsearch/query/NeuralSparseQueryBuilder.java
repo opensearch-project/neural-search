@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -41,7 +42,6 @@ import org.opensearch.index.query.AbstractQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.neuralsearch.analysis.HFModelTokenizer;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.TextInferenceRequest;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
@@ -84,6 +84,12 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     @VisibleForTesting
     static final ParseField ANALYZER_FIELD = new ParseField("analyzer");
     private static MLCommonsClientAccessor ML_CLIENT;
+    private static final String DEFAULT_ANALYZER = "bert-uncased";
+
+    public static void initialize(MLCommonsClientAccessor mlClient) {
+        NeuralSparseQueryBuilder.ML_CLIENT = mlClient;
+    }
+
     private String fieldName;
     private String queryText;
     private String modelId;
@@ -98,10 +104,6 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
 
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_ANALYZER = Version.V_3_0_0;
-
-    public static void initialize(MLCommonsClientAccessor mlClient) {
-        NeuralSparseQueryBuilder.ML_CLIENT = mlClient;
-    }
 
     /**
      * Constructor from stream input
@@ -163,7 +165,8 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
 
     /**
      * Copy this QueryBuilder for two phase rescorer.
-     * @param pruneRatio the parameter of the NeuralSparseTwoPhaseProcessor, control how to split the queryTokens to two phase.
+     * @param pruneRatio the parameter of the NeuralSparseTwoPhaseProcessor, control the ratio of splitting the queryTokens to two phase.
+     * @param pruneType the parameter of the NeuralSparseTwoPhaseProcessor, control how to split the queryTokens to two phase.
      * @return A copy NeuralSparseQueryBuilder for twoPhase, it will be added to the rescorer.
      */
     public NeuralSparseQueryBuilder getCopyNeuralSparseQueryBuilderForTwoPhase(float pruneRatio, PruneType pruneType) {
@@ -188,7 +191,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             Tuple<Map<String, Float>, Map<String, Float>> splitTokens = PruneUtils.splitSparseVector(pruneType, pruneRatio, tokens);
             this.queryTokensSupplier(() -> splitTokens.v1());
             copy.queryTokensSupplier(() -> splitTokens.v2());
-        } else {
+        } else if (StringUtils.isNotEmpty(modelId)) {
             this.twoPhaseSharedQueryToken = new HashMap<>();
             copy.queryTokensSupplier(() -> this.twoPhaseSharedQueryToken);
         }
@@ -289,6 +292,10 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             }
         }
 
+        if (Objects.isNull(sparseEncodingQueryBuilder.analyzer())) {
+            sparseEncodingQueryBuilder.analyzer(DEFAULT_ANALYZER);
+        }
+
         if (StringUtils.EMPTY.equals(sparseEncodingQueryBuilder.queryText())) {
             throw new IllegalArgumentException(
                 String.format(Locale.ROOT, "%s field can not be empty", QUERY_TEXT_FIELD.getPreferredName())
@@ -296,9 +303,6 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         }
         if (StringUtils.EMPTY.equals(sparseEncodingQueryBuilder.modelId())) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "%s field can not be empty", MODEL_ID_FIELD.getPreferredName()));
-        }
-        if (StringUtils.EMPTY.equals(sparseEncodingQueryBuilder.analyzer())) {
-            throw new IllegalArgumentException(String.format(Locale.ROOT, "%s field can not be empty", ANALYZER_FIELD.getPreferredName()));
         }
 
         return sparseEncodingQueryBuilder;
@@ -351,7 +355,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (Objects.nonNull(queryTokensSupplier)) {
             return this;
         }
-        if (Objects.nonNull(analyzer)) {
+        if (StringUtils.isEmpty(modelId) && Objects.nonNull(analyzer)) {
             return this;
         }
         validateForRewrite(queryText, modelId);
@@ -393,7 +397,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     }
 
     private Map<String, Float> getQueryTokens(QueryShardContext context) {
-        if (Objects.nonNull(queryTokensSupplier) && !queryTokensSupplier.get().isEmpty()) {
+        if (Objects.nonNull(queryTokensSupplier)) {
             return queryTokensSupplier.get();
         } else if (Objects.nonNull(analyzer)) {
             Map<String, Float> queryTokens = new HashMap<>();
@@ -405,8 +409,10 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
 
                 while (stream.incrementToken()) {
                     String token = term.toString();
-                    Float weight = Objects.isNull(payload.getPayload()) ? 1.0f : HFModelTokenizer.bytesToFloat(payload.getPayload().bytes);
-                    queryTokens.put(token, weight);
+                    float weight = Objects.isNull(payload.getPayload()) ? 1.0f : bytesToFloat(payload.getPayload().bytes);
+                    if (weight > 0) {
+                        queryTokens.put(token, weight);
+                    }
                 }
                 stream.end();
             } catch (IOException e) {
@@ -516,5 +522,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
 
     private static boolean isClusterOnOrAfterMinReqVersionForAnalyzer() {
         return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_ANALYZER);
+    }
+
+    public static float bytesToFloat(byte[] bytes) {
+        return ByteBuffer.wrap(bytes).getFloat();
     }
 }
