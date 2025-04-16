@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.query;
 
 import lombok.Getter;
 import org.apache.lucene.search.Query;
+import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.AbstractQueryBuilder;
@@ -14,12 +15,28 @@ import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.knn.index.query.parser.KNNQueryBuilderParser;
+import org.opensearch.knn.index.query.parser.MethodParametersParser;
+import org.opensearch.knn.index.query.parser.RescoreParser;
 import org.opensearch.knn.index.query.rescore.RescoreContext;
 import org.opensearch.knn.index.util.IndexUtil;
+import org.opensearch.neuralsearch.common.MinClusterVersionUtil;
+import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.core.common.ParsingException;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+
+import static org.opensearch.knn.index.query.KNNQueryBuilder.METHOD_PARAMS_FIELD;
+import static org.opensearch.knn.index.query.KNNQueryBuilder.VECTOR_FIELD;
+import static org.opensearch.knn.index.query.KNNQueryBuilder.K_FIELD;
+import static org.opensearch.knn.index.query.KNNQueryBuilder.FILTER_FIELD;
+import static org.opensearch.knn.index.query.KNNQueryBuilder.MAX_DISTANCE_FIELD;
+import static org.opensearch.knn.index.query.KNNQueryBuilder.MIN_SCORE_FIELD;
+import static org.opensearch.knn.index.query.KNNQueryBuilder.EXPAND_NESTED_FIELD;
+import static org.opensearch.knn.index.query.KNNQueryBuilder.RESCORE_FIELD;
 
 /**
  * NeuralKNNQueryBuilder wraps KNNQueryBuilder to:
@@ -32,6 +49,16 @@ import java.util.Objects;
 
 @Getter
 public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBuilder> {
+    /**
+     * The name of the query
+     */
+    public static final String NAME = "neural_knn";
+
+    /**
+     * The field name for the original query text
+     */
+    public static final String ORIGINAL_QUERY_TEXT_FIELD = "original_query_text";
+
     /**
      * The underlying KNN query builder that handles the vector search functionality
      */
@@ -280,6 +307,27 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
     @Override
     public void doWriteTo(StreamOutput out) throws IOException {
         KNNQueryBuilderParser.streamOutput(out, knnQueryBuilder, IndexUtil::isClusterOnOrAfterMinRequiredVersion);
+
+        if (MinClusterVersionUtil.isVersionOnOrAfterMinReqVersionForNeuralKNNQueryText(out.getVersion())) {
+            out.writeOptionalString(originalQueryText);
+        }
+    }
+
+    /**
+     * Constructor for deserialization from stream input.
+     *
+     * @param in The stream input to read from
+     * @throws IOException If an I/O error occurs
+     */
+    public NeuralKNNQueryBuilder(StreamInput in) throws IOException {
+        super(in);
+        KNNQueryBuilder.Builder builder = KNNQueryBuilderParser.streamInput(in, IndexUtil::isClusterOnOrAfterMinRequiredVersion);
+        this.knnQueryBuilder = builder.build();
+        if (MinClusterVersionUtil.isVersionOnOrAfterMinReqVersionForNeuralKNNQueryText(in.getVersion())) {
+            this.originalQueryText = in.readOptionalString();
+        } else {
+            this.originalQueryText = null;
+        }
     }
 
     /**
@@ -351,6 +399,81 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
      */
     @Override
     public String getWriteableName() {
-        return knnQueryBuilder.getWriteableName();
+        return NAME;
+    }
+
+    /**
+     * Creates NeuralKNNQueryBuilder from xContent.
+     * The expected parsing form looks like:
+     * {
+     *   "FIELD_NAME": {
+     *     "vector": [1.0, 2.0, ...],
+     *     "k": 10,
+     *     "filter": { ... },
+     *     "max_distance": 1.0,
+     *     "min_score": 0.5,
+     *     "expand_nested": true,
+     *     "method_parameters": { ... },
+     *     "rescore": { ... },
+     *     "original_query_text": "text"
+     *   }
+     * }
+     *
+     * @param parser XContentParser
+     * @return NeuralKNNQueryBuilder
+     * @throws IOException can be thrown by parser
+     */
+    public static NeuralKNNQueryBuilder fromXContent(XContentParser parser) throws IOException {
+        String fieldName = parser.currentName();
+        XContentParser.Token token;
+        KNNQueryBuilder.Builder builder = new KNNQueryBuilder.Builder();
+        String originalQueryText = null;
+
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+            if (token == XContentParser.Token.FIELD_NAME) {
+                String currentFieldName = parser.currentName();
+                token = parser.nextToken();
+
+                if (VECTOR_FIELD.equals(currentFieldName)) {
+                    List<Float> vector = new ArrayList<>();
+                    if (token == XContentParser.Token.START_ARRAY) {
+                        while (parser.nextToken() != XContentParser.Token.END_ARRAY) {
+                            vector.add(parser.floatValue());
+                        }
+                        float[] vectorArray = new float[vector.size()];
+                        for (int i = 0; i < vector.size(); i++) {
+                            vectorArray[i] = vector.get(i);
+                        }
+                        builder.vector(vectorArray);
+                    } else {
+                        throw new ParsingException(parser.getTokenLocation(), "[" + NAME + "] vector must be an array of floats");
+                    }
+                } else if (K_FIELD.equals(currentFieldName)) {
+                    builder.k(parser.intValue());
+                } else if (FILTER_FIELD.equals(currentFieldName)) {
+                    builder.filter(AbstractQueryBuilder.parseInnerQueryBuilder(parser));
+                } else if (MAX_DISTANCE_FIELD.equals(currentFieldName)) {
+                    builder.maxDistance(parser.floatValue());
+                } else if (MIN_SCORE_FIELD.equals(currentFieldName)) {
+                    builder.minScore(parser.floatValue());
+                } else if (EXPAND_NESTED_FIELD.equals(currentFieldName)) {
+                    builder.expandNested(parser.booleanValue());
+                } else if (METHOD_PARAMS_FIELD.equals(currentFieldName)) {
+                    builder.methodParameters(MethodParametersParser.fromXContent(parser));
+                } else if (RESCORE_FIELD.equals(currentFieldName)) {
+                    builder.rescoreContext(RescoreParser.fromXContent(parser));
+                } else if (ORIGINAL_QUERY_TEXT_FIELD.equals(currentFieldName)) {
+                    originalQueryText = parser.text();
+                } else {
+                    throw new ParsingException(
+                        parser.getTokenLocation(),
+                        "[" + NAME + "] query does not support [" + currentFieldName + "]"
+                    );
+                }
+            }
+        }
+
+        KNNQueryBuilder knnBuilder = builder.build();
+        return new NeuralKNNQueryBuilder(knnBuilder, originalQueryText);
     }
 }
