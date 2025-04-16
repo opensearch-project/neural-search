@@ -18,6 +18,11 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * This class encapsulates information related to the two-phase execution process
+ * for a neural sparse query. It tracks the current processing phase, the ratio
+ * used for pruning during the two-phase process, and the type of pruning applied.
+ */
 @Getter
 @Setter
 public class NeuralSparseQueryTwoPhaseInfo implements Writeable {
@@ -48,8 +53,8 @@ public class NeuralSparseQueryTwoPhaseInfo implements Writeable {
 
     public enum TwoPhaseStatus {
         NOT_ENABLED(0),
-        PARENT(1),
-        CHILD(2);
+        PHASE_ONE(1),
+        PHASE_TWO(2);
 
         private static final Map<Integer, TwoPhaseStatus> VALUE_MAP = Arrays.stream(values())
             .collect(Collectors.toUnmodifiableMap(status -> status.value, Function.identity()));
@@ -63,6 +68,12 @@ public class NeuralSparseQueryTwoPhaseInfo implements Writeable {
             return value;
         }
 
+        /**
+         * Converts an integer value to the corresponding TwoPhaseStatus.
+         * @param value the integer value to convert
+         * @return the corresponding TwoPhaseStatus enum constant
+         * @throws IllegalArgumentException if the value does not correspond to any known status
+         */
         public static TwoPhaseStatus fromInt(final int value) {
             TwoPhaseStatus status = VALUE_MAP.get(value);
             if (status == null) {
