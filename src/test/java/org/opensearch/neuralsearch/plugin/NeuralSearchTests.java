@@ -122,6 +122,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         assertTrue(querySpecs.stream().anyMatch(spec -> NeuralSparseQueryBuilder.NAME.equals(spec.getName().getPreferredName())));
     }
 
+    @AwaitsFix(bugUrl = "https://github.com/opensearch-project/OpenSearch/issues/17940")
     public void testQueryPhaseSearcher() {
         Optional<QueryPhaseSearcher> queryPhaseSearcherWithFeatureFlagDisabled = plugin.getQueryPhaseSearcher();
 
