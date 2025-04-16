@@ -396,7 +396,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         ));
     }
 
-    private Map<String, Float> getQueryTokens(QueryShardContext context) {
+    protected Map<String, Float> getQueryTokens(QueryShardContext context) {
         if (Objects.nonNull(queryTokensSupplier)) {
             return queryTokensSupplier.get();
         } else if (Objects.nonNull(analyzer)) {
@@ -489,7 +489,8 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .append(neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneType(), obj.neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneType())
             .append(neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneRatio(), obj.neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneRatio())
             .append(neuralSparseQueryTwoPhaseInfo.getStatus().getValue(), obj.neuralSparseQueryTwoPhaseInfo.getStatus().getValue())
-            .append(twoPhaseSharedQueryToken, obj.twoPhaseSharedQueryToken);
+            .append(twoPhaseSharedQueryToken, obj.twoPhaseSharedQueryToken)
+            .append(analyzer, obj.analyzer);
         if (Objects.nonNull(queryTokensSupplier)) {
             equalsBuilder.append(queryTokensSupplier.get(), obj.queryTokensSupplier.get());
         }
@@ -505,7 +506,8 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .append(neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneType())
             .append(neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneRatio())
             .append(neuralSparseQueryTwoPhaseInfo.getStatus().getValue())
-            .append(twoPhaseSharedQueryToken);
+            .append(twoPhaseSharedQueryToken)
+            .append(analyzer);
         if (Objects.nonNull(queryTokensSupplier)) {
             builder.append(queryTokensSupplier.get());
         }
