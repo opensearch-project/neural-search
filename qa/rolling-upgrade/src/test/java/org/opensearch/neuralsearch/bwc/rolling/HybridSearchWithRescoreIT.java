@@ -105,7 +105,13 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
     ) throws Exception {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
-        loadModel(modelId);
+        // In rolling upgrade tests we will not clean up the resources created in old and mix
+        // so check if the model is already deployed then no need to deploy it again.
+        if (!isModelAlreadyDeployed(modelId)) {
+            loadModel(modelId);
+        }
+        // Try to ensure all nodes are green before we do the search.
+        waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         Map<String, Object> searchResponseAsMap = search(
             getIndexNameForTest(),
             hybridQueryBuilder,

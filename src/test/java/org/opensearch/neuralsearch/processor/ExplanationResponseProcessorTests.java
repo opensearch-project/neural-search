@@ -519,7 +519,8 @@ public class ExplanationResponseProcessorTests extends OpenSearchTestCase {
         int requestedSize = 2;
         PriorityQueue<SearchHit> priorityQueue = new PriorityQueue<>(new SearchHitComparator(null));
         TotalHits.Relation totalHitsRelation = randomFrom(TotalHits.Relation.values());
-        TotalHits totalHits = new TotalHits(randomLongBetween(1, 1000), totalHitsRelation);
+        // At least need 2 total hits since later in getCombinedExplainDetails we will try to process two hits.
+        TotalHits totalHits = new TotalHits(randomLongBetween(2, 1000), totalHitsRelation);
 
         final int numDocs = totalHits.value() >= requestedSize ? requestedSize : (int) totalHits.value();
         int scoreFactor = randomIntBetween(1, numResponses);
