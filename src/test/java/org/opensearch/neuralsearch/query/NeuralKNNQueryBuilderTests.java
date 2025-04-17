@@ -20,6 +20,7 @@ import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.Version;
+import org.opensearch.knn.index.query.rescore.RescoreContext;
 
 import java.io.IOException;
 import java.util.Map;
@@ -75,7 +76,7 @@ public class NeuralKNNQueryBuilderTests extends OpenSearchTestCase {
         NeuralKNNQueryBuilder queryBuilder = NeuralKNNQueryBuilder.builder().fieldName(FIELD_NAME).vector(VECTOR).k(K).build();
 
         assertNotNull("Query builder should not be null", queryBuilder);
-        assertEquals("Field name should match", "knn", queryBuilder.getWriteableName());
+        assertEquals("Field name should match", "neural_knn", queryBuilder.getWriteableName());
     }
 
     public void testBuilder_withAllFields() {
@@ -91,7 +92,7 @@ public class NeuralKNNQueryBuilderTests extends OpenSearchTestCase {
             .build();
 
         assertNotNull("Query builder should not be null", queryBuilder);
-        assertEquals("Field name should match", "knn", queryBuilder.getWriteableName());
+        assertEquals("Field name should match", "neural_knn", queryBuilder.getWriteableName());
     }
 
     public void testDoToQuery() throws IOException {
@@ -126,5 +127,77 @@ public class NeuralKNNQueryBuilderTests extends OpenSearchTestCase {
 
         assertNotEquals("Different builders should not be equal", builder1, builder2);
         assertNotEquals("Different builders should have different hash codes", builder1.hashCode(), builder2.hashCode());
+    }
+
+    public void testBuilder_withOriginalQueryText() {
+        String originalQueryText = "test query text";
+        NeuralKNNQueryBuilder queryBuilder = NeuralKNNQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .vector(VECTOR)
+            .k(K)
+            .originalQueryText(originalQueryText)
+            .build();
+
+        assertNotNull("Query builder should not be null", queryBuilder);
+        assertEquals("Original query text should match", originalQueryText, queryBuilder.getOriginalQueryText());
+    }
+
+    public void testBuilder_withMethodParameters() {
+        Map<String, Object> methodParams = Map.of("ef_search", 100);
+        NeuralKNNQueryBuilder queryBuilder = NeuralKNNQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .vector(VECTOR)
+            .k(K)
+            .methodParameters(methodParams)
+            .build();
+
+        assertNotNull("Query builder should not be null", queryBuilder);
+        assertEquals("Method parameters should match", methodParams, queryBuilder.getKnnQueryBuilder().getMethodParameters());
+    }
+
+    public void testBuilder_withAllFieldsAndOriginalQueryText() {
+        String originalQueryText = "test query text";
+        Map<String, Object> methodParams = Map.of("ef_search", 100);
+        RescoreContext rescoreContext = RescoreContext.getDefault();
+        QueryBuilder filter = mock(QueryBuilder.class);
+
+        NeuralKNNQueryBuilder queryBuilder = NeuralKNNQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .vector(VECTOR)
+            .k(K)
+            .originalQueryText(originalQueryText)
+            .methodParameters(methodParams)
+            .rescoreContext(rescoreContext)
+            .filter(filter)
+            .expandNested(true)
+            .build();
+
+        assertNotNull("Query builder should not be null", queryBuilder);
+        assertEquals("Original query text should match", originalQueryText, queryBuilder.getOriginalQueryText());
+        assertEquals("Method parameters should match", methodParams, queryBuilder.getKnnQueryBuilder().getMethodParameters());
+        assertEquals("Rescore context should match", rescoreContext, queryBuilder.getKnnQueryBuilder().getRescoreContext());
+        assertEquals("Filter should match", filter, queryBuilder.getKnnQueryBuilder().getFilter());
+        assertTrue("Expand nested should be true", queryBuilder.getKnnQueryBuilder().getExpandNested());
+    }
+
+    public void testDoToQuery_withMultiNodeSettings() throws IOException {
+        // Mock index settings with multiple shards to simulate multi-node scenario
+        IndexMetadata indexMetadata = IndexMetadata.builder("dummy")
+            .settings(Settings.builder().put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT))
+            .numberOfShards(3)
+            .numberOfReplicas(1)
+            .build();
+        Settings settings = Settings.builder()
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(3))
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, Integer.toString(1))
+            .build();
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
+        when(mockContext.getIndexSettings()).thenReturn(indexSettings);
+
+        NeuralKNNQueryBuilder queryBuilder = NeuralKNNQueryBuilder.builder().fieldName(FIELD_NAME).vector(VECTOR).k(K).build();
+
+        Query query = queryBuilder.doToQuery(mockContext);
+        assertNotNull("Query should not be null", query);
+        assertTrue("Query should be instance of NeuralKNNQuery", query instanceof NeuralKNNQuery);
     }
 }

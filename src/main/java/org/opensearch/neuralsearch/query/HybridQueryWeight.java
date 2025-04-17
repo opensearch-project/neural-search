@@ -47,7 +47,7 @@ public final class HybridQueryWeight extends Weight {
         super(hybridQuery);
         weights = hybridQuery.getSubQueries().stream().map(q -> {
             try {
-                return searcher.createWeight(q, scoreMode, boost);
+                return searcher.createWeight(searcher.rewrite(q), scoreMode, boost);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }

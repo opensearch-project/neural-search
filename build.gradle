@@ -64,6 +64,7 @@ apply plugin: 'jacoco'
 apply plugin: "com.diffplug.spotless"
 apply plugin: 'io.freefair.lombok'
 apply from: 'gradle/formatting.gradle'
+apply plugin: 'opensearch.java-agent'
 
 ext.opensearch_tmp_dir = rootProject.file('build/private/opensearch_tmp').absoluteFile
 opensearch_tmp_dir.mkdirs()
