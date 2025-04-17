@@ -1,0 +1,14 @@
+{
+  "products": {
+    "type": "nested",
+    "properties": {
+      "product_description": {
+        "type": "semantic",
+        "model_id": "dummy model id"
+      },
+      "price": {
+        "type": "number"
+      }
+    }
+  }
+}

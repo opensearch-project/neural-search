@@ -18,6 +18,7 @@ import org.opensearch.index.mapper.ParametrizedFieldMapper;
 import org.opensearch.index.mapper.ParseContext;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.mapper.WildcardFieldMapper;
+import org.opensearch.neuralsearch.util.SemanticFieldMapperTestUtil;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.io.IOException;
@@ -36,9 +37,9 @@ import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.RAW_FIELD_TYPE;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEARCH_MODEL_ID;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
-import static org.opensearch.neuralsearch.mapper.SemanticFieldMapperTestUtil.buildSemanticFieldMapperWithTextAsRawFieldType;
-import static org.opensearch.neuralsearch.mapper.SemanticFieldMapperTestUtil.mockParserContext;
-import static org.opensearch.neuralsearch.mapper.SemanticFieldMapperTestUtil.TYPE_PARSER;
+import static org.opensearch.neuralsearch.util.SemanticFieldMapperTestUtil.buildSemanticFieldMapperWithTextAsRawFieldType;
+import static org.opensearch.neuralsearch.util.SemanticFieldMapperTestUtil.mockParserContext;
+import static org.opensearch.neuralsearch.util.SemanticFieldMapperTestUtil.TYPE_PARSER;
 import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 
 public class SemanticFieldMapperTests extends OpenSearchTestCase {

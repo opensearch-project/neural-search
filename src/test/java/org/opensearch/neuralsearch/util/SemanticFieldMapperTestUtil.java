@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.mapper;
+package org.opensearch.neuralsearch.util;
 
 import lombok.NonNull;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
@@ -14,6 +14,7 @@ import org.opensearch.index.mapper.ContentPath;
 import org.opensearch.index.mapper.Mapper;
 import org.opensearch.index.mapper.ParametrizedFieldMapper;
 import org.opensearch.index.mapper.TextFieldMapper;
+import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
 
 import java.util.HashMap;
 import java.util.Map;
