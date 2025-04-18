@@ -397,7 +397,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         ));
     }
 
-    protected Map<String, Float> getQueryTokens(QueryShardContext context) {
+    Map<String, Float> getQueryTokens(QueryShardContext context) {
         if (Objects.nonNull(queryTokensSupplier)) {
             return queryTokensSupplier.get();
         } else if (Objects.nonNull(analyzer)) {
