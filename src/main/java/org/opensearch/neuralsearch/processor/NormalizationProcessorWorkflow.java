@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.processor;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -15,7 +16,6 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.TopFieldDocs;
@@ -32,7 +32,7 @@ import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.processor.explain.ExplanationPayload;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
-import org.opensearch.search.DocValueFormat;
+import org.opensearch.neuralsearch.search.query.HybridQueryFieldDocComparator;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.fetch.FetchSearchResult;
@@ -200,7 +200,7 @@ public class NormalizationProcessorWorkflow {
             CollapseTopFieldDocs collapseTopFieldDocs = (CollapseTopFieldDocs) topDocs;
             ScoreDoc[] scoreDocs = collapseTopFieldDocs.scoreDocs;
             for (int i = 0; i < scoreDocs.length; i++) {
-                ScoreDoc currentScoreDoc = scoreDocs[i];
+                FieldDoc currentScoreDoc = (FieldDoc) scoreDocs[i];
                 if (scoreDoc.doc == currentScoreDoc.doc) {
                     return (BytesRef) collapseTopFieldDocs.collapseValues[i];
                 }
@@ -217,50 +217,54 @@ public class NormalizationProcessorWorkflow {
 
         // Collapse logic
         boolean isCollapseEnabled = queryTopDocs.getFirst().getTopDocs().getFirst() instanceof CollapseTopFieldDocs;
-        Map<BytesRef, ScoreDoc> collapseValueToTopScoreDocMap = new HashMap<>();
+        Map<BytesRef, FieldDoc> collapseValueToTopScoreDocMap = new HashMap<>();
         Map<BytesRef, Integer> collapseValueToShardMap = new HashMap<>();
         String collapseField = "";
         if (isCollapseEnabled) {
+            HybridQueryFieldDocComparator comparator = new HybridQueryFieldDocComparator(
+                ((CollapseTopFieldDocs) queryTopDocs.getFirst().getTopDocs().getFirst()).fields,
+                Comparator.comparing((ScoreDoc scoreDoc) -> scoreDoc.score)
+            );
+
             for (int i = 0; i < querySearchResults.size(); i++) {
                 CompoundTopDocs updatedTopDocs = queryTopDocs.get(i);
                 List<ScoreDoc> updatedScoreDocs = updatedTopDocs.getScoreDocs();
                 collapseField = ((CollapseTopFieldDocs) updatedTopDocs.getTopDocs().getFirst()).field;
-                for (int j = 0; j < updatedScoreDocs.size(); j++) {
-                    ScoreDoc scoreDoc = updatedScoreDocs.get(j);
-                    BytesRef collapseValue = getCollapseValue(scoreDoc, updatedTopDocs);
+
+                for (ScoreDoc scoreDoc : updatedScoreDocs) {
+                    FieldDoc fieldDoc = (FieldDoc) scoreDoc;
+                    BytesRef collapseValue = getCollapseValue(fieldDoc, updatedTopDocs);
                     if (collapseValue == null) {
                         continue;
                     }
-                    ScoreDoc currentBestScoreDoc = collapseValueToTopScoreDocMap.get(collapseValue);
-                    if (currentBestScoreDoc == null) {
-                        collapseValueToTopScoreDocMap.put(BytesRef.deepCopyOf(collapseValue), scoreDoc);
-                        collapseValueToShardMap.put(BytesRef.deepCopyOf(collapseValue), i);
-                    } else if (scoreDoc.score > currentBestScoreDoc.score) {
-                        collapseValueToTopScoreDocMap.put(BytesRef.deepCopyOf(collapseValue), scoreDoc);
+
+                    FieldDoc currentBestFieldDoc = collapseValueToTopScoreDocMap.get(collapseValue);
+                    if (currentBestFieldDoc == null || comparator.compare(fieldDoc, currentBestFieldDoc) < 0) {
+                        collapseValueToTopScoreDocMap.put(BytesRef.deepCopyOf(collapseValue), fieldDoc);
                         collapseValueToShardMap.put(BytesRef.deepCopyOf(collapseValue), i);
                     }
                 }
             }
-        }
 
-        if (isCollapseEnabled) {
+            List<Map.Entry<BytesRef, FieldDoc>> entryList = new ArrayList<>(collapseValueToTopScoreDocMap.entrySet());
+
+            entryList.sort(Map.Entry.comparingByValue(comparator));
+
             for (int index = 0; index < querySearchResults.size(); index++) {
-                QuerySearchResult querySearchResult = querySearchResults.get(index);
                 CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
-                List<ScoreDoc> updatedScoreDocs = updatedTopDocs.getScoreDocs();
-                List<ScoreDoc> newScoreDocs = new ArrayList<>();
+                List<FieldDoc> newFieldDocs = new ArrayList<>();
                 List<BytesRef> collapseValues = new ArrayList<>();
-                for (ScoreDoc scoreDoc : updatedScoreDocs) {
-                    for (Map.Entry<BytesRef, ScoreDoc> entry : collapseValueToTopScoreDocMap.entrySet()) {
-                        BytesRef collapseValue = entry.getKey();
-                        if (scoreDoc.equals(entry.getValue()) && index == collapseValueToShardMap.get(collapseValue)) {
-                            newScoreDocs.add(new FieldDoc(scoreDoc.doc, scoreDoc.score, new Object[] { scoreDoc.score }));
-                            collapseValues.add(BytesRef.deepCopyOf(collapseValue));
-                        }
+
+                for (Map.Entry<BytesRef, FieldDoc> entry : entryList) {
+                    BytesRef collapseValue = entry.getKey();
+                    FieldDoc fieldDoc = entry.getValue();
+                    if (collapseValueToShardMap.get(collapseValue) == index) {
+                        newFieldDocs.add(fieldDoc);
+                        collapseValues.add(collapseValue);
                     }
                 }
 
-                totalScoreDocsCount += newScoreDocs.size();
+                totalScoreDocsCount += newFieldDocs.size();
 
                 Object[] objectCollapseValues = new Object[collapseValues.size()];
                 for (int i = 0; i < objectCollapseValues.length; i++) {
@@ -271,13 +275,13 @@ public class NormalizationProcessorWorkflow {
                     new CollapseTopFieldDocs(
                         collapseField,
                         updatedTopDocs.getTotalHits(),
-                        newScoreDocs.toArray(new ScoreDoc[0]),
-                        new SortField[] { ((CollapseTopFieldDocs) updatedTopDocs.getTopDocs().getFirst()).fields[0] },
+                        newFieldDocs.toArray(new ScoreDoc[0]),
+                        sort.getSort(),
                         objectCollapseValues
                     ),
-                    maxScoreForShard(updatedTopDocs, false)
+                    maxScoreForShard(updatedTopDocs, true)
                 );
-                querySearchResult.topDocs(updatedTopDocsAndMaxScore, new DocValueFormat[1]);
+                querySearchResults.get(index).topDocs(updatedTopDocsAndMaxScore, querySearchResults.get(index).sortValueFormats());
             }
         } else {
             for (int index = 0; index < querySearchResults.size(); index++) {

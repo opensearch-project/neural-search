@@ -78,6 +78,7 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
     protected Query extractHybridQuery(final SearchContext searchContext, final Query query) {
         if (isHybridQueryWrappedInBooleanQuery(searchContext, query)) {
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
+            System.out.println(booleanClauses);
             if (!(booleanClauses.get(0).query() instanceof HybridQuery)) {
                 throw new IllegalArgumentException("hybrid query must be a top level query and cannot be wrapped into other queries");
             }
