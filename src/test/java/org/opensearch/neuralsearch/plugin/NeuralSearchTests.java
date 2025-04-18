@@ -29,12 +29,14 @@ import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.RRFProcessor;
+import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory;
 import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.plugins.SearchPipelinePlugin;
@@ -63,6 +65,8 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
     private ClusterService clusterService;
     @Mock
     private ThreadPool threadPool;
+    @Mock
+    private Environment environment;
 
     @Before
     public void setup() {
@@ -112,6 +116,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         assertFalse(querySpecs.isEmpty());
         assertTrue(querySpecs.stream().anyMatch(spec -> NeuralQueryBuilder.NAME.equals(spec.getName().getPreferredName())));
         assertTrue(querySpecs.stream().anyMatch(spec -> HybridQueryBuilder.NAME.equals(spec.getName().getPreferredName())));
+        assertTrue(querySpecs.stream().anyMatch(spec -> NeuralSparseQueryBuilder.NAME.equals(spec.getName().getPreferredName())));
     }
 
     public void testProcessors() {
@@ -133,6 +138,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         Map<String, Processor.Factory> processors = plugin.getProcessors(processorParams);
         assertNotNull(processors);
         assertNotNull(processors.get(TextEmbeddingProcessor.TYPE));
+        assertNotNull(processors.get(SparseEncodingProcessor.TYPE));
     }
 
     public void testSearchPhaseResultsProcessors() {
