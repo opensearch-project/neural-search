@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 - Implement analyzer based neural sparse query ([#1088](https://github.com/opensearch-project/neural-search/pull/1088))
+- [Semantic Field] Add semantic field mapper. ([#1225](https://github.com/opensearch-project/neural-search/pull/1225)).
 
 ### Enhancements
 
