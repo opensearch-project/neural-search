@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
@@ -401,7 +402,10 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             return queryTokensSupplier.get();
         } else if (Objects.nonNull(analyzer)) {
             Map<String, Float> queryTokens = new HashMap<>();
-            Analyzer luceneAnalyzer = context.convertToShardContext().getIndexAnalyzers().getAnalyzers().get(this.analyzer);
+            Analyzer luceneAnalyzer = context.getIndexAnalyzers().getAnalyzers().get(this.analyzer);
+            if (Objects.isNull(luceneAnalyzer)) {
+                throw new IllegalArgumentException(String.format(Locale.ROOT, "Analyzer [%s] not found in shard context. ", this.analyzer));
+            }
             try (TokenStream stream = luceneAnalyzer.tokenStream(fieldName, queryText)) {
                 stream.reset();
                 CharTermAttribute term = stream.addAttribute(CharTermAttribute.class);
@@ -431,9 +435,11 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
                 };
             } catch (IOException e) {
                 throw new OpenSearchException("failed to analyze query text. ", e);
+            } catch (BufferUnderflowException e) {
+                throw new OpenSearchException("failed to parse query token weight from analyzer. ", e);
             }
         }
-        throw new IllegalArgumentException("Query tokens cannot be null.");
+        throw new IllegalArgumentException("Both query tokens and analyzer is null.");
     }
 
     @Override

@@ -41,6 +41,7 @@ import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.util.BytesRef;
 import org.junit.Before;
+import org.opensearch.OpenSearchException;
 import org.opensearch.Version;
 import org.opensearch.index.analysis.AnalyzerScope;
 import org.opensearch.index.analysis.IndexAnalyzers;
@@ -868,6 +869,27 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
+    public void testGetQueryTokens_whenAnalyzerNotFound_thenThrowException() {
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .queryText("hello world")
+            .analyzer("test");
+
+        QueryShardContext mockedQueryShardContext = mock(QueryShardContext.class);
+        IndexAnalyzers mockIndexAnalyzers = new IndexAnalyzers(
+            Map.of("default", new NamedAnalyzer("default", AnalyzerScope.INDEX, new StandardAnalyzer())),
+            Collections.emptyMap(),
+            Collections.emptyMap()
+        );
+        when(mockedQueryShardContext.getIndexAnalyzers()).thenReturn(mockIndexAnalyzers);
+
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> sparseEncodingQueryBuilder.getQueryTokens(mockedQueryShardContext)
+        );
+        assertEquals("Analyzer [test] not found in shard context. ", exception.getMessage());
+    }
+
+    @SneakyThrows
     public void testGetQueryTokens_useAnalyzerWithTokenWeights() {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
             .queryText("hello world")
@@ -916,5 +938,57 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(2, queryTokens.size());
         assertEquals(1.23f, queryTokens.get("hello"), 0f);
         assertEquals(2.34f, queryTokens.get("world"), 0f);
+    }
+
+    @SneakyThrows
+    public void testGetQueryTokens_useAnalyzerWithMalformedTokenWeights_thenFail() {
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .queryText("hello world")
+            .analyzer("default");
+
+        QueryShardContext mockedQueryShardContext = mock(QueryShardContext.class);
+        Analyzer mockedAnalyzer = new Analyzer() {
+            @Override
+            protected TokenStreamComponents createComponents(String s) {
+                Tokenizer tokenizer = new Tokenizer() {
+                    private int numToCall = 0;
+                    CharTermAttribute termAtt = addAttribute(CharTermAttribute.class);
+                    PayloadAttribute payloadAtt = addAttribute(PayloadAttribute.class);
+
+                    @Override
+                    public boolean incrementToken() throws IOException {
+                        clearAttributes();
+                        switch (numToCall) {
+                            case 0:
+                                termAtt.append("hello");
+                                payloadAtt.setPayload(new BytesRef(ByteBuffer.allocate(2).putShort((short) 1).array()));
+                                numToCall++;
+                                return true;
+                            case 1:
+                                termAtt.append("world");
+                                payloadAtt.setPayload(new BytesRef(ByteBuffer.allocate(4).putFloat(2.34f).array()));
+                                numToCall++;
+                                return true;
+                            default:
+                                return false;
+                        }
+                    }
+                };
+                return new TokenStreamComponents(tokenizer, tokenizer);
+            }
+        };
+
+        IndexAnalyzers mockIndexAnalyzers = new IndexAnalyzers(
+            Map.of("default", new NamedAnalyzer("default", AnalyzerScope.INDEX, mockedAnalyzer)),
+            Collections.emptyMap(),
+            Collections.emptyMap()
+        );
+        when(mockedQueryShardContext.getIndexAnalyzers()).thenReturn(mockIndexAnalyzers);
+
+        OpenSearchException exception = assertThrows(
+            OpenSearchException.class,
+            () -> sparseEncodingQueryBuilder.getQueryTokens(mockedQueryShardContext)
+        );
+        assertEquals("failed to parse query token weight from analyzer. ", exception.getMessage());
     }
 }
