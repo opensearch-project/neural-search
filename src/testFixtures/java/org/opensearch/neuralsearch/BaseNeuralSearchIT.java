@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch;
 
+import lombok.NonNull;
 import org.junit.After;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.client.ResponseException;
@@ -1573,9 +1574,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         );
     }
 
-    @SneakyThrows
-    protected MLModelState getModelState(String modelId) {
-        Response getModelResponse = makeRequest(
+    private Response getModel(@NonNull final String modelId) throws IOException {
+        return makeRequest(
             client(),
             "GET",
             String.format(LOCALE, "/_plugins/_ml/models/%s", modelId),
@@ -1583,6 +1583,9 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             toHttpEntity(""),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
+    }
+
+    private MLModelState getModelState(@NonNull final Response getModelResponse) throws IOException, ParseException {
         Map<String, Object> getModelResponseJson = XContentHelper.convertToMap(
             XContentType.JSON.xContent(),
             EntityUtils.toString(getModelResponse.getEntity()),
@@ -1590,6 +1593,21 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         );
         String modelState = (String) getModelResponseJson.get("model_state");
         return MLModelState.valueOf(modelState);
+    }
+
+    protected boolean isModelAlreadyDeployed(@NonNull final String modelId) throws IOException, ParseException {
+        Response getModelResponse = getModel(modelId);
+        if (RestStatus.NOT_FOUND.equals(RestStatus.fromCode(getModelResponse.getStatusLine().getStatusCode()))) {
+            return false;
+        } else {
+            return MLModelState.DEPLOYED.equals(getModelState(getModelResponse));
+        }
+    }
+
+    @SneakyThrows
+    protected MLModelState getModelState(String modelId) {
+        Response getModelResponse = getModel(modelId);
+        return getModelState(getModelResponse);
     }
 
     public boolean isUpdateClusterSettings() {

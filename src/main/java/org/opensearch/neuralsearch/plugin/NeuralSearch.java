@@ -4,8 +4,8 @@
  */
 package org.opensearch.neuralsearch.plugin;
 
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SEARCH_HYBRID_SEARCH_DISABLED;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER_MAX_DOC_FIELDS;
+import static org.opensearch.neuralsearch.util.FeatureFlagUtil.SEMANTIC_FIELD_ENABLED;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_STATS_ENABLED;
 
 import java.util.Arrays;
@@ -25,6 +25,10 @@ import org.opensearch.action.ActionRequest;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.stats.info.InfoStatsManager;
+import org.opensearch.index.mapper.Mapper;
+import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
+import org.opensearch.neuralsearch.util.FeatureFlagUtil;
+import org.opensearch.plugins.MapperPlugin;
 import org.opensearch.transport.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.node.DiscoveryNodes;
@@ -34,7 +38,6 @@ import org.opensearch.common.settings.IndexScopedSettings;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.settings.SettingsFilter;
-import org.opensearch.common.util.FeatureFlags;
 import org.opensearch.core.action.ActionResponse;
 import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
@@ -102,7 +105,14 @@ import lombok.extern.log4j.Log4j2;
  * Neural Search plugin class
  */
 @Log4j2
-public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, IngestPlugin, ExtensiblePlugin, SearchPipelinePlugin {
+public class NeuralSearch extends Plugin
+    implements
+        ActionPlugin,
+        MapperPlugin,
+        SearchPlugin,
+        IngestPlugin,
+        ExtensiblePlugin,
+        SearchPipelinePlugin {
     private MLCommonsClientAccessor clientAccessor;
     private NormalizationProcessorWorkflow normalizationProcessorWorkflow;
     private NeuralSearchSettingsAccessor settingsAccessor;
@@ -216,17 +226,6 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     @Override
     public Optional<QueryPhaseSearcher> getQueryPhaseSearcher() {
-        // we're using "is_disabled" flag as there are no proper implementation of FeatureFlags.isDisabled(). Both
-        // cases when flag is not set, or it is "false" are interpreted in the same way. In such case core is reading
-        // the actual value from settings.
-        if (FeatureFlags.isEnabled(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED.getKey())) {
-            log.info(
-                "Not registering hybrid query phase searcher because feature flag [{}] is disabled",
-                NEURAL_SEARCH_HYBRID_SEARCH_DISABLED.getKey()
-            );
-            return Optional.empty();
-        }
-        log.info("Registering hybrid query phase searcher with feature flag [{}]", NEURAL_SEARCH_HYBRID_SEARCH_DISABLED.getKey());
         return Optional.of(new HybridQueryPhaseSearcher());
     }
 
@@ -244,7 +243,7 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED, RERANKER_MAX_DOC_FIELDS, NEURAL_STATS_ENABLED);
+        return List.of(RERANKER_MAX_DOC_FIELDS, NEURAL_STATS_ENABLED);
     }
 
     @Override
@@ -288,5 +287,13 @@ public class NeuralSearch extends Plugin implements ActionPlugin, SearchPlugin, 
     @Override
     public Map<String, Highlighter> getHighlighters() {
         return Collections.singletonMap(SemanticHighlighter.NAME, semanticHighlighter);
+    }
+
+    @Override
+    public Map<String, Mapper.TypeParser> getMappers() {
+        if (FeatureFlagUtil.isEnabled(SEMANTIC_FIELD_ENABLED)) {
+            return Map.of(SemanticFieldMapper.CONTENT_TYPE, new SemanticFieldMapper.TypeParser());
+        }
+        return Collections.emptyMap();
     }
 }

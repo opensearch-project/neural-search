@@ -16,7 +16,6 @@ import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.BooleanClause;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilderVisitor;
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_SEARCH_HYBRID_SEARCH_DISABLED;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -32,7 +31,6 @@ import org.apache.lucene.index.LeafReaderContext;
 import org.opensearch.Version;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.common.CheckedConsumer;
-import org.opensearch.common.SuppressForbidden;
 import org.opensearch.common.compress.CompressedXContent;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.XContentFactory;
@@ -230,11 +228,6 @@ public abstract class OpenSearchQueryTestCase extends OpenSearchTestCase {
                 return Float.MAX_VALUE;
             }
         };
-    }
-
-    @SuppressForbidden(reason = "manipulates system properties for testing")
-    protected static void initFeatureFlags() {
-        System.setProperty(NEURAL_SEARCH_HYBRID_SEARCH_DISABLED.getKey(), "true");
     }
 
     protected static QueryBuilderVisitor createTestVisitor(List<QueryBuilder> visitedQueries) {

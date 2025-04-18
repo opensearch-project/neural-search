@@ -16,17 +16,6 @@ import lombok.NoArgsConstructor;
 public final class NeuralSearchSettings {
 
     /**
-     * Gates the functionality of hybrid search
-     * Currently query phase searcher added with hybrid search will conflict with concurrent search in core.
-     * Once that problem is resolved this feature flag can be removed.
-     */
-    public static final Setting<Boolean> NEURAL_SEARCH_HYBRID_SEARCH_DISABLED = Setting.boolSetting(
-        "plugins.neural_search.hybrid_search_disabled",
-        false,
-        Setting.Property.NodeScope
-    );
-
-    /**
      * Limits the number of document fields that can be passed to the reranker.
      */
     public static final Setting<Integer> RERANKER_MAX_DOC_FIELDS = Setting.intSetting(
