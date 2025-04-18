@@ -196,4 +196,8 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
     public void testGetMappers_shouldReturnEmptyMap() {
         assertTrue(plugin.getMappers().isEmpty());
     }
+
+    public void testGetMappingTransformers_shouldReturnEmptyMap() {
+        assertTrue(plugin.getMappingTransformers().isEmpty());
+    }
 }
