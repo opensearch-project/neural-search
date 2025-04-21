@@ -228,7 +228,7 @@ public class ScoreCombiner {
         final Collection<Integer> sortedScores,
         final long maxHits,
         final Map<Integer, Object[]> docIdSortFieldMap,
-        Sort sort,
+        final Sort sort,
         final boolean isSingleShard
     ) {
 
@@ -251,7 +251,7 @@ public class ScoreCombiner {
     }
 
     private ScoreDoc getScoreDoc(
-        Sort sort,
+        final Sort sort,
         final int docId,
         final int shardId,
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
@@ -301,7 +301,7 @@ public class ScoreCombiner {
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
         final Collection<Integer> sortedScores,
         Map<Integer, Object[]> docIdSortFieldMap,
-        Sort sort,
+        final Sort sort,
         final boolean isSingleShard
     ) {
         // - max number of hits will be the same which are passed from QueryPhase
