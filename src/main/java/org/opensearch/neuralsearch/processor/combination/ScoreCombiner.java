@@ -261,7 +261,7 @@ public class ScoreCombiner {
         final boolean isSortEnabled = sort != null;
         final boolean isSortByScore = isSortOrderByScore(sort);
         // Case when sort is enabled on single shard and sorting is not done on score field
-        if (isSortEnabled && !isSortByScore && isSingleShard) {
+        if (isSortEnabled && isSortByScore == false && isSingleShard) {
             return new FieldDoc(docId, Float.NaN, docIdSortFieldMap.get(docId), shardId);
         }
         if (isSortEnabled && docIdSortFieldMap != null) {

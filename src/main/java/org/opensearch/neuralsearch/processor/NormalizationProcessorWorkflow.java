@@ -106,7 +106,7 @@ public class NormalizationProcessorWorkflow {
 
     private boolean getIsSingleShard(final NormalizationProcessorWorkflowExecuteRequest request) {
         final SearchPhaseContext searchPhaseContext = request.getSearchPhaseContext();
-        return searchPhaseContext.getNumShards() == 1;
+        return searchPhaseContext.getNumShards() == 1 || request.fetchSearchResultOptional.isEmpty() == false;
     }
 
     /**
@@ -116,7 +116,7 @@ public class NormalizationProcessorWorkflow {
      */
     private int getFromValueIfSingleShard(final NormalizationProcessorWorkflowExecuteRequest request) {
         final SearchPhaseContext searchPhaseContext = request.getSearchPhaseContext();
-        if (searchPhaseContext.getNumShards() > 1 || request.fetchSearchResultOptional.isEmpty()) {
+        if (getIsSingleShard(request) == false) {
             return -1;
         }
         int from = searchPhaseContext.getRequest().source().from();
