@@ -6,7 +6,11 @@ package org.opensearch.neuralsearch.util.prune;
 
 import org.apache.commons.lang.StringUtils;
 
+import java.util.Arrays;
 import java.util.Locale;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Enum representing different types of prune methods for sparse vectors
@@ -19,6 +23,8 @@ public enum PruneType {
     ABS_VALUE("abs_value");
 
     private final String value;
+    private static final Map<String, PruneType> VALUE_MAP = Arrays.stream(values())
+        .collect(Collectors.toUnmodifiableMap(status -> status.value, Function.identity()));
 
     PruneType(String value) {
         this.value = value;
@@ -37,11 +43,10 @@ public enum PruneType {
      */
     public static PruneType fromString(final String value) {
         if (StringUtils.isEmpty(value)) return NONE;
-        for (PruneType type : PruneType.values()) {
-            if (type.value.equals(value)) {
-                return type;
-            }
+        PruneType type = VALUE_MAP.get(value);
+        if (type == null) {
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "Unknown prune type: %s", value));
         }
-        throw new IllegalArgumentException(String.format(Locale.ROOT, "Unknown prune type: %s", value));
+        return type;
     }
 }
