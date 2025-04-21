@@ -30,4 +30,5 @@ public class CombineScoresDto {
     @Nullable
     private Sort sort;
     private int fromValueForSingleShard;
+    private boolean isSingleShard;
 }

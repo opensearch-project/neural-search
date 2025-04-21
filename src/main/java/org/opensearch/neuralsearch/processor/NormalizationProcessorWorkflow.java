@@ -86,6 +86,7 @@ public class NormalizationProcessorWorkflow {
             .querySearchResults(querySearchResults)
             .sort(evaluateSortCriteria(querySearchResults, queryTopDocs))
             .fromValueForSingleShard(getFromValueIfSingleShard(request))
+            .isSingleShard(getIsSingleShard(request))
             .build();
 
         // combine
@@ -101,6 +102,11 @@ public class NormalizationProcessorWorkflow {
             unprocessedDocIds,
             combineScoresDTO.getFromValueForSingleShard()
         );
+    }
+
+    private boolean getIsSingleShard(final NormalizationProcessorWorkflowExecuteRequest request) {
+        final SearchPhaseContext searchPhaseContext = request.getSearchPhaseContext();
+        return searchPhaseContext.getNumShards() == 1;
     }
 
     /**
