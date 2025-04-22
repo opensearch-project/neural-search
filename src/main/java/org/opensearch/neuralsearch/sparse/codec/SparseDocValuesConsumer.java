@@ -14,9 +14,13 @@ import org.apache.lucene.index.SegmentWriteState;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.neuralsearch.sparse.SparseTokensField;
+import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 
 import java.io.IOException;
 
+/**
+ * A DocValuesConsumer that writes sparse doc values to a segment.
+ */
 public class SparseDocValuesConsumer extends DocValuesConsumer {
     private final DocValuesConsumer delegate;
     private final SegmentWriteState state;
@@ -47,16 +51,13 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
             SparseDocValuesReader reader = (SparseDocValuesReader) valuesProducer;
             for (DocValuesProducer producer : reader.getMergeState().docValuesProducers) {
                 SparseDocValuesProducer sparseDocValuesProducer = (SparseDocValuesProducer) producer;
-                SparseVectorForwardIndex.IndexKey key = new SparseVectorForwardIndex.IndexKey(
-                    sparseDocValuesProducer.getState().segmentInfo,
-                    field
-                );
+                InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(sparseDocValuesProducer.getState().segmentInfo, field);
                 SparseVectorForwardIndex.removeIndex(key);
             }
         }
         BinaryDocValues binaryDocValues = valuesProducer.getBinary(field);
         int docId;
-        SparseVectorForwardIndex.IndexKey key = new SparseVectorForwardIndex.IndexKey(this.state.segmentInfo, field);
+        InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(this.state.segmentInfo, field);
         SparseVectorForwardIndex index = SparseVectorForwardIndex.getOrCreate(key);
         SparseVectorForwardIndex.SparseVectorForwardIndexWriter writer = index.getForwardIndexWriter();
         while ((docId = binaryDocValues.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {

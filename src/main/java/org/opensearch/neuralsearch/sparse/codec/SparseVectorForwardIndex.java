@@ -4,11 +4,12 @@
  */
 package org.opensearch.neuralsearch.sparse.codec;
 
-import lombok.AllArgsConstructor;
-import org.apache.lucene.index.FieldInfo;
-import org.apache.lucene.index.SegmentInfo;
+import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
 
+/**
+ * Interface for sparse vector forward index
+ */
 public interface SparseVectorForwardIndex extends ForwardIndex {
     @Override
     SparseVectorForwardIndexReader getForwardIndexReader();  // covariant return type
@@ -24,22 +25,11 @@ public interface SparseVectorForwardIndex extends ForwardIndex {
         void write(int docId, SparseVector vector);
     }
 
-    static SparseVectorForwardIndex getOrCreate(IndexKey key) {
+    static SparseVectorForwardIndex getOrCreate(InMemoryKey.IndexKey key) {
         return InMemorySparseVectorForwardIndex.getOrCreate(key);
     }
 
-    static void removeIndex(IndexKey key) {
+    static void removeIndex(InMemoryKey.IndexKey key) {
         InMemorySparseVectorForwardIndex.removeIndex(key);
-    }
-
-    @AllArgsConstructor
-    public static class IndexKey {
-        private SegmentInfo segmentInfo;
-        private FieldInfo fieldInfo;
-
-        @Override
-        public int hashCode() {
-            return segmentInfo.hashCode() + fieldInfo.name.hashCode();
-        }
     }
 }

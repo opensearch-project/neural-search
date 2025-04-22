@@ -10,6 +10,9 @@ import org.opensearch.index.codec.CodecService;
 import org.opensearch.index.codec.CodecServiceConfig;
 import org.opensearch.index.mapper.MapperService;
 
+/**
+ * It vends SparseCodec to engine to provide sparse vector codec.
+ */
 public class SparseCodecService extends CodecService {
     private final MapperService mapperService;
 

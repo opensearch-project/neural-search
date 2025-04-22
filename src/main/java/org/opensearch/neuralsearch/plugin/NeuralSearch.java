@@ -29,6 +29,7 @@ import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.sparse.SparseSettings;
 import org.opensearch.neuralsearch.sparse.codec.SparseCodecService;
 import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
+import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.stats.info.InfoStatsManager;
 import org.opensearch.plugins.EnginePlugin;
@@ -170,7 +171,8 @@ public class NeuralSearch extends Plugin
         return Arrays.asList(
             new QuerySpec<>(NeuralQueryBuilder.NAME, NeuralQueryBuilder::new, NeuralQueryBuilder::fromXContent),
             new QuerySpec<>(HybridQueryBuilder.NAME, HybridQueryBuilder::new, HybridQueryBuilder::fromXContent),
-            new QuerySpec<>(NeuralSparseQueryBuilder.NAME, NeuralSparseQueryBuilder::new, NeuralSparseQueryBuilder::fromXContent)
+            new QuerySpec<>(NeuralSparseQueryBuilder.NAME, NeuralSparseQueryBuilder::new, NeuralSparseQueryBuilder::fromXContent),
+            new QuerySpec<>(SparseAnnQueryBuilder.NAME, SparseAnnQueryBuilder::new, SparseAnnQueryBuilder::fromXContent)
         );
     }
 

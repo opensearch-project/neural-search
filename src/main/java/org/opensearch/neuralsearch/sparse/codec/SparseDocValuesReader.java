@@ -19,6 +19,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * It produces SparseDocValues when segments merge happens. It does the actual work for sparse vector merge.
+ */
 public class SparseDocValuesReader extends EmptyDocValuesProducer {
     @Getter
     private final MergeState mergeState;

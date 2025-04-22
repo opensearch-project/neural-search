@@ -12,6 +12,9 @@ import org.apache.lucene.codecs.PostingsFormat;
 import org.apache.lucene.codecs.lucene101.Lucene101Codec;
 import org.opensearch.index.mapper.MapperService;
 
+/**
+ * SparseCodec is used to encode and decode sparse vector related data structures.
+ */
 public class SparseCodec extends FilterCodec {
     private static final String NAME = "Sparse10010Codec";
     public static final Codec DEFAULT_DELEGATE = new Lucene101Codec();

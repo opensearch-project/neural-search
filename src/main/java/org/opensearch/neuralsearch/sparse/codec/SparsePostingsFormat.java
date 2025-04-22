@@ -12,6 +12,9 @@ import org.apache.lucene.index.SegmentWriteState;
 
 import java.io.IOException;
 
+/**
+ * Format for sparse vector postings.
+ */
 public class SparsePostingsFormat extends PostingsFormat {
     private PostingsFormat delegate;
 
@@ -27,6 +30,6 @@ public class SparsePostingsFormat extends PostingsFormat {
 
     @Override
     public FieldsProducer fieldsProducer(SegmentReadState state) throws IOException {
-        return delegate.fieldsProducer(state);
+        return new SparsePostingsProducer(this.delegate.fieldsProducer(state), state);
     }
 }

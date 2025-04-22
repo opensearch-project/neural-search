@@ -8,6 +8,9 @@ import org.apache.lucene.document.Field;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.IndexableFieldType;
 
+/**
+ * A custom field type for sparse tokens
+ */
 public class SparseTokensField extends Field {
     public static final String SPARSE_FIELD = "sparse_tokens_field";
 

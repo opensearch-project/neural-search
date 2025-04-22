@@ -10,6 +10,9 @@ import org.apache.lucene.index.MergeState;
 
 import java.io.IOException;
 
+/**
+ * It holds binary doc values sub for each segment. It is used to merge doc values from multiple segments.
+ */
 public class BinaryDocValuesSub extends DocIDMerger.Sub {
 
     private final BinaryDocValues values;
