@@ -36,10 +36,12 @@ import java.util.TreeMap;
  * It is used by the SparsePostingsConsumer and SparsePostingsReader classes.
  */
 public class InMemoryClusteredPosting {
-    public static Map<InMemoryKey.IndexKey, Map<BytesRef, PostingClusters>> inMemoryPostings = new HashMap<>();
+    public static final Map<InMemoryKey.IndexKey, Map<BytesRef, PostingClusters>> inMemoryPostings = new HashMap<>();
 
     public static void clearIndex(InMemoryKey.IndexKey key) {
-        inMemoryPostings.remove(key);
+        synchronized (inMemoryPostings) {
+            inMemoryPostings.remove(key);
+        }
     }
 
     @AllArgsConstructor
@@ -47,20 +49,24 @@ public class InMemoryClusteredPosting {
         private final InMemoryKey.IndexKey key;
 
         public PostingClusters read(BytesRef term) {
-            if (!inMemoryPostings.containsKey(key)) {
-                return null;
+            synchronized (inMemoryPostings) {
+                if (!inMemoryPostings.containsKey(key)) {
+                    return null;
+                }
+                if (!inMemoryPostings.get(key).containsKey(term)) {
+                    return null;
+                }
+                return inMemoryPostings.get(key).get(term);
             }
-            if (!inMemoryPostings.get(key).containsKey(term)) {
-                return null;
-            }
-            return inMemoryPostings.get(key).get(term);
         }
 
         public Set<BytesRef> getTerms() {
-            if (!inMemoryPostings.containsKey(key)) {
-                return null;
+            synchronized (inMemoryPostings) {
+                if (!inMemoryPostings.containsKey(key)) {
+                    return null;
+                }
+                return inMemoryPostings.get(key).keySet();
             }
-            return inMemoryPostings.get(key).keySet();
         }
     }
 
@@ -95,10 +101,10 @@ public class InMemoryClusteredPosting {
         }
 
         public static void writePostingClusters(InMemoryKey.IndexKey key, BytesRef term, List<DocumentCluster> clusters) {
-            if (!inMemoryPostings.containsKey(key)) {
-                inMemoryPostings.put(key, new TreeMap<>());
+            synchronized (inMemoryPostings) {
+                inMemoryPostings.putIfAbsent(key, new TreeMap<>());
+                inMemoryPostings.get(key).put(term.clone(), new PostingClusters(clusters));
             }
-            inMemoryPostings.get(key).put(term.clone(), new PostingClusters(clusters));
         }
 
         @Override

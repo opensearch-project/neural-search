@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.sparse.mapper;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
@@ -23,19 +24,23 @@ import java.util.Map;
  */
 @AllArgsConstructor(access = AccessLevel.PACKAGE)
 @Getter
+@EqualsAndHashCode
 public class SparseMethodContext implements ToXContentFragment, Writeable {
     private static final String NAME_FIELD = "name";
-    private static final String LAMBDA_FIELD = "lambda";
-    private static final String ALPHA_FIELD = "alpha";
+    public static final String LAMBDA_FIELD = "lambda";
+    public static final String ALPHA_FIELD = "alpha";
+    public static final String BETA_FIELD = "beta";
 
     private final String name;
     private final int lambda;
     private final float alpha;
+    private final int beta;
 
     public SparseMethodContext(StreamInput in) throws IOException {
         this.name = in.readString();
         this.lambda = in.readOptionalInt();
         this.alpha = in.readOptionalFloat();
+        this.beta = in.readOptionalInt();
     }
 
     @Override
@@ -43,6 +48,7 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
         out.writeString(this.name);
         out.writeOptionalInt(this.lambda);
         out.writeOptionalFloat(this.alpha);
+        out.writeOptionalInt(this.beta);
     }
 
     @Override
@@ -50,6 +56,7 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
         builder.field(NAME_FIELD, this.name);
         builder.field(LAMBDA_FIELD, this.lambda);
         builder.field(ALPHA_FIELD, this.alpha);
+        builder.field(BETA_FIELD, this.beta);
         return builder;
     }
 
@@ -59,8 +66,9 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
         }
         Map<String, Object> methodMap = (Map<String, Object>) in;
         String name = "";
-        int lambda = 0;
-        float alpha = 0;
+        int lambda = 6000;
+        float alpha = 0.4f;
+        int beta = 400;
         String key;
         Object value;
         for (Map.Entry<String, Object> methodEntry : methodMap.entrySet()) {
@@ -72,6 +80,8 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
                 lambda = (int) value;
             } else if (ALPHA_FIELD.equals(key)) {
                 alpha = ((Double) value).floatValue();
+            } else if (BETA_FIELD.equals(key)) {
+                beta = (int) value;
             } else {
                 throw new MapperParsingException("Invalid parameter: " + key);
             }
@@ -79,6 +89,6 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
         if (name.isEmpty()) {
             throw new MapperParsingException(NAME_FIELD + " needs to be set");
         }
-        return new SparseMethodContext(name, lambda, alpha);
+        return new SparseMethodContext(name, lambda, alpha, beta);
     }
 }

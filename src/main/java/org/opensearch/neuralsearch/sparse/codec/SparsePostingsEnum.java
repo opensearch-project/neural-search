@@ -27,23 +27,11 @@ public class SparsePostingsEnum extends PostingsEnum {
     private IteratorWrapper<DocumentCluster> currentCluster;
     private DocFreqIterator currentDocFreq;
 
-    public SparsePostingsEnum(PostingClusters clusters, InMemoryKey.IndexKey indexKey) {
+    public SparsePostingsEnum(PostingClusters clusters, InMemoryKey.IndexKey indexKey) throws IOException {
         this.clusters = clusters;
         this.indexKey = indexKey;
         currentCluster = clusterIterator();
-        positionIterators();
-    }
-
-    private void positionIterators() {
-        if (currentDocFreq == null && currentCluster != null) {
-            currentDocFreq = currentCluster.next().getDisi();
-        }
-        while (currentDocFreq.docID() == DocIdSetIterator.NO_MORE_DOCS) {
-            if (!currentCluster.hasNext()) {
-                break;
-            }
-            currentDocFreq = currentCluster.next().getDisi();
-        }
+        currentDocFreq = currentCluster.next().getDisi();
     }
 
     public IteratorWrapper<DocumentCluster> clusterIterator() {
@@ -90,8 +78,12 @@ public class SparsePostingsEnum extends PostingsEnum {
         }
         int doc = currentDocFreq.nextDoc();
         if (doc == DocIdSetIterator.NO_MORE_DOCS) {
-            positionIterators();
-            return currentDocFreq.nextDoc();
+            if (!currentCluster.hasNext()) {
+                return DocIdSetIterator.NO_MORE_DOCS;
+            } else {
+                currentDocFreq = currentCluster.next().getDisi();
+                return nextDoc();
+            }
         }
         return doc;
     }

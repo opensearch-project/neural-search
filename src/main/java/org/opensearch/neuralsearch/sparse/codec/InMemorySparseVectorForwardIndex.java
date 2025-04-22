@@ -17,22 +17,24 @@ import java.util.Map;
  */
 public class InMemorySparseVectorForwardIndex implements SparseVectorForwardIndex {
 
-    private static Map<InMemoryKey.IndexKey, InMemorySparseVectorForwardIndex> forwardIndexMap = new HashMap<>();
+    private static final Map<InMemoryKey.IndexKey, InMemorySparseVectorForwardIndex> forwardIndexMap = new HashMap<>();
 
     public static InMemorySparseVectorForwardIndex getOrCreate(InMemoryKey.IndexKey key) {
-        if (forwardIndexMap.containsKey(key)) {
-            return forwardIndexMap.get(key);
+        if (key == null) {
+            throw new IllegalArgumentException("Index key cannot be null");
         }
-        InMemorySparseVectorForwardIndex inMemorySparseVectorForwardIndex = new InMemorySparseVectorForwardIndex();
-        forwardIndexMap.put(key, inMemorySparseVectorForwardIndex);
-        return inMemorySparseVectorForwardIndex;
+        synchronized (forwardIndexMap) {
+            return forwardIndexMap.computeIfAbsent(key, k -> new InMemorySparseVectorForwardIndex());
+        }
     }
 
     public static void removeIndex(InMemoryKey.IndexKey key) {
-        forwardIndexMap.remove(key);
+        synchronized (forwardIndexMap) {
+            forwardIndexMap.remove(key);
+        }
     }
 
-    private Map<Integer, SparseVector> sparseVectorMap = new HashMap<>();
+    private final Map<Integer, SparseVector> sparseVectorMap = new HashMap<>();
 
     public InMemorySparseVectorForwardIndex() {}
 
@@ -50,10 +52,9 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
 
         @Override
         public SparseVector readSparseVector(int docId) {
-            if (sparseVectorMap.containsKey(docId)) {
+            synchronized (sparseVectorMap) {
                 return sparseVectorMap.get(docId);
             }
-            return null;
         }
 
         @Override
@@ -66,10 +67,14 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
 
         @Override
         public void write(int docId, SparseVector vector) {
-            if (sparseVectorMap.containsKey(docId)) {
-                throw new IllegalArgumentException("docId already exists");
+            if (vector == null) return;
+            synchronized (sparseVectorMap) {
+                // Use putIfAbsent to make the operation atomic and more efficient
+                SparseVector existing = sparseVectorMap.putIfAbsent(docId, vector);
+                if (existing != null) {
+                    throw new IllegalArgumentException("Document ID " + docId + " already exists");
+                }
             }
-            sparseVectorMap.put(docId, vector);
         }
 
         @Override

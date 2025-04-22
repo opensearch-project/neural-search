@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.sparse.common;
 
 import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.lucene.util.ArrayUtil;
@@ -22,12 +23,12 @@ import java.util.stream.Collectors;
 /**
  * Sparse vector implementation, which is a list of (token, freq) pairs
  */
-public class SparseVector implements Iterator<SparseVector.Item> {
+@EqualsAndHashCode
+public class SparseVector {
     private final int size;
     // tokens will be stored in order
     private int[] tokens;
     private float[] freqs;
-    private int current = -1;
 
     public SparseVector(BytesRef bytesRef) throws IOException {
         this(readToMap(bytesRef));
@@ -65,12 +66,9 @@ public class SparseVector implements Iterator<SparseVector.Item> {
             );
             ObjectInputStream objectInputStream = new ObjectInputStream(bais)
         ) {
-            int available = bais.available();
             while (bais.available() > 0) {
                 String key = (String) objectInputStream.readObject();
-                available = bais.available();
                 float value = objectInputStream.readFloat();
-                available = bais.available();
                 map.put(key, value);
             }
         } catch (Exception e) {
@@ -159,23 +157,29 @@ public class SparseVector implements Iterator<SparseVector.Item> {
         return score;
     }
 
-    @Override
-    public boolean hasNext() {
-        return this.size > 0 && this.current + 1 < this.size;
-    }
+    public IteratorWrapper<Item> iterator() {
+        return new IteratorWrapper<>(new Iterator<>() {
+            private int current = -1;
 
-    @Override
-    public Item next() {
-        ++this.current;
-        return Item.of(this.tokens[this.current], this.freqs[this.current]);
-    }
+            @Override
+            public boolean hasNext() {
+                return current + 1 < size;
+            }
 
-    public void reset() {
-        this.current = -1;
+            @Override
+            public Item next() {
+                if (!hasNext()) {
+                    return null;
+                }
+                ++current;
+                return new Item(tokens[current], freqs[current]);
+            }
+        });
     }
 
     @AllArgsConstructor
     @Getter
+    @EqualsAndHashCode
     public static class Item {
         int token;
         float freq;
@@ -183,43 +187,5 @@ public class SparseVector implements Iterator<SparseVector.Item> {
         static Item of(int token, float freq) {
             return new Item(token, freq);
         }
-    }
-
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < this.size; ++i) {
-            sb.append(this.tokens[i]).append(":").append(this.freqs[i]).append(" ");
-        }
-        return sb.toString();
-    }
-
-    @Override
-    public int hashCode() {
-        long result = 0;
-        for (int i = 0; i < this.size; ++i) {
-            result += (long) (this.tokens[i] * this.freqs[i]);
-        }
-        return (int) result;
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (obj == null) {
-            return false;
-        }
-        if (obj instanceof SparseVector) {
-            SparseVector vector = (SparseVector) obj;
-            if (this.size != vector.size) {
-                return false;
-            }
-            for (int i = 0; i < this.size; ++i) {
-                if (this.tokens[i] != vector.tokens[i] || this.freqs[i] != vector.freqs[i]) {
-                    return false;
-                }
-            }
-            return true;
-        }
-        return false;
     }
 }

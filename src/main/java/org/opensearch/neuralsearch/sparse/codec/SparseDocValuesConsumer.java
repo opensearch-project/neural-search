@@ -48,8 +48,14 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
 
     private void addBinary(FieldInfo field, DocValuesProducer valuesProducer, boolean isMerge) throws IOException {
         if (isMerge) {
+            if (!(valuesProducer instanceof SparseDocValuesReader)) {
+                return;
+            }
             SparseDocValuesReader reader = (SparseDocValuesReader) valuesProducer;
             for (DocValuesProducer producer : reader.getMergeState().docValuesProducers) {
+                if (!(producer instanceof SparseDocValuesProducer)) {
+                    continue;
+                }
                 SparseDocValuesProducer sparseDocValuesProducer = (SparseDocValuesProducer) producer;
                 InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(sparseDocValuesProducer.getState().segmentInfo, field);
                 SparseVectorForwardIndex.removeIndex(key);

@@ -86,7 +86,9 @@ public class SparseTerms extends Terms {
 
         SparseTermsEnum() {
             terms = reader.getTerms();
-            termIterator = terms.iterator();
+            if (terms != null) {
+                termIterator = terms.iterator();
+            }
         }
 
         @Override

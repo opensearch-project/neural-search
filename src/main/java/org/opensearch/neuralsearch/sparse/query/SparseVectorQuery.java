@@ -14,7 +14,6 @@ import org.apache.lucene.search.Weight;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
 
 import java.io.IOException;
-import java.util.List;
 
 /**
  * A new query type for "sparse_ann" query. It vends a customized weight and scorer so that it can utilize
@@ -24,14 +23,14 @@ import java.util.List;
 public class SparseVectorQuery extends Query {
 
     private final SparseVector queryVector;
-    private final List<String> tokens;
+    private final SparseQueryContext queryContext;
     private final String fieldName;
 
     @Builder
-    public SparseVectorQuery(SparseVector queryVector, String fieldName, List<String> tokens) {
+    public SparseVectorQuery(SparseVector queryVector, String fieldName, SparseQueryContext queryContext) {
         this.queryVector = queryVector;
         this.fieldName = fieldName;
-        this.tokens = tokens;
+        this.queryContext = queryContext;
     }
 
     @Override
