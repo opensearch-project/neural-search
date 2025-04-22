@@ -5,14 +5,20 @@
 package org.opensearch.neuralsearch.processor;
 
 import java.util.Collections;
+
+import org.apache.lucene.search.TopFieldDocs;
+import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.TotalHits;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.FieldDoc;
+import org.apache.lucene.search.SortField;
+import org.apache.lucene.search.Sort;
+import org.apache.lucene.util.BytesRef;
 import org.opensearch.neuralsearch.processor.combination.CombineScoresDto;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 
 import java.util.List;
 
-import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.search.TotalHits;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.test.OpenSearchTestCase;
@@ -104,5 +110,102 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
         assertEquals(9, queryTopDocs.get(1).getScoreDocs().get(3).doc);
 
         assertEquals(0, queryTopDocs.get(2).getScoreDocs().size());
+    }
+
+    public void testCombination_whenMultipleSubqueriesWithSortingEnabled_thenScoresNull() {
+        ScoreCombiner scoreCombiner = new ScoreCombiner();
+
+        // Create sort fields for documents
+        Object[] sortFields1 = new Object[] { new BytesRef("value1") };
+        Object[] sortFields2 = new Object[] { new BytesRef("value2") };
+        Object[] sortFields3 = new Object[] { new BytesRef("value3") };
+        Object[] sortFields4 = new Object[] { new BytesRef("value4") };
+        // Define the sort field
+        SortField[] sortFields = new SortField[] { new SortField("_id", SortField.Type.STRING, true) };
+        Sort sort = new Sort(sortFields);
+
+        final List<CompoundTopDocs> queryTopDocs = List.of(
+            new CompoundTopDocs(
+                new TotalHits(5, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopFieldDocs(
+                        new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                        new FieldDoc[] {
+                            new FieldDoc(1, 0.5f, sortFields1),
+                            new FieldDoc(2, 0.3f, sortFields2),
+                            new FieldDoc(4, 0.1f, sortFields3) },
+                        sortFields
+                    ),
+                    new TopFieldDocs(
+                        new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                        new FieldDoc[] { new FieldDoc(3, 0.2f, sortFields2), new FieldDoc(5, Float.NaN, sortFields4) },
+                        sortFields
+                    )
+                ),
+                true,  // isSortEnabled set to true
+                SEARCH_SHARD
+            ),
+            new CompoundTopDocs(
+                new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopFieldDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new FieldDoc[0], sortFields),
+                    new TopFieldDocs(
+                        new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+                        new FieldDoc[] {
+                            new FieldDoc(2, 0.5f, sortFields1),
+                            new FieldDoc(4, 1.0f, sortFields2),
+                            new FieldDoc(7, 0.3f, sortFields3),
+                            new FieldDoc(9, 0.2f, sortFields4) },
+                        sortFields
+                    )
+                ),
+                true,
+                SEARCH_SHARD
+            )
+        );
+
+        scoreCombiner.combineScores(
+            CombineScoresDto.builder()
+                .queryTopDocs(queryTopDocs)
+                .scoreCombinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+                .querySearchResults(Collections.emptyList())
+                .sort(sort)
+                .isSingleShard(true)
+                .build()
+        );
+
+        // Verify results
+        assertNotNull(queryTopDocs);
+        assertEquals(2, queryTopDocs.size());
+
+        // First CompoundTopDocs assertions
+        assertEquals(5, queryTopDocs.get(0).getScoreDocs().size());
+        assertTrue(queryTopDocs.get(0).getScoreDocs().get(0) instanceof ScoreDoc);
+        ScoreDoc firstDoc = queryTopDocs.get(0).getScoreDocs().get(0);
+        assertEquals(Float.NaN, firstDoc.score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(3, firstDoc.doc);
+
+        // Second CompoundTopDocs assertions
+        assertEquals(4, queryTopDocs.get(1).getScoreDocs().size());
+        assertTrue(queryTopDocs.get(1).getScoreDocs().get(0) instanceof ScoreDoc);
+        ScoreDoc secondDoc = queryTopDocs.get(1).getScoreDocs().get(0);
+        assertEquals(Float.NaN, secondDoc.score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(2, secondDoc.doc);
+
+        // Verify sort fields are preserved
+        for (CompoundTopDocs compoundTopDocs : queryTopDocs) {
+            for (TopDocs topDocs : compoundTopDocs.getTopDocs()) {
+                if (topDocs instanceof TopFieldDocs) {
+                    TopFieldDocs topFieldDocs = (TopFieldDocs) topDocs;
+                    assertArrayEquals(sortFields, topFieldDocs.fields);
+                } else {
+                    fail(
+                        "Expected TopFieldDocs but found "
+                            + topDocs.getClass().getSimpleName()
+                            + ". All TopDocs should be TopFieldDocs when sorting is enabled"
+                    );
+                }
+            }
+        }
     }
 }
