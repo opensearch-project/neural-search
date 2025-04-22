@@ -40,6 +40,7 @@ public class PostingWithClustersScorer extends Scorer {
     private final String fieldName;
     private final List<String> queryTokens;
     private final SparseVector queryVector;
+    private final float[] queryDenseVector;
     // The heap to maintain docId and its similarity score with query
     private final PriorityQueue<Pair<Integer, Float>> scoreHeap = new PriorityQueue<>((a, b) -> Float.compare(a.getRight(), b.getRight()));
     private final static int MAX_QUEUE_SIZE = 100;
@@ -61,6 +62,7 @@ public class PostingWithClustersScorer extends Scorer {
         this.queryTokens = queryTokens;
         this.fieldName = fieldName;
         this.queryVector = queryVector;
+        this.queryDenseVector = queryVector.toDenseVector();
         this.visitedDocId = new LongBitSet(context.reader().maxDoc());
         this.acceptedDocs = acceptedDocs;
         initialize(context.reader());
@@ -141,7 +143,7 @@ public class PostingWithClustersScorer extends Scorer {
                     }
                     visitedDocId.set(docId);
                     SparseVector doc = reader.readSparseVector(docId);
-                    score = doc.dotProduct(queryVector);
+                    score = doc.dotProduct(queryDenseVector);
                     addToHeap(Pair.of(docId, score));
                     return docId;
                 }
@@ -218,7 +220,7 @@ public class PostingWithClustersScorer extends Scorer {
                     // check dot product between cluster summary and query vector
                     while (cluster != null) {
                         assert cluster.getSummary() != null;
-                        float score = cluster.getSummary().dotProduct(queryVector);
+                        float score = cluster.getSummary().dotProduct(queryDenseVector);
                         if (scoreHeap.size() == MAX_QUEUE_SIZE && score < scoreHeap.peek().getRight() / HEAP_FACTOR) {
                             cluster = clusterIter.next();
                         } else {
