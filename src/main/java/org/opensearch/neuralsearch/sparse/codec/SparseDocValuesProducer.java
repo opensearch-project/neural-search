@@ -17,6 +17,9 @@ import org.apache.lucene.index.SortedSetDocValues;
 
 import java.io.IOException;
 
+/**
+ *
+ */
 public class SparseDocValuesProducer extends DocValuesProducer {
     private final DocValuesProducer delegate;
     @Getter

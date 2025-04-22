@@ -11,6 +11,9 @@ import org.opensearch.common.settings.Setting;
 import static org.opensearch.common.settings.Setting.Property.Final;
 import static org.opensearch.common.settings.Setting.Property.IndexScope;
 
+/**
+ * It holds index settings of a sparse vector index.
+ */
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class SparseSettings {
     public static final String SPARSE_INDEX = "index.sparse";

@@ -12,6 +12,9 @@ import org.apache.lucene.index.SegmentWriteState;
 
 import java.io.IOException;
 
+/**
+ * SparseDocValuesFormat is used to encode and decode sparse vector related data structures.
+ */
 public class SparseDocValuesFormat extends DocValuesFormat {
     private final DocValuesFormat delegate;
 

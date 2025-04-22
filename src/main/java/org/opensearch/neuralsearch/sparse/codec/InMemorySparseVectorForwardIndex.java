@@ -5,17 +5,21 @@
 package org.opensearch.neuralsearch.sparse.codec;
 
 import org.apache.lucene.util.BytesRef;
+import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
 
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * InMemorySparseVectorForwardIndex is used to store/read sparse vector in memory
+ */
 public class InMemorySparseVectorForwardIndex implements SparseVectorForwardIndex {
 
-    private static Map<IndexKey, InMemorySparseVectorForwardIndex> forwardIndexMap = new HashMap<>();
+    private static Map<InMemoryKey.IndexKey, InMemorySparseVectorForwardIndex> forwardIndexMap = new HashMap<>();
 
-    public static InMemorySparseVectorForwardIndex getOrCreate(IndexKey key) {
+    public static InMemorySparseVectorForwardIndex getOrCreate(InMemoryKey.IndexKey key) {
         if (forwardIndexMap.containsKey(key)) {
             return forwardIndexMap.get(key);
         }
@@ -24,7 +28,7 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
         return inMemorySparseVectorForwardIndex;
     }
 
-    public static void removeIndex(IndexKey key) {
+    public static void removeIndex(InMemoryKey.IndexKey key) {
         forwardIndexMap.remove(key);
     }
 
@@ -74,8 +78,6 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
         }
 
         @Override
-        public void close() {
-            throw new UnsupportedOperationException();
-        }
+        public void close() {}
     }
 }

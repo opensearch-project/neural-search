@@ -17,6 +17,9 @@ import org.opensearch.search.lookup.SearchLookup;
 import java.util.Collections;
 import java.util.function.Supplier;
 
+/**
+ * SparseTokensFieldType is responsible for handling sparse tokens field type
+ */
 @Getter
 public class SparseTokensFieldType extends MappedFieldType {
     private final SparseMethodContext sparseMethodContext;

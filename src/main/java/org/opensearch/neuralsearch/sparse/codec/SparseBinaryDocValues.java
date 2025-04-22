@@ -11,6 +11,9 @@ import org.apache.lucene.util.BytesRef;
 
 import java.io.IOException;
 
+/**
+ * This is a customized BinaryDocValues for sparse vector. It is used to merge doc values from multiple segments.
+ */
 public class SparseBinaryDocValues extends BinaryDocValues {
     private DocIDMerger<BinaryDocValuesSub> docIDMerger;
 

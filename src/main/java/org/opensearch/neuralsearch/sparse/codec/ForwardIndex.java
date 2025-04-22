@@ -8,6 +8,9 @@ import org.apache.lucene.util.BytesRef;
 
 import java.io.IOException;
 
+/**
+ * An interface for forward index. It provides a reader and writer to read and write document.
+ */
 public interface ForwardIndex {
     ForwardIndexReader getForwardIndexReader();
 

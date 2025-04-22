@@ -17,6 +17,10 @@ import org.opensearch.index.mapper.MapperParsingException;
 import java.io.IOException;
 import java.util.Map;
 
+/**
+ * SparseMethodContext is responsible for handling the parameters of sparse method.
+ * It will be used to initialize SparseEncodingQueryBuilder
+ */
 @AllArgsConstructor(access = AccessLevel.PACKAGE)
 @Getter
 public class SparseMethodContext implements ToXContentFragment, Writeable {
