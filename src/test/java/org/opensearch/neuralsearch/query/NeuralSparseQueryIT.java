@@ -100,6 +100,24 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
             assertEquals("1", firstInnerHit.get("_id"));
             float expectedScore = 2 * computeExpectedScore(testRankFeaturesDoc, Map.of("hello", 1f, "world", 1f, "a", 1f, "b", 1f));
             assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
+
+            sparseEncodingQueryBuilder.analyzer("bert-uncased");
+            Map<String, Object> searchResponseAsMap2 = search(TEST_BASIC_INDEX_NAME, sparseEncodingQueryBuilder, 1);
+            Map<String, Object> firstInnerHit2 = getFirstInnerHit(searchResponseAsMap2);
+            expectedScore = 2 * computeExpectedScore(
+                testRankFeaturesDoc,
+                Map.of("hello", 6.937756538391113f, "world", 3.4208686351776123f, "a", 0.4022789001464844f, "b", 3.7727110385894775f)
+            );
+            assertEquals(expectedScore, objectToFloat(firstInnerHit2.get("_score")), DELTA);
+
+            sparseEncodingQueryBuilder.analyzer("mbert-uncased");
+            Map<String, Object> searchResponseAsMap3 = search(TEST_BASIC_INDEX_NAME, sparseEncodingQueryBuilder, 1);
+            Map<String, Object> firstInnerHit3 = getFirstInnerHit(searchResponseAsMap3);
+            expectedScore = 2 * computeExpectedScore(
+                testRankFeaturesDoc,
+                Map.of("hello", 3.848525285720825f, "world", 1.5188000202178955f, "a", 1.054316759109497f, "b", 2.0035440921783447f)
+            );
+            assertEquals(expectedScore, objectToFloat(firstInnerHit3.get("_score")), DELTA);
         } finally {
             wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, null, null);
         }
