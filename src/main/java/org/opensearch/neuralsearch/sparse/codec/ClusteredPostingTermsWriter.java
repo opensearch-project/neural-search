@@ -14,6 +14,7 @@ import org.apache.lucene.util.FixedBitSet;
 import org.opensearch.neuralsearch.sparse.algorithm.KMeansPlusPlus;
 import org.opensearch.neuralsearch.sparse.algorithm.PostingClustering;
 import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
+import org.opensearch.neuralsearch.sparse.mapper.SparseMethodContext;
 
 import java.io.IOException;
 
@@ -23,17 +24,18 @@ import java.io.IOException;
 public class ClusteredPostingTermsWriter {
     private final PostingsWriterBase postingsWriter;
     private final FixedBitSet docsSeen;
-    private static final int DEFAULT_LAMBDA = 20;
-    private static final int DEFAULT_BETA = 2;
 
     public ClusteredPostingTermsWriter(SegmentWriteState state, FieldInfo fieldInfo) {
         super();
         InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(state.segmentInfo, fieldInfo);
         SparseVectorForwardIndex index = SparseVectorForwardIndex.getOrCreate(key);
+        int beta = Integer.parseInt(fieldInfo.attributes().get(SparseMethodContext.BETA_FIELD));
+        int lambda = Integer.parseInt(fieldInfo.attributes().get(SparseMethodContext.LAMBDA_FIELD));
+        float alpha = Float.parseFloat(fieldInfo.attributes().get(SparseMethodContext.ALPHA_FIELD));
         this.postingsWriter = new InMemoryClusteredPosting.InMemoryClusteredPostingWriter(
             key,
             fieldInfo,
-            new PostingClustering(DEFAULT_LAMBDA, new KMeansPlusPlus(DEFAULT_BETA, index.getForwardIndexReader()))
+            new PostingClustering(lambda, new KMeansPlusPlus(alpha, beta, (docId) -> index.getForwardIndexReader().readSparseVector(docId)))
         );
         this.docsSeen = new FixedBitSet(state.segmentInfo.maxDoc());
     }

@@ -36,7 +36,7 @@ public class SparseQueryWeight extends Weight {
         final SparseVectorQuery query = (SparseVectorQuery) parentQuery;
         final Scorer scorer = new PostingWithClustersScorer(
             query.getFieldName(),
-            query.getTokens(),
+            query.getQueryContext(),
             query.getQueryVector(),
             context,
             context.reader().getLiveDocs()

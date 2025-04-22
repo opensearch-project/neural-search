@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.sparse.algorithm;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 import org.opensearch.neuralsearch.sparse.common.DocFreq;
@@ -20,6 +21,7 @@ import java.util.List;
  */
 @Getter
 @Setter
+@EqualsAndHashCode
 public class DocumentCluster {
     private SparseVector summary;
     private final List<DocFreq> docs;

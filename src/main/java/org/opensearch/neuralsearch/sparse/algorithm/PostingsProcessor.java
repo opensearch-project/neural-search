@@ -5,14 +5,17 @@
 package org.opensearch.neuralsearch.sparse.algorithm;
 
 import org.apache.lucene.search.DocIdSetIterator;
-import org.opensearch.neuralsearch.sparse.codec.SparseVectorForwardIndex;
 import org.opensearch.neuralsearch.sparse.common.DocFreq;
+import org.opensearch.neuralsearch.sparse.common.DocFreqIterator;
+import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
+import org.opensearch.neuralsearch.sparse.common.SparseVectorReader;
 
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * This is a utility class for processing postings. It is used by the clustering algorithm to sort and prune postings.
@@ -27,27 +30,30 @@ public class PostingsProcessor {
         return postings.subList(0, Math.min(postings.size(), size));
     }
 
-    public static void summarize(DocumentCluster cluster, SparseVectorForwardIndex.SparseVectorForwardIndexReader reader, float alpha)
-        throws IOException {
+    public static void summarize(DocumentCluster cluster, SparseVectorReader reader, float alpha) throws IOException {
         Map<Integer, Float> summary = new HashMap<>();
-        while (cluster.getDisi().docID() != DocIdSetIterator.NO_MORE_DOCS) {
-            int docId = cluster.getDisi().docID();
-            SparseVector vector = reader.readSparseVector(docId);
-            while (vector.hasNext()) {
-                SparseVector.Item item = vector.next();
-                if (!summary.containsKey(item.getToken())) {
-                    summary.put(item.getToken(), item.getFreq());
-                } else {
-                    summary.put(item.getToken(), summary.get(item.getToken()) + item.getFreq());
+        DocFreqIterator iterator = cluster.getDisi();
+        while (iterator.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
+            int docId = iterator.docID();
+            SparseVector vector = reader.read(docId);
+            if (vector != null) {
+                IteratorWrapper<SparseVector.Item> vectorIterator = vector.iterator();
+                while (vectorIterator.hasNext()) {
+                    SparseVector.Item item = vectorIterator.next();
+                    if (!summary.containsKey(item.getToken())) {
+                        summary.put(item.getToken(), item.getFreq());
+                    } else {
+                        summary.put(item.getToken(), summary.get(item.getToken()) + item.getFreq());
+                    }
                 }
             }
-            cluster.getDisi().nextDoc();
         }
         // convert summary to a SparseVector
         List<SparseVector.Item> items = summary.entrySet()
             .stream()
             .map(entry -> new SparseVector.Item(entry.getKey(), entry.getValue()))
-            .toList();
+            .collect(Collectors.toList());
+        ;
         items.sort((o1, o2) -> o2.getToken() - o1.getToken());
         // count total freq of items
         double totalFreq = items.stream().mapToDouble(SparseVector.Item::getFreq).sum();

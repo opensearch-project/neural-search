@@ -68,6 +68,9 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
     static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
     @VisibleForTesting
     static final ParseField CUT_FIELD = new ParseField("cut");
+    @VisibleForTesting
+    static final ParseField TOP_K_FIELD = new ParseField("k");
+
     // We use max_token_score field to help WAND scorer prune query clause in lucene 9.7. But in lucene 9.8 the inner
     // logics change, this field is not needed any more.
     @VisibleForTesting
@@ -80,8 +83,10 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
     private Float maxTokenScore;
     private Supplier<Map<String, Float>> queryTokensSupplier;
     private Integer queryCut;
+    private Integer k;
 
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
+    private static final int DEFAULT_TOP_K = 10;
 
     public static void initialize(MLCommonsClientAccessor mlClient) {
         SparseAnnQueryBuilder.ML_CLIENT = mlClient;
@@ -155,6 +160,9 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         }
         if (Objects.nonNull(queryCut)) {
             xContentBuilder.field(CUT_FIELD.getPreferredName(), queryCut);
+        }
+        if (Objects.nonNull(k)) {
+            xContentBuilder.field(TOP_K_FIELD.getPreferredName(), k);
         }
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
@@ -262,6 +270,8 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
                     sparseAnnQueryBuilder.maxTokenScore(parser.floatValue());
                 } else if (CUT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     sparseAnnQueryBuilder.queryCut(parser.intValue());
+                } else if (TOP_K_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    sparseAnnQueryBuilder.k(parser.intValue());
                 } else {
                     throw new ParsingException(
                         parser.getTokenLocation(),
@@ -334,8 +344,13 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
             .map(Map.Entry::getKey)
             .toList();
 
+        SparseQueryContext sparseQueryContext = SparseQueryContext.builder()
+            .tokens(topTokens)
+            .heapFactor(0.4f)
+            .k((k == null || k == 0) ? DEFAULT_TOP_K : k)
+            .build();
         SparseVectorQuery.SparseVectorQueryBuilder builder = new SparseVectorQuery.SparseVectorQueryBuilder();
-        builder.fieldName(fieldName).tokens(topTokens).queryVector(new SparseVector(queryTokens));
+        builder.fieldName(fieldName).queryContext(sparseQueryContext).queryVector(new SparseVector(queryTokens));
         return builder.build();
     }
 

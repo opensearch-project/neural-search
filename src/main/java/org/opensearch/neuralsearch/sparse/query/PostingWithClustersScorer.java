@@ -38,13 +38,11 @@ import java.util.PriorityQueue;
 public class PostingWithClustersScorer extends Scorer {
 
     private final String fieldName;
-    private final List<String> queryTokens;
+    private final SparseQueryContext sparseQueryContext;
     private final SparseVector queryVector;
     private final float[] queryDenseVector;
     // The heap to maintain docId and its similarity score with query
     private final PriorityQueue<Pair<Integer, Float>> scoreHeap = new PriorityQueue<>((a, b) -> Float.compare(a.getRight(), b.getRight()));
-    private final static int MAX_QUEUE_SIZE = 100;
-    private final static float HEAP_FACTOR = 1.0f;
     private final LongBitSet visitedDocId;
     private SparseVectorForwardIndex.SparseVectorForwardIndexReader reader;
     private List<Scorer> subScorers = new ArrayList<>();
@@ -54,12 +52,12 @@ public class PostingWithClustersScorer extends Scorer {
 
     public PostingWithClustersScorer(
         String fieldName,
-        List<String> queryTokens,
+        SparseQueryContext sparseQueryContext,
         SparseVector queryVector,
         LeafReaderContext context,
         Bits acceptedDocs
     ) throws IOException {
-        this.queryTokens = queryTokens;
+        this.sparseQueryContext = sparseQueryContext;
         this.fieldName = fieldName;
         this.queryVector = queryVector;
         this.queryDenseVector = queryVector.toDenseVector();
@@ -70,8 +68,9 @@ public class PostingWithClustersScorer extends Scorer {
 
     private void initialize(LeafReader leafReader) throws IOException {
         terms = Terms.getTerms(leafReader, fieldName);
+        assert terms != null : "Terms must not be null";
         BinaryDocValues docValues = leafReader.getBinaryDocValues(fieldName);
-        for (String token : queryTokens) {
+        for (String token : sparseQueryContext.getTokens()) {
             TermsEnum termsEnum = terms.iterator();
             BytesRef term = new BytesRef(token);
             if (!termsEnum.seekExact(term)) {
@@ -89,7 +88,7 @@ public class PostingWithClustersScorer extends Scorer {
     }
 
     private boolean isHeapFull() {
-        return scoreHeap.size() == MAX_QUEUE_SIZE;
+        return scoreHeap.size() == sparseQueryContext.getK();
     }
 
     private void addToHeap(Pair<Integer, Float> pair) {
@@ -172,14 +171,10 @@ public class PostingWithClustersScorer extends Scorer {
     }
 
     class SingleScorer extends Scorer {
-        private final SparsePostingsEnum postingsEnum;
-        private final BytesRef term;
         private IteratorWrapper<DocumentCluster> clusterIter;
         private DocFreqIterator docs = null;
 
         public SingleScorer(SparsePostingsEnum postingsEnum, BytesRef term) throws IOException {
-            this.postingsEnum = postingsEnum;
-            this.term = term;
             clusterIter = postingsEnum.clusterIterator();
         }
 
@@ -221,7 +216,8 @@ public class PostingWithClustersScorer extends Scorer {
                     while (cluster != null) {
                         assert cluster.getSummary() != null;
                         float score = cluster.getSummary().dotProduct(queryDenseVector);
-                        if (scoreHeap.size() == MAX_QUEUE_SIZE && score < scoreHeap.peek().getRight() / HEAP_FACTOR) {
+                        if (scoreHeap.size() == sparseQueryContext.getK()
+                            && score < scoreHeap.peek().getRight() / sparseQueryContext.getHeapFactor()) {
                             cluster = clusterIter.next();
                         } else {
                             docs = cluster.getDisi();

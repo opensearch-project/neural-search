@@ -5,9 +5,9 @@
 package org.opensearch.neuralsearch.sparse.algorithm;
 
 import lombok.AllArgsConstructor;
-import org.opensearch.neuralsearch.sparse.codec.SparseVectorForwardIndex;
 import org.opensearch.neuralsearch.sparse.common.DocFreq;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
+import org.opensearch.neuralsearch.sparse.common.SparseVectorReader;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -19,8 +19,9 @@ import java.util.Random;
  */
 @AllArgsConstructor
 public class KMeansPlusPlus implements Clustering {
+    private final float alpha;
     private final int beta;
-    private final SparseVectorForwardIndex.SparseVectorForwardIndexReader reader;
+    private final SparseVectorReader reader;
 
     @Override
     public List<DocumentCluster> cluster(List<DocFreq> docFreqs) throws IOException {
@@ -37,8 +38,8 @@ public class KMeansPlusPlus implements Clustering {
             int centerIdx = 0;
             float maxScore = Float.MIN_VALUE;
             for (int i = 0; i < beta; i++) {
-                SparseVector center = reader.readSparseVector(centers[i]);
-                SparseVector docVector = reader.readSparseVector(docFreq.getDocID());
+                SparseVector center = reader.read(centers[i]);
+                SparseVector docVector = reader.read(docFreq.getDocID());
                 float score = Float.MIN_VALUE;
                 if (center != null && docVector != null) {
                     score = center.dotProduct(docVector);
@@ -54,7 +55,7 @@ public class KMeansPlusPlus implements Clustering {
         for (int i = 0; i < beta; ++i) {
             if (docAssignments.get(i).isEmpty()) continue;
             DocumentCluster cluster = new DocumentCluster(null, docAssignments.get(i), false);
-            PostingsProcessor.summarize(cluster, this.reader, 0.4f);
+            PostingsProcessor.summarize(cluster, this.reader, this.alpha);
             clusters.add(cluster);
         }
         return clusters;

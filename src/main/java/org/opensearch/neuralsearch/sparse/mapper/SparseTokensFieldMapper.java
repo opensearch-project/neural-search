@@ -52,9 +52,11 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
         this.hasDocValues = hasDocValues;
         this.fieldType = new FieldType(Defaults.FIELD_TYPE);
         this.fieldType.setDocValuesType(DocValuesType.BINARY);
+        setFieldTypeAttributes(this.fieldType, sparseMethodContext);
         this.fieldType.freeze();
 
         this.tokenFieldType = new FieldType(Defaults.TOKEN_FIELD_TYPE);
+        setFieldTypeAttributes(this.tokenFieldType, sparseMethodContext);
         this.tokenFieldType.freeze();
     }
 
@@ -168,6 +170,8 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
                         );
                     }
                     FeatureField featureField = new FeatureField(name(), feature, value);// this.tokenFieldType);
+                    setFieldTypeAttributes((FieldType) featureField.fieldType(), sparseMethodContext);
+
                     context.doc().addWithKey(key, featureField);
                     oos.writeObject(feature);
                     oos.writeFloat(value);
@@ -184,6 +188,12 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
             oos.flush();
             context.doc().add(new SparseTokensField(name(), baos.toByteArray(), fieldType));
         }
+    }
+
+    private void setFieldTypeAttributes(FieldType fieldType, SparseMethodContext sparseMethodContext) {
+        fieldType.putAttribute(SparseMethodContext.LAMBDA_FIELD, String.valueOf(sparseMethodContext.getLambda()));
+        fieldType.putAttribute(SparseMethodContext.ALPHA_FIELD, String.valueOf(sparseMethodContext.getAlpha()));
+        fieldType.putAttribute(SparseMethodContext.BETA_FIELD, String.valueOf(sparseMethodContext.getBeta()));
     }
 
     public static class Defaults {
