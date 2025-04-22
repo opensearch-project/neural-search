@@ -72,14 +72,16 @@ public class ScoreCombiner {
         // multiple sub queries, doc ids may repeat for each sub query results
         ScoreCombinationTechnique scoreCombinationTechnique = combineScoresDTO.getScoreCombinationTechnique();
         Sort sort = combineScoresDTO.getSort();
+        boolean isSingleShard = combineScoresDTO.isSingleShard();
         combineScoresDTO.getQueryTopDocs()
-            .forEach(compoundQueryTopDocs -> combineShardScores(scoreCombinationTechnique, compoundQueryTopDocs, sort));
+            .forEach(compoundQueryTopDocs -> combineShardScores(scoreCombinationTechnique, compoundQueryTopDocs, sort, isSingleShard));
     }
 
     private void combineShardScores(
         final ScoreCombinationTechnique scoreCombinationTechnique,
         final CompoundTopDocs compoundQueryTopDocs,
-        final Sort sort
+        final Sort sort,
+        final boolean isSingleShard
     ) {
         if (Objects.isNull(compoundQueryTopDocs) || compoundQueryTopDocs.getTotalHits().value() == 0) {
             return;
@@ -106,7 +108,8 @@ public class ScoreCombiner {
             combinedNormalizedScoresByDocId,
             sortedDocsIds,
             getDocIdSortFieldsMap(compoundQueryTopDocs, combinedNormalizedScoresByDocId, sort),
-            sort != null
+            sort,
+            isSingleShard
         );
     }
 
@@ -225,8 +228,10 @@ public class ScoreCombiner {
         final Collection<Integer> sortedScores,
         final long maxHits,
         final Map<Integer, Object[]> docIdSortFieldMap,
-        boolean isSortingEnabled
+        final Sort sort,
+        final boolean isSingleShard
     ) {
+
         // ShardId will be -1 when index has multiple shards
         int shardId = -1;
         // ShardId will not be -1 in when index has single shard because Fetch phase gets executed before Normalization
@@ -239,19 +244,26 @@ public class ScoreCombiner {
             if (hitCount == maxHits) {
                 break;
             }
-            scoreDocs.add(getScoreDoc(isSortingEnabled, docId, shardId, combinedNormalizedScoresByDocId, docIdSortFieldMap));
+            scoreDocs.add(getScoreDoc(sort, docId, shardId, combinedNormalizedScoresByDocId, docIdSortFieldMap, isSingleShard));
             hitCount++;
         }
         return scoreDocs;
     }
 
     private ScoreDoc getScoreDoc(
-        final boolean isSortEnabled,
+        final Sort sort,
         final int docId,
         final int shardId,
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
-        final Map<Integer, Object[]> docIdSortFieldMap
+        final Map<Integer, Object[]> docIdSortFieldMap,
+        final boolean isSingleShard
     ) {
+        final boolean isSortEnabled = sort != null;
+        final boolean isSortByScore = isSortOrderByScore(sort);
+        // Case when sort is enabled on single shard and sorting is not done on score field
+        if (isSortEnabled && isSortByScore == false && isSingleShard) {
+            return new FieldDoc(docId, Float.NaN, docIdSortFieldMap.get(docId), shardId);
+        }
         if (isSortEnabled && docIdSortFieldMap != null) {
             return new FieldDoc(docId, combinedNormalizedScoresByDocId.get(docId), docIdSortFieldMap.get(docId), shardId);
         }
@@ -289,7 +301,8 @@ public class ScoreCombiner {
         final Map<Integer, Float> combinedNormalizedScoresByDocId,
         final Collection<Integer> sortedScores,
         Map<Integer, Object[]> docIdSortFieldMap,
-        boolean isSortingEnabled
+        final Sort sort,
+        final boolean isSingleShard
     ) {
         // - max number of hits will be the same which are passed from QueryPhase
         long maxHits = compoundQueryTopDocs.getTotalHits().value();
@@ -301,7 +314,8 @@ public class ScoreCombiner {
                 sortedScores,
                 maxHits,
                 docIdSortFieldMap,
-                isSortingEnabled
+                sort,
+                isSingleShard
             )
         );
         compoundQueryTopDocs.setTotalHits(getTotalHits(topDocsPerSubQuery, maxHits));
