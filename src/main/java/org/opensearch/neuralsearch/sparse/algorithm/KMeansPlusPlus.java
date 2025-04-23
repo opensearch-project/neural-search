@@ -28,9 +28,10 @@ public class KMeansPlusPlus implements Clustering {
         int size = docFreqs.size();
         // generate beta unique random centers
         Random random = new Random();
-        int[] centers = random.ints(0, size).distinct().limit(beta).toArray();
-        List<List<DocFreq>> docAssignments = new ArrayList<>(beta);
-        for (int i = 0; i < beta; i++) {
+        int num_cluster = Math.min(beta, size);
+        int[] centers = random.ints(0, size).distinct().limit(num_cluster).toArray();
+        List<List<DocFreq>> docAssignments = new ArrayList<>(num_cluster);
+        for (int i = 0; i < num_cluster; i++) {
             docAssignments.add(new ArrayList<>());
         }
 
@@ -39,7 +40,7 @@ public class KMeansPlusPlus implements Clustering {
             float maxScore = Float.MIN_VALUE;
             SparseVector docVector = reader.read(docFreq.getDocID());
             if (docVector == null) continue;
-            for (int i = 0; i < beta; i++) {
+            for (int i = 0; i < num_cluster; i++) {
                 SparseVector center = reader.read(centers[i]);
                 float score = Float.MIN_VALUE;
                 if (center != null) {
@@ -53,7 +54,7 @@ public class KMeansPlusPlus implements Clustering {
             docAssignments.get(centerIdx).add(docFreq);
         }
         List<DocumentCluster> clusters = new ArrayList<>();
-        for (int i = 0; i < beta; ++i) {
+        for (int i = 0; i < num_cluster; ++i) {
             if (docAssignments.get(i).isEmpty()) continue;
             DocumentCluster cluster = new DocumentCluster(null, docAssignments.get(i), false);
             PostingsProcessor.summarize(cluster, this.reader, this.alpha);
