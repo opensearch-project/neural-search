@@ -21,6 +21,7 @@ import java.io.IOException;
  * PostingsEnum for sparse vector
  */
 public class SparsePostingsEnum extends PostingsEnum {
+    @Getter
     private final PostingClusters clusters;
     @Getter
     private final InMemoryKey.IndexKey indexKey;
@@ -36,6 +37,10 @@ public class SparsePostingsEnum extends PostingsEnum {
 
     public IteratorWrapper<DocumentCluster> clusterIterator() {
         return this.clusters.iterator();
+    }
+
+    public int size() {
+        return clusters.getSize();
     }
 
     @Override

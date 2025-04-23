@@ -36,6 +36,10 @@ public class DocumentCluster {
         this.shouldNotSkip = shouldNotSkip;
     }
 
+    public int size() {
+        return docs == null ? 0 : docs.size();
+    }
+
     public DocFreqIterator getDisi() {
         return new DocFreqIterator() {
             final IteratorWrapper<DocFreq> wrapper = new IteratorWrapper(docs.iterator());

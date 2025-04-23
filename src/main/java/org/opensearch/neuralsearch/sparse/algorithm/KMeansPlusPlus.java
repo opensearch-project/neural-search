@@ -37,11 +37,12 @@ public class KMeansPlusPlus implements Clustering {
         for (DocFreq docFreq : docFreqs) {
             int centerIdx = 0;
             float maxScore = Float.MIN_VALUE;
+            SparseVector docVector = reader.read(docFreq.getDocID());
+            if (docVector == null) continue;
             for (int i = 0; i < beta; i++) {
                 SparseVector center = reader.read(centers[i]);
-                SparseVector docVector = reader.read(docFreq.getDocID());
                 float score = Float.MIN_VALUE;
-                if (center != null && docVector != null) {
+                if (center != null) {
                     score = center.dotProduct(docVector);
                 }
                 if (score > maxScore) {

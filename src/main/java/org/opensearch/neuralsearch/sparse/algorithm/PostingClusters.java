@@ -15,9 +15,19 @@ import java.util.List;
 @Getter
 public class PostingClusters {
     private final List<DocumentCluster> clusters;
+    private final int size;
 
     public PostingClusters(List<DocumentCluster> clusters) {
         this.clusters = clusters;
+        if (clusters == null) {
+            size = 0;
+        } else {
+            int count = 0;
+            for (DocumentCluster cluster : clusters) {
+                count += cluster.size();
+            }
+            size = count;
+        }
     }
 
     public IteratorWrapper<DocumentCluster> iterator() {
