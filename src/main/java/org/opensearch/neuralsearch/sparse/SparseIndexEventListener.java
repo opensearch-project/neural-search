@@ -34,7 +34,6 @@ public class SparseIndexEventListener implements IndexEventListener {
                             InMemoryClusteredPosting.clearIndex(key);
                         }
                     }
-
                 }
             } catch (Exception e) {
                 throw new RuntimeException(e);

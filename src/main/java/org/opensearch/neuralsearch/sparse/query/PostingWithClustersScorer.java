@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.sparse.query;
 
+import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.LeafReader;
@@ -23,6 +24,7 @@ import org.opensearch.neuralsearch.sparse.codec.SparseVectorForwardIndex;
 import org.opensearch.neuralsearch.sparse.common.DocFreqIterator;
 import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
+import org.opensearch.neuralsearch.sparse.common.SparseVectorReader;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -35,6 +37,7 @@ import java.util.PriorityQueue;
  * only if heap.size >= k and score > (heap.peek() / heap_factor), we'll evaluate each doc in the cluster,
  * otherwise, we skip the whole cluster.
  */
+@Log4j2
 public class PostingWithClustersScorer extends Scorer {
 
     private final String fieldName;
@@ -44,7 +47,7 @@ public class PostingWithClustersScorer extends Scorer {
     // The heap to maintain docId and its similarity score with query
     private final PriorityQueue<Pair<Integer, Float>> scoreHeap = new PriorityQueue<>((a, b) -> Float.compare(a.getRight(), b.getRight()));
     private final LongBitSet visitedDocId;
-    private SparseVectorForwardIndex.SparseVectorForwardIndexReader reader;
+    private SparseVectorReader reader;
     private List<Scorer> subScorers = new ArrayList<>();
     private Terms terms;
     private float score;
@@ -55,7 +58,8 @@ public class PostingWithClustersScorer extends Scorer {
         SparseQueryContext sparseQueryContext,
         SparseVector queryVector,
         LeafReaderContext context,
-        Bits acceptedDocs
+        Bits acceptedDocs,
+        SparseVectorReader reader
     ) throws IOException {
         this.sparseQueryContext = sparseQueryContext;
         this.fieldName = fieldName;
@@ -63,6 +67,7 @@ public class PostingWithClustersScorer extends Scorer {
         this.queryDenseVector = queryVector.toDenseVector();
         this.visitedDocId = new LongBitSet(context.reader().maxDoc());
         this.acceptedDocs = acceptedDocs;
+        this.reader = reader;
         initialize(context.reader());
     }
 
@@ -79,8 +84,17 @@ public class PostingWithClustersScorer extends Scorer {
             PostingsEnum postingsEnum = termsEnum.postings(null, PostingsEnum.FREQS);
             if (postingsEnum instanceof SparsePostingsEnum) {
                 SparsePostingsEnum sparsePostingsEnum = (SparsePostingsEnum) postingsEnum;
+                log.info(
+                    "query token: {}, posting doc size: {}, cluster size: {}",
+                    token,
+                    sparsePostingsEnum.size(),
+                    sparsePostingsEnum.getClusters().getClusters().size()
+                );
                 if (null == reader) {
-                    reader = InMemorySparseVectorForwardIndex.getOrCreate(sparsePostingsEnum.getIndexKey()).getForwardIndexReader();
+                    SparseVectorForwardIndex.SparseVectorForwardIndexReader indexReader = InMemorySparseVectorForwardIndex.getOrCreate(
+                        sparsePostingsEnum.getIndexKey()
+                    ).getForwardIndexReader();
+                    reader = (docId) -> { return indexReader.readSparseVector(docId); };
                 }
                 subScorers.add(new SingleScorer(sparsePostingsEnum, term));
             }
@@ -141,7 +155,7 @@ public class PostingWithClustersScorer extends Scorer {
                         return nextDoc();
                     }
                     visitedDocId.set(docId);
-                    SparseVector doc = reader.readSparseVector(docId);
+                    SparseVector doc = reader.read(docId);
                     score = doc.dotProduct(queryDenseVector);
                     addToHeap(Pair.of(docId, score));
                     return docId;

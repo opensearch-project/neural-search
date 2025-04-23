@@ -71,16 +71,10 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
     @VisibleForTesting
     static final ParseField TOP_K_FIELD = new ParseField("k");
 
-    // We use max_token_score field to help WAND scorer prune query clause in lucene 9.7. But in lucene 9.8 the inner
-    // logics change, this field is not needed any more.
-    @VisibleForTesting
-    @Deprecated
-    static final ParseField MAX_TOKEN_SCORE_FIELD = new ParseField("max_token_score").withAllDeprecated();
     private static MLCommonsClientAccessor ML_CLIENT;
     private String fieldName;
     private String queryText;
     private String modelId;
-    private Float maxTokenScore;
     private Supplier<Map<String, Float>> queryTokensSupplier;
     private Integer queryCut;
     private Integer k;
@@ -107,7 +101,6 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         } else {
             this.modelId = in.readString();
         }
-        this.maxTokenScore = in.readOptionalFloat();
         if (in.readBoolean()) {
             Map<String, Float> queryTokens = in.readMap(StreamInput::readString, StreamInput::readFloat);
             this.queryTokensSupplier = () -> queryTokens;
@@ -133,7 +126,6 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         } else {
             out.writeString(StringUtils.defaultString(this.modelId, StringUtils.EMPTY));
         }
-        out.writeOptionalFloat(maxTokenScore);
         if (!Objects.isNull(this.queryTokensSupplier) && !Objects.isNull(this.queryTokensSupplier.get())) {
             out.writeBoolean(true);
             out.writeMap(this.queryTokensSupplier.get(), StreamOutput::writeString, StreamOutput::writeFloat);
@@ -151,9 +143,6 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         }
         if (Objects.nonNull(modelId)) {
             xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
-        }
-        if (Objects.nonNull(maxTokenScore)) {
-            xContentBuilder.field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), maxTokenScore);
         }
         if (Objects.nonNull(queryTokensSupplier) && Objects.nonNull(queryTokensSupplier.get())) {
             xContentBuilder.field(QUERY_TOKENS_FIELD.getPreferredName(), queryTokensSupplier.get());
@@ -266,8 +255,6 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
                     sparseAnnQueryBuilder.queryText(parser.text());
                 } else if (MODEL_ID_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     sparseAnnQueryBuilder.modelId(parser.text());
-                } else if (MAX_TOKEN_SCORE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    sparseAnnQueryBuilder.maxTokenScore(parser.floatValue());
                 } else if (CUT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     sparseAnnQueryBuilder.queryCut(parser.intValue());
                 } else if (TOP_K_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
@@ -306,8 +293,8 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         return new SparseAnnQueryBuilder().fieldName(fieldName)
             .queryText(queryText)
             .modelId(modelId)
-            .maxTokenScore(maxTokenScore)
             .queryCut(queryCut)
+            .k(k)
             .queryTokensSupplier(queryTokensSetOnce::get);
     }
 
@@ -392,7 +379,7 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
             .append(queryText, obj.queryText)
             .append(modelId, obj.modelId)
             .append(queryCut, obj.queryCut)
-            .append(maxTokenScore, obj.maxTokenScore);
+            .append(k, obj.k);
         if (Objects.nonNull(queryTokensSupplier)) {
             equalsBuilder.append(queryTokensSupplier.get(), obj.queryTokensSupplier.get());
         }
@@ -401,7 +388,7 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
 
     @Override
     protected int doHashCode() {
-        HashCodeBuilder builder = new HashCodeBuilder().append(fieldName).append(queryText).append(modelId).append(maxTokenScore);
+        HashCodeBuilder builder = new HashCodeBuilder().append(fieldName).append(queryText).append(modelId).append(k);
         if (Objects.nonNull(queryTokensSupplier)) {
             builder.append(queryTokensSupplier.get());
         }
