@@ -66,7 +66,7 @@ public class SparseBinaryDocValues extends BinaryDocValues {
     /**
      * Builder pattern like setter for setting totalLiveDocs. We can use setter also. But this way the code is clean.
      * @param totalLiveDocs int
-     * @return {@link KNN80BinaryDocValues}
+     * @return {@link SparseBinaryDocValues}
      */
     public SparseBinaryDocValues setTotalLiveDocs(long totalLiveDocs) {
         this.totalLiveDocs = totalLiveDocs;

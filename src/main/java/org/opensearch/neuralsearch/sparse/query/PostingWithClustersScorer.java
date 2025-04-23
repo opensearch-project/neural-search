@@ -32,7 +32,7 @@ import java.util.PriorityQueue;
 /**
  * A scorer that simulates the query algorithm in seismic.
  * For each query token: we get its posting with clusters. We compute score = dp(cluster_summary, query) and
- * only if heap.size >= k && score > (heap.peek() / heap_factor), we'll evaluate each doc in the cluster,
+ * only if heap.size >= k and score > (heap.peek() / heap_factor), we'll evaluate each doc in the cluster,
  * otherwise, we skip the whole cluster.
  */
 public class PostingWithClustersScorer extends Scorer {
