@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.sparse.common;
 
 import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 
 /**
@@ -12,26 +13,10 @@ import lombok.Getter;
  */
 @AllArgsConstructor
 @Getter
+@EqualsAndHashCode
 public final class DocFreq implements Comparable<DocFreq> {
     private final int docID;
     private final float freq;
-
-    @Override
-    public int hashCode() {
-        return Integer.hashCode(docID) + Float.hashCode(freq);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (obj == null) {
-            return false;
-        }
-        if (obj.getClass() != this.getClass()) {
-            return false;
-        }
-        final DocFreq other = (DocFreq) obj;
-        return this.docID == other.docID && this.freq == other.freq;
-    }
 
     @Override
     public int compareTo(DocFreq o) {

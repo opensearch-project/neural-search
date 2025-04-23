@@ -10,7 +10,6 @@ import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.neuralsearch.sparse.algorithm.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.algorithm.PostingClusters;
-import org.opensearch.neuralsearch.sparse.common.DocFreq;
 import org.opensearch.neuralsearch.sparse.common.DocFreqIterator;
 import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
@@ -91,13 +90,6 @@ public class SparsePostingsEnum extends PostingsEnum {
             }
         }
         return doc;
-    }
-
-    public DocFreq docFreq() {
-        if (currentDocFreq == null) {
-            return null;
-        }
-        return currentDocFreq.docFreq();
     }
 
     @Override

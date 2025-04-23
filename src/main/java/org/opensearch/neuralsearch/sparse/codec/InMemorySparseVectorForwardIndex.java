@@ -11,27 +11,24 @@ import org.opensearch.neuralsearch.sparse.common.SparseVector;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * InMemorySparseVectorForwardIndex is used to store/read sparse vector in memory
  */
 public class InMemorySparseVectorForwardIndex implements SparseVectorForwardIndex {
 
-    private static final Map<InMemoryKey.IndexKey, InMemorySparseVectorForwardIndex> forwardIndexMap = new HashMap<>();
+    private static final Map<InMemoryKey.IndexKey, InMemorySparseVectorForwardIndex> forwardIndexMap = new ConcurrentHashMap<>();
 
     public static InMemorySparseVectorForwardIndex getOrCreate(InMemoryKey.IndexKey key) {
         if (key == null) {
             throw new IllegalArgumentException("Index key cannot be null");
         }
-        synchronized (forwardIndexMap) {
-            return forwardIndexMap.computeIfAbsent(key, k -> new InMemorySparseVectorForwardIndex());
-        }
+        return forwardIndexMap.computeIfAbsent(key, k -> new InMemorySparseVectorForwardIndex());
     }
 
     public static void removeIndex(InMemoryKey.IndexKey key) {
-        synchronized (forwardIndexMap) {
-            forwardIndexMap.remove(key);
-        }
+        forwardIndexMap.remove(key);
     }
 
     private final Map<Integer, SparseVector> sparseVectorMap = new HashMap<>();
@@ -52,9 +49,7 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
 
         @Override
         public SparseVector readSparseVector(int docId) {
-            synchronized (sparseVectorMap) {
-                return sparseVectorMap.get(docId);
-            }
+            return sparseVectorMap.get(docId);
         }
 
         @Override
@@ -68,12 +63,10 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
         @Override
         public void write(int docId, SparseVector vector) {
             if (vector == null) return;
-            synchronized (sparseVectorMap) {
-                // Use putIfAbsent to make the operation atomic and more efficient
-                SparseVector existing = sparseVectorMap.putIfAbsent(docId, vector);
-                if (existing != null) {
-                    throw new IllegalArgumentException("Document ID " + docId + " already exists");
-                }
+            // Use putIfAbsent to make the operation atomic and more efficient
+            SparseVector existing = sparseVectorMap.putIfAbsent(docId, vector);
+            if (existing != null) {
+                throw new IllegalArgumentException("Document ID " + docId + " already exists");
             }
         }
 
