@@ -42,12 +42,7 @@ public class DocumentCluster {
 
     public DocFreqIterator getDisi() {
         return new DocFreqIterator() {
-            final IteratorWrapper<DocFreq> wrapper = new IteratorWrapper(docs.iterator());
-
-            @Override
-            public DocFreq docFreq() {
-                return wrapper.getCurrent();
-            }
+            final IteratorWrapper<DocFreq> wrapper = new IteratorWrapper<>(docs.iterator());
 
             @Override
             public float freq() {
