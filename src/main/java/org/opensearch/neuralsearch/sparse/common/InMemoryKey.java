@@ -4,16 +4,16 @@
  */
 package org.opensearch.neuralsearch.sparse.common;
 
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.SegmentInfo;
 
 /**
  * Key for in-memory sparse vector forward index
  */
-@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class InMemoryKey {
+
+    @EqualsAndHashCode
     public static class IndexKey {
         private final int hashCode;
 
@@ -21,17 +21,8 @@ public class InMemoryKey {
             this.hashCode = segmentInfo.hashCode() + fieldInfo.name.hashCode();
         }
 
-        @Override
-        public int hashCode() {
-            return this.hashCode;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) return true;
-            if (obj == null || getClass() != obj.getClass()) return false;
-
-            return this.hashCode() == obj.hashCode();
+        public IndexKey(SegmentInfo segmentInfo, String fieldName) {
+            this.hashCode = segmentInfo.hashCode() + fieldName.hashCode();
         }
     }
 }

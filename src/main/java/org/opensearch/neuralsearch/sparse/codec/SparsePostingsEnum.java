@@ -35,7 +35,7 @@ public class SparsePostingsEnum extends PostingsEnum {
     }
 
     public IteratorWrapper<DocumentCluster> clusterIterator() {
-        return new IteratorWrapper<DocumentCluster>(this.clusters.iterator());
+        return this.clusters.iterator();
     }
 
     @Override

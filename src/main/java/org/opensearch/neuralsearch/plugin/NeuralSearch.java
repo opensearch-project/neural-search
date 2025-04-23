@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
+import org.opensearch.index.IndexModule;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.codec.CodecServiceFactory;
 import org.opensearch.index.mapper.Mapper;
@@ -26,6 +27,7 @@ import org.opensearch.neuralsearch.highlight.extractor.QueryTextExtractorRegistr
 import com.google.common.collect.ImmutableList;
 import org.opensearch.action.ActionRequest;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.sparse.SparseIndexEventListener;
 import org.opensearch.neuralsearch.sparse.SparseSettings;
 import org.opensearch.neuralsearch.sparse.codec.SparseCodecService;
 import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
@@ -322,5 +324,12 @@ public class NeuralSearch extends Plugin
     @Override
     public Map<String, Highlighter> getHighlighters() {
         return Collections.singletonMap(SemanticHighlighter.NAME, semanticHighlighter);
+    }
+
+    @Override
+    public void onIndexModule(IndexModule indexModule) {
+        if (SparseSettings.IS_SPARSE_INDEX_SETTING.get(indexModule.getSettings())) {
+            indexModule.addIndexEventListener(new SparseIndexEventListener());
+        }
     }
 }

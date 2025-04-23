@@ -20,7 +20,7 @@ public class PostingClusters {
         this.clusters = clusters;
     }
 
-    public IteratorWrapper iterator() {
-        return new IteratorWrapper(this.clusters.iterator());
+    public IteratorWrapper<DocumentCluster> iterator() {
+        return new IteratorWrapper<DocumentCluster>(this.clusters.iterator());
     }
 }
