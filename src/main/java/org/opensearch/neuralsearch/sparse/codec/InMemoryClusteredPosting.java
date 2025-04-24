@@ -101,6 +101,7 @@ public class InMemoryClusteredPosting {
         }
 
         public static void writePostingClusters(InMemoryKey.IndexKey key, BytesRef term, List<DocumentCluster> clusters) {
+            if (clusters == null || clusters.isEmpty()) return;
             synchronized (inMemoryPostings) {
                 inMemoryPostings.putIfAbsent(key, new TreeMap<>());
                 inMemoryPostings.get(key).put(term.clone(), new PostingClusters(clusters));
