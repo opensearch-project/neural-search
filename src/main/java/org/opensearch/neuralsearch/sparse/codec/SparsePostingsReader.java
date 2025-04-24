@@ -13,6 +13,7 @@ import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.neuralsearch.sparse.SparseTokensField;
+import org.opensearch.neuralsearch.sparse.algorithm.ClusterTrainingRunning;
 import org.opensearch.neuralsearch.sparse.algorithm.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.algorithm.KMeansPlusPlus;
 import org.opensearch.neuralsearch.sparse.algorithm.PostingClustering;
@@ -108,8 +109,18 @@ public class SparsePostingsReader {
                 return null;
             }));
             for (Map.Entry<BytesRef, Set<DocFreq>> entry : docs.entrySet()) {
-                List<DocumentCluster> cluster = postingClustering.cluster(entry.getValue().stream().toList());
-                InMemoryClusteredPosting.InMemoryClusteredPostingWriter.writePostingClusters(key, entry.getKey(), cluster);
+                ClusterTrainingRunning.getInstance().run(new Runnable() {
+                    @Override
+                    public void run() {
+                        List<DocumentCluster> cluster = null;
+                        try {
+                            cluster = postingClustering.cluster(entry.getValue().stream().toList());
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                        InMemoryClusteredPosting.InMemoryClusteredPostingWriter.writePostingClusters(key, entry.getKey(), cluster);
+                    }
+                });
             }
         }
     }
