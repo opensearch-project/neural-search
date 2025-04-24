@@ -77,17 +77,14 @@ public class SparsePostingsEnum extends PostingsEnum {
 
     @Override
     public int nextDoc() throws IOException {
-        if (currentDocFreq == null) {
-            return -1;
-        }
+        assert currentDocFreq != null;
         int doc = currentDocFreq.nextDoc();
-        if (doc == DocIdSetIterator.NO_MORE_DOCS) {
+        while (doc == DocIdSetIterator.NO_MORE_DOCS) {
             if (!currentCluster.hasNext()) {
                 return DocIdSetIterator.NO_MORE_DOCS;
-            } else {
-                currentDocFreq = currentCluster.next().getDisi();
-                return nextDoc();
             }
+            currentDocFreq = currentCluster.next().getDisi();
+            doc = currentDocFreq.nextDoc();
         }
         return doc;
     }
