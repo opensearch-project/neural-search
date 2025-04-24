@@ -32,7 +32,7 @@ public class KMeansPlusPlus implements Clustering {
         int size = docFreqs.size();
         // generate beta unique random centers
         Random random = new Random();
-        int num_cluster = Math.min(beta, size);
+        int num_cluster = Math.min(beta, size / 10);
         int[] centers = random.ints(0, size).distinct().limit(num_cluster).toArray();
         List<List<DocFreq>> docAssignments = new ArrayList<>(num_cluster);
         for (int i = 0; i < num_cluster; i++) {
