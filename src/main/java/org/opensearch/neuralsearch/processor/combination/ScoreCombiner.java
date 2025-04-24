@@ -25,6 +25,9 @@ import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
+import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
+import org.apache.lucene.util.BytesRef;
+import org.opensearch.neuralsearch.processor.CollapseFieldDoc;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import lombok.extern.log4j.Log4j2;
@@ -163,18 +166,34 @@ public class ScoreCombiner {
         Map<Integer, Object[]> docIdSortFieldMap = new HashMap<>();
         final List<TopDocs> topFieldDocs = compoundTopDocs.getTopDocs();
         final boolean isSortByScore = isSortOrderByScore(sort);
+        final boolean isCollapseEnabled = topFieldDocs.getFirst() instanceof CollapseTopFieldDocs;
         for (TopDocs topDocs : topFieldDocs) {
+            int i = 0;
             for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
                 FieldDoc fieldDoc = (FieldDoc) scoreDoc;
 
                 if (docIdSortFieldMap.get(fieldDoc.doc) == null) {
                     // If sort by score then replace sort field value with normalized score.
                     if (isSortByScore) {
-                        docIdSortFieldMap.put(fieldDoc.doc, new Object[] { combinedNormalizedScoresByDocId.get(fieldDoc.doc) });
+                        docIdSortFieldMap.put(
+                            fieldDoc.doc,
+                            isCollapseEnabled
+                                ? new Object[] {
+                                    combinedNormalizedScoresByDocId.get(fieldDoc.doc),
+                                    ((CollapseTopFieldDocs) topDocs).collapseValues[i] }
+                                : new Object[] { combinedNormalizedScoresByDocId.get(fieldDoc.doc) }
+                        );
                     } else {
+                        if (isCollapseEnabled) {
+                            Object[] fields = new Object[fieldDoc.fields.length + 1];
+                            System.arraycopy(fieldDoc.fields, 0, fields, 0, fieldDoc.fields.length);
+                            fields[fieldDoc.fields.length] = ((CollapseTopFieldDocs) topDocs).collapseValues[i];
+                            docIdSortFieldMap.put(fieldDoc.doc, fields);
+                        }
                         docIdSortFieldMap.put(fieldDoc.doc, fieldDoc.fields);
                     }
                 }
+                i++;
             }
         }
         return docIdSortFieldMap;

@@ -233,7 +233,7 @@ public class NormalizationProcessorWorkflow {
 
                 for (ScoreDoc scoreDoc : updatedScoreDocs) {
                     FieldDoc fieldDoc = (FieldDoc) scoreDoc;
-                    BytesRef collapseValue = getCollapseValue(fieldDoc, updatedTopDocs);
+                    BytesRef collapseValue = (BytesRef) fieldDoc.fields[fieldDoc.fields.length - 1];
                     if (collapseValue == null) {
                         continue;
                     }
@@ -259,7 +259,9 @@ public class NormalizationProcessorWorkflow {
                     BytesRef collapseValue = entry.getKey();
                     FieldDoc fieldDoc = entry.getValue();
                     if (collapseValueToShardMap.get(collapseValue) == index) {
-                        newFieldDocs.add(fieldDoc);
+                        newFieldDocs.add(
+                            new FieldDoc(fieldDoc.doc, fieldDoc.score, Arrays.copyOfRange(fieldDoc.fields, 0, fieldDoc.fields.length - 1))
+                        );
                         collapseValues.add(collapseValue);
                     }
                 }

@@ -87,7 +87,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
     public List<? extends TopDocs> topDocs() throws IOException {
         List<CollapseTopFieldDocs> topDocsList = new ArrayList<>();
         if (collectedHitsPerSubQueryMap.isEmpty()) {
-            return Collections.EMPTY_LIST;
+            return Collections.emptyList();
         }
         // Get num sub queries, there is probably a better way to do this
         int numSubQueries = 0;
