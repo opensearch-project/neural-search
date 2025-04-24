@@ -106,7 +106,7 @@ public class SparsePostingsReader {
                         return oldIndex.getForwardIndexReader().readSparseVector(oldDocId.getLeft());
                     }
                 }
-                return null;
+                return vector;
             }));
             for (Map.Entry<BytesRef, Set<DocFreq>> entry : docs.entrySet()) {
                 ClusterTrainingRunning.getInstance().run(new Runnable() {
