@@ -12,9 +12,11 @@ import org.opensearch.neuralsearch.sparse.common.SparseVector;
 import org.opensearch.neuralsearch.sparse.common.SparseVectorReader;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.PriorityQueue;
 import java.util.stream.Collectors;
 
 /**
@@ -28,6 +30,17 @@ public class PostingsProcessor {
 
     public static List<DocFreq> pruneBySize(List<DocFreq> postings, int size) {
         return postings.subList(0, Math.min(postings.size(), size));
+    }
+
+    public static List<DocFreq> getTopK(List<DocFreq> postings, int K) {
+        PriorityQueue<DocFreq> pq = new PriorityQueue<>(K, (o1, o2) -> Float.compare(o2.getFreq(), o1.getFreq()));
+        for (DocFreq docFreq : postings) {
+            pq.add(docFreq);
+            if (pq.size() > K) {
+                pq.poll();
+            }
+        }
+        return new ArrayList<>(pq);
     }
 
     public static void summarize(DocumentCluster cluster, SparseVectorReader reader, float alpha) throws IOException {

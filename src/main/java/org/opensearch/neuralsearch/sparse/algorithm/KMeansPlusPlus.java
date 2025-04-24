@@ -25,6 +25,10 @@ public class KMeansPlusPlus implements Clustering {
 
     @Override
     public List<DocumentCluster> cluster(List<DocFreq> docFreqs) throws IOException {
+        if (beta == 1) {
+            DocumentCluster cluster = new DocumentCluster(null, docFreqs, true);
+            return List.of(cluster);
+        }
         int size = docFreqs.size();
         // generate beta unique random centers
         Random random = new Random();

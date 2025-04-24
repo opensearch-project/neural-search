@@ -70,6 +70,8 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
     static final ParseField CUT_FIELD = new ParseField("cut");
     @VisibleForTesting
     static final ParseField TOP_K_FIELD = new ParseField("k");
+    @VisibleForTesting
+    static final ParseField HEAP_FACTOR_FIELD = new ParseField("heap_factor");
 
     private static MLCommonsClientAccessor ML_CLIENT;
     private String fieldName;
@@ -78,6 +80,7 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
     private Supplier<Map<String, Float>> queryTokensSupplier;
     private Integer queryCut;
     private Integer k;
+    private Float heapFactor;
 
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
     private static final int DEFAULT_TOP_K = 10;
@@ -152,6 +155,9 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         }
         if (Objects.nonNull(k)) {
             xContentBuilder.field(TOP_K_FIELD.getPreferredName(), k);
+        }
+        if (Objects.nonNull(heapFactor)) {
+            xContentBuilder.field(HEAP_FACTOR_FIELD.getPreferredName(), heapFactor);
         }
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
@@ -259,6 +265,8 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
                     sparseAnnQueryBuilder.queryCut(parser.intValue());
                 } else if (TOP_K_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     sparseAnnQueryBuilder.k(parser.intValue());
+                } else if (HEAP_FACTOR_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    sparseAnnQueryBuilder.heapFactor(parser.floatValue());
                 } else {
                     throw new ParsingException(
                         parser.getTokenLocation(),
@@ -295,6 +303,7 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
             .modelId(modelId)
             .queryCut(queryCut)
             .k(k)
+            .heapFactor(heapFactor)
             .queryTokensSupplier(queryTokensSetOnce::get);
     }
 
@@ -333,7 +342,7 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
 
         SparseQueryContext sparseQueryContext = SparseQueryContext.builder()
             .tokens(topTokens)
-            .heapFactor(0.4f)
+            .heapFactor(heapFactor)
             .k((k == null || k == 0) ? DEFAULT_TOP_K : k)
             .build();
         SparseVectorQuery.SparseVectorQueryBuilder builder = new SparseVectorQuery.SparseVectorQueryBuilder();
@@ -379,6 +388,7 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
             .append(queryText, obj.queryText)
             .append(modelId, obj.modelId)
             .append(queryCut, obj.queryCut)
+            .append(heapFactor, obj.heapFactor)
             .append(k, obj.k);
         if (Objects.nonNull(queryTokensSupplier)) {
             equalsBuilder.append(queryTokensSupplier.get(), obj.queryTokensSupplier.get());
