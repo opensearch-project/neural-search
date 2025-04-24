@@ -26,11 +26,7 @@ public class PostingClustering {
     }
 
     private List<DocFreq> preprocess(List<DocFreq> postings) {
-        // sort
-        List<DocFreq> result = PostingsProcessor.sortByFreq(postings);
-        // prune
-        result = PostingsProcessor.pruneBySize(result, this.lambda);
-        return result;
+        return PostingsProcessor.getTopK(postings, lambda);
     }
 
     public List<DocumentCluster> cluster(List<DocFreq> postings) throws IOException {
