@@ -38,6 +38,7 @@ import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.mapper.NumberFieldMapper;
 import org.opensearch.index.query.AbstractQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.WithFieldName;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.knn.index.query.parser.MethodParametersParser;
@@ -69,7 +70,7 @@ import org.opensearch.neuralsearch.processor.MapInferenceRequest;
 @Accessors(chain = true, fluent = true)
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
-public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder> implements ModelInferenceQueryBuilder {
+public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder> implements ModelInferenceQueryBuilder, WithFieldName {
 
     public static final String NAME = "neural";
 
@@ -609,5 +610,15 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             throw new IllegalArgumentException("Only one of k, max_distance, or min_score can be provided");
         }
         return queryCount == 1;
+    }
+
+    /**
+     * Gets the field name that this query is searching against.
+     *
+     * @return The field name used in the Neural query
+     */
+    @Override
+    public String fieldName() {
+        return this.fieldName;
     }
 }
