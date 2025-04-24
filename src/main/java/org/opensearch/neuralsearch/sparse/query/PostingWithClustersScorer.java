@@ -135,31 +135,32 @@ public class PostingWithClustersScorer extends Scorer {
 
             @Override
             public int nextDoc() throws IOException {
-                if (subScorersIndex == NO_MORE_DOCS) {
-                    return NO_MORE_DOCS;
-                }
-                if (subScorersIndex >= subScorers.size()) {
-                    subScorersIndex = NO_MORE_DOCS;
-                    return NO_MORE_DOCS;
-                }
-                Scorer scorer = subScorers.get(subScorersIndex);
-                int docId = scorer.iterator().nextDoc();
-                if (docId == NO_MORE_DOCS) {
-                    subScorersIndex++;
-                    return nextDoc();
-                } else {
-                    if (visitedDocId.get(docId)) {
-                        return nextDoc();
+                while (subScorersIndex < subScorers.size()) {
+                    Scorer scorer = subScorers.get(subScorersIndex);
+                    int docId = scorer.iterator().nextDoc();
+                    // reach the end of current cluster;
+                    if (docId == NO_MORE_DOCS) {
+                        ++subScorersIndex;
+                        continue;
                     }
+                    // already visited this docId
+                    if (visitedDocId.get(docId)) {
+                        continue;
+                    }
+                    // doc marked as deleted
                     if (acceptedDocs != null && !acceptedDocs.get(docId)) {
-                        return nextDoc();
+                        continue;
                     }
                     visitedDocId.set(docId);
                     SparseVector doc = reader.read(docId);
+                    if (doc == null) {
+                        continue;
+                    }
                     score = doc.dotProduct(queryDenseVector);
                     addToHeap(Pair.of(docId, score));
                     return docId;
                 }
+                return NO_MORE_DOCS;
             }
 
             @Override
@@ -203,6 +204,24 @@ public class PostingWithClustersScorer extends Scorer {
         @Override
         public DocIdSetIterator iterator() {
             return new DocIdSetIterator() {
+
+                private DocumentCluster nextQualifiedCluster() {
+                    DocumentCluster cluster = clusterIter.next();
+                    while (cluster != null) {
+                        if (cluster.isShouldNotSkip()) {
+                            return cluster;
+                        }
+                        float score = cluster.getSummary().dotProduct(queryDenseVector);
+                        if (scoreHeap.size() == sparseQueryContext.getK()
+                            && score < scoreHeap.peek().getRight() / sparseQueryContext.getHeapFactor()) {
+                            cluster = clusterIter.next();
+                        } else {
+                            return cluster;
+                        }
+                    }
+                    return null;
+                }
+
                 @Override
                 public int docID() {
                     return docs.docID();
@@ -210,35 +229,22 @@ public class PostingWithClustersScorer extends Scorer {
 
                 @Override
                 public int nextDoc() throws IOException {
-                    if (docs != null) {
+                    DocumentCluster cluster = null;
+                    if (docs == null) {
+                        cluster = nextQualifiedCluster();
+                    } else {
                         int docId = docs.nextDoc();
                         if (docId != DocIdSetIterator.NO_MORE_DOCS) {
                             return docId;
                         }
+                        cluster = nextQualifiedCluster();
                     }
-                    // current cluster run out docs
-                    DocumentCluster cluster = clusterIter.next();
                     if (cluster == null) {
                         return DocIdSetIterator.NO_MORE_DOCS;
                     }
-                    // should not skip cluster
-                    if (cluster.isShouldNotSkip()) {
-                        docs = cluster.getDisi();
-                        return nextDoc();
-                    }
-                    // check dot product between cluster summary and query vector
-                    while (cluster != null) {
-                        assert cluster.getSummary() != null;
-                        float score = cluster.getSummary().dotProduct(queryDenseVector);
-                        if (scoreHeap.size() == sparseQueryContext.getK()
-                            && score < scoreHeap.peek().getRight() / sparseQueryContext.getHeapFactor()) {
-                            cluster = clusterIter.next();
-                        } else {
-                            docs = cluster.getDisi();
-                            return nextDoc();
-                        }
-                    }
-                    return DocIdSetIterator.NO_MORE_DOCS;
+                    docs = cluster.getDisi();
+                    // every cluster should have at least one doc
+                    return docs.nextDoc();
                 }
 
                 @Override

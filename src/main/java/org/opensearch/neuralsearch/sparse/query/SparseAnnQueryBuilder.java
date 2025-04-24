@@ -84,6 +84,7 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
 
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
     private static final int DEFAULT_TOP_K = 10;
+    private static final float DEFAULT_HEAP_FACTOR = 1.0f;
 
     public static void initialize(MLCommonsClientAccessor mlClient) {
         SparseAnnQueryBuilder.ML_CLIENT = mlClient;
@@ -342,7 +343,7 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
 
         SparseQueryContext sparseQueryContext = SparseQueryContext.builder()
             .tokens(topTokens)
-            .heapFactor(heapFactor)
+            .heapFactor(heapFactor == null ? DEFAULT_HEAP_FACTOR : heapFactor)
             .k((k == null || k == 0) ? DEFAULT_TOP_K : k)
             .build();
         SparseVectorQuery.SparseVectorQueryBuilder builder = new SparseVectorQuery.SparseVectorQueryBuilder();

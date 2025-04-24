@@ -33,6 +33,9 @@ public class PostingsProcessor {
     }
 
     public static List<DocFreq> getTopK(List<DocFreq> postings, int K) {
+        if (K >= postings.size()) {
+            return postings;
+        }
         PriorityQueue<DocFreq> pq = new PriorityQueue<>(K, (o1, o2) -> Float.compare(o2.getFreq(), o1.getFreq()));
         for (DocFreq docFreq : postings) {
             pq.add(docFreq);
