@@ -96,6 +96,14 @@ public class SparsePostingsReader {
             int beta = Integer.parseInt(fieldInfo.attributes().get(SparseMethodContext.BETA_FIELD));
             int lambda = Integer.parseInt(fieldInfo.attributes().get(SparseMethodContext.LAMBDA_FIELD));
             float alpha = Float.parseFloat(fieldInfo.attributes().get(SparseMethodContext.ALPHA_FIELD));
+            int clusterUtilDocCountReach = Integer.parseInt(fieldInfo.attributes().get(SparseMethodContext.CLUSTER_UNTIL_FIELD));
+            int docCount = 0;
+            for (int n : mergeState.maxDocs) {
+                docCount += n;
+            }
+            if (clusterUtilDocCountReach > 0 && docCount < clusterUtilDocCountReach) {
+                beta = 1;
+            }
             PostingClustering postingClustering = new PostingClustering(lambda, new KMeansPlusPlus(alpha, beta, (newDocId) -> {
                 SparseVector vector = index.getForwardIndexReader().readSparseVector(newDocId);
                 if (vector == null) {

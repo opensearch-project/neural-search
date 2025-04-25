@@ -32,10 +32,11 @@ public class ClusteredPostingTermsWriter {
         int beta = Integer.parseInt(fieldInfo.attributes().get(SparseMethodContext.BETA_FIELD));
         int lambda = Integer.parseInt(fieldInfo.attributes().get(SparseMethodContext.LAMBDA_FIELD));
         float alpha = Float.parseFloat(fieldInfo.attributes().get(SparseMethodContext.ALPHA_FIELD));
+        int clusterUntilDocCountReach = Integer.parseInt(fieldInfo.attributes().get(SparseMethodContext.CLUSTER_UNTIL_FIELD));
         this.postingsWriter = new InMemoryClusteredPosting.InMemoryClusteredPostingWriter(
             key,
             fieldInfo,
-            new PostingClustering(lambda, new KMeansPlusPlus(alpha, beta, (docId) -> index.getForwardIndexReader().readSparseVector(docId)))
+            new PostingClustering(lambda, new KMeansPlusPlus(alpha, clusterUntilDocCountReach > 0 ? 1 : beta, (docId) -> index.getForwardIndexReader().readSparseVector(docId)))
         );
         this.docsSeen = new FixedBitSet(state.segmentInfo.maxDoc());
     }

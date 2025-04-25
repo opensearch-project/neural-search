@@ -194,6 +194,7 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
         fieldType.putAttribute(SparseMethodContext.LAMBDA_FIELD, String.valueOf(sparseMethodContext.getLambda()));
         fieldType.putAttribute(SparseMethodContext.ALPHA_FIELD, String.valueOf(sparseMethodContext.getAlpha()));
         fieldType.putAttribute(SparseMethodContext.BETA_FIELD, String.valueOf(sparseMethodContext.getBeta()));
+        fieldType.putAttribute(SparseMethodContext.CLUSTER_UNTIL_FIELD, String.valueOf(sparseMethodContext.getClusterUntilDocCountReach()));
     }
 
     public static class Defaults {
