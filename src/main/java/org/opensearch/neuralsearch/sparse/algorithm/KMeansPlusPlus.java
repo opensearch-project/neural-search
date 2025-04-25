@@ -35,8 +35,15 @@ public class KMeansPlusPlus implements Clustering {
         int num_cluster = Math.min(beta, size / 10);
         int[] centers = random.ints(0, size).distinct().limit(num_cluster).toArray();
         List<List<DocFreq>> docAssignments = new ArrayList<>(num_cluster);
+        List<float[]> denseCentroids = new ArrayList<>();
         for (int i = 0; i < num_cluster; i++) {
             docAssignments.add(new ArrayList<>());
+            SparseVector center = reader.read(centers[i]);
+            if (center == null) {
+                denseCentroids.add(null);
+            } else {
+                denseCentroids.add(center.toDenseVector());
+            }
         }
 
         for (DocFreq docFreq : docFreqs) {
@@ -45,10 +52,10 @@ public class KMeansPlusPlus implements Clustering {
             SparseVector docVector = reader.read(docFreq.getDocID());
             if (docVector == null) continue;
             for (int i = 0; i < num_cluster; i++) {
-                SparseVector center = reader.read(centers[i]);
                 float score = Float.MIN_VALUE;
+                float [] center = denseCentroids.get(i);
                 if (center != null) {
-                    score = center.dotProduct(docVector);
+                    score = docVector.dotProduct(center);
                 }
                 if (score > maxScore) {
                     maxScore = score;

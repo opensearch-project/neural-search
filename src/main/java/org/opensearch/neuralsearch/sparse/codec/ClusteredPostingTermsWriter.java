@@ -36,7 +36,14 @@ public class ClusteredPostingTermsWriter {
         this.postingsWriter = new InMemoryClusteredPosting.InMemoryClusteredPostingWriter(
             key,
             fieldInfo,
-            new PostingClustering(lambda, new KMeansPlusPlus(alpha, clusterUntilDocCountReach > 0 ? 1 : beta, (docId) -> index.getForwardIndexReader().readSparseVector(docId)))
+            new PostingClustering(
+                lambda,
+                new KMeansPlusPlus(
+                    alpha,
+                    clusterUntilDocCountReach > 0 ? 1 : beta,
+                    (docId) -> index.getForwardIndexReader().readSparseVector(docId)
+                )
+            )
         );
         this.docsSeen = new FixedBitSet(state.segmentInfo.maxDoc());
     }
