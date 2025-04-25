@@ -30,17 +30,20 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
     public static final String LAMBDA_FIELD = "lambda";
     public static final String ALPHA_FIELD = "alpha";
     public static final String BETA_FIELD = "beta";
+    public static final String CLUSTER_UNTIL_FIELD = "cluster_until_doc_count_reach";
 
     private final String name;
     private final int lambda;
     private final float alpha;
     private final int beta;
+    private final int clusterUntilDocCountReach;
 
     public SparseMethodContext(StreamInput in) throws IOException {
         this.name = in.readString();
         this.lambda = in.readOptionalInt();
         this.alpha = in.readOptionalFloat();
         this.beta = in.readOptionalInt();
+        this.clusterUntilDocCountReach = in.readOptionalInt();
     }
 
     @Override
@@ -49,6 +52,7 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
         out.writeOptionalInt(this.lambda);
         out.writeOptionalFloat(this.alpha);
         out.writeOptionalInt(this.beta);
+        out.writeOptionalInt(this.clusterUntilDocCountReach);
     }
 
     @Override
@@ -57,6 +61,7 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
         builder.field(LAMBDA_FIELD, this.lambda);
         builder.field(ALPHA_FIELD, this.alpha);
         builder.field(BETA_FIELD, this.beta);
+        builder.field(CLUSTER_UNTIL_FIELD, this.clusterUntilDocCountReach);
         return builder;
     }
 
@@ -69,6 +74,7 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
         int lambda = 6000;
         float alpha = 0.4f;
         int beta = 400;
+        int clusterUntilDocCountReach = 0;
         String key;
         Object value;
         for (Map.Entry<String, Object> methodEntry : methodMap.entrySet()) {
@@ -82,6 +88,8 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
                 alpha = ((Double) value).floatValue();
             } else if (BETA_FIELD.equals(key)) {
                 beta = (int) value;
+            } else if (CLUSTER_UNTIL_FIELD.equals(key)) {
+                clusterUntilDocCountReach = (int) value;
             } else {
                 throw new MapperParsingException("Invalid parameter: " + key);
             }
@@ -89,6 +97,6 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
         if (name.isEmpty()) {
             throw new MapperParsingException(NAME_FIELD + " needs to be set");
         }
-        return new SparseMethodContext(name, lambda, alpha, beta);
+        return new SparseMethodContext(name, lambda, alpha, beta, clusterUntilDocCountReach);
     }
 }

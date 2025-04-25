@@ -19,6 +19,9 @@ public class SparseTokensField extends Field {
     }
 
     public static boolean isSparseField(FieldInfo field) {
-        return field.attributes().containsKey(SPARSE_FIELD);
+        if (field == null) {
+            return false;
+        }
+        return field != null && field.attributes().containsKey(SPARSE_FIELD);
     }
 }
