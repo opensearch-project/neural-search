@@ -41,6 +41,7 @@ import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.query.AbstractQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.WithFieldName;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
@@ -69,7 +70,10 @@ import org.opensearch.neuralsearch.util.prune.PruneUtils;
 @Accessors(chain = true, fluent = true)
 @NoArgsConstructor
 @AllArgsConstructor
-public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQueryBuilder> implements ModelInferenceQueryBuilder {
+public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQueryBuilder>
+    implements
+        ModelInferenceQueryBuilder,
+        WithFieldName {
     public static final String NAME = "neural_sparse";
     @VisibleForTesting
     static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
@@ -539,5 +543,15 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
 
     public static float bytesToFloat(byte[] bytes) {
         return ByteBuffer.wrap(bytes).getFloat();
+    }
+
+    /**
+     * Gets the field name that this query is searching against.
+     *
+     * @return The field name used in the Neural Sparse query
+     */
+    @Override
+    public String fieldName() {
+        return this.fieldName;
     }
 }
