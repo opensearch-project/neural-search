@@ -8,8 +8,10 @@ import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.RamUsageEstimator;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -24,7 +26,7 @@ import java.util.stream.Collectors;
  * Sparse vector implementation, which is a list of (token, freq) pairs
  */
 @EqualsAndHashCode
-public class SparseVector {
+public class SparseVector implements Accountable {
     private final int size;
     // tokens will be stored in order
     private int[] tokens;
@@ -175,6 +177,13 @@ public class SparseVector {
                 return new Item(tokens[current], freqs[current]);
             }
         });
+    }
+
+    @Override
+    public long ramBytesUsed() {
+        return RamUsageEstimator.shallowSizeOfInstance(SparseVector.class) + RamUsageEstimator.sizeOf(tokens) + RamUsageEstimator.sizeOf(
+            freqs
+        );
     }
 
     @AllArgsConstructor

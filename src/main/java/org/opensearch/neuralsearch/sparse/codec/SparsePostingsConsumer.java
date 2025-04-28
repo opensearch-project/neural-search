@@ -5,9 +5,7 @@
 package org.opensearch.neuralsearch.sparse.codec;
 
 import org.apache.lucene.codecs.FieldsConsumer;
-import org.apache.lucene.codecs.FieldsProducer;
 import org.apache.lucene.codecs.NormsProducer;
-import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.Fields;
 import org.apache.lucene.index.FilterLeafReader;
 import org.apache.lucene.index.MergeState;
@@ -16,7 +14,7 @@ import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.neuralsearch.sparse.SparseTokensField;
-import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
+import org.opensearch.neuralsearch.sparse.common.MergeHelper;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -85,21 +83,6 @@ public class SparsePostingsConsumer extends FieldsConsumer {
         }
     }
 
-    private void clearInMemoryPostings(MergeState mergeState) {
-        for (int readerIndex = 0; readerIndex < mergeState.fieldsProducers.length; readerIndex++) {
-            final FieldsProducer f = mergeState.fieldsProducers[readerIndex];
-            if (!(f instanceof SparsePostingsProducer)) {
-                continue;
-            }
-
-            SparsePostingsProducer producer = (SparsePostingsProducer) f;
-            for (FieldInfo fieldInfo : mergeState.mergeFieldInfos) {
-                InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(producer.getState().segmentInfo, fieldInfo);
-                InMemoryClusteredPosting.clearIndex(key);
-            }
-        }
-    }
-
     @Override
     public void merge(MergeState mergeState, NormsProducer norms) throws IOException {
         // merge non-sparse fields
@@ -107,7 +90,7 @@ public class SparsePostingsConsumer extends FieldsConsumer {
         // merge sparse fields
         SparsePostingsReader sparsePostingsReader = new SparsePostingsReader(mergeState);
         sparsePostingsReader.merge();
-        clearInMemoryPostings(mergeState);
+        MergeHelper.clearInMemoryData(mergeState, null, InMemoryClusteredPosting::clearIndex);
     }
 
     @Override

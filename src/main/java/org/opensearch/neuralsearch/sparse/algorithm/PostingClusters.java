@@ -5,6 +5,8 @@
 package org.opensearch.neuralsearch.sparse.algorithm;
 
 import lombok.Getter;
+import org.apache.lucene.util.Accountable;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
 
 import java.util.List;
@@ -13,7 +15,7 @@ import java.util.List;
  * This class represents the clusters of postings for a field
  */
 @Getter
-public class PostingClusters {
+public class PostingClusters implements Accountable {
     private final List<DocumentCluster> clusters;
     private final int size;
 
@@ -32,5 +34,14 @@ public class PostingClusters {
 
     public IteratorWrapper<DocumentCluster> iterator() {
         return new IteratorWrapper<DocumentCluster>(this.clusters.iterator());
+    }
+
+    @Override
+    public long ramBytesUsed() {
+        long ramUsed = RamUsageEstimator.shallowSizeOfInstance(PostingClusters.class);
+        for (DocumentCluster cluster : clusters) {
+            ramUsed += cluster.ramBytesUsed();
+        }
+        return ramUsed;
     }
 }

@@ -91,10 +91,13 @@ public class PostingWithClustersScorer extends Scorer {
                     sparsePostingsEnum.getClusters().getClusters().size()
                 );
                 if (null == reader) {
-                    SparseVectorForwardIndex.SparseVectorForwardIndexReader indexReader = InMemorySparseVectorForwardIndex.getOrCreate(
-                        sparsePostingsEnum.getIndexKey()
-                    ).getForwardIndexReader();
-                    reader = (docId) -> { return indexReader.readSparseVector(docId); };
+                    SparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.get(sparsePostingsEnum.getIndexKey());
+                    if (index != null) {
+                        SparseVectorForwardIndex.SparseVectorForwardIndexReader indexReader = index.getForwardIndexReader();
+                        reader = (docId) -> { return indexReader.readSparseVector(docId); };
+                    } else {
+                        reader = (docId) -> { return null; };
+                    }
                 }
                 subScorers.add(new SingleScorer(sparsePostingsEnum, term));
             }

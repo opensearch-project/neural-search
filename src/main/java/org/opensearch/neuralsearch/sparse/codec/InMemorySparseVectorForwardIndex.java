@@ -4,7 +4,9 @@
  */
 package org.opensearch.neuralsearch.sparse.codec;
 
+import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
 
@@ -16,15 +18,31 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * InMemorySparseVectorForwardIndex is used to store/read sparse vector in memory
  */
-public class InMemorySparseVectorForwardIndex implements SparseVectorForwardIndex {
+public class InMemorySparseVectorForwardIndex implements SparseVectorForwardIndex, Accountable {
 
     private static final Map<InMemoryKey.IndexKey, InMemorySparseVectorForwardIndex> forwardIndexMap = new ConcurrentHashMap<>();
+
+    public static long memUsage() {
+        long mem = 0;
+        for (Map.Entry<InMemoryKey.IndexKey, InMemorySparseVectorForwardIndex> entry : forwardIndexMap.entrySet()) {
+            mem += RamUsageEstimator.shallowSizeOf(InMemoryKey.IndexKey.class);
+            mem += entry.getValue().ramBytesUsed();
+        }
+        return mem;
+    }
 
     public static InMemorySparseVectorForwardIndex getOrCreate(InMemoryKey.IndexKey key) {
         if (key == null) {
             throw new IllegalArgumentException("Index key cannot be null");
         }
         return forwardIndexMap.computeIfAbsent(key, k -> new InMemorySparseVectorForwardIndex());
+    }
+
+    public static InMemorySparseVectorForwardIndex get(InMemoryKey.IndexKey key) {
+        if (key == null) {
+            throw new IllegalArgumentException("Index key cannot be null");
+        }
+        return forwardIndexMap.get(key);
     }
 
     public static void removeIndex(InMemoryKey.IndexKey key) {
@@ -43,6 +61,16 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
     @Override
     public SparseVectorForwardIndexWriter getForwardIndexWriter() {
         return new InMemorySparseVectorForwardIndexWriter();
+    }
+
+    @Override
+    public long ramBytesUsed() {
+        long ramUsed = 0;
+        for (Map.Entry<Integer, SparseVector> entry : sparseVectorMap.entrySet()) {
+            ramUsed += RamUsageEstimator.shallowSizeOfInstance(Integer.class);
+            ramUsed += entry.getValue().ramBytesUsed();
+        }
+        return ramUsed;
     }
 
     private class InMemorySparseVectorForwardIndexReader implements SparseVectorForwardIndexReader {

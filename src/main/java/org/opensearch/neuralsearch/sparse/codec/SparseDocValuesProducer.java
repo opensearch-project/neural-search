@@ -38,7 +38,7 @@ public class SparseDocValuesProducer extends DocValuesProducer {
 
     @Override
     public BinaryDocValues getBinary(FieldInfo field) throws IOException {
-        return this.delegate.getBinary(field);
+        return new SparseBinaryDocValuesPassThrough(this.delegate.getBinary(field), this.getState().segmentInfo);
     }
 
     @Override
