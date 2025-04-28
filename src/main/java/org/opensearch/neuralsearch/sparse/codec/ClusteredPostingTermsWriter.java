@@ -28,7 +28,8 @@ public class ClusteredPostingTermsWriter {
     public ClusteredPostingTermsWriter(SegmentWriteState state, FieldInfo fieldInfo) {
         super();
         InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(state.segmentInfo, fieldInfo);
-        SparseVectorForwardIndex index = SparseVectorForwardIndex.getOrCreate(key);
+        SparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.get(key);
+        assert (index != null);
         int beta = Integer.parseInt(fieldInfo.attributes().get(SparseMethodContext.BETA_FIELD));
         int lambda = Integer.parseInt(fieldInfo.attributes().get(SparseMethodContext.LAMBDA_FIELD));
         float alpha = Float.parseFloat(fieldInfo.attributes().get(SparseMethodContext.ALPHA_FIELD));

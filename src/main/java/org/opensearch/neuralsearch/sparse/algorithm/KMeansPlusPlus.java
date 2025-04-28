@@ -53,7 +53,7 @@ public class KMeansPlusPlus implements Clustering {
             if (docVector == null) continue;
             for (int i = 0; i < num_cluster; i++) {
                 float score = Float.MIN_VALUE;
-                float [] center = denseCentroids.get(i);
+                float[] center = denseCentroids.get(i);
                 if (center != null) {
                     score = docVector.dotProduct(center);
                 }

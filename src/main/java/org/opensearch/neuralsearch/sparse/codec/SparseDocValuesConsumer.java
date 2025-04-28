@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.sparse.codec;
 
+import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.codecs.DocValuesConsumer;
 import org.apache.lucene.codecs.DocValuesProducer;
 import org.apache.lucene.index.BinaryDocValues;
@@ -15,12 +16,14 @@ import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.neuralsearch.sparse.SparseTokensField;
 import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
+import org.opensearch.neuralsearch.sparse.common.MergeHelper;
 
 import java.io.IOException;
 
 /**
  * A DocValuesConsumer that writes sparse doc values to a segment.
  */
+@Log4j2
 public class SparseDocValuesConsumer extends DocValuesConsumer {
     private final DocValuesConsumer delegate;
     private final SegmentWriteState state;
@@ -52,14 +55,7 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
                 return;
             }
             SparseDocValuesReader reader = (SparseDocValuesReader) valuesProducer;
-            for (DocValuesProducer producer : reader.getMergeState().docValuesProducers) {
-                if (!(producer instanceof SparseDocValuesProducer)) {
-                    continue;
-                }
-                SparseDocValuesProducer sparseDocValuesProducer = (SparseDocValuesProducer) producer;
-                InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(sparseDocValuesProducer.getState().segmentInfo, field);
-                SparseVectorForwardIndex.removeIndex(key);
-            }
+            MergeHelper.clearInMemoryData(reader.getMergeState(), field, SparseVectorForwardIndex::removeIndex);
         }
         BinaryDocValues binaryDocValues = valuesProducer.getBinary(field);
         int docId;

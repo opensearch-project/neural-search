@@ -7,12 +7,15 @@ package org.opensearch.neuralsearch.sparse.algorithm;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
+import org.apache.lucene.util.Accountable;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.neuralsearch.sparse.common.DocFreq;
 import org.opensearch.neuralsearch.sparse.common.DocFreqIterator;
 import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -22,7 +25,7 @@ import java.util.List;
 @Getter
 @Setter
 @EqualsAndHashCode
-public class DocumentCluster {
+public class DocumentCluster implements Accountable {
     private SparseVector summary;
     private final List<DocFreq> docs;
     // if true, docs in this cluster should always be examined
@@ -75,5 +78,21 @@ public class DocumentCluster {
                 return 0;
             }
         };
+    }
+
+    @Override
+    public long ramBytesUsed() {
+        return RamUsageEstimator.shallowSizeOfInstance(DocumentCluster.class) + docs.size() * RamUsageEstimator.shallowSizeOfInstance(
+            DocFreq.class
+        );
+    }
+
+    @Override
+    public Collection<Accountable> getChildResources() {
+        List<Accountable> children = new ArrayList<>();
+        if (summary != null) {
+            children.add(summary);
+        }
+        return Collections.unmodifiableList(children);
     }
 }

@@ -15,8 +15,10 @@ import org.apache.lucene.index.SegmentWriteState;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.store.DataOutput;
 import org.apache.lucene.store.IndexOutput;
+import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.FixedBitSet;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.neuralsearch.sparse.algorithm.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.algorithm.PostingClustering;
 import org.opensearch.neuralsearch.sparse.algorithm.PostingClusters;
@@ -25,23 +27,36 @@ import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * This class manages the in-memory postings for sparse vectors. It provides methods to write and read postings from memory.
  * It is used by the SparsePostingsConsumer and SparsePostingsReader classes.
  */
-public class InMemoryClusteredPosting {
-    public static final Map<InMemoryKey.IndexKey, Map<BytesRef, PostingClusters>> inMemoryPostings = new HashMap<>();
+public class InMemoryClusteredPosting implements Accountable {
+    public static final Map<InMemoryKey.IndexKey, Map<BytesRef, PostingClusters>> inMemoryPostings = new ConcurrentHashMap<>();
 
     public static void clearIndex(InMemoryKey.IndexKey key) {
-        synchronized (inMemoryPostings) {
-            inMemoryPostings.remove(key);
+        inMemoryPostings.remove(key);
+    }
+
+    @Override
+    public long ramBytesUsed() {
+        long ramUsed = 0;
+        for (Map.Entry<InMemoryKey.IndexKey, Map<BytesRef, PostingClusters>> entry : inMemoryPostings.entrySet()) {
+            ramUsed += RamUsageEstimator.shallowSizeOfInstance(InMemoryKey.IndexKey.class);
+            for (Map.Entry<BytesRef, PostingClusters> entry2 : entry.getValue().entrySet()) {
+                ramUsed += entry2.getKey().length;
+                ramUsed += entry2.getValue().ramBytesUsed();
+            }
         }
+        return ramUsed;
     }
 
     @AllArgsConstructor
@@ -49,24 +64,16 @@ public class InMemoryClusteredPosting {
         private final InMemoryKey.IndexKey key;
 
         public PostingClusters read(BytesRef term) {
-            synchronized (inMemoryPostings) {
-                if (!inMemoryPostings.containsKey(key)) {
-                    return null;
-                }
-                if (!inMemoryPostings.get(key).containsKey(term)) {
-                    return null;
-                }
-                return inMemoryPostings.get(key).get(term);
-            }
+            return inMemoryPostings.getOrDefault(key, Collections.emptyMap()).get(term);
         }
 
         public Set<BytesRef> getTerms() {
-            synchronized (inMemoryPostings) {
-                if (!inMemoryPostings.containsKey(key)) {
-                    return null;
-                }
-                return inMemoryPostings.get(key).keySet();
+            Map<BytesRef, PostingClusters> innerMap = inMemoryPostings.get(key);
+            if (innerMap == null) {
+                return null;
             }
+            // Create an unmodifiable copy of the keySet to ensure thread-safety
+            return Collections.unmodifiableSet(new HashSet<>(innerMap.keySet()));
         }
     }
 
@@ -101,11 +108,17 @@ public class InMemoryClusteredPosting {
         }
 
         public static void writePostingClusters(InMemoryKey.IndexKey key, BytesRef term, List<DocumentCluster> clusters) {
-            if (clusters == null || clusters.isEmpty()) return;
-            synchronized (inMemoryPostings) {
-                inMemoryPostings.putIfAbsent(key, new TreeMap<>());
-                inMemoryPostings.get(key).put(term.clone(), new PostingClusters(clusters));
+            if (clusters == null || clusters.isEmpty()) {
+                return;
             }
+
+            inMemoryPostings.compute(key, (k, existingMap) -> {
+                if (existingMap == null) {
+                    existingMap = new TreeMap<>();
+                }
+                existingMap.put(term.clone(), new PostingClusters(clusters));
+                return existingMap;
+            });
         }
 
         @Override

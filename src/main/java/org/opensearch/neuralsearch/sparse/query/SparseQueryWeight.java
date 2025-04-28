@@ -66,9 +66,8 @@ public class SparseQueryWeight extends Weight {
         if (info != null) {
             log.info("segment info: {}", info.name);
             InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(info, fieldType);
-            SparseVectorForwardIndex.SparseVectorForwardIndexReader reader = InMemorySparseVectorForwardIndex.getOrCreate(key)
-                .getForwardIndexReader();
-            sparseReader = reader::readSparseVector;
+            SparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.get(key);
+            sparseReader = index != null ? index.getForwardIndexReader()::readSparseVector : (docId -> { return null; });
         }
         final Scorer scorer = new PostingWithClustersScorer(
             query.getFieldName(),
