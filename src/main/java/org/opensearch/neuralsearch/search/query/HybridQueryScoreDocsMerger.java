@@ -46,14 +46,13 @@ class HybridQueryScoreDocsMerger<T extends ScoreDoc> {
         // then the newTopFieldDocs method in the HybridCollectorManager will set the fieldDocs as TopFieldDocs(totalHits, new FieldDoc[0],
         // sortFields).
         // In this case the size of fieldDocs is 0 with no delimiters.
-        if (sourceScoreDocs.length == 0) {
+        if (Objects.requireNonNull(sourceScoreDocs, "score docs cannot be null").length == 0) {
             return newScoreDocs;
         }
-        if (newScoreDocs.length == 0) {
+        if (Objects.requireNonNull(newScoreDocs, "score docs cannot be null").length == 0) {
             return sourceScoreDocs;
         }
-        if (Objects.requireNonNull(sourceScoreDocs, "score docs cannot be null").length < MIN_NUMBER_OF_ELEMENTS_IN_SCORE_DOC
-            || Objects.requireNonNull(newScoreDocs, "score docs cannot be null").length < MIN_NUMBER_OF_ELEMENTS_IN_SCORE_DOC) {
+        if (sourceScoreDocs.length < MIN_NUMBER_OF_ELEMENTS_IN_SCORE_DOC || newScoreDocs.length < MIN_NUMBER_OF_ELEMENTS_IN_SCORE_DOC) {
             throw new IllegalArgumentException("cannot merge top docs because it does not have enough elements");
         }
         // we overshoot and preallocate more than we need - length of both top docs combined.
