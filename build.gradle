@@ -15,7 +15,7 @@ import java.util.concurrent.Callable
 buildscript {
     ext {
         opensearch_version = System.getProperty("opensearch.version", "3.0.0-SNAPSHOT")
-        buildVersionQualifier = System.getProperty("build.version_qualifier", "beta1")
+        buildVersionQualifier = System.getProperty("build.version_qualifier", "")
         isSnapshot = "true" == System.getProperty("build.snapshot", "true")
         version_tokens = opensearch_version.tokenize('-')
         opensearch_build = version_tokens[0] + '.0'
