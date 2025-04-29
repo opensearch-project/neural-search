@@ -11,7 +11,6 @@ import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.AbstractQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.WithFieldName;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
@@ -49,7 +48,7 @@ import static org.opensearch.knn.index.query.KNNQueryBuilder.RESCORE_FIELD;
  */
 
 @Getter
-public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBuilder> implements WithFieldName {
+public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBuilder> {
     /**
      * The name of the query
      */
@@ -84,7 +83,6 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
      *
      * @return The field name used in the KNN query
      */
-    @Override
     public String fieldName() {
         return knnQueryBuilder.fieldName();
     }
