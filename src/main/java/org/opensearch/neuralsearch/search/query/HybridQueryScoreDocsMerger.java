@@ -37,8 +37,22 @@ class HybridQueryScoreDocsMerger<T extends ScoreDoc> {
      * @return merged array of ScoreDocs objects
      */
     public T[] merge(final T[] sourceScoreDocs, final T[] newScoreDocs, final Comparator<T> comparator, final boolean isSortEnabled) {
-        if (Objects.requireNonNull(sourceScoreDocs, "score docs cannot be null").length < MIN_NUMBER_OF_ELEMENTS_IN_SCORE_DOC
-            || Objects.requireNonNull(newScoreDocs, "score docs cannot be null").length < MIN_NUMBER_OF_ELEMENTS_IN_SCORE_DOC) {
+        // The length of sourceScoreDocs or newScoreDocs can be 0 in the following conditions
+        // 1. When concurrent segment search is enabled then there can be multiple collector instances that can have search results.
+        // 2. The total hits count of every collector instance represent the actual count of search results present in the shard
+        // irrespective of pagination.
+        // 3. If the PagingFieldCollector removes the search results as per `search_after` criteria and totalHits added in the collector is
+        // greater than 0,
+        // then the newTopFieldDocs method in the HybridCollectorManager will set the fieldDocs as TopFieldDocs(totalHits, new FieldDoc[0],
+        // sortFields).
+        // In this case the size of fieldDocs is 0 with no delimiters.
+        if (Objects.requireNonNull(sourceScoreDocs, "score docs cannot be null").length == 0) {
+            return newScoreDocs;
+        }
+        if (Objects.requireNonNull(newScoreDocs, "score docs cannot be null").length == 0) {
+            return sourceScoreDocs;
+        }
+        if (sourceScoreDocs.length < MIN_NUMBER_OF_ELEMENTS_IN_SCORE_DOC || newScoreDocs.length < MIN_NUMBER_OF_ELEMENTS_IN_SCORE_DOC) {
             throw new IllegalArgumentException("cannot merge top docs because it does not have enough elements");
         }
         // we overshoot and preallocate more than we need - length of both top docs combined.
