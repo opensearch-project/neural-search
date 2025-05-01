@@ -13,7 +13,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.Supplier;
 
 import org.opensearch.ml.client.MachineLearningNodeClient;
@@ -44,38 +43,24 @@ import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
 import org.opensearch.ingest.Processor;
-import org.opensearch.neuralsearch.executors.HybridQueryExecutor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor;
-import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
-import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.TextChunkingProcessor;
 import org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor;
-import org.opensearch.neuralsearch.processor.RRFProcessor;
-import org.opensearch.neuralsearch.processor.NormalizationProcessor;
-import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
-import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
-import org.opensearch.neuralsearch.processor.factory.ExplanationResponseProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.TextChunkingProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.SparseEncodingProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.TextImageEmbeddingProcessorFactory;
-import org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory;
-import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
-import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
-import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
-import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
 import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.neuralsearch.rest.RestNeuralStatsAction;
-import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
 import org.opensearch.neuralsearch.transport.NeuralStatsAction;
 import org.opensearch.neuralsearch.transport.NeuralStatsTransportAction;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
@@ -91,11 +76,8 @@ import org.opensearch.rest.RestController;
 import org.opensearch.rest.RestHandler;
 import org.opensearch.script.ScriptService;
 import org.opensearch.search.fetch.subphase.highlight.Highlighter;
-import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
-import org.opensearch.search.query.QueryPhaseSearcher;
-import org.opensearch.threadpool.ExecutorBuilder;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.watcher.ResourceWatcherService;
 
@@ -114,12 +96,12 @@ public class NeuralSearch extends Plugin
         ExtensiblePlugin,
         SearchPipelinePlugin {
     private MLCommonsClientAccessor clientAccessor;
-    private NormalizationProcessorWorkflow normalizationProcessorWorkflow;
+    // private NormalizationProcessorWorkflow normalizationProcessorWorkflow;
     private NeuralSearchSettingsAccessor settingsAccessor;
     private PipelineServiceUtil pipelineServiceUtil;
     private InfoStatsManager infoStatsManager;
-    private final ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
-    private final ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();
+    // private final ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
+    // private final ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();
     private final SemanticHighlighter semanticHighlighter;
     public static final String EXPLANATION_RESPONSE_KEY = "explanation_response";
     public static final String NEURAL_BASE_URI = "/_plugins/_neural";
@@ -151,8 +133,8 @@ public class NeuralSearch extends Plugin
             .queryTextExtractorRegistry(queryTextExtractorRegistry)
             .build();
         semanticHighlighter.initialize(semanticHighlighterEngine);
-        HybridQueryExecutor.initialize(threadPool);
-        normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
+        // HybridQueryExecutor.initialize(threadPool);
+        // normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
         settingsAccessor = new NeuralSearchSettingsAccessor(clusterService, environment.settings());
         pipelineServiceUtil = new PipelineServiceUtil(clusterService);
         infoStatsManager = new InfoStatsManager(NeuralSearchClusterUtil.instance(), settingsAccessor, pipelineServiceUtil);
@@ -164,7 +146,7 @@ public class NeuralSearch extends Plugin
     public List<QuerySpec<?>> getQueries() {
         return Arrays.asList(
             new QuerySpec<>(NeuralQueryBuilder.NAME, NeuralQueryBuilder::new, NeuralQueryBuilder::fromXContent),
-            new QuerySpec<>(HybridQueryBuilder.NAME, HybridQueryBuilder::new, HybridQueryBuilder::fromXContent),
+            // new QuerySpec<>(HybridQueryBuilder.NAME, HybridQueryBuilder::new, HybridQueryBuilder::fromXContent),
             new QuerySpec<>(NeuralSparseQueryBuilder.NAME, NeuralSparseQueryBuilder::new, NeuralSparseQueryBuilder::fromXContent),
             new QuerySpec<>(NeuralKNNQueryBuilder.NAME, NeuralKNNQueryBuilder::new, NeuralKNNQueryBuilder::fromXContent)
         );
@@ -189,10 +171,10 @@ public class NeuralSearch extends Plugin
         return Arrays.asList(new ActionHandler<>(NeuralStatsAction.INSTANCE, NeuralStatsTransportAction.class));
     }
 
-    @Override
-    public List<ExecutorBuilder<?>> getExecutorBuilders(Settings settings) {
-        return List.of(HybridQueryExecutor.getExecutorBuilder(settings));
-    }
+    // @Override
+    // public List<ExecutorBuilder<?>> getExecutorBuilders(Settings settings) {
+    // return List.of(HybridQueryExecutor.getExecutorBuilder(settings));
+    // }
 
     @Override
     public Map<String, Processor.Factory> getProcessors(Processor.Parameters parameters) {
@@ -223,23 +205,23 @@ public class NeuralSearch extends Plugin
             new TextChunkingProcessorFactory(parameters.env, parameters.ingestService.getClusterService(), parameters.analysisRegistry)
         );
     }
-
-    @Override
-    public Optional<QueryPhaseSearcher> getQueryPhaseSearcher() {
-        return Optional.of(new HybridQueryPhaseSearcher());
-    }
-
-    @Override
-    public Map<String, org.opensearch.search.pipeline.Processor.Factory<SearchPhaseResultsProcessor>> getSearchPhaseResultsProcessors(
-        Parameters parameters
-    ) {
-        return Map.of(
-            NormalizationProcessor.TYPE,
-            new NormalizationProcessorFactory(normalizationProcessorWorkflow, scoreNormalizationFactory, scoreCombinationFactory),
-            RRFProcessor.TYPE,
-            new RRFProcessorFactory(normalizationProcessorWorkflow, scoreNormalizationFactory, scoreCombinationFactory)
-        );
-    }
+    //
+    // @Override
+    // public Optional<QueryPhaseSearcher> getQueryPhaseSearcher() {
+    // return Optional.of(new HybridQueryPhaseSearcher());
+    // }
+    //
+    // @Override
+    // public Map<String, org.opensearch.search.pipeline.Processor.Factory<SearchPhaseResultsProcessor>> getSearchPhaseResultsProcessors(
+    // Parameters parameters
+    // ) {
+    // return Map.of(
+    // NormalizationProcessor.TYPE,
+    // new NormalizationProcessorFactory(normalizationProcessorWorkflow, scoreNormalizationFactory, scoreCombinationFactory),
+    // RRFProcessor.TYPE,
+    // new RRFProcessorFactory(normalizationProcessorWorkflow, scoreNormalizationFactory, scoreCombinationFactory)
+    // );
+    // }
 
     @Override
     public List<Setting<?>> getSettings() {
@@ -264,9 +246,7 @@ public class NeuralSearch extends Plugin
     ) {
         return Map.of(
             RerankProcessor.TYPE,
-            new RerankProcessorFactory(clientAccessor, parameters.searchPipelineService.getClusterService()),
-            ExplanationResponseProcessor.TYPE,
-            new ExplanationResponseProcessorFactory()
+            new RerankProcessorFactory(clientAccessor, parameters.searchPipelineService.getClusterService())
         );
     }
 

@@ -6,7 +6,6 @@ package org.opensearch.neuralsearch.processor.util;
 
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.core.action.ActionListener;
-import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.search.SearchHit;
 
 import java.util.ArrayList;
@@ -298,21 +297,21 @@ public class ProcessorUtils {
         return false;
     }
 
-    /**
-     * Returns the number of subqueries that are present in the queryTopDocs. This is useful to determine
-     * if the queryTopDocs are empty or not
-     * @param queryTopDocs
-     * @return
-     */
-    public static int getNumOfSubqueries(final List<CompoundTopDocs> queryTopDocs) {
-        return queryTopDocs.stream()
-            .filter(Objects::nonNull)
-            .filter(topDocs -> !topDocs.getTopDocs().isEmpty())
-            .findAny()
-            .get()
-            .getTopDocs()
-            .size();
-    }
+    // /**
+    // * Returns the number of subqueries that are present in the queryTopDocs. This is useful to determine
+    // * if the queryTopDocs are empty or not
+    // * @param queryTopDocs
+    // * @return
+    // */
+    // public static int getNumOfSubqueries(final List<CompoundTopDocs> queryTopDocs) {
+    // return queryTopDocs.stream()
+    // .filter(Objects::nonNull)
+    // .filter(topDocs -> !topDocs.getTopDocs().isEmpty())
+    // .findAny()
+    // .get()
+    // .getTopDocs()
+    // .size();
+    // }
 
     // This method should be used only when you are certain the object is a `Map<String, Object>`.
     // It is recommended to use this method as a last resort.

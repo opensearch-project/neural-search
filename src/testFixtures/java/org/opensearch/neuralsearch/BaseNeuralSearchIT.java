@@ -62,8 +62,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.neuralsearch.highlight.SemanticHighlighter;
 import org.opensearch.neuralsearch.plugin.NeuralSearch;
-import org.opensearch.neuralsearch.processor.NormalizationProcessor;
-import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
+//import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.neuralsearch.transport.NeuralStatsResponse;
@@ -87,13 +86,9 @@ import static org.opensearch.neuralsearch.util.TestUtils.INGEST_PIPELINE_TYPE;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TASK_RETRIES;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_USER_AGENT;
-import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
-import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.ML_PLUGIN_SYSTEM_INDEX_PREFIX;
 import static org.opensearch.neuralsearch.util.TestUtils.OPENDISTRO_SECURITY;
 import static org.opensearch.neuralsearch.util.TestUtils.OPENSEARCH_SYSTEM_INDEX_PREFIX;
-import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_LOWER_BOUNDS;
-import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_RETRY;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TIME_OUT_INTERVAL;
 import static org.opensearch.neuralsearch.util.TestUtils.SEARCH_PIPELINE_TYPE;
@@ -1614,88 +1609,88 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return true;
     }
 
-    @SneakyThrows
-    protected void createSearchPipelineWithResultsPostProcessor(final String pipelineId) {
-        createSearchPipeline(pipelineId, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of());
-    }
+    // @SneakyThrows
+    // protected void createSearchPipelineWithResultsPostProcessor(final String pipelineId) {
+    // createSearchPipeline(pipelineId, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of());
+    // }
 
-    @SneakyThrows
-    protected void createSearchPipeline(
-        final String pipelineId,
-        final String normalizationMethod,
-        String combinationMethod,
-        final Map<String, String> combinationParams
-    ) {
-        createSearchPipeline(pipelineId, normalizationMethod, Map.of(), combinationMethod, combinationParams, false);
-    }
+    // @SneakyThrows
+    // protected void createSearchPipeline(
+    // final String pipelineId,
+    // final String normalizationMethod,
+    // String combinationMethod,
+    // final Map<String, String> combinationParams
+    // ) {
+    // createSearchPipeline(pipelineId, normalizationMethod, Map.of(), combinationMethod, combinationParams, false);
+    // }
 
-    @SneakyThrows
-    protected void createSearchPipeline(
-        final String pipelineId,
-        final String normalizationMethod,
-        final Map<String, Object> normalizationParams,
-        final String combinationMethod,
-        final Map<String, String> combinationParams,
-        boolean addExplainResponseProcessor
-    ) {
-        StringBuilder stringBuilderForContentBody = new StringBuilder();
-        stringBuilderForContentBody.append("{\"description\": \"Post processor pipeline\",")
-            .append("\"phase_results_processors\": [{ ")
-            .append("\"")
-            .append(NormalizationProcessor.TYPE)
-            .append("\": {")
-            .append("\"normalization\": {")
-            .append("\"technique\": \"%s\"");
-        if (Objects.nonNull(normalizationParams) && !normalizationParams.isEmpty()) {
-            stringBuilderForContentBody.append(", \"parameters\": {");
-            if (normalizationParams.containsKey(PARAM_NAME_LOWER_BOUNDS)) {
-                stringBuilderForContentBody.append("\"lower_bounds\": [");
-                List<Map> lowerBounds = (List) normalizationParams.get(PARAM_NAME_LOWER_BOUNDS);
-                for (int i = 0; i < lowerBounds.size(); i++) {
-                    Map<String, String> lowerBound = lowerBounds.get(i);
-                    stringBuilderForContentBody.append("{ ")
-                        .append("\"mode\"")
-                        .append(": \"")
-                        .append(lowerBound.get("mode"))
-                        .append("\",")
-                        .append("\"min_score\"")
-                        .append(": ")
-                        .append(lowerBound.get("min_score"))
-                        .append(" }");
-                    if (i < lowerBounds.size() - 1) {
-                        stringBuilderForContentBody.append(", ");
-                    }
-                }
-                stringBuilderForContentBody.append("]");
-            }
-            stringBuilderForContentBody.append(" }");
-        }
-        stringBuilderForContentBody.append("},").append("\"combination\": {").append("\"technique\": \"%s\"");
-        if (Objects.nonNull(combinationParams) && !combinationParams.isEmpty()) {
-            stringBuilderForContentBody.append(", \"parameters\": {");
-            if (combinationParams.containsKey(PARAM_NAME_WEIGHTS)) {
-                stringBuilderForContentBody.append("\"weights\": ").append(combinationParams.get(PARAM_NAME_WEIGHTS));
-            }
-            stringBuilderForContentBody.append(" }");
-        }
-        stringBuilderForContentBody.append("}").append("}}]");
-        if (addExplainResponseProcessor) {
-            stringBuilderForContentBody.append(", \"response_processors\": [ ")
-                .append("{\"")
-                .append(ExplanationResponseProcessor.TYPE)
-                .append("\": {}}")
-                .append("]");
-        }
-        stringBuilderForContentBody.append("}");
-        makeRequest(
-            client(),
-            "PUT",
-            String.format(LOCALE, "/_search/pipeline/%s", pipelineId),
-            null,
-            toHttpEntity(String.format(LOCALE, stringBuilderForContentBody.toString(), normalizationMethod, combinationMethod)),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
-        );
-    }
+    // @SneakyThrows
+    // protected void createSearchPipeline(
+    // final String pipelineId,
+    // final String normalizationMethod,
+    // final Map<String, Object> normalizationParams,
+    // final String combinationMethod,
+    // final Map<String, String> combinationParams,
+    // boolean addExplainResponseProcessor
+    // ) {
+    // StringBuilder stringBuilderForContentBody = new StringBuilder();
+    // stringBuilderForContentBody.append("{\"description\": \"Post processor pipeline\",")
+    // .append("\"phase_results_processors\": [{ ")
+    // .append("\"")
+    // .append(NormalizationProcessor.TYPE)
+    // .append("\": {")
+    // .append("\"normalization\": {")
+    // .append("\"technique\": \"%s\"");
+    // if (Objects.nonNull(normalizationParams) && !normalizationParams.isEmpty()) {
+    // stringBuilderForContentBody.append(", \"parameters\": {");
+    // if (normalizationParams.containsKey(PARAM_NAME_LOWER_BOUNDS)) {
+    // stringBuilderForContentBody.append("\"lower_bounds\": [");
+    // List<Map> lowerBounds = (List) normalizationParams.get(PARAM_NAME_LOWER_BOUNDS);
+    // for (int i = 0; i < lowerBounds.size(); i++) {
+    // Map<String, String> lowerBound = lowerBounds.get(i);
+    // stringBuilderForContentBody.append("{ ")
+    // .append("\"mode\"")
+    // .append(": \"")
+    // .append(lowerBound.get("mode"))
+    // .append("\",")
+    // .append("\"min_score\"")
+    // .append(": ")
+    // .append(lowerBound.get("min_score"))
+    // .append(" }");
+    // if (i < lowerBounds.size() - 1) {
+    // stringBuilderForContentBody.append(", ");
+    // }
+    // }
+    // stringBuilderForContentBody.append("]");
+    // }
+    // stringBuilderForContentBody.append(" }");
+    // }
+    // stringBuilderForContentBody.append("},").append("\"combination\": {").append("\"technique\": \"%s\"");
+    // if (Objects.nonNull(combinationParams) && !combinationParams.isEmpty()) {
+    // stringBuilderForContentBody.append(", \"parameters\": {");
+    // if (combinationParams.containsKey(PARAM_NAME_WEIGHTS)) {
+    // stringBuilderForContentBody.append("\"weights\": ").append(combinationParams.get(PARAM_NAME_WEIGHTS));
+    // }
+    // stringBuilderForContentBody.append(" }");
+    // }
+    // stringBuilderForContentBody.append("}").append("}}]");
+    // if (addExplainResponseProcessor) {
+    // stringBuilderForContentBody.append(", \"response_processors\": [ ")
+    // .append("{\"")
+    // .append(ExplanationResponseProcessor.TYPE)
+    // .append("\": {}}")
+    // .append("]");
+    // }
+    // stringBuilderForContentBody.append("}");
+    // makeRequest(
+    // client(),
+    // "PUT",
+    // String.format(LOCALE, "/_search/pipeline/%s", pipelineId),
+    // null,
+    // toHttpEntity(String.format(LOCALE, stringBuilderForContentBody.toString(), normalizationMethod, combinationMethod)),
+    // ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+    // );
+    // }
 
     @SneakyThrows
     protected void createSearchPipelineWithDefaultResultsPostProcessor(final String pipelineId) {
