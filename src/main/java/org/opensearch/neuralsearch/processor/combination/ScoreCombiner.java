@@ -26,8 +26,6 @@ import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
-import org.apache.lucene.util.BytesRef;
-import org.opensearch.neuralsearch.processor.CollapseFieldDoc;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import lombok.extern.log4j.Log4j2;
@@ -189,8 +187,9 @@ public class ScoreCombiner {
                             System.arraycopy(fieldDoc.fields, 0, fields, 0, fieldDoc.fields.length);
                             fields[fieldDoc.fields.length] = ((CollapseTopFieldDocs) topDocs).collapseValues[i];
                             docIdSortFieldMap.put(fieldDoc.doc, fields);
+                        } else {
+                            docIdSortFieldMap.put(fieldDoc.doc, fieldDoc.fields);
                         }
-                        docIdSortFieldMap.put(fieldDoc.doc, fieldDoc.fields);
                     }
                 }
                 i++;

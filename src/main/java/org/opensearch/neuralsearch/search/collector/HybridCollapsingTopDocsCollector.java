@@ -17,17 +17,16 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
-import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.apache.lucene.search.grouping.GroupSelector;
 import org.apache.lucene.util.BytesRef;
+import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.neuralsearch.query.HybridQueryScorer;
 import org.opensearch.neuralsearch.search.lucene.MultiLeafFieldComparator;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -40,21 +39,20 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
     private int totalHitCount;
     private float maxScore = 0.0f;
     private Sort sort;
-    private final GroupSelector<BytesRef> groupSelector;
+    private final GroupSelector<T> groupSelector;
     private final int[] reversed;
     private final boolean needsScores;
     private int docBase;
-    private final ConcurrentHashMap<BytesRef, HybridCollectedSearchGroup<BytesRef>> groupMap;
-    private final ConcurrentHashMap<BytesRef, FieldValueHitQueue<FieldValueHitQueue.Entry>[]> groupQueueMap;
-    private ConcurrentHashMap<BytesRef, int[]> collectedHitsPerSubQueryMap;
-    private ConcurrentHashMap<BytesRef, FieldValueHitQueue.Entry[]> fieldValueLeafTrackersMap;
-    private ConcurrentHashMap<BytesRef, LeafFieldComparator[]> comparatorsMap;
-    private ConcurrentHashMap<BytesRef, FieldComparator<?>> firstComparatorMap;
-    private ConcurrentHashMap<BytesRef, Integer> reverseMulMap;
-    private ConcurrentHashMap<BytesRef, boolean[]> queueFullMap;
+    private final ConcurrentHashMap<T, FieldValueHitQueue<FieldValueHitQueue.Entry>[]> groupQueueMap;
+    private ConcurrentHashMap<T, int[]> collectedHitsPerSubQueryMap;
+    private ConcurrentHashMap<T, FieldValueHitQueue.Entry[]> fieldValueLeafTrackersMap;
+    private ConcurrentHashMap<T, LeafFieldComparator[]> comparatorsMap;
+    private ConcurrentHashMap<T, FieldComparator<?>> firstComparatorMap;
+    private ConcurrentHashMap<T, Integer> reverseMulMap;
+    private ConcurrentHashMap<T, boolean[]> queueFullMap;
     private final int numHits;
 
-    public HybridCollapsingTopDocsCollector(GroupSelector<BytesRef> groupSelector, String collapseField, Sort groupSort, int topNGroups) {
+    HybridCollapsingTopDocsCollector(GroupSelector<T> groupSelector, String collapseField, Sort groupSort, int topNGroups) {
         this.groupSelector = groupSelector;
         this.collapseField = collapseField;
         this.sort = groupSort;
@@ -70,7 +68,6 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 this.reversed[i] = sortField.getReverse() ? -1 : 1;
             }
 
-            this.groupMap = new ConcurrentHashMap<>();
             this.groupQueueMap = new ConcurrentHashMap<>();
             this.collectedHitsPerSubQueryMap = new ConcurrentHashMap<>();
             this.fieldValueLeafTrackersMap = new ConcurrentHashMap<>();
@@ -83,25 +80,52 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         }
     }
 
+    public static HybridCollapsingTopDocsCollector<?> createKeyword(
+        String collapseField,
+        MappedFieldType fieldType,
+        Sort sort,
+        int topNGroups
+    ) {
+        return new HybridCollapsingTopDocsCollector<>(
+            new CollapseDocSourceGroupSelector.Keyword(fieldType),
+            collapseField,
+            sort,
+            topNGroups
+        );
+    }
+
+    public static HybridCollapsingTopDocsCollector<?> createNumeric(
+        String collapseField,
+        MappedFieldType fieldType,
+        Sort sort,
+        int topNGroups
+    ) {
+        return new HybridCollapsingTopDocsCollector<>(
+            new CollapseDocSourceGroupSelector.Numeric(fieldType),
+            collapseField,
+            sort,
+            topNGroups
+        );
+    }
+
     @Override
-    public List<? extends TopDocs> topDocs() throws IOException {
+    public List<CollapseTopFieldDocs> topDocs() throws IOException {
         List<CollapseTopFieldDocs> topDocsList = new ArrayList<>();
         if (collectedHitsPerSubQueryMap.isEmpty()) {
-            return Collections.emptyList();
+            return topDocsList;
         }
         // Get num sub queries, there is probably a better way to do this
         int numSubQueries = 0;
-        for (Map.Entry<BytesRef, int[]> entry : collectedHitsPerSubQueryMap.entrySet()) {
+        for (Map.Entry<T, int[]> entry : collectedHitsPerSubQueryMap.entrySet()) {
             numSubQueries = entry.getValue().length;
             break;
         }
 
         for (int i = 0; i < numSubQueries; i++) {
             ArrayList<ScoreDoc> fieldDocs = new ArrayList<>();
-            ArrayList<BytesRef> collapseValues = new ArrayList<>();
+            ArrayList<T> collapseValues = new ArrayList<>();
             int hitsOnCurrentSubQuery = 0;
-            for (Map.Entry<BytesRef, HybridCollectedSearchGroup<BytesRef>> entry : groupMap.entrySet()) {
-                BytesRef groupValue = entry.getKey();
+            for (T groupValue : groupQueueMap.keySet()) {
                 FieldValueHitQueue<FieldValueHitQueue.Entry> priorityQueue = groupQueueMap.get(groupValue)[i];
                 final int n = priorityQueue.getComparators().length;
 
@@ -115,7 +139,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                             fields[k] = priorityQueue.getComparators()[k].value(queueEntry.slot);
                         }
                         fieldDocs.add(new FieldDoc(queueEntry.doc, queueEntry.score, fields));
-                        collapseValues.add(BytesRef.deepCopyOf(groupValue));
+                        collapseValues.add(groupValue instanceof BytesRef ? (T) BytesRef.deepCopyOf((BytesRef) groupValue) : groupValue);
                     } else {
                         // Break if queue is empty
                         break;
@@ -129,7 +153,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     new TotalHits(hitsOnCurrentSubQuery, TotalHits.Relation.EQUAL_TO),
                     fieldDocs.toArray(new FieldDoc[0]),
                     sort.getSort(),
-                    collapseValues.toArray(new BytesRef[0])
+                    collapseValues.toArray(new Object[0])
                 )
             );
         }
@@ -157,7 +181,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         groupSelector.setNextReader(context);
         return new LeafCollector() {
             HybridQueryScorer compoundQueryScorer;
-            ConcurrentHashMap<BytesRef, Boolean> initializeLeafComparatorsPerSegmentOnceMap;
+            ConcurrentHashMap<T, Boolean> initializeLeafComparatorsPerSegmentOnceMap;
 
             {
                 initializeLeafComparatorsPerSegmentOnceMap = new ConcurrentHashMap<>();
@@ -204,16 +228,11 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
             @Override
             public void collect(int doc) throws IOException {
                 groupSelector.advanceTo(doc);
-                BytesRef groupValue = groupSelector.currentValue();
-                HybridCollectedSearchGroup group = groupMap.get(groupValue);
+                T groupValue = groupSelector.currentValue();
+                FieldValueHitQueue<FieldValueHitQueue.Entry>[] group = groupQueueMap.get(groupValue);
                 float[] subScoresByQuery = compoundQueryScorer.hybridScores();
                 if (group == null) {
-                    initializeQueue(groupValue, subScoresByQuery.length);
-
-                    HybridCollectedSearchGroup newGroup = new HybridCollectedSearchGroup();
-                    newGroup.groupValue = groupSelector.copyValue();
-                    newGroup.topDoc = docBase + doc;
-                    groupMap.put(groupSelector.copyValue(), newGroup);
+                    initializeQueue(subScoresByQuery.length);
                 }
 
                 if (initializeLeafComparatorsPerSegmentOnceMap.get(groupValue) == null) {
@@ -224,18 +243,20 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                         LeafFieldComparator[] leafFieldComparators = compoundScores[i].getComparators(context);
                         int[] reverseMuls = compoundScores[i].getReverseMul();
                         if (leafFieldComparators.length == 1) {
-                            reverseMulMap.put(BytesRef.deepCopyOf(groupValue), reverseMuls[0]);
+                            reverseMulMap.put(groupSelector.copyValue(), reverseMuls[0]);
                             comparators[i] = leafFieldComparators[0];
                         } else {
-                            reverseMulMap.put(BytesRef.deepCopyOf(groupValue), 1);
+                            reverseMulMap.put(groupSelector.copyValue(), 1);
                             comparators[i] = new MultiLeafFieldComparator(leafFieldComparators, reverseMuls);
                         }
                         comparators[i].setScorer(compoundQueryScorer);
                     }
-                    comparatorsMap.put(BytesRef.deepCopyOf(groupValue), comparators);
-                    initializeLeafComparatorsPerSegmentOnceMap.put(BytesRef.deepCopyOf(groupValue), false);
+                    comparatorsMap.put(groupSelector.copyValue(), comparators);
+                    initializeLeafComparatorsPerSegmentOnceMap.put(groupSelector.copyValue(), false);
                 }
                 totalHitCount++;
+
+                subScoresByQuery = compoundQueryScorer.hybridScores();
 
                 for (int i = 0; i < subScoresByQuery.length; i++) {
                     float score = subScoresByQuery[i];
@@ -255,9 +276,9 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                             fieldValueLeafTrackers[i] = compoundScores[i].updateTop();
                             comparators[i].setBottom(fieldValueLeafTrackers[i].slot);
 
-                            comparatorsMap.put(BytesRef.deepCopyOf(groupValue), comparators);
-                            fieldValueLeafTrackersMap.put(BytesRef.deepCopyOf(groupValue), fieldValueLeafTrackers);
-                            groupQueueMap.put(BytesRef.deepCopyOf(groupValue), compoundScores);
+                            comparatorsMap.put(groupSelector.copyValue(), comparators);
+                            fieldValueLeafTrackersMap.put(groupSelector.copyValue(), fieldValueLeafTrackers);
+                            groupQueueMap.put(groupSelector.copyValue(), compoundScores);
                         }
                     } else {
                         int[] collectedHitsForCurrentSubQuery = collectedHitsPerSubQueryMap.get(groupValue);
@@ -279,28 +300,28 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
                         fieldValueLeafTrackers[i] = compoundScores[i].add(bottomEntry);
 
-                        fieldValueLeafTrackersMap.put(BytesRef.deepCopyOf(groupValue), fieldValueLeafTrackers);
-                        groupQueueMap.put(BytesRef.deepCopyOf(groupValue), compoundScores);
+                        fieldValueLeafTrackersMap.put(groupSelector.copyValue(), fieldValueLeafTrackers);
+                        groupQueueMap.put(groupSelector.copyValue(), compoundScores);
 
                         if (slot == (numHits - 1)) {
                             queueFullArray[i] = true;
-                            queueFullMap.put(BytesRef.deepCopyOf(groupValue), queueFullArray);
+                            queueFullMap.put(groupSelector.copyValue(), queueFullArray);
                         }
                     }
                 }
             }
 
-            private void initializeQueue(BytesRef groupValue, int numSubQueries) {
+            private void initializeQueue(int numSubQueries) throws IOException {
                 FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores = new FieldValueHitQueue[numSubQueries];
                 for (int i = 0; i < numSubQueries; i++) {
                     compoundScores[i] = FieldValueHitQueue.create(sort.getSort(), numHits);
-                    firstComparatorMap.put(BytesRef.deepCopyOf(groupValue), compoundScores[i].getComparators()[0]);
+                    firstComparatorMap.put(groupSelector.copyValue(), compoundScores[i].getComparators()[0]);
                 }
-                groupQueueMap.put(BytesRef.deepCopyOf(groupValue), compoundScores);
-                collectedHitsPerSubQueryMap.put(BytesRef.deepCopyOf(groupValue), new int[numSubQueries]);
-                comparatorsMap.put(BytesRef.deepCopyOf(groupValue), new LeafFieldComparator[numSubQueries]);
-                fieldValueLeafTrackersMap.put(BytesRef.deepCopyOf(groupValue), new FieldValueHitQueue.Entry[numSubQueries]);
-                queueFullMap.put(BytesRef.deepCopyOf(groupValue), new boolean[numSubQueries]);
+                groupQueueMap.put(groupSelector.copyValue(), compoundScores);
+                collectedHitsPerSubQueryMap.put(groupSelector.copyValue(), new int[numSubQueries]);
+                comparatorsMap.put(groupSelector.copyValue(), new LeafFieldComparator[numSubQueries]);
+                fieldValueLeafTrackersMap.put(groupSelector.copyValue(), new FieldValueHitQueue.Entry[numSubQueries]);
+                queueFullMap.put(groupSelector.copyValue(), new boolean[numSubQueries]);
             }
         };
     }

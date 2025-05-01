@@ -26,9 +26,11 @@ import org.apache.lucene.util.BytesRef;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.lucene.search.FilteredCollector;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
+import org.opensearch.index.mapper.KeywordFieldMapper;
+import org.opensearch.index.mapper.MappedFieldType;
+import org.opensearch.index.mapper.NumberFieldMapper;
 import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
-import org.opensearch.neuralsearch.search.collector.CollapseDocSourceGroupSelector;
 import org.opensearch.neuralsearch.search.collector.HybridCollapsingTopDocsCollector;
 import org.opensearch.neuralsearch.search.collector.HybridSearchCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopFieldDocSortCollector;
@@ -155,12 +157,26 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     private Collector getHybridQueryCollector() {
         if (collapseContext != null) {
             // Collapse is applied
-            return new HybridCollapsingTopDocsCollector(
-                new CollapseDocSourceGroupSelector<>(collapseContext.getFieldName()),
-                collapseContext.getFieldName(),
-                sortAndFormats == null ? new Sort(new SortField(null, SortField.Type.SCORE)) : sortAndFormats.sort,
-                searchContext.size()
-            );
+            MappedFieldType fieldType = collapseContext.getFieldType();
+            if (fieldType instanceof KeywordFieldMapper.KeywordFieldType) {
+                return HybridCollapsingTopDocsCollector.createKeyword(
+                    collapseContext.getFieldName(),
+                    fieldType,
+                    sortAndFormats == null ? new Sort(new SortField(null, SortField.Type.SCORE)) : sortAndFormats.sort,
+                    searchContext.size()
+                );
+            } else if (fieldType instanceof NumberFieldMapper.NumberFieldType) {
+                return HybridCollapsingTopDocsCollector.createNumeric(
+                    collapseContext.getFieldName(),
+                    fieldType,
+                    sortAndFormats == null ? new Sort(new SortField(null, SortField.Type.SCORE)) : sortAndFormats.sort,
+                    searchContext.size()
+                );
+            } else {
+                throw new IllegalStateException(
+                    "unknown type for collapse field " + collapseContext.getFieldName() + ", only keywords and numbers are accepted"
+                );
+            }
         } else {
             if (sortAndFormats == null) {
                 return new HybridTopScoreDocCollector(numHits, hitsThresholdChecker);
@@ -400,7 +416,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 List<FieldDoc> result = new ArrayList<>();
                 Object[] fields = new Object[0];
                 result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, fields));
-                collapseValues.add(new BytesRef(createCollapseValueStartStopElementForHybridSearchResults()));
+                collapseValues.add(0);
                 for (TopDocs topDoc : topDocs) {
                     CollapseTopFieldDocs collapseTopFieldDoc = (CollapseTopFieldDocs) topDoc;
                     collapseField = collapseTopFieldDoc.field;
@@ -416,12 +432,13 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                     }
                     result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, fields));
                     result.addAll(fieldDocsPerQuery);
-                    collapseValues.add(new BytesRef(createCollapseValueDelimiterElementForHybridSearchResults()));
+                    // Dummy delimiter element
+                    collapseValues.add(0);
                     collapseValues.addAll(Arrays.asList(collapseTopFieldDoc.collapseValues));
 
                 }
                 result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, fields));
-                collapseValues.add(new BytesRef(createCollapseValueStartStopElementForHybridSearchResults()));
+                collapseValues.add(0);
                 fieldDocs.addAll(result);
             } else {
                 List<ScoreDoc> result = new ArrayList<>();
@@ -485,7 +502,11 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
             .findFirst()
             .orElse(-1);
         if (delimiterDocId == -1) {
-            return new TopFieldDocs(totalHits, new FieldDoc[0], sortFields);
+            return new TopFieldDocs(
+                totalHits,
+                new FieldDoc[0],
+                sortFields == null ? new SortField[] { new SortField(null, SortField.Type.SCORE) } : sortFields
+            );
         }
 
         // format scores using following template:
