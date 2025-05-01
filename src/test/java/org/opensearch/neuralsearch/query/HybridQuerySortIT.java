@@ -50,7 +50,6 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
     private static final int SHARDS_COUNT_IN_MULTI_NODE_CLUSTER = 3;
     private static final int LTE_OF_RANGE_IN_HYBRID_QUERY = 400;
     private static final int GTE_OF_RANGE_IN_HYBRID_QUERY = 20;
-    private static final int SMALLEST_STOCK_VALUE_IN_QUERY_RESULT = 20;
     private static final int LARGEST_STOCK_VALUE_IN_QUERY_RESULT = 400;
     private static final int LARGEST_STOCK_VALUE_IN_SEARCH_AFTER_MULTIPLE_FIELD_QUERY_RESULT = 25;
     private static final int LARGEST_STOCK_VALUE_IN_SEARCH_AFTER_SINGLE_FIELD_QUERY_RESULT = 22;
@@ -70,6 +69,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
         updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
         testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+        testSingleFieldSortNotOnScoreField_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
         testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
     }
 
@@ -78,6 +78,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
         updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
         testSingleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+        testSingleFieldSortNotOnScoreField_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
         testMultipleFieldSort_whenMultipleSubQueries_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
         testScoreSort_whenSingleFieldSort_thenSuccessful(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
     }
@@ -127,6 +128,35 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
         );
         List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6, 6);
         assertStockValueWithSortOrderInHybridQueryResults(nestedHits, SortOrder.DESC, LARGEST_STOCK_VALUE_IN_QUERY_RESULT, true, true);
+    }
+
+    @SneakyThrows
+    private void testSingleFieldSortNotOnScoreField_whenMultipleSubQueries_thenSuccessful(String indexName) {
+        HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
+            "mission",
+            "part",
+            LTE_OF_RANGE_IN_HYBRID_QUERY,
+            GTE_OF_RANGE_IN_HYBRID_QUERY
+        );
+
+        Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
+        fieldSortOrderMap.put("category", SortOrder.DESC);
+
+        Map<String, Object> searchResponseAsMap = search(
+            indexName,
+            hybridQueryBuilder,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            createSortBuilders(fieldSortOrderMap, false),
+            false,
+            null,
+            0
+        );
+        List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6, 6);
+        assertNullScoreWithSortOrderInHybridQueryResults(nestedHits);
     }
 
     @SneakyThrows
@@ -683,6 +713,13 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                 assertTrue("Stock value is sorted by ascending sort order", score >= baseScore);
             }
             baseScore = score;
+        }
+    }
+
+    private void assertNullScoreWithSortOrderInHybridQueryResults(List<Map<String, Object>> hitsNestedList) {
+        for (Map<String, Object> oneHit : hitsNestedList) {
+            assertNotNull(oneHit.get("_source"));
+            assertEquals(null, oneHit.get("_score"));
         }
     }
 

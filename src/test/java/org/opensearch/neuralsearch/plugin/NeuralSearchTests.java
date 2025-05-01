@@ -12,7 +12,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import org.junit.Before;
 import org.mockito.Mock;
@@ -30,14 +29,15 @@ import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.RRFProcessor;
+import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory;
 import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
-import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.plugins.SearchPipelinePlugin;
 import org.opensearch.plugins.SearchPlugin;
@@ -47,7 +47,6 @@ import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.pipeline.SearchPipelineService;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
-import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.threadpool.ExecutorBuilder;
 import org.opensearch.threadpool.FixedExecutorBuilder;
 import org.opensearch.threadpool.ThreadPool;
@@ -66,6 +65,8 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
     private ClusterService clusterService;
     @Mock
     private ThreadPool threadPool;
+    @Mock
+    private Environment environment;
 
     @Before
     public void setup() {
@@ -115,21 +116,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         assertFalse(querySpecs.isEmpty());
         assertTrue(querySpecs.stream().anyMatch(spec -> NeuralQueryBuilder.NAME.equals(spec.getName().getPreferredName())));
         assertTrue(querySpecs.stream().anyMatch(spec -> HybridQueryBuilder.NAME.equals(spec.getName().getPreferredName())));
-    }
-
-    public void testQueryPhaseSearcher() {
-        Optional<QueryPhaseSearcher> queryPhaseSearcherWithFeatureFlagDisabled = plugin.getQueryPhaseSearcher();
-
-        assertNotNull(queryPhaseSearcherWithFeatureFlagDisabled);
-        assertFalse(queryPhaseSearcherWithFeatureFlagDisabled.isEmpty());
-        assertTrue(queryPhaseSearcherWithFeatureFlagDisabled.get() instanceof HybridQueryPhaseSearcher);
-
-        initFeatureFlags();
-
-        Optional<QueryPhaseSearcher> queryPhaseSearcher = plugin.getQueryPhaseSearcher();
-
-        assertNotNull(queryPhaseSearcher);
-        assertTrue(queryPhaseSearcher.isEmpty());
+        assertTrue(querySpecs.stream().anyMatch(spec -> NeuralSparseQueryBuilder.NAME.equals(spec.getName().getPreferredName())));
     }
 
     public void testProcessors() {
@@ -151,6 +138,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         Map<String, Processor.Factory> processors = plugin.getProcessors(processorParams);
         assertNotNull(processors);
         assertNotNull(processors.get(TextEmbeddingProcessor.TYPE));
+        assertNotNull(processors.get(SparseEncodingProcessor.TYPE));
     }
 
     public void testSearchPhaseResultsProcessors() {
@@ -209,5 +197,9 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         assertFalse(executorBuilders.isEmpty());
         assertEquals("Unexpected number of executor builders are registered", 1, executorBuilders.size());
         assertTrue(executorBuilders.get(0) instanceof FixedExecutorBuilder);
+    }
+
+    public void testGetMappers_shouldReturnEmptyMap() {
+        assertTrue(plugin.getMappers().isEmpty());
     }
 }
