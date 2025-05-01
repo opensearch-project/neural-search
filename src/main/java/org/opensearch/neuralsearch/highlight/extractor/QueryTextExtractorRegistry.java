@@ -8,7 +8,6 @@ import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.opensearch.neuralsearch.query.NeuralKNNQuery;
-import org.opensearch.neuralsearch.query.HybridQuery;
 
 import lombok.extern.log4j.Log4j2;
 
@@ -36,7 +35,6 @@ public class QueryTextExtractorRegistry {
     private void initialize() {
         register(NeuralKNNQuery.class, new NeuralQueryTextExtractor());
         register(TermQuery.class, new TermQueryTextExtractor());
-        register(HybridQuery.class, new HybridQueryTextExtractor(this));
 
         // BooleanQueryTextExtractor needs a reference to this registry
         // so we need to register it after creating the registry instance

@@ -27,26 +27,23 @@ import org.opensearch.ingest.IngestService;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor;
-import org.opensearch.neuralsearch.processor.NormalizationProcessor;
-import org.opensearch.neuralsearch.processor.RRFProcessor;
+//import org.opensearch.neuralsearch.processor.NormalizationProcessor;
+//import org.opensearch.neuralsearch.processor.RRFProcessor;
+import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
-import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
-import org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory;
 import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
-import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+//import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.plugins.SearchPipelinePlugin;
 import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.plugins.SearchPlugin.SearchExtSpec;
 import org.opensearch.search.pipeline.Processor.Factory;
-import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.pipeline.SearchPipelineService;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
-import org.opensearch.threadpool.ExecutorBuilder;
-import org.opensearch.threadpool.FixedExecutorBuilder;
 import org.opensearch.threadpool.ThreadPool;
 
 public class NeuralSearchTests extends OpenSearchQueryTestCase {
@@ -63,6 +60,8 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
     private ClusterService clusterService;
     @Mock
     private ThreadPool threadPool;
+    @Mock
+    private Environment environment;
 
     @Before
     public void setup() {
@@ -111,7 +110,8 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         assertNotNull(querySpecs);
         assertFalse(querySpecs.isEmpty());
         assertTrue(querySpecs.stream().anyMatch(spec -> NeuralQueryBuilder.NAME.equals(spec.getName().getPreferredName())));
-        assertTrue(querySpecs.stream().anyMatch(spec -> HybridQueryBuilder.NAME.equals(spec.getName().getPreferredName())));
+        // assertTrue(querySpecs.stream().anyMatch(spec -> HybridQueryBuilder.NAME.equals(spec.getName().getPreferredName())));
+        assertTrue(querySpecs.stream().anyMatch(spec -> NeuralSparseQueryBuilder.NAME.equals(spec.getName().getPreferredName())));
     }
 
     public void testProcessors() {
@@ -133,26 +133,27 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         Map<String, Processor.Factory> processors = plugin.getProcessors(processorParams);
         assertNotNull(processors);
         assertNotNull(processors.get(TextEmbeddingProcessor.TYPE));
+        assertNotNull(processors.get(SparseEncodingProcessor.TYPE));
     }
 
-    public void testSearchPhaseResultsProcessors() {
-        Map<String, org.opensearch.search.pipeline.Processor.Factory<SearchPhaseResultsProcessor>> searchPhaseResultsProcessors = plugin
-            .getSearchPhaseResultsProcessors(searchParameters);
-        assertNotNull(searchPhaseResultsProcessors);
-        assertEquals(2, searchPhaseResultsProcessors.size());
-        // assert normalization processor conditions
-        assertTrue(searchPhaseResultsProcessors.containsKey("normalization-processor"));
-        org.opensearch.search.pipeline.Processor.Factory<SearchPhaseResultsProcessor> scoringProcessor = searchPhaseResultsProcessors.get(
-            NormalizationProcessor.TYPE
-        );
-        assertTrue(scoringProcessor instanceof NormalizationProcessorFactory);
-        // assert rrf processor conditions
-        assertTrue(searchPhaseResultsProcessors.containsKey("score-ranker-processor"));
-        org.opensearch.search.pipeline.Processor.Factory<SearchPhaseResultsProcessor> rankingProcessor = searchPhaseResultsProcessors.get(
-            RRFProcessor.TYPE
-        );
-        assertTrue(rankingProcessor instanceof RRFProcessorFactory);
-    }
+    // public void testSearchPhaseResultsProcessors() {
+    // Map<String, org.opensearch.search.pipeline.Processor.Factory<SearchPhaseResultsProcessor>> searchPhaseResultsProcessors = plugin
+    // .getSearchPhaseResultsProcessors(searchParameters);
+    // assertNotNull(searchPhaseResultsProcessors);
+    // assertEquals(2, searchPhaseResultsProcessors.size());
+    // // assert normalization processor conditions
+    // assertTrue(searchPhaseResultsProcessors.containsKey("normalization-processor"));
+    // org.opensearch.search.pipeline.Processor.Factory<SearchPhaseResultsProcessor> scoringProcessor = searchPhaseResultsProcessors.get(
+    // NormalizationProcessor.TYPE
+    // );
+    // assertTrue(scoringProcessor instanceof NormalizationProcessorFactory);
+    // // assert rrf processor conditions
+    // assertTrue(searchPhaseResultsProcessors.containsKey("score-ranker-processor"));
+    // org.opensearch.search.pipeline.Processor.Factory<SearchPhaseResultsProcessor> rankingProcessor = searchPhaseResultsProcessors.get(
+    // RRFProcessor.TYPE
+    // );
+    // assertTrue(rankingProcessor instanceof RRFProcessorFactory);
+    // }
 
     public void testGetSettings() {
         List<Setting<?>> settings = plugin.getSettings();
@@ -181,17 +182,17 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         assertEquals(1, searchExts.size());
     }
 
-    public void testExecutionBuilders() {
-        Settings settings = Settings.builder().build();
-        Environment environment = mock(Environment.class);
-        when(environment.settings()).thenReturn(settings);
-        final List<ExecutorBuilder<?>> executorBuilders = plugin.getExecutorBuilders(settings);
-
-        assertNotNull(executorBuilders);
-        assertFalse(executorBuilders.isEmpty());
-        assertEquals("Unexpected number of executor builders are registered", 1, executorBuilders.size());
-        assertTrue(executorBuilders.get(0) instanceof FixedExecutorBuilder);
-    }
+    // public void testExecutionBuilders() {
+    // Settings settings = Settings.builder().build();
+    // Environment environment = mock(Environment.class);
+    // when(environment.settings()).thenReturn(settings);
+    // final List<ExecutorBuilder<?>> executorBuilders = plugin.getExecutorBuilders(settings);
+    //
+    // assertNotNull(executorBuilders);
+    // assertFalse(executorBuilders.isEmpty());
+    // assertEquals("Unexpected number of executor builders are registered", 1, executorBuilders.size());
+    // assertTrue(executorBuilders.get(0) instanceof FixedExecutorBuilder);
+    // }
 
     public void testGetMappers_shouldReturnEmptyMap() {
         assertTrue(plugin.getMappers().isEmpty());

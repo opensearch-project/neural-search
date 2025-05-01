@@ -82,7 +82,7 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 4.0f, 10000);
         processor.processRequest(searchRequest);
         NeuralSparseQueryBuilder queryBuilder = (NeuralSparseQueryBuilder) searchRequest.source().query();
-        assertEquals(queryBuilder.twoPhasePruneRatio(), 0.5f, 1e-3);
+        assertEquals(queryBuilder.neuralSparseQueryTwoPhaseInfo().getTwoPhasePruneRatio(), 0.5f, 1e-3);
         assertNotNull(searchRequest.source().rescores());
     }
 
@@ -94,8 +94,8 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, "alpha_mass", true, 4.0f, 10000);
         processor.processRequest(searchRequest);
         NeuralSparseQueryBuilder queryBuilder = (NeuralSparseQueryBuilder) searchRequest.source().query();
-        assertEquals(queryBuilder.twoPhasePruneRatio(), 0.5f, 1e-3);
-        assertEquals(queryBuilder.twoPhasePruneType(), PruneType.ALPHA_MASS);
+        assertEquals(queryBuilder.neuralSparseQueryTwoPhaseInfo().getTwoPhasePruneRatio(), 0.5f, 1e-3);
+        assertEquals(queryBuilder.neuralSparseQueryTwoPhaseInfo().getTwoPhasePruneType(), PruneType.ALPHA_MASS);
         assertNotNull(searchRequest.source().rescores());
     }
 
@@ -110,7 +110,7 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         processor.processRequest(searchRequest);
         BoolQueryBuilder queryBuilder = (BoolQueryBuilder) searchRequest.source().query();
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = (NeuralSparseQueryBuilder) queryBuilder.should().get(0);
-        assertEquals(neuralSparseQueryBuilder.twoPhasePruneRatio(), 0.5f, 1e-3);
+        assertEquals(neuralSparseQueryBuilder.neuralSparseQueryTwoPhaseInfo().getTwoPhasePruneRatio(), 0.5f, 1e-3);
         assertNotNull(searchRequest.source().rescores());
     }
 
@@ -125,7 +125,7 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 4.0f, 10000);
         processor.processRequest(searchRequest);
         NeuralSparseQueryBuilder queryBuilder = (NeuralSparseQueryBuilder) searchRequest.source().query();
-        assertEquals(queryBuilder.twoPhasePruneRatio(), 0.5f, 1e-3);
+        assertEquals(queryBuilder.neuralSparseQueryTwoPhaseInfo().getTwoPhasePruneRatio(), 0.5f, 1e-3);
         assertNotNull(searchRequest.source().rescores());
     }
 
@@ -137,7 +137,7 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, false, 4.0f, 10000);
         processor.processRequest(searchRequest);
         NeuralSparseQueryBuilder queryBuilder = (NeuralSparseQueryBuilder) searchRequest.source().query();
-        assertEquals(queryBuilder.twoPhasePruneRatio(), 0f, 1e-3);
+        assertEquals(queryBuilder.neuralSparseQueryTwoPhaseInfo().getTwoPhasePruneRatio(), 0f, 1e-3);
         assertNull(searchRequest.source().rescores());
     }
 
