@@ -225,7 +225,14 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                                 String.format(Locale.ROOT, "Number of sub-queries exceeds maximum supported by [%s] query", NAME)
                             );
                         }
-                        queries.add(parseInnerQueryBuilder(parser));
+                        QueryBuilder query = parseInnerQueryBuilder(parser);
+                        if (query.getName().equals(NAME)) {
+                            throw new ParsingException(
+                                parser.getTokenLocation(),
+                                String.format(Locale.ROOT, "[%s] query cannot be nested in another [%s] query", NAME, NAME)
+                            );
+                        }
+                        queries.add(query);
                         token = parser.nextToken();
                     }
                 } else {
