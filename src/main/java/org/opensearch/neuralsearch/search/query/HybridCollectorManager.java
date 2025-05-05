@@ -163,14 +163,16 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                     collapseContext.getFieldName(),
                     fieldType,
                     sortAndFormats == null ? new Sort(new SortField(null, SortField.Type.SCORE)) : sortAndFormats.sort,
-                    searchContext.size()
+                    searchContext.size(),
+                    hitsThresholdChecker
                 );
             } else if (fieldType instanceof NumberFieldMapper.NumberFieldType) {
                 return HybridCollapsingTopDocsCollector.createNumeric(
                     collapseContext.getFieldName(),
                     fieldType,
                     sortAndFormats == null ? new Sort(new SortField(null, SortField.Type.SCORE)) : sortAndFormats.sort,
-                    searchContext.size()
+                    searchContext.size(),
+                    hitsThresholdChecker
                 );
             } else {
                 throw new IllegalStateException(

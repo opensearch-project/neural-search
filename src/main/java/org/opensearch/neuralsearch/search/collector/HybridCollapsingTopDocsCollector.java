@@ -4,8 +4,10 @@
  */
 package org.opensearch.neuralsearch.search.collector;
 
+import lombok.Setter;
 import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.search.CollectionTerminatedException;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.FieldComparator;
 import org.apache.lucene.search.FieldDoc;
@@ -23,6 +25,7 @@ import org.apache.lucene.search.grouping.GroupSelector;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.neuralsearch.query.HybridQueryScorer;
+import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 import org.opensearch.neuralsearch.search.lucene.MultiLeafFieldComparator;
 
 import java.io.IOException;
@@ -51,8 +54,17 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
     private ConcurrentHashMap<T, Integer> reverseMulMap;
     private ConcurrentHashMap<T, boolean[]> queueFullMap;
     private final int numHits;
+    @Setter
+    private TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
+    private HitsThresholdChecker hitsThresholdChecker;
 
-    HybridCollapsingTopDocsCollector(GroupSelector<T> groupSelector, String collapseField, Sort groupSort, int topNGroups) {
+    HybridCollapsingTopDocsCollector(
+        GroupSelector<T> groupSelector,
+        String collapseField,
+        Sort groupSort,
+        int topNGroups,
+        HitsThresholdChecker hitsThresholdChecker
+    ) {
         this.groupSelector = groupSelector;
         this.collapseField = collapseField;
         this.sort = groupSort;
@@ -77,6 +89,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
             this.queueFullMap = new ConcurrentHashMap<>();
 
             this.numHits = topNGroups;
+            this.hitsThresholdChecker = hitsThresholdChecker;
         }
     }
 
@@ -84,13 +97,15 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         String collapseField,
         MappedFieldType fieldType,
         Sort sort,
-        int topNGroups
+        int topNGroups,
+        HitsThresholdChecker hitsThresholdChecker
     ) {
         return new HybridCollapsingTopDocsCollector<>(
             new CollapseDocSourceGroupSelector.Keyword(fieldType),
             collapseField,
             sort,
-            topNGroups
+            topNGroups,
+            hitsThresholdChecker
         );
     }
 
@@ -98,13 +113,15 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         String collapseField,
         MappedFieldType fieldType,
         Sort sort,
-        int topNGroups
+        int topNGroups,
+        HitsThresholdChecker hitsThresholdChecker
     ) {
         return new HybridCollapsingTopDocsCollector<>(
             new CollapseDocSourceGroupSelector.Numeric(fieldType),
             collapseField,
             sort,
-            topNGroups
+            topNGroups,
+            hitsThresholdChecker
         );
     }
 
@@ -129,8 +146,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 FieldValueHitQueue<FieldValueHitQueue.Entry> priorityQueue = groupQueueMap.get(groupValue)[i];
                 final int n = priorityQueue.getComparators().length;
 
-                // Hard coded 10 for now
-                for (int j = 0; j < 10; j++) {
+                for (int j = 0; j < numHits; j++) {
                     if (priorityQueue.size() > 0) {
                         FieldValueHitQueue.Entry queueEntry = priorityQueue.pop();
 
@@ -150,7 +166,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
             topDocsList.add(
                 new CollapseTopFieldDocs(
                     collapseField,
-                    new TotalHits(hitsOnCurrentSubQuery, TotalHits.Relation.EQUAL_TO),
+                    new TotalHits(hitsOnCurrentSubQuery, totalHitsRelation),
                     fieldDocs.toArray(new FieldDoc[0]),
                     sort.getSort(),
                     collapseValues.toArray(new Object[0])
@@ -255,6 +271,13 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     initializeLeafComparatorsPerSegmentOnceMap.put(groupSelector.copyValue(), false);
                 }
                 totalHitCount++;
+                hitsThresholdChecker.incrementHitCount();
+
+                if (hitsThresholdChecker.isThresholdReached()) {
+                    setTotalHitsRelation(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO);
+                    log.info("Terminating collection as hits threshold is reached");
+                    throw new CollectionTerminatedException();
+                }
 
                 subScoresByQuery = compoundQueryScorer.hybridScores();
 
