@@ -380,7 +380,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     }
 
     private TopDocs getNewTopDocs(final TotalHits totalHits, final List<TopDocs> topDocs) {
-        boolean isCollapseEnabled = topDocs.get(0) instanceof CollapseTopFieldDocs;
+        boolean isCollapseEnabled = topDocs.isEmpty() == false && topDocs.get(0) instanceof CollapseTopFieldDocs;
         ScoreDoc[] scoreDocs = new ScoreDoc[0];
         ArrayList<Object> collapseValues = new ArrayList<>();
         String collapseField = "";
