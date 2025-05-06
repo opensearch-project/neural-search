@@ -23,7 +23,10 @@ import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.processor.chunker.Chunker;
 import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
+import org.opensearch.neuralsearch.processor.chunker.DelimiterChunker;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.util.ProcessorDocumentUtils;
 
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.MAX_CHUNK_LIMIT_FIELD;
@@ -192,6 +195,8 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, maxChunkLimit);
         runtimeParameters.put(CHUNK_STRING_COUNT_FIELD, chunkStringCount);
         chunkMapType(sourceAndMetadataMap, fieldMap, runtimeParameters);
+
+        recordChunkingExecutionStats(chunker.getAlgorithmName());
         return ingestDocument;
     }
 
@@ -315,5 +320,13 @@ public final class TextChunkingProcessor extends AbstractProcessor {
             result = chunkList((List<String>) value, runTimeParameters);
         }
         return result;
+    }
+
+    private void recordChunkingExecutionStats(String algorithmName) {
+        EventStatsManager.increment(EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS);
+        switch (algorithmName) {
+            case DelimiterChunker.ALGORITHM_NAME -> EventStatsManager.increment(EventStatName.TEXT_CHUNKING_DELIMITER_EXECUTIONS);
+            case FixedTokenLengthChunker.ALGORITHM_NAME -> EventStatsManager.increment(EventStatName.TEXT_CHUNKING_FIXED_LENGTH_EXECUTIONS);
+        }
     }
 }

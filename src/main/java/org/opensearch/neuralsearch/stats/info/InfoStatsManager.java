@@ -4,7 +4,10 @@
  */
 package org.opensearch.neuralsearch.stats.info;
 
+import org.opensearch.neuralsearch.processor.TextChunkingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
+import org.opensearch.neuralsearch.processor.chunker.DelimiterChunker;
+import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
@@ -118,6 +121,7 @@ public class InfoStatsManager {
     private void addIngestProcessorStats(Map<InfoStatName, CountableInfoStatSnapshot> stats) {
         List<Map<String, Object>> pipelineConfigs = pipelineServiceUtil.getIngestPipelineConfigs();
 
+        // Iterate through all ingest processors and count their stats individually by calling helpers
         for (Map<String, Object> pipelineConfig : pipelineConfigs) {
             List<Map<String, Object>> ingestProcessors = asListOfMaps(pipelineConfig.get(PROCESSORS_KEY));
             for (Map<String, Object> ingestProcessor : ingestProcessors) {
@@ -128,9 +132,31 @@ public class InfoStatsManager {
                         case TextEmbeddingProcessor.TYPE:
                             increment(stats, InfoStatName.TEXT_EMBEDDING_PROCESSORS);
                             break;
+                        case TextChunkingProcessor.TYPE:
+                            countTextChunkingProcessorStats(stats, processorConfig);
+                            break;
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Counts text chunking processor stats based on processor config
+     * @param stats
+     * @param processorConfig
+     */
+    private void countTextChunkingProcessorStats(Map<InfoStatName, CountableInfoStatSnapshot> stats, Map<String, Object> processorConfig) {
+        increment(stats, InfoStatName.TEXT_CHUNKING_PROCESSORS);
+
+        Map<String, Object> algorithmMap = asMap(processorConfig.get(TextChunkingProcessor.ALGORITHM_FIELD));
+
+        Map.Entry<String, Object> algorithmEntry = algorithmMap.entrySet().iterator().next();
+        String algorithmKey = algorithmEntry.getKey();
+
+        switch (algorithmKey) {
+            case DelimiterChunker.ALGORITHM_NAME -> increment(stats, InfoStatName.TEXT_CHUNKING_DELIMITER_PROCESSORS);
+            case FixedTokenLengthChunker.ALGORITHM_NAME -> increment(stats, InfoStatName.TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS);
         }
     }
 
