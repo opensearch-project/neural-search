@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.sparse.codec;
 
+import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.codecs.FieldsConsumer;
 import org.apache.lucene.codecs.NormsProducer;
 import org.apache.lucene.index.Fields;
@@ -24,6 +25,7 @@ import java.util.List;
 /**
  * This class is responsible for writing sparse postings to the index
  */
+@Log4j2
 public class SparsePostingsConsumer extends FieldsConsumer {
     private final FieldsConsumer delegate;
     private final SegmentWriteState state;
@@ -88,9 +90,13 @@ public class SparsePostingsConsumer extends FieldsConsumer {
         // merge non-sparse fields
         super.merge(mergeState, norms);
         // merge sparse fields
-        SparsePostingsReader sparsePostingsReader = new SparsePostingsReader(mergeState);
-        sparsePostingsReader.merge();
-        MergeHelper.clearInMemoryData(mergeState, null, InMemoryClusteredPosting::clearIndex);
+        try {
+            SparsePostingsReader sparsePostingsReader = new SparsePostingsReader(mergeState);
+            sparsePostingsReader.merge();
+            MergeHelper.clearInMemoryData(mergeState, null, InMemoryClusteredPosting::clearIndex);
+        } catch (Exception e) {
+            log.error("Merge sparse postings error", e);
+        }
     }
 
     @Override

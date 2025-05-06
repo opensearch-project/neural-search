@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
 public class SparseVector implements Accountable {
     private final int size;
     // tokens will be stored in order
-    private int[] tokens;
+    private short[] tokens;
     private float[] freqs;
 
     public SparseVector(BytesRef bytesRef) throws IOException {
@@ -52,10 +52,10 @@ public class SparseVector implements Accountable {
     public SparseVector(List<Item> items) {
         items.sort((o1, o2) -> o1.getToken() - o2.getToken());
         this.size = items.size();
-        this.tokens = new int[this.size];
+        this.tokens = new short[this.size];
         this.freqs = new float[this.size];
         for (int i = 0; i < this.size; ++i) {
-            this.tokens[i] = items.get(i).getToken();
+            this.tokens[i] = (short) items.get(i).getToken();
             this.freqs[i] = items.get(i).getFreq();
         }
     }

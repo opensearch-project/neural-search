@@ -144,7 +144,7 @@ public class SparseTerms extends Terms {
 
         @Override
         public BytesRef next() throws IOException {
-            if (!termIterator.hasNext()) {
+            if (termIterator == null || !termIterator.hasNext()) {
                 this.currentTerm = null;
                 return null;
             }

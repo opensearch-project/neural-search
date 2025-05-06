@@ -15,14 +15,17 @@ public class InMemoryKey {
 
     @EqualsAndHashCode
     public static class IndexKey {
-        private final int hashCode;
+        private final SegmentInfo segmentInfo;
+        private final String field;
 
         public IndexKey(SegmentInfo segmentInfo, FieldInfo fieldInfo) {
-            this.hashCode = segmentInfo.hashCode() + fieldInfo.name.hashCode();
+            this.segmentInfo = segmentInfo;
+            this.field = fieldInfo.name;
         }
 
         public IndexKey(SegmentInfo segmentInfo, String fieldName) {
-            this.hashCode = segmentInfo.hashCode() + fieldName.hashCode();
+            this.segmentInfo = segmentInfo;
+            this.field = fieldName;
         }
     }
 }
