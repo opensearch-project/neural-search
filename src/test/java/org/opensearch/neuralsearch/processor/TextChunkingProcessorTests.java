@@ -37,6 +37,8 @@ import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.processor.chunker.DelimiterChunker;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.neuralsearch.processor.factory.TextChunkingProcessorFactory;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.plugins.AnalysisPlugin;
 import org.opensearch.test.OpenSearchTestCase;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.TYPE;
@@ -92,6 +94,10 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         when(clusterState.metadata()).thenReturn(metadata);
         when(clusterService.state()).thenReturn(clusterState);
         textChunkingProcessorFactory = new TextChunkingProcessorFactory(environment, clusterService, getAnalysisRegistry());
+
+        NeuralSearchSettingsAccessor settingsAccessor = mock(NeuralSearchSettingsAccessor.class);
+        when(settingsAccessor.isStatsEnabled()).thenReturn(true);
+        EventStatsManager.instance().initialize(settingsAccessor);
     }
 
     private Map<String, Object> createFixedTokenLengthParameters() {
