@@ -19,6 +19,8 @@ import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 import org.opensearch.neuralsearch.sparse.common.MergeHelper;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * A DocValuesConsumer that writes sparse doc values to a segment.
@@ -51,20 +53,22 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
 
     private void addBinary(FieldInfo field, DocValuesProducer valuesProducer, boolean isMerge) throws IOException {
         if (isMerge) {
-            if (!(valuesProducer instanceof SparseDocValuesReader)) {
-                return;
+            if (valuesProducer instanceof SparseDocValuesReader) {
+                SparseDocValuesReader reader = (SparseDocValuesReader) valuesProducer;
+                MergeHelper.clearInMemoryData(reader.getMergeState(), field, SparseVectorForwardIndex::removeIndex);
             }
-            SparseDocValuesReader reader = (SparseDocValuesReader) valuesProducer;
-            MergeHelper.clearInMemoryData(reader.getMergeState(), field, SparseVectorForwardIndex::removeIndex);
         }
         BinaryDocValues binaryDocValues = valuesProducer.getBinary(field);
-        int docId;
         InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(this.state.segmentInfo, field);
-        SparseVectorForwardIndex index = SparseVectorForwardIndex.getOrCreate(key);
-        SparseVectorForwardIndex.SparseVectorForwardIndexWriter writer = index.getForwardIndexWriter();
-        while ((docId = binaryDocValues.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {
+        SparseVectorForwardIndex.SparseVectorForwardIndexWriter writer = InMemorySparseVectorForwardIndex.getOrCreate(key).getForwardIndexWriter();
+        if (writer == null) {
+            throw new IllegalStateException("Forward index writer is null");
+        }
+        int docId = binaryDocValues.nextDoc();
+        while (docId != DocIdSetIterator.NO_MORE_DOCS) {
             BytesRef bytesRef = binaryDocValues.binaryValue();
             writer.write(docId, bytesRef);
+            docId = binaryDocValues.nextDoc();
         }
     }
 
@@ -89,9 +93,9 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
     }
 
     @Override
-    public void merge(MergeState mergeState) {
+    public void merge(MergeState mergeState) throws IOException {
+        this.delegate.merge(mergeState);
         try {
-            this.delegate.merge(mergeState);
             assert mergeState != null;
             assert mergeState.mergeFieldInfos != null;
             for (FieldInfo fieldInfo : mergeState.mergeFieldInfos) {
@@ -101,7 +105,7 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
                 }
             }
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            log.error("Merge sparse doc values error", e);
         }
     }
 }

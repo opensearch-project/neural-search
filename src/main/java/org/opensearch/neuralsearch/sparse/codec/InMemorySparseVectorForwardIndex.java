@@ -4,6 +4,9 @@
  */
 package org.opensearch.neuralsearch.sparse.codec;
 
+import lombok.extern.log4j.Log4j2;
+import org.apache.lucene.index.FieldInfo;
+import org.apache.lucene.index.SegmentInfo;
 import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.RamUsageEstimator;
@@ -11,13 +14,13 @@ import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * InMemorySparseVectorForwardIndex is used to store/read sparse vector in memory
  */
+@Log4j2
 public class InMemorySparseVectorForwardIndex implements SparseVectorForwardIndex, Accountable {
 
     private static final Map<InMemoryKey.IndexKey, InMemorySparseVectorForwardIndex> forwardIndexMap = new ConcurrentHashMap<>();
@@ -38,6 +41,11 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
         return forwardIndexMap.computeIfAbsent(key, k -> new InMemorySparseVectorForwardIndex());
     }
 
+    public static InMemorySparseVectorForwardIndex getOrCreate(SegmentInfo segmentInfo, FieldInfo fieldInfo) {
+        InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(segmentInfo, fieldInfo);
+        return forwardIndexMap.computeIfAbsent(key, k -> new InMemorySparseVectorForwardIndex());
+    }
+
     public static InMemorySparseVectorForwardIndex get(InMemoryKey.IndexKey key) {
         if (key == null) {
             throw new IllegalArgumentException("Index key cannot be null");
@@ -49,7 +57,7 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
         forwardIndexMap.remove(key);
     }
 
-    private final Map<Integer, SparseVector> sparseVectorMap = new HashMap<>();
+    private final Map<Integer, SparseVector> sparseVectorMap = new ConcurrentHashMap<>();
 
     public InMemorySparseVectorForwardIndex() {}
 

@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.sparse.codec;
 import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.codecs.FieldsProducer;
+import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.MergeState;
 import org.apache.lucene.index.PostingsEnum;
@@ -26,7 +27,6 @@ import org.opensearch.neuralsearch.sparse.common.SparseVector;
 import org.opensearch.neuralsearch.sparse.mapper.SparseMethodContext;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,28 +46,23 @@ public class SparsePostingsReader {
     }
 
     public void merge() throws IOException {
-        Set<String> fields = new TreeSet<>();
-        List<SparsePostingsProducer> fieldsProducers = new ArrayList<>();
-        for (FieldsProducer fieldsProducer : mergeState.fieldsProducers) {
-            if (fieldsProducer instanceof SparsePostingsProducer) {
-                fieldsProducers.add((SparsePostingsProducer) fieldsProducer);
-            }
-        }
-
         for (FieldInfo fieldInfo : mergeState.mergeFieldInfos) {
             if (!SparseTokensField.isSparseField(fieldInfo)) {
                 continue;
             }
-            fields.add(fieldInfo.name);
             Map<BytesRef, Set<DocFreq>> docs = new TreeMap<>();
             Map<Integer, Pair<Integer, InMemoryKey.IndexKey>> newToOldDocIdMap = new HashMap<>();
             for (int i = 0; i < this.mergeState.fieldsProducers.length; i++) {
-                if (!(this.mergeState.fieldsProducers[i] instanceof SparsePostingsProducer)) {
+                FieldsProducer fieldsProducer = this.mergeState.fieldsProducers[i];
+                // we need this SparseBinaryDocValuesPassThrough to get segment info
+                BinaryDocValues binaryDocValues = this.mergeState.docValuesProducers[i].getBinary(fieldInfo);
+                if (!(binaryDocValues instanceof SparseBinaryDocValuesPassThrough)) {
                     continue;
                 }
-                SparsePostingsProducer fieldsProducer = (SparsePostingsProducer) this.mergeState.fieldsProducers[i];
                 Terms terms = fieldsProducer.terms(fieldInfo.name);
+                if (terms == null) continue;
                 TermsEnum termsEnum = terms.iterator();
+                if (termsEnum == null) continue;
                 BytesRef term = termsEnum.next();
                 while (term != null) {
                     if (!docs.containsKey(term)) {
@@ -83,7 +78,13 @@ public class SparsePostingsReader {
                                 int newDocId = this.mergeState.docMaps[i].get(docIter.docID());
                                 newToOldDocIdMap.put(
                                     newDocId,
-                                    Pair.of(docIter.docID(), new InMemoryKey.IndexKey(fieldsProducer.getState().segmentInfo, fieldInfo))
+                                    Pair.of(
+                                        docIter.docID(),
+                                        new InMemoryKey.IndexKey(
+                                            ((SparseBinaryDocValuesPassThrough) binaryDocValues).getSegmentInfo(),
+                                            fieldInfo
+                                        )
+                                    )
                                 );
                                 docs.get(term).add(new DocFreq(newDocId, docIter.freq()));
                             }
@@ -125,18 +126,23 @@ public class SparsePostingsReader {
                 return null;
             }));
             for (Map.Entry<BytesRef, Set<DocFreq>> entry : docs.entrySet()) {
-                ClusterTrainingRunning.getInstance().run(new Runnable() {
-                    @Override
-                    public void run() {
-                        List<DocumentCluster> cluster = null;
-                        try {
-                            cluster = postingClustering.cluster(entry.getValue().stream().toList());
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
+                if (beta == 1) {
+                    List<DocumentCluster> cluster = postingClustering.cluster(entry.getValue().stream().toList());
+                    InMemoryClusteredPosting.InMemoryClusteredPostingWriter.writePostingClusters(key, entry.getKey(), cluster);
+                } else {
+                    ClusterTrainingRunning.getInstance().run(new Runnable() {
+                        @Override
+                        public void run() {
+                            List<DocumentCluster> cluster = null;
+                            try {
+                                cluster = postingClustering.cluster(entry.getValue().stream().toList());
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                            InMemoryClusteredPosting.InMemoryClusteredPostingWriter.writePostingClusters(key, entry.getKey(), cluster);
                         }
-                        InMemoryClusteredPosting.InMemoryClusteredPostingWriter.writePostingClusters(key, entry.getKey(), cluster);
-                    }
-                });
+                    });
+                }
             }
         }
     }

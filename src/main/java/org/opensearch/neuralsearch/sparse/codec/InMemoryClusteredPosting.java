@@ -70,7 +70,7 @@ public class InMemoryClusteredPosting implements Accountable {
         public Set<BytesRef> getTerms() {
             Map<BytesRef, PostingClusters> innerMap = inMemoryPostings.get(key);
             if (innerMap == null) {
-                return null;
+                return Collections.emptySet();
             }
             // Create an unmodifiable copy of the keySet to ensure thread-safety
             return Collections.unmodifiableSet(new HashSet<>(innerMap.keySet()));
