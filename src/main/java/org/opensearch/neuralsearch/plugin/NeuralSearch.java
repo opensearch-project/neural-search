@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.plugin;
 
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER_MAX_DOC_FIELDS;
-import static org.opensearch.neuralsearch.util.FeatureFlagUtil.SEMANTIC_FIELD_ENABLED;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_STATS_ENABLED;
 
 import java.util.Arrays;
@@ -26,8 +25,9 @@ import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.stats.info.InfoStatsManager;
 import org.opensearch.index.mapper.Mapper;
+import org.opensearch.index.mapper.MappingTransformer;
 import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
-import org.opensearch.neuralsearch.util.FeatureFlagUtil;
+import org.opensearch.neuralsearch.mappingtransformer.SemanticMappingTransformer;
 import org.opensearch.plugins.MapperPlugin;
 import org.opensearch.transport.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
@@ -114,6 +114,7 @@ public class NeuralSearch extends Plugin
         ExtensiblePlugin,
         SearchPipelinePlugin {
     private MLCommonsClientAccessor clientAccessor;
+    private NamedXContentRegistry xContentRegistry;
     private NormalizationProcessorWorkflow normalizationProcessorWorkflow;
     private NeuralSearchSettingsAccessor settingsAccessor;
     private PipelineServiceUtil pipelineServiceUtil;
@@ -157,6 +158,7 @@ public class NeuralSearch extends Plugin
         pipelineServiceUtil = new PipelineServiceUtil(clusterService);
         infoStatsManager = new InfoStatsManager(NeuralSearchClusterUtil.instance(), settingsAccessor, pipelineServiceUtil);
         EventStatsManager.instance().initialize(settingsAccessor);
+        this.xContentRegistry = xContentRegistry;
         return List.of(clientAccessor, EventStatsManager.instance(), infoStatsManager);
     }
 
@@ -291,9 +293,11 @@ public class NeuralSearch extends Plugin
 
     @Override
     public Map<String, Mapper.TypeParser> getMappers() {
-        if (FeatureFlagUtil.isEnabled(SEMANTIC_FIELD_ENABLED)) {
-            return Map.of(SemanticFieldMapper.CONTENT_TYPE, new SemanticFieldMapper.TypeParser());
-        }
-        return Collections.emptyMap();
+        return Map.of(SemanticFieldMapper.CONTENT_TYPE, new SemanticFieldMapper.TypeParser());
+    }
+
+    @Override
+    public List<MappingTransformer> getMappingTransformers() {
+        return List.of(new SemanticMappingTransformer(clientAccessor, xContentRegistry));
     }
 }
