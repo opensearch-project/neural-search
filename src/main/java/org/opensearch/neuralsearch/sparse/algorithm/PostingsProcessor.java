@@ -36,7 +36,7 @@ public class PostingsProcessor {
         if (K >= postings.size()) {
             return postings;
         }
-        PriorityQueue<DocFreq> pq = new PriorityQueue<>(K, (o1, o2) -> Float.compare(o2.getFreq(), o1.getFreq()));
+        PriorityQueue<DocFreq> pq = new PriorityQueue<>(K, (o1, o2) -> Float.compare(o1.getFreq(), o2.getFreq()));
         for (DocFreq docFreq : postings) {
             pq.add(docFreq);
             if (pq.size() > K) {
@@ -59,7 +59,7 @@ public class PostingsProcessor {
                     if (!summary.containsKey(item.getToken())) {
                         summary.put(item.getToken(), item.getFreq());
                     } else {
-                        summary.put(item.getToken(), summary.get(item.getToken()) + item.getFreq());
+                        summary.put(item.getToken(), Math.max(summary.get(item.getToken()), item.getFreq()));
                     }
                 }
             }

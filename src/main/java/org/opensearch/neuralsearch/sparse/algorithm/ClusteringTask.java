@@ -62,7 +62,7 @@ public class ClusteringTask implements Runnable {
                 return vector;
             }
             return null;
-        }));
+        }), beta);
     }
 
     @Override

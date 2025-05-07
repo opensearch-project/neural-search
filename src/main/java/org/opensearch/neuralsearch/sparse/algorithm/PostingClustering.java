@@ -19,10 +19,12 @@ public class PostingClustering {
     private final static int MINIMAL_DOC_SIZE_OF_CLUSTER = 10;
     private final int lambda;
     private final Clustering clustering;
+    private final int beta;
 
-    public PostingClustering(int lambda, Clustering clustering) {
+    public PostingClustering(int lambda, Clustering clustering, int beta) {
         this.lambda = lambda;
         this.clustering = clustering;
+        this.beta = beta;
     }
 
     private List<DocFreq> preprocess(List<DocFreq> postings) {
@@ -31,7 +33,10 @@ public class PostingClustering {
 
     public List<DocumentCluster> cluster(List<DocFreq> postings) throws IOException {
         List<DocFreq> postingsCopy = new ArrayList<>(postings);
-        List<DocFreq> preprocessed = preprocess(postingsCopy);
+        List<DocFreq> preprocessed = postingsCopy;
+        if (beta > 1) {
+            preprocessed = preprocess(postingsCopy);
+        }
         if (preprocessed.isEmpty()) {
             return new ArrayList<>();
         }

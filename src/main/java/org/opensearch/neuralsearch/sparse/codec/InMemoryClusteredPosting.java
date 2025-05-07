@@ -45,6 +45,20 @@ public class InMemoryClusteredPosting implements Accountable {
         inMemoryPostings.remove(key);
     }
 
+    static final int MAX_FREQ = Float.floatToIntBits(Float.MAX_VALUE) >>> 15;
+
+    static float decodeFeatureValue(float freq) {
+        if (freq > MAX_FREQ) {
+            // This is never used in practice but callers of the SimScorer API might
+            // occasionally call it on eg. Float.MAX_VALUE to compute the max score
+            // so we need to be consistent.
+            return Float.MAX_VALUE;
+        }
+        int tf = (int) freq; // lossless
+        int featureBits = tf << 15;
+        return Float.intBitsToFloat(featureBits);
+    }
+
     @Override
     public long ramBytesUsed() {
         long ramUsed = 0;
@@ -134,7 +148,7 @@ public class InMemoryClusteredPosting implements Accountable {
             if (docID == -1) {
                 throw new IllegalStateException("docId must be set before startDoc");
             }
-            docFreqs.add(new DocFreq(docID, freq));
+            docFreqs.add(new DocFreq(docID, decodeFeatureValue(freq)));
         }
 
         @Override
