@@ -50,7 +50,9 @@ public class KMeansPlusPlus implements Clustering {
             int centerIdx = 0;
             float maxScore = Float.MIN_VALUE;
             SparseVector docVector = reader.read(docFreq.getDocID());
-            if (docVector == null) continue;
+            if (docVector == null) {
+                continue;
+            }
             for (int i = 0; i < num_cluster; i++) {
                 float score = Float.MIN_VALUE;
                 float[] center = denseCentroids.get(i);

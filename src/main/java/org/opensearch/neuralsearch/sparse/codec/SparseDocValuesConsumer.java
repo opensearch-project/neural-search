@@ -52,15 +52,10 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
     }
 
     private void addBinary(FieldInfo field, DocValuesProducer valuesProducer, boolean isMerge) throws IOException {
-        if (isMerge) {
-            if (valuesProducer instanceof SparseDocValuesReader) {
-                SparseDocValuesReader reader = (SparseDocValuesReader) valuesProducer;
-                MergeHelper.clearInMemoryData(reader.getMergeState(), field, SparseVectorForwardIndex::removeIndex);
-            }
-        }
         BinaryDocValues binaryDocValues = valuesProducer.getBinary(field);
         InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(this.state.segmentInfo, field);
-        SparseVectorForwardIndex.SparseVectorForwardIndexWriter writer = InMemorySparseVectorForwardIndex.getOrCreate(key).getForwardIndexWriter();
+        SparseVectorForwardIndex.SparseVectorForwardIndexWriter writer = InMemorySparseVectorForwardIndex.getOrCreate(key)
+            .getForwardIndexWriter();
         if (writer == null) {
             throw new IllegalStateException("Forward index writer is null");
         }
@@ -69,6 +64,12 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
             BytesRef bytesRef = binaryDocValues.binaryValue();
             writer.write(docId, bytesRef);
             docId = binaryDocValues.nextDoc();
+        }
+        if (isMerge) {
+            if (valuesProducer instanceof SparseDocValuesReader) {
+                SparseDocValuesReader reader = (SparseDocValuesReader) valuesProducer;
+                MergeHelper.clearInMemoryData(reader.getMergeState(), field, SparseVectorForwardIndex::removeIndex);
+            }
         }
     }
 

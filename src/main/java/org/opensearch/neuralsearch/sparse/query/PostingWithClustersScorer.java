@@ -82,25 +82,27 @@ public class PostingWithClustersScorer extends Scorer {
                 continue;
             }
             PostingsEnum postingsEnum = termsEnum.postings(null, PostingsEnum.FREQS);
-            if (postingsEnum instanceof SparsePostingsEnum) {
-                SparsePostingsEnum sparsePostingsEnum = (SparsePostingsEnum) postingsEnum;
-                log.info(
-                    "query token: {}, posting doc size: {}, cluster size: {}",
-                    token,
-                    sparsePostingsEnum.size(),
-                    sparsePostingsEnum.getClusters().getClusters().size()
-                );
-                if (null == reader) {
-                    SparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.get(sparsePostingsEnum.getIndexKey());
-                    if (index != null) {
-                        SparseVectorForwardIndex.SparseVectorForwardIndexReader indexReader = index.getForwardIndexReader();
-                        reader = (docId) -> { return indexReader.readSparseVector(docId); };
-                    } else {
-                        reader = (docId) -> { return null; };
-                    }
-                }
-                subScorers.add(new SingleScorer(sparsePostingsEnum, term));
+            if (!(postingsEnum instanceof SparsePostingsEnum)) {
+                log.error("posting enum is not SparsePostingsEnum, actual type: {}", postingsEnum.getClass().getName());
+                return;
             }
+            SparsePostingsEnum sparsePostingsEnum = (SparsePostingsEnum) postingsEnum;
+            log.info(
+                "query token: {}, posting doc size: {}, cluster size: {}",
+                token,
+                sparsePostingsEnum.size(),
+                sparsePostingsEnum.getClusters().getClusters().size()
+            );
+            if (null == reader) {
+                SparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.get(sparsePostingsEnum.getIndexKey());
+                if (index != null) {
+                    SparseVectorForwardIndex.SparseVectorForwardIndexReader indexReader = index.getForwardIndexReader();
+                    reader = (docId) -> { return indexReader.readSparseVector(docId); };
+                } else {
+                    reader = (docId) -> { return null; };
+                }
+            }
+            subScorers.add(new SingleScorer(sparsePostingsEnum, term));
         }
     }
 
