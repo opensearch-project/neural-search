@@ -28,19 +28,18 @@ import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * This class manages the in-memory postings for sparse vectors. It provides methods to write and read postings from memory.
  * It is used by the SparsePostingsConsumer and SparsePostingsReader classes.
  */
 public class InMemoryClusteredPosting implements Accountable {
-    public static final Map<InMemoryKey.IndexKey, Map<BytesRef, PostingClusters>> inMemoryPostings = new ConcurrentHashMap<>();
+    public static final Map<InMemoryKey.IndexKey, Map<String, PostingClusters>> inMemoryPostings = new ConcurrentHashMap<>();
 
     public static void clearIndex(InMemoryKey.IndexKey key) {
         inMemoryPostings.remove(key);
@@ -49,10 +48,10 @@ public class InMemoryClusteredPosting implements Accountable {
     @Override
     public long ramBytesUsed() {
         long ramUsed = 0;
-        for (Map.Entry<InMemoryKey.IndexKey, Map<BytesRef, PostingClusters>> entry : inMemoryPostings.entrySet()) {
+        for (Map.Entry<InMemoryKey.IndexKey, Map<String, PostingClusters>> entry : inMemoryPostings.entrySet()) {
             ramUsed += RamUsageEstimator.shallowSizeOfInstance(InMemoryKey.IndexKey.class);
-            for (Map.Entry<BytesRef, PostingClusters> entry2 : entry.getValue().entrySet()) {
-                ramUsed += entry2.getKey().length;
+            for (Map.Entry<String, PostingClusters> entry2 : entry.getValue().entrySet()) {
+                ramUsed += RamUsageEstimator.shallowSizeOfInstance(String.class);
                 ramUsed += entry2.getValue().ramBytesUsed();
             }
         }
@@ -64,16 +63,17 @@ public class InMemoryClusteredPosting implements Accountable {
         private final InMemoryKey.IndexKey key;
 
         public PostingClusters read(BytesRef term) {
-            return inMemoryPostings.getOrDefault(key, Collections.emptyMap()).get(term);
+            String stringTerm = term.utf8ToString();
+            return inMemoryPostings.getOrDefault(key, Collections.emptyMap()).get(stringTerm);
         }
 
         public Set<BytesRef> getTerms() {
-            Map<BytesRef, PostingClusters> innerMap = inMemoryPostings.get(key);
+            Map<String, PostingClusters> innerMap = inMemoryPostings.get(key);
             if (innerMap == null) {
                 return Collections.emptySet();
             }
             // Create an unmodifiable copy of the keySet to ensure thread-safety
-            return Collections.unmodifiableSet(new HashSet<>(innerMap.keySet()));
+            return innerMap.keySet().stream().map(BytesRef::new).collect(Collectors.toSet());
         }
     }
 
@@ -114,9 +114,9 @@ public class InMemoryClusteredPosting implements Accountable {
 
             inMemoryPostings.compute(key, (k, existingMap) -> {
                 if (existingMap == null) {
-                    existingMap = new TreeMap<>();
+                    existingMap = new ConcurrentHashMap<>();
                 }
-                existingMap.put(term.clone(), new PostingClusters(clusters));
+                existingMap.put(term.utf8ToString(), new PostingClusters(clusters));
                 return existingMap;
             });
         }
@@ -131,6 +131,9 @@ public class InMemoryClusteredPosting implements Accountable {
 
         @Override
         public void startDoc(int docID, int freq) throws IOException {
+            if (docID == -1) {
+                throw new IllegalStateException("docId must be set before startDoc");
+            }
             docFreqs.add(new DocFreq(docID, freq));
         }
 
