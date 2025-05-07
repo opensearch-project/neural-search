@@ -68,6 +68,7 @@ public class HybridBulkScorer extends BulkScorer {
         collector.setScorer(hybridSubQueryScorer);
         // making sure we are not going over the global limit defined by maxDoc
         max = Math.min(max, maxDoc);
+        // advance all scorers to the segment's minimum doc id
         int[] docsIds = advance(min, scorers);
         while (allDocIdsUsed(docsIds, max) == false) {
             scoreWindow(collector, acceptDocs, min, max, docsIds);
@@ -88,10 +89,21 @@ public class HybridBulkScorer extends BulkScorer {
         final int windowBase = topDoc & ~MASK; // take the next match (at random) and find the window where it belongs
         final int windowMin = Math.max(min, windowBase);
         final int windowMax = Math.min(max, windowBase + WINDOW_SIZE);
-
+        // collect doc ids and scores for this window using leaf collector
         scoreWindowIntoBitSetWithSubqueryScorers(collector, acceptDocs, max, docIds, windowMin, windowMax, windowBase);
     }
 
+    /**
+     * Collect scores for the window using segment level leaf collector
+     * @param collector leaf collector for the segment
+     * @param acceptDocs bitset with live docs
+     * @param max max doc id
+     * @param docIds last used doc ids per scorer
+     * @param windowMin min doc id of this collector window
+     * @param windowMax max doc id of this collector window
+     * @param windowBase offset for this collector window
+     * @throws IOException
+     */
     private void scoreWindowIntoBitSetWithSubqueryScorers(
         LeafCollector collector,
         Bits acceptDocs,
@@ -135,6 +147,9 @@ public class HybridBulkScorer extends BulkScorer {
         resetWindowState();
     }
 
+    /**
+     * Advance all scorers to the next document that is >= min
+     */
     private int[] advance(int min, Scorer[] scorers) throws IOException {
         int[] docIds = new int[scorers.length];
         for (int subQueryIndex = 0; subQueryIndex < scorers.length; subQueryIndex++) {
