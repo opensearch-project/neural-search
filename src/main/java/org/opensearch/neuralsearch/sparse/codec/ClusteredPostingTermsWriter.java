@@ -43,7 +43,8 @@ public class ClusteredPostingTermsWriter {
                     alpha,
                     clusterUntilDocCountReach > 0 ? 1 : beta,
                     (docId) -> index.getForwardIndexReader().readSparseVector(docId)
-                )
+                ),
+                clusterUntilDocCountReach > 0 ? 1 : beta
             )
         );
         this.docsSeen = new FixedBitSet(state.segmentInfo.maxDoc());
