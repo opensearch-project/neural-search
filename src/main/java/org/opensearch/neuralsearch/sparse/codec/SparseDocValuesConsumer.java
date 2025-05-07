@@ -19,8 +19,6 @@ import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 import org.opensearch.neuralsearch.sparse.common.MergeHelper;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * A DocValuesConsumer that writes sparse doc values to a segment.
