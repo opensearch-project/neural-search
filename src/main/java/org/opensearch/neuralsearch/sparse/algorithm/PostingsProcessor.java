@@ -68,9 +68,8 @@ public class PostingsProcessor {
         List<SparseVector.Item> items = summary.entrySet()
             .stream()
             .map(entry -> new SparseVector.Item(entry.getKey(), entry.getValue()))
+            .sorted((o1, o2) -> Float.compare(o2.getFreq(), o1.getFreq()))
             .collect(Collectors.toList());
-        ;
-        items.sort((o1, o2) -> o2.getToken() - o1.getToken());
         // count total freq of items
         double totalFreq = items.stream().mapToDouble(SparseVector.Item::getFreq).sum();
         double freqThreshold = totalFreq * alpha;
