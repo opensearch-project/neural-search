@@ -33,10 +33,7 @@ public class PostingClustering {
 
     public List<DocumentCluster> cluster(List<DocFreq> postings) throws IOException {
         List<DocFreq> postingsCopy = new ArrayList<>(postings);
-        List<DocFreq> preprocessed = postingsCopy;
-        if (beta > 1) {
-            preprocessed = preprocess(postingsCopy);
-        }
+        List<DocFreq> preprocessed = preprocess(postingsCopy);
         if (preprocessed.isEmpty()) {
             return new ArrayList<>();
         }
