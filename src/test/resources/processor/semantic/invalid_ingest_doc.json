@@ -1,0 +1,10 @@
+{
+  "geo_data": "dummy_geo_data_1",
+  "products": [
+    {
+      "product_description": {
+        "invalid": "not a string"
+      }
+    }
+  ]
+}

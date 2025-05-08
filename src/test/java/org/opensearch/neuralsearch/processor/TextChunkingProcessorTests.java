@@ -57,7 +57,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     private static final String INDEX_NAME = "_index";
 
     @SneakyThrows
-    private AnalysisRegistry getAnalysisRegistry() {
+    public static AnalysisRegistry getAnalysisRegistry() {
         Settings settings = Settings.builder().put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString()).build();
         Environment environment = TestEnvironment.newEnvironment(settings);
         AnalysisPlugin plugin = new AnalysisPlugin() {

@@ -28,6 +28,7 @@ import org.opensearch.index.mapper.Mapper;
 import org.opensearch.index.mapper.MappingTransformer;
 import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
 import org.opensearch.neuralsearch.mappingtransformer.SemanticMappingTransformer;
+import org.opensearch.neuralsearch.processor.factory.SemanticFieldProcessorFactory;
 import org.opensearch.plugins.MapperPlugin;
 import org.opensearch.transport.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
@@ -299,5 +300,18 @@ public class NeuralSearch extends Plugin
     @Override
     public List<MappingTransformer> getMappingTransformers() {
         return List.of(new SemanticMappingTransformer(clientAccessor, xContentRegistry));
+    }
+
+    @Override
+    public Map<String, Processor.Factory> getSystemIngestProcessors(Processor.Parameters parameters) {
+        return Map.of(
+            SemanticFieldProcessorFactory.PROCESSOR_FACTORY_TYPE,
+            new SemanticFieldProcessorFactory(
+                clientAccessor,
+                parameters.env,
+                parameters.ingestService.getClusterService(),
+                parameters.analysisRegistry
+            )
+        );
     }
 }
