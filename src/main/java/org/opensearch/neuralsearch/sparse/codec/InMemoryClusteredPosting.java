@@ -32,14 +32,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /**
  * This class manages the in-memory postings for sparse vectors. It provides methods to write and read postings from memory.
  * It is used by the SparsePostingsConsumer and SparsePostingsReader classes.
  */
 public class InMemoryClusteredPosting implements Accountable {
-    public static final Map<InMemoryKey.IndexKey, Map<String, PostingClusters>> inMemoryPostings = new ConcurrentHashMap<>();
+    public static final Map<InMemoryKey.IndexKey, Map<BytesRef, PostingClusters>> inMemoryPostings = new ConcurrentHashMap<>();
 
     public static void clearIndex(InMemoryKey.IndexKey key) {
         inMemoryPostings.remove(key);
@@ -62,10 +61,10 @@ public class InMemoryClusteredPosting implements Accountable {
     @Override
     public long ramBytesUsed() {
         long ramUsed = 0;
-        for (Map.Entry<InMemoryKey.IndexKey, Map<String, PostingClusters>> entry : inMemoryPostings.entrySet()) {
+        for (Map.Entry<InMemoryKey.IndexKey, Map<BytesRef, PostingClusters>> entry : inMemoryPostings.entrySet()) {
             ramUsed += RamUsageEstimator.shallowSizeOfInstance(InMemoryKey.IndexKey.class);
-            for (Map.Entry<String, PostingClusters> entry2 : entry.getValue().entrySet()) {
-                ramUsed += RamUsageEstimator.shallowSizeOfInstance(String.class);
+            for (Map.Entry<BytesRef, PostingClusters> entry2 : entry.getValue().entrySet()) {
+                ramUsed += entry2.getKey().length;
                 ramUsed += entry2.getValue().ramBytesUsed();
             }
         }
@@ -77,18 +76,14 @@ public class InMemoryClusteredPosting implements Accountable {
         private final InMemoryKey.IndexKey key;
 
         public PostingClusters read(BytesRef term) {
-            String stringTerm = term.utf8ToString();
-            return inMemoryPostings.getOrDefault(key, Collections.emptyMap()).get(stringTerm);
+            return inMemoryPostings.getOrDefault(key, Collections.emptyMap()).get(term);
         }
 
         public Set<BytesRef> getTerms() {
-            Map<String, PostingClusters> innerMap = inMemoryPostings.get(key);
-            if (innerMap == null) {
-                return Collections.emptySet();
-            }
-            // Create an unmodifiable copy of the keySet to ensure thread-safety
-            return innerMap.keySet().stream().map(BytesRef::new).collect(Collectors.toSet());
+            Map<BytesRef, PostingClusters> innerMap = inMemoryPostings.get(key);
+            return innerMap != null ? innerMap.keySet() : Collections.emptySet();
         }
+
     }
 
     public static class InMemoryClusteredPostingWriter extends PushPostingsWriterBase {
@@ -130,7 +125,7 @@ public class InMemoryClusteredPosting implements Accountable {
                 if (existingMap == null) {
                     existingMap = new ConcurrentHashMap<>();
                 }
-                existingMap.put(term.utf8ToString(), new PostingClusters(clusters));
+                existingMap.put(term.clone(), new PostingClusters(clusters));
                 return existingMap;
             });
         }
