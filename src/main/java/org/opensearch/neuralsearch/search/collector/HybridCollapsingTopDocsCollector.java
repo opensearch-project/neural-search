@@ -55,7 +55,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
     private ConcurrentHashMap<T, boolean[]> queueFullMap;
     private final int numHits;
     @Setter
-    private TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
+    TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
     private HitsThresholdChecker hitsThresholdChecker;
 
     HybridCollapsingTopDocsCollector(
@@ -245,6 +245,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
             public void collect(int doc) throws IOException {
                 groupSelector.advanceTo(doc);
                 T groupValue = groupSelector.currentValue();
+                assert groupValue != null;
                 FieldValueHitQueue<FieldValueHitQueue.Entry>[] group = groupQueueMap.get(groupValue);
                 float[] subScoresByQuery = compoundQueryScorer.hybridScores();
                 if (group == null) {
@@ -278,8 +279,6 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     log.info("Terminating collection as hits threshold is reached");
                     throw new CollectionTerminatedException();
                 }
-
-                subScoresByQuery = compoundQueryScorer.hybridScores();
 
                 for (int i = 0; i < subScoresByQuery.length; i++) {
                     float score = subScoresByQuery[i];

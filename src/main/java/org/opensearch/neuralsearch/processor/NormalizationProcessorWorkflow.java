@@ -226,9 +226,23 @@ public class NormalizationProcessorWorkflow {
                 .getFirst()).collapseValues[0] instanceof BytesRef;
 
             if (isKeyword) {
-                totalScoreDocsCount = collapseOnKeyword(queryTopDocs, querySearchResults, sort, indexOfFirstNonEmpty);
+                totalScoreDocsCount = collapseOnKeyword(
+                    queryTopDocs,
+                    querySearchResults,
+                    sort,
+                    indexOfFirstNonEmpty,
+                    isFetchPhaseExecuted,
+                    combineScoresDTO
+                );
             } else {
-                totalScoreDocsCount = collapseOnNumeric(queryTopDocs, querySearchResults, sort, indexOfFirstNonEmpty);
+                totalScoreDocsCount = collapseOnNumeric(
+                    queryTopDocs,
+                    querySearchResults,
+                    sort,
+                    indexOfFirstNonEmpty,
+                    isFetchPhaseExecuted,
+                    combineScoresDTO
+                );
             }
         } else {
             for (int index = 0; index < querySearchResults.size(); index++) {
@@ -260,7 +274,9 @@ public class NormalizationProcessorWorkflow {
         List<CompoundTopDocs> queryTopDocs,
         List<QuerySearchResult> querySearchResults,
         Sort sort,
-        int indexOfFirstNonEmpty
+        int indexOfFirstNonEmpty,
+        final boolean isFetchPhaseExecuted,
+        CombineScoresDto combineScoresDTO
     ) {
         int totalScoreDocsCount = 0;
         Map<BytesRef, FieldDoc> collapseValueToTopScoreDocMap = new HashMap<>();
@@ -332,6 +348,9 @@ public class NormalizationProcessorWorkflow {
                 ),
                 maxScoreForShard(updatedTopDocs, true)
             );
+            if (isFetchPhaseExecuted) {
+                querySearchResults.get(index).from(combineScoresDTO.getFromValueForSingleShard());
+            }
             querySearchResults.get(index).topDocs(updatedTopDocsAndMaxScore, querySearchResults.get(index).sortValueFormats());
         }
 
@@ -342,7 +361,9 @@ public class NormalizationProcessorWorkflow {
         List<CompoundTopDocs> queryTopDocs,
         List<QuerySearchResult> querySearchResults,
         Sort sort,
-        int indexOfNonEmpty
+        int indexOfNonEmpty,
+        final boolean isFetchPhaseExecuted,
+        CombineScoresDto combineScoresDTO
     ) {
         int totalScoreDocsCount = 0;
         Map<Long, FieldDoc> collapseValueToTopScoreDocMap = new HashMap<>();
@@ -416,6 +437,9 @@ public class NormalizationProcessorWorkflow {
                 ),
                 maxScoreForShard(updatedTopDocs, true)
             );
+            if (isFetchPhaseExecuted) {
+                querySearchResults.get(index).from(combineScoresDTO.getFromValueForSingleShard());
+            }
             querySearchResults.get(index).topDocs(updatedTopDocsAndMaxScore, querySearchResults.get(index).sortValueFormats());
         }
 
