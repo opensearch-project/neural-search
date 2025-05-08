@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.processor.chunker;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -163,5 +164,61 @@ public final class ChunkerParameterParser {
             return defaultValue;
         }
         return parseDouble(parameters, fieldName);
+    }
+
+    /**
+     * Parses and validates a List<String> parameter from the parameters map.
+     *
+     * @param parameters The map containing chunking parameters
+     * @param fieldName The key corresponding to the expected List<String> value
+     * @return The validated List<String> value from the parameters map
+     * @throws IllegalArgumentException if the parameter is missing, empty, or not a list of strings
+     */
+    public static List<String> parseListOfString(final Map<String, Object> parameters, final String fieldName) {
+        Object fieldValue = parameters.get(fieldName);
+
+        if (!(fieldValue instanceof List<?> list)) {
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "Parameter [%s] must be of type List<String>", fieldName));
+        }
+
+        if (list.isEmpty()) {
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "Parameter [%s] should not be an empty list.", fieldName));
+        }
+
+        for (Object item : list) {
+            if (!(item instanceof String)) {
+                throw new IllegalArgumentException(
+                    String.format(Locale.ROOT, "Parameter [%s] must contain only String elements.", fieldName)
+                );
+            }
+        }
+
+        return (List<String>) list;
+    }
+
+    /**
+     * Parses and validates a List<String> parameter from the parameters map,
+     * with a fallback to a provided default value if the field is not present.
+     *
+     * @param parameters The map containing chunking parameters
+     * @param fieldName The key corresponding to the expected List<String> value
+     * @param defaultValue The default value to return if the parameter is not present
+     * @return The validated List<String> value from the parameters map, or the default value if the field is absent
+     * @throws IllegalArgumentException if the parameter is present but is not a list of strings
+     */
+    public static List<String> parseListOfStringWithDefault(
+        final Map<String, Object> parameters,
+        final String fieldName,
+        final List<String> defaultValue
+    ) {
+        if (defaultValue == null) {
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "Default value for field [%s] must not be null.", fieldName));
+        }
+
+        if (!parameters.containsKey(fieldName)) {
+            // all list of strings parameters are optional
+            return defaultValue;
+        }
+        return parseListOfString(parameters, fieldName);
     }
 }
