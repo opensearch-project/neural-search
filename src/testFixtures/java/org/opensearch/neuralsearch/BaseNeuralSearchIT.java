@@ -1289,6 +1289,18 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return scores;
     }
 
+    @SuppressWarnings("unchecked")
+    protected List<String> getNormalizationDocIdList(final Map<String, Object> searchResponseAsMap) {
+        Map<String, Object> hits1map = (Map<String, Object>) searchResponseAsMap.get("hits");
+        List<Object> hitsList = (List<Object>) hits1map.get("hits");
+        List<String> docIds = new ArrayList<>();
+        for (Object hit : hitsList) {
+            Map<String, Object> searchHit = (Map<String, Object>) hit;
+            docIds.add(searchHit.get("_id").toString());
+        }
+        return docIds;
+    }
+
     protected List<Map<String, Object>> getListOfValues(Map<String, Object> searchResponseAsMap, String key) {
         return (List<Map<String, Object>>) searchResponseAsMap.get(key);
     }
