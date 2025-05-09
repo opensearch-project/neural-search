@@ -143,8 +143,8 @@ public class InfoStatsManager {
 
     /**
      * Counts text chunking processor stats based on processor config
-     * @param stats
-     * @param processorConfig
+     * @param stats map containing the stat to increment
+     * @param processorConfig map of the processor config, parsed to add stats
      */
     private void countTextChunkingProcessorStats(Map<InfoStatName, CountableInfoStatSnapshot> stats, Map<String, Object> processorConfig) {
         increment(stats, InfoStatName.TEXT_CHUNKING_PROCESSORS);
@@ -157,6 +157,8 @@ public class InfoStatsManager {
         switch (algorithmKey) {
             case DelimiterChunker.ALGORITHM_NAME -> increment(stats, InfoStatName.TEXT_CHUNKING_DELIMITER_PROCESSORS);
             case FixedTokenLengthChunker.ALGORITHM_NAME -> increment(stats, InfoStatName.TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS);
+            // If no algorithm is specified, the default is fixed length
+            default -> increment(stats, InfoStatName.TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS);
         }
     }
 

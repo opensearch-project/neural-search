@@ -171,7 +171,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    public void testTextChunkingProcessor_processorStats() {
+    public void testTextChunkingProcessor_processorStats_successful() {
         updateClusterSettings("plugins.neural_search.stats_enabled", true);
         createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
         createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
@@ -186,11 +186,22 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         ingestDocument(INDEX_NAME, document);
         ingestDocument(INDEX_NAME, document);
 
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked. The document ");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by ");
+        expectedPassages.add("standard tokenizer in OpenSearch.");
+        validateIndexIngestResultsWithMultipleDocs(INDEX_NAME, OUTPUT_FIELD, expectedPassages, 2);
+
         ingestDocument(INDEX_NAME2, document);
         ingestDocument(INDEX_NAME2, document);
         ingestDocument(INDEX_NAME2, document);
 
-        // Get stats request
+        expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked.");
+        expectedPassages.add(" The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.");
+        validateIndexIngestResultsWithMultipleDocs(INDEX_NAME2, OUTPUT_FIELD, expectedPassages, 3);
+
+        // Get stats
         String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
         Map<String, Object> stats = parseInfoStatsResponse(responseBody);
         Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
@@ -208,8 +219,8 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         updateClusterSettings("plugins.neural_search.stats_enabled", false);
     }
 
-    private void validateIndexIngestResults(String indexName, String fieldName, Object expected) {
-        assertEquals(1, getDocCount(indexName));
+    private void validateIndexIngestResultsWithMultipleDocs(String indexName, String fieldName, Object expected, int docCount) {
+        assertEquals(docCount, getDocCount(indexName));
         MatchAllQueryBuilder query = new MatchAllQueryBuilder();
         Map<String, Object> searchResults = search(indexName, query, 10);
         assertNotNull(searchResults);
@@ -222,6 +233,10 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         assert (documentSourceMap).containsKey(fieldName);
         Object ingestOutputs = documentSourceMap.get(fieldName);
         assertEquals(expected, ingestOutputs);
+    }
+
+    private void validateIndexIngestResults(String indexName, String fieldName, Object expected) {
+        validateIndexIngestResultsWithMultipleDocs(indexName, fieldName, expected, 1);
     }
 
     private void createPipelineProcessor(String pipelineName) throws Exception {
