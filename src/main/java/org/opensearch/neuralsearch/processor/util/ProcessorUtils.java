@@ -4,9 +4,15 @@
  */
 package org.opensearch.neuralsearch.processor.util;
 
+import lombok.NonNull;
+import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.collect.Tuple;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
+import org.opensearch.index.IndexSettings;
+import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.search.SearchHit;
 
 import java.util.ArrayList;
@@ -328,4 +334,18 @@ public class ProcessorUtils {
         return (List<Object>) obj;
     }
 
+    public static int getMaxTokenCount(
+        @NonNull final Map<String, Object> sourceAndMetadataMap,
+        @NonNull final Settings settings,
+        @NonNull final ClusterService clusterService
+    ) {
+        int defaultMaxTokenCount = IndexSettings.MAX_TOKEN_COUNT_SETTING.get(settings);
+        String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
+        IndexMetadata indexMetadata = clusterService.state().metadata().index(indexName);
+        if (Objects.isNull(indexMetadata)) {
+            return defaultMaxTokenCount;
+        }
+        // if the index is specified in the metadata, read maxTokenCount from the index setting
+        return IndexSettings.MAX_TOKEN_COUNT_SETTING.get(indexMetadata.getSettings());
+    }
 }

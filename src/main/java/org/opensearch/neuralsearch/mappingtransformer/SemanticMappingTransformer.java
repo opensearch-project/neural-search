@@ -21,17 +21,15 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.opensearch.neuralsearch.constants.MappingConstants.PROPERTIES;
-import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.collectSemanticField;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.extractModelIdToFieldPathMap;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.getProperties;
+import static org.opensearch.neuralsearch.util.SemanticMappingUtils.validateModelId;
+import static org.opensearch.neuralsearch.util.SemanticMappingUtils.validateSemanticInfoFieldName;
 
 /**
  * SemanticMappingTransformer transforms the index mapping for the semantic field to auto add the semantic info fields
@@ -168,101 +166,17 @@ public class SemanticMappingTransformer implements MappingTransformer {
         }
     }
 
-    private String validateModelId(@NonNull final String semanticFieldPath, @NonNull final Map<String, Object> semanticFieldConfig) {
-        Object modelId = semanticFieldConfig.get(SemanticFieldConstants.MODEL_ID);
-        if (modelId == null) {
-            return String.format(Locale.ROOT, "%s is required for the semantic field at %s", MODEL_ID, semanticFieldPath);
-        }
-
-        if (modelId instanceof String == false || ((String) modelId).isEmpty()) {
-            return String.format(Locale.ROOT, "%s should be a non-empty string for the semantic field at %s", MODEL_ID, semanticFieldPath);
-        }
-
-        return null;
-    }
-
-    private String validateSemanticInfoFieldName(
-        @NonNull final String semanticFieldPath,
-        @NonNull final Map<String, Object> semanticFieldConfig
-    ) {
-        if (semanticFieldConfig.containsKey(SEMANTIC_INFO_FIELD_NAME)) {
-            final Object semanticInfoFieldName = semanticFieldConfig.get(SEMANTIC_INFO_FIELD_NAME);
-            if (semanticInfoFieldName instanceof String semanticInfoFieldNameStr) {
-                if (semanticInfoFieldNameStr.isEmpty()) {
-                    return String.format(
-                        Locale.ROOT,
-                        "%s cannot be an empty string for the semantic field at %s",
-                        SEMANTIC_INFO_FIELD_NAME,
-                        semanticFieldPath
-
-                    );
-                }
-
-                // OpenSearch allows to define a field name with "." in the index mapping and will unflatten it later
-                // but in our case it's not necessary to support "." in the custom semantic info field name. So add this
-                // validation to block it.
-                if (semanticInfoFieldNameStr.contains(".")) {
-                    return String.format(
-                        Locale.ROOT,
-                        "%s should not contain '.' for the semantic field at %s",
-                        SEMANTIC_INFO_FIELD_NAME,
-                        semanticFieldPath
-
-                    );
-                }
-            } else {
-                return String.format(
-                    Locale.ROOT,
-                    "%s should be a non-empty string for the semantic field at %s",
-                    SEMANTIC_INFO_FIELD_NAME,
-                    semanticFieldPath
-
-                );
-            }
-        }
-        // SEMANTIC_INFO_FIELD_NAME is an optional field. If it does not exist we simply return null to show no error.
-        return null;
-    }
-
     private void fetchModelAndModifyMapping(
         @NonNull final Map<String, Map<String, Object>> semanticFieldPathToConfigMap,
         @NonNull final Map<String, Object> mappings,
         @NonNull final ActionListener<Void> listener
     ) {
         final Map<String, List<String>> modelIdToFieldPathMap = extractModelIdToFieldPathMap(semanticFieldPathToConfigMap);
-        if (modelIdToFieldPathMap.isEmpty()) {
-            listener.onResponse(null);
-        }
-        final AtomicInteger counter = new AtomicInteger(modelIdToFieldPathMap.size());
-        final AtomicBoolean hasError = new AtomicBoolean(false);
-        final List<String> errors = new ArrayList<>();
-        final Map<String, MLModel> modelIdToConfigMap = new ConcurrentHashMap<>(modelIdToFieldPathMap.size());
 
-        // We can have multiple semantic fields with different model ids, and we should get model config for each model
-        for (String modelId : modelIdToFieldPathMap.keySet()) {
-            mlClientAccessor.getModel(modelId, ActionListener.wrap(mlModel -> {
-                modelIdToConfigMap.put(modelId, mlModel);
-                if (counter.decrementAndGet() == 0) {
-                    try {
-                        if (hasError.get()) {
-                            listener.onFailure(new RuntimeException(String.join("; ", errors)));
-                        } else {
-                            modifyMappings(modelIdToConfigMap, mappings, modelIdToFieldPathMap, semanticFieldPathToConfigMap);
-                            listener.onResponse(null);
-                        }
-                    } catch (Exception e) {
-                        errors.add(e.getMessage());
-                        listener.onFailure(new RuntimeException(String.join("; ", errors)));
-                    }
-                }
-            }, e -> {
-                hasError.set(true);
-                errors.add(e.getMessage());
-                if (counter.decrementAndGet() == 0) {
-                    listener.onFailure(new RuntimeException(String.join("; ", errors)));
-                }
-            }));
-        }
+        mlClientAccessor.getModels(modelIdToFieldPathMap.keySet(), modelIdToConfigMap -> {
+            modifyMappings(modelIdToConfigMap, mappings, modelIdToFieldPathMap, semanticFieldPathToConfigMap);
+            listener.onResponse(null);
+        }, listener::onFailure);
     }
 
     private void modifyMappings(

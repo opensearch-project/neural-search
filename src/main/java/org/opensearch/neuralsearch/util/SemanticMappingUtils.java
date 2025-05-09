@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.util;
 
 import org.opensearch.neuralsearch.constants.MappingConstants;
-import org.opensearch.neuralsearch.constants.SemanticFieldConstants;
 import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
 import lombok.NonNull;
 
@@ -17,11 +16,15 @@ import java.util.Map;
 
 import static org.opensearch.neuralsearch.constants.MappingConstants.DOC;
 import static org.opensearch.neuralsearch.constants.MappingConstants.PROPERTIES;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
 
 /**
  * A util class to help process mapping with semantic field
  */
 public class SemanticMappingUtils {
+    private static final int MAX_DEPTH_OF_INDEX_MAPPING = 1000;
+
     /**
      * It will recursively traverse the mapping to collect the full path to field config map for semantic fields
      * @param currentMapping current mapping
@@ -31,15 +34,22 @@ public class SemanticMappingUtils {
         @NonNull final Map<String, Object> currentMapping,
         @NonNull final Map<String, Map<String, Object>> semanticFieldPathToConfigMap
     ) {
-        collectSemanticField(currentMapping, "", semanticFieldPathToConfigMap);
+        collectSemanticField(currentMapping, "", 0, semanticFieldPathToConfigMap);
     }
 
     @SuppressWarnings("unchecked")
     private static void collectSemanticField(
         @NonNull final Map<String, Object> currentMapping,
         @NonNull final String parentPath,
+        final int depth,
         @NonNull final Map<String, Map<String, Object>> semanticFieldPathToConfigMap
     ) {
+        if (depth > MAX_DEPTH_OF_INDEX_MAPPING) {
+            throw new IllegalArgumentException(
+                "Cannot transform the mapping for semantic fields because its depth exceeds the maximum allowed depth "
+                    + MAX_DEPTH_OF_INDEX_MAPPING
+            );
+        }
         for (Map.Entry<String, Object> entry : currentMapping.entrySet()) {
             final String fieldName = entry.getKey();
             final Object fieldConfig = entry.getValue();
@@ -59,6 +69,7 @@ public class SemanticMappingUtils {
                     collectSemanticField(
                         (Map<String, Object>) fieldConfigMap.get(MappingConstants.PROPERTIES),
                         fullPath,
+                        depth + 1,
                         semanticFieldPathToConfigMap
                     );
                 }
@@ -94,12 +105,36 @@ public class SemanticMappingUtils {
         return modelIdToFieldPathMap;
     }
 
-    private static String getModelId(@NonNull final Map<String, Object> fieldConfigMap, @NonNull final String fullPath) {
-        final Object modelId = fieldConfigMap.get(SemanticFieldConstants.MODEL_ID);
-        if (modelId instanceof String == false) {
-            throw new IllegalArgumentException("Model ID is a required string value for semantic field: " + fullPath);
+    /**
+     * Get the model id from the semantic field config. It will validate the model id to ensure it is a valid string
+     * value.
+     * @param fieldConfigMap semantic field config
+     * @param fullPath full path to the semantic field
+     * @return valid model id
+     */
+    public static String getModelId(@NonNull final Map<String, Object> fieldConfigMap, @NonNull final String fullPath) {
+        final String error = validateModelId(fullPath, fieldConfigMap);
+        if (error != null) {
+            throw new IllegalArgumentException(error);
         }
-        return (String) modelId;
+
+        return (String) fieldConfigMap.get(MODEL_ID);
+    }
+
+    /**
+     * Get the semantic info field name from the semantic field config. It will validate the name is a valid string
+     * value if it exists.
+     * @param fieldConfigMap semantic field config
+     * @param fullPath full path to the semantic field
+     * @return valid model id
+     */
+    public static String getSemanticInfoFieldName(@NonNull final Map<String, Object> fieldConfigMap, @NonNull final String fullPath) {
+        final String error = validateSemanticInfoFieldName(fullPath, fieldConfigMap);
+        if (error != null) {
+            throw new IllegalArgumentException(error);
+        }
+
+        return fieldConfigMap.containsKey(SEMANTIC_INFO_FIELD_NAME) ? (String) fieldConfigMap.get(SEMANTIC_INFO_FIELD_NAME) : null;
     }
 
     /**
@@ -135,5 +170,72 @@ public class SemanticMappingUtils {
         }
 
         return new HashMap<>();
+    }
+
+    /**
+     * Validate the semantic field should have a string as the model id
+     * @param semanticFieldPath full path to the semantic field
+     * @param semanticFieldConfig config of the semantic field
+     * @return error message is there is any otherwise return null
+     */
+    public static String validateModelId(@NonNull final String semanticFieldPath, @NonNull final Map<String, Object> semanticFieldConfig) {
+        Object modelId = semanticFieldConfig.get(MODEL_ID);
+        if (modelId == null) {
+            return String.format(Locale.ROOT, "%s is required for the semantic field at %s", MODEL_ID, semanticFieldPath);
+        }
+
+        if (modelId instanceof String == false || ((String) modelId).isEmpty()) {
+            return String.format(Locale.ROOT, "%s should be a non-empty string for the semantic field at %s", MODEL_ID, semanticFieldPath);
+        }
+
+        return null;
+    }
+
+    /**
+     * Validate if the semantic info field name exist it should be a non-empty string without dot
+     * @param semanticFieldPath full path to the semantic field
+     * @param semanticFieldConfig config of the semantic field
+     * @return error message is there is any otherwise return null
+     */
+    public static String validateSemanticInfoFieldName(
+        @NonNull final String semanticFieldPath,
+        @NonNull final Map<String, Object> semanticFieldConfig
+    ) {
+        if (semanticFieldConfig.containsKey(SEMANTIC_INFO_FIELD_NAME)) {
+            final Object semanticInfoFieldName = semanticFieldConfig.get(SEMANTIC_INFO_FIELD_NAME);
+            if (semanticInfoFieldName instanceof String semanticInfoFieldNameStr) {
+                if (semanticInfoFieldNameStr.isEmpty()) {
+                    return String.format(
+                        Locale.ROOT,
+                        "%s cannot be an empty string for the semantic field at %s",
+                        SEMANTIC_INFO_FIELD_NAME,
+                        semanticFieldPath
+                    );
+                }
+
+                // OpenSearch allows to define a field name with "." in the index mapping and will unflatten it later
+                // but in our case it's not necessary to support "." in the custom semantic info field name. So add this
+                // validation to block it.
+                if (semanticInfoFieldNameStr.contains(".")) {
+                    return String.format(
+                        Locale.ROOT,
+                        "%s should not contain '.' for the semantic field at %s",
+                        SEMANTIC_INFO_FIELD_NAME,
+                        semanticFieldPath
+
+                    );
+                }
+            } else {
+                return String.format(
+                    Locale.ROOT,
+                    "%s should be a non-empty string for the semantic field at %s",
+                    SEMANTIC_INFO_FIELD_NAME,
+                    semanticFieldPath
+
+                );
+            }
+        }
+        // SEMANTIC_INFO_FIELD_NAME is an optional field. If it does not exist we simply return null to show no error.
+        return null;
     }
 }

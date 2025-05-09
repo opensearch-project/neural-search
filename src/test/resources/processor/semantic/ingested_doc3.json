@@ -1,0 +1,21 @@
+{
+  "_routing" : "routing",
+  "geo_data_semantic_info" : {
+    "chunks" : [ {
+      "text" : "dummy_geo_data_1",
+      "embedding" : {
+        "dummy token" : 1.0
+      }
+    } ],
+    "model" : {
+      "name" : "SPARSE_ENCODING",
+      "id" : "dummy_model_id_2",
+      "type" : "SPARSE_ENCODING"
+    }
+  },
+  "_version_type" : "internal",
+  "_index" : "index",
+  "geo_data" : "dummy_geo_data_1",
+  "_id" : "2",
+  "_version" : 1
+}

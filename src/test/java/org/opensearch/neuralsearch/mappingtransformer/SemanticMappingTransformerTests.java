@@ -30,8 +30,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Consumer;
 
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
@@ -73,6 +74,14 @@ public class SemanticMappingTransformerTests extends OpenSearchTestCase {
     public void testTransform_whenNoSemanticField_thenDoNothing() {
         final Map<String, Object> unexpectedMapping = new HashMap<>();
         unexpectedMapping.put("properties", Map.of("field", Map.of("type", "text")));
+
+        doAnswer(invocationOnMock -> {
+            final Set<String> modelIds = invocationOnMock.getArgument(0);
+            assert modelIds.isEmpty();
+            final Consumer<Map<String, MLModel>> onSuccess = invocationOnMock.getArgument(1);
+            onSuccess.accept(Collections.emptyMap());
+            return null;
+        }).when(mlClientAccessor).getModels(any(), any(), any());
 
         transformer.transform(unexpectedMapping, null, listener);
 
@@ -116,17 +125,10 @@ public class SemanticMappingTransformerTests extends OpenSearchTestCase {
 
         // mock
         doAnswer(invocationOnMock -> {
-            final String modelId = invocationOnMock.getArgument(0);
-            final ActionListener<MLModel> listener = invocationOnMock.getArgument(1);
-            if (textEmbeddingModelId.equals(modelId)) {
-                listener.onResponse(textEmbeddingModel);
-            } else if (sparseModelId.equals(modelId)) {
-                listener.onResponse(sparseModel);
-            } else {
-                listener.onFailure(new RuntimeException("Model not found"));
-            }
+            final Consumer<Map<String, MLModel>> onSuccess = invocationOnMock.getArgument(1);
+            onSuccess.accept(Map.of(textEmbeddingModelId, textEmbeddingModel, sparseModelId, sparseModel));
             return null;
-        }).when(mlClientAccessor).getModel(any(), any());
+        }).when(mlClientAccessor).getModels(any(), any(), any());
 
         // call
         transformer.transform(mappings, null, listener);
@@ -188,17 +190,10 @@ public class SemanticMappingTransformerTests extends OpenSearchTestCase {
 
         // mock
         doAnswer(invocationOnMock -> {
-            final String modelId = invocationOnMock.getArgument(0);
-            final ActionListener<MLModel> listener = invocationOnMock.getArgument(1);
-            if (remoteTextEmbeddingModelId.equals(modelId)) {
-                listener.onResponse(remoteTextEmbeddingModel);
-            } else if (remoteSparseModelId.equals(modelId)) {
-                listener.onResponse(remoteSparseModel);
-            } else {
-                listener.onFailure(new RuntimeException("Model not found"));
-            }
+            final Consumer<Map<String, MLModel>> onSuccess = invocationOnMock.getArgument(1);
+            onSuccess.accept(Map.of(remoteTextEmbeddingModelId, remoteTextEmbeddingModel, remoteSparseModelId, remoteSparseModel));
             return null;
-        }).when(mlClientAccessor).getModel(any(), any());
+        }).when(mlClientAccessor).getModels(any(), any(), any());
 
         // call
         transformer.transform(mappings, null, listener);
@@ -233,13 +228,10 @@ public class SemanticMappingTransformerTests extends OpenSearchTestCase {
 
         // mock
         doAnswer(invocationOnMock -> {
-            final String modelId = invocationOnMock.getArgument(0);
-            final ActionListener<MLModel> listener = invocationOnMock.getArgument(1);
-            if (dummyModelId.equals(modelId)) {
-                listener.onResponse(dummyModel);
-            }
+            final Consumer<Map<String, MLModel>> onSuccess = invocationOnMock.getArgument(1);
+            onSuccess.accept(Map.of(dummyModelId, dummyModel));
             return null;
-        }).when(mlClientAccessor).getModel(any(), any());
+        }).when(mlClientAccessor).getModels(any(), any(), any());
 
         // call
         transformer.transform(mappings, null, listener);
@@ -274,11 +266,10 @@ public class SemanticMappingTransformerTests extends OpenSearchTestCase {
 
         // mock
         doAnswer(invocationOnMock -> {
-            final String modelId = invocationOnMock.getArgument(0);
-            final ActionListener<MLModel> listener = invocationOnMock.getArgument(1);
-            listener.onFailure(new RuntimeException(String.format(Locale.ROOT, "Model %s is not found", modelId)));
+            final Consumer<Exception> onFailure = invocationOnMock.getArgument(2);
+            onFailure.accept(new RuntimeException("Model notFoundModel1 is not found; Model notFoundModel2 is not found"));
             return null;
-        }).when(mlClientAccessor).getModel(any(), any());
+        }).when(mlClientAccessor).getModels(any(), any(), any());
 
         // call
         transformer.transform(mappings, null, listener);
