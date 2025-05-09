@@ -11,7 +11,7 @@ import org.apache.lucene.index.SegmentWriteState;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.FixedBitSet;
-import org.opensearch.neuralsearch.sparse.algorithm.KMeansPlusPlus;
+import org.opensearch.neuralsearch.sparse.algorithm.RandomClustering;
 import org.opensearch.neuralsearch.sparse.algorithm.PostingClustering;
 import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 import org.opensearch.neuralsearch.sparse.mapper.SparseMethodContext;
@@ -39,7 +39,8 @@ public class ClusteredPostingTermsWriter {
             fieldInfo,
             new PostingClustering(
                 lambda,
-                new KMeansPlusPlus(
+                new RandomClustering(
+                    lambda,
                     alpha,
                     clusterUntilDocCountReach > 0 ? 1 : beta,
                     (docId) -> index.getForwardIndexReader().readSparseVector(docId)
@@ -51,9 +52,7 @@ public class ClusteredPostingTermsWriter {
     }
 
     public void write(BytesRef text, TermsEnum termsEnum, NormsProducer norms) throws IOException {
-        if (this.postingsWriter instanceof InMemoryClusteredPosting.InMemoryClusteredPostingWriter) {
-            InMemoryClusteredPosting.InMemoryClusteredPostingWriter writer =
-                (InMemoryClusteredPosting.InMemoryClusteredPostingWriter) this.postingsWriter;
+        if (this.postingsWriter instanceof InMemoryClusteredPosting.InMemoryClusteredPostingWriter writer) {
             writer.writeInMemoryTerm(text, termsEnum, this.docsSeen, norms);
         } else {
             throw new RuntimeException("not support");
