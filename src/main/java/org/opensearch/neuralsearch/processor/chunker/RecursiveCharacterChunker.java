@@ -7,50 +7,28 @@ package org.opensearch.neuralsearch.processor.chunker;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.regex.Pattern;
+import java.util.Objects;
 
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseInteger;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseListOfStringWithDefault;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parsePositiveIntegerWithDefault;
 
 public class RecursiveCharacterChunker implements Chunker {
 
-    /** The identifier for the recursive character chunking algorithm. */
     public static final String ALGORITHM_NAME = "recursive_character";
-
-    /** The parameter field name for specifying the delimiters. */
     public static final String DELIMITERS_FIELD = "delimiters";
-
-    /** The default list of delimiters values used when none is specified. */
     public static final List<String> DEFAULT_DELIMITERS = List.of("\n\n", "\n", " ", "");
-
-    /** Field name for specifying the maximum number of characters per chunk. */
     public static final String CHUNK_SIZE_FIELD = "chunk_size";
-
-    // Default values for each non-runtime parameter
+    public static final String MAX_CHUNK_LIMIT_FIELD = "max_chunk_limit";
     private static final int DEFAULT_CHUNK_SIZE = 384;
 
-    // Parameter values
     private List<String> delimiters;
     private int chunkSize;
 
-    /**
-     * Constructor that initializes the recursive character chunker with the specified parameters.
-     * @param parameters a map with non-runtime parameters to be parsed
-     */
     public RecursiveCharacterChunker(final Map<String, Object> parameters) {
         parseParameters(parameters);
     }
 
-    /**
-     * Parse the parameters for recursive character algorithm.
-     * Throw IllegalArgumentException when parameters are invalid.
-     *
-     * @param parameters a map with non-runtime parameters as the following:
-     * 1. chunk_size: the max length for each chunked passage
-     * Requirements:
-     * - chunk_size must be a positive integer
-     */
     @Override
     public void parseParameters(Map<String, Object> parameters) {
         this.delimiters = parseListOfStringWithDefault(parameters, DELIMITERS_FIELD, DEFAULT_DELIMITERS);
@@ -59,58 +37,64 @@ public class RecursiveCharacterChunker implements Chunker {
 
     @Override
     public List<String> chunk(String content, Map<String, Object> runtimeParameters) {
-        return splitText(content, delimiters, chunkSize, String::length);
+        int runtimeMaxChunkLimit = parseInteger(runtimeParameters, MAX_CHUNK_LIMIT_FIELD);
+        List<String> processedChunks = splitRecursive(content, delimiters, chunkSize, 0);
+
+        if (runtimeMaxChunkLimit > 0 && processedChunks.size() > runtimeMaxChunkLimit) {
+            List<String> limitedChunks = new ArrayList<>();
+            if (runtimeMaxChunkLimit > 1) {
+                limitedChunks.addAll(processedChunks.subList(0, runtimeMaxChunkLimit - 1));
+            }
+
+            StringBuilder mergedTailBuilder = new StringBuilder();
+            int mergeStartIndex = Math.max(0, runtimeMaxChunkLimit - 1);
+
+            for (int i = mergeStartIndex; i < processedChunks.size(); i++) {
+                String chunk = processedChunks.get(i);
+                if (!mergedTailBuilder.isEmpty() && chunk != null && !chunk.isEmpty()) {
+                    char last = mergedTailBuilder.charAt(mergedTailBuilder.length() - 1);
+                    char first = chunk.charAt(0);
+                    if (!Character.isWhitespace(last) && !Character.isWhitespace(first)) {
+                        mergedTailBuilder.append(" ");
+                    }
+                }
+                if (chunk != null) {
+                    mergedTailBuilder.append(chunk);
+                }
+            }
+            limitedChunks.add(mergedTailBuilder.toString());
+            return limitedChunks;
+        } else {
+            return processedChunks;
+        }
     }
 
-    private List<String> splitText(String text, List<String> delimiters, int chunkSize, Function<String, Integer> lengthFunction) {
-        List<String> finalChunks = new ArrayList<>();
-        String delimiter = delimiters.getLast();
-        List<String> newDelimiters = new ArrayList<>();
-
-        for (int i = 0; i < delimiters.size(); i++) {
-            String sep = delimiters.get(i);
-            String delimiterToUse = delimiter;
-
-            if (sep.isEmpty()) {
-                delimiter = sep;
-                break;
-            }
-
-            if (Pattern.compile(Pattern.quote(delimiterToUse)).matcher(text).find()) {
-                delimiter = sep;
-                for (int j = i + 1; j < delimiters.size(); j++) {
-                    newDelimiters.add(delimiters.get(j));
-                }
-                break;
-            }
+    private List<String> splitRecursive(String text, List<String> delimiters, int chunkSize, int level) {
+        if (text == null || text.isEmpty()) {
+            return new ArrayList<>();
+        }
+        if (level >= delimiters.size()) {
+            return mergeSplits(List.of(text.split("(?<=.)")), "", chunkSize);
         }
 
+        String delimiter = delimiters.get(level);
         List<String> splits = splitByLiteralDelimiter(text, delimiter);
-        List<String> goodSplits = new ArrayList<>();
-        String sepToUse = delimiter;
+        List<String> chunks = mergeSplits(splits, delimiter, chunkSize);
 
-        for (String split : splits) {
-            if (lengthFunction.apply(split) < chunkSize) {
-                goodSplits.add(split);
-            } else {
-                if (!goodSplits.isEmpty()) {
-                    finalChunks.addAll(mergeSplits(goodSplits, sepToUse, chunkSize, lengthFunction));
-                    goodSplits.clear();
-                }
-
-                if (newDelimiters.isEmpty()) {
-                    finalChunks.add(split);
-                } else {
-                    finalChunks.addAll(splitText(split, newDelimiters, chunkSize, lengthFunction));
+        boolean tooLong = chunks.stream().anyMatch(s -> s != null && s.length() > chunkSize);
+        if (tooLong) {
+            List<String> refined = new ArrayList<>();
+            for (String chunk : chunks) {
+                if (chunk != null && chunk.length() > chunkSize) {
+                    refined.addAll(splitRecursive(chunk, delimiters, chunkSize, level + 1));
+                } else if (chunk != null) {
+                    refined.add(chunk);
                 }
             }
+            return refined;
+        } else {
+            return chunks.stream().filter(Objects::nonNull).toList();
         }
-
-        if (!goodSplits.isEmpty()) {
-            finalChunks.addAll(mergeSplits(goodSplits, sepToUse, chunkSize, lengthFunction));
-        }
-
-        return finalChunks;
     }
 
     private List<String> splitByLiteralDelimiter(String text, String delimiter) {
@@ -120,39 +104,55 @@ public class RecursiveCharacterChunker implements Chunker {
                 result.add(String.valueOf(c));
             }
         } else {
-            int index;
             int start = 0;
-            while ((index = text.indexOf(delimiter, start)) >= 0) {
-                result.add(text.substring(start, index));
-                start = index + delimiter.length();
+            int next = text.indexOf(delimiter, start);
+            while (next != -1) {
+                String part = text.substring(start, next);
+                if (!part.isEmpty()) {
+                    result.add(part);
+                }
+                result.add(delimiter);
+                start = next + delimiter.length();
+                next = text.indexOf(delimiter, start);
             }
-            result.add(text.substring(start));
+            if (start < text.length()) {
+                result.add(text.substring(start));
+            }
         }
         return result;
     }
 
-    private List<String> mergeSplits(List<String> splits, String delimiter, int chunkSize, Function<String, Integer> lengthFunction) {
-        List<String> result = new ArrayList<>();
-        StringBuilder currentText = new StringBuilder();
+    private List<String> mergeSplits(List<String> splits, String currentDelimiter, int chunkSize) {
+        List<String> merged = new ArrayList<>();
+        StringBuilder builder = new StringBuilder();
 
-        for (String split : splits) {
-            String potentialText = !currentText.isEmpty() ? currentText + delimiter + split : split;
+        for (String piece : splits) {
+            if (piece == null) continue;
+            boolean isDelimiter = !currentDelimiter.isEmpty() && piece.equals(currentDelimiter);
 
-            if (lengthFunction.apply(potentialText) > chunkSize && !currentText.isEmpty()) {
-                result.add(currentText.toString());
-                currentText = new StringBuilder(split);
+            if (builder.isEmpty() && isDelimiter) {
+                continue;
+            }
+
+            if (builder.length() + piece.length() <= chunkSize) {
+                builder.append(piece);
             } else {
-                if (!currentText.isEmpty()) {
-                    currentText.append(delimiter);
+                if (!builder.isEmpty()) {
+                    String chunk = builder.toString().strip();
+                    if (!chunk.isEmpty()) {
+                        merged.add(chunk);
+                    }
                 }
-                currentText.append(split);
+                builder = isDelimiter ? new StringBuilder() : new StringBuilder(piece);
             }
         }
 
-        if (!currentText.isEmpty()) {
-            result.add(currentText.toString());
+        if (!builder.isEmpty()) {
+            String chunk = builder.toString().strip();
+            if (!chunk.isEmpty()) {
+                merged.add(chunk);
+            }
         }
-
-        return result;
+        return merged;
     }
 }

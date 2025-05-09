@@ -50,7 +50,7 @@ public class RecursiveCharacterChunkerTests extends OpenSearchTestCase {
 
     public void testChunk_whenExceedsMaxChunkLimit_thenLastChunksAreConcatenated() {
         RecursiveCharacterChunker chunker = new RecursiveCharacterChunker(Map.of("delimiters", List.of(". ", " ", ""), "chunk_size", 5));
-        String content = "a b c d e f g h";
+        String content = "a b c d e f g h i j k l m";
         int runtimeMaxChunkLimit = 3;
         List<String> result = chunker.chunk(content, Map.of(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit, CHUNK_STRING_COUNT_FIELD, 1));
         assertTrue(result.size() <= runtimeMaxChunkLimit);
@@ -60,9 +60,36 @@ public class RecursiveCharacterChunkerTests extends OpenSearchTestCase {
         RecursiveCharacterChunker chunker = new RecursiveCharacterChunker(Map.of("delimiters", List.of(". ", " ", ""), "chunk_size", 5));
         String content = "abc def. ghi jkl.";
         List<String> result = chunker.chunk(content, runtimeParameters);
-        logger.info(result.toString());
         for (String chunk : result) {
             assertTrue(chunk.length() <= 5);
         }
+    }
+
+    public void testChunk_withDefaultDelimiters_thenChunksWithinLimit() {
+        String content =
+            """
+                OpenSearch is an open-source search and analytics suite.\n\nIt is built on Apache Lucene and supports full-text search, structured search, and analytics.\nDevelopers use OpenSearch to build fast search experiences at scale.\n\nIt provides a powerful query DSL and RESTful API.
+                """;
+        RecursiveCharacterChunker chunker = new RecursiveCharacterChunker(Map.of("chunk_size", 50));
+        List<String> chunks = chunker.chunk(content, runtimeParameters);
+
+        // All chunks must be within the specified size limit
+        for (String chunk : chunks) {
+            assertTrue(chunk.length() <= 50);
+        }
+
+        assertFalse(chunks.isEmpty());
+    }
+
+    public void testChunk_withCustomDelimiters_thenSplitProperly() {
+        RecursiveCharacterChunker chunker = new RecursiveCharacterChunker(Map.of("delimiters", List.of("; ", ", ", ""), "chunk_size", 50));
+        String content =
+            "indexing is fast; shards are distributed evenly; replica synchronization is ensured, especially in high-load clusters, resilience must be guaranteed.";
+        List<String> chunks = chunker.chunk(content, runtimeParameters);
+        for (String chunk : chunks) {
+            assertTrue(chunk.length() <= 50);
+        }
+
+        assertFalse(chunks.isEmpty());
     }
 }
