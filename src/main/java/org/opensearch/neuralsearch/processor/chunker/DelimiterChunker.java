@@ -83,4 +83,9 @@ public final class DelimiterChunker implements Chunker {
 
         return chunkResult;
     }
+
+    @Override
+    public String getAlgorithmName() {
+        return ALGORITHM_NAME;
+    }
 }
