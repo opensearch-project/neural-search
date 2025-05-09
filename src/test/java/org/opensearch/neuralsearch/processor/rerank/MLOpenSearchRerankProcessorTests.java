@@ -43,6 +43,7 @@ import org.opensearch.neuralsearch.processor.rerank.context.DocumentContextSourc
 import org.opensearch.neuralsearch.processor.rerank.context.QueryContextSourceFetcher;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
 import org.opensearch.search.SearchExtBuilder;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
@@ -153,6 +154,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
     }
 
     public void testRerankContext_whenQueryText_thenSucceed() throws IOException {
+        NeuralSearchClusterTestUtils.setUpClusterService();
         setupParams(Map.of(QueryContextSourceFetcher.QUERY_TEXT_FIELD, "query text"));
         setupSearchResults();
         @SuppressWarnings("unchecked")
@@ -166,6 +168,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
     }
 
     public void testRerankContext_whenQueryTextPath_thenSucceed() throws IOException {
+        NeuralSearchClusterTestUtils.setUpClusterService();
         setupParams(Map.of(QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD, "query.neural.embedding.query_text"));
         setupSearchResults();
         @SuppressWarnings("unchecked")
@@ -179,6 +182,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
     }
 
     public void testRerankContext_whenQueryTextAndPath_thenFail() throws IOException {
+        NeuralSearchClusterTestUtils.setUpClusterService();
         setupParams(
             Map.of(
                 QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD,
@@ -226,6 +230,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
     }
 
     public void testRerankContext_whenQueryTextPathIsBadPointer_thenFail() throws IOException {
+        NeuralSearchClusterTestUtils.setUpClusterService();
         setupParams(Map.of(QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD, "query.neural.embedding"));
         setupSearchResults();
         @SuppressWarnings("unchecked")
@@ -241,6 +246,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testRerankContext_whenQueryTextPathIsExceeedinglyManyCharacters_thenFail() {
+        NeuralSearchClusterTestUtils.setUpClusterService();
         // "eighteencharacters" * 60 = 1080 character string > max len of 1024
         setupParams(Map.of(QueryContextSourceFetcher.QUERY_TEXT_PATH_FIELD, "eighteencharacters".repeat(60)));
         setupSearchResults();
@@ -388,6 +394,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
     }
 
     public void testProcessResponseAsync() throws IOException {
+        NeuralSearchClusterTestUtils.setUpClusterService();
         setupParams(Map.of(QueryContextSourceFetcher.QUERY_TEXT_FIELD, "query text"));
         setupSimilarityRescoring();
         setupSearchResults();

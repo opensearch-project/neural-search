@@ -11,22 +11,50 @@ import static org.opensearch.knn.index.query.KNNQueryBuilder.METHOD_PARAMS_FIELD
 import static org.opensearch.knn.index.query.KNNQueryBuilder.MIN_SCORE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.RESCORE_FIELD;
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersion;
-import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport;
+import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForDefaultDenseModelIdSupport;
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForRadialSearch;
+import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForSemanticFieldType;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
+import static org.opensearch.neuralsearch.constants.MappingConstants.PATH_SEPARATOR;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DEFAULT_SEMANTIC_INFO_FIELD_NAME_SUFFIX;
+import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.CHUNKS_EMBEDDING_FIELD_NAME;
+import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.CHUNKS_FIELD_NAME;
 import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.INPUT_IMAGE;
 import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.INPUT_TEXT;
+import static org.opensearch.neuralsearch.query.parser.NeuralQueryParser.modelIdToQueryTokensSupplierMapStreamInput;
+import static org.opensearch.neuralsearch.query.parser.NeuralQueryParser.modelIdToQueryTokensSupplierMapStreamOutput;
+import static org.opensearch.neuralsearch.query.parser.NeuralQueryParser.modelIdToVectorSupplierMapStreamInput;
+import static org.opensearch.neuralsearch.query.parser.NeuralQueryParser.modelIdToVectorSupplierMapStreamOutput;
+import static org.opensearch.neuralsearch.query.parser.NeuralQueryParser.queryTokensMapSupplierStreamInput;
+import static org.opensearch.neuralsearch.query.parser.NeuralQueryParser.queryTokensMapSupplierStreamOutput;
+import static org.opensearch.neuralsearch.query.parser.NeuralQueryParser.vectorSupplierStreamInput;
+import static org.opensearch.neuralsearch.query.parser.NeuralQueryParser.vectorSupplierStreamOutput;
+import static org.opensearch.neuralsearch.util.NeuralQueryValidationUtil.validateNeuralQueryForKnn;
+import static org.opensearch.neuralsearch.util.NeuralQueryValidationUtil.validateNeuralQueryForSemanticDense;
+import static org.opensearch.neuralsearch.util.NeuralQueryValidationUtil.validateNeuralQueryForSemanticSparse;
+import static org.opensearch.neuralsearch.util.NeuralQueryValidationUtil.validateTargetFieldConfig;
+import static org.opensearch.neuralsearch.util.SemanticMappingUtils.getIndexToTargetFieldConfigMapFromIndexMetadata;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
+import lombok.NonNull;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
+import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.join.ScoreMode;
+import org.opensearch.action.IndicesRequest;
+import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.common.SetOnce;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.action.ActionListener;
@@ -34,17 +62,27 @@ import org.opensearch.core.common.ParsingException;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.core.xcontent.XContentLocation;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.mapper.NumberFieldMapper;
+import org.opensearch.index.mapper.RankFeaturesFieldMapper;
 import org.opensearch.index.query.AbstractQueryBuilder;
+import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryCoordinatorContext;
 import org.opensearch.index.query.WithFieldName;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
+import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
 import org.opensearch.knn.index.query.parser.MethodParametersParser;
 import org.opensearch.knn.index.query.parser.RescoreParser;
 import org.opensearch.knn.index.query.rescore.RescoreContext;
 import org.opensearch.neuralsearch.common.MinClusterVersionUtil;
+import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
+import org.opensearch.neuralsearch.query.dto.NeuralQueryBuildStage;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
+
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -57,6 +95,10 @@ import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.processor.MapInferenceRequest;
+import org.opensearch.neuralsearch.processor.TextInferenceRequest;
+import org.opensearch.neuralsearch.query.dto.NeuralQueryTargetFieldConfig;
+import org.opensearch.neuralsearch.util.TokenWeightUtil;
+import org.opensearch.transport.RemoteClusterService;
 
 /**
  * NeuralQueryBuilder is responsible for producing "neural" query types. A "neural" query type is a wrapper around a
@@ -74,28 +116,42 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
 
     public static final String NAME = "neural";
 
+    // common fields used for both dense and sparse model
     @VisibleForTesting
-    static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
-
-    public static final ParseField QUERY_IMAGE_FIELD = new ParseField("query_image");
+    public static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
 
     public static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
+
+    // fields only used for dense model
+    public static final ParseField QUERY_IMAGE_FIELD = new ParseField("query_image");
 
     @VisibleForTesting
     static final ParseField K_FIELD = new ParseField("k");
 
-    private static final int DEFAULT_K = 10;
+    public static final int DEFAULT_K = 10;
+    public static final Set<String> SUPPORTED_TARGET_FIELD_TYPES = Set.of(
+        SemanticFieldMapper.CONTENT_TYPE,
+        KNNVectorFieldMapper.CONTENT_TYPE
+    );
 
+    // fields for sparse model
+    public static final ParseField QUERY_TOKENS_FIELD = new ParseField("query_tokens");
+
+    // client to invoke ml-common APIs
     private static MLCommonsClientAccessor ML_CLIENT;
 
     public static void initialize(MLCommonsClientAccessor mlClient) {
         NeuralQueryBuilder.ML_CLIENT = mlClient;
     }
 
+    // common fields used for both dense and sparse model
     private String fieldName;
     private String queryText;
-    private String queryImage;
     private String modelId;
+    private String embeddingFieldType;
+
+    // fields only used for dense model
+    private String queryImage;
     private Integer k = null;
     private Float maxDistance = null;
     private Float minScore = null;
@@ -107,6 +163,13 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     private QueryBuilder filter;
     private Map<String, ?> methodParameters;
     private RescoreContext rescoreContext;
+    // fields to support the semantic field for dense model
+    private Map<String, Supplier<float[]>> modelIdToVectorSupplierMap;
+
+    // fields only used for sparse model
+    private Supplier<Map<String, Float>> queryTokensMapSupplier;
+    // fields to support the semantic field for sparse model
+    private Map<String, Supplier<Map<String, Float>>> modelIdToQueryTokensSupplierMap;
 
     /**
      * A custom builder class to enforce valid Neural Query Builder instantiation
@@ -126,6 +189,12 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         private RescoreContext rescoreContext;
         private String queryName;
         private float boost = DEFAULT_BOOST;
+        private String embeddingFieldType;
+        private Map<String, Supplier<float[]>> modelIdToVectorSupplierMap;
+        private Supplier<Map<String, Float>> queryTokensMapSupplier;
+        private Map<String, Supplier<Map<String, Float>>> modelIdToQueryTokensSupplierMap;
+        private Boolean isSemanticField = false;
+        private NeuralQueryBuildStage buildStage;
 
         public Builder() {}
 
@@ -199,17 +268,45 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             return this;
         }
 
+        public Builder embeddingFieldType(String embeddingFieldType) {
+            this.embeddingFieldType = embeddingFieldType;
+            return this;
+        }
+
+        public Builder modelIdToVectorSupplierMap(Map<String, Supplier<float[]>> modelIdToVectorSupplierMap) {
+            this.modelIdToVectorSupplierMap = modelIdToVectorSupplierMap;
+            return this;
+        }
+
+        public Builder queryTokensMapSupplier(Supplier<Map<String, Float>> queryTokensMapSupplier) {
+            this.queryTokensMapSupplier = queryTokensMapSupplier;
+            return this;
+        }
+
+        public Builder modelIdToQueryTokensSupplierMap(Map<String, Supplier<Map<String, Float>>> modelIdToQueryTokensSupplierMap) {
+            this.modelIdToQueryTokensSupplierMap = modelIdToQueryTokensSupplierMap;
+            return this;
+        }
+
+        public Builder isSemanticField(Boolean isSemanticField) {
+            this.isSemanticField = isSemanticField;
+            return this;
+        }
+
+        public Builder builStage(NeuralQueryBuildStage buildStage) {
+            this.buildStage = buildStage;
+            return this;
+        }
+
         public NeuralQueryBuilder build() {
-            validateQueryParameters(fieldName, queryText, queryImage);
-            boolean queryTypeIsProvided = validateKNNQueryType(k, maxDistance, minScore);
-            if (queryTypeIsProvided == false) {
-                k = DEFAULT_K;
-            }
-            return new NeuralQueryBuilder(
+            requireValue(fieldName, "Field name must be provided for neural query");
+
+            final NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
                 fieldName,
                 queryText,
-                queryImage,
                 modelId,
+                embeddingFieldType,
+                queryImage,
                 k,
                 maxDistance,
                 minScore,
@@ -217,8 +314,41 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 vectorSupplier,
                 filter,
                 methodParameters,
-                rescoreContext
+                rescoreContext,
+                modelIdToVectorSupplierMap,
+                queryTokensMapSupplier,
+                modelIdToQueryTokensSupplierMap
             ).boost(boost).queryName(queryName);
+
+            List<String> errors = new ArrayList<>();
+
+            // Try to build the neural query builder in fromXContent function
+            if (buildStage == null || NeuralQueryBuildStage.FROM_X_CONTENT.equals(buildStage)) {
+                // Before semantic field we only support query against a knn field so validate for that case
+                // If we can support the semantic field we will delay the validation to COORDINATE_REWRITE where we
+                // have more info to do the validation.
+                if (isClusterOnOrAfterMinReqVersionForSemanticFieldType() == false) {
+                    errors = validateNeuralQueryForKnn(neuralQueryBuilder, buildStage);
+                }
+            } else if (NeuralQueryBuildStage.REWRITE.equals(buildStage)) {
+                if (isSemanticField == null || isSemanticField == false) {
+                    // Currently if the target field is not a semantic field we will assume the target field should be a knn
+                    // field. In the future we can add the support for the case when the target field is a rank_features.
+                    errors = validateNeuralQueryForKnn(neuralQueryBuilder, buildStage);
+                } else if (KNNVectorFieldMapper.CONTENT_TYPE.equals(embeddingFieldType)) {
+                    errors = validateNeuralQueryForSemanticDense(neuralQueryBuilder);
+                } else if (RankFeaturesFieldMapper.CONTENT_TYPE.equals(embeddingFieldType)) {
+                    errors = validateNeuralQueryForSemanticSparse(neuralQueryBuilder);
+                } else {
+                    throw new IllegalArgumentException("Unsupported embedding field type: " + embeddingFieldType);
+                }
+            }
+
+            if (!errors.isEmpty()) {
+                throw new IllegalArgumentException("Failed to build the NeuralQueryBuilder: " + String.join("; ", errors));
+            } else {
+                return neuralQueryBuilder;
+            }
         }
 
     }
@@ -247,7 +377,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             this.queryText = in.readString();
         }
         // If cluster version is on or after 2.11 then default model Id support is enabled
-        if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
+        if (isClusterOnOrAfterMinReqVersionForDefaultDenseModelIdSupport()) {
             this.modelId = in.readOptionalString();
         } else {
             this.modelId = in.readString();
@@ -269,6 +399,12 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             this.methodParameters = MethodParametersParser.streamInput(in, MinClusterVersionUtil::isClusterOnOrAfterMinReqVersion);
         }
         this.rescoreContext = RescoreParser.streamInput(in);
+        if (isClusterOnOrAfterMinReqVersionForSemanticFieldType(in.getVersion())) {
+            this.vectorSupplier = vectorSupplierStreamInput(in);
+            this.modelIdToVectorSupplierMap = modelIdToVectorSupplierMapStreamInput(in);
+            this.queryTokensMapSupplier = queryTokensMapSupplierStreamInput(in);
+            this.modelIdToQueryTokensSupplierMap = modelIdToQueryTokensSupplierMapStreamInput(in);
+        }
     }
 
     @Override
@@ -285,7 +421,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             out.writeString(this.queryText);
         }
         // If cluster version is on or after 2.11 then default model Id support is enabled
-        if (isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
+        if (isClusterOnOrAfterMinReqVersionForDefaultDenseModelIdSupport()) {
             out.writeOptionalString(this.modelId);
         } else {
             out.writeString(this.modelId);
@@ -308,6 +444,13 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             MethodParametersParser.streamOutput(out, methodParameters, MinClusterVersionUtil::isClusterOnOrAfterMinReqVersion);
         }
         RescoreParser.streamOutput(out, rescoreContext);
+
+        if (isClusterOnOrAfterMinReqVersionForSemanticFieldType(out.getVersion())) {
+            vectorSupplierStreamOutput(out, vectorSupplier);
+            modelIdToVectorSupplierMapStreamOutput(out, modelIdToVectorSupplierMap);
+            queryTokensMapSupplierStreamOutput(out, queryTokensMapSupplier);
+            modelIdToQueryTokensSupplierMapStreamOutput(out, modelIdToQueryTokensSupplierMap);
+        }
     }
 
     /**
@@ -362,6 +505,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         if (Objects.nonNull(rescoreContext)) {
             RescoreParser.doXContent(xContentBuilder, rescoreContext);
         }
+        if (Objects.nonNull(queryTokensMapSupplier) && Objects.nonNull(queryTokensMapSupplier.get())) {
+            xContentBuilder.field(QUERY_TOKENS_FIELD.getPreferredName(), queryTokensMapSupplier.get());
+        }
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
         xContentBuilder.endObject();
@@ -387,44 +533,27 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
      * @throws IOException can be thrown by parser
      */
     public static NeuralQueryBuilder fromXContent(XContentParser parser) throws IOException {
-        NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder();
+        final Builder builder = new Builder();
         if (parser.currentToken() != XContentParser.Token.START_OBJECT) {
             throw new ParsingException(parser.getTokenLocation(), "Token must be START_OBJECT");
         }
         parser.nextToken();
-        neuralQueryBuilder.fieldName(parser.currentName());
+        builder.fieldName(parser.currentName());
         parser.nextToken();
-        parseQueryParams(parser, neuralQueryBuilder);
+        parseQueryParams(parser, builder);
         if (parser.nextToken() != XContentParser.Token.END_OBJECT) {
             throw new ParsingException(
                 parser.getTokenLocation(),
-                "["
-                    + NAME
-                    + "] query doesn't support multiple fields, found ["
-                    + neuralQueryBuilder.fieldName()
-                    + "] and ["
-                    + parser.currentName()
-                    + "]"
+                "[" + NAME + "] query doesn't support multiple fields, found [" + builder.fieldName + "] and [" + parser.currentName() + "]"
             );
         }
-        validateQueryParameters(neuralQueryBuilder.fieldName(), neuralQueryBuilder.queryText(), neuralQueryBuilder.queryImage());
-        if (!isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport()) {
-            requireValue(neuralQueryBuilder.modelId(), "Model ID must be provided for neural query");
-        }
 
-        boolean queryTypeIsProvided = validateKNNQueryType(
-            neuralQueryBuilder.k(),
-            neuralQueryBuilder.maxDistance(),
-            neuralQueryBuilder.minScore()
-        );
-        if (queryTypeIsProvided == false) {
-            neuralQueryBuilder.k(DEFAULT_K);
-        }
+        builder.builStage(NeuralQueryBuildStage.FROM_X_CONTENT);
 
-        return neuralQueryBuilder;
+        return builder.build();
     }
 
-    private static void parseQueryParams(XContentParser parser, NeuralQueryBuilder neuralQueryBuilder) throws IOException {
+    private static void parseQueryParams(XContentParser parser, Builder builder) throws IOException {
         XContentParser.Token token;
         String currentFieldName = "";
         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
@@ -432,36 +561,42 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 currentFieldName = parser.currentName();
             } else if (token.isValue()) {
                 if (QUERY_TEXT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    neuralQueryBuilder.queryText(parser.text());
+                    builder.queryText(parser.text());
                 } else if (QUERY_IMAGE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    neuralQueryBuilder.queryImage(parser.text());
+                    builder.queryImage(parser.text());
                 } else if (MODEL_ID_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    neuralQueryBuilder.modelId(parser.text());
+                    builder.modelId(parser.text());
                 } else if (K_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    neuralQueryBuilder.k((Integer) NumberFieldMapper.NumberType.INTEGER.parse(parser.objectBytes(), false));
+                    builder.k((Integer) NumberFieldMapper.NumberType.INTEGER.parse(parser.objectBytes(), false));
                 } else if (NAME_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    neuralQueryBuilder.queryName(parser.text());
+                    builder.queryName(parser.text());
                 } else if (BOOST_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    neuralQueryBuilder.boost(parser.floatValue());
+                    builder.boost(parser.floatValue());
                 } else if (MAX_DISTANCE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    neuralQueryBuilder.maxDistance(parser.floatValue());
+                    builder.maxDistance(parser.floatValue());
                 } else if (MIN_SCORE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    neuralQueryBuilder.minScore(parser.floatValue());
+                    builder.minScore(parser.floatValue());
                 } else if (EXPAND_NESTED_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    neuralQueryBuilder.expandNested(parser.booleanValue());
+                    builder.expandNested(parser.booleanValue());
                 } else {
-                    throw new ParsingException(
-                        parser.getTokenLocation(),
-                        "[" + NAME + "] query does not support [" + currentFieldName + "]"
-                    );
+                    throw getUnsupportedFieldException(parser.getTokenLocation(), currentFieldName);
                 }
             } else if (token == XContentParser.Token.START_OBJECT) {
                 if (FILTER_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    neuralQueryBuilder.filter(parseInnerQueryBuilder(parser));
+                    builder.filter(parseInnerQueryBuilder(parser));
                 } else if (METHOD_PARAMS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    neuralQueryBuilder.methodParameters(MethodParametersParser.fromXContent(parser));
+                    builder.methodParameters(MethodParametersParser.fromXContent(parser));
                 } else if (RESCORE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    neuralQueryBuilder.rescoreContext(RescoreParser.fromXContent(parser));
+                    builder.rescoreContext(RescoreParser.fromXContent(parser));
+                } else if (QUERY_TOKENS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    if (isClusterOnOrAfterMinReqVersionForSemanticFieldType()) {
+                        final Map<String, Float> queryTokens = parser.map(HashMap::new, XContentParser::floatValue);
+                        builder.queryTokensMapSupplier(() -> queryTokens);
+                    } else {
+                        throw getUnsupportedFieldException(parser.getTokenLocation(), currentFieldName);
+                    }
+                } else {
+                    throw getUnsupportedFieldException(parser.getTokenLocation(), currentFieldName);
                 }
             } else {
                 throw new ParsingException(
@@ -472,8 +607,152 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         }
     }
 
+    private static ParsingException getUnsupportedFieldException(XContentLocation tokenLocation, String currentFieldName) {
+        return new ParsingException(tokenLocation, "[" + NAME + "] query does not support [" + currentFieldName + "]");
+    }
+
     @Override
     protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) {
+        // For backward compatibility
+        if (isClusterOnOrAfterMinReqVersionForSemanticFieldType() == false) {
+            return rewriteQueryAgainstKnnField(queryRewriteContext);
+        }
+
+        final QueryCoordinatorContext coordinatorContext = queryRewriteContext.convertToCoordinatorContext();
+        if (coordinatorContext != null) {
+            return rewriteQueryWithCoordinatorContext(coordinatorContext);
+        }
+
+        final QueryShardContext queryShardContext = queryRewriteContext.convertToShardContext();
+        if (queryShardContext != null) {
+            return rewriteQueryWithQueryShardContext(queryShardContext);
+        }
+
+        // We can rewrite with a BaseQueryRewriteContext on the shard level:
+        // In SearchService do a quick rewrite to handle AliasFilters rewrite. This happens after the
+        // coordinate rewrite, and we do not need to rewrite the neural query for this case. We will do rewrite later
+        // with queryShardContext.
+        return this;
+    }
+
+    private QueryBuilder rewriteQueryWithCoordinatorContext(@NonNull final QueryCoordinatorContext queryRewriteContext) {
+        final IndicesRequest searchRequest = queryRewriteContext.getSearchRequest();
+        final List<String> remoteIndices = getRemoteIndices(searchRequest);
+        // If we have remote target indices in the search request we assume the target field should be a knn field
+        // for backward compatibility. For semantic field we do not support cross cluster search for now.
+        if (remoteIndices.isEmpty() == false) {
+            return rewriteQueryAgainstKnnField(queryRewriteContext);
+        }
+
+        final Map<String, NeuralQueryTargetFieldConfig> indexToTargetFieldConfigMap = getIndexToTargetFieldConfigMap(searchRequest);
+        final NeuralQueryTargetFieldConfig firstTargetFieldConfig = getFirstTargetFieldConfig(indexToTargetFieldConfigMap);
+        // If no target field config found or the target field is not a semantic field then fall back to the old logic.
+        // Here we just need to check the target field config in one index since we already validate the target field
+        // in all the target indices should all be semantic field or non-semantic field.
+        if (firstTargetFieldConfig == null || Boolean.TRUE.equals(firstTargetFieldConfig.getIsSemanticField()) == false) {
+            // When the target field is not a semantic field we simply fall back to the old logic to support the
+            // dense model. But in the future we can add the logic to also support the sparse model.
+            return rewriteQueryAgainstKnnField(queryRewriteContext);
+        } else {
+            final String searchModelId = getSearchModelId(firstTargetFieldConfig);
+            // If it is not null it means we already start the async actions in the previous rewrite.
+            // Current rewrite happens after all the async actions done so simply return this to end the rewrite.
+            if (modelIdToVectorSupplierMap != null || modelIdToQueryTokensSupplierMap != null || queryTokensMapSupplier != null) {
+                // If we only have one target index it means we know the path to the target embedding feild so we can
+                // continue the rewrite
+                if (indexToTargetFieldConfigMap.size() == 1) {
+                    return rewriteQueryForSemanticField(
+                        searchModelId,
+                        firstTargetFieldConfig.getEmbeddingFieldType(),
+                        firstTargetFieldConfig.getEmbeddingFieldPath(),
+                        firstTargetFieldConfig.getChunksPath()
+                    );
+                }
+                // If we have more than one target index we need QueryShardContext to know the target index so simply
+                // return this to end the rewrite. Will do rewrite later on the shard level with QueryShardContext.
+                return this;
+            }
+
+            final Set<String> modelIds = indexToTargetFieldConfigMap.values()
+                .stream()
+                .map(NeuralQueryTargetFieldConfig::getSearchModelId)
+                .collect(Collectors.toSet());
+
+            return inferenceForSemanticField(queryRewriteContext, modelIds, firstTargetFieldConfig.getEmbeddingFieldType());
+        }
+    }
+
+    private QueryBuilder rewriteQueryForSemanticField(
+        @NonNull final String searchModelId,
+        @NonNull final String embeddingFieldType,
+        @NonNull final String embeddingFieldName,
+        @NonNull final String nestedQueryPath
+    ) {
+        if (KNNVectorFieldMapper.CONTENT_TYPE.equals(embeddingFieldType)) {
+            if (modelIdToVectorSupplierMap == null
+                || modelIdToVectorSupplierMap.get(searchModelId) == null
+                || modelIdToVectorSupplierMap.get(searchModelId).get() == null) {
+                throw new RuntimeException(
+                    getErrorMessageWithBaseErrorForSemantic("Not able to find the dense embedding when try to rewrite it to the KNN query.")
+                );
+            }
+            final float[] vector = modelIdToVectorSupplierMap.get(searchModelId).get();
+            final NeuralKNNQueryBuilder neuralKNNQueryBuilder = createKNNQueryBuilder(vector);
+            return new NestedQueryBuilder(nestedQueryPath, neuralKNNQueryBuilder, ScoreMode.Max);
+        } else if (RankFeaturesFieldMapper.CONTENT_TYPE.equals(embeddingFieldType)) {
+            Supplier<Map<String, Float>> queryTokensSupplier = queryTokensMapSupplier;
+            // If the raw token is not provided then try to find the token generated by the ml model
+            if (queryTokensSupplier == null) {
+                if (modelIdToQueryTokensSupplierMap == null || modelIdToQueryTokensSupplierMap.get(searchModelId) == null) {
+                    throw new RuntimeException(
+                        getErrorMessageWithBaseErrorForSemantic(
+                            "Not able to find the sparse embedding when try to rewrite it neural sparse query."
+                        )
+                    );
+                }
+                queryTokensSupplier = modelIdToQueryTokensSupplierMap.get(searchModelId);
+            }
+
+            final NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(embeddingFieldName)
+                .queryTokensSupplier(queryTokensSupplier);
+            return new NestedQueryBuilder(nestedQueryPath, neuralSparseQueryBuilder, ScoreMode.Max);
+        } else {
+            throw new RuntimeException(
+                getErrorMessageWithBaseErrorForSemantic(
+                    "Expect the embedding field type to be knn_vector or ran_features but found unsupported embedding field type: "
+                        + embeddingFieldType
+                )
+            );
+        }
+    }
+
+    private Map<String, NeuralQueryTargetFieldConfig> getIndexToTargetFieldConfigMap(@NonNull final IndicesRequest searchRequest) {
+        final List<IndexMetadata> targetIndexMetadataList = NeuralSearchClusterUtil.instance().getIndexMetadataList(searchRequest);
+        final Map<String, NeuralQueryTargetFieldConfig> indexToTargetFieldConfigMap = getIndexToTargetFieldConfigMapFromIndexMetadata(
+            fieldName,
+            targetIndexMetadataList
+        );
+        validateTargetFieldConfig(fieldName, indexToTargetFieldConfigMap);
+        return indexToTargetFieldConfigMap;
+    }
+
+    private List<String> getRemoteIndices(@NonNull final IndicesRequest searchRequest) {
+        return Arrays.stream(searchRequest.indices())
+            .filter(index -> index.indexOf(RemoteClusterService.REMOTE_CLUSTER_INDEX_SEPARATOR) >= 0)
+            .collect(Collectors.toList());
+    }
+
+    private NeuralQueryTargetFieldConfig getFirstTargetFieldConfig(
+        @NonNull final Map<String, NeuralQueryTargetFieldConfig> indexToTargetFieldConfigMap
+    ) {
+        final Set<String> targetIndices = indexToTargetFieldConfigMap.keySet();
+        if (targetIndices.isEmpty()) {
+            return null;
+        }
+        return indexToTargetFieldConfigMap.get(targetIndices.iterator().next());
+    }
+
+    private QueryBuilder rewriteQueryAgainstKnnField(QueryRewriteContext queryRewriteContext) {
         // When re-writing a QueryBuilder, if the QueryBuilder is not changed, doRewrite should return itself
         // (see
         // https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/index/query/QueryBuilder.java#L90-L98).
@@ -488,28 +767,25 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 return this;
             }
 
-            return NeuralKNNQueryBuilder.builder()
-                .fieldName(fieldName())
-                .vector(vectorSupplier.get())
-                .k(k())
-                .filter(filter())
-                .maxDistance(maxDistance())
-                .minScore(minScore())
-                .expandNested(expandNested())
-                .methodParameters(methodParameters())
-                .rescoreContext(rescoreContext())
-                .originalQueryText(queryText())
-                .build();
+            return createKNNQueryBuilder(vectorSupplier.get());
         }
 
         SetOnce<float[]> vectorSetOnce = new SetOnce<>();
         Map<String, String> inferenceInput = new HashMap<>();
+        // build first to leverage the validation in the build function
+        final NeuralQueryBuilder neuralQueryBuilder = createNeuralQueryBuilder(
+            KNNVectorFieldMapper.CONTENT_TYPE,
+            vectorSetOnce::get,
+            false
+        );
+
         if (StringUtils.isNotBlank(queryText())) {
             inferenceInput.put(INPUT_TEXT, queryText());
         }
         if (StringUtils.isNotBlank(queryImage())) {
             inferenceInput.put(INPUT_IMAGE, queryImage());
         }
+
         queryRewriteContext.registerAsyncAction(
             ((client, actionListener) -> ML_CLIENT.inferenceSentencesMap(
                 MapInferenceRequest.builder().modelId(modelId()).inputObjects(inferenceInput).build(),
@@ -519,26 +795,243 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 }, actionListener::onFailure)
             ))
         );
-        return new NeuralQueryBuilder(
-            fieldName(),
-            queryText(),
-            queryImage(),
-            modelId(),
-            k(),
-            maxDistance(),
-            minScore(),
-            expandNested(),
-            vectorSetOnce::get,
-            filter(),
-            methodParameters(),
-            rescoreContext()
-        );
+
+        return neuralQueryBuilder;
     }
 
+    private NeuralKNNQueryBuilder createKNNQueryBuilder(float[] vector) {
+        return NeuralKNNQueryBuilder.builder()
+            .fieldName(fieldName())
+            .vector(vector)
+            .k(k())
+            .filter(filter())
+            .maxDistance(maxDistance())
+            .minScore(minScore())
+            .expandNested(expandNested())
+            .methodParameters(methodParameters())
+            .rescoreContext(rescoreContext())
+            .originalQueryText(queryText())
+            .build();
+    }
+
+    private NeuralQueryBuilder createNeuralQueryBuilder(
+        String embeddingFieldType,
+        Supplier<float[]> vectorSupplier,
+        boolean isSemanticField
+    ) {
+        return NeuralQueryBuilder.builder()
+            .fieldName(fieldName())
+            .queryText(queryText())
+            .modelId(modelId())
+            .embeddingFieldType(embeddingFieldType)
+            .queryImage(queryImage())
+            .k(k())
+            .maxDistance(maxDistance())
+            .minScore(minScore())
+            .expandNested(expandNested())
+            .vectorSupplier(vectorSupplier)
+            .filter(filter())
+            .methodParameters(methodParameters())
+            .rescoreContext(rescoreContext())
+            .isSemanticField(isSemanticField)
+            .builStage(NeuralQueryBuildStage.REWRITE)
+            .queryTokensMapSupplier(queryTokensMapSupplier())
+            .modelIdToQueryTokensSupplierMap(modelIdToQueryTokensSupplierMap())
+            .modelIdToVectorSupplierMap(modelIdToVectorSupplierMap())
+            .build();
+    }
+
+    private QueryBuilder rewriteQueryWithQueryShardContext(QueryShardContext shardContext) {
+        final MappedFieldType mappedFieldType = shardContext.fieldMapper(fieldName());
+        if (mappedFieldType == null) {
+            // We will convert it to NoMatchDocQuery later in doToQuery function.
+            return this;
+        }
+
+        // In PercolatorFieldMapper we can try to rewrite the neural query with QueryShardContext directly. In that
+        // case if the target field is a knn field we should fall back to the old logic to process it.
+        if (KNNVectorFieldMapper.CONTENT_TYPE.equals(mappedFieldType.typeName())) {
+            return rewriteQueryAgainstKnnField(shardContext);
+        }
+
+        if (SemanticFieldMapper.CONTENT_TYPE.equals(mappedFieldType.typeName()) == false) {
+            throw new RuntimeException(
+                "Expect the neural query target field to be a semantic field but found: " + mappedFieldType.typeName()
+            );
+        }
+
+        final SemanticFieldMapper.SemanticFieldType semanticFieldType = (SemanticFieldMapper.SemanticFieldType) mappedFieldType;
+        final String searchModelId = getSearchModelId(semanticFieldType);
+
+        final String nestedQueryPath = getNestedQueryPath(semanticFieldType);
+        final String embeddingFieldName = nestedQueryPath + PATH_SEPARATOR + CHUNKS_EMBEDDING_FIELD_NAME;
+
+        final MappedFieldType embeddingFieldType = shardContext.fieldMapper(embeddingFieldName);
+        if (embeddingFieldType == null) {
+            throw new RuntimeException(
+                getErrorMessageWithBaseErrorForSemantic("Expect the embedding field exists in the index mapping but not able to find it.")
+            );
+        }
+
+        final String embeddingFieldTypeName = embeddingFieldType.typeName();
+
+        // In PercolatorFieldMapper we can try to rewrite the neural query with QueryShardContext directly. In that case
+        // we need to generate the embedding on the shard level.
+        if (modelIdToVectorSupplierMap == null && modelIdToQueryTokensSupplierMap == null) {
+            return inferenceForSemanticField(shardContext, Set.of(searchModelId), embeddingFieldTypeName);
+        }
+
+        return rewriteQueryForSemanticField(searchModelId, embeddingFieldTypeName, embeddingFieldName, nestedQueryPath);
+    }
+
+    /**
+     * If we have a model id defined in the query we should use it to override the model id defined in the field config
+     * @param semanticFieldType semantic field type
+     * @return search model id
+     */
+    private String getSearchModelId(@NonNull final SemanticFieldMapper.SemanticFieldType semanticFieldType) {
+        if (modelId != null) {
+            return modelId;
+        } else if (semanticFieldType.getSemanticParameters().getSearchModelId() != null) {
+            return semanticFieldType.getSemanticParameters().getSearchModelId();
+        } else {
+            return semanticFieldType.getSemanticParameters().getModelId();
+        }
+    }
+
+    /**
+     * If we have a model id defined in the query we should use it to override the model id defined in the field config
+     * @param config target field config
+     * @return search model id
+     */
+    private String getSearchModelId(@NonNull final NeuralQueryTargetFieldConfig config) {
+        if (modelId != null) {
+            return modelId;
+        } else {
+            return config.getSearchModelId();
+        }
+    }
+
+    private String getErrorMessageWithBaseErrorForSemantic(@NonNull final String errorMessage) {
+        return "Failed to rewrite the neural query against the semantic field " + fieldName + ". " + errorMessage;
+    }
+
+    private String getNestedQueryPath(SemanticFieldMapper.SemanticFieldType semanticFieldType) {
+        final String[] paths = semanticFieldType.name().split("\\.");
+        final String semanticInfoFieldName = semanticFieldType.getSemanticParameters().getSemanticInfoFieldName();
+        paths[paths.length - 1] = semanticInfoFieldName == null
+            ? paths[paths.length - 1] + DEFAULT_SEMANTIC_INFO_FIELD_NAME_SUFFIX
+            : semanticInfoFieldName;
+        return String.join(PATH_SEPARATOR, paths) + PATH_SEPARATOR + CHUNKS_FIELD_NAME;
+    }
+
+    private QueryBuilder inferenceForSemanticField(
+        @NonNull final QueryRewriteContext queryRewriteContext,
+        @NonNull final Set<String> modelIdsFromTargetFields,
+        @NonNull final String embeddingFieldType
+    ) {
+        Set<String> modelIds = modelIdsFromTargetFields;
+        if (modelId != null) {
+            // If user explicitly define a model id in the query we should use it to override
+            // the model id defined in the index mapping.
+            modelIds = Set.of(modelId);
+        }
+
+        if (KNNVectorFieldMapper.CONTENT_TYPE.equals(embeddingFieldType)) {
+            modelIdToVectorSupplierMap = new HashMap<>(modelIds.size());
+        } else if (RankFeaturesFieldMapper.CONTENT_TYPE.equals(embeddingFieldType)) {
+            modelIdToQueryTokensSupplierMap = new HashMap<>(modelIds.size());
+        } else {
+            throw new RuntimeException(
+                String.format(
+                    Locale.ROOT,
+                    "Not able to do inference for the neural query against the " + "field %s. Unsupported embedding field type: %s.",
+                    fieldName,
+                    embeddingFieldType
+                )
+            );
+        }
+
+        // build first to leverage the validation in the build function
+        final NeuralQueryBuilder neuralQueryBuilder = createNeuralQueryBuilder(embeddingFieldType, vectorSupplier(), true);
+
+        if (KNNVectorFieldMapper.CONTENT_TYPE.equals(embeddingFieldType)) {
+            inferenceByDenseModel(modelIds, queryRewriteContext);
+        } else {
+            // We only inference for the sparse model if the raw query tokens are not provided
+            if (queryTokensMapSupplier == null) {
+                inferenceBySparseModel(modelIds, queryRewriteContext);
+            }
+        }
+
+        // We don't do rewrite and just start the async actions to inference the query text
+        // We still need to return a different object to enter the code block to execute the async tasks
+        // Otherwise we will directly end the rewrite.
+        return neuralQueryBuilder;
+    }
+
+    private void inferenceBySparseModel(@NonNull final Set<String> modelIds, @NonNull QueryRewriteContext queryRewriteContext) {
+        for (String modelId : modelIds) {
+            final SetOnce<Map<String, Float>> setOnce = new SetOnce<>();
+            modelIdToQueryTokensSupplierMap.put(modelId, setOnce::get);
+            queryRewriteContext.registerAsyncAction(
+                ((client, actionListener) -> ML_CLIENT.inferenceSentencesWithMapResult(
+                    TextInferenceRequest.builder().modelId(modelId).inputTexts(List.of(queryText)).build(),
+                    ActionListener.wrap(mapResultList -> {
+                        final Map<String, Float> queryTokens = TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList).get(0);
+                        // Currently we don't support NeuralSparseTwoPhaseProcessor which can be supported
+                        // in the future.
+                        setOnce.set(queryTokens);
+                        actionListener.onResponse(null);
+                    }, actionListener::onFailure)
+                ))
+            );
+        }
+    }
+
+    private void inferenceByDenseModel(@NonNull final Set<String> modelIds, @NonNull QueryRewriteContext queryRewriteContext) {
+        final Map<String, String> inferenceInput = getInferenceInputForDenseModel();
+        for (String modelId : modelIds) {
+            final SetOnce<float[]> vectorSetOnce = new SetOnce<>();
+            modelIdToVectorSupplierMap.put(modelId, vectorSetOnce::get);
+            queryRewriteContext.registerAsyncAction(
+                ((client, actionListener) -> ML_CLIENT.inferenceSentencesMap(
+                    MapInferenceRequest.builder().modelId(modelId).inputObjects(inferenceInput).build(),
+                    ActionListener.wrap(floatList -> {
+                        vectorSetOnce.set(vectorAsListToArray(floatList));
+                        actionListener.onResponse(null);
+                    }, actionListener::onFailure)
+                ))
+            );
+        }
+    }
+
+    private Map<String, String> getInferenceInputForDenseModel() {
+        Map<String, String> inferenceInput = new HashMap<>();
+        if (StringUtils.isNotBlank(queryText())) {
+            inferenceInput.put(INPUT_TEXT, queryText());
+        }
+        if (StringUtils.isNotBlank(queryImage())) {
+            inferenceInput.put(INPUT_IMAGE, queryImage());
+        }
+        return inferenceInput;
+    }
+
+    /**
+     * We only rely on this function to handle the case when the target field is an unmapped field and simply convert
+     * it to a MatchNoDocsQuery. For other use cases the query should be rewritten to other query builders, and we
+     * should not reach this function.
+     * @param queryShardContext query context on shard level
+     * @return query
+     */
     @Override
     protected Query doToQuery(QueryShardContext queryShardContext) {
-        // All queries should be generated by the k-NN Query Builder
-        throw new UnsupportedOperationException("Query cannot be created by NeuralQueryBuilder directly");
+        final MappedFieldType mappedFieldType = queryShardContext.fieldMapper(this.fieldName);
+        if (mappedFieldType == null) {
+            return new MatchNoDocsQuery();
+        } else {
+            throw new UnsupportedOperationException("Query cannot be created by NeuralQueryBuilder directly");
+        }
     }
 
     @Override
@@ -558,6 +1051,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         equalsBuilder.append(filter, obj.filter);
         equalsBuilder.append(methodParameters, obj.methodParameters);
         equalsBuilder.append(rescoreContext, obj.rescoreContext);
+        equalsBuilder.append(getQueryTokenMap(queryTokensMapSupplier), getQueryTokenMap(obj.queryTokensMapSupplier));
         return equalsBuilder.isEquals();
     }
 
@@ -575,7 +1069,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             Arrays.hashCode(getVector(vectorSupplier)),
             filter,
             methodParameters,
-            rescoreContext
+            rescoreContext,
+            getQueryTokenMap(queryTokensMapSupplier)
         );
     }
 
@@ -583,33 +1078,13 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         return Objects.isNull(vectorSupplier) ? null : vectorSupplier.get();
     }
 
+    private Map<String, Float> getQueryTokenMap(final Supplier<Map<String, Float>> queryTokensSupplierMap) {
+        return Objects.isNull(queryTokensSupplierMap) ? null : queryTokensSupplierMap.get();
+    }
+
     @Override
     public String getWriteableName() {
         return NAME;
-    }
-
-    private static void validateQueryParameters(String fieldName, String queryText, String queryImage) {
-        if (StringUtils.isBlank(queryText) && StringUtils.isBlank(queryImage)) {
-            throw new IllegalArgumentException("Either query text or image text must be provided for neural query");
-        }
-        requireValue(fieldName, "Field name must be provided for neural query");
-    }
-
-    private static boolean validateKNNQueryType(Integer k, Float maxDistance, Float minScore) {
-        int queryCount = 0;
-        if (k != null) {
-            queryCount++;
-        }
-        if (maxDistance != null) {
-            queryCount++;
-        }
-        if (minScore != null) {
-            queryCount++;
-        }
-        if (queryCount > 1) {
-            throw new IllegalArgumentException("Only one of k, max_distance, or min_score can be provided");
-        }
-        return queryCount == 1;
     }
 
     /**

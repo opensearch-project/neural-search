@@ -144,7 +144,7 @@ public class NeuralSearch extends Plugin
         final IndexNameExpressionResolver indexNameExpressionResolver,
         final Supplier<RepositoriesService> repositoriesServiceSupplier
     ) {
-        NeuralSearchClusterUtil.instance().initialize(clusterService);
+        NeuralSearchClusterUtil.instance().initialize(clusterService, indexNameExpressionResolver);
         NeuralQueryBuilder.initialize(clientAccessor);
         NeuralSparseQueryBuilder.initialize(clientAccessor);
         QueryTextExtractorRegistry queryTextExtractorRegistry = new QueryTextExtractorRegistry();

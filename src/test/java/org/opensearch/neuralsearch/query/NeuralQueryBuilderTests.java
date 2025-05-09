@@ -4,11 +4,8 @@
  */
 package org.opensearch.neuralsearch.query;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.ArgumentMatchers.isA;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS;
 import static org.opensearch.index.query.AbstractQueryBuilder.BOOST_FIELD;
 import static org.opensearch.index.query.AbstractQueryBuilder.NAME_FIELD;
@@ -18,6 +15,7 @@ import static org.opensearch.knn.index.query.KNNQueryBuilder.MAX_DISTANCE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.MIN_SCORE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.RESCORE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.RESCORE_OVERSAMPLE_FIELD;
+import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TOKENS_FIELD;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_FLOATS_ASSERTION;
 import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.K_FIELD;
@@ -25,25 +23,24 @@ import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MODEL_ID_FIEL
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.NAME;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_IMAGE_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TEXT_FIELD;
+import static org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils.setUpClusterService;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
+import org.apache.lucene.search.MatchNoDocsQuery;
+import org.apache.lucene.search.Query;
+import org.junit.Before;
 import org.opensearch.Version;
+import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
-import org.opensearch.transport.client.Client;
-import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.ParseField;
-import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.ParsingException;
 import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.common.io.stream.FilterStreamInput;
@@ -56,14 +53,9 @@ import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchNoneQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.knn.index.query.rescore.RescoreContext;
 import org.opensearch.neuralsearch.common.MinClusterVersionUtil;
-import org.opensearch.neuralsearch.common.VectorUtil;
-import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
-import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
-import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.test.OpenSearchTestCase;
 
 import lombok.SneakyThrows;
@@ -85,6 +77,9 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
 
     private static final QueryBuilder TEST_FILTER = new MatchAllQueryBuilder();
     private static final QueryBuilder ADDITIONAL_TEST_FILTER = new TermQueryBuilder(TERM_QUERY_FIELD_NAME, TERM_QUERY_FIELD_VALUE);
+
+    @Before
+    public void setup() throws Exception {}
 
     @SneakyThrows
     public void testFromXContent_whenBuiltWithDefaults_thenBuildSuccessfully() {
@@ -213,7 +208,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
               }
           }
         */
-        setUpClusterService(Version.CURRENT);
+        setUpClusterService();
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject(FIELD_NAME)
@@ -257,7 +252,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
               }
           }
         */
-        setUpClusterService(Version.CURRENT);
+        setUpClusterService();
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject(FIELD_NAME)
@@ -329,6 +324,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testFromXContent_whenBuildWithMissingParameters_thenFail() {
+        NeuralSearchClusterTestUtils.setUpClusterService(Version.V_3_0_0);
         /*
           {
               "VECTOR_FIELD": {
@@ -431,95 +427,6 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         expectThrows(ParsingException.class, () -> NeuralQueryBuilder.fromXContent(contentParser));
     }
 
-    @SneakyThrows
-    public void testBuilderInstantiation_whenBuiltWithRequiredFields_thenBuildSuccessfully() {
-        /*
-          {
-              "VECTOR_FIELD": {
-                "query_text": "string",
-                "query_image": "string",
-                "model_id": "string",
-                "k": int
-              }
-          }
-        */
-        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder().fieldName(FIELD_NAME).queryText(QUERY_TEXT).build();
-
-        assertEquals(FIELD_NAME, neuralQueryBuilder.fieldName());
-        assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
-    }
-
-    @SneakyThrows
-    public void testBuilderInstantiation_whenBuiltWithOptionalFields_thenBuildSuccessfully() {
-        /*
-          {
-              "VECTOR_FIELD": {
-                "query_text": "string",
-                "model_id": "string",
-                "k": int,
-                "boost": 10.0,
-                "_name": "something",
-                "expandNestedDocs": true
-              }
-          }
-        */
-        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-            .fieldName(FIELD_NAME)
-            .queryText(QUERY_TEXT)
-            .queryImage(IMAGE_TEXT)
-            .modelId(MODEL_ID)
-            .k(K)
-            .expandNested(Boolean.TRUE)
-            .boost(BOOST)
-            .queryName(QUERY_NAME)
-            .build();
-
-        assertEquals(FIELD_NAME, neuralQueryBuilder.fieldName());
-        assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
-        assertEquals(IMAGE_TEXT, neuralQueryBuilder.queryImage());
-        assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
-        assertEquals(K, neuralQueryBuilder.k());
-        assertEquals(BOOST, neuralQueryBuilder.boost(), 0.0);
-        assertEquals(QUERY_NAME, neuralQueryBuilder.queryName());
-        assertEquals(Boolean.TRUE, neuralQueryBuilder.expandNested());
-    }
-
-    @SneakyThrows
-    public void testBuilderInstantiation_whenMissingFieldName_thenFail() {
-        /*
-          {
-              null : {
-                "query_text": "string",
-                "model_id": "string",
-                "k": int
-              }
-          }
-        */
-
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> NeuralQueryBuilder.builder().queryText(QUERY_TEXT).modelId(MODEL_ID).k(K).build()
-        );
-        assertEquals("Field name must be provided for neural query", exception.getMessage());
-    }
-
-    @SneakyThrows
-    public void testBuilderInstantiation_whenMissingBothQueryTextAndQueryImage_thenFail() {
-        /*
-          {
-              "VECTOR_FIELD": {
-                "model_id": "string",
-                "k": int
-              }
-          }
-        */
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> NeuralQueryBuilder.builder().fieldName(FIELD_NAME).modelId(MODEL_ID).k(K).build()
-        );
-        assertEquals("Either query text or image text must be provided for neural query", exception.getMessage());
-    }
-
     @SuppressWarnings("unchecked")
     @SneakyThrows
     public void testToXContent() {
@@ -568,7 +475,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
     public void testStreams_whenClusterServiceWithDifferentVersions() {
         setUpClusterService(Version.V_2_10_0);
         testStreams();
-        setUpClusterService(Version.CURRENT);
+        setUpClusterService();
         testStreams();
     }
 
@@ -769,6 +676,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
     }
 
     public void testFilter_whenAddBoolQueryBuilderToNeuralQueryBuilder_thenFilterSuccessful() {
+        setUpClusterService();
         // Test for Null Case
         NeuralQueryBuilder neuralQueryBuilder = getBaselineNeuralQueryBuilder();
         QueryBuilder updatedNeuralQueryBuilder = neuralQueryBuilder.filter(null);
@@ -791,141 +699,8 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(TEST_FILTER, neuralQueryBuilder.filter());
     }
 
-    @SneakyThrows
-    public void testRewrite_whenVectorSupplierNull_thenSetVectorSupplier() {
-        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-            .fieldName(FIELD_NAME)
-            .queryText(QUERY_TEXT)
-            .modelId(MODEL_ID)
-            .k(K)
-            .build();
-        List<Number> expectedVector = Arrays.asList(1.0f, 2.0f, 3.0f, 4.0f, 5.0f);
-        MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
-        doAnswer(invocation -> {
-            ActionListener<List<Number>> listener = invocation.getArgument(1);
-            listener.onResponse(expectedVector);
-            return null;
-        }).when(mlCommonsClientAccessor)
-            .inferenceSentencesMap(argThat(request -> request.getInputObjects() != null), isA(ActionListener.class));
-        NeuralQueryBuilder.initialize(mlCommonsClientAccessor);
-
-        final CountDownLatch inProgressLatch = new CountDownLatch(1);
-        QueryRewriteContext queryRewriteContext = mock(QueryRewriteContext.class);
-        doAnswer(invocation -> {
-            BiConsumer<Client, ActionListener<?>> biConsumer = invocation.getArgument(0);
-            biConsumer.accept(
-                null,
-                ActionListener.wrap(
-                    response -> inProgressLatch.countDown(),
-                    err -> fail("Failed to set vector supplier: " + err.getMessage())
-                )
-            );
-            return null;
-        }).when(queryRewriteContext).registerAsyncAction(any());
-
-        NeuralQueryBuilder queryBuilder = (NeuralQueryBuilder) neuralQueryBuilder.doRewrite(queryRewriteContext);
-        assertNotNull(queryBuilder.vectorSupplier());
-        assertTrue(inProgressLatch.await(5, TimeUnit.SECONDS));
-        assertArrayEquals(VectorUtil.vectorAsListToArray(expectedVector), queryBuilder.vectorSupplier().get(), 0.0f);
-    }
-
-    @SneakyThrows
-    public void testRewrite_whenVectorSupplierNullAndQueryTextAndImageTextSet_thenSetVectorSupplier() {
-        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-            .fieldName(FIELD_NAME)
-            .queryText(QUERY_TEXT)
-            .queryImage(IMAGE_TEXT)
-            .modelId(MODEL_ID)
-            .k(K)
-            .build();
-        List<Number> expectedVector = Arrays.asList(1.0f, 2.0f, 3.0f, 4.0f, 5.0f);
-        MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
-        doAnswer(invocation -> {
-            ActionListener<List<Number>> listener = invocation.getArgument(1);
-            listener.onResponse(expectedVector);
-            return null;
-        }).when(mlCommonsClientAccessor)
-            .inferenceSentencesMap(argThat(request -> request.getInputObjects() != null), isA(ActionListener.class));
-        NeuralQueryBuilder.initialize(mlCommonsClientAccessor);
-
-        final CountDownLatch inProgressLatch = new CountDownLatch(1);
-        QueryRewriteContext queryRewriteContext = mock(QueryRewriteContext.class);
-        doAnswer(invocation -> {
-            BiConsumer<Client, ActionListener<?>> biConsumer = invocation.getArgument(0);
-            biConsumer.accept(
-                null,
-                ActionListener.wrap(
-                    response -> inProgressLatch.countDown(),
-                    err -> fail("Failed to set vector supplier: " + err.getMessage())
-                )
-            );
-            return null;
-        }).when(queryRewriteContext).registerAsyncAction(any());
-
-        NeuralQueryBuilder queryBuilder = (NeuralQueryBuilder) neuralQueryBuilder.doRewrite(queryRewriteContext);
-        assertNotNull(queryBuilder.vectorSupplier());
-        assertTrue(inProgressLatch.await(5, TimeUnit.SECONDS));
-        assertArrayEquals(VectorUtil.vectorAsListToArray(expectedVector), queryBuilder.vectorSupplier().get(), 0.0f);
-    }
-
-    public void testRewrite_whenVectorNull_thenReturnCopy() {
-        Supplier<float[]> nullSupplier = () -> null;
-        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-            .fieldName(FIELD_NAME)
-            .queryText(QUERY_TEXT)
-            .queryImage(IMAGE_TEXT)
-            .modelId(MODEL_ID)
-            .k(K)
-            .expandNested(Boolean.TRUE)
-            .vectorSupplier(nullSupplier)
-            .build();
-        QueryBuilder queryBuilder = neuralQueryBuilder.doRewrite(null);
-        assertEquals(neuralQueryBuilder, queryBuilder);
-    }
-
-    public void testRewrite_whenVectorSupplierAndVectorSet_thenReturnKNNQueryBuilder() {
-        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-            .fieldName(FIELD_NAME)
-            .queryText(QUERY_TEXT)
-            .queryImage(IMAGE_TEXT)
-            .modelId(MODEL_ID)
-            .k(K)
-            .expandNested(Boolean.TRUE)
-            .methodParameters(Map.of("ef_search", 100))
-            .rescoreContext(RescoreContext.getDefault())
-            .vectorSupplier(TEST_VECTOR_SUPPLIER)
-            .build();
-
-        NeuralKNNQueryBuilder expected = NeuralKNNQueryBuilder.builder()
-            .k(K)
-            .fieldName(neuralQueryBuilder.fieldName())
-            .methodParameters(neuralQueryBuilder.methodParameters())
-            .rescoreContext(neuralQueryBuilder.rescoreContext())
-            .vector(TEST_VECTOR_SUPPLIER.get())
-            .expandNested(Boolean.TRUE)
-            .originalQueryText(QUERY_TEXT)
-            .build();
-
-        QueryBuilder queryBuilder = neuralQueryBuilder.doRewrite(null);
-        assertEquals(expected, queryBuilder);
-    }
-
-    public void testRewrite_whenFilterSet_thenKNNQueryBuilderFilterSet() {
-        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-            .fieldName(FIELD_NAME)
-            .queryText(QUERY_TEXT)
-            .modelId(MODEL_ID)
-            .k(K)
-            .vectorSupplier(TEST_VECTOR_SUPPLIER)
-            .filter(TEST_FILTER)
-            .build();
-        QueryBuilder queryBuilder = neuralQueryBuilder.doRewrite(null);
-        assertTrue(queryBuilder instanceof NeuralKNNQueryBuilder);
-        NeuralKNNQueryBuilder neuralKNNQueryBuilder = (NeuralKNNQueryBuilder) queryBuilder;
-        assertEquals(neuralQueryBuilder.filter(), neuralKNNQueryBuilder.getKnnQueryBuilder().getFilter());
-    }
-
     public void testQueryCreation_whenCreateQueryWithDoToQuery_thenFail() {
+        setUpClusterService();
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
             .fieldName(FIELD_NAME)
             .queryText(QUERY_TEXT)
@@ -935,11 +710,44 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
             .filter(TEST_FILTER)
             .build();
         QueryShardContext queryShardContext = mock(QueryShardContext.class);
+        when(queryShardContext.fieldMapper(FIELD_NAME)).thenReturn(mock(MappedFieldType.class));
         UnsupportedOperationException exception = expectThrows(
             UnsupportedOperationException.class,
             () -> neuralQueryBuilder.doToQuery(queryShardContext)
         );
         assertEquals("Query cannot be created by NeuralQueryBuilder directly", exception.getMessage());
+    }
+
+    public void testQueryCreation_whenCreateQueryUnmappedField_thenMatchNoDocQuery() {
+        setUpClusterService();
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .k(K)
+            .vectorSupplier(TEST_VECTOR_SUPPLIER)
+            .filter(TEST_FILTER)
+            .build();
+        QueryShardContext queryShardContext = mock(QueryShardContext.class);
+        when(queryShardContext.fieldMapper(FIELD_NAME)).thenReturn(null);
+        Query query = neuralQueryBuilder.doToQuery(queryShardContext);
+        assertTrue(query instanceof MatchNoDocsQuery);
+    }
+
+    public void testQueryCreation_whenUnmappedField_thenMatchNoDocsQuery() {
+        setUpClusterService();
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .k(K)
+            .vectorSupplier(TEST_VECTOR_SUPPLIER)
+            .filter(TEST_FILTER)
+            .build();
+        QueryShardContext queryShardContext = mock(QueryShardContext.class);
+        when(queryShardContext.fieldMapper(FIELD_NAME)).thenReturn(null);
+        Query query = neuralQueryBuilder.doToQuery(queryShardContext);
+        assertTrue(query instanceof MatchNoDocsQuery);
     }
 
     @SneakyThrows
@@ -1040,8 +848,57 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         expectThrows(IllegalArgumentException.class, () -> NeuralQueryBuilder.fromXContent(contentParser));
     }
 
-    private void setUpClusterService(Version version) {
-        ClusterService clusterService = NeuralSearchClusterTestUtils.mockClusterService(version);
-        NeuralSearchClusterUtil.instance().initialize(clusterService);
+    @SneakyThrows
+    public void testFromXContent_whenBuiltWithQueryTokens_3_0_0_thenFail() {
+        setUpClusterService(Version.V_3_0_0);
+        XContentBuilder xContentBuilder = null;
+        try {
+            xContentBuilder = XContentFactory.jsonBuilder()
+                .startObject()
+                .startObject(FIELD_NAME)
+                .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+                .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+                .field(K_FIELD.getPreferredName(), K)
+                .startObject(QUERY_TOKENS_FIELD.getPreferredName())
+                .field("key1", 1.0f)
+                .endObject()
+                .endObject()
+                .endObject();
+        } catch (IOException e) {
+            fail("Failed to create XContentBuilder");
+        }
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+
+        ParsingException exception = assertThrows(ParsingException.class, () -> NeuralQueryBuilder.fromXContent(contentParser));
+
+        assertEquals("[neural] query does not support [query_tokens]", exception.getMessage());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuiltWithQueryTokens_thenBuildSuccessfully() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = null;
+        try {
+            xContentBuilder = XContentFactory.jsonBuilder()
+                .startObject()
+                .startObject(FIELD_NAME)
+                .startObject(QUERY_TOKENS_FIELD.getPreferredName())
+                .field("key1", 1.0f)
+                .endObject()
+                .endObject()
+                .endObject();
+        } catch (IOException e) {
+            fail("Failed to create XContentBuilder");
+        }
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.fromXContent(contentParser);
+
+        assertEquals(FIELD_NAME, neuralQueryBuilder.fieldName());
+        assertEquals(Map.of("key1", 1.0f), neuralQueryBuilder.queryTokensMapSupplier().get());
     }
 }

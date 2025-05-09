@@ -4,12 +4,21 @@
  */
 package org.opensearch.neuralsearch.util;
 
+import lombok.NonNull;
 import org.opensearch.Version;
+import org.opensearch.action.IndicesRequest;
+import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.service.ClusterService;
 
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.core.index.Index;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Class abstracts information related to underlying OpenSearch cluster
@@ -18,6 +27,7 @@ import lombok.extern.log4j.Log4j2;
 @Log4j2
 public class NeuralSearchClusterUtil {
     private ClusterService clusterService;
+    private IndexNameExpressionResolver indexNameExpressionResolver;
 
     private static NeuralSearchClusterUtil instance;
 
@@ -36,8 +46,9 @@ public class NeuralSearchClusterUtil {
      * Initializes instance of cluster context by injecting dependencies
      * @param clusterService
      */
-    public void initialize(final ClusterService clusterService) {
+    public void initialize(final ClusterService clusterService, final IndexNameExpressionResolver indexNameExpressionResolver) {
         this.clusterService = clusterService;
+        this.indexNameExpressionResolver = indexNameExpressionResolver;
     }
 
     /**
@@ -48,4 +59,10 @@ public class NeuralSearchClusterUtil {
         return this.clusterService.state().getNodes().getMinNodeVersion();
     }
 
+    public List<IndexMetadata> getIndexMetadataList(@NonNull final IndicesRequest searchRequest) {
+        final Index[] concreteIndices = this.indexNameExpressionResolver.concreteIndices(clusterService.state(), searchRequest);
+        return Arrays.stream(concreteIndices)
+            .map(concreteIndex -> clusterService.state().metadata().index(concreteIndex))
+            .collect(Collectors.toList());
+    }
 }

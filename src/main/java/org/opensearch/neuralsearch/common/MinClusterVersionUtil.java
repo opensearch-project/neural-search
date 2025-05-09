@@ -21,22 +21,22 @@ import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_IMAGE_F
  */
 public final class MinClusterVersionUtil {
 
-    private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_11_0;
+    private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_DENSE_MODEL_ID = Version.V_2_11_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_RADIAL_SEARCH = Version.V_2_14_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_QUERY_IMAGE_FIX = Version.V_2_19_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_PAGINATION_IN_HYBRID_QUERY = Version.V_2_19_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_NEURAL_ORIGINAL_QUERY_TEXT = Version.V_3_0_0;
 
-    // Note this minimal version will act as a override
+    // Note this minimal version will act as an override
     private static final Map<String, Version> MINIMAL_VERSION_NEURAL = ImmutableMap.<String, Version>builder()
-        .put(MODEL_ID_FIELD.getPreferredName(), MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID)
+        .put(MODEL_ID_FIELD.getPreferredName(), MINIMAL_SUPPORTED_VERSION_DEFAULT_DENSE_MODEL_ID)
         .put(MAX_DISTANCE_FIELD.getPreferredName(), MINIMAL_SUPPORTED_VERSION_RADIAL_SEARCH)
         .put(MIN_SCORE_FIELD.getPreferredName(), MINIMAL_SUPPORTED_VERSION_RADIAL_SEARCH)
         .put(QUERY_IMAGE_FIELD.getPreferredName(), MINIMAL_SUPPORTED_VERSION_QUERY_IMAGE_FIX)
         .build();
 
-    public static boolean isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport() {
-        return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID);
+    public static boolean isClusterOnOrAfterMinReqVersionForDefaultDenseModelIdSupport() {
+        return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_DEFAULT_DENSE_MODEL_ID);
     }
 
     public static boolean isClusterOnOrAfterMinReqVersionForRadialSearch() {
@@ -65,5 +65,24 @@ public final class MinClusterVersionUtil {
      */
     public static boolean isVersionOnOrAfterMinReqVersionForNeuralKNNQueryText(Version version) {
         return version.onOrAfter(MINIMAL_SUPPORTED_VERSION_NEURAL_ORIGINAL_QUERY_TEXT);
+    }
+
+    /**
+     * Checks if the cluster min version is on or after the minimum required version for semantic field type
+     *
+     * @return true if the version is on or after the minimum required version
+     */
+    public static boolean isClusterOnOrAfterMinReqVersionForSemanticFieldType() {
+        return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(Version.V_3_1_0);
+    }
+
+    /**
+     * Checks if the cluster min version and stream version is on or after the minimum required version for semantic
+     * field type. In this function we check the stream version to handle the cross cluster search case.
+     *
+     * @return true if the version is on or after the minimum required version
+     */
+    public static boolean isClusterOnOrAfterMinReqVersionForSemanticFieldType(Version version) {
+        return version.onOrAfter(Version.V_3_1_0) && isClusterOnOrAfterMinReqVersionForSemanticFieldType();
     }
 }

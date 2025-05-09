@@ -43,6 +43,9 @@ import org.apache.lucene.util.BytesRef;
 import org.junit.Before;
 import org.opensearch.OpenSearchException;
 import org.opensearch.Version;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.index.analysis.AnalyzerScope;
 import org.opensearch.index.analysis.IndexAnalyzers;
 import org.opensearch.index.analysis.NamedAnalyzer;
@@ -795,7 +798,8 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
 
     private void setUpClusterService(Version version) {
         ClusterService clusterService = NeuralSearchClusterTestUtils.mockClusterService(version);
-        NeuralSearchClusterUtil.instance().initialize(clusterService);
+        IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
+        NeuralSearchClusterUtil.instance().initialize(clusterService, indexNameExpressionResolver);
     }
 
     @SneakyThrows
