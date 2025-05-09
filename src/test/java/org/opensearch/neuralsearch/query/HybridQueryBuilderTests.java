@@ -13,6 +13,7 @@ import static org.opensearch.index.query.AbstractQueryBuilder.BOOST_FIELD;
 import static org.opensearch.index.query.AbstractQueryBuilder.DEFAULT_BOOST;
 import static org.opensearch.index.remote.RemoteStoreEnums.PathType.HASHED_PREFIX;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.FILTER_FIELD;
+import static org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils.setUpClusterService;
 import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.K_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MODEL_ID_FIELD;
@@ -77,8 +78,6 @@ import org.opensearch.knn.index.engine.KNNMethodContext;
 import org.opensearch.knn.index.engine.MethodComponentContext;
 import org.opensearch.knn.index.mapper.KNNMappingConfig;
 import org.opensearch.knn.index.mapper.KNNVectorFieldType;
-import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
-import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 
@@ -128,6 +127,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testDoToQuery_whenOneSubquery_thenBuildSuccessfully() {
+        setUpClusterService(Version.V_3_0_0);
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
         queryBuilder.paginationDepth(10);
         Index dummyIndex = new Index("dummy", "dummy");
@@ -167,6 +167,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testDoToQuery_whenMultipleSubqueries_thenBuildSuccessfully() {
+        setUpClusterService(Version.V_3_0_0);
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
         queryBuilder.paginationDepth(10);
         Index dummyIndex = new Index("dummy", "dummy");
@@ -221,6 +222,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testDoToQuery_whenPaginationDepthIsGreaterThan10000_thenBuildSuccessfully() {
+        setUpClusterService(Version.V_3_0_0);
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
         queryBuilder.paginationDepth(10001);
         Index dummyIndex = new Index("dummy", "dummy");
@@ -260,6 +262,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testDoToQuery_whenPaginationDepthIsLessThanZero_thenBuildSuccessfully() {
+        setUpClusterService(Version.V_3_0_0);
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
         queryBuilder.paginationDepth(-1);
         Index dummyIndex = new Index("dummy", "dummy");
@@ -714,6 +717,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     public void testHashAndEquals_whenSameOrIdenticalObject_thenReturnEqual() {
+        setUpClusterService();
         HybridQueryBuilder hybridQueryBuilderBaseline = new HybridQueryBuilder();
         hybridQueryBuilderBaseline.add(
             NeuralQueryBuilder.builder()
@@ -849,7 +853,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testRewrite_whenMultipleSubQueries_thenReturnBuilderForEachSubQuery() {
-        setUpClusterService();
+        setUpClusterService(Version.V_3_0_0);
         HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
             .fieldName(VECTOR_FIELD_NAME)
@@ -1075,6 +1079,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     public void testVisit() {
+        setUpClusterService();
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(
             NeuralQueryBuilder.builder().fieldName("test").queryText("test").build()
         ).add(new NeuralSparseQueryBuilder());
@@ -1156,11 +1161,6 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertTrue(neuralInnerMap.get(fieldName) instanceof Map);
         Map<String, Object> vectorFieldInnerMap = (Map<String, Object>) neuralInnerMap.get(fieldName);
         return vectorFieldInnerMap;
-    }
-
-    private void setUpClusterService() {
-        ClusterService clusterService = NeuralSearchClusterTestUtils.mockClusterService(Version.CURRENT);
-        NeuralSearchClusterUtil.instance().initialize(clusterService);
     }
 
     private void initKNNSettings() {

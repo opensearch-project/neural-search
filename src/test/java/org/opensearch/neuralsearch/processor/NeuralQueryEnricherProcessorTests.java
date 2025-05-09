@@ -11,6 +11,7 @@ import java.util.Map;
 import org.opensearch.OpenSearchParseException;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.test.OpenSearchTestCase;
 
@@ -37,6 +38,7 @@ public class NeuralQueryEnricherProcessorTests extends OpenSearchTestCase {
     }
 
     public void testProcessRequest_whenVisitingQueryBuilder_thenSuccess() throws Exception {
+        NeuralSearchClusterTestUtils.setUpClusterService();
         NeuralQueryEnricherProcessor.Factory factory = new NeuralQueryEnricherProcessor.Factory();
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder().fieldName("field_name").queryText("query_text").build();
         SearchRequest searchRequest = new SearchRequest();

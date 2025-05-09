@@ -10,11 +10,13 @@ import java.util.Map;
 import org.apache.lucene.search.BooleanClause;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class NeuralSearchQueryVisitorTests extends OpenSearchTestCase {
 
     public void testAccept_whenNeuralQueryBuilderWithoutModelId_thenSetModelId() {
+        NeuralSearchClusterTestUtils.setUpClusterService();
         String modelId = "bdcvjkcdjvkddcjxdjsc";
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
             .fieldName("passage_text")
@@ -29,6 +31,7 @@ public class NeuralSearchQueryVisitorTests extends OpenSearchTestCase {
     }
 
     public void testAccept_whenNeuralQueryBuilderWithoutFieldModelId_thenSetFieldModelId() {
+        NeuralSearchClusterTestUtils.setUpClusterService();
         Map<String, Object> neuralInfoMap = new HashMap<>();
         neuralInfoMap.put("passage_text", "bdcvjkcdjvkddcjxdjsc");
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
@@ -80,6 +83,7 @@ public class NeuralSearchQueryVisitorTests extends OpenSearchTestCase {
     }
 
     public void testAccept_whenNullValuesInVisitor_thenFail() {
+        NeuralSearchClusterTestUtils.setUpClusterService();
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder().fieldName("passage_text").queryText("query_text").build();
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
         NeuralSearchQueryVisitor neuralSearchQueryVisitor = new NeuralSearchQueryVisitor(null, null);
