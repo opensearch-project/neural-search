@@ -6,20 +6,16 @@ package org.opensearch.neuralsearch.search.collector;
 
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.LeafCollector;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Scorable;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.Weight;
-import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
-import static org.mockito.ArgumentMatchers.eq;
+
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -39,20 +35,15 @@ import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.tests.analysis.MockAnalyzer;
-import org.opensearch.index.mapper.TextFieldMapper;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.query.HybridQueryScorer;
-import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
+import org.opensearch.neuralsearch.query.HybridSubQueryScorer;
 
 import lombok.SneakyThrows;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
-public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
+public class HybridTopScoreDocCollectorTests extends HybridCollectorTestCase {
 
     static final String TEXT_FIELD_NAME = "field";
-    private static final String TEST_QUERY_TEXT = "greeting";
-    private static final String TEST_QUERY_TEXT2 = "salute";
     private static final int NUM_DOCS = 4;
     private static final int NUM_HITS = 1;
     private static final int TOTAL_HITS_UP_TO = 1000;
@@ -102,57 +93,6 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
-    public void testGetHybridScores_whenCreateNewAndGetScores_thenSuccessful() {
-        final Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
-        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
-        ft.freeze();
-
-        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_1, FIELD_1_VALUE, ft));
-        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_2, FIELD_2_VALUE, ft));
-        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_3, FIELD_3_VALUE, ft));
-        w.commit();
-
-        DirectoryReader reader = DirectoryReader.open(w);
-
-        LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
-
-        HybridTopScoreDocCollector hybridTopScoreDocCollector = new HybridTopScoreDocCollector(
-            NUM_DOCS,
-            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
-        );
-        LeafCollector leafCollector = hybridTopScoreDocCollector.getLeafCollector(leafReaderContext);
-        assertNotNull(leafCollector);
-
-        Weight weight = mock(Weight.class);
-        int[] docIds = new int[] { DOC_ID_1, DOC_ID_2, DOC_ID_3 };
-        Arrays.sort(docIds);
-        final List<Float> scores = Stream.generate(() -> random().nextFloat()).limit(NUM_DOCS).collect(Collectors.toList());
-        HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(
-            weight,
-            Arrays.asList(scorer(docIds, scores, fakeWeight(new MatchAllDocsQuery())))
-        );
-
-        leafCollector.setScorer(hybridQueryScorer);
-        List<float[]> hybridScores = new ArrayList<>();
-        DocIdSetIterator iterator = hybridQueryScorer.iterator();
-        int nextDoc = iterator.nextDoc();
-        while (nextDoc != NO_MORE_DOCS) {
-            hybridScores.add(hybridQueryScorer.hybridScores());
-            nextDoc = iterator.nextDoc();
-        }
-        // assert
-        assertEquals(3, hybridScores.size());
-        assertFalse(hybridScores.stream().anyMatch(score -> score[0] <= 0.0));
-
-        w.close();
-        reader.close();
-        directory.close();
-    }
-
-    @SneakyThrows
     public void testTopDocs_whenCreateNewAndGetTopDocs_thenSuccessful() {
         final Directory directory = newDirectory();
         final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
@@ -183,33 +123,16 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
         Arrays.sort(docIds);
         final List<Float> scores1 = Stream.generate(() -> random().nextFloat()).limit(NUM_DOCS).collect(Collectors.toList());
         final List<Float> scores2 = Stream.generate(() -> random().nextFloat()).limit(NUM_DOCS).collect(Collectors.toList());
-        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
-        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
-        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
-        HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(
-            weight,
-            Arrays.asList(
-                scorer(
-                    docIds,
-                    scores1,
-                    fakeWeight(QueryBuilders.termQuery(TEXT_FIELD_NAME, TEST_QUERY_TEXT).toQuery(mockQueryShardContext))
-                ),
-                scorer(
-                    docIds,
-                    scores2,
-                    fakeWeight(QueryBuilders.termQuery(TEXT_FIELD_NAME, TEST_QUERY_TEXT2).toQuery(mockQueryShardContext))
-                )
-            )
-        );
 
-        leafCollector.setScorer(hybridQueryScorer);
-        DocIdSetIterator iterator = hybridQueryScorer.iterator();
+        // Create mock HybridSubQueryScorer that extends Scorable
+        HybridSubQueryScorer mockHybridSubQueryScorer = mock(HybridSubQueryScorer.class);
+        when(mockHybridSubQueryScorer.getNumOfSubQueries()).thenReturn(2);
 
-        int doc = iterator.nextDoc();
-        while (doc != DocIdSetIterator.NO_MORE_DOCS) {
-            leafCollector.collect(doc);
-            doc = iterator.nextDoc();
-        }
+        HybridSubQueryScorer scorer = new HybridSubQueryScorer(2);
+        leafCollector.setScorer(scorer);
+
+        collectDocsAndScores(scorer, scores1, leafCollector, 0, docIds);
+        collectDocsAndScores(scorer, scores2, leafCollector, 1, docIds);
 
         List<TopDocs> topDocs = hybridTopScoreDocCollector.topDocs();
 
@@ -251,15 +174,23 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
         DirectoryReader reader = DirectoryReader.open(w);
 
         LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
-
         HybridTopScoreDocCollector hybridTopScoreDocCollector = new HybridTopScoreDocCollector(
             NUM_DOCS,
             new HitsThresholdChecker(TOTAL_HITS_UP_TO)
         );
+
         Weight weight = mock(Weight.class);
         hybridTopScoreDocCollector.setWeight(weight);
+
         LeafCollector leafCollector = hybridTopScoreDocCollector.getLeafCollector(leafReaderContext);
         assertNotNull(leafCollector);
+
+        // Create mock HybridSubQueryScorer that extends Scorable
+        HybridSubQueryScorer mockHybridSubQueryScorer = mock(HybridSubQueryScorer.class);
+        when(mockHybridSubQueryScorer.getNumOfSubQueries()).thenReturn(4);
+
+        HybridSubQueryScorer scorer = new HybridSubQueryScorer(4);
+        leafCollector.setScorer(scorer);
 
         int[] docIdsQuery1 = new int[] { DOC_ID_1, DOC_ID_2, DOC_ID_3 };
         int[] docIdsQuery2 = new int[] { DOC_ID_4, DOC_ID_1 };
@@ -273,35 +204,9 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
             .limit(docIdsQueryMatchAll.length)
             .collect(Collectors.toList());
 
-        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
-        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
-        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
-        HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(
-            weight,
-            Arrays.asList(
-                scorer(
-                    docIdsQuery1,
-                    scores1,
-                    fakeWeight(QueryBuilders.termQuery(TEXT_FIELD_NAME, TEST_QUERY_TEXT).toQuery(mockQueryShardContext))
-                ),
-                scorer(
-                    docIdsQuery2,
-                    scores2,
-                    fakeWeight(QueryBuilders.termQuery(TEXT_FIELD_NAME, TEST_QUERY_TEXT2).toQuery(mockQueryShardContext))
-                ),
-                scorer(new int[0], new float[0], fakeWeight(new MatchNoDocsQuery())),
-                scorer(docIdsQueryMatchAll, scoresMatchAll, fakeWeight(new MatchAllDocsQuery()))
-            )
-        );
-
-        leafCollector.setScorer(hybridQueryScorer);
-        DocIdSetIterator iterator = hybridQueryScorer.iterator();
-
-        int doc = iterator.nextDoc();
-        while (doc != DocIdSetIterator.NO_MORE_DOCS) {
-            leafCollector.collect(doc);
-            doc = iterator.nextDoc();
-        }
+        collectDocsAndScores(scorer, scores1, leafCollector, 0, docIdsQuery1);
+        collectDocsAndScores(scorer, scores2, leafCollector, 1, docIdsQuery2);
+        collectDocsAndScores(scorer, scoresMatchAll, leafCollector, 3, docIdsQueryMatchAll);
 
         List<TopDocs> topDocs = hybridTopScoreDocCollector.topDocs();
 
@@ -358,57 +263,6 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
-    public void testTrackTotalHits_whenTotalHitsSetIntegerMaxValue_thenSuccessful() {
-        final Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
-        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
-        ft.freeze();
-
-        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_1, FIELD_1_VALUE, ft));
-        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_2, FIELD_2_VALUE, ft));
-        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_3, FIELD_3_VALUE, ft));
-        w.commit();
-
-        DirectoryReader reader = DirectoryReader.open(w);
-
-        LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
-
-        HybridTopScoreDocCollector hybridTopScoreDocCollector = new HybridTopScoreDocCollector(
-            NUM_DOCS,
-            new HitsThresholdChecker(Integer.MAX_VALUE)
-        );
-        LeafCollector leafCollector = hybridTopScoreDocCollector.getLeafCollector(leafReaderContext);
-        assertNotNull(leafCollector);
-
-        Weight weight = mock(Weight.class);
-        int[] docIds = new int[] { DOC_ID_1, DOC_ID_2, DOC_ID_3 };
-        Arrays.sort(docIds);
-        final List<Float> scores = Stream.generate(() -> random().nextFloat()).limit(NUM_DOCS).collect(Collectors.toList());
-        HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(
-            weight,
-            Arrays.asList(scorer(docIds, scores, fakeWeight(new MatchAllDocsQuery())))
-        );
-
-        leafCollector.setScorer(hybridQueryScorer);
-        List<float[]> hybridScores = new ArrayList<>();
-        DocIdSetIterator iterator = hybridQueryScorer.iterator();
-        int nextDoc = iterator.nextDoc();
-        while (nextDoc != NO_MORE_DOCS) {
-            hybridScores.add(hybridQueryScorer.hybridScores());
-            nextDoc = iterator.nextDoc();
-        }
-        // assert
-        assertEquals(3, hybridScores.size());
-        assertFalse(hybridScores.stream().anyMatch(score -> score[0] <= 0.0));
-
-        w.close();
-        reader.close();
-        directory.close();
-    }
-
-    @SneakyThrows
     public void testCompoundScorer_whenHybridScorerIsChildScorer_thenSuccessful() {
         HybridTopScoreDocCollector hybridTopScoreDocCollector = new HybridTopScoreDocCollector(
             NUM_DOCS,
@@ -434,21 +288,68 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
 
         assertNotNull(leafCollector);
 
-        Weight weight = mock(Weight.class);
-        Weight subQueryWeight = mock(Weight.class);
         Scorer subQueryScorer = mock(Scorer.class);
-        // when(subQueryScorer.getWeight()).thenReturn(subQueryWeight);
         DocIdSetIterator iterator = mock(DocIdSetIterator.class);
         when(subQueryScorer.iterator()).thenReturn(iterator);
 
-        HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(weight, Arrays.asList(subQueryScorer));
+        int[] docIds = new int[] { DOC_ID_1, DOC_ID_2, DOC_ID_3 };
+        Arrays.sort(docIds);
+        final List<Float> scores = Stream.generate(() -> random().nextFloat()).limit(NUM_DOCS).collect(Collectors.toList());
+        HybridSubQueryScorer hybridQueryScorer = new HybridSubQueryScorer(1);
 
         Scorer scorer = mock(Scorer.class);
         Collection<Scorable.ChildScorable> childrenCollectors = List.of(new Scorable.ChildScorable(hybridQueryScorer, "MUST"));
         when(scorer.getChildren()).thenReturn(childrenCollectors);
         leafCollector.setScorer(scorer);
-        int nextDoc = hybridQueryScorer.iterator().nextDoc();
-        leafCollector.collect(nextDoc);
+
+        collectDocsAndScores(hybridQueryScorer, scores, leafCollector, 0, docIds);
+
+        w.close();
+        reader.close();
+        directory.close();
+    }
+
+    @SneakyThrows
+    public void testTrackTotalHits_whenTotalHitsSetIntegerMaxValue_thenSuccessful() {
+        final Directory directory = newDirectory();
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
+        ft.setOmitNorms(random().nextBoolean());
+        ft.freeze();
+
+        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_1, FIELD_1_VALUE, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_2, FIELD_2_VALUE, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_3, FIELD_3_VALUE, ft));
+        w.commit();
+
+        DirectoryReader reader = DirectoryReader.open(w);
+
+        LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
+
+        HybridTopScoreDocCollector hybridTopScoreDocCollector = new HybridTopScoreDocCollector(
+            NUM_DOCS,
+            new HitsThresholdChecker(Integer.MAX_VALUE)
+        );
+        LeafCollector leafCollector = hybridTopScoreDocCollector.getLeafCollector(leafReaderContext);
+        assertNotNull(leafCollector);
+
+        int[] docIds = new int[] { DOC_ID_1, DOC_ID_2, DOC_ID_3 };
+        Arrays.sort(docIds);
+        final List<Float> scores = Stream.generate(() -> random().nextFloat()).limit(NUM_DOCS).collect(Collectors.toList());
+
+        HybridSubQueryScorer scorer = new HybridSubQueryScorer(1);
+        leafCollector.setScorer(scorer);
+
+        collectDocsAndScores(scorer, scores, leafCollector, 0, docIds);
+
+        List<TopDocs> topDocs = hybridTopScoreDocCollector.topDocs();
+        assertEquals(1, topDocs.size());
+        TopDocs topDoc = topDocs.get(0);
+        assertEquals(3, topDoc.totalHits.value());
+        ScoreDoc[] scoreDocs = topDoc.scoreDocs;
+        assertEquals(3, scoreDocs.length);
+        assertFalse(Arrays.stream(scoreDocs).anyMatch(score -> score.score <= 0.0));
 
         w.close();
         reader.close();
@@ -481,14 +382,19 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
 
         assertNotNull(leafCollector);
 
-        Weight weight = mock(Weight.class);
-        Weight subQueryWeight = mock(Weight.class);
         Scorer subQueryScorer = mock(Scorer.class);
-        // when(subQueryScorer.getWeight()).thenReturn(subQueryWeight);
         DocIdSetIterator iterator = mock(DocIdSetIterator.class);
         when(subQueryScorer.iterator()).thenReturn(iterator);
 
-        HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(weight, Arrays.asList(subQueryScorer));
+        int[] docIds = new int[] { DOC_ID_1, DOC_ID_2, DOC_ID_3 };
+        Arrays.sort(docIds);
+        final List<Float> scores = Stream.generate(() -> random().nextFloat()).limit(NUM_DOCS).collect(Collectors.toList());
+
+        HybridSubQueryScorer scorer = new HybridSubQueryScorer(1);
+        leafCollector.setScorer(scorer);
+        collectDocsAndScores(scorer, scores, leafCollector, 0, docIds);
+
+        HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(Arrays.asList(subQueryScorer));
 
         leafCollector.setScorer(hybridQueryScorer);
         int nextDoc = hybridQueryScorer.iterator().nextDoc();
@@ -525,27 +431,17 @@ public class HybridTopScoreDocCollectorTests extends OpenSearchQueryTestCase {
         LeafCollector leafCollector = hybridTopScoreDocCollector.getLeafCollector(leafReaderContext);
         assertNotNull(leafCollector);
 
-        Weight weight = mock(Weight.class);
         int[] docIdsForQuery1 = new int[] { DOC_ID_1, DOC_ID_2 };
         Arrays.sort(docIdsForQuery1);
         int[] docIdsForQuery2 = new int[] { DOC_ID_3, DOC_ID_4 };
         Arrays.sort(docIdsForQuery2);
         final List<Float> scores = Stream.generate(() -> random().nextFloat()).limit(NUM_DOCS).collect(Collectors.toList());
-        HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(
-            weight,
-            Arrays.asList(
-                scorer(docIdsForQuery1, scores, fakeWeight(new MatchAllDocsQuery())),
-                scorer(docIdsForQuery2, scores, fakeWeight(new MatchAllDocsQuery()))
-            )
-        );
 
-        leafCollector.setScorer(hybridQueryScorer);
-        DocIdSetIterator iterator = hybridQueryScorer.iterator();
-        int nextDoc = iterator.nextDoc();
-        while (nextDoc != NO_MORE_DOCS) {
-            leafCollector.collect(nextDoc);
-            nextDoc = iterator.nextDoc();
-        }
+        HybridSubQueryScorer scorer = new HybridSubQueryScorer(2);
+        leafCollector.setScorer(scorer);
+
+        collectDocsAndScores(scorer, scores, leafCollector, 0, docIdsForQuery1);
+        collectDocsAndScores(scorer, scores, leafCollector, 1, docIdsForQuery2);
 
         List<TopDocs> topDocs = hybridTopScoreDocCollector.topDocs();
         long totalHits = hybridTopScoreDocCollector.getTotalHits();

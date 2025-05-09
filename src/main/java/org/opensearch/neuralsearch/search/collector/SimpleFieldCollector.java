@@ -31,7 +31,7 @@ public final class SimpleFieldCollector extends HybridTopFieldDocSortCollector {
                 if (Objects.isNull(compoundQueryScorer)) {
                     throw new IllegalArgumentException("scorers are null for all sub-queries in hybrid query");
                 }
-                float[] subScoresByQuery = compoundQueryScorer.hybridScores();
+                float[] subScoresByQuery = compoundQueryScorer.getSubQueryScores();
                 initializePriorityQueuesWithComparators(context, subScoresByQuery.length);
                 incrementTotalHitCount();
                 for (int i = 0; i < subScoresByQuery.length; i++) {

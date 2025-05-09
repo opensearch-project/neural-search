@@ -6,7 +6,6 @@ package org.opensearch.neuralsearch.search.collector;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Objects;
 import java.util.Locale;
 import java.util.ArrayList;
 
@@ -21,16 +20,13 @@ import org.apache.lucene.search.FieldValueHitQueue;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.TotalHits;
-import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.LeafFieldComparator;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopFieldDocs;
-import org.apache.lucene.search.Scorable;
 import org.apache.lucene.search.FieldComparator;
 import org.apache.lucene.search.CollectionTerminatedException;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.util.PriorityQueue;
-import org.opensearch.neuralsearch.query.HybridQueryScorer;
 import org.opensearch.common.Nullable;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 import org.opensearch.neuralsearch.search.lucene.MultiLeafFieldComparator;
@@ -127,8 +123,7 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
         return hitsThresholdChecker.scoreMode();
     }
 
-    protected abstract class HybridTopDocSortLeafCollector implements LeafCollector {
-        protected HybridQueryScorer compoundQueryScorer;
+    protected abstract class HybridTopDocSortLeafCollector extends HybridLeafCollector {
         private boolean collectedAllCompetitiveHits = false;
 
         /**
@@ -141,44 +136,6 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
 
         public HybridTopDocSortLeafCollector() {
             this.initializeLeafComparatorsPerSegmentOnce = true;
-        }
-
-        @Override
-        public void setScorer(final Scorable scorer) throws IOException {
-            if (scorer instanceof HybridQueryScorer) {
-                log.debug("passed scorer is of type HybridQueryScorer, saving it for collecting documents and scores");
-                compoundQueryScorer = (HybridQueryScorer) scorer;
-            } else {
-                compoundQueryScorer = getHybridQueryScorer(scorer);
-                if (Objects.isNull(compoundQueryScorer)) {
-                    log.error(
-                        String.format(Locale.ROOT, "cannot find scorer of type HybridQueryScorer in a hierarchy of scorer %s", scorer)
-                    );
-                }
-            }
-        }
-
-        private HybridQueryScorer getHybridQueryScorer(final Scorable scorer) throws IOException {
-            if (scorer == null) {
-                return null;
-            }
-            if (scorer instanceof HybridQueryScorer) {
-                return (HybridQueryScorer) scorer;
-            }
-            for (Scorable.ChildScorable childScorable : scorer.getChildren()) {
-                HybridQueryScorer hybridQueryScorer = getHybridQueryScorer(childScorable.child());
-                if (Objects.nonNull(hybridQueryScorer)) {
-                    log.debug(
-                        String.format(
-                            Locale.ROOT,
-                            "found hybrid query scorer, it's child of scorer %s",
-                            childScorable.child().getClass().getSimpleName()
-                        )
-                    );
-                    return hybridQueryScorer;
-                }
-            }
-            return null;
         }
 
         /*
