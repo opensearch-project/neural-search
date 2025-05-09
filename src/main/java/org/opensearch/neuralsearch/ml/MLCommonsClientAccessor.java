@@ -12,6 +12,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import org.opensearch.core.action.ActionListener;
@@ -314,6 +319,71 @@ public class MLCommonsClientAccessor {
 
     public void getModel(@NonNull final String modelId, @NonNull final ActionListener<MLModel> listener) {
         retryableGetModel(modelId, 0, listener);
+    }
+
+    /**
+     * Get model info for multiple model ids. It will send multiple getModel requests to get the model info in parallel.
+     * It will fail if any one of the get model request fail. Only return the success result if all model info is
+     * successfully retrieved.
+     * @param modelIds a set of model ids
+     * @param onSuccess onSuccess consumer
+     * @param onFailure onFailure consumer
+     */
+    public void getModels(
+        @NonNull final Set<String> modelIds,
+        @NonNull final Consumer<Map<String, MLModel>> onSuccess,
+        @NonNull final Consumer<Exception> onFailure
+    ) {
+        if (modelIds.isEmpty()) {
+            try {
+                onSuccess.accept(Collections.emptyMap());
+            } catch (Exception e) {
+                onFailure.accept(e);
+            }
+            return;
+        }
+
+        final Map<String, MLModel> modelMap = new ConcurrentHashMap<>();
+        final AtomicInteger counter = new AtomicInteger(modelIds.size());
+        final AtomicBoolean hasError = new AtomicBoolean(false);
+        final List<String> errors = Collections.synchronizedList(new ArrayList<>());
+
+        for (String modelId : modelIds) {
+            try {
+                getModel(modelId, ActionListener.wrap(model -> {
+                    modelMap.put(modelId, model);
+                    if (counter.decrementAndGet() == 0) {
+                        if (hasError.get()) {
+                            onFailure.accept(new RuntimeException(String.join(";", errors)));
+                        } else {
+                            try {
+                                onSuccess.accept(modelMap);
+                            } catch (Exception e) {
+                                onFailure.accept(e);
+                            }
+                        }
+                    }
+                }, e -> { handleGetModelException(hasError, errors, modelId, e, counter, onFailure); }));
+            } catch (Exception e) {
+                handleGetModelException(hasError, errors, modelId, e, counter, onFailure);
+            }
+        }
+
+    }
+
+    private void handleGetModelException(
+        AtomicBoolean hasError,
+        List<String> errors,
+        String modelId,
+        Exception e,
+        AtomicInteger counter,
+        @NonNull Consumer<Exception> onFailure
+    ) {
+        hasError.set(true);
+        errors.add("Failed to fetch model [" + modelId + "]: " + e.getMessage());
+        if (counter.decrementAndGet() == 0) {
+            onFailure.accept(new RuntimeException(String.join(";", errors)));
+        }
     }
 
     private void retryableGetModel(@NonNull final String modelId, final int retryTime, @NonNull final ActionListener<MLModel> listener) {

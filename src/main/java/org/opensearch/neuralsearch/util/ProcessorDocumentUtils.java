@@ -11,6 +11,7 @@ import org.opensearch.common.settings.Settings;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.env.Environment;
 import org.opensearch.index.mapper.MapperService;
+import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.processor.util.ProcessorUtils;
 
 import java.util.ArrayList;
@@ -286,6 +287,17 @@ public class ProcessorDocumentUtils {
                 throw new IllegalStateException("Unexpected data structure at " + value);
             }
         }
+    }
+
+    public static void unflattenIngestDoc(IngestDocument document) {
+        if (document == null || document.getSourceAndMetadata() == null) {
+            return;
+        }
+
+        Map<String, Object> sourceAndMetadataMap = document.getSourceAndMetadata();
+        Map<String, Object> unflattened = ProcessorDocumentUtils.unflattenJson(sourceAndMetadataMap);
+        unflattened.forEach(document::setFieldValue);
+        sourceAndMetadataMap.keySet().removeIf(key -> key.contains("."));
     }
 
     private static List<Object> handleList(List<Object> list) {

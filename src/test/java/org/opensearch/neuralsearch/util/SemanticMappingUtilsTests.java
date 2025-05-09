@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.opensearch.neuralsearch.constants.MappingConstants.PROPERTIES;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.collectSemanticField;
 
 public class SemanticMappingUtilsTests extends OpenSearchTestCase {
@@ -38,6 +39,33 @@ public class SemanticMappingUtilsTests extends OpenSearchTestCase {
             Map.of("model_id", "dummy model id", "type", "semantic")
         );
         assertEquals(expectedPathToConfigMap, semanticFieldPathToConfigMap);
+    }
+
+    public void testCollectSemanticField_whenDepthExceedMax_thenException() {
+        final Map<String, Object> mapping = new HashMap<>();
+        Map<String, Object> current = mapping;
+        final StringBuilder sb = new StringBuilder();
+
+        for (int i = 0; i < 1001; i++) {
+            final Map<String, Object> temp = new HashMap<>();
+            temp.put(PROPERTIES, new HashMap<String, Object>());
+            current.put("test", temp);
+            current = (Map<String, Object>) temp.get(PROPERTIES);
+            if (sb.length() > 0) {
+                sb.append(".");
+            }
+            sb.append("test");
+        }
+
+        final IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> collectSemanticField(mapping, Map.of(sb.toString(), new HashMap<>()))
+        );
+
+        final String expectedMessage =
+            "Cannot transform the mapping for semantic fields because its depth exceeds the maximum allowed depth 1000";
+
+        assertEquals(expectedMessage, exception.getMessage());
     }
 
     public void testExtractModelIdToFieldPathMap() {

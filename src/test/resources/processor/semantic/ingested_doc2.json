@@ -1,0 +1,35 @@
+{
+  "_routing" : "routing",
+  "geo_data_semantic_info" : {
+    "chunks" : [ {
+      "text" : "dummy_geo_data_1",
+      "embedding" : {
+        "dummy token" : 1.0
+      }
+    } ],
+    "model" : {
+      "name" : "SPARSE_ENCODING",
+      "id" : "dummy_model_id_2",
+      "type" : "SPARSE_ENCODING"
+    }
+  },
+  "_version_type" : "internal",
+  "_index" : "index",
+  "geo_data" : "dummy_geo_data_1",
+  "_id" : "2",
+  "_version" : 1,
+  "products" : [ {
+    "product_description" : "dummy_product_description",
+    "product_description_semantic_info" : {
+      "chunks" : [ {
+        "text" : "dummy_product_description",
+        "embedding" : [ 3.0 ]
+      } ],
+      "model" : {
+        "name" : "TEXT_EMBEDDING",
+        "id" : "dummy_model_id_1",
+        "type" : "TEXT_EMBEDDING"
+      }
+    }
+  } ]
+}

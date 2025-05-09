@@ -21,4 +21,9 @@ public class MappingConstants {
      * Name for properties. An object field will define subfields as properties.
      */
     public static final String PROPERTIES = "properties";
+
+    /**
+     * Separator in a field path.
+     */
+    public static final String PATH_SEPARATOR = ".";
 }

@@ -37,6 +37,7 @@ import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory;
+import org.opensearch.neuralsearch.processor.factory.SemanticFieldProcessorFactory;
 import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
@@ -213,5 +214,14 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         final List<MappingTransformer> mappingTransformers = plugin.getMappingTransformers();
         assertEquals(1, mappingTransformers.size());
         assertTrue(mappingTransformers.getFirst() instanceof SemanticMappingTransformer);
+    }
+
+    public void testGetSystemIngestProcessors() {
+        Map<String, Processor.Factory> systemIngestProcessors;
+        systemIngestProcessors = plugin.getSystemIngestProcessors(ingestParameters);
+        assertEquals(1, systemIngestProcessors.size());
+        assertTrue(
+            systemIngestProcessors.get(SemanticFieldProcessorFactory.PROCESSOR_FACTORY_TYPE) instanceof SemanticFieldProcessorFactory
+        );
     }
 }

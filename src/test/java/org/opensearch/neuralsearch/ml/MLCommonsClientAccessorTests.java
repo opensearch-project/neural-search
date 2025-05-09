@@ -16,6 +16,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Consumer;
 
 import org.junit.Before;
 import org.mockito.ArgumentCaptor;
@@ -23,6 +25,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
+import org.opensearch.ResourceNotFoundException;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.ml.client.MachineLearningNodeClient;
@@ -550,5 +553,64 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         accessor.getModel(modelId, listener);
 
         verify(client).getModel(eq(modelId), eq(null), any(ActionListener.class));
+    }
+
+    public void testGetModels_Success() {
+        final String modelId1 = "dummyModel1";
+        final String modelId2 = "dummyModel2";
+        final Set<String> modelIds = Set.of(modelId1, modelId2);
+        final MLModel mlModel1 = mock(MLModel.class);
+        final MLModel mlModel2 = mock(MLModel.class);
+        final Consumer<Map<String, MLModel>> onSuccess = mock(Consumer.class);
+        final Consumer<Exception> onFailure = mock(Consumer.class);
+
+        Mockito.doAnswer(invocation -> {
+            final String modelId = (String) invocation.getArgument(0);
+            final ActionListener<MLModel> listener = invocation.getArgument(2);
+            if (modelId.equals(modelId1)) {
+                listener.onResponse(mlModel1);
+            } else if (modelId.equals(modelId2)) {
+                listener.onResponse(mlModel2);
+            }
+            return null;
+        }).when(client).getModel(any(), any(), any());
+
+        accessor.getModels(modelIds, onSuccess, onFailure);
+
+        // Capture the exception passed to onFailure
+        final ArgumentCaptor resultCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(onSuccess, times(1)).accept((Map<String, MLModel>) resultCaptor.capture());
+
+        final Map<String, MLModel> expectedResultMap = Map.of(modelId1, mlModel1, modelId2, mlModel2);
+        assertEquals(expectedResultMap, resultCaptor.getValue());
+    }
+
+    public void testGetModels_Failure() {
+        final String modelId1 = "dummyModel1";
+        final String modelId2 = "dummyModel2";
+        final Set<String> modelIds = Set.of(modelId1, modelId2);
+        final MLModel mlModel1 = mock(MLModel.class);
+        final Consumer<Map<String, MLModel>> onSuccess = mock(Consumer.class);
+        final Consumer<Exception> onFailure = mock(Consumer.class);
+
+        Mockito.doAnswer(invocation -> {
+            final String modelId = (String) invocation.getArgument(0);
+            final ActionListener<MLModel> listener = invocation.getArgument(2);
+            if (modelId.equals(modelId1)) {
+                listener.onResponse(mlModel1);
+            } else if (modelId.equals(modelId2)) {
+                listener.onFailure(new ResourceNotFoundException("dummyModel2 not found"));
+            }
+            return null;
+        }).when(client).getModel(any(), any(), any());
+
+        accessor.getModels(modelIds, onSuccess, onFailure);
+
+        // Capture the exception passed to onFailure
+        final ArgumentCaptor<Exception> resultCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(onFailure, times(1)).accept(resultCaptor.capture());
+
+        final String expectedMessage = "Failed to fetch model [dummyModel2]: dummyModel2 not found";
+        assertEquals(expectedMessage, resultCaptor.getValue().getMessage());
     }
 }
