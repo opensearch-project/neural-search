@@ -30,4 +30,9 @@ public class SemanticFieldConstants {
      * Name of the raw field type parameter. We use this key to define a custom field name for the semantic info.
      */
     public static final String SEMANTIC_INFO_FIELD_NAME = "semantic_info_field_name";
+
+    /**
+     * Default suffix for semantic info field name. It will be used to construct the field name of the semantic info.
+     */
+    public static final String DEFAULT_SEMANTIC_INFO_FIELD_NAME_SUFFIX = "_semantic_info";
 }

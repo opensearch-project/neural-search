@@ -1,0 +1,85 @@
+
+{
+  "properties": {
+    "inter_field": {
+      "properties": {
+        "semantic_field_1": {
+          "model_id": "textEmbeddingModelId",
+          "type": "semantic"
+        },
+        "semantic_field_1_semantic_info": {
+          "properties": {
+            "chunks": {
+              "type": "nested",
+              "properties": {
+                "embedding": {
+                  "type": "knn_vector",
+                  "method": {
+                    "space_type": "l2",
+                    "name": "hnsw"
+                  },
+                  "dimension": 768
+                },
+                "text": {
+                  "type": "text"
+                }
+              }
+            },
+            "model": {
+              "properties": {
+                "id": {
+                  "type": "text",
+                  "index": false
+                },
+                "type": {
+                  "type": "text",
+                  "index": false
+                },
+                "name": {
+                  "type": "text",
+                  "index": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "semantic_field_2": {
+      "model_id": "sparseModelId",
+      "type": "semantic",
+      "semantic_info_field_name": "custom_semantic_info_field"
+    },
+    "custom_semantic_info_field": {
+      "properties": {
+        "chunks": {
+          "type": "nested",
+          "properties": {
+            "embedding": {
+              "type": "rank_features"
+            },
+            "text": {
+              "type": "text"
+            }
+          }
+        },
+        "model": {
+          "properties": {
+            "id": {
+              "type": "text",
+              "index": false
+            },
+            "type": {
+              "type": "text",
+              "index": false
+            },
+            "name": {
+              "type": "text",
+              "index": false
+            }
+          }
+        }
+      }
+    }
+  }
+}
