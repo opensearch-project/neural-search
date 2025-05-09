@@ -195,7 +195,6 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, maxChunkLimit);
         runtimeParameters.put(CHUNK_STRING_COUNT_FIELD, chunkStringCount);
         chunkMapType(sourceAndMetadataMap, fieldMap, runtimeParameters);
-
         recordChunkingExecutionStats(chunker.getAlgorithmName());
         return ingestDocument;
     }

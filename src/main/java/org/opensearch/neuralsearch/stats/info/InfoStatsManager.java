@@ -143,8 +143,8 @@ public class InfoStatsManager {
 
     /**
      * Counts text chunking processor stats based on processor config
-     * @param stats
-     * @param processorConfig
+     * @param stats map containing the stat to increment
+     * @param processorConfig map of the processor config, parsed to add stats
      */
     private void countTextChunkingProcessorStats(Map<InfoStatName, CountableInfoStatSnapshot> stats, Map<String, Object> processorConfig) {
         increment(stats, InfoStatName.TEXT_CHUNKING_PROCESSORS);
