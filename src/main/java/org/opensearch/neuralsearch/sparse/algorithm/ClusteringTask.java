@@ -48,7 +48,7 @@ public class ClusteringTask implements Runnable {
         this.beta = beta;
         this.lambda = lambda;
         this.newToOldDocIdMap = Collections.unmodifiableMap(newToOldDocIdMap);
-        this.postingClustering = new PostingClustering(lambda, new KMeansPlusPlus(alpha, beta, (newDocId) -> {
+        this.postingClustering = new PostingClustering(lambda, new RandomClustering(lambda, alpha, beta, (newDocId) -> {
             Pair<Integer, InMemoryKey.IndexKey> oldDocId = this.newToOldDocIdMap.get(newDocId);
             if (oldDocId != null) {
                 InMemorySparseVectorForwardIndex oldIndex = InMemorySparseVectorForwardIndex.get(oldDocId.getRight());
