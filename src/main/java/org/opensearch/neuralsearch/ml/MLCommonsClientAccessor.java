@@ -10,6 +10,7 @@ import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,6 +28,7 @@ import org.opensearch.ml.common.MLModel;
 import org.opensearch.ml.common.dataset.MLInputDataset;
 import org.opensearch.ml.common.dataset.TextDocsInputDataSet;
 import org.opensearch.ml.common.dataset.TextSimilarityInputDataSet;
+import org.opensearch.ml.common.dataset.remote.RemoteInferenceInputDataSet;
 import org.opensearch.ml.common.input.MLInput;
 import org.opensearch.ml.common.output.MLOutput;
 import org.opensearch.ml.common.output.model.ModelResultFilter;
@@ -45,6 +47,10 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import java.util.concurrent.TimeUnit;
+
 /**
  * This class will act as an abstraction on the MLCommons client for accessing the ML Capabilities
  */
@@ -52,6 +58,10 @@ import lombok.extern.log4j.Log4j2;
 @Log4j2
 public class MLCommonsClientAccessor {
     private final MachineLearningNodeClient mlClient;
+
+    // Define constants for cache configuration
+    private static final long DEFAULT_MODEL_TYPE_CACHE_MAX_SIZE = 200L;
+    private static final long DEFAULT_MODEL_TYPE_CACHE_EXPIRE_AFTER_ACCESS_DAYS = 30L;
 
     /**
      * Wrapper around {@link #inferenceSentences} that expected a single input text and produces a single floating
@@ -398,8 +408,24 @@ public class MLCommonsClientAccessor {
     }
 
     /**
-     * Retryable method to perform sentence highlighting inference.
-     * This method will retry up to 3 times if a retryable exception occurs.
+     * Cache to store the {@link FunctionName} (algorithm) for a given model ID.
+     * This helps to avoid redundant calls to fetch model metadata (like its algorithm type)
+     * for sentence highlighting operations. The cache has a maximum size and entries expire
+     * after a defined period of inactivity.
+     */
+    private final Cache<String, FunctionName> modelTypeCache = CacheBuilder.newBuilder()
+        .maximumSize(DEFAULT_MODEL_TYPE_CACHE_MAX_SIZE)
+        .expireAfterAccess(DEFAULT_MODEL_TYPE_CACHE_EXPIRE_AFTER_ACCESS_DAYS, TimeUnit.DAYS)
+        .build();
+
+    /**
+     * Performs sentence highlighting inference with retries. This method first checks a local cache
+     * for the model's algorithm type ({@link FunctionName}). If not found, it fetches the model metadata,
+     * caches its algorithm, and then proceeds with the inference. Retries are handled in case of failures.
+     *
+     * @param inferenceRequest The request containing the model ID, question, and context for highlighting.
+     * @param retryTime The current retry attempt count.
+     * @param listener  ActionListener to be called with the highlighting results or an exception.
      */
     private void retryableInferenceSentenceHighlighting(
         final SentenceHighlightingRequest inferenceRequest,
@@ -407,27 +433,80 @@ public class MLCommonsClientAccessor {
         final ActionListener<List<Map<String, Object>>> listener
     ) {
         try {
-            MLInputDataset inputDataset = new QuestionAnsweringInputDataSet(inferenceRequest.getQuestion(), inferenceRequest.getContext());
-            MLInput mlInput = new MLInput(FunctionName.QUESTION_ANSWERING, null, inputDataset);
+            String modelId = inferenceRequest.getModelId();
 
-            mlClient.predict(inferenceRequest.getModelId(), mlInput, ActionListener.wrap(mlOutput -> {
-                try {
-                    List<Map<String, Object>> result = processHighlightingOutput((ModelTensorOutput) mlOutput);
-                    listener.onResponse(result);
-                } catch (Exception e) {
-                    listener.onFailure(e);
-                }
-            },
-                e -> RetryUtil.handleRetryOrFailure(
-                    e,
-                    retryTime,
-                    () -> retryableInferenceSentenceHighlighting(inferenceRequest, retryTime + 1, listener),
-                    listener
-                )
-            ));
+            // Check if model type is already cached using Guava's getIfPresent
+            FunctionName algorithm = modelTypeCache.getIfPresent(modelId);
+
+            if (algorithm != null) {
+                // Cache hit
+                processSentenceHighlightingWithKnownAlgorithm(inferenceRequest, algorithm, retryTime, listener);
+            } else {
+                // Cache miss or entry expired/evicted
+                // Fetch model metadata
+                getModel(modelId, ActionListener.wrap(mlModel -> {
+                    FunctionName fetchedAlgorithm = mlModel.getAlgorithm();
+                    if (fetchedAlgorithm != null) { // Avoid caching nulls unless specifically intended
+                        // Cache the model algorithm for future use
+                        modelTypeCache.put(modelId, fetchedAlgorithm);
+                    }
+                    processSentenceHighlightingWithKnownAlgorithm(inferenceRequest, fetchedAlgorithm, retryTime, listener);
+                }, listener::onFailure));
+            }
         } catch (Exception e) {
             listener.onFailure(e);
         }
+    }
+
+    /**
+     * Processes the sentence highlighting inference request once the model's algorithm ({@link FunctionName})
+     * is known. It constructs the appropriate {@link MLInput} based on whether the model is remote or local
+     * (e.g., {@link FunctionName#REMOTE} vs {@link FunctionName#QUESTION_ANSWERING}) and then calls the
+     * ML clients predict method.
+     *
+     * @param inferenceRequest The original sentence highlighting request.
+     * @param algorithm The determined {@link FunctionName} of the model.
+     * @param retryTime The current retry attempt count (for potential retries within predict).
+     * @param listener ActionListener to be called with the highlighting results or an exception.
+     */
+    private void processSentenceHighlightingWithKnownAlgorithm(
+        final SentenceHighlightingRequest inferenceRequest,
+        final FunctionName algorithm,
+        final int retryTime,
+        final ActionListener<List<Map<String, Object>>> listener
+    ) {
+        MLInput mlInput;
+
+        if (algorithm == FunctionName.REMOTE) {
+            // For remote models, use RemoteInferenceInputDataSet
+            Map<String, String> parameters = new HashMap<>();
+            parameters.put(MLInput.QUESTION_FIELD, inferenceRequest.getQuestion());
+            parameters.put(MLInput.CONTEXT_FIELD, inferenceRequest.getContext());
+
+            MLInputDataset inputDataset = new RemoteInferenceInputDataSet(parameters);
+            mlInput = new MLInput(FunctionName.REMOTE, null, inputDataset);
+        } else {
+            // For local models, use the QuestionAnsweringInputDataSet
+            MLInputDataset inputDataset = new QuestionAnsweringInputDataSet(inferenceRequest.getQuestion(), inferenceRequest.getContext());
+            mlInput = new MLInput(FunctionName.QUESTION_ANSWERING, null, inputDataset);
+        }
+
+        // Make the prediction call
+        mlClient.predict(inferenceRequest.getModelId(), mlInput, ActionListener.wrap(mlOutput -> {
+            try {
+                List<Map<String, Object>> result = processHighlightingOutput((ModelTensorOutput) mlOutput);
+                listener.onResponse(result);
+            } catch (Exception e) {
+                listener.onFailure(e);
+            }
+        },
+            e -> RetryUtil.handleRetryOrFailure(
+                e,
+                retryTime,
+                () -> retryableInferenceSentenceHighlighting(inferenceRequest, retryTime + 1, listener),
+                listener
+            )
+        ));
     }
 
     /**

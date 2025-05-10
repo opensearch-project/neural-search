@@ -40,6 +40,10 @@ import org.opensearch.neuralsearch.constants.TestCommonConstants;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.transport.NodeNotConnectedException;
+import org.opensearch.ml.common.dataset.remote.RemoteInferenceInputDataSet;
+import org.opensearch.ml.common.FunctionName;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 
 public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
@@ -51,6 +55,12 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
     @Mock
     private ActionListener<List<Float>> similarityResultListener;
+
+    @Mock
+    private ActionListener<List<Map<String, Object>>> mockHighlightingListener;
+
+    @Mock
+    private MLModel mockMlModel;
 
     @Mock
     private MachineLearningNodeClient client;
@@ -392,6 +402,15 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             )
         );
 
+        // Setup getModel to return QUESTION_ANSWERING
+        Mockito.doAnswer(invocation -> {
+            ActionListener<MLModel> listener = invocation.getArgument(2);
+            MLModel mlModel = mock(MLModel.class);
+            Mockito.when(mlModel.getAlgorithm()).thenReturn(FunctionName.QUESTION_ANSWERING);
+            listener.onResponse(mlModel);
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), any(), any(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onResponse(createModelTensorOutput(highlights));
@@ -409,6 +428,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             resultListener
         );
 
+        Mockito.verify(client).getModel(eq(TestCommonConstants.MODEL_ID), any(), any(ActionListener.class));
         Mockito.verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         Mockito.verify(resultListener).onResponse(List.of(highlights));
         Mockito.verifyNoMoreInteractions(resultListener);
@@ -420,6 +440,15 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     public void testInferenceSentenceHighlighting_whenEmptyHighlights_thenReturnEmptyList() {
         final ActionListener<List<Map<String, Object>>> resultListener = mock(ActionListener.class);
         final Map<String, Object> emptyHighlights = Map.of("highlights", Collections.emptyList());
+
+        // Setup getModel to return QUESTION_ANSWERING
+        Mockito.doAnswer(invocation -> {
+            ActionListener<MLModel> listener = invocation.getArgument(2);
+            MLModel mlModel = mock(MLModel.class);
+            Mockito.when(mlModel.getAlgorithm()).thenReturn(FunctionName.QUESTION_ANSWERING);
+            listener.onResponse(mlModel);
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), any(), any(ActionListener.class));
 
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
@@ -436,6 +465,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             resultListener
         );
 
+        Mockito.verify(client).getModel(eq(TestCommonConstants.MODEL_ID), any(), any(ActionListener.class));
         Mockito.verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         Mockito.verify(resultListener).onResponse(List.of(emptyHighlights));
         Mockito.verifyNoMoreInteractions(resultListener);
@@ -450,6 +480,15 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             mock(DiscoveryNode.class),
             "Node not connected"
         );
+
+        // Setup getModel to return QUESTION_ANSWERING
+        Mockito.doAnswer(invocation -> {
+            ActionListener<MLModel> listener = invocation.getArgument(2);
+            MLModel mlModel = mock(MLModel.class);
+            Mockito.when(mlModel.getAlgorithm()).thenReturn(FunctionName.QUESTION_ANSWERING);
+            listener.onResponse(mlModel);
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), any(), any(ActionListener.class));
 
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
@@ -480,6 +519,15 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         final ActionListener<List<Map<String, Object>>> resultListener = mock(ActionListener.class);
         final IllegalStateException illegalStateException = new IllegalStateException("Illegal state");
 
+        // Setup getModel to return QUESTION_ANSWERING
+        Mockito.doAnswer(invocation -> {
+            ActionListener<MLModel> listener = invocation.getArgument(2);
+            MLModel mlModel = mock(MLModel.class);
+            Mockito.when(mlModel.getAlgorithm()).thenReturn(FunctionName.QUESTION_ANSWERING);
+            listener.onResponse(mlModel);
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), any(), any(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onFailure(illegalStateException);
@@ -499,6 +547,86 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             .predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         Mockito.verify(resultListener).onFailure(illegalStateException);
         Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    /**
+     * Tests sentence highlighting inference when the model type is already in cache.
+     * This test verifies that if a model's type is already cached from a previous call,
+     * getModel is not called again, and predict uses the cached model type.
+     */
+    public void testInferenceSentenceHighlighting_whenCacheHit_thenUsesCachedModelType() {
+        // Setup model lookup to return REMOTE algorithm type
+        Mockito.doAnswer(invocation -> {
+            ActionListener<MLModel> listener = invocation.getArgument(2);
+            Mockito.when(mockMlModel.getAlgorithm()).thenReturn(FunctionName.REMOTE);
+            listener.onResponse(mockMlModel);
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), any(), any(ActionListener.class));
+
+        // Setup predict to succeed
+        Mockito.doAnswer(invocation -> {
+            ActionListener<MLOutput> listener = invocation.getArgument(2);
+            ModelTensorOutput output = createModelTensorOutput(Map.of("dummy_highlight_key", "dummy_highlight_value"));
+            listener.onResponse(output);
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), any(MLInput.class), any(ActionListener.class));
+
+        // First call: populates the cache
+        SentenceHighlightingRequest request = SentenceHighlightingRequest.builder()
+            .modelId(TestCommonConstants.MODEL_ID)
+            .question("What is OpenSearch?")
+            .context("OpenSearch is a distributed, RESTful search and analytics engine designed for a broad set of use cases.")
+            .build();
+
+        accessor.inferenceSentenceHighlighting(request, mock(ActionListener.class)); // Use a throwaway listener
+
+        // Second call: should hit the cache
+        accessor.inferenceSentenceHighlighting(request, mockHighlightingListener);
+
+        // Verify getModel was called only ONCE in total (from the first call)
+        verify(client, times(1)).getModel(eq(TestCommonConstants.MODEL_ID), any(), any(ActionListener.class));
+
+        // Verify predict was called TWICE in total
+        ArgumentCaptor<MLInput> mlInputCaptor = ArgumentCaptor.forClass(MLInput.class);
+        verify(client, times(2)).predict(eq(TestCommonConstants.MODEL_ID), mlInputCaptor.capture(), any(ActionListener.class));
+
+        // Verify the second predict call (last captured value) used the cached REMOTE algorithm
+        List<MLInput> capturedInputs = mlInputCaptor.getAllValues();
+        MLInput secondCapturedInput = capturedInputs.get(1); // Get the second call's input
+        assertEquals(FunctionName.REMOTE, secondCapturedInput.getAlgorithm());
+        assertTrue(secondCapturedInput.getInputDataset() instanceof RemoteInferenceInputDataSet);
+
+        verify(mockHighlightingListener, times(1)).onResponse(anyList());
+        verify(mockHighlightingListener, times(0)).onFailure(any());
+    }
+
+    /**
+     * Tests sentence highlighting inference failure when getModel fails.
+     * This test verifies that if the getModel call fails, the failure is propagated
+     * to the top-level listener, and no predict call is made.
+     */
+    public void testInferenceSentenceHighlighting_whenGetModelFailure_thenPropagatesError() {
+        // Setup getModel to fail
+        final RuntimeException getModelException = new RuntimeException("Failed to get model");
+        Mockito.doAnswer(invocation -> {
+            ActionListener<MLModel> listener = invocation.getArgument(2);
+            listener.onFailure(getModelException);
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), any(), any(ActionListener.class));
+
+        SentenceHighlightingRequest request = SentenceHighlightingRequest.builder()
+            .modelId(TestCommonConstants.MODEL_ID)
+            .question("What is OpenSearch?")
+            .context("OpenSearch is a distributed, RESTful search and analytics engine designed for a broad set of use cases.")
+            .build();
+
+        accessor.inferenceSentenceHighlighting(request, mockHighlightingListener);
+
+        verify(client, times(1)).getModel(eq(TestCommonConstants.MODEL_ID), any(), any(ActionListener.class));
+        verify(client, times(0)).predict(anyString(), any(MLInput.class), any(ActionListener.class)); // predict should not be called
+
+        verify(mockHighlightingListener, times(0)).onResponse(anyList());
+        verify(mockHighlightingListener, times(1)).onFailure(eq(getModelException));
     }
 
     private ModelTensorOutput createModelTensorOutput(final Float[] output) {
