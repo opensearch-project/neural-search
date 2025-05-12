@@ -36,6 +36,7 @@ public class HybridBulkScorer extends BulkScorer {
     private final float[][] windowScores;
     private final HybridQueryDocIdStream hybridQueryDocIdStream;
     private final int maxDoc;
+    private int[] docIds;
 
     /**
      * Constructor for HybridBulkScorer
@@ -45,8 +46,9 @@ public class HybridBulkScorer extends BulkScorer {
      */
     public HybridBulkScorer(List<Scorer> scorers, boolean needsScores, int maxDoc) {
         long cost = 0;
-        this.scorers = new Scorer[scorers.size()];
-        for (int subQueryIndex = 0; subQueryIndex < scorers.size(); subQueryIndex++) {
+        int numOfQueries = scorers.size();
+        this.scorers = new Scorer[numOfQueries];
+        for (int subQueryIndex = 0; subQueryIndex < numOfQueries; subQueryIndex++) {
             Scorer scorer = scorers.get(subQueryIndex);
             if (Objects.isNull(scorer)) {
                 continue;
@@ -55,12 +57,14 @@ public class HybridBulkScorer extends BulkScorer {
             this.scorers[subQueryIndex] = scorer;
         }
         this.cost = cost;
-        this.hybridSubQueryScorer = new HybridSubQueryScorer(scorers.size());
+        this.hybridSubQueryScorer = new HybridSubQueryScorer(numOfQueries);
         this.needsScores = needsScores;
         this.matching = new FixedBitSet(WINDOW_SIZE);
         this.windowScores = new float[this.scorers.length][WINDOW_SIZE];
         this.maxDoc = maxDoc;
         this.hybridQueryDocIdStream = new HybridQueryDocIdStream(this);
+        this.docIds = new int[numOfQueries];
+        Arrays.fill(docIds, DocIdSetIterator.NO_MORE_DOCS);
     }
 
     @Override
@@ -69,15 +73,15 @@ public class HybridBulkScorer extends BulkScorer {
         // making sure we are not going over the global limit defined by maxDoc
         max = Math.min(max, maxDoc);
         // advance all scorers to the segment's minimum doc id
-        int[] docsIds = advance(min, scorers);
-        while (allDocIdsUsed(docsIds, max) == false) {
-            scoreWindow(collector, acceptDocs, min, max, docsIds);
+        advance(min, scorers);
+        while (allDocIdsUsed(docIds, max) == false) {
+            scoreWindow(collector, acceptDocs, min, max, docIds);
         }
-        return getNextDocIdCandidate(docsIds);
+        return getNextDocIdCandidate(docIds);
     }
 
     private void scoreWindow(LeafCollector collector, Bits acceptDocs, int min, int max, int[] docIds) throws IOException {
-        // pick the lowest out of all not yet used doc ids
+        // find the first document ID below the maximum threshold to establish the next scoring window boundary
         int topDoc = -1;
         for (int docId : docIds) {
             if (docId < max) {
@@ -150,11 +154,9 @@ public class HybridBulkScorer extends BulkScorer {
     /**
      * Advance all scorers to the next document that is >= min
      */
-    private int[] advance(int min, Scorer[] scorers) throws IOException {
-        int[] docIds = new int[scorers.length];
+    private void advance(int min, Scorer[] scorers) throws IOException {
         for (int subQueryIndex = 0; subQueryIndex < scorers.length; subQueryIndex++) {
             if (Objects.isNull(scorers[subQueryIndex])) {
-                docIds[subQueryIndex] = DocIdSetIterator.NO_MORE_DOCS;
                 continue;
             }
             DocIdSetIterator it = scorers[subQueryIndex].iterator();
@@ -164,7 +166,6 @@ public class HybridBulkScorer extends BulkScorer {
             }
             docIds[subQueryIndex] = doc;
         }
-        return docIds;
     }
 
     private boolean allDocIdsUsed(int[] docsIds, int max) {

@@ -18,6 +18,7 @@ import java.util.Objects;
  */
 @RequiredArgsConstructor
 public class HybridQueryDocIdStream extends DocIdStream {
+    private static final int BLOCK_SHIFT = 6;
     private final HybridBulkScorer hybridBulkScorer;
     @Setter
     private int base;
@@ -41,7 +42,7 @@ public class HybridQueryDocIdStream extends DocIdStream {
                 // calculate actual document ID within the window
                 // idx << 6 is equivalent to idx * 64 (block offset)
                 // numberOfTrailingZeros gives position within the block
-                final int docIndexInWindow = (idx << 6) | numberOfTrailingZeros;
+                final int docIndexInWindow = (idx << BLOCK_SHIFT) | numberOfTrailingZeros;
                 float[][] windowScores = hybridBulkScorer.getWindowScores();
                 for (int subQueryIndex = 0; subQueryIndex < windowScores.length; subQueryIndex++) {
                     if (Objects.isNull(windowScores[subQueryIndex])) {

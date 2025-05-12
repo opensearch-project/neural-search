@@ -23,6 +23,7 @@ import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.util.PriorityQueue;
 
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.query.HybridSubQueryScorer;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
 /**
@@ -132,22 +133,18 @@ public class HybridTopScoreDocCollector implements HybridSearchCollector {
 
         @Override
         public void collect(int doc) throws IOException {
-            if (Objects.isNull(getCompoundQueryScorer())) {
+            HybridSubQueryScorer compoundQueryScorer = getCompoundQueryScorer();
+            if (Objects.isNull(compoundQueryScorer)) {
                 return;
             }
             ensureSubQueryScoreQueues();
             // Increment total hit count which represents unique doc found on the shard
             totalHits++;
-            float[] scores = getCompoundQueryScorer().getSubQueryScores();
+            float[] scores = compoundQueryScorer.getSubQueryScores();
             int docWithBase = doc + docBase;
             for (int subQueryIndex = 0; subQueryIndex < scores.length; subQueryIndex++) {
                 float score = scores[subQueryIndex];
-                // if score is 0.0 there is no hits for that sub-query
-                if (score <= 0) {
-                    continue;
-                }
-
-                if (score < minScoreThresholds[subQueryIndex]) {
+                if (isNonCompetitiveScore(score, subQueryIndex)) {
                     continue;
                 }
 
@@ -170,6 +167,10 @@ public class HybridTopScoreDocCollector implements HybridSearchCollector {
                     );
                 }
             }
+        }
+
+        private boolean isNonCompetitiveScore(float score, int subQueryIndex) {
+            return score <= 0 && score < minScoreThresholds[subQueryIndex];
         }
 
         /**
