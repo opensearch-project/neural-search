@@ -15,7 +15,7 @@ import java.io.IOException;
 import java.util.Objects;
 
 /**
- * The abstract class for hybrid query collector
+ * The abstract class for hybrid query leaf collector
  */
 @Log4j2
 public abstract class HybridLeafCollector implements LeafCollector {
