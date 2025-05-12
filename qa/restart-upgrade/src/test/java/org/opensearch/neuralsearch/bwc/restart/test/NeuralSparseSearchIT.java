@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.bwc.restart;
+package org.opensearch.neuralsearch.bwc.restart.test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -12,7 +12,6 @@ import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.neuralsearch.util.TestUtils;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
-import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESSOR;
 import static org.opensearch.neuralsearch.util.TestUtils.objectToFloat;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 
@@ -33,8 +32,7 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
     public void testSparseEncodingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadSparseEncodingModel();
-            loadModel(modelId);
+            String modelId = getSparseEncodingModelId();
             createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
@@ -53,8 +51,7 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
         } else {
             String modelId = null;
             try {
-                modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                loadModel(modelId);
+                modelId = getSparseEncodingModelId();
                 addSparseEncodingDoc(
                     getIndexNameForTest(),
                     "1",
@@ -65,7 +62,7 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
                 );
                 validateTestIndex(modelId);
             } finally {
-                wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
+                wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, null);
             }
         }
 

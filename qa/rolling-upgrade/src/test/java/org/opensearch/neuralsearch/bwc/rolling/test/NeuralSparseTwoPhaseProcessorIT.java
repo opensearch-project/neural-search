@@ -2,18 +2,16 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.bwc.rolling;
+package org.opensearch.neuralsearch.bwc.rolling.test;
 
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
-import org.opensearch.neuralsearch.util.TestUtils;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
-import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESSOR;
 
 public class NeuralSparseTwoPhaseProcessorIT extends AbstractRollingUpgradeTestCase {
     // add prefix to avoid conflicts with other IT class, since don't wipe resources after first round
@@ -33,8 +31,7 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRollingUpgradeTestC
 
         switch (getClusterType()) {
             case OLD:
-                sparseModelId = uploadSparseEncodingModel();
-                loadModel(sparseModelId);
+                sparseModelId = getSparseEncodingModelId();
                 neuralSparseQueryBuilder.modelId(sparseModelId);
                 createPipelineForSparseEncodingProcessor(sparseModelId, SPARSE_INGEST_PIPELINE_NAME);
                 createIndexWithConfiguration(
@@ -51,24 +48,17 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRollingUpgradeTestC
                 assertNotNull(search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits"));
                 break;
             case MIXED:
-                sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                loadModel(sparseModelId);
+                sparseModelId = getSparseEncodingModelId();
                 neuralSparseQueryBuilder.modelId(sparseModelId);
                 assertNotNull(search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits"));
                 break;
             case UPGRADED:
                 try {
-                    sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                    loadModel(sparseModelId);
+                    sparseModelId = getSparseEncodingModelId();
                     neuralSparseQueryBuilder.modelId(sparseModelId);
                     assertNotNull(search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits"));
                 } finally {
-                    wipeOfTestResources(
-                        getIndexNameForTest(),
-                        SPARSE_INGEST_PIPELINE_NAME,
-                        sparseModelId,
-                        SPARSE_SEARCH_TWO_PHASE_PIPELINE_NAME
-                    );
+                    wipeOfTestResources(getIndexNameForTest(), SPARSE_INGEST_PIPELINE_NAME, SPARSE_SEARCH_TWO_PHASE_PIPELINE_NAME);
                 }
                 break;
             default:

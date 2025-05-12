@@ -32,6 +32,11 @@ jobs:
         with:
           java-version: ${{ matrix.java }}
 
+      - name: Collect Workflow Telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+        with:
+          comment_on_pr: false
+
       - name: Run NeuralSearch Restart-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
         run: |
           echo "Running restart-upgrade backwards compatibility tests ..."

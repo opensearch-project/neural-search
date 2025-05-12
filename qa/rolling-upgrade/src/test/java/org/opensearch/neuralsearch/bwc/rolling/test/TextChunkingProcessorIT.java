@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.bwc.rolling;
+package org.opensearch.neuralsearch.bwc.rolling.test;
 
 import java.net.URL;
 import java.nio.file.Files;
@@ -59,7 +59,7 @@ public class TextChunkingProcessorIT extends AbstractRollingUpgradeTestCase {
                     addDocument(indexName, "2", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
                     validateTestIndex(indexName, OUTPUT_FIELD, totalDocsCountUpgraded, expectedPassages);
                 } finally {
-                    wipeOfTestResources(indexName, PIPELINE_NAME, null, null);
+                    wipeOfTestResources(indexName, PIPELINE_NAME, null);
                 }
                 break;
             default:

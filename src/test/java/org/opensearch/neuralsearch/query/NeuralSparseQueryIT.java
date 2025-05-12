@@ -119,7 +119,7 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
             );
             assertEquals(expectedScore, objectToFloat(firstInnerHit3.get("_score")), DELTA);
         } finally {
-            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, null, null);
+            wipeOfTestResources(TEST_BASIC_INDEX_NAME, null, null);
         }
     }
 

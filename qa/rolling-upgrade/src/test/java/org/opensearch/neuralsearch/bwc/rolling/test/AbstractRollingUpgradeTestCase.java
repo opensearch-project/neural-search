@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.bwc.rolling;
+package org.opensearch.neuralsearch.bwc.rolling.test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -27,6 +27,9 @@ import org.opensearch.test.rest.OpenSearchRestTestCase;
 public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT {
 
     private static final Set<MLModelState> READY_FOR_INFERENCE_STATES = Set.of(MLModelState.LOADED, MLModelState.DEPLOYED);
+
+    private static String sparseEncodingModelId = null;
+    private static String textEmbeddingModelId = null;
 
     @Before
     protected String getIndexNameForTest() {
@@ -102,9 +105,15 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
         return Optional.ofNullable(System.getProperty(BWC_VERSION, null));
     }
 
-    protected String uploadTextEmbeddingModel() throws Exception {
+    protected String uploadAndDeployTextEmbeddingModel() throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        return registerModelGroupAndGetModelId(requestBody);
+        textEmbeddingModelId = registerModelGroupAndGetModelId(requestBody);
+        loadModel(textEmbeddingModelId);
+        return textEmbeddingModelId;
+    }
+
+    protected String getTextEmbeddingModelId() {
+        return textEmbeddingModelId;
     }
 
     protected String registerModelGroupAndGetModelId(String requestBody) throws Exception {
@@ -120,11 +129,6 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
         createPipelineProcessor(requestBody, pipelineName, modelId, null);
     }
 
-    protected String uploadTextImageEmbeddingModel() throws Exception {
-        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        return registerModelGroupAndGetModelId(requestBody);
-    }
-
     protected void createPipelineForTextImageProcessor(String modelId, String pipelineName) throws Exception {
         String requestBody = Files.readString(
             Path.of(classLoader.getResource("processor/PipelineForTextImageProcessorConfiguration.json").toURI())
@@ -132,11 +136,17 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
         createPipelineProcessor(requestBody, pipelineName, modelId, null);
     }
 
-    protected String uploadSparseEncodingModel() throws Exception {
+    protected String uploadAndDeploySparseEncodingModel() throws Exception {
         String requestBody = Files.readString(
             Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
         );
-        return registerModelGroupAndGetModelId(requestBody);
+        sparseEncodingModelId = registerModelGroupAndGetModelId(requestBody);
+        loadModel(sparseEncodingModelId);
+        return sparseEncodingModelId;
+    }
+
+    protected String getSparseEncodingModelId() {
+        return sparseEncodingModelId;
     }
 
     protected void createPipelineForSparseEncodingProcessor(String modelId, String pipelineName, Integer batchSize) throws Exception {

@@ -2,10 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.bwc.rolling;
-
-import org.opensearch.neuralsearch.util.TestUtils;
-import org.opensearch.ml.common.model.MLModelState;
+package org.opensearch.neuralsearch.bwc.rolling.test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,7 +11,6 @@ import java.util.Map;
 
 import static org.opensearch.neuralsearch.util.BatchIngestionUtils.prepareDataForBulkIngestion;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
-import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESSOR;
 
 public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
     private static final String SPARSE_PIPELINE = "BatchIngestionIT_sparse_pipeline_rolling";
@@ -27,18 +23,7 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
         String sparseModelId = null;
         switch (getClusterType()) {
             case OLD:
-                sparseModelId = uploadSparseEncodingModel();
-                loadModel(sparseModelId);
-                MLModelState oldModelState = getModelState(sparseModelId);
-                logger.info("Model state in OLD phase: {}", oldModelState);
-                if (oldModelState != MLModelState.LOADED && oldModelState != MLModelState.DEPLOYED) {
-                    logger.error(
-                        "Model {} is not in LOADED or DEPLOYED state in OLD phase. Current state: {}",
-                        sparseModelId,
-                        oldModelState
-                    );
-                    waitForModelToLoad(sparseModelId);
-                }
+                sparseModelId = getSparseEncodingModelId();
                 createPipelineForSparseEncodingProcessor(sparseModelId, SPARSE_PIPELINE, 2);
                 logger.info("Pipeline state in OLD phase: {}", getIngestionPipeline(SPARSE_PIPELINE));
                 createIndexWithConfiguration(
@@ -52,18 +37,6 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
                 validateDocCountAndInfo(indexName, 5, () -> getDocById(indexName, "4"), EMBEDDING_FIELD_NAME, Map.class);
                 break;
             case MIXED:
-                sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_PIPELINE), SPARSE_ENCODING_PROCESSOR);
-                loadModel(sparseModelId);
-                MLModelState mixedModelState = getModelState(sparseModelId);
-                logger.info("Model state in MIXED phase: {}", mixedModelState);
-                if (mixedModelState != MLModelState.LOADED && mixedModelState != MLModelState.DEPLOYED) {
-                    logger.error(
-                        "Model {} is not in LOADED or DEPLOYED state in MIXED phase. Current state: {}",
-                        sparseModelId,
-                        mixedModelState
-                    );
-                    waitForModelToLoad(sparseModelId);
-                }
                 logger.info("Pipeline state in MIXED phase: {}", getIngestionPipeline(SPARSE_PIPELINE));
                 List<Map<String, String>> docsForMixed = prepareDataForBulkIngestion(5, 5);
                 logger.info("Document count before MIXED phase ingestion: {}", getDocCount(indexName));
@@ -73,18 +46,6 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
                 break;
             case UPGRADED:
                 try {
-                    sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_PIPELINE), SPARSE_ENCODING_PROCESSOR);
-                    loadModel(sparseModelId);
-                    MLModelState upgradedModelState = getModelState(sparseModelId);
-                    logger.info("Model state in UPGRADED phase: {}", upgradedModelState);
-                    if (upgradedModelState != MLModelState.LOADED) {
-                        logger.error(
-                            "Model {} is not in LOADED state in UPGRADED phase. Current state: {}",
-                            sparseModelId,
-                            upgradedModelState
-                        );
-                        waitForModelToLoad(sparseModelId);
-                    }
                     logger.info("Pipeline state in UPGRADED phase: {}", getIngestionPipeline(SPARSE_PIPELINE));
                     List<Map<String, String>> docsForUpgraded = prepareDataForBulkIngestion(10, 5);
                     logger.info("Document count before UPGRADED phase ingestion: {}", getDocCount(indexName));
@@ -92,7 +53,7 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
                     logger.info("Document count after UPGRADED phase ingestion: {}", getDocCount(indexName));
                     validateDocCountAndInfo(indexName, 15, () -> getDocById(indexName, "14"), EMBEDDING_FIELD_NAME, Map.class);
                 } finally {
-                    wipeOfTestResources(indexName, SPARSE_PIPELINE, sparseModelId, null);
+                    wipeOfTestResources(indexName, SPARSE_PIPELINE, null);
                 }
                 break;
             default:

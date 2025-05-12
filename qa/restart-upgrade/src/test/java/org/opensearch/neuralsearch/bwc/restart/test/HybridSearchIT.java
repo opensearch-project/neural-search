@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.bwc.restart;
+package org.opensearch.neuralsearch.bwc.restart.test;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -13,10 +13,8 @@ import java.util.Map;
 
 import org.opensearch.index.query.MatchQueryBuilder;
 
-import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
-import static org.opensearch.neuralsearch.util.TestUtils.TEXT_EMBEDDING_PROCESSOR;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
 
@@ -57,8 +55,7 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadTextEmbeddingModel();
-            loadModel(modelId);
+            String modelId = getTextEmbeddingModelId();
             createPipelineProcessor(modelId, pipelineName);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
@@ -70,8 +67,7 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         } else {
             String modelId = null;
             try {
-                modelId = getModelId(getIngestionPipeline(pipelineName), TEXT_EMBEDDING_PROCESSOR);
-                loadModel(modelId);
+                modelId = getTextEmbeddingModelId();
                 addDocuments(getIndexNameForTest(), false);
                 HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null, null, null);
                 validateTestIndex(getIndexNameForTest(), searchPipelineName, hybridQueryBuilder);
@@ -84,7 +80,7 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
                 );
                 validateTestIndex(getIndexNameForTest(), searchPipelineName, hybridQueryBuilder);
             } finally {
-                wipeOfTestResources(getIndexNameForTest(), pipelineName, modelId, searchPipelineName);
+                wipeOfTestResources(getIndexNameForTest(), pipelineName, searchPipelineName);
             }
         }
     }

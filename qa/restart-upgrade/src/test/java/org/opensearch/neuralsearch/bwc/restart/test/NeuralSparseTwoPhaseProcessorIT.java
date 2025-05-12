@@ -2,18 +2,16 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.bwc.restart;
+package org.opensearch.neuralsearch.bwc.restart.test;
 
 import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
-import org.opensearch.neuralsearch.util.TestUtils;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
-import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESSOR;
 
 public class NeuralSparseTwoPhaseProcessorIT extends AbstractRestartUpgradeRestTestCase {
 
@@ -27,8 +25,7 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRestartUpgradeRestT
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_ENCODING_FIELD).queryText(TEXT_1);
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadSparseEncodingModel();
-            loadModel(modelId);
+            String modelId = getSparseEncodingModelId();
             neuralSparseQueryBuilder.modelId(modelId);
             createPipelineForSparseEncodingProcessor(modelId, NEURAL_SPARSE_INGEST_PIPELINE_NAME);
             createIndexWithConfiguration(
@@ -47,8 +44,7 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRestartUpgradeRestT
         } else {
             String modelId = null;
             try {
-                modelId = TestUtils.getModelId(getIngestionPipeline(NEURAL_SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                loadModel(modelId);
+                modelId = getSparseEncodingModelId();
                 neuralSparseQueryBuilder.modelId(modelId);
                 Object resultWith2PhasePipeline = search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits");
                 assertNotNull(resultWith2PhasePipeline);
@@ -56,7 +52,6 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRestartUpgradeRestT
                 wipeOfTestResources(
                     getIndexNameForTest(),
                     NEURAL_SPARSE_INGEST_PIPELINE_NAME,
-                    modelId,
                     NEURAL_SPARSE_TWO_PHASE_SEARCH_PIPELINE_NAME
                 );
             }

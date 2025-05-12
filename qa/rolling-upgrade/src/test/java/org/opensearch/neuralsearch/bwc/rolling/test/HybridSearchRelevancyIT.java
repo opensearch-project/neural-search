@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.bwc.rolling;
+package org.opensearch.neuralsearch.bwc.rolling.test;
 
 import org.opensearch.common.Randomness;
 import org.opensearch.index.query.MatchQueryBuilder;
@@ -93,7 +93,7 @@ public class HybridSearchRelevancyIT extends AbstractRollingUpgradeTestCase {
         String[] testDocuments = generateTestDocuments(NUM_DOCS);
         switch (getClusterType()) {
             case OLD:
-                modelId = uploadTextEmbeddingModel();
+                modelId = getTextEmbeddingModelId();
                 loadModel(modelId);
                 createPipelineProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
@@ -140,7 +140,7 @@ public class HybridSearchRelevancyIT extends AbstractRollingUpgradeTestCase {
                     HybridQueryBuilder upgradedClusterQuery = createHybridQuery(modelId, QUERY_TEXT);
                     getAndAssertQueryResults(upgradedClusterQuery, modelId, 3 * NUM_DOCS);
                 } finally {
-                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, SEARCH_PIPELINE_NAME);
+                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, SEARCH_PIPELINE_NAME);
                 }
                 break;
             default:

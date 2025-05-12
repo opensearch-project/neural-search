@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.bwc.rolling;
+package org.opensearch.neuralsearch.bwc.rolling.test;
 
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
@@ -34,8 +34,7 @@ public class RestNeuralStatsActionIT extends AbstractRollingUpgradeTestCase {
 
         switch (getClusterType()) {
             case OLD:
-                modelId = uploadTextEmbeddingModel();
-                loadModel(modelId);
+                modelId = getTextEmbeddingModelId();
                 createPipelineProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
                     getIndexNameForTest(),
@@ -70,7 +69,7 @@ public class RestNeuralStatsActionIT extends AbstractRollingUpgradeTestCase {
                     assertEquals(0, getNestedValue(aggregatedNodeStats, EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS));
                     assertEquals(1, getNestedValue(infoStats, InfoStatName.TEXT_EMBEDDING_PROCESSORS));
                 } finally {
-                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
+                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, null);
                 }
                 break;
             default:

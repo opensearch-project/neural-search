@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.bwc.rolling;
+package org.opensearch.neuralsearch.bwc.rolling.test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -12,9 +12,7 @@ import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.neuralsearch.util.TestUtils;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
-import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESSOR;
 import static org.opensearch.neuralsearch.util.TestUtils.objectToFloat;
-import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 
 public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
@@ -41,8 +39,7 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER, 90);
         switch (getClusterType()) {
             case OLD:
-                modelId = uploadSparseEncodingModel();
-                loadModel(modelId);
+                modelId = getSparseEncodingModelId();
                 createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
                     getIndexNameForTest(),
@@ -59,7 +56,7 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
                 );
                 break;
             case MIXED:
-                modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                modelId = getSparseEncodingModelId();
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
@@ -79,9 +76,8 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
                 break;
             case UPGRADED:
                 try {
-                    modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                    modelId = getSparseEncodingModelId();
                     int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                    loadModel(modelId);
                     addSparseEncodingDoc(
                         getIndexNameForTest(),
                         "2",
@@ -92,7 +88,7 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
                     );
                     validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId);
                 } finally {
-                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
+                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, null);
                 }
                 break;
             default:
@@ -100,10 +96,9 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
         }
     }
 
-    private void validateTestIndexOnUpgrade(final int numberOfDocs, final String modelId) throws Exception {
+    private void validateTestIndexOnUpgrade(final int numberOfDocs, final String modelId) {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
-        loadModel(modelId);
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_SPARSE_ENCODING_FIELD)
             .queryText(TEXT)

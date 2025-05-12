@@ -164,6 +164,18 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         }
     }
 
+    public void cleanUpModelId(final String modelId) {
+        if (modelId != null) {
+            try {
+                deleteModel(modelId);
+            } catch (AssertionError e) {
+                // sometimes we have flaky test that the model state doesn't change after call undeploy api
+                // for this case we can call undeploy api one more time
+                deleteModel(modelId);
+            }
+        }
+    }
+
     protected boolean shouldCleanUpResources() {
         return true;
     }
@@ -2089,26 +2101,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     @SneakyThrows
-    protected void wipeOfTestResources(
-        final String indexName,
-        final String ingestPipeline,
-        final String modelId,
-        final String searchPipeline
-    ) {
+    protected void wipeOfTestResources(final String indexName, final String ingestPipeline, final String searchPipeline) {
         if (ingestPipeline != null) {
             deleteIngestPipeline(ingestPipeline);
         }
         if (searchPipeline != null) {
             deleteSearchPipeline(searchPipeline);
-        }
-        if (modelId != null) {
-            try {
-                deleteModel(modelId);
-            } catch (AssertionError e) {
-                // sometimes we have flaky test that the model state doesn't change after call undeploy api
-                // for this case we can call undeploy api one more time
-                deleteModel(modelId);
-            }
         }
         if (indexName != null) {
             deleteIndex(indexName);

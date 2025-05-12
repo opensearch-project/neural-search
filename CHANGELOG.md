@@ -16,7 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Bug Fixes
 - Fix score value as null for single shard when sorting is not done on score field ([#1277](https://github.com/opensearch-project/neural-search/pull/1277))
 - Return bad request for stats API calls with invalid stat names instead of ignoring them ([#1291](https://github.com/opensearch-project/neural-search/pull/1291))
-
+- Fix Flaky BWC Tests by adding shared model id and test resources clean up stage at the end of all bwc tests ([#1319](https://github.com/opensearch-project/neural-search/pull/1319))
 
 ### Infrastructure
 

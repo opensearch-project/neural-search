@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.bwc.restart;
+package org.opensearch.neuralsearch.bwc.restart.test;
 
 import java.net.URL;
 import java.nio.file.Files;
@@ -44,7 +44,7 @@ public class TextChunkingProcessorIT extends AbstractRestartUpgradeRestTestCase 
                 addDocument(indexName, "1", INPUT_FIELD, TEST_INGEST_TEXT, null, null);
                 validateTestIndex(indexName, OUTPUT_FIELD, 2, expectedPassages);
             } finally {
-                wipeOfTestResources(indexName, PIPELINE_NAME, null, null);
+                wipeOfTestResources(indexName, PIPELINE_NAME, null);
             }
         }
     }
