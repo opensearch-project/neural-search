@@ -2,9 +2,9 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch.bwc.rolling;
 
+import org.opensearch.common.Randomness;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
@@ -34,58 +34,58 @@ public class HybridSearchRelevancyIT extends AbstractRollingUpgradeTestCase {
 
     // Arrays of words to generate random meaningful content
     private static final String[] SUBJECTS = {
-            "Machine learning",
-            "Deep learning",
-            "Neural networks",
-            "Artificial intelligence",
-            "Data science",
-            "Natural language processing",
-            "Computer vision",
-            "Robotics",
-            "Big data",
-            "Cloud computing",
-            "Edge computing",
-            "Internet of Things" };
+        "Machine learning",
+        "Deep learning",
+        "Neural networks",
+        "Artificial intelligence",
+        "Data science",
+        "Natural language processing",
+        "Computer vision",
+        "Robotics",
+        "Big data",
+        "Cloud computing",
+        "Edge computing",
+        "Internet of Things" };
 
     private static final String[] VERBS = {
-            "analyzes",
-            "processes",
-            "transforms",
-            "improves",
-            "optimizes",
-            "enhances",
-            "revolutionizes",
-            "accelerates",
-            "streamlines",
-            "powers",
-            "enables",
-            "drives" };
+        "analyzes",
+        "processes",
+        "transforms",
+        "improves",
+        "optimizes",
+        "enhances",
+        "revolutionizes",
+        "accelerates",
+        "streamlines",
+        "powers",
+        "enables",
+        "drives" };
 
     private static final String[] OBJECTS = {
-            "data processing",
-            "pattern recognition",
-            "decision making",
-            "business operations",
-            "computational tasks",
-            "system performance",
-            "automation processes",
-            "data analysis",
-            "resource utilization",
-            "technological innovation",
-            "software development",
-            "cloud infrastructure" };
+        "data processing",
+        "pattern recognition",
+        "decision making",
+        "business operations",
+        "computational tasks",
+        "system performance",
+        "automation processes",
+        "data analysis",
+        "resource utilization",
+        "technological innovation",
+        "software development",
+        "cloud infrastructure" };
 
     private static final String[] MODIFIERS = {
-            "efficiently",
-            "rapidly",
-            "intelligently",
-            "automatically",
-            "significantly",
-            "dramatically",
-            "consistently",
-            "reliably",
-            "effectively",
-            "seamlessly" };
+        "efficiently",
+        "rapidly",
+        "intelligently",
+        "automatically",
+        "significantly",
+        "dramatically",
+        "consistently",
+        "reliably",
+        "effectively",
+        "seamlessly" };
 
     public void testSearchHitsAfterNormalization_whenIndexWithMultipleShards_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
@@ -97,19 +97,19 @@ public class HybridSearchRelevancyIT extends AbstractRollingUpgradeTestCase {
                 loadModel(modelId);
                 createPipelineProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
-                        indexName,
-                        Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
-                        PIPELINE_NAME
+                    indexName,
+                    Files.readString(Path.of(classLoader.getResource("processor/IndexMappings.json").toURI())),
+                    PIPELINE_NAME
                 );
                 // ingest test documents
                 for (int i = 0; i < testDocuments.length; i++) {
                     addDocument(indexName, String.valueOf(i), TEST_FIELD, testDocuments[i], null, null);
                 }
                 createSearchPipeline(
-                        SEARCH_PIPELINE_NAME,
-                        "l2",
-                        "arithmetic_mean",
-                        Map.of("weights", Arrays.toString(new float[] { 0.5f, 0.5f }))
+                    SEARCH_PIPELINE_NAME,
+                    "l2",
+                    "arithmetic_mean",
+                    Map.of("weights", Arrays.toString(new float[] { 0.5f, 0.5f }))
                 );
 
                 // execute hybrid query and store results
@@ -150,7 +150,7 @@ public class HybridSearchRelevancyIT extends AbstractRollingUpgradeTestCase {
 
     private String[] generateTestDocuments(int count) {
         String[] documents = new String[count];
-        Random random = new Random();
+        Random random = Randomness.get();
 
         for (int i = 0; i < count; i++) {
             String subject = SUBJECTS[random.nextInt(SUBJECTS.length)];
@@ -162,19 +162,19 @@ public class HybridSearchRelevancyIT extends AbstractRollingUpgradeTestCase {
             boolean includeModifier = random.nextDouble() < 0.7;
 
             documents[i] = includeModifier
-                    ? String.format("%s %s %s %s", subject, verb, object, modifier)
-                    : String.format("%s %s %s", subject, verb, object);
+                ? String.format(Locale.ROOT, "%s %s %s %s", subject, verb, object, modifier)
+                : String.format(Locale.ROOT, "%s %s %s", subject, verb, object);
         }
         return documents;
     }
 
     private HybridQueryBuilder createHybridQuery(String modelId, String queryText) {
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-                .fieldName(VECTOR_EMBEDDING_FIELD)
-                .modelId(modelId)
-                .queryText(queryText)
-                .k(10 * NUM_DOCS)
-                .build();
+            .fieldName(VECTOR_EMBEDDING_FIELD)
+            .modelId(modelId)
+            .queryText(queryText)
+            .k(10 * NUM_DOCS)
+            .build();
 
         MatchQueryBuilder matchQueryBuilder = new MatchQueryBuilder("text", queryText);
 
@@ -188,11 +188,11 @@ public class HybridSearchRelevancyIT extends AbstractRollingUpgradeTestCase {
     private void getAndAssertQueryResults(HybridQueryBuilder queryBuilder, String modelId, int queryResultSize) throws Exception {
         loadModel(modelId);
         Map<String, Object> searchResponseAsMap = search(
-                getIndexNameForTest(),
-                queryBuilder,
-                null,
-                queryResultSize,
-                Map.of("search_pipeline", SEARCH_PIPELINE_NAME)
+            getIndexNameForTest(),
+            queryBuilder,
+            null,
+            queryResultSize,
+            Map.of("search_pipeline", SEARCH_PIPELINE_NAME)
         );
         int hits = getHitCount(searchResponseAsMap);
         assertEquals(queryResultSize, hits);
