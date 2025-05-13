@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.search.collector;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -22,7 +23,7 @@ import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.util.PriorityQueue;
 
 import lombok.extern.log4j.Log4j2;
-import org.opensearch.neuralsearch.query.HybridQueryScorer;
+import org.opensearch.neuralsearch.query.HybridSubQueryScorer;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
 /**
@@ -38,7 +39,7 @@ public class HybridTopScoreDocCollector implements HybridSearchCollector {
     private int totalHits;
     private int[] collectedHitsPerSubQuery;
     private final int numOfHits;
-    private PriorityQueue<ScoreDoc>[] compoundScores;
+    private List<PriorityQueue<ScoreDoc>> compoundScores;
     @Getter
     private float maxScore = 0.0f;
 
@@ -50,89 +51,7 @@ public class HybridTopScoreDocCollector implements HybridSearchCollector {
     @Override
     public LeafCollector getLeafCollector(LeafReaderContext context) {
         docBase = context.docBase;
-
-        return new LeafCollector() {
-            HybridQueryScorer compoundQueryScorer;
-
-            @Override
-            public void setScorer(Scorable scorer) throws IOException {
-                if (scorer instanceof HybridQueryScorer) {
-                    log.debug("passed scorer is of type HybridQueryScorer, saving it for collecting documents and scores");
-                    compoundQueryScorer = (HybridQueryScorer) scorer;
-                } else {
-                    compoundQueryScorer = getHybridQueryScorer(scorer);
-                    if (Objects.isNull(compoundQueryScorer)) {
-                        log.error(
-                            String.format(Locale.ROOT, "cannot find scorer of type HybridQueryScorer in a hierarchy of scorer %s", scorer)
-                        );
-                    }
-                }
-            }
-
-            private HybridQueryScorer getHybridQueryScorer(final Scorable scorer) throws IOException {
-                if (scorer == null) {
-                    return null;
-                }
-                if (scorer instanceof HybridQueryScorer) {
-                    return (HybridQueryScorer) scorer;
-                }
-                for (Scorable.ChildScorable childScorable : scorer.getChildren()) {
-                    HybridQueryScorer hybridQueryScorer = getHybridQueryScorer(childScorable.child());
-                    if (Objects.nonNull(hybridQueryScorer)) {
-                        log.debug(
-                            String.format(
-                                Locale.ROOT,
-                                "found hybrid query scorer, it's child of scorer %s",
-                                childScorable.child().getClass().getSimpleName()
-                            )
-                        );
-                        return hybridQueryScorer;
-                    }
-                }
-                return null;
-            }
-
-            @Override
-            public void collect(int doc) throws IOException {
-                if (Objects.isNull(compoundQueryScorer)) {
-                    throw new IllegalArgumentException("scorers are null for all sub-queries in hybrid query");
-                }
-                float[] subScoresByQuery = compoundQueryScorer.hybridScores();
-                // iterate over results for each query
-                if (compoundScores == null) {
-                    compoundScores = new PriorityQueue[subScoresByQuery.length];
-                    for (int i = 0; i < subScoresByQuery.length; i++) {
-                        compoundScores[i] = new HitQueue(numOfHits, false);
-                    }
-                    collectedHitsPerSubQuery = new int[subScoresByQuery.length];
-                }
-                // Increment total hit count which represents unique doc found on the shard
-                totalHits++;
-                hitsThresholdChecker.incrementHitCount();
-                for (int i = 0; i < subScoresByQuery.length; i++) {
-                    float score = subScoresByQuery[i];
-                    // if score is 0.0 there is no hits for that sub-query
-                    if (score == 0) {
-                        continue;
-                    }
-                    if (hitsThresholdChecker.isThresholdReached() && totalHitsRelation == TotalHits.Relation.EQUAL_TO) {
-                        log.info(
-                            "hit count threshold reached: total hits={}, threshold={}, action=updating_results",
-                            totalHits,
-                            hitsThresholdChecker.getTotalHitsThreshold()
-                        );
-                        totalHitsRelation = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;
-                    }
-                    collectedHitsPerSubQuery[i]++;
-                    PriorityQueue<ScoreDoc> pq = compoundScores[i];
-                    ScoreDoc currentDoc = new ScoreDoc(doc + docBase, score);
-                    maxScore = Math.max(currentDoc.score, maxScore);
-                    // this way we're inserting into heap and do nothing else unless we reach the capacity
-                    // after that we pull out the lowest score element on each insert
-                    pq.insertWithOverflow(currentDoc);
-                }
-            }
-        };
+        return new HybridTopScoreLeafCollector();
     }
 
     @Override
@@ -149,12 +68,12 @@ public class HybridTopScoreDocCollector implements HybridSearchCollector {
             return new ArrayList<>();
         }
         final List<TopDocs> topDocs = new ArrayList<>();
-        for (int i = 0; i < compoundScores.length; i++) {
+        for (int i = 0; i < compoundScores.size(); i++) {
             topDocs.add(
                 topDocsPerQuery(
                     0,
-                    Math.min(collectedHitsPerSubQuery[i], compoundScores[i].size()),
-                    compoundScores[i],
+                    Math.min(collectedHitsPerSubQuery[i], compoundScores.get(i).size()),
+                    compoundScores.get(i),
                     collectedHitsPerSubQuery[i]
                 )
             );
@@ -196,4 +115,75 @@ public class HybridTopScoreDocCollector implements HybridSearchCollector {
             }
         }
     }
+
+    /**
+     * Leaf collector to collect top docs for each sub query
+     */
+    protected class HybridTopScoreLeafCollector extends HybridLeafCollector {
+        float[] minScoreThresholds;
+
+        @Override
+        public void setScorer(Scorable scorer) throws IOException {
+            super.setScorer(scorer);
+            if (Objects.isNull(minScoreThresholds)) {
+                minScoreThresholds = new float[getCompoundQueryScorer().getNumOfSubQueries()];
+                Arrays.fill(minScoreThresholds, Float.MIN_VALUE);
+            }
+        }
+
+        @Override
+        public void collect(int doc) throws IOException {
+            HybridSubQueryScorer compoundQueryScorer = getCompoundQueryScorer();
+            if (Objects.isNull(compoundQueryScorer)) {
+                return;
+            }
+            ensureSubQueryScoreQueues();
+            // Increment total hit count which represents unique doc found on the shard
+            totalHits++;
+            float[] scores = compoundQueryScorer.getSubQueryScores();
+            int docWithBase = doc + docBase;
+            for (int subQueryIndex = 0; subQueryIndex < scores.length; subQueryIndex++) {
+                float score = scores[subQueryIndex];
+                if (isNonCompetitiveScore(score, subQueryIndex)) {
+                    continue;
+                }
+
+                if (hitsThresholdChecker.isThresholdReached() && totalHitsRelation == TotalHits.Relation.EQUAL_TO) {
+                    totalHitsRelation = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;
+                }
+                collectedHitsPerSubQuery[subQueryIndex]++;
+                PriorityQueue<ScoreDoc> pq = compoundScores.get(subQueryIndex);
+                ScoreDoc currentDoc = new ScoreDoc(docWithBase, score);
+                maxScore = Math.max(currentDoc.score, maxScore);
+                // this way we're inserting into heap and do nothing else unless we reach the capacity
+                // after that we pull out the lowest score element on each insert
+                ScoreDoc evictedScoreDoc = pq.insertWithOverflow(currentDoc);
+                if (Objects.nonNull(evictedScoreDoc)) {
+                    float newThresholdScore = evictedScoreDoc.score;
+                    minScoreThresholds[subQueryIndex] = Math.max(minScoreThresholds[subQueryIndex], newThresholdScore);
+                    compoundQueryScorer.getMinScores()[subQueryIndex] = Math.max(
+                        compoundQueryScorer.getMinScores()[subQueryIndex],
+                        newThresholdScore
+                    );
+                }
+            }
+        }
+
+        private boolean isNonCompetitiveScore(float score, int subQueryIndex) {
+            return score <= 0 && score < minScoreThresholds[subQueryIndex];
+        }
+
+        /**
+         * Initialize compound score queues for each sub query if it's not initialized already
+         */
+        private void ensureSubQueryScoreQueues() {
+            if (Objects.isNull(compoundScores)) {
+                compoundScores = new ArrayList<>(compoundQueryScorer.getNumOfSubQueries());
+                for (int i = 0; i < compoundQueryScorer.getNumOfSubQueries(); i++) {
+                    compoundScores.add(new HitQueue(numOfHits, false));
+                }
+                collectedHitsPerSubQuery = new int[compoundQueryScorer.getNumOfSubQueries()];
+            }
+        }
+    };
 }
