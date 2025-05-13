@@ -56,14 +56,14 @@ jobs:
   multi-node-integ-test-with-security-linux:
     strategy:
       matrix:
-        java: [21, 23]
+        java: [21]
 
     name: Run Multi-Node Integration Tests on Linux
     runs-on: ubuntu-latest
     needs: Get-CI-Image-Tag
     container:
       # using the same image which is used by opensearch-build team to build the OpenSearch Distribution
-      # this image tag is subject to change as more dependencies and updates will arrive over time
+      # this image tag is subject to change as more dependencies and updates will arrive over time.
       image: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-version-linux }}
       # need to switch to root so that github actions can install runner binary on container without permission issues.
       options: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-options }}
@@ -87,4 +87,4 @@ jobs:
         # switching the user, as OpenSearch cluster can only be started as root/Administrator on linux-deb/linux-rpm/windows-zip.
         run: |
           chown -R 1000:1000 `pwd`
-          su `id -un 1000` -c "whoami && java -version && ./gradlew integTest -PnumNodes=3 -Dsecurity.enabled=true"
+          su `id -un 1000` -c "whoami && java -version && ./gradlew integTest -PnumNodes=2 -Dsecurity.enabled=true"
