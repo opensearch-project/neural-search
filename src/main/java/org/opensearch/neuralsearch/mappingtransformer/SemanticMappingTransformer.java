@@ -190,7 +190,7 @@ public class SemanticMappingTransformer implements MappingTransformer {
             final List<String> fieldPathList = modelIdToFieldPathMap.get(modelId);
             for (String fieldPath : fieldPathList) {
                 try {
-                    final Map<String, Object> semanticInfoConfig = createSemanticInfoField(mlModel);
+                    final Map<String, Object> semanticInfoConfig = createSemanticInfoField(mlModel, modelId);
                     final Map<String, Object> fieldConfig = semanticFieldPathToConfigMap.get(fieldPath);
                     setSemanticInfoField(mappings, fieldPath, fieldConfig.get(SEMANTIC_INFO_FIELD_NAME), semanticInfoConfig);
                 } catch (IllegalArgumentException e) {
@@ -207,9 +207,9 @@ public class SemanticMappingTransformer implements MappingTransformer {
     }
 
     @VisibleForTesting
-    private Map<String, Object> createSemanticInfoField(final @NonNull MLModel modelConfig) {
+    private Map<String, Object> createSemanticInfoField(final @NonNull MLModel modelConfig, String modelId) {
         SemanticInfoConfigBuilder builder = new SemanticInfoConfigBuilder(xContentRegistry);
-        return builder.mlModel(modelConfig).build();
+        return builder.mlModel(modelConfig, modelId).build();
     }
 
     @SuppressWarnings("unchecked")

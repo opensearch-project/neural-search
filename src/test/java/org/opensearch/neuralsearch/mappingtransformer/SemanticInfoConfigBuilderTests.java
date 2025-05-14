@@ -24,7 +24,10 @@ public class SemanticInfoConfigBuilderTests extends OpenSearchTestCase {
         // prepare mock model config
         final MLModel unsupportedModel = MLModel.builder().modelId("unsupportedModelId").algorithm(FunctionName.QUESTION_ANSWERING).build();
 
-        final IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> builder.mlModel(unsupportedModel));
+        final IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> builder.mlModel(unsupportedModel, "unsupportedModelId")
+        );
 
         final String expectedErrorMessage =
             "The algorithm QUESTION_ANSWERING of the model unsupportedModelId is not supported in the semantic field. Supported algorithms:";
@@ -45,7 +48,10 @@ public class SemanticInfoConfigBuilderTests extends OpenSearchTestCase {
         when(remoteTextEmbeddingModelConfig.getAllConfig()).thenReturn("{\"space_type\":\"l2\"}");
         when(remoteTextEmbeddingModelConfig.getEmbeddingDimension()).thenReturn(null);
 
-        final IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> builder.mlModel(dummyModel));
+        final IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> builder.mlModel(dummyModel, "dummyModelId")
+        );
 
         final String expectedErrorMessage =
             "Model dummyModelId is a remote text embedding model but the embedding dimension is not defined in the model config.";
@@ -72,7 +78,7 @@ public class SemanticInfoConfigBuilderTests extends OpenSearchTestCase {
 
         final IllegalArgumentException exception = assertThrows(
             IllegalArgumentException.class,
-            () -> builder.mlModel(remoteTextEmbeddingModel)
+            () -> builder.mlModel(remoteTextEmbeddingModel, "dummyModelId")
         );
 
         final String expectedErrorMessage = "space_type is not defined or not a string in the all_config of the model dummyModelId.";
