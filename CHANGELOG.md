@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Return bad request for stats API calls with invalid stat names instead of ignoring them ([#1291](https://github.com/opensearch-project/neural-search/pull/1291))
 
 ### Infrastructure
+- Support multi node integration testing ([#1320](https://github.com/opensearch-project/neural-search/pull/1320))
 
 ### Documentation
 
