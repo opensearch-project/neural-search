@@ -107,7 +107,7 @@ public class RRFProcessorFactoryTests extends OpenSearchTestCase {
         boolean ignoreFailure = false;
 
         Map<String, Object> config = new HashMap<>();
-        config.put(COMBINATION_CLAUSE, new HashMap<>(Map.of(TECHNIQUE, "rrf", PARAMETERS, new HashMap<>(Map.of("rank_constant", -1)))));
+        config.put(COMBINATION_CLAUSE, new HashMap<>(Map.of(TECHNIQUE, "rrf", RRFNormalizationTechnique.PARAM_NAME_RANK_CONSTANT, -1)));
         Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
         IllegalArgumentException exception = expectThrows(
             IllegalArgumentException.class,
@@ -131,7 +131,7 @@ public class RRFProcessorFactoryTests extends OpenSearchTestCase {
         boolean ignoreFailure = false;
 
         Map<String, Object> config = new HashMap<>();
-        config.put(COMBINATION_CLAUSE, new HashMap<>(Map.of(TECHNIQUE, "rrf", PARAMETERS, new HashMap<>(Map.of("rank_constant", 50_000)))));
+        config.put(COMBINATION_CLAUSE, new HashMap<>(Map.of(TECHNIQUE, "rrf", RRFNormalizationTechnique.PARAM_NAME_RANK_CONSTANT, 50_000)));
         Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
         IllegalArgumentException exception = expectThrows(
             IllegalArgumentException.class,
@@ -157,7 +157,7 @@ public class RRFProcessorFactoryTests extends OpenSearchTestCase {
         Map<String, Object> config = new HashMap<>();
         config.put(
             COMBINATION_CLAUSE,
-            new HashMap<>(Map.of(TECHNIQUE, "rrf", PARAMETERS, new HashMap<>(Map.of("rank_constant", "string"))))
+            new HashMap<>(Map.of(TECHNIQUE, "rrf", RRFNormalizationTechnique.PARAM_NAME_RANK_CONSTANT, "String"))
         );
         Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
         IllegalArgumentException exception = expectThrows(
@@ -182,7 +182,7 @@ public class RRFProcessorFactoryTests extends OpenSearchTestCase {
         Map<String, Object> config = new HashMap<>();
         config.put(
             COMBINATION_CLAUSE,
-            new HashMap<>(Map.of(TECHNIQUE, "my_function", PARAMETERS, new HashMap<>(Map.of("rank_constant", 100))))
+            new HashMap<>(Map.of(TECHNIQUE, "my_function", RRFNormalizationTechnique.PARAM_NAME_RANK_CONSTANT, 100))
         );
         Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
         IllegalArgumentException exception = expectThrows(
@@ -205,7 +205,7 @@ public class RRFProcessorFactoryTests extends OpenSearchTestCase {
         boolean ignoreFailure = false;
 
         Map<String, Object> config = new HashMap<>();
-        config.put(COMBINATION_CLAUSE, new HashMap<>(Map.of(TECHNIQUE, "rrf", PARAMETERS, new HashMap<>(Map.of("rank_constant", 100)))));
+        config.put(COMBINATION_CLAUSE, new HashMap<>(Map.of(TECHNIQUE, "rrf", RRFNormalizationTechnique.PARAM_NAME_RANK_CONSTANT, 100)));
         config.put(
             NORMALIZATION_CLAUSE,
             new HashMap<>(Map.of(TECHNIQUE, ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME, PARAMETERS, new HashMap<>(Map.of())))

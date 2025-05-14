@@ -72,9 +72,7 @@ public class RRFProcessorFactory implements Processor.Factory<SearchPhaseResults
                 );
             }
             Map<String, Object> params = readOptionalMap(RRFProcessor.TYPE, tag, combinationClause, PARAMETERS);
-            if (Objects.nonNull(params) && params.size() > 0) {
-                scoreCombinationTechnique = scoreCombinationFactory.createCombination(combinationTechnique, params);
-            }
+            scoreCombinationTechnique = scoreCombinationFactory.createCombination(combinationTechnique, params);
         }
         log.info(
             "Creating search phase results processor of type [{}] with normalization [{}] and combination [{}]",

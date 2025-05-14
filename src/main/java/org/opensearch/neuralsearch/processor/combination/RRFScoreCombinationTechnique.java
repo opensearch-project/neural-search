@@ -30,7 +30,6 @@ public class RRFScoreCombinationTechnique implements ScoreCombinationTechnique, 
     private static final Float ZERO_SCORE = 0.0f;
     private final ScoreCombinationUtil scoreCombinationUtil;
 
-    // Not currently using weights for RRF, no need to modify or verify these params
     public RRFScoreCombinationTechnique(final Map<String, Object> params, final ScoreCombinationUtil combinationUtil) {
         scoreCombinationUtil = combinationUtil;
         scoreCombinationUtil.validateParams(params, SUPPORTED_PARAMS);
