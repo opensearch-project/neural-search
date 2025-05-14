@@ -19,7 +19,7 @@ public class SemanticParameters {
     public SemanticParameters(String modelId, String searchModelId, String rawFieldType, String semanticInfoFieldName) {
         this.modelId = modelId;
         this.searchModelId = searchModelId;
-        this.semanticInfoFieldName = semanticInfoFieldName;
         this.rawFieldType = rawFieldType;
+        this.semanticInfoFieldName = semanticInfoFieldName;
     }
 }
