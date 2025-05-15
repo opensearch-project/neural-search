@@ -546,7 +546,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testExplain_whenRRFProcessor_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
-        createRRFSearchPipeline(RRF_SEARCH_PIPELINE, true);
+        createRRFSearchPipeline(RRF_SEARCH_PIPELINE, Arrays.asList(), true);
 
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
         KNNQueryBuilder knnQueryBuilder = KNNQueryBuilder.builder()

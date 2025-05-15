@@ -2212,11 +2212,11 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     @SneakyThrows
     protected void createDefaultRRFSearchPipeline() {
-        createRRFSearchPipeline(RRF_SEARCH_PIPELINE, false);
+        createRRFSearchPipeline(RRF_SEARCH_PIPELINE, Arrays.asList(), false);
     }
 
     @SneakyThrows
-    protected void createRRFSearchPipeline(final String pipelineName, boolean addExplainResponseProcessor) {
+    protected void createRRFSearchPipeline(final String pipelineName, final List<Double> weights, boolean addExplainResponseProcessor) {
         XContentBuilder builder = XContentFactory.jsonBuilder()
             .startObject()
             .field("description", "Post processor for hybrid search")
@@ -2225,10 +2225,16 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             .startObject("score-ranker-processor")
             .startObject("combination")
             .field("technique", "rrf")
-            .endObject()
-            .endObject()
-            .endObject()
-            .endArray();
+            .startObject("parameters");
+        if (weights.size() > 0) {
+            builder.startArray("weights");
+            for (Double weight : weights) {
+                builder.value(weight);
+            }
+            builder.endArray();
+        }
+
+        builder.endObject().endObject().endObject().endObject().endArray();
 
         if (addExplainResponseProcessor) {
             builder.startArray("response_processors")

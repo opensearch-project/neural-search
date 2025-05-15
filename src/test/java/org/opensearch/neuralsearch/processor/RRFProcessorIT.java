@@ -11,6 +11,7 @@ import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -43,6 +44,22 @@ public class RRFProcessorIT extends BaseNeuralSearchIT {
         assertEquals(0.016393442, (Double) hitsList.getFirst().get("_score"), DELTA_FOR_SCORE_ASSERTION);
         assertEquals(0.016129032, (Double) hitsList.get(1).get("_score"), DELTA_FOR_SCORE_ASSERTION);
         assertEquals(0.015873017, (Double) hitsList.getLast().get("_score"), DELTA_FOR_SCORE_ASSERTION);
+
+        createRRFSearchPipeline(RRF_SEARCH_PIPELINE, Arrays.asList(0.7, 0.3), false);
+        Map<String, Object> weightedResults = search(
+            RRF_INDEX_NAME,
+            hybridQueryBuilder,
+            null,
+            5,
+            Map.of("search_pipeline", RRF_SEARCH_PIPELINE)
+        );
+        Map<String, Object> weightedHits = (Map<String, Object>) weightedResults.get("hits");
+        ArrayList<HashMap<String, Object>> weightedHitsList = (ArrayList<HashMap<String, Object>>) weightedHits.get("hits");
+        assertEquals(3, weightedHitsList.size());
+        assertEquals(0.011475409, (Double) weightedHitsList.getFirst().get("_score"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(0.011475409, (Double) weightedHitsList.get(1).get("_score"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(0.011290322, (Double) weightedHitsList.getLast().get("_score"), DELTA_FOR_SCORE_ASSERTION);
+
     }
 
     private HybridQueryBuilder getHybridQueryBuilder() {
