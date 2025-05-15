@@ -36,6 +36,7 @@ public class RRFScoreCombinationTechniqueTests extends BaseScoreCombinationTechn
         List<Float> scores = List.of(1.0f, 0.0f, 0.6f);
         List<Double> weights = List.of(0.45, 0.15, 0.4);
         ScoreCombinationTechnique technique = new RRFScoreCombinationTechnique(Map.of(PARAM_NAME_WEIGHTS, weights), scoreCombinationUtil);
+        // 1 x 0.45 + 0 x 0.15 + 0.6 x 0.4 = 0.69
         float expectedScore = 0.69f;
         testLogic_whenNotAllScoresAndWeightsPresent_thenCorrectScores(technique, scores, expectedScore);
     }
