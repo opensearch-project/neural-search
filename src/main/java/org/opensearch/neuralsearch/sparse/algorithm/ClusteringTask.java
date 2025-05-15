@@ -18,19 +18,15 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 @Log4j2
-public class ClusteringTask implements Runnable {
+public class ClusteringTask implements Supplier<PostingClusters> {
     private final BytesRef term;
     private final List<DocFreq> docs;
     private final PostingClustering postingClustering;
     private final InMemoryKey.IndexKey key;
-    private final float alpha;
-    private final int beta;
-    private final int lambda;
-    private final Map<Integer, Pair<Integer, InMemoryKey.IndexKey>> newToOldDocIdMap;
-    public static AtomicInteger counter = new AtomicInteger(0);
+    private Map<Integer, Pair<Integer, InMemoryKey.IndexKey>> newToOldDocIdMap;
 
     public ClusteringTask(
         BytesRef term,
@@ -44,9 +40,6 @@ public class ClusteringTask implements Runnable {
         this.docs = docs.stream().toList();
         this.term = BytesRef.deepCopyOf(term);
         this.key = key;
-        this.alpha = alpha;
-        this.beta = beta;
-        this.lambda = lambda;
         this.newToOldDocIdMap = Collections.unmodifiableMap(newToOldDocIdMap);
         this.postingClustering = new PostingClustering(lambda, new RandomClustering(lambda, alpha, beta, (newDocId) -> {
             Pair<Integer, InMemoryKey.IndexKey> oldDocId = this.newToOldDocIdMap.get(newDocId);
@@ -65,15 +58,23 @@ public class ClusteringTask implements Runnable {
         }), beta);
     }
 
+    public ClusteringTask(BytesRef term, Collection<DocFreq> docs, InMemoryKey.IndexKey key, PostingClustering postingClustering) {
+        this.docs = docs.stream().toList();
+        this.term = BytesRef.deepCopyOf(term);
+        this.key = key;
+        this.postingClustering = postingClustering;
+    }
+
     @Override
-    public void run() {
-        List<DocumentCluster> cluster = null;
+    public PostingClusters get() {
+        List<DocumentCluster> clusters = null;
         try {
-            cluster = postingClustering.cluster(this.docs);
+            clusters = postingClustering.cluster(this.docs);
         } catch (IOException e) {
             log.error("cluster failed", e);
             throw new RuntimeException(e);
         }
-        InMemoryClusteredPosting.InMemoryClusteredPostingWriter.writePostingClusters(key, term, cluster);
+        InMemoryClusteredPosting.InMemoryClusteredPostingWriter.writePostingClusters(key, term, clusters);
+        return new PostingClusters(clusters);
     }
 }

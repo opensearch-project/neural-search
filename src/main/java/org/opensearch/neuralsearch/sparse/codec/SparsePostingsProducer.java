@@ -24,16 +24,19 @@ public class SparsePostingsProducer extends FieldsProducer {
 
     private final FieldsProducer delegate;
     private final SegmentReadState state;
+    private final SparseTermsLuceneReader reader;
 
-    public SparsePostingsProducer(FieldsProducer delegate, SegmentReadState state) {
+    public SparsePostingsProducer(FieldsProducer delegate, SegmentReadState state) throws IOException {
         super();
         this.delegate = delegate;
         this.state = state;
+        this.reader = new SparseTermsLuceneReader(state);
     }
 
     @Override
     public void close() throws IOException {
         this.delegate.close();
+        this.reader.close();
     }
 
     @Override
@@ -53,8 +56,7 @@ public class SparsePostingsProducer extends FieldsProducer {
             return delegate.terms(field);
         }
         InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(this.state.segmentInfo, fieldInfo);
-        InMemoryClusteredPosting.InMemoryClusteredPostingReader reader = new InMemoryClusteredPosting.InMemoryClusteredPostingReader(key);
-        return new SparseTerms(reader, key);
+        return new SparseTerms(key, reader, field);
     }
 
     @Override

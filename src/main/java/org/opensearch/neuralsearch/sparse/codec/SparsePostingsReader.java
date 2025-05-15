@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.sparse.codec;
 
 import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.lucene.codecs.BlockTermState;
 import org.apache.lucene.codecs.FieldsProducer;
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.FieldInfo;
@@ -18,6 +19,7 @@ import org.opensearch.neuralsearch.sparse.SparseTokensField;
 import org.opensearch.neuralsearch.sparse.algorithm.ClusterTrainingRunning;
 import org.opensearch.neuralsearch.sparse.algorithm.ClusteringTask;
 import org.opensearch.neuralsearch.sparse.algorithm.DocumentCluster;
+import org.opensearch.neuralsearch.sparse.algorithm.PostingClusters;
 import org.opensearch.neuralsearch.sparse.common.DocFreq;
 import org.opensearch.neuralsearch.sparse.common.DocFreqIterator;
 import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
@@ -31,6 +33,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 /**
  * Merge sparse postings
@@ -43,17 +48,24 @@ public class SparsePostingsReader {
         this.mergeState = state;
     }
 
-    public void merge() throws IOException, InterruptedException {
+    public void merge(SparseTermsLuceneWriter sparseTermsLuceneWriter, ClusteredPostingTermsWriter clusteredPostingTermsWriter)
+        throws Exception {
         int docCount = 0;
         for (int n : mergeState.maxDocs) {
             docCount += n;
         }
         log.debug("Merge total doc: {}", docCount);
-
+        List<FieldInfo> sparseFieldInfos = new ArrayList<>();
         for (FieldInfo fieldInfo : mergeState.mergeFieldInfos) {
-            if (!SparseTokensField.isSparseField(fieldInfo)) {
-                continue;
+            if (SparseTokensField.isSparseField(fieldInfo)) {
+                sparseFieldInfos.add(fieldInfo);
             }
+        }
+
+        sparseTermsLuceneWriter.writeFieldCount(sparseFieldInfos.size());
+        for (FieldInfo fieldInfo : sparseFieldInfos) {
+            log.debug("Merge field: {}", fieldInfo.name);
+            sparseTermsLuceneWriter.writeFieldNumber(fieldInfo.number);
 
             InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(mergeState.segmentInfo, fieldInfo);
             int beta = Integer.parseInt(fieldInfo.attributes().get(SparseMethodContext.BETA_FIELD));
@@ -66,23 +78,49 @@ public class SparsePostingsReader {
             }
 
             // get all terms of old segments from InMemoryClusteredPosting
-            Set<BytesRef> allTerms = getAllTermsFromInMemoryClusteredPosting(fieldInfo);
+            Set<BytesRef> allTerms = getAllTerms(fieldInfo);
+            sparseTermsLuceneWriter.writeTermsSize(allTerms.size());
+            clusteredPostingTermsWriter.setField(fieldInfo);
+
+            List<CompletableFuture<PostingClusters>> futures = new ArrayList<>(allTerms.size());
             for (BytesRef term : allTerms) {
                 Map<Integer, Pair<Integer, InMemoryKey.IndexKey>> newToOldDocIdMap = new HashMap<>();
                 List<DocFreq> docFreqs = getMergedPostingForATerm(term, fieldInfo, newToOldDocIdMap);
                 if (beta == 1) {
                     // not run asynchronously
-                    new ClusteringTask(term, docFreqs, key, alpha, beta, lambda, newToOldDocIdMap).run();
+                    futures.add(
+                        CompletableFuture.completedFuture(
+                            new ClusteringTask(term, docFreqs, key, alpha, beta, lambda, newToOldDocIdMap).get()
+                        )
+                    );
                 } else {
-                    ClusterTrainingRunning.getInstance()
-                        .run(new ClusteringTask(term, docFreqs, key, alpha, beta, lambda, newToOldDocIdMap));
+                    futures.add(
+                        CompletableFuture.supplyAsync(
+                            new ClusteringTask(term, docFreqs, key, alpha, beta, lambda, newToOldDocIdMap),
+                            ClusterTrainingRunning.getInstance().getExecutor()
+                        )
+                    );
                 }
+            }
+            int i = 0;
+            for (BytesRef term : allTerms) {
+                try {
+                    PostingClusters cluster = futures.get(i).join();
+                    BlockTermState state = clusteredPostingTermsWriter.write(term, cluster);
+                    sparseTermsLuceneWriter.writeTerm(term, state);
+                } catch (CancellationException | CompletionException ex) {
+                    log.error("Thread of running clustering from term {} during merge has exception", term, ex);
+                } catch (IOException ex) {
+                    clusteredPostingTermsWriter.closeWithException();
+                    sparseTermsLuceneWriter.closeWithException();
+                }
+                ++i;
             }
         }
     }
 
     // get all terms of old segments from InMemoryClusteredPosting
-    private Set<BytesRef> getAllTermsFromInMemoryClusteredPosting(FieldInfo fieldInfo) throws IOException {
+    private Set<BytesRef> getAllTerms(FieldInfo fieldInfo) throws IOException {
         Set<BytesRef> allTerms = new HashSet<>();
         for (int i = 0; i < this.mergeState.fieldsProducers.length; i++) {
             FieldsProducer fieldsProducer = this.mergeState.fieldsProducers[i];
@@ -92,11 +130,14 @@ public class SparsePostingsReader {
                 log.error("binaryDocValues is not SparseBinaryDocValuesPassThrough, {}", binaryDocValues.getClass().getName());
                 continue;
             }
-            InMemoryKey.IndexKey oldKey = new InMemoryKey.IndexKey(
-                ((SparseBinaryDocValuesPassThrough) binaryDocValues).getSegmentInfo(),
-                fieldInfo
-            );
-            allTerms.addAll(new InMemoryClusteredPosting.InMemoryClusteredPostingReader(oldKey).getTerms());
+
+            Terms terms = fieldsProducer.terms(fieldInfo.name);
+            if (terms instanceof SparseTerms) {
+                SparseTerms sparseTerms = (SparseTerms) terms;
+                allTerms.addAll(sparseTerms.getReader().terms());
+            } else {
+                throw new RuntimeException("terms should always be SparseTerms");
+            }
         }
         return allTerms;
     }
