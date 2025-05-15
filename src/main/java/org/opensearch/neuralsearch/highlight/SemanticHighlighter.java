@@ -6,6 +6,8 @@ package org.opensearch.neuralsearch.highlight;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.index.mapper.MappedFieldType;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.search.fetch.subphase.highlight.FieldHighlightContext;
 import org.opensearch.search.fetch.subphase.highlight.HighlightField;
 import org.opensearch.search.fetch.subphase.highlight.Highlighter;
@@ -46,6 +48,8 @@ public class SemanticHighlighter implements Highlighter {
             throw new IllegalStateException("SemanticHighlighter has not been initialized");
         }
 
+        EventStatsManager.increment(EventStatName.SEMANTIC_HIGHLIGHTING_REQUEST_COUNT);
+
         // Extract field text
         String fieldText = semanticHighlighterEngine.getFieldText(fieldContext);
 
@@ -57,6 +61,7 @@ public class SemanticHighlighter implements Highlighter {
 
         if (originalQueryText == null || originalQueryText.isEmpty()) {
             log.warn("No query text found for field {}", fieldContext.fieldName);
+            EventStatsManager.increment(EventStatName.SEMANTIC_HIGHLIGHTING_ERROR_COUNT);
             return null;
         }
 
@@ -64,14 +69,20 @@ public class SemanticHighlighter implements Highlighter {
         String[] preTags = fieldContext.field.fieldOptions().preTags();
         String[] postTags = fieldContext.field.fieldOptions().postTags();
 
-        // Get highlighted text - allow any exceptions from this call to propagate
-        String highlightedResponse = semanticHighlighterEngine.getHighlightedSentences(
-            modelId,
-            originalQueryText,
-            fieldText,
-            preTags[0],
-            postTags[0]
-        );
+        String highlightedResponse;
+        try {
+            // Get highlighted text
+            highlightedResponse = semanticHighlighterEngine.getHighlightedSentences(
+                modelId,
+                originalQueryText,
+                fieldText,
+                preTags[0],
+                postTags[0]
+            );
+        } catch (Exception e) {
+            EventStatsManager.increment(EventStatName.SEMANTIC_HIGHLIGHTING_ERROR_COUNT);
+            throw e;
+        }
 
         if (highlightedResponse == null || highlightedResponse.isEmpty()) {
             log.warn("No highlighted text found for field {}", fieldContext.fieldName);
