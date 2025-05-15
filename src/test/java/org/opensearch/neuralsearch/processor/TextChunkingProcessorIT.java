@@ -17,9 +17,12 @@ import java.util.Objects;
 
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
 
 public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
     private static final String INDEX_NAME = "text_chunking_test_index";
+    private static final String INDEX_NAME2 = "text_chunking_test_index_2nd";
 
     private static final String OUTPUT_FIELD = "body_chunk";
 
@@ -167,8 +170,57 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         assertEquals(1, getDocCount(INDEX_NAME));
     }
 
-    private void validateIndexIngestResults(String indexName, String fieldName, Object expected) {
-        assertEquals(1, getDocCount(indexName));
+    @SneakyThrows
+    public void testTextChunkingProcessor_processorStats_successful() {
+        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+        createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
+        createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
+
+        // Creating an extra fixed length pipeline
+        createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_LOWERCASE_TOKENIZER_NAME);
+
+        createPipelineProcessor(DELIMITER_PIPELINE_NAME);
+        createTextChunkingIndex(INDEX_NAME2, DELIMITER_PIPELINE_NAME);
+
+        String document = getDocumentFromFilePath(TEST_DOCUMENT);
+        ingestDocument(INDEX_NAME, document);
+        ingestDocument(INDEX_NAME, document);
+
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked. The document ");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by ");
+        expectedPassages.add("standard tokenizer in OpenSearch.");
+        validateIndexIngestResultsWithMultipleDocs(INDEX_NAME, OUTPUT_FIELD, expectedPassages, 2);
+
+        ingestDocument(INDEX_NAME2, document);
+        ingestDocument(INDEX_NAME2, document);
+        ingestDocument(INDEX_NAME2, document);
+
+        expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked.");
+        expectedPassages.add(" The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.");
+        validateIndexIngestResultsWithMultipleDocs(INDEX_NAME2, OUTPUT_FIELD, expectedPassages, 3);
+
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        // Parse json to get stats
+        assertEquals(5, getNestedValue(allNodesStats, EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS));
+        assertEquals(3, getNestedValue(allNodesStats, EventStatName.TEXT_CHUNKING_DELIMITER_EXECUTIONS));
+        assertEquals(2, getNestedValue(allNodesStats, EventStatName.TEXT_CHUNKING_FIXED_LENGTH_EXECUTIONS));
+
+        assertEquals(3, getNestedValue(stats, InfoStatName.TEXT_CHUNKING_PROCESSORS));
+        assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_CHUNKING_DELIMITER_PROCESSORS));
+        assertEquals(2, getNestedValue(stats, InfoStatName.TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS));
+
+        // Reset stats
+        updateClusterSettings("plugins.neural_search.stats_enabled", false);
+    }
+
+    private void validateIndexIngestResultsWithMultipleDocs(String indexName, String fieldName, Object expected, int docCount) {
+        assertEquals(docCount, getDocCount(indexName));
         MatchAllQueryBuilder query = new MatchAllQueryBuilder();
         Map<String, Object> searchResults = search(indexName, query, 10);
         assertNotNull(searchResults);
@@ -181,6 +233,10 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         assert (documentSourceMap).containsKey(fieldName);
         Object ingestOutputs = documentSourceMap.get(fieldName);
         assertEquals(expected, ingestOutputs);
+    }
+
+    private void validateIndexIngestResults(String indexName, String fieldName, Object expected) {
+        validateIndexIngestResultsWithMultipleDocs(indexName, fieldName, expected, 1);
     }
 
     private void createPipelineProcessor(String pipelineName) throws Exception {
