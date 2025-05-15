@@ -6,6 +6,10 @@ package org.opensearch.neuralsearch.sparse.algorithm;
 
 import org.opensearch.threadpool.ThreadPool;
 
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
+
 public class ClusterTrainingRunning {
     private static ThreadPool threadpool = null;
     private static ClusterTrainingRunning INSTANCE;
@@ -22,7 +26,15 @@ public class ClusterTrainingRunning {
         return INSTANCE;
     }
 
+    public Executor getExecutor() {
+        return ClusterTrainingRunning.threadpool.executor(THREAD_POOL_NAME);
+    }
+
     public void run(Runnable runnable) {
         ClusterTrainingRunning.threadpool.executor(THREAD_POOL_NAME).execute(runnable);
+    }
+
+    public <T> Future<T> submit(Callable<T> callable) {
+        return ClusterTrainingRunning.threadpool.executor(THREAD_POOL_NAME).submit(callable);
     }
 }

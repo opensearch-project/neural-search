@@ -23,13 +23,17 @@ import java.util.Set;
  */
 @Getter
 public class SparseTerms extends Terms {
-
-    private final InMemoryClusteredPosting.InMemoryClusteredPostingReader reader;
     private final InMemoryKey.IndexKey indexKey;
+    private final CacheGatedPostingsReader reader;
 
-    public SparseTerms(InMemoryClusteredPosting.InMemoryClusteredPostingReader reader, InMemoryKey.IndexKey indexKey) {
-        this.reader = reader;
+    public SparseTerms(InMemoryKey.IndexKey indexKey, SparseTermsLuceneReader sparseTermsLuceneReader, String field) {
         this.indexKey = indexKey;
+        this.reader = new CacheGatedPostingsReader(
+            field,
+            new InMemoryClusteredPosting.InMemoryClusteredPostingReader(indexKey),
+            sparseTermsLuceneReader,
+            indexKey
+        );
     }
 
     @Override
@@ -40,7 +44,7 @@ public class SparseTerms extends Terms {
 
     @Override
     public long size() throws IOException {
-        return 0;
+        return this.reader.size();
     }
 
     @Override
@@ -84,8 +88,8 @@ public class SparseTerms extends Terms {
         // iterator now only used for next()
         private Iterator<BytesRef> termIterator;
 
-        SparseTermsEnum() {
-            terms = reader.getTerms();
+        SparseTermsEnum() throws IOException {
+            terms = reader.terms();
             if (terms != null) {
                 termIterator = terms.iterator();
             }
@@ -132,7 +136,7 @@ public class SparseTerms extends Terms {
             }
             PostingClusters clusters = reader.read(currentTerm);
             if (clusters != null) {
-                return new SparsePostingsEnum(reader.read(currentTerm), indexKey);
+                return new SparsePostingsEnum(clusters, indexKey);
             }
             return null;
         }

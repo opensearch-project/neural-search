@@ -27,6 +27,7 @@ import java.util.stream.Collectors;
  */
 @EqualsAndHashCode
 public class SparseVector implements Accountable {
+    @Getter
     private final int size;
     // tokens will be stored in order
     private short[] tokens;
@@ -42,11 +43,6 @@ public class SparseVector implements Accountable {
 
     private static Integer convertStringToInteger(String value) {
         return NumberUtils.createInteger(value);
-    }
-
-    private static Integer convertFloatToInteger(Float value) {
-        int freqBits = Float.floatToIntBits(value);
-        return freqBits >>> 15;
     }
 
     public SparseVector(List<Item> items) {
