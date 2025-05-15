@@ -9,7 +9,10 @@ import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.search.join.ScoreMode;
+import org.opensearch.index.search.OpenSearchToParentBlockJoinQuery;
 import org.opensearch.neuralsearch.highlight.extractor.BooleanQueryTextExtractor;
+import org.opensearch.neuralsearch.highlight.extractor.NestedQueryTextExtractor;
 import org.opensearch.neuralsearch.highlight.extractor.NeuralQueryTextExtractor;
 import org.opensearch.neuralsearch.highlight.extractor.QueryTextExtractorRegistry;
 import org.opensearch.neuralsearch.highlight.extractor.TermQueryTextExtractor;
@@ -60,6 +63,25 @@ public class QueryTextExtractorTests extends OpenSearchTestCase {
             "Should throw IllegalArgumentException with correct message",
             exception.getMessage().contains("Expected TermQuery but got BooleanQuery")
         );
+    }
+
+    /**
+     * Test the NestedQueryTextExtractor
+     */
+    public void testNestedQueryTextExtractor_whenNeuralKnnQueryNested() {
+        // Create a registry for the testNestedQueryTextExtractor to use
+        QueryTextExtractorRegistry localRegistry = new QueryTextExtractorRegistry();
+        NestedQueryTextExtractor extractor = new NestedQueryTextExtractor(localRegistry);
+
+        NeuralKNNQuery neuralQuery = new NeuralKNNQuery(new TermQuery(new Term("content", "dummy")), "semantic search query");
+        OpenSearchToParentBlockJoinQuery openSearchToParentBlockJoinQuery = new OpenSearchToParentBlockJoinQuery(
+            neuralQuery,
+            null,
+            ScoreMode.Max,
+            "nestedpath"
+        );
+        String result = extractor.extractQueryText(openSearchToParentBlockJoinQuery, "content");
+        assertEquals("Should extract original query text", "semantic search query", result);
     }
 
     /**

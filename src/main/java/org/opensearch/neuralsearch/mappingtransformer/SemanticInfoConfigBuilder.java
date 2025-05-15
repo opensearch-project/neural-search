@@ -111,17 +111,18 @@ public class SemanticInfoConfigBuilder {
         return config;
     }
 
-    public SemanticInfoConfigBuilder mlModel(@NonNull final MLModel mlModel) {
+    // Here we also require the model id because sometimes the MLModel does not have that info.
+    public SemanticInfoConfigBuilder mlModel(@NonNull final MLModel mlModel, @NonNull final String modelId) {
         switch (mlModel.getAlgorithm()) {
-            case FunctionName.TEXT_EMBEDDING -> extractInfoForTextEmbeddingModel(mlModel);
+            case FunctionName.TEXT_EMBEDDING -> extractInfoForTextEmbeddingModel(mlModel, modelId);
             case FunctionName.SPARSE_ENCODING, FunctionName.SPARSE_TOKENIZE -> extractInfoForSparseModel();
-            case FunctionName.REMOTE -> extractInfoForRemoteModel(mlModel);
+            case FunctionName.REMOTE -> extractInfoForRemoteModel(mlModel, modelId);
             default -> throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
                     "The algorithm %s of the model %s is not supported in the semantic field. Supported algorithms: [%s].",
                     mlModel.getAlgorithm().name(),
-                    mlModel.getModelId(),
+                    modelId,
                     String.join(",", SUPPORTED_MODEL_ALGORITHMS)
                 )
             );
@@ -130,10 +131,8 @@ public class SemanticInfoConfigBuilder {
         return this;
     }
 
-    private void extractInfoForTextEmbeddingModel(@NonNull final MLModel mlModel) {
+    private void extractInfoForTextEmbeddingModel(@NonNull final MLModel mlModel, @NonNull final String modelId) {
         this.embeddingFieldType = KNNVectorFieldMapper.CONTENT_TYPE;
-
-        final String modelId = mlModel.getModelId();
 
         if (mlModel.getModelConfig() instanceof TextEmbeddingModelConfig == false) {
             throw new IllegalArgumentException(
@@ -185,8 +184,7 @@ public class SemanticInfoConfigBuilder {
         this.embeddingFieldType = RankFeaturesFieldMapper.CONTENT_TYPE;
     }
 
-    private void extractInfoForRemoteModel(@NonNull final MLModel mlModel) {
-        final String modelId = mlModel.getModelId();
+    private void extractInfoForRemoteModel(@NonNull final MLModel mlModel, @NonNull final String modelId) {
         final MLModelConfig mlModelConfig = mlModel.getModelConfig();
         if (mlModelConfig == null) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "Model config is null for the remote model %s.", modelId));
@@ -200,7 +198,7 @@ public class SemanticInfoConfigBuilder {
         }
 
         switch (modelTypeFunctionName) {
-            case FunctionName.TEXT_EMBEDDING -> extractInfoForTextEmbeddingModel(mlModel);
+            case FunctionName.TEXT_EMBEDDING -> extractInfoForTextEmbeddingModel(mlModel, modelId);
             case FunctionName.SPARSE_ENCODING, FunctionName.SPARSE_TOKENIZE -> extractInfoForSparseModel();
             default -> throw new IllegalArgumentException(getUnsupportedRemoteModelError(modelType, modelId));
         }

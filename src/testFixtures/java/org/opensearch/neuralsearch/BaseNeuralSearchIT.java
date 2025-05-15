@@ -8,6 +8,8 @@ import lombok.NonNull;
 import org.junit.After;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.client.ResponseException;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.core.xcontent.DeprecationHandler;
 import org.opensearch.core.xcontent.MediaType;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
@@ -147,10 +149,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     public void setupSettings() {
         threadPool = setUpThreadPool();
         clusterService = createClusterService(threadPool);
+        final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
+
         if (isUpdateClusterSettings()) {
             updateClusterSettings();
         }
-        NeuralSearchClusterUtil.instance().initialize(clusterService);
+        NeuralSearchClusterUtil.instance().initialize(clusterService, indexNameExpressionResolver);
     }
 
     // Wipe of all the resources after execution of the tests.
