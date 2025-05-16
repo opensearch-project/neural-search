@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
 @Getter
 public enum EventStatName implements StatName {
     TEXT_EMBEDDING_PROCESSOR_EXECUTIONS("text_embedding_executions", "processors.ingest", EventStatType.TIMESTAMPED_EVENT_COUNTER),
+    // Text chunking processor stats
     TEXT_CHUNKING_PROCESSOR_EXECUTIONS("text_chunking_executions", "processors.ingest", EventStatType.TIMESTAMPED_EVENT_COUNTER),
     TEXT_CHUNKING_FIXED_LENGTH_EXECUTIONS(
         "text_chunking_fixed_length_executions",
@@ -30,7 +31,21 @@ public enum EventStatName implements StatName {
         "semantic_highlighting_request_count",
         "semantic_highlighting",
         EventStatType.TIMESTAMPED_EVENT_COUNTER
-    );
+    ),
+    // Normalization processor stats
+    NORMALIZATION_PROCESSOR_EXECUTIONS(
+        "normalization_processor_executions",
+        "processors.search.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER
+    ),
+    NORM_TECHNIQUE_L2_EXECUTIONS("norm_l2_executions", "processors.search.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),
+    NORM_TECHNIQUE_MINMAX_EXECUTIONS("norm_minmax_executions", "processors.search.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),
+    NORM_TECHNIQUE_NORM_ZSCORE_EXECUTIONS("norm_zscore_executions", "processors.search.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),
+    COMB_TECHNIQUE_ARITHMETIC_EXECUTIONS("comb_arithmetic_executions", "processors.search.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),
+    COMB_TECHNIQUE_GEOMETRIC_EXECUTIONS("comb_geometric_executions", "processors.search.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),
+    COMB_TECHNIQUE_HARMONIC_EXECUTIONS("comb_harmonic_executions", "processors.search.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),
+    // RRF processor stats
+    RRF_PROCESSOR_EXECUTIONS("rrf_processor_executions", "processors.search.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),;
 
     private final String nameString;
     private final String path;
