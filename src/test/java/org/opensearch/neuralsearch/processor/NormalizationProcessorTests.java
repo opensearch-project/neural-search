@@ -97,6 +97,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
             OpenSearchExecutors.daemonThreadFactory("test"),
             threadPool.getThreadContext()
         );
+        TestUtils.initializeEventStatsManager();
     }
 
     @After
