@@ -25,8 +25,7 @@ import org.opensearch.search.lookup.SearchLookup;
 import org.opensearch.search.lookup.SourceLookup;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.neuralsearch.highlight.extractor.QueryTextExtractorRegistry;
-import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
-import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+import org.opensearch.neuralsearch.util.TestUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -70,9 +69,7 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         fieldType = new TextFieldMapper.TextFieldType(TEST_FIELD);
 
         // Initialize EventStatsManager for tests
-        NeuralSearchSettingsAccessor mockSettingsAccessor = mock(NeuralSearchSettingsAccessor.class);
-        when(mockSettingsAccessor.isStatsEnabled()).thenReturn(true);
-        EventStatsManager.instance().initialize(mockSettingsAccessor);
+        TestUtils.initializeEventStatsManager();
 
         // Setup default mock behavior
         setupDefaultMockBehavior();

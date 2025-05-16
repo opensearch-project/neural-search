@@ -26,8 +26,16 @@ public enum EventStatName implements StatName {
         EventStatType.TIMESTAMPED_EVENT_COUNTER
     ),
     TEXT_CHUNKING_DELIMITER_EXECUTIONS("text_chunking_delimiter_executions", "processors.ingest", EventStatType.TIMESTAMPED_EVENT_COUNTER),
-    SEMANTIC_HIGHLIGHTING_REQUEST_COUNT("request_count", "semantic_highlighting", EventStatType.TIMESTAMPED_EVENT_COUNTER),
-    SEMANTIC_HIGHLIGHTING_ERROR_COUNT("error_count", "semantic_highlighting", EventStatType.TIMESTAMPED_EVENT_COUNTER);
+    SEMANTIC_HIGHLIGHTING_REQUEST_COUNT(
+        "semantic_highlighting_request_count",
+        "semantic_highlighting",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER
+    ),
+    SEMANTIC_HIGHLIGHTING_ERROR_COUNT(
+        "semantic_highlighting_error_count",
+        "semantic_highlighting",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER
+    );
 
     private final String nameString;
     private final String path;
