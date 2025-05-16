@@ -16,6 +16,8 @@ import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.search.fetch.FetchSearchResult;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.query.QuerySearchResult;
@@ -70,6 +72,7 @@ public class RRFProcessor extends AbstractScoreHybridizationProcessor {
         Optional<FetchSearchResult> fetchSearchResult = getFetchSearchResults(searchPhaseResult);
         boolean explain = Objects.nonNull(searchPhaseContext.getRequest().source().explain())
             && searchPhaseContext.getRequest().source().explain();
+        EventStatsManager.increment(EventStatName.RRF_PROCESSOR_EXECUTIONS);
         // make data transfer object to pass in, execute will get object with 4 or 5 fields, depending
         // on coming from NormalizationProcessor or RRFProcessor
         NormalizationProcessorWorkflowExecuteRequest normalizationExecuteDTO = NormalizationProcessorWorkflowExecuteRequest.builder()
