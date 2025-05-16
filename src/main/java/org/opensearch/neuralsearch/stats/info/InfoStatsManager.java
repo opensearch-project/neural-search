@@ -4,8 +4,17 @@
  */
 package org.opensearch.neuralsearch.stats.info;
 
+import org.opensearch.neuralsearch.processor.NormalizationProcessor;
+import org.opensearch.neuralsearch.processor.RRFProcessor;
 import org.opensearch.neuralsearch.processor.TextChunkingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
+import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.GeometricMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.HarmonicMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
+import org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ZScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.chunker.DelimiterChunker;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
@@ -25,6 +34,7 @@ import java.util.stream.Collectors;
  */
 public class InfoStatsManager {
     public static final String PROCESSORS_KEY = "processors";
+    public static final String PHASE_RESULTS_PROCESSORS_KEY = "phase_results_processors";
 
     private final NeuralSearchClusterUtil neuralSearchClusterUtil;
     private final NeuralSearchSettingsAccessor settingsAccessor;
@@ -83,6 +93,9 @@ public class InfoStatsManager {
 
         // Parses ingest pipeline processor configs for processor info
         addIngestProcessorStats(countableInfoStats);
+
+        // Parses search pipeline processor configs for processor info
+        addSearchProcessorStats(countableInfoStats);
 
         // Helpers to parse search pipeline processor configs for processor info would go here
         return countableInfoStats;
@@ -177,6 +190,81 @@ public class InfoStatsManager {
     }
 
     /**
+     * Adds search processor info stats, mutating the input
+     * @param stats mutable map of info stats that the result will be added to
+     */
+    private void addSearchProcessorStats(Map<InfoStatName, CountableInfoStatSnapshot> stats) {
+        List<Map<String, Object>> pipelineConfigs = pipelineServiceUtil.getSearchPipelineConfigs();
+
+        // Iterate through all search processors and count their stats individually by calling helpers
+        for (Map<String, Object> pipelineConfig : pipelineConfigs) {
+            // Search phase results processors
+            List<Map<String, Object>> phaseResultsProcessors = asListOfMaps(pipelineConfig.get(PHASE_RESULTS_PROCESSORS_KEY));
+            for (Map<String, Object> phaseResultsProcessor : phaseResultsProcessors) {
+                for (Map.Entry<String, Object> entry : phaseResultsProcessor.entrySet()) {
+                    String processorType = entry.getKey();
+                    Map<String, Object> processorConfig = asMap(entry.getValue());
+                    switch (processorType) {
+                        case NormalizationProcessor.TYPE:
+                            countNormalizationProcessorStats(stats, processorConfig);
+                            break;
+                        case RRFProcessor.TYPE:
+                            countRRFProcessorStats(stats, processorConfig);
+                            break;
+                    }
+                }
+            }
+        }
+    }
+
+    private void countNormalizationProcessorStats(Map<InfoStatName, CountableInfoStatSnapshot> stats, Map<String, Object> processorConfig) {
+        increment(stats, InfoStatName.NORMALIZATION_PROCESSORS);
+
+        String normalizationTechnique = asString(
+            asMap(processorConfig.get(NormalizationProcessorFactory.NORMALIZATION_CLAUSE)).get(NormalizationProcessorFactory.TECHNIQUE)
+        );
+        String combinationTechnique = asString(
+            asMap(processorConfig.get(NormalizationProcessorFactory.COMBINATION_CLAUSE)).get(NormalizationProcessorFactory.TECHNIQUE)
+        );
+
+        countNormalizationTechniqueStats(stats, normalizationTechnique);
+        countCombinationTechniqueStats(stats, combinationTechnique);
+    }
+
+    private void countRRFProcessorStats(Map<InfoStatName, CountableInfoStatSnapshot> stats, Map<String, Object> processorConfig) {
+        increment(stats, InfoStatName.RRF_PROCESSORS);
+
+        // RRF only has combination technique
+        String combinationTechnique = asString(
+            asMap(processorConfig.get(NormalizationProcessorFactory.COMBINATION_CLAUSE)).get(NormalizationProcessorFactory.TECHNIQUE)
+        );
+
+        countCombinationTechniqueStats(stats, combinationTechnique);
+    }
+
+    private void countNormalizationTechniqueStats(Map<InfoStatName, CountableInfoStatSnapshot> stats, String normalizationTechnique) {
+        switch (normalizationTechnique) {
+            case L2ScoreNormalizationTechnique.TECHNIQUE_NAME -> increment(stats, InfoStatName.NORM_TECHNIQUE_L2_PROCESSORS);
+            case MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME -> increment(stats, InfoStatName.NORM_TECHNIQUE_MINMAX_PROCESSORS);
+            case ZScoreNormalizationTechnique.TECHNIQUE_NAME -> increment(stats, InfoStatName.NORM_TECHNIQUE_ZSCORE_PROCESSORS);
+        }
+    }
+
+    private void countCombinationTechniqueStats(Map<InfoStatName, CountableInfoStatSnapshot> stats, String combinationTechnique) {
+        switch (combinationTechnique) {
+            case ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME -> increment(
+                stats,
+                InfoStatName.COMB_TECHNIQUE_ARITHMETIC_PROCESSORS
+            );
+            case GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME -> increment(
+                stats,
+                InfoStatName.COMB_TECHNIQUE_GEOMETRIC_PROCESSORS
+            );
+            case HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME -> increment(stats, InfoStatName.COMB_TECHNIQUE_HARMONIC_PROCESSORS);
+        }
+    }
+
+    /**
      * Increments a countable info stat in the given stat name
      * @param stats map containing the stat to increment
      * @param infoStatName the identifier for the stat to increment
@@ -215,6 +303,17 @@ public class InfoStatsManager {
     @SuppressWarnings("unchecked")
     private Map<String, Object> asMap(Object value) {
         return value instanceof Map ? (Map<String, Object>) value : null;
+    }
+
+    /**
+     * Helper to cast generic object into String or null
+     * Used to parse pipeline processor configs
+     * @param value the object
+     * @return the string or null if not a string
+     */
+    @SuppressWarnings("unchecked")
+    private String asString(Object value) {
+        return value instanceof String ? (String) value : null;
     }
 
     /**

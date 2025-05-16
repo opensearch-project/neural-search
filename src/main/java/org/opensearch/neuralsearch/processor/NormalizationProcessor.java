@@ -15,8 +15,16 @@ import org.opensearch.action.search.QueryPhaseResultConsumer;
 import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.action.search.SearchPhaseName;
 import org.opensearch.action.search.SearchPhaseResults;
+import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.GeometricMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.HarmonicMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ZScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.search.SearchPhaseResult;
 import org.opensearch.search.fetch.FetchSearchResult;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
@@ -54,6 +62,7 @@ public class NormalizationProcessor extends AbstractScoreHybridizationProcessor 
         Optional<FetchSearchResult> fetchSearchResult = getFetchSearchResults(searchPhaseResult);
         boolean explain = Objects.nonNull(searchPhaseContext.getRequest().source().explain())
             && searchPhaseContext.getRequest().source().explain();
+        recordStats(normalizationTechnique, combinationTechnique);
         NormalizationProcessorWorkflowExecuteRequest request = NormalizationProcessorWorkflowExecuteRequest.builder()
             .querySearchResults(querySearchResults)
             .fetchSearchResultOptional(fetchSearchResult)
@@ -134,5 +143,37 @@ public class NormalizationProcessor extends AbstractScoreHybridizationProcessor 
     ) {
         Optional<Result> optionalFirstSearchPhaseResult = searchPhaseResults.getAtomicArray().asList().stream().findFirst();
         return optionalFirstSearchPhaseResult.map(SearchPhaseResult::fetchResult);
+    }
+
+    private void recordStats(ScoreNormalizationTechnique normalizationTechnique, ScoreCombinationTechnique combinationTechnique) {
+        EventStatsManager.increment(EventStatName.NORMALIZATION_PROCESSOR_EXECUTIONS);
+        recordNormalizationCombinationTechniqueStats(normalizationTechnique, combinationTechnique);
+    }
+
+    void recordNormalizationCombinationTechniqueStats(
+        ScoreNormalizationTechnique normalizationTechnique,
+        ScoreCombinationTechnique combinationTechnique
+    ) {
+        switch (normalizationTechnique.techniqueName()) {
+            case L2ScoreNormalizationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(EventStatName.NORM_TECHNIQUE_L2_EXECUTIONS);
+            case MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(
+                EventStatName.NORM_TECHNIQUE_MINMAX_EXECUTIONS
+            );
+            case ZScoreNormalizationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(
+                EventStatName.NORM_TECHNIQUE_NORM_ZSCORE_EXECUTIONS
+            );
+        }
+
+        switch (combinationTechnique.techniqueName()) {
+            case ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(
+                EventStatName.COMB_TECHNIQUE_ARITHMETIC_EXECUTIONS
+            );
+            case GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(
+                EventStatName.COMB_TECHNIQUE_GEOMETRIC_EXECUTIONS
+            );
+            case HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(
+                EventStatName.COMB_TECHNIQUE_HARMONIC_EXECUTIONS
+            );
+        }
     }
 }
