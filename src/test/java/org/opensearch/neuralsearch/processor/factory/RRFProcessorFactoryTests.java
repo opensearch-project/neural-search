@@ -4,18 +4,21 @@
  */
 package org.opensearch.neuralsearch.processor.factory;
 
+import com.carrotsearch.randomizedtesting.RandomizedTest;
 import lombok.SneakyThrows;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.RRFProcessor;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
+import org.opensearch.neuralsearch.processor.normalization.RRFNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.test.OpenSearchTestCase;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -63,8 +66,22 @@ public class RRFProcessorFactoryTests extends OpenSearchTestCase {
         String tag = "tag";
         String description = "description";
         boolean ignoreFailure = false;
+        double weight1 = RandomizedTest.randomDouble();
+        double weight2 = 1.0f - weight1;
         Map<String, Object> config = new HashMap<>();
-        config.put(COMBINATION_CLAUSE, new HashMap<>(Map.of(TECHNIQUE, "rrf", PARAMETERS, new HashMap<>(Map.of("rank_constant", 100)))));
+        config.put(
+            COMBINATION_CLAUSE,
+            new HashMap<>(
+                Map.of(
+                    TECHNIQUE,
+                    "rrf",
+                    PARAMETERS,
+                    new HashMap<>(Map.of("weights", Arrays.asList(weight1, weight2))),
+                    RRFNormalizationTechnique.PARAM_NAME_RANK_CONSTANT,
+                    100
+                )
+            )
+        );
         Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
         SearchPhaseResultsProcessor searchPhaseResultsProcessor = rrfProcessorFactory.create(
             processorFactories,
@@ -90,7 +107,7 @@ public class RRFProcessorFactoryTests extends OpenSearchTestCase {
         boolean ignoreFailure = false;
 
         Map<String, Object> config = new HashMap<>();
-        config.put(COMBINATION_CLAUSE, new HashMap<>(Map.of(TECHNIQUE, "rrf", PARAMETERS, new HashMap<>(Map.of("rank_constant", -1)))));
+        config.put(COMBINATION_CLAUSE, new HashMap<>(Map.of(TECHNIQUE, "rrf", RRFNormalizationTechnique.PARAM_NAME_RANK_CONSTANT, -1)));
         Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
         IllegalArgumentException exception = expectThrows(
             IllegalArgumentException.class,
@@ -114,7 +131,7 @@ public class RRFProcessorFactoryTests extends OpenSearchTestCase {
         boolean ignoreFailure = false;
 
         Map<String, Object> config = new HashMap<>();
-        config.put(COMBINATION_CLAUSE, new HashMap<>(Map.of(TECHNIQUE, "rrf", PARAMETERS, new HashMap<>(Map.of("rank_constant", 50_000)))));
+        config.put(COMBINATION_CLAUSE, new HashMap<>(Map.of(TECHNIQUE, "rrf", RRFNormalizationTechnique.PARAM_NAME_RANK_CONSTANT, 50_000)));
         Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
         IllegalArgumentException exception = expectThrows(
             IllegalArgumentException.class,
@@ -140,7 +157,7 @@ public class RRFProcessorFactoryTests extends OpenSearchTestCase {
         Map<String, Object> config = new HashMap<>();
         config.put(
             COMBINATION_CLAUSE,
-            new HashMap<>(Map.of(TECHNIQUE, "rrf", PARAMETERS, new HashMap<>(Map.of("rank_constant", "string"))))
+            new HashMap<>(Map.of(TECHNIQUE, "rrf", RRFNormalizationTechnique.PARAM_NAME_RANK_CONSTANT, "String"))
         );
         Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
         IllegalArgumentException exception = expectThrows(
@@ -165,7 +182,7 @@ public class RRFProcessorFactoryTests extends OpenSearchTestCase {
         Map<String, Object> config = new HashMap<>();
         config.put(
             COMBINATION_CLAUSE,
-            new HashMap<>(Map.of(TECHNIQUE, "my_function", PARAMETERS, new HashMap<>(Map.of("rank_constant", 100))))
+            new HashMap<>(Map.of(TECHNIQUE, "my_function", RRFNormalizationTechnique.PARAM_NAME_RANK_CONSTANT, 100))
         );
         Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
         IllegalArgumentException exception = expectThrows(
@@ -188,7 +205,7 @@ public class RRFProcessorFactoryTests extends OpenSearchTestCase {
         boolean ignoreFailure = false;
 
         Map<String, Object> config = new HashMap<>();
-        config.put(COMBINATION_CLAUSE, new HashMap<>(Map.of(TECHNIQUE, "rrf", PARAMETERS, new HashMap<>(Map.of("rank_constant", 100)))));
+        config.put(COMBINATION_CLAUSE, new HashMap<>(Map.of(TECHNIQUE, "rrf", RRFNormalizationTechnique.PARAM_NAME_RANK_CONSTANT, 100)));
         config.put(
             NORMALIZATION_CLAUSE,
             new HashMap<>(Map.of(TECHNIQUE, ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME, PARAMETERS, new HashMap<>(Map.of())))
@@ -203,6 +220,48 @@ public class RRFProcessorFactoryTests extends OpenSearchTestCase {
             pipelineContext
         );
         assertRRFProcessor(searchPhaseResultsProcessor);
+    }
+
+    @SneakyThrows
+    public void testWeightsParams_whenInvalidValues_thenFail() {
+        RRFProcessorFactory rrfProcessorFactory = new RRFProcessorFactory(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner()),
+            new ScoreNormalizationFactory(),
+            new ScoreCombinationFactory()
+        );
+        final Map<String, Processor.Factory<SearchPhaseResultsProcessor>> processorFactories = new HashMap<>();
+        String tag = "tag";
+        String description = "description";
+        boolean ignoreFailure = false;
+
+        // First value is always 0.5
+        double first = 0.5;
+        // Second value is random between 0.3 and 1.0
+        double second = 0.3 + (RandomizedTest.randomDouble() * 0.7);
+        // Third value is random between 0.3 and 1.0
+        double third = 0.3 + (RandomizedTest.randomDouble() * 0.7);
+        // This ensures minimum sum of 1.1 (0.5 + 0.3 + 0.3)
+
+        Map<String, Object> config = new HashMap<>();
+        config.put(
+            COMBINATION_CLAUSE,
+            new HashMap<>(
+                Map.of(
+                    TECHNIQUE,
+                    "rrf",
+                    PARAMETERS,
+                    new HashMap<>(Map.of("weights", Arrays.asList(first, second, third))),
+                    RRFNormalizationTechnique.PARAM_NAME_RANK_CONSTANT,
+                    100
+                )
+            )
+        );
+        Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> rrfProcessorFactory.create(processorFactories, tag, description, ignoreFailure, config, pipelineContext)
+        );
+        assertTrue(exception.getMessage().contains("sum of weights for combination must be equal to 1.0"));
     }
 
     private static void assertRRFProcessor(SearchPhaseResultsProcessor searchPhaseResultsProcessor) {

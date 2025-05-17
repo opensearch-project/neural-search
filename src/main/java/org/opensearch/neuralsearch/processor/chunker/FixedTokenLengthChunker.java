@@ -180,4 +180,9 @@ public final class FixedTokenLengthChunker implements Chunker {
             throw new IllegalStateException(String.format(Locale.ROOT, "analyzer %s throws exception: %s", tokenizer, e.getMessage()), e);
         }
     }
+
+    @Override
+    public String getAlgorithmName() {
+        return ALGORITHM_NAME;
+    }
 }

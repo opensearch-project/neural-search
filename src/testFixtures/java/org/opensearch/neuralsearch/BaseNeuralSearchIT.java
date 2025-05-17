@@ -8,6 +8,8 @@ import lombok.NonNull;
 import org.junit.After;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.client.ResponseException;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.core.xcontent.DeprecationHandler;
 import org.opensearch.core.xcontent.MediaType;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
@@ -147,10 +149,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     public void setupSettings() {
         threadPool = setUpThreadPool();
         clusterService = createClusterService(threadPool);
+        final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
+
         if (isUpdateClusterSettings()) {
             updateClusterSettings();
         }
-        NeuralSearchClusterUtil.instance().initialize(clusterService);
+        NeuralSearchClusterUtil.instance().initialize(clusterService, indexNameExpressionResolver);
     }
 
     // Wipe of all the resources after execution of the tests.
@@ -1289,6 +1293,18 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return scores;
     }
 
+    @SuppressWarnings("unchecked")
+    protected List<String> getNormalizationDocIdList(final Map<String, Object> searchResponseAsMap) {
+        Map<String, Object> hits1map = (Map<String, Object>) searchResponseAsMap.get("hits");
+        List<Object> hitsList = (List<Object>) hits1map.get("hits");
+        List<String> docIds = new ArrayList<>();
+        for (Object hit : hitsList) {
+            Map<String, Object> searchHit = (Map<String, Object>) hit;
+            docIds.add(searchHit.get("_id").toString());
+        }
+        return docIds;
+    }
+
     protected List<Map<String, Object>> getListOfValues(Map<String, Object> searchResponseAsMap, String key) {
         return (List<Map<String, Object>>) searchResponseAsMap.get(key);
     }
@@ -2196,11 +2212,11 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     @SneakyThrows
     protected void createDefaultRRFSearchPipeline() {
-        createRRFSearchPipeline(RRF_SEARCH_PIPELINE, false);
+        createRRFSearchPipeline(RRF_SEARCH_PIPELINE, Arrays.asList(), false);
     }
 
     @SneakyThrows
-    protected void createRRFSearchPipeline(final String pipelineName, boolean addExplainResponseProcessor) {
+    protected void createRRFSearchPipeline(final String pipelineName, final List<Double> weights, boolean addExplainResponseProcessor) {
         XContentBuilder builder = XContentFactory.jsonBuilder()
             .startObject()
             .field("description", "Post processor for hybrid search")
@@ -2209,10 +2225,16 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             .startObject("score-ranker-processor")
             .startObject("combination")
             .field("technique", "rrf")
-            .endObject()
-            .endObject()
-            .endObject()
-            .endArray();
+            .startObject("parameters");
+        if (weights.size() > 0) {
+            builder.startArray("weights");
+            for (Double weight : weights) {
+                builder.value(weight);
+            }
+            builder.endArray();
+        }
+
+        builder.endObject().endObject().endObject().endObject().endArray();
 
         if (addExplainResponseProcessor) {
             builder.startArray("response_processors")

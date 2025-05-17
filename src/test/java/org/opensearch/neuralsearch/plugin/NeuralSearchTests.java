@@ -22,9 +22,13 @@ import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.concurrent.OpenSearchExecutors;
 import org.opensearch.env.Environment;
+import org.opensearch.index.mapper.Mapper;
+import org.opensearch.index.mapper.MappingTransformer;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.ingest.IngestService;
 import org.opensearch.ingest.Processor;
+import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
+import org.opensearch.neuralsearch.mappingtransformer.SemanticMappingTransformer;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
@@ -33,6 +37,7 @@ import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory;
+import org.opensearch.neuralsearch.processor.factory.SemanticFieldProcessorFactory;
 import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
@@ -199,7 +204,24 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         assertTrue(executorBuilders.get(0) instanceof FixedExecutorBuilder);
     }
 
-    public void testGetMappers_shouldReturnEmptyMap() {
-        assertTrue(plugin.getMappers().isEmpty());
+    public void testGetMappers_shouldReturnMappers() {
+        final Map<String, Mapper.TypeParser> typeParserMap = plugin.getMappers();
+        assertEquals(1, typeParserMap.size());
+        assertTrue(typeParserMap.get(SemanticFieldMapper.CONTENT_TYPE) instanceof SemanticFieldMapper.TypeParser);
+    }
+
+    public void testGetMappingTransformers_shouldReturnTransformers() {
+        final List<MappingTransformer> mappingTransformers = plugin.getMappingTransformers();
+        assertEquals(1, mappingTransformers.size());
+        assertTrue(mappingTransformers.getFirst() instanceof SemanticMappingTransformer);
+    }
+
+    public void testGetSystemIngestProcessors() {
+        Map<String, Processor.Factory> systemIngestProcessors;
+        systemIngestProcessors = plugin.getSystemIngestProcessors(ingestParameters);
+        assertEquals(1, systemIngestProcessors.size());
+        assertTrue(
+            systemIngestProcessors.get(SemanticFieldProcessorFactory.PROCESSOR_FACTORY_TYPE) instanceof SemanticFieldProcessorFactory
+        );
     }
 }

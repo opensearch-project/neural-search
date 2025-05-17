@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.highlight.extractor;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
+import org.opensearch.index.search.OpenSearchToParentBlockJoinQuery;
 import org.opensearch.neuralsearch.query.NeuralKNNQuery;
 import org.opensearch.neuralsearch.query.HybridQuery;
 
@@ -37,6 +38,9 @@ public class QueryTextExtractorRegistry {
         register(NeuralKNNQuery.class, new NeuralQueryTextExtractor());
         register(TermQuery.class, new TermQueryTextExtractor());
         register(HybridQuery.class, new HybridQueryTextExtractor(this));
+
+        // Handle nested query
+        register(OpenSearchToParentBlockJoinQuery.class, new NestedQueryTextExtractor(this));
 
         // BooleanQueryTextExtractor needs a reference to this registry
         // so we need to register it after creating the registry instance
