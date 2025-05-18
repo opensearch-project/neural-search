@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.processor;
 
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryStartStopElement;
 
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import java.util.List;
@@ -14,6 +15,7 @@ import java.util.Optional;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
+import org.opensearch.neuralsearch.processor.combination.RRFScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
@@ -52,6 +54,11 @@ public class RRFProcessor extends AbstractScoreHybridizationProcessor {
     private final ScoreCombinationTechnique combinationTechnique;
     private final NormalizationProcessorWorkflow normalizationWorkflow;
 
+    private final Map<String, Runnable> combTechniqueIncrementers = Map.of(
+        RRFScoreCombinationTechnique.TECHNIQUE_NAME,
+        () -> EventStatsManager.increment(EventStatName.COMB_TECHNIQUE_RRF_EXECUTIONS)
+    );
+
     /**
      * Method abstracts functional aspect of score normalization and score combination. Exact methods for each processing stage
      * are set as part of class constructor
@@ -72,7 +79,7 @@ public class RRFProcessor extends AbstractScoreHybridizationProcessor {
         Optional<FetchSearchResult> fetchSearchResult = getFetchSearchResults(searchPhaseResult);
         boolean explain = Objects.nonNull(searchPhaseContext.getRequest().source().explain())
             && searchPhaseContext.getRequest().source().explain();
-        EventStatsManager.increment(EventStatName.RRF_PROCESSOR_EXECUTIONS);
+        recordStats(combinationTechnique);
         // make data transfer object to pass in, execute will get object with 4 or 5 fields, depending
         // on coming from NormalizationProcessor or RRFProcessor
         NormalizationProcessorWorkflowExecuteRequest normalizationExecuteDTO = NormalizationProcessorWorkflowExecuteRequest.builder()
@@ -145,5 +152,10 @@ public class RRFProcessor extends AbstractScoreHybridizationProcessor {
     ) {
         Optional<Result> optionalFirstSearchPhaseResult = searchPhaseResults.getAtomicArray().asList().stream().findFirst();
         return optionalFirstSearchPhaseResult.map(SearchPhaseResult::fetchResult);
+    }
+
+    private void recordStats(ScoreCombinationTechnique combinationTechnique) {
+        EventStatsManager.increment(EventStatName.RRF_PROCESSOR_EXECUTIONS);
+        Optional.of(combTechniqueIncrementers.get(combinationTechnique.techniqueName())).ifPresent(Runnable::run);
     }
 }

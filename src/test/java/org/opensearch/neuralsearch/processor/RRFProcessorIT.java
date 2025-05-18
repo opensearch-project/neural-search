@@ -84,8 +84,10 @@ public class RRFProcessorIT extends BaseNeuralSearchIT {
 
         // Parse json to get stats
         assertEquals(1, getNestedValue(allNodesStats, EventStatName.RRF_PROCESSOR_EXECUTIONS));
+        assertEquals(1, getNestedValue(allNodesStats, EventStatName.COMB_TECHNIQUE_RRF_EXECUTIONS));
 
         assertEquals(1, getNestedValue(stats, InfoStatName.RRF_PROCESSORS));
+        assertEquals(1, getNestedValue(stats, InfoStatName.COMB_TECHNIQUE_RRF_PROCESSORS));
 
         updateClusterSettings("plugins.neural_search.stats_enabled", false);
     }

@@ -34,7 +34,8 @@ public enum InfoStatName implements StatName {
     COMB_TECHNIQUE_GEOMETRIC_PROCESSORS("comb_geometric_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER),
     COMB_TECHNIQUE_HARMONIC_PROCESSORS("comb_harmonic_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER),
     // RRF processor
-    RRF_PROCESSORS("rrf_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER),;
+    RRF_PROCESSORS("rank_based_normalization_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER),
+    COMB_TECHNIQUE_RRF_PROCESSORS("comb_rrf_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER),;
 
     private final String nameString;
     private final String path;
