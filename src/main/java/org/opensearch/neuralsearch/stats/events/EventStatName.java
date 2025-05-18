@@ -49,7 +49,12 @@ public enum EventStatName implements StatName {
     COMB_TECHNIQUE_GEOMETRIC_EXECUTIONS("comb_geometric_executions", "processors.search.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),
     COMB_TECHNIQUE_HARMONIC_EXECUTIONS("comb_harmonic_executions", "processors.search.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),
     // RRF processor stats
-    RRF_PROCESSOR_EXECUTIONS("rrf_processor_executions", "processors.search.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),;
+    RRF_PROCESSOR_EXECUTIONS(
+        "rank_based_normalization_processor_executions",
+        "processors.search.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER
+    ),
+    COMB_TECHNIQUE_RRF_EXECUTIONS("comb_rrf_executions", "processors.search.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),;
 
     private final String nameString;
     private final String path;

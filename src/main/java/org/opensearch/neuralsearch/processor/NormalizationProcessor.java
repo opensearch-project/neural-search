@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.processor;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryStartStopElement;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -47,6 +48,24 @@ public class NormalizationProcessor extends AbstractScoreHybridizationProcessor 
     private final ScoreNormalizationTechnique normalizationTechnique;
     private final ScoreCombinationTechnique combinationTechnique;
     private final NormalizationProcessorWorkflow normalizationWorkflow;
+
+    private final Map<String, Runnable> normTechniqueIncrementers = Map.of(
+        L2ScoreNormalizationTechnique.TECHNIQUE_NAME,
+        () -> EventStatsManager.increment(EventStatName.NORM_TECHNIQUE_L2_EXECUTIONS),
+        MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME,
+        () -> EventStatsManager.increment(EventStatName.NORM_TECHNIQUE_MINMAX_EXECUTIONS),
+        ZScoreNormalizationTechnique.TECHNIQUE_NAME,
+        () -> EventStatsManager.increment(EventStatName.NORM_TECHNIQUE_NORM_ZSCORE_EXECUTIONS)
+    );
+
+    private final Map<String, Runnable> combTechniqueIncrementers = Map.of(
+        ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+        () -> EventStatsManager.increment(EventStatName.COMB_TECHNIQUE_ARITHMETIC_EXECUTIONS),
+        HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+        () -> EventStatsManager.increment(EventStatName.COMB_TECHNIQUE_HARMONIC_EXECUTIONS),
+        GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+        () -> EventStatsManager.increment(EventStatName.COMB_TECHNIQUE_GEOMETRIC_EXECUTIONS)
+    );
 
     @Override
     <Result extends SearchPhaseResult> void hybridizeScores(
@@ -147,33 +166,7 @@ public class NormalizationProcessor extends AbstractScoreHybridizationProcessor 
 
     private void recordStats(ScoreNormalizationTechnique normalizationTechnique, ScoreCombinationTechnique combinationTechnique) {
         EventStatsManager.increment(EventStatName.NORMALIZATION_PROCESSOR_EXECUTIONS);
-        recordNormalizationCombinationTechniqueStats(normalizationTechnique, combinationTechnique);
-    }
-
-    void recordNormalizationCombinationTechniqueStats(
-        ScoreNormalizationTechnique normalizationTechnique,
-        ScoreCombinationTechnique combinationTechnique
-    ) {
-        switch (normalizationTechnique.techniqueName()) {
-            case L2ScoreNormalizationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(EventStatName.NORM_TECHNIQUE_L2_EXECUTIONS);
-            case MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(
-                EventStatName.NORM_TECHNIQUE_MINMAX_EXECUTIONS
-            );
-            case ZScoreNormalizationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(
-                EventStatName.NORM_TECHNIQUE_NORM_ZSCORE_EXECUTIONS
-            );
-        }
-
-        switch (combinationTechnique.techniqueName()) {
-            case ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(
-                EventStatName.COMB_TECHNIQUE_ARITHMETIC_EXECUTIONS
-            );
-            case GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(
-                EventStatName.COMB_TECHNIQUE_GEOMETRIC_EXECUTIONS
-            );
-            case HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(
-                EventStatName.COMB_TECHNIQUE_HARMONIC_EXECUTIONS
-            );
-        }
+        Optional.ofNullable(normTechniqueIncrementers.get(normalizationTechnique.techniqueName())).ifPresent(Runnable::run);
+        Optional.ofNullable(combTechniqueIncrementers.get(combinationTechnique.techniqueName())).ifPresent(Runnable::run);
     }
 }

@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.stats.info;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.RRFProcessor;
 import org.opensearch.neuralsearch.processor.TextChunkingProcessor;
@@ -11,6 +12,7 @@ import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.GeometricMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.HarmonicMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.RRFScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique;
@@ -26,6 +28,8 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -39,6 +43,26 @@ public class InfoStatsManager {
     private final NeuralSearchClusterUtil neuralSearchClusterUtil;
     private final NeuralSearchSettingsAccessor settingsAccessor;
     private final PipelineServiceUtil pipelineServiceUtil;
+
+    private final Map<String, Consumer<Map<InfoStatName, CountableInfoStatSnapshot>>> normTechniqueIncrementers = Map.of(
+        L2ScoreNormalizationTechnique.TECHNIQUE_NAME,
+        stats -> increment(stats, InfoStatName.NORM_TECHNIQUE_L2_PROCESSORS),
+        MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME,
+        stats -> increment(stats, InfoStatName.NORM_TECHNIQUE_MINMAX_PROCESSORS),
+        ZScoreNormalizationTechnique.TECHNIQUE_NAME,
+        stats -> increment(stats, InfoStatName.NORM_TECHNIQUE_ZSCORE_PROCESSORS)
+    );
+
+    private final Map<String, Consumer<Map<InfoStatName, CountableInfoStatSnapshot>>> combTechniqueIncrementers = Map.of(
+        ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+        stats -> increment(stats, InfoStatName.COMB_TECHNIQUE_ARITHMETIC_PROCESSORS),
+        HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+        stats -> increment(stats, InfoStatName.COMB_TECHNIQUE_HARMONIC_PROCESSORS),
+        GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+        stats -> increment(stats, InfoStatName.COMB_TECHNIQUE_GEOMETRIC_PROCESSORS),
+        RRFScoreCombinationTechnique.TECHNIQUE_NAME,
+        stats -> increment(stats, InfoStatName.COMB_TECHNIQUE_RRF_PROCESSORS)
+    );
 
     /**
      * Constructor
@@ -227,8 +251,8 @@ public class InfoStatsManager {
             asMap(processorConfig.get(NormalizationProcessorFactory.COMBINATION_CLAUSE)).get(NormalizationProcessorFactory.TECHNIQUE)
         );
 
-        countNormalizationTechniqueStats(stats, normalizationTechnique);
-        countCombinationTechniqueStats(stats, combinationTechnique);
+        callNullableIncrementer(stats, normTechniqueIncrementers.get(normalizationTechnique));
+        callNullableIncrementer(stats, combTechniqueIncrementers.get(combinationTechnique));
     }
 
     private void countRRFProcessorStats(Map<InfoStatName, CountableInfoStatSnapshot> stats, Map<String, Object> processorConfig) {
@@ -239,29 +263,7 @@ public class InfoStatsManager {
             asMap(processorConfig.get(NormalizationProcessorFactory.COMBINATION_CLAUSE)).get(NormalizationProcessorFactory.TECHNIQUE)
         );
 
-        countCombinationTechniqueStats(stats, combinationTechnique);
-    }
-
-    private void countNormalizationTechniqueStats(Map<InfoStatName, CountableInfoStatSnapshot> stats, String normalizationTechnique) {
-        switch (normalizationTechnique) {
-            case L2ScoreNormalizationTechnique.TECHNIQUE_NAME -> increment(stats, InfoStatName.NORM_TECHNIQUE_L2_PROCESSORS);
-            case MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME -> increment(stats, InfoStatName.NORM_TECHNIQUE_MINMAX_PROCESSORS);
-            case ZScoreNormalizationTechnique.TECHNIQUE_NAME -> increment(stats, InfoStatName.NORM_TECHNIQUE_ZSCORE_PROCESSORS);
-        }
-    }
-
-    private void countCombinationTechniqueStats(Map<InfoStatName, CountableInfoStatSnapshot> stats, String combinationTechnique) {
-        switch (combinationTechnique) {
-            case ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME -> increment(
-                stats,
-                InfoStatName.COMB_TECHNIQUE_ARITHMETIC_PROCESSORS
-            );
-            case GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME -> increment(
-                stats,
-                InfoStatName.COMB_TECHNIQUE_GEOMETRIC_PROCESSORS
-            );
-            case HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME -> increment(stats, InfoStatName.COMB_TECHNIQUE_HARMONIC_PROCESSORS);
-        }
+        callNullableIncrementer(stats, combTechniqueIncrementers.get(combinationTechnique));
     }
 
     /**
@@ -269,7 +271,8 @@ public class InfoStatsManager {
      * @param stats map containing the stat to increment
      * @param infoStatName the identifier for the stat to increment
      */
-    private void increment(Map<InfoStatName, CountableInfoStatSnapshot> stats, InfoStatName infoStatName) {
+    @VisibleForTesting
+    protected void increment(Map<InfoStatName, CountableInfoStatSnapshot> stats, InfoStatName infoStatName) {
         incrementBy(stats, infoStatName, 1L);
     }
 
@@ -277,6 +280,22 @@ public class InfoStatsManager {
         if (stats.containsKey(statName)) {
             stats.get(statName).incrementBy(amount);
         }
+    }
+
+    /**
+     * Conditionally accepts a param into a consumer if the consumer is non-null
+     * In this class, used after getting a nullable stat incrementing consumer and safely incrementing it with
+     * the ongoing stats map.
+     * @param param
+     * @param consumer
+     * @param <T>
+     */
+    @VisibleForTesting
+    protected void callNullableIncrementer(
+        Map<InfoStatName, CountableInfoStatSnapshot> stats,
+        Consumer<Map<InfoStatName, CountableInfoStatSnapshot>> incrementer
+    ) {
+        Optional.ofNullable(incrementer).ifPresent(consumer -> consumer.accept(stats));
     }
 
     /**
