@@ -340,11 +340,6 @@ public class SemanticHighlighterIT extends BaseNeuralSearchIT {
         );
         verifyHighlightResults(searchResponse, "artificial intelligence");
 
-        // Verify that invalid model ID is handled gracefully and error stats are incremented
-        String invalidModelId = "invalid-model-id";
-        searchResponse = searchWithSemanticHighlighter(TEST_BASIC_INDEX_NAME, hybridMatchQuery, 10, TEST_TEXT_FIELD_NAME, invalidModelId);
-        assertNotNull("Search response should contain hits", searchResponse);
-
         // Get stats
         String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
         Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
@@ -352,13 +347,8 @@ public class SemanticHighlighterIT extends BaseNeuralSearchIT {
         // Parse json to get stats
         assertEquals(
             "Stats should contain the expected number of requests",
-            8,
+            7,
             getNestedValue(allNodesStats, EventStatName.SEMANTIC_HIGHLIGHTING_REQUEST_COUNT)
-        );
-        assertEquals(
-            "Stats should contain the expected number of errors",
-            1,
-            getNestedValue(allNodesStats, EventStatName.SEMANTIC_HIGHLIGHTING_ERROR_COUNT)
         );
     }
 

@@ -61,7 +61,6 @@ public class SemanticHighlighter implements Highlighter {
 
         if (originalQueryText == null || originalQueryText.isEmpty()) {
             log.warn("No query text found for field {}", fieldContext.fieldName);
-            EventStatsManager.increment(EventStatName.SEMANTIC_HIGHLIGHTING_ERROR_COUNT);
             return null;
         }
 
@@ -69,20 +68,14 @@ public class SemanticHighlighter implements Highlighter {
         String[] preTags = fieldContext.field.fieldOptions().preTags();
         String[] postTags = fieldContext.field.fieldOptions().postTags();
 
-        String highlightedResponse;
-        try {
-            // Get highlighted text
-            highlightedResponse = semanticHighlighterEngine.getHighlightedSentences(
-                modelId,
-                originalQueryText,
-                fieldText,
-                preTags[0],
-                postTags[0]
-            );
-        } catch (Exception e) {
-            EventStatsManager.increment(EventStatName.SEMANTIC_HIGHLIGHTING_ERROR_COUNT);
-            throw e;
-        }
+        // Get highlighted text - allow any exceptions from this call to propagate
+        String highlightedResponse = semanticHighlighterEngine.getHighlightedSentences(
+            modelId,
+            originalQueryText,
+            fieldText,
+            preTags[0],
+            postTags[0]
+        );
 
         if (highlightedResponse == null || highlightedResponse.isEmpty()) {
             log.warn("No highlighted text found for field {}", fieldContext.fieldName);

@@ -30,11 +30,6 @@ public enum EventStatName implements StatName {
         "semantic_highlighting_request_count",
         "semantic_highlighting",
         EventStatType.TIMESTAMPED_EVENT_COUNTER
-    ),
-    SEMANTIC_HIGHLIGHTING_ERROR_COUNT(
-        "semantic_highlighting_error_count",
-        "semantic_highlighting",
-        EventStatType.TIMESTAMPED_EVENT_COUNTER
     );
 
     private final String nameString;
