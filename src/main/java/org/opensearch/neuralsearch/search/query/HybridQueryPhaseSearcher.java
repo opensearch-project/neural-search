@@ -61,6 +61,7 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             return super.searchWith(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);
         } else {
             Query hybridQuery = extractHybridQuery(searchContext, query);
+            validateHybridQuery((HybridQuery) hybridQuery);
             QueryPhaseSearcher queryPhaseSearcher = getQueryPhaseSearcher(searchContext);
             queryPhaseSearcher.searchWith(searchContext, searcher, hybridQuery, collectors, hasFilterCollector, hasTimeout);
             // we decide on rescore later in collector manager
@@ -151,6 +152,14 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
         if (query instanceof DisjunctionMaxQuery) {
             for (Query disjunct : (DisjunctionMaxQuery) query) {
                 validateNestedDisJunctionQuery(disjunct, level - 1);
+            }
+        }
+    }
+
+    private void validateHybridQuery(final HybridQuery query) {
+        for (Query innerQuery : query) {
+            if (innerQuery instanceof HybridQuery) {
+                throw new IllegalArgumentException("hybrid query cannot be nested in another hybrid query");
             }
         }
     }
