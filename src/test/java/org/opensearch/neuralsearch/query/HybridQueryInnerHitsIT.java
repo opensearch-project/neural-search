@@ -12,6 +12,7 @@ import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.join.query.HasChildQueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.search.sort.SortOrder;
 
 import java.util.AbstractMap;
@@ -576,5 +577,24 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
             List.of(TEST_PARENT_CHILD_RELATION_FIELD_NAME_2),
             "1"
         );
+    }
+
+    @SneakyThrows
+    public void testInnerHits_whenMultipleSubqueriesOnNestedFields_statsEnabled_thenSuccessful() {
+        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+
+        testInnerHits_whenMultipleSubqueriesOnNestedFields_thenSuccessful(TEST_MULTI_DOC_WITH_NESTED_FIELDS_SINGLE_SHARD_INDEX_NAME);
+        testInnerHits_whenMultipleSubqueriesOnNestedFields_thenSuccessful(TEST_MULTI_DOC_WITH_NESTED_FIELDS_MULTIPLE_SHARD_INDEX_NAME);
+
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        // Parse json to get stats
+        assertEquals(2, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_COUNT));
+        assertEquals(2, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_INNER_HITS_COUNT));
+
+        updateClusterSettings("plugins.neural_search.stats_enabled", false);
     }
 }
