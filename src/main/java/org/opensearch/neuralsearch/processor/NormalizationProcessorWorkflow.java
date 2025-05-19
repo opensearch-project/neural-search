@@ -207,10 +207,7 @@ public class NormalizationProcessorWorkflow {
         final Sort sort = combineScoresDTO.getSort();
         int totalScoreDocsCount = 0;
 
-        // Collapse logic
-        if (queryTopDocs.isEmpty()) {
-
-        }
+        // Get index of first non-empty CompoundTopDocs to check if collapse is enabled
         boolean isCollapseEnabled = false;
         int indexOfFirstNonEmpty = 0;
         for (CompoundTopDocs compoundTopDocs : queryTopDocs) {
@@ -221,33 +218,18 @@ public class NormalizationProcessorWorkflow {
             indexOfFirstNonEmpty++;
         }
         if (isCollapseEnabled) {
-            boolean isKeyword = ((CollapseTopFieldDocs) queryTopDocs.get(indexOfFirstNonEmpty)
-                .getTopDocs()
-                .getFirst()).collapseValues[0] instanceof BytesRef;
-
-            if (isKeyword) {
-                totalScoreDocsCount = collapseOnKeyword(
-                    queryTopDocs,
-                    querySearchResults,
-                    sort,
-                    indexOfFirstNonEmpty,
-                    isFetchPhaseExecuted,
-                    combineScoresDTO
-                );
-            } else {
-                totalScoreDocsCount = collapseOnNumeric(
-                    queryTopDocs,
-                    querySearchResults,
-                    sort,
-                    indexOfFirstNonEmpty,
-                    isFetchPhaseExecuted,
-                    combineScoresDTO
-                );
-            }
+            totalScoreDocsCount = collapse(
+                queryTopDocs,
+                indexOfFirstNonEmpty,
+                querySearchResults,
+                sort,
+                isFetchPhaseExecuted,
+                combineScoresDTO
+            );
         } else {
-            for (int index = 0; index < querySearchResults.size(); index++) {
-                QuerySearchResult querySearchResult = querySearchResults.get(index);
-                CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
+            for (int shardIndex = 0; shardIndex < querySearchResults.size(); shardIndex++) {
+                QuerySearchResult querySearchResult = querySearchResults.get(shardIndex);
+                CompoundTopDocs updatedTopDocs = queryTopDocs.get(shardIndex);
                 totalScoreDocsCount += updatedTopDocs.getScoreDocs().size();
                 TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(
                     buildTopDocs(updatedTopDocs, sort),
@@ -267,6 +249,25 @@ public class NormalizationProcessorWorkflow {
             throw new IllegalArgumentException(
                 String.format(Locale.ROOT, "Reached end of search result, increase pagination_depth value to see more results")
             );
+        }
+    }
+
+    private int collapse(
+        List<CompoundTopDocs> queryTopDocs,
+        int indexOfFirstNonEmpty,
+        List<QuerySearchResult> querySearchResults,
+        Sort sort,
+        final boolean isFetchPhaseExecuted,
+        CombineScoresDto combineScoresDTO
+    ) {
+        boolean isKeyword = ((CollapseTopFieldDocs) queryTopDocs.get(indexOfFirstNonEmpty)
+            .getTopDocs()
+            .getFirst()).collapseValues[0] instanceof BytesRef;
+
+        if (isKeyword) {
+            return collapseOnKeyword(queryTopDocs, querySearchResults, sort, indexOfFirstNonEmpty, isFetchPhaseExecuted, combineScoresDTO);
+        } else {
+            return collapseOnNumeric(queryTopDocs, querySearchResults, sort, indexOfFirstNonEmpty, isFetchPhaseExecuted, combineScoresDTO);
         }
     }
 

@@ -175,6 +175,8 @@ public class ScoreCombiner {
 
                 if (docIdSortFieldMap.get(fieldDoc.doc) == null) {
                     // If sort by score then replace sort field value with normalized score.
+                    // If collapse is enabled, then we append the collapse value to the end of the sort fields
+                    // in order to more easily access it later.
                     if (isSortByScore) {
                         docIdSortFieldMap.put(
                             fieldDoc.doc,
