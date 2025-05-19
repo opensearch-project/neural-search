@@ -6,16 +6,29 @@ package org.opensearch.neuralsearch.query;
 
 import com.google.common.primitives.Floats;
 import lombok.SneakyThrows;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.junit.BeforeClass;
+import org.opensearch.client.Request;
+import org.opensearch.client.Response;
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+import org.opensearch.common.xcontent.XContentHelper;
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.common.xcontent.json.JsonXContent;
+import org.opensearch.core.rest.RestStatus;
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.RangeQueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.opensearch.neuralsearch.util.TestUtils.TEST_DIMENSION;
@@ -67,6 +80,75 @@ public class HybridQueryFilterIT extends BaseNeuralSearchIT {
         updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
         testNeuralQueryBuilder(TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD);
+    }
+
+    @SneakyThrows
+    public void testFilterOnHybridQuery_statsEnabled() {
+        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+
+        // Filter is not stored on the hybrid query itself and
+        // Stats are incremented on parsing from XContent which we have to do explicitly here in order make it work
+        String queryText = String.format(Locale.ROOT, """
+                {
+                    "query": {
+                        "hybrid": {
+                            "queries": [
+                                {
+                                    "term": {
+                                        "text": "keyword"
+                                    }
+                                },
+                                {
+                                    "term": {
+                                        "text": "keyword"
+                                    }
+                                }
+                            ],
+                            "filter": {
+                                "term": {
+                                    "text": "keyword"
+                                }
+                            }
+                        }
+                    }
+                }
+            """);
+
+        XContentBuilder builder = JsonXContent.contentBuilder();
+        // parse JSON string
+        Map<String, Object> map = JsonXContent.jsonXContent.createParser(
+            NamedXContentRegistry.EMPTY,
+            LoggingDeprecationHandler.INSTANCE,
+            queryText
+        ).map();
+        // add all fields from map
+        builder.map(map);
+
+        Request request = new Request("GET", "/" + TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD + "/_search?timeout=1000s");
+
+        request.setJsonEntity(builder.toString());
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+
+        String searchResponseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> searchResponseAsMapTextQuery = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            searchResponseBody,
+            false
+        );
+
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        // Parse json to get stats
+        assertEquals(1, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_COUNT));
+        assertEquals(1, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_FILTER_COUNT));
+
+        updateClusterSettings("plugins.neural_search.stats_enabled", false);
     }
 
     @SneakyThrows

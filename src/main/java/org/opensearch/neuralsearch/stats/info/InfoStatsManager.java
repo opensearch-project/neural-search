@@ -283,12 +283,12 @@ public class InfoStatsManager {
     }
 
     /**
-     * Conditionally accepts a param into a consumer if the consumer is non-null
+     *  Conditionally accepts a param into a consumer if the consumer is non-null
      * In this class, used after getting a nullable stat incrementing consumer and safely incrementing it with
      * the ongoing stats map.
-     * @param param
-     * @param consumer
-     * @param <T>
+     *
+     * @param stats the ongoing stats map
+     * @param incrementer the consumer to increment the stat in the stats map
      */
     @VisibleForTesting
     protected void callNullableIncrementer(

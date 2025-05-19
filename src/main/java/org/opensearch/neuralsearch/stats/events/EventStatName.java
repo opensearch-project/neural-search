@@ -54,7 +54,12 @@ public enum EventStatName implements StatName {
         "processors.search.hybrid",
         EventStatType.TIMESTAMPED_EVENT_COUNTER
     ),
-    COMB_TECHNIQUE_RRF_EXECUTIONS("comb_rrf_executions", "processors.search.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),;
+    COMB_TECHNIQUE_RRF_EXECUTIONS("comb_rrf_executions", "processors.search.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),
+    // Hybrid query stats
+    HYBRID_QUERY_COUNT("hybrid_query_count", "query.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),
+    HYBRID_QUERY_INNER_HITS_COUNT("hybrid_query_with_inner_hits_count", "query.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),
+    HYBRID_QUERY_FILTER_COUNT("hybrid_query_with_filter_count", "query.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),
+    HYBRID_QUERY_PAGINATION_COUNT("hybrid_query_with_pagination_count", "query.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),;
 
     private final String nameString;
     private final String path;
