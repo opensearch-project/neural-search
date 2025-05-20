@@ -237,7 +237,7 @@ abstract class CollapseDocSourceGroupSelector<T> extends GroupSelector<T> {
                     break;
 
                 default:
-                    throw new IllegalStateException("unexpected doc values type " + type + "` for field `" + field + "`");
+                    throw new IllegalStateException(String.format("unexpected doc values type `%s` for field `%s`", type, field));
             }
         }
 

@@ -34,6 +34,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Collects the CollapseTopFieldDocs based on a collapse field passed in a search request containing a hybrid query.
+ */
 @Log4j2
 public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollector, Collector {
     protected final String collapseField;
@@ -239,7 +242,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
                 if (hitsThresholdChecker.isThresholdReached()) {
                     setTotalHitsRelation(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO);
-                    log.info("Terminating collection as hits threshold is reached");
+                    log.info("Terminating collection early as specified hits threshold is reached");
                     throw new CollectionTerminatedException();
                 }
 
