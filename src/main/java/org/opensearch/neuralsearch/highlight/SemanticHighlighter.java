@@ -6,6 +6,8 @@ package org.opensearch.neuralsearch.highlight;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.index.mapper.MappedFieldType;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.search.fetch.subphase.highlight.FieldHighlightContext;
 import org.opensearch.search.fetch.subphase.highlight.HighlightField;
 import org.opensearch.search.fetch.subphase.highlight.Highlighter;
@@ -45,6 +47,8 @@ public class SemanticHighlighter implements Highlighter {
         if (semanticHighlighterEngine == null) {
             throw new IllegalStateException("SemanticHighlighter has not been initialized");
         }
+
+        EventStatsManager.increment(EventStatName.SEMANTIC_HIGHLIGHTING_REQUEST_COUNT);
 
         // Extract field text
         String fieldText = semanticHighlighterEngine.getFieldText(fieldContext);
