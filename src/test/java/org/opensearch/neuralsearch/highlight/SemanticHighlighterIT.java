@@ -8,6 +8,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.TEST_DIMENSION;
 import static org.opensearch.neuralsearch.util.TestUtils.TEST_SPACE_TYPE;
 import static org.opensearch.neuralsearch.util.TestUtils.createRandomVector;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +21,7 @@ import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.index.query.QueryStringQueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.search.builder.SearchSourceBuilder;
 
 import com.google.common.primitives.Floats;
@@ -77,7 +79,10 @@ public class SemanticHighlighterIT extends BaseNeuralSearchIT {
      * 5. Neural Query
      * 6. Hybrid Query
      */
+    @SneakyThrows
     public void testQueriesWithSemanticHighlighter() {
+        // Enable stats for the test
+        updateClusterSettings("plugins.neural_search.stats_enabled", true);
         // Set up models for the test
         String textEmbeddingModelId = prepareModel();
         String sentenceHighlightingModelId = prepareSentenceHighlightingModel();
@@ -334,6 +339,17 @@ public class SemanticHighlighterIT extends BaseNeuralSearchIT {
             sentenceHighlightingModelId
         );
         verifyHighlightResults(searchResponse, "artificial intelligence");
+
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        // Parse json to get stats
+        assertEquals(
+            "Stats should contain the expected number of requests",
+            7,
+            getNestedValue(allNodesStats, EventStatName.SEMANTIC_HIGHLIGHTING_REQUEST_COUNT)
+        );
     }
 
     private void verifyHighlightResults(Map<String, Object> searchResponse, String expectedContent) {
