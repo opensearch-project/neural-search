@@ -45,9 +45,11 @@ public class EventStatNameTests extends OpenSearchTestCase {
 
     public void test_uniquePaths() {
         Set<String> paths = new HashSet<>();
+
+        // First pass to add all base paths (excluding stat names) to avoid colliding a stat name with a terminal path
+        // e.g. if a.b is a stat, a.b.c cannot be a stat.
         for (EventStatName statName : EVENT_STATS) {
             String path = statName.getPath().toLowerCase(Locale.ROOT);
-            assertFalse(String.format(Locale.ROOT, "Checking path uniqueness for %s", path), paths.contains(path));
             paths.add(path);
         }
 

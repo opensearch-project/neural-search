@@ -9,6 +9,7 @@ import lombok.SneakyThrows;
 import org.apache.lucene.tests.analysis.MockTokenizer;
 import org.junit.Before;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -37,6 +38,11 @@ import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.processor.chunker.DelimiterChunker;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.neuralsearch.processor.factory.TextChunkingProcessorFactory;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+import org.opensearch.neuralsearch.stats.events.TimestampedEventStatSnapshot;
+import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.plugins.AnalysisPlugin;
 import org.opensearch.test.OpenSearchTestCase;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessor.TYPE;
@@ -57,7 +63,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
     private static final String INDEX_NAME = "_index";
 
     @SneakyThrows
-    private AnalysisRegistry getAnalysisRegistry() {
+    public static AnalysisRegistry getAnalysisRegistry() {
         Settings settings = Settings.builder().put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString()).build();
         Environment environment = TestEnvironment.newEnvironment(settings);
         AnalysisPlugin plugin = new AnalysisPlugin() {
@@ -92,6 +98,8 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         when(clusterState.metadata()).thenReturn(metadata);
         when(clusterService.state()).thenReturn(clusterState);
         textChunkingProcessorFactory = new TextChunkingProcessorFactory(environment, clusterService, getAnalysisRegistry());
+
+        TestUtils.initializeEventStatsManager();
     }
 
     private Map<String, Object> createFixedTokenLengthParameters() {
@@ -971,5 +979,71 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         TextChunkingProcessor processor = createIgnoreMissingInstance();
         IngestDocument document = processor.execute(ingestDocument);
         assertFalse(document.getSourceAndMetadata().containsKey(OUTPUT_FIELD));
+    }
+
+    @SneakyThrows
+    public void testExecute_statsDisabled_thenSucceed() {
+        NeuralSearchSettingsAccessor settingsAccessor = mock(NeuralSearchSettingsAccessor.class);
+        when(settingsAccessor.isStatsEnabled()).thenReturn(false);
+        EventStatsManager.instance().initialize(settingsAccessor);
+
+        TextChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
+        IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
+        IngestDocument document = processor.execute(ingestDocument);
+        assert document.getSourceAndMetadata().containsKey(OUTPUT_FIELD);
+        Object passages = document.getSourceAndMetadata().get(OUTPUT_FIELD);
+        assert (passages instanceof List<?>);
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked. The document ");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by ");
+        expectedPassages.add("standard tokenizer in OpenSearch.");
+        assertEquals(expectedPassages, passages);
+
+        Map<EventStatName, TimestampedEventStatSnapshot> snapshots = EventStatsManager.instance()
+            .getTimestampedEventStatSnapshots(EnumSet.allOf(EventStatName.class));
+
+        assertEquals(0L, snapshots.get(EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS).getValue().longValue());
+        assertEquals(0L, snapshots.get(EventStatName.TEXT_CHUNKING_FIXED_LENGTH_EXECUTIONS).getValue().longValue());
+    }
+
+    @SneakyThrows
+    public void testExecute_statsEnabled_withFixedTokenLength_andSourceDataString_thenSucceed() {
+        TextChunkingProcessor processor = createFixedTokenLengthInstance(createStringFieldMap());
+        IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
+        IngestDocument document = processor.execute(ingestDocument);
+        assert document.getSourceAndMetadata().containsKey(OUTPUT_FIELD);
+        Object passages = document.getSourceAndMetadata().get(OUTPUT_FIELD);
+        assert (passages instanceof List<?>);
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked. The document ");
+        expectedPassages.add("contains a single paragraph, two sentences and 24 tokens by ");
+        expectedPassages.add("standard tokenizer in OpenSearch.");
+        assertEquals(expectedPassages, passages);
+
+        Map<EventStatName, TimestampedEventStatSnapshot> snapshots = EventStatsManager.instance()
+            .getTimestampedEventStatSnapshots(EnumSet.allOf(EventStatName.class));
+
+        assertEquals(1L, snapshots.get(EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS).getValue().longValue());
+        assertEquals(1L, snapshots.get(EventStatName.TEXT_CHUNKING_FIXED_LENGTH_EXECUTIONS).getValue().longValue());
+    }
+
+    @SneakyThrows
+    public void testExecute_statsEnabled_withDelimiter_andSourceDataString_thenSucceed() {
+        TextChunkingProcessor processor = createDelimiterInstance();
+        IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
+        IngestDocument document = processor.execute(ingestDocument);
+        assert document.getSourceAndMetadata().containsKey(OUTPUT_FIELD);
+        Object passages = document.getSourceAndMetadata().get(OUTPUT_FIELD);
+        assert (passages instanceof List<?>);
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked.");
+        expectedPassages.add(" The document contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch.");
+        assertEquals(expectedPassages, passages);
+
+        Map<EventStatName, TimestampedEventStatSnapshot> snapshots = EventStatsManager.instance()
+            .getTimestampedEventStatSnapshots(EnumSet.allOf(EventStatName.class));
+
+        assertEquals(1L, snapshots.get(EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS).getValue().longValue());
+        assertEquals(1L, snapshots.get(EventStatName.TEXT_CHUNKING_DELIMITER_EXECUTIONS).getValue().longValue());
     }
 }

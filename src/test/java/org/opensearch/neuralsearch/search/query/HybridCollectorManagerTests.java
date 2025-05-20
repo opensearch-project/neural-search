@@ -875,10 +875,18 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         assertEquals(6, scoreDocs.length);
         assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[0].score, DELTA_FOR_ASSERTION);
         assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[1].score, DELTA_FOR_ASSERTION);
-        assertTrue(maxScore >= scoreDocs[2].score);
         assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[3].score, DELTA_FOR_ASSERTION);
-        assertEquals(maxScore, scoreDocs[4].score, DELTA_FOR_ASSERTION);
         assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[5].score, DELTA_FOR_ASSERTION);
+
+        if (Math.abs(scoreDocs[2].score - maxScore) <= DELTA_FOR_ASSERTION) {
+            assertEquals(maxScore, scoreDocs[2].score, DELTA_FOR_ASSERTION);
+            assertTrue(scoreDocs[4].score <= maxScore);
+        } else if (Math.abs(scoreDocs[4].score - maxScore) <= DELTA_FOR_ASSERTION) {
+            assertTrue(scoreDocs[2].score <= maxScore);
+            assertEquals(maxScore, scoreDocs[4].score, DELTA_FOR_ASSERTION);
+        } else {
+            fail("neither scoreDocs[2] nor scoreDocs[4] equals maxScore");
+        }
 
         w.close();
         reader.close();

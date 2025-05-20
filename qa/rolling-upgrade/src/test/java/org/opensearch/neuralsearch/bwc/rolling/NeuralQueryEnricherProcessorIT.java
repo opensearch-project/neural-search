@@ -67,6 +67,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                 loadModel(sparseModelId);
                 sparseEncodingQueryBuilderWithModelId.modelId(sparseModelId);
 
+                waitForClusterHealthGreen(NODES_BWC_CLUSTER);
                 assertEquals(
                     search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
                     search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
@@ -132,6 +133,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                 loadModel(denseModelId);
                 neuralQueryBuilderWithModelId.modelId(denseModelId);
 
+                waitForClusterHealthGreen(NODES_BWC_CLUSTER);
                 assertEquals(
                     search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
                     search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")

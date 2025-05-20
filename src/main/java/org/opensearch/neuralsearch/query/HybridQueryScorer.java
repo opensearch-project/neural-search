@@ -14,7 +14,6 @@ import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.TwoPhaseIterator;
-import org.apache.lucene.search.Weight;
 import org.apache.lucene.util.PriorityQueue;
 import org.opensearch.neuralsearch.search.HybridDisiWrapper;
 
@@ -44,11 +43,11 @@ public class HybridQueryScorer extends Scorer {
     private final TwoPhase twoPhase;
     private final int numSubqueries;
 
-    public HybridQueryScorer(final Weight weight, final List<Scorer> subScorers) throws IOException {
-        this(weight, subScorers, ScoreMode.TOP_SCORES);
+    public HybridQueryScorer(final List<Scorer> subScorers) throws IOException {
+        this(subScorers, ScoreMode.TOP_SCORES);
     }
 
-    HybridQueryScorer(final Weight weight, final List<Scorer> subScorers, final ScoreMode scoreMode) throws IOException {
+    HybridQueryScorer(final List<Scorer> subScorers, final ScoreMode scoreMode) throws IOException {
         super();
         this.subScorers = Collections.unmodifiableList(subScorers);
         this.numSubqueries = subScorers.size();
@@ -75,7 +74,7 @@ public class HybridQueryScorer extends Scorer {
                 sumMatchCost += w.matchCost * costWeight;
             }
         }
-        if (!hasApproximation) { // no sub scorer supports approximations
+        if (hasApproximation == false) { // no sub scorer supports approximations
             twoPhase = null;
         } else {
             final float matchCost = sumMatchCost / sumApproxCost;
@@ -284,7 +283,7 @@ public class HybridQueryScorer extends Scorer {
                     wrapper.next = verifiedMatches;
                     verifiedMatches = wrapper;
 
-                    if (!needsScores) {
+                    if (needsScores == false) {
                         // we can stop here
                         return true;
                     }

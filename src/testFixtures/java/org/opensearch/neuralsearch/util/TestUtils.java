@@ -9,6 +9,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.opensearch.test.OpenSearchTestCase.randomFloat;
 
 import java.util.ArrayList;
@@ -28,6 +30,8 @@ import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.knn.index.SpaceType;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.fetch.FetchSearchResult;
@@ -393,5 +397,12 @@ public class TestUtils {
 
     public static String generateModelId() {
         return "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8);
+    }
+
+    public static void initializeEventStatsManager() {
+        NeuralSearchSettingsAccessor settingsAccessor = mock(NeuralSearchSettingsAccessor.class);
+        EventStatsManager.instance().reset();
+        when(settingsAccessor.isStatsEnabled()).thenReturn(true);
+        EventStatsManager.instance().initialize(settingsAccessor);
     }
 }

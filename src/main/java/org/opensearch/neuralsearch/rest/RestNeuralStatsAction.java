@@ -8,6 +8,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.common.util.set.Sets;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.NeuralStatsInput;
@@ -23,6 +24,7 @@ import org.opensearch.transport.client.node.NodeClient;
 
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -38,6 +40,16 @@ import static org.opensearch.neuralsearch.plugin.NeuralSearch.NEURAL_BASE_URI;
 @Log4j2
 @AllArgsConstructor
 public class RestNeuralStatsAction extends BaseRestHandler {
+    /**
+     * Path parameter name for specified stats
+     */
+    public static final String STAT_PARAM = "stat";
+
+    /**
+     * Path parameter name for specified node ids
+     */
+    public static final String NODE_ID_PARAM = "nodeId";
+
     /**
      * Query parameter name to request flattened stat paths as keys
      */
@@ -79,7 +91,7 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         new Route(RestRequest.Method.GET, NEURAL_BASE_URI + "/stats/{stat}")
     );
 
-    private static final Set<String> RESPONSE_PARAMS = ImmutableSet.of("nodeId", "stat", INCLUDE_METADATA_PARAM, FLATTEN_PARAM);
+    private static final Set<String> RESPONSE_PARAMS = ImmutableSet.of(NODE_ID_PARAM, STAT_PARAM, INCLUDE_METADATA_PARAM, FLATTEN_PARAM);
 
     /**
      * Validates a param string if its under the max length and matches simple string pattern
@@ -143,7 +155,7 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         NeuralStatsInput neuralStatsInput = new NeuralStatsInput();
 
         // Parse specified nodes
-        Optional<String[]> nodeIds = splitCommaSeparatedParam(request, "nodeId");
+        Optional<String[]> nodeIds = splitCommaSeparatedParam(request, NODE_ID_PARAM);
         if (nodeIds.isPresent()) {
             // Ignore node ids that don't pattern match
             List<String> validFormatNodeIds = Arrays.stream(nodeIds.get()).filter(this::isValidNodeId).toList();
@@ -157,47 +169,48 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         boolean includeMetadata = request.paramAsBoolean(INCLUDE_METADATA_PARAM, false);
         neuralStatsInput.setIncludeMetadata(includeMetadata);
 
-        // Determine which stat names to retrieve based on user parameters
-        Optional<String[]> stats = splitCommaSeparatedParam(request, "stat");
-
-        if (stats.isPresent() == false) {
-            // No specific stats requested, add all stats by default
-            addAllStats(neuralStatsInput);
-            return neuralStatsInput;
-        }
-
-        // Process requested stats
-        boolean anyStatAdded = processRequestedStats(stats.get(), neuralStatsInput);
-
-        // If no valid stats were added, fall back to all stats
-        if (anyStatAdded == false) {
-            addAllStats(neuralStatsInput);
-        }
+        // Process requested stats parameters
+        processStatsRequestParameters(request, neuralStatsInput);
 
         return neuralStatsInput;
     }
 
-    private boolean processRequestedStats(String[] stats, NeuralStatsInput neuralStatsInput) {
-        boolean statAdded = false;
+    private void processStatsRequestParameters(RestRequest request, NeuralStatsInput neuralStatsInput) {
+        // Determine which stat names to retrieve based on user parameters
+        Optional<String[]> optionalStats = splitCommaSeparatedParam(request, STAT_PARAM);
 
+        if (optionalStats.isPresent() == false || optionalStats.get().length == 0) {
+            // No specific stats requested, add all stats by default
+            addAllStats(neuralStatsInput);
+            return;
+        }
+
+        String[] stats = optionalStats.get();
+        Set<String> invalidStatNames = new HashSet<>();
         for (String stat : stats) {
             // Validate parameter
             String normalizedStat = stat.toLowerCase(Locale.ROOT);
             if (isValidParamString(normalizedStat) == false) {
-                log.info("Invalid stat name parameter format: {}", normalizedStat);
+                invalidStatNames.add(normalizedStat);
                 continue;
             }
 
             if (EVENT_STAT_NAMES.contains(normalizedStat)) {
                 neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
-                statAdded = true;
             } else if (STATE_STAT_NAMES.contains(normalizedStat)) {
                 neuralStatsInput.getInfoStatNames().add(InfoStatName.from(normalizedStat));
-                statAdded = true;
+            } else {
+                invalidStatNames.add(normalizedStat);
             }
-            log.info("Non-existent stat name parsed: {}", normalizedStat);
         }
-        return statAdded;
+
+        // When we reach this block, we must have added at least one stat to the input, or else invalid stats will be
+        // non empty. So throwing this exception here without adding all covers the empty input case.
+        if (invalidStatNames.isEmpty() == false) {
+            throw new IllegalArgumentException(
+                unrecognized(request, invalidStatNames, Sets.union(EVENT_STAT_NAMES, STATE_STAT_NAMES), STAT_PARAM)
+            );
+        }
     }
 
     private void addAllStats(NeuralStatsInput neuralStatsInput) {

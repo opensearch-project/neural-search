@@ -13,14 +13,12 @@ import java.util.stream.Collectors;
 
 import lombok.AccessLevel;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Matches;
 import org.apache.lucene.search.MatchesUtils;
 import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.ScorerSupplier;
 import org.apache.lucene.search.Weight;
 import org.opensearch.neuralsearch.executors.HybridQueryExecutor;
@@ -37,7 +35,6 @@ public final class HybridQueryWeight extends Weight {
     // The Weights for our subqueries, in 1-1 correspondence
     @Getter(AccessLevel.PACKAGE)
     private final List<Weight> weights;
-
     private final ScoreMode scoreMode;
 
     /**
@@ -95,7 +92,7 @@ public final class HybridQueryWeight extends Weight {
         if (scorerSuppliers.isEmpty()) {
             return null;
         }
-        return new HybridScorerSupplier(scorerSuppliers, this, scoreMode);
+        return new HybridScorerSupplier(scorerSuppliers, this, scoreMode, context);
     }
 
     private Void addScoreSupplier(Weight weight, HybridQueryExecutorCollector<LeafReaderContext, ScorerSupplier> collector) {
@@ -145,7 +142,7 @@ public final class HybridQueryWeight extends Weight {
                 max = Math.max(max, score);
                 subsOnMatch.add(e);
             } else {
-                if (!match) {
+                if (match == false) {
                     subsOnNoMatch.add(e);
                 }
                 subsOnMatch.add(e);
@@ -158,50 +155,4 @@ public final class HybridQueryWeight extends Weight {
             return Explanation.noMatch("no matching clause", subsOnNoMatch);
         }
     }
-
-    @RequiredArgsConstructor
-    static class HybridScorerSupplier extends ScorerSupplier {
-        private long cost = -1;
-        private final List<ScorerSupplier> scorerSuppliers;
-        private final Weight weight;
-        private final ScoreMode scoreMode;
-
-        @Override
-        public Scorer get(long leadCost) throws IOException {
-            List<Scorer> tScorers = new ArrayList<>();
-            for (ScorerSupplier ss : scorerSuppliers) {
-                if (Objects.nonNull(ss)) {
-                    tScorers.add(ss.get(leadCost));
-                } else {
-                    tScorers.add(null);
-                }
-            }
-            return new HybridQueryScorer(weight, tScorers, scoreMode);
-        }
-
-        @Override
-        public long cost() {
-            if (cost == -1) {
-                long cost = 0;
-                for (ScorerSupplier ss : scorerSuppliers) {
-                    if (Objects.nonNull(ss)) {
-                        cost += ss.cost();
-                    }
-                }
-                this.cost = cost;
-            }
-            return cost;
-        }
-
-        @Override
-        public void setTopLevelScoringClause() throws IOException {
-            for (ScorerSupplier ss : scorerSuppliers) {
-                // sub scorers need to be able to skip too as calls to setMinCompetitiveScore get
-                // propagated
-                if (Objects.nonNull(ss)) {
-                    ss.setTopLevelScoringClause();
-                }
-            }
-        }
-    };
 }
