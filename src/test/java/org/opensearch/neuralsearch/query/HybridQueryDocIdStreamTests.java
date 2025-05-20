@@ -124,6 +124,7 @@ public class HybridQueryDocIdStreamTests extends OpenSearchTestCase {
     private HybridBulkScorer createMockScorerWithDocs(FixedBitSet matchingDocs, int numDocs) {
         HybridBulkScorer mockScorer = mock(HybridBulkScorer.class);
         when(mockScorer.getMatching()).thenReturn(matchingDocs);
+        when(mockScorer.getMaxDoc()).thenReturn(200);
 
         // setup window scores with the specified number of docs
         float[][] windowScores = new float[2][numDocs];
@@ -144,6 +145,7 @@ public class HybridQueryDocIdStreamTests extends OpenSearchTestCase {
     private HybridBulkScorer createMockScorerWithDocs(FixedBitSet matchingDocs) {
         HybridBulkScorer mockScorer = mock(HybridBulkScorer.class);
         when(mockScorer.getMatching()).thenReturn(matchingDocs);
+        when(mockScorer.getMaxDoc()).thenReturn(200);
 
         // setup window scores
         float[][] windowScores = new float[2][NUM_DOCS]; // 2 sub-queries
