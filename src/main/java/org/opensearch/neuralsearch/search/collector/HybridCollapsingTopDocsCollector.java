@@ -14,7 +14,6 @@ import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.FieldValueHitQueue;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.LeafFieldComparator;
-import org.apache.lucene.search.Scorable;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Sort;
@@ -24,14 +23,13 @@ import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.apache.lucene.search.grouping.GroupSelector;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.neuralsearch.query.HybridQueryScorer;
+import org.opensearch.neuralsearch.query.HybridSubQueryScorer;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 import org.opensearch.neuralsearch.search.lucene.MultiLeafFieldComparator;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -195,8 +193,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
     public LeafCollector getLeafCollector(LeafReaderContext context) throws IOException {
         docBase = context.docBase;
         groupSelector.setNextReader(context);
-        return new LeafCollector() {
-            HybridQueryScorer compoundQueryScorer;
+        return new HybridLeafCollector() {
             ConcurrentHashMap<T, Boolean> initializeLeafComparatorsPerSegmentOnceMap;
 
             {
@@ -204,50 +201,16 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
             }
 
             @Override
-            public void setScorer(Scorable scorer) throws IOException {
-                if (scorer instanceof HybridQueryScorer) {
-                    log.debug("passed scorer is of type HybridQueryScorer, saving it for collecting documents and scores");
-                    compoundQueryScorer = (HybridQueryScorer) scorer;
-                } else {
-                    compoundQueryScorer = getHybridQueryScorer(scorer);
-                    if (Objects.isNull(compoundQueryScorer)) {
-                        log.error(
-                            String.format(Locale.ROOT, "cannot find scorer of type HybridQueryScorer in a hierarchy of scorer %s", scorer)
-                        );
-                    }
-                }
-            }
-
-            private HybridQueryScorer getHybridQueryScorer(final Scorable scorer) throws IOException {
-                if (scorer == null) {
-                    return null;
-                }
-                if (scorer instanceof HybridQueryScorer) {
-                    return (HybridQueryScorer) scorer;
-                }
-                for (Scorable.ChildScorable childScorable : scorer.getChildren()) {
-                    HybridQueryScorer hybridQueryScorer = getHybridQueryScorer(childScorable.child());
-                    if (Objects.nonNull(hybridQueryScorer)) {
-                        log.debug(
-                            String.format(
-                                Locale.ROOT,
-                                "found hybrid query scorer, it's child of scorer %s",
-                                childScorable.child().getClass().getSimpleName()
-                            )
-                        );
-                        return hybridQueryScorer;
-                    }
-                }
-                return null;
-            }
-
-            @Override
             public void collect(int doc) throws IOException {
+                HybridSubQueryScorer compoundQueryScorer = getCompoundQueryScorer();
+                if (Objects.isNull(compoundQueryScorer)) {
+                    return;
+                }
                 groupSelector.advanceTo(doc);
                 T groupValue = groupSelector.currentValue();
                 assert groupValue != null;
                 FieldValueHitQueue<FieldValueHitQueue.Entry>[] group = groupQueueMap.get(groupValue);
-                float[] subScoresByQuery = compoundQueryScorer.hybridScores();
+                float[] subScoresByQuery = compoundQueryScorer.getSubQueryScores();
                 if (group == null) {
                     initializeQueue(subScoresByQuery.length);
                 }

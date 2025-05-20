@@ -89,7 +89,6 @@ public class HybridCollapsingTopDocsCollectorTests extends OpenSearchQueryTestCa
         QueryShardContext mockContext = mockQueryShardContext();
 
         HybridQueryScorer hybridScorer = new HybridQueryScorer(
-            weight,
             Arrays.asList(
                 collapseScorer(docIds, scores1, fakeWeight(QueryBuilders.termQuery(TEXT_FIELD_NAME, TEST_QUERY_TEXT).toQuery(mockContext))),
                 collapseScorer(docIds, scores2, fakeWeight(QueryBuilders.termQuery(TEXT_FIELD_NAME, TEST_QUERY_TEXT2).toQuery(mockContext)))
@@ -167,7 +166,6 @@ public class HybridCollapsingTopDocsCollectorTests extends OpenSearchQueryTestCa
         QueryShardContext mockContext = mockQueryShardContext();
 
         HybridQueryScorer hybridScorer = new HybridQueryScorer(
-            weight,
             Arrays.asList(
                 collapseScorer(docIds, scores1, fakeWeight(QueryBuilders.termQuery(TEXT_FIELD_NAME, TEST_QUERY_TEXT).toQuery(mockContext))),
                 collapseScorer(docIds, scores2, fakeWeight(QueryBuilders.termQuery(TEXT_FIELD_NAME, TEST_QUERY_TEXT2).toQuery(mockContext)))

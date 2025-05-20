@@ -63,8 +63,8 @@ public class HybridCollapseIT extends NeuralSearchRestTestCase {
 
         final String responseBody = EntityUtils.toString(searchResponse.getEntity());
 
-        // 3 hits indicates that the results were collapsed down from 4 to 3 as intended.
-        assertTrue(responseBody.contains("\"hits\":{\"total\":{\"value\":3"));
+        String collapseDuplicate = "Chocolate Cake";
+        assertTrue(isCollapseDuplicateRemoved(responseBody, collapseDuplicate));
     }
 
     private void createBasicCollapseIndex() throws IOException {
@@ -112,5 +112,23 @@ public class HybridCollapseIT extends NeuralSearchRestTestCase {
         indexRequest.setJsonEntity(indexRequestBody);
         assertOK(client().performRequest(indexRequest));
         currentDocNumber++;
+    }
+
+    private boolean isCollapseDuplicateRemoved(String responseBody, String collapseDuplicate) {
+        // Collapse field should only be present twice in the response body
+        // First occurrence should be the hit
+        // Second occurrence should be specifying that hit's collapse field
+
+        // Find first occurrence
+        int firstIndex = responseBody.indexOf(collapseDuplicate);
+        if (firstIndex == -1) return false;
+
+        // Find second occurrence
+        int secondIndex = responseBody.indexOf(collapseDuplicate, firstIndex + 1);
+        if (secondIndex == -1) return false;
+
+        // Check there isn't a third occurrence
+        int thirdIndex = responseBody.indexOf(collapseDuplicate, secondIndex + 1);
+        return thirdIndex == -1;
     }
 }
