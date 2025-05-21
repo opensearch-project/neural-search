@@ -122,6 +122,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     public static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
 
     public static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
+    public static final ParseField SEARCH_ANALYZER_FIELD = new ParseField("search_analyzer");
 
     // fields only used for dense model
     public static final ParseField QUERY_IMAGE_FIELD = new ParseField("query_image");
@@ -149,6 +150,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     private String fieldName;
     private String queryText;
     private String modelId;
+    private String searchAnalyzer;
     private String embeddingFieldType;
 
     // fields only used for dense model
@@ -180,6 +182,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         private String queryText;
         private String queryImage;
         private String modelId;
+        private String searchAnalyzer;
         private Integer k = null;
         private Float maxDistance = null;
         private Float minScore = null;
@@ -299,6 +302,11 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             return this;
         }
 
+        public Builder searchAnalyzer(String searchAnalyzer) {
+            this.searchAnalyzer = searchAnalyzer;
+            return this;
+        }
+
         public NeuralQueryBuilder build() {
             requireValue(fieldName, "Field name must be provided for neural query");
 
@@ -306,6 +314,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 fieldName,
                 queryText,
                 modelId,
+                searchAnalyzer,
                 embeddingFieldType,
                 queryImage,
                 k,
@@ -583,6 +592,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                     builder.minScore(parser.floatValue());
                 } else if (EXPAND_NESTED_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     builder.expandNested(parser.booleanValue());
+                } else if (SEARCH_ANALYZER_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    builder.searchAnalyzer(parser.text());
                 } else {
                     throw getUnsupportedFieldException(parser.getTokenLocation(), currentFieldName);
                 }
@@ -717,8 +728,11 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 queryTokensSupplier = modelIdToQueryTokensSupplierMap.get(searchModelId);
             }
 
-            final NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(embeddingFieldPath)
+            NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(embeddingFieldPath)
                 .queryTokensSupplier(queryTokensSupplier);
+            if (StringUtils.EMPTY.equals(this.searchAnalyzer) == false) {
+                neuralSparseQueryBuilder = neuralSparseQueryBuilder.analyzer(this.searchAnalyzer);
+            }
             if (Boolean.TRUE.equals(chunkingEnabled)) {
                 return new NestedQueryBuilder(chunksPath, neuralSparseQueryBuilder, ScoreMode.Max);
             } else {
@@ -846,6 +860,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             .queryTokensMapSupplier(queryTokensMapSupplier())
             .modelIdToQueryTokensSupplierMap(modelIdToQueryTokensSupplierMap())
             .modelIdToVectorSupplierMap(modelIdToVectorSupplierMap())
+            .searchAnalyzer(searchAnalyzer())
             .build();
     }
 

@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.util;
 
 import lombok.NonNull;
 import org.apache.commons.lang.StringUtils;
+import org.opensearch.core.common.Strings;
 import org.opensearch.index.mapper.RankFeaturesFieldMapper;
 import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
@@ -31,6 +32,7 @@ import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MODEL_ID_FIEL
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_IMAGE_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TEXT_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TOKENS_FIELD;
+import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.SEARCH_ANALYZER_FIELD;
 
 public class NeuralQueryValidationUtil {
     public static List<String> validateNeuralQueryForKnn(
@@ -142,8 +144,26 @@ public class NeuralQueryValidationUtil {
             errors.add(String.format(Locale.ROOT, "%s field can not be empty", QUERY_TEXT_FIELD.getPreferredName()));
         }
 
-        if (StringUtils.EMPTY.equals(queryBuilder.modelId())) {
-            errors.add(String.format(Locale.ROOT, "%s field can not be empty", MODEL_ID_FIELD.getPreferredName()));
+        if (StringUtils.EMPTY.equals(queryBuilder.modelId()) && Strings.isNullOrEmpty(queryBuilder.searchAnalyzer())) {
+            errors.add(
+                String.format(
+                    Locale.ROOT,
+                    "%s field and %s field can not be both empty",
+                    MODEL_ID_FIELD.getPreferredName(),
+                    SEARCH_ANALYZER_FIELD.getPreferredName()
+                )
+            );
+        }
+
+        if (StringUtils.EMPTY.equals(queryBuilder.modelId()) == false && Strings.isNullOrEmpty(queryBuilder.searchAnalyzer()) == false) {
+            errors.add(
+                String.format(
+                    Locale.ROOT,
+                    "%s field and %s field can not both exist",
+                    MODEL_ID_FIELD.getPreferredName(),
+                    SEARCH_ANALYZER_FIELD.getPreferredName()
+                )
+            );
         }
 
         final Set<String> fieldsOnlySupportedByDenseModel = getFieldsOnlySupportedByDenseModel(queryBuilder);
