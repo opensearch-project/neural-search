@@ -23,6 +23,7 @@ public class ArithmeticMeanScoreCombinationTechnique implements ScoreCombination
     public static final String TECHNIQUE_NAME = "arithmetic_mean";
     private static final Set<String> SUPPORTED_PARAMS = Set.of(PARAM_NAME_WEIGHTS);
     private static final Float ZERO_SCORE = 0.0f;
+    @ToString.Include
     private final List<Float> weights;
     private final ScoreCombinationUtil scoreCombinationUtil;
 

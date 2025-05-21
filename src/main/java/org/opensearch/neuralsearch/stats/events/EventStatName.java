@@ -18,7 +18,19 @@ import java.util.stream.Collectors;
  */
 @Getter
 public enum EventStatName implements StatName {
-    TEXT_EMBEDDING_PROCESSOR_EXECUTIONS("text_embedding_executions", "processors.ingest", EventStatType.TIMESTAMPED_EVENT_COUNTER);
+    TEXT_EMBEDDING_PROCESSOR_EXECUTIONS("text_embedding_executions", "processors.ingest", EventStatType.TIMESTAMPED_EVENT_COUNTER),
+    TEXT_CHUNKING_PROCESSOR_EXECUTIONS("text_chunking_executions", "processors.ingest", EventStatType.TIMESTAMPED_EVENT_COUNTER),
+    TEXT_CHUNKING_FIXED_LENGTH_EXECUTIONS(
+        "text_chunking_fixed_length_executions",
+        "processors.ingest",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER
+    ),
+    TEXT_CHUNKING_DELIMITER_EXECUTIONS("text_chunking_delimiter_executions", "processors.ingest", EventStatType.TIMESTAMPED_EVENT_COUNTER),
+    SEMANTIC_HIGHLIGHTING_REQUEST_COUNT(
+        "semantic_highlighting_request_count",
+        "semantic_highlighting",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER
+    );
 
     private final String nameString;
     private final String path;
