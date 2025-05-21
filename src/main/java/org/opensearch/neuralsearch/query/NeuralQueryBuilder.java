@@ -50,6 +50,7 @@ import java.util.stream.Collectors;
 
 import lombok.NonNull;
 import org.apache.commons.lang.StringUtils;
+import org.opensearch.core.common.Strings;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
@@ -122,6 +123,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     public static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
 
     public static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
+    public static final ParseField SEMANTIC_FIELD_SEARCH_ANALYZER_FIELD = new ParseField("semantic_field_search_analyzer");
 
     // fields only used for dense model
     public static final ParseField QUERY_IMAGE_FIELD = new ParseField("query_image");
@@ -171,6 +173,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     private Supplier<Map<String, Float>> queryTokensMapSupplier;
     // fields to support the semantic field for sparse model
     private Map<String, Supplier<Map<String, Float>>> modelIdToQueryTokensSupplierMap;
+    private String searchAnalyzer;
 
     /**
      * A custom builder class to enforce valid Neural Query Builder instantiation
@@ -180,6 +183,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         private String queryText;
         private String queryImage;
         private String modelId;
+        private String searchAnalyzer;
         private Integer k = null;
         private Float maxDistance = null;
         private Float minScore = null;
@@ -299,6 +303,11 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             return this;
         }
 
+        public Builder searchAnalyzer(String searchAnalyzer) {
+            this.searchAnalyzer = searchAnalyzer;
+            return this;
+        }
+
         public NeuralQueryBuilder build() {
             requireValue(fieldName, "Field name must be provided for neural query");
 
@@ -318,7 +327,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 rescoreContext,
                 modelIdToVectorSupplierMap,
                 queryTokensMapSupplier,
-                modelIdToQueryTokensSupplierMap
+                modelIdToQueryTokensSupplierMap,
+                searchAnalyzer
+
             ).boost(boost).queryName(queryName);
 
             List<String> errors = new ArrayList<>();
@@ -409,6 +420,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             this.queryTokensMapSupplier = queryTokensMapSupplierStreamInput(in);
             this.modelIdToVectorSupplierMap = modelIdToVectorSupplierMapStreamInput(in);
             this.modelIdToQueryTokensSupplierMap = modelIdToQueryTokensSupplierMapStreamInput(in);
+            this.searchAnalyzer = in.readOptionalString();
         }
     }
 
@@ -455,6 +467,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             queryTokensMapSupplierStreamOutput(out, queryTokensMapSupplier);
             modelIdToVectorSupplierMapStreamOutput(out, modelIdToVectorSupplierMap);
             modelIdToQueryTokensSupplierMapStreamOutput(out, modelIdToQueryTokensSupplierMap);
+            out.writeOptionalString(this.searchAnalyzer);
         }
     }
 
@@ -583,6 +596,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                     builder.minScore(parser.floatValue());
                 } else if (EXPAND_NESTED_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     builder.expandNested(parser.booleanValue());
+                } else if (SEMANTIC_FIELD_SEARCH_ANALYZER_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    builder.searchAnalyzer(parser.text());
                 } else {
                     throw getUnsupportedFieldException(parser.getTokenLocation(), currentFieldName);
                 }
@@ -661,7 +676,10 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         } else {
             // If it is not null it means we already start the async actions in the previous rewrite.
             // Current rewrite happens after all the async actions done so simply return this to end the rewrite.
-            if (modelIdToVectorSupplierMap != null || modelIdToQueryTokensSupplierMap != null || queryTokensMapSupplier != null) {
+            if (modelIdToVectorSupplierMap != null
+                || modelIdToQueryTokensSupplierMap != null
+                || queryTokensMapSupplier != null
+                || searchAnalyzer != null) {
                 // If we only have one target index it means we know the path to the target embedding feild so we can
                 // continue the rewrite
                 if (indexToTargetFieldConfigMap.size() == 1) {
@@ -705,8 +723,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             }
         } else if (RankFeaturesFieldMapper.CONTENT_TYPE.equals(embeddingFieldType)) {
             Supplier<Map<String, Float>> queryTokensSupplier = queryTokensMapSupplier;
-            // If the raw token is not provided then try to find the token generated by the ml model
-            if (queryTokensSupplier == null) {
+            // If the raw token is not provided or no search analyzer provided
+            // then try to find the token generated by the ml model
+            if (queryTokensSupplier == null && searchAnalyzer == null) {
                 if (modelIdToQueryTokensSupplierMap == null || modelIdToQueryTokensSupplierMap.get(searchModelId) == null) {
                     throw new RuntimeException(
                         getErrorMessageWithBaseErrorForSemantic(
@@ -717,8 +736,12 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 queryTokensSupplier = modelIdToQueryTokensSupplierMap.get(searchModelId);
             }
 
-            final NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(embeddingFieldPath)
-                .queryTokensSupplier(queryTokensSupplier);
+            NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(embeddingFieldPath);
+            if (Strings.isNullOrEmpty(this.searchAnalyzer) == false) {
+                neuralSparseQueryBuilder = neuralSparseQueryBuilder.analyzer(this.searchAnalyzer).queryText(this.queryText);
+            } else {
+                neuralSparseQueryBuilder = neuralSparseQueryBuilder.queryTokensSupplier(queryTokensSupplier);
+            }
             if (Boolean.TRUE.equals(chunkingEnabled)) {
                 return new NestedQueryBuilder(chunksPath, neuralSparseQueryBuilder, ScoreMode.Max);
             } else {
@@ -846,6 +869,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             .queryTokensMapSupplier(queryTokensMapSupplier())
             .modelIdToQueryTokensSupplierMap(modelIdToQueryTokensSupplierMap())
             .modelIdToVectorSupplierMap(modelIdToVectorSupplierMap())
+            .searchAnalyzer(searchAnalyzer())
             .build();
     }
 
@@ -1064,6 +1088,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         equalsBuilder.append(queryText, obj.queryText);
         equalsBuilder.append(queryImage, obj.queryImage);
         equalsBuilder.append(modelId, obj.modelId);
+        equalsBuilder.append(searchAnalyzer, obj.searchAnalyzer);
         equalsBuilder.append(k, obj.k);
         equalsBuilder.append(maxDistance, obj.maxDistance);
         equalsBuilder.append(minScore, obj.minScore);
@@ -1083,6 +1108,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             queryText,
             queryImage,
             modelId,
+            searchAnalyzer,
             k,
             maxDistance,
             minScore,
