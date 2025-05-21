@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.mappingtransformer;
 
 import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.mapper.ObjectMapper;
 import org.opensearch.index.mapper.RankFeaturesFieldMapper;
 import org.opensearch.index.mapper.TextFieldMapper;
@@ -22,7 +21,7 @@ import java.util.Map;
 
 import static org.opensearch.neuralsearch.constants.MappingConstants.PROPERTIES;
 import static org.opensearch.neuralsearch.constants.MappingConstants.TYPE;
-import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.CHUNKS_EMBEDDING_FIELD_NAME;
+import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.EMBEDDING_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.CHUNKS_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.CHUNKS_TEXT_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.DEFAULT_MODEL_CONFIG;
@@ -45,6 +44,7 @@ public class SemanticInfoConfigBuilder {
     private String spaceType;
     private String knnMethodName = KNN_VECTOR_METHOD_DEFAULT_NAME;
     private Integer embeddingDimension;
+    private Boolean chunkingEnabled;
 
     public SemanticInfoConfigBuilder(@NonNull final NamedXContentRegistry xContentRegistry) {
         this.xContentRegistry = xContentRegistry;
@@ -72,7 +72,7 @@ public class SemanticInfoConfigBuilder {
      * @return Config of the semantic info fields.
      */
     public Map<String, Object> build() {
-        Map<String, Object> embeddingFieldConfig = switch (embeddingFieldType) {
+        final Map<String, Object> embeddingFieldConfig = switch (embeddingFieldType) {
             case KNNVectorFieldMapper.CONTENT_TYPE -> buildKnnFieldConfig();
             case RankFeaturesFieldMapper.CONTENT_TYPE -> buildRankFeaturesFieldConfig();
             default -> throw new IllegalArgumentException(
@@ -84,14 +84,17 @@ public class SemanticInfoConfigBuilder {
             );
         };
 
-        final Map<String, Object> chunksConfig = Map.of(
-            TYPE,
-            ObjectMapper.NESTED_CONTENT_TYPE,
-            PROPERTIES,
-            Map.of(CHUNKS_TEXT_FIELD_NAME, Map.of(TYPE, TextFieldMapper.CONTENT_TYPE), CHUNKS_EMBEDDING_FIELD_NAME, embeddingFieldConfig)
-        );
-
-        return Map.of(PROPERTIES, Map.of(CHUNKS_FIELD_NAME, chunksConfig, MODEL_FIELD_NAME, DEFAULT_MODEL_CONFIG));
+        if (chunkingEnabled) {
+            final Map<String, Object> chunksConfig = Map.of(
+                TYPE,
+                ObjectMapper.NESTED_CONTENT_TYPE,
+                PROPERTIES,
+                Map.of(CHUNKS_TEXT_FIELD_NAME, Map.of(TYPE, TextFieldMapper.CONTENT_TYPE), EMBEDDING_FIELD_NAME, embeddingFieldConfig)
+            );
+            return Map.of(PROPERTIES, Map.of(CHUNKS_FIELD_NAME, chunksConfig, MODEL_FIELD_NAME, DEFAULT_MODEL_CONFIG));
+        } else {
+            return Map.of(PROPERTIES, Map.of(EMBEDDING_FIELD_NAME, embeddingFieldConfig, MODEL_FIELD_NAME, DEFAULT_MODEL_CONFIG));
+        }
     }
 
     private Map<String, Object> buildKnnFieldConfig() {
@@ -158,26 +161,22 @@ public class SemanticInfoConfigBuilder {
 
         this.embeddingDimension = textEmbeddingModelConfig.getEmbeddingDimension();
 
-        final Map<String, Object> allConfigMap;
-        try {
-            allConfigMap = MapperService.parseMapping(xContentRegistry, textEmbeddingModelConfig.getAllConfig());
-        } catch (Exception e) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "Failed to parse the all_config of the model %s. Invalid all_config: %s",
-                    modelId,
-                    textEmbeddingModelConfig.getAllConfig()
-                )
-            );
+        final Map<String, Object> additionalConfig = textEmbeddingModelConfig.getAdditionalConfig();
+        if (additionalConfig != null) {
+            final Object spaceTypeObject = additionalConfig.get(KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME);
+            if (spaceTypeObject instanceof String == false) {
+                throw createInvalidSpaceTypeException(modelId);
+            }
+            this.spaceType = (String) spaceTypeObject;
+        } else {
+            throw createInvalidSpaceTypeException(modelId);
         }
-        final Object spaceTypeObject = allConfigMap.get(KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME);
-        if (spaceTypeObject instanceof String == false) {
-            throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "space_type is not defined or not a string in the all_config of the model %s.", modelId)
-            );
-        }
-        this.spaceType = (String) spaceTypeObject;
+    }
+
+    private IllegalArgumentException createInvalidSpaceTypeException(@NonNull final String modelId) {
+        return new IllegalArgumentException(
+            String.format(Locale.ROOT, "space_type is not defined or not a string in the additional_config of the model %s.", modelId)
+        );
     }
 
     private void extractInfoForSparseModel() {
@@ -212,5 +211,10 @@ public class SemanticInfoConfigBuilder {
             modelId,
             String.join(",", SUPPORTED_REMOTE_MODEL_TYPES)
         );
+    }
+
+    public SemanticInfoConfigBuilder chunkingEnabled(final Boolean chunkingEnabled) {
+        this.chunkingEnabled = chunkingEnabled;
+        return this;
     }
 }

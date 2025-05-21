@@ -40,7 +40,6 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static org.opensearch.neuralsearch.constants.MappingConstants.PATH_SEPARATOR;
-import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DEFAULT_SEMANTIC_INFO_FIELD_NAME_SUFFIX;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.CHUNKS_TEXT_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.MODEL_ID_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.MODEL_NAME_FIELD_NAME;
@@ -52,8 +51,9 @@ import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getMaxTo
 import static org.opensearch.neuralsearch.util.ProcessorDocumentUtils.unflattenIngestDoc;
 import static org.opensearch.neuralsearch.util.SemanticMLModelUtils.getModelType;
 import static org.opensearch.neuralsearch.util.SemanticMLModelUtils.isDenseModel;
+import static org.opensearch.neuralsearch.util.SemanticMappingUtils.isChunkingEnabled;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.getModelId;
-import static org.opensearch.neuralsearch.util.SemanticMappingUtils.getSemanticInfoFieldName;
+import static org.opensearch.neuralsearch.util.SemanticMappingUtils.getSemanticInfoFieldFullPath;
 
 /**
  * Processor to ingest the semantic fields. It will do text chunking and embedding generation for the semantic field.
@@ -74,7 +74,7 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
     private final Environment environment;
     private final ClusterService clusterService;
 
-    private final Chunker chunker;
+    private final Chunker defaultTextChunker;
 
     private final static float DEFAULT_PRUNE_RATIO = 0.1f;
 
@@ -86,14 +86,14 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
         @NonNull final MLCommonsClientAccessor mlClientAccessor,
         @NonNull final Environment environment,
         @NonNull final ClusterService clusterService,
-        @NonNull final Chunker chunker
+        @NonNull final Chunker defaultTextChunker
     ) {
         super(tag, description, batchSize);
         this.pathToFieldConfig = pathToFieldConfig;
         this.mlCommonsClientAccessor = mlClientAccessor;
         this.environment = environment;
         this.clusterService = clusterService;
-        this.chunker = chunker;
+        this.defaultTextChunker = defaultTextChunker;
     }
 
     /**
@@ -199,7 +199,10 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
         }
 
         for (final SemanticFieldInfo semanticFieldInfo : semanticFieldInfoList) {
-            ingestDocument.setFieldValue(semanticFieldInfo.getFullPathForModelInfo(), modelIdToInfoMap.get(semanticFieldInfo.getModelId()));
+            ingestDocument.setFieldValue(
+                semanticFieldInfo.getFullPathForModelInfoInDoc(),
+                modelIdToInfoMap.get(semanticFieldInfo.getModelId())
+            );
         }
     }
 
@@ -259,7 +262,7 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
                 if (!isDenseModel) {
                     embedding = PruneUtils.pruneSparseVector(PruneType.MAX_RATIO, pruneRatio, (Map<String, Float>) embedding);
                 }
-                final String embeddingFullPath = semanticFieldInfo.getFullPathForEmbedding(i);
+                final String embeddingFullPath = semanticFieldInfo.getFullPathForEmbeddingInDoc(i);
                 ingestDocument.setFieldValue(embeddingFullPath, embedding);
             }
         }
@@ -272,27 +275,56 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
         return semanticFieldInfos;
     }
 
-    private void chunk(@NonNull final IngestDocument ingestDocument, @NonNull final List<SemanticFieldInfo> semanticFieldInfo) {
+    private void chunk(@NonNull final IngestDocument ingestDocument, @NonNull final List<SemanticFieldInfo> semanticFieldInfoList) {
         final Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
-        final Map<String, Object> runtimeParameters = new HashMap<>();
         int maxTokenCount = getMaxTokenCount(sourceAndMetadataMap, environment.settings(), clusterService);
-        int chunkStringCount = semanticFieldInfo.size();
-        runtimeParameters.put(FixedTokenLengthChunker.MAX_TOKEN_COUNT_FIELD, maxTokenCount);
-        runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, DEFAULT_MAX_CHUNK_LIMIT);
-        runtimeParameters.put(CHUNK_STRING_COUNT_FIELD, chunkStringCount);
-        for (final SemanticFieldInfo fieldInfo : semanticFieldInfo) {
-            final List<String> chunkedText = chunker.chunk(fieldInfo.getValue(), runtimeParameters);
-            fieldInfo.setChunks(chunkedText);
-            final String chunksFullPath = fieldInfo.getFullPathForChunks();
-            final List<Map<String, Object>> chunks = new ArrayList<>();
 
-            for (final String text : chunkedText) {
-                final Map<String, Object> chunk = new HashMap<>();
-                chunk.put(CHUNKS_TEXT_FIELD_NAME, text);
-                chunks.add(chunk);
+        for (SemanticFieldInfo semanticFieldInfo : semanticFieldInfoList) {
+            if (semanticFieldInfo.getChunkingEnabled()) {
+                if (semanticFieldInfo.getChunkers() == null || semanticFieldInfo.getChunkers().isEmpty()) {
+                    semanticFieldInfo.setChunkers(List.of(defaultTextChunker));
+                }
+                executeChunkers(semanticFieldInfo, maxTokenCount);
+
+                setChunkedText(ingestDocument, semanticFieldInfo);
+            } else {
+                // When chunking is disabled, treat the original text as a single chunk to keep the subsequent logic consistent.
+                semanticFieldInfo.setChunks(List.of(semanticFieldInfo.getValue()));
             }
+        }
+    }
 
-            ingestDocument.setFieldValue(chunksFullPath, chunks);
+    private void setChunkedText(@NonNull final IngestDocument ingestDocument, @NonNull final SemanticFieldInfo semanticFieldInfo) {
+        final List<Map<String, Object>> chunks = new ArrayList<>();
+
+        for (final String text : semanticFieldInfo.getChunks()) {
+            final Map<String, Object> chunk = new HashMap<>();
+            chunk.put(CHUNKS_TEXT_FIELD_NAME, text);
+            chunks.add(chunk);
+        }
+        ingestDocument.setFieldValue(semanticFieldInfo.getFullPathForChunksInDoc(), chunks);
+    }
+
+    private void executeChunkers(@NonNull final SemanticFieldInfo semanticFieldInfo, int maxTokenCount) {
+        for (Chunker chunker : semanticFieldInfo.getChunkers()) {
+            final Map<String, Object> runtimeParameters = new HashMap<>();
+            final List<String> chunks = semanticFieldInfo.getChunks();
+            final boolean isFirstChunker = chunks == null;
+            runtimeParameters.put(FixedTokenLengthChunker.MAX_TOKEN_COUNT_FIELD, maxTokenCount);
+            runtimeParameters.put(CHUNK_STRING_COUNT_FIELD, isFirstChunker ? 1 : chunks.size());
+            // TODO: Should allow user to configure it for each chunker - https://github.com/opensearch-project/neural-search/issues/1340
+            runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, DEFAULT_MAX_CHUNK_LIMIT);
+
+            final List<String> chunkedText = new ArrayList<>();
+            if (isFirstChunker) {
+                chunkedText.addAll(chunker.chunkString(semanticFieldInfo.getValue(), runtimeParameters));
+            } else {
+                for (String chunk : chunks) {
+                    final List<String> chunkedTextTemp = chunker.chunkString(chunk, runtimeParameters);
+                    chunkedText.addAll(chunkedTextTemp);
+                }
+            }
+            semanticFieldInfo.setChunks(chunkedText);
         }
     }
 
@@ -326,33 +358,28 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
                 collectSemanticFieldInfo(listItem, pathParts, fieldConfig, depth, indexedPath, semanticFieldInfoList);
             }
         } else if (depth == pathParts.length) {
-            // the current node is the value of the semantic field and it should be a string value
-            final String fullPath = String.join(PATH_SEPARATOR, pathParts);
+            // the current node is the value of the semantic field, and it should be a string value
+            final String pathToSemanticField = String.join(PATH_SEPARATOR, pathParts);
             if (node instanceof String == false) {
                 throw new IllegalArgumentException(
                     String.format(
                         Locale.ROOT,
                         "Expect the semantic field at path: %s to be a string but found: %s.",
-                        fullPath,
+                        pathToSemanticField,
                         node.getClass()
                     )
                 );
             }
-            final String modelId = getModelId(fieldConfig, fullPath);
 
-            String semanticInfoFullPath = currentPath + DEFAULT_SEMANTIC_INFO_FIELD_NAME_SUFFIX;
-            final String userDefinedFieldName = getSemanticInfoFieldName(fieldConfig, fullPath);
-            if (userDefinedFieldName != null) {
-                final String[] paths = currentPath.split("\\.");
-                paths[paths.length - 1] = userDefinedFieldName;
-                semanticInfoFullPath = String.join(PATH_SEPARATOR, paths);
-            }
-
-            final SemanticFieldInfo semanticFieldInfo = new SemanticFieldInfo();
-            semanticFieldInfo.setValue(node.toString());
-            semanticFieldInfo.setModelId(modelId);
-            semanticFieldInfo.setFullPath(currentPath);
-            semanticFieldInfo.setSemanticInfoFullPath(semanticInfoFullPath);
+            final SemanticFieldInfo semanticFieldInfo = SemanticFieldInfo.builder()
+                .value(node.toString())
+                .modelId(getModelId(fieldConfig, pathToSemanticField))
+                .semanticFieldFullPathInMapping(currentPath)
+                // Here we should use the currentPath because it has the inter index if there is any inter nested object
+                // By using this path we can handle the nested object properly when we use it to set the data for the semantic field
+                .semanticInfoFullPathInDoc(getSemanticInfoFieldFullPath(fieldConfig, currentPath, pathToSemanticField))
+                .chunkingEnabled(isChunkingEnabled(fieldConfig, pathToSemanticField))
+                .build();
 
             semanticFieldInfoList.add(semanticFieldInfo);
         }

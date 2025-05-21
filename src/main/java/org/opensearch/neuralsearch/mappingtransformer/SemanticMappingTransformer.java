@@ -27,6 +27,7 @@ import static org.opensearch.neuralsearch.constants.MappingConstants.PROPERTIES;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.collectSemanticField;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.extractModelIdToFieldPathMap;
+import static org.opensearch.neuralsearch.util.SemanticMappingUtils.isChunkingEnabled;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.getProperties;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.validateModelId;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.validateSemanticInfoFieldName;
@@ -190,8 +191,8 @@ public class SemanticMappingTransformer implements MappingTransformer {
             final List<String> fieldPathList = modelIdToFieldPathMap.get(modelId);
             for (String fieldPath : fieldPathList) {
                 try {
-                    final Map<String, Object> semanticInfoConfig = createSemanticInfoField(mlModel, modelId);
                     final Map<String, Object> fieldConfig = semanticFieldPathToConfigMap.get(fieldPath);
+                    final Map<String, Object> semanticInfoConfig = createSemanticInfoField(mlModel, modelId, fieldConfig, fieldPath);
                     setSemanticInfoField(mappings, fieldPath, fieldConfig.get(SEMANTIC_INFO_FIELD_NAME), semanticInfoConfig);
                 } catch (IllegalArgumentException e) {
                     throw new IllegalArgumentException(getModifyMappingErrorMessage(fieldPath, e.getMessage()), e);
@@ -207,9 +208,16 @@ public class SemanticMappingTransformer implements MappingTransformer {
     }
 
     @VisibleForTesting
-    private Map<String, Object> createSemanticInfoField(final @NonNull MLModel modelConfig, String modelId) {
-        SemanticInfoConfigBuilder builder = new SemanticInfoConfigBuilder(xContentRegistry);
-        return builder.mlModel(modelConfig, modelId).build();
+    private Map<String, Object> createSemanticInfoField(
+        final @NonNull MLModel modelConfig,
+        final String modelId,
+        @NonNull final Map<String, Object> fieldConfig,
+        String fieldPath
+    ) {
+        final SemanticInfoConfigBuilder builder = new SemanticInfoConfigBuilder(xContentRegistry);
+        builder.mlModel(modelConfig, modelId);
+        builder.chunkingEnabled(isChunkingEnabled(fieldConfig, fieldPath));
+        return builder.build();
     }
 
     @SuppressWarnings("unchecked")

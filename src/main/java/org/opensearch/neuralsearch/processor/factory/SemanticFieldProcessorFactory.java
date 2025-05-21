@@ -44,8 +44,6 @@ public final class SemanticFieldProcessorFactory extends AbstractBatchingSystemP
 
     private final ClusterService clusterService;
     private final AnalysisRegistry analysisRegistry;
-    private final static int DEFAULT_TOKEN_LIMIT = 50;
-    private final static double DEFAULT_OVERLAP_RATE = 0.2;
 
     public SemanticFieldProcessorFactory(
         final MLCommonsClientAccessor mlClientAccessor,
@@ -99,6 +97,9 @@ public final class SemanticFieldProcessorFactory extends AbstractBatchingSystemP
             return null;
         }
 
+        // TODO: Allow users to define the chunkers for each field and build the semantic field path -> chunkers map
+        // and pass to the SemanticFieldProcessor to use. - https://github.com/opensearch-project/neural-search/issues/1340
+
         return new SemanticFieldProcessor(
             tag,
             description,
@@ -107,19 +108,16 @@ public final class SemanticFieldProcessorFactory extends AbstractBatchingSystemP
             mlClientAccessor,
             environment,
             clusterService,
-            createChunker()
+            createDefaultTextChunker()
         );
     }
 
     /**
      * Create a default text chunker.
-     * TODO: Make it configurable
      * @return A default fixed token length chunker
      */
-    private Chunker createChunker() {
+    private Chunker createDefaultTextChunker() {
         final Map<String, Object> chunkerParameters = new HashMap<>();
-        chunkerParameters.put(FixedTokenLengthChunker.TOKEN_LIMIT_FIELD, DEFAULT_TOKEN_LIMIT);
-        chunkerParameters.put(FixedTokenLengthChunker.OVERLAP_RATE_FIELD, DEFAULT_OVERLAP_RATE);
         chunkerParameters.put(FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD, analysisRegistry);
         return ChunkerFactory.create(FixedTokenLengthChunker.ALGORITHM_NAME, chunkerParameters);
     }
