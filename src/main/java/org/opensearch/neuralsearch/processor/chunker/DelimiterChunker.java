@@ -7,8 +7,10 @@ package org.opensearch.neuralsearch.processor.chunker;
 import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Collections;
 
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseInteger;
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseIntegerWithDefault;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseStringWithDefault;
 
 /**
@@ -25,8 +27,17 @@ public final class DelimiterChunker implements Chunker {
     /** The default delimiter value used when none is specified. Uses two consecutive newline characters to split on paragraph boundaries. */
     public static final String DEFAULT_DELIMITER = "\n\n";
 
+    /** The parameter field name for specifying the chunk size. */
+    public static final String CHUNK_SIZE_FIELD = "chunk_size";
+
+    /** The default chunk size value. */
+    public static final int DEFAULT_CHUNK_SIZE = Integer.MAX_VALUE;
+
     /** The delimiter string used for text chunking. */
     private String delimiter;
+
+    /** The minimum chunk size. If the total text length is smaller than this, it will not be split. */
+    private int chunkSize;
 
     /**
      * Constructor that initializes the delimiter chunker with the specified parameters.
@@ -41,12 +52,14 @@ public final class DelimiterChunker implements Chunker {
      * Throw IllegalArgumentException if delimiter is not a string or an empty string.
      *
      * @param parameters a map with non-runtime parameters as the following:
-     * 1. delimiter A string as the paragraph split indicator
-     * 2. max_chunk_limit processor level max chunk limit
+     * 1. delimiter A string used as the split indicator (e.g., paragraph separator).
+     * 2. chunk_size An integer representing the maximum allowed length for each chunk;
+     *    if a segment split by delimiter exceeds this length, it will be further split.
      */
     @Override
     public void parseParameters(Map<String, Object> parameters) {
         this.delimiter = parseStringWithDefault(parameters, DELIMITER_FIELD, DEFAULT_DELIMITER);
+        this.chunkSize = parseIntegerWithDefault(parameters, CHUNK_SIZE_FIELD, DEFAULT_CHUNK_SIZE);
     }
 
     /**
@@ -62,25 +75,69 @@ public final class DelimiterChunker implements Chunker {
         int runtimeMaxChunkLimit = parseInteger(runtimeParameters, MAX_CHUNK_LIMIT_FIELD);
         int chunkStringCount = parseInteger(runtimeParameters, CHUNK_STRING_COUNT_FIELD);
 
-        List<String> chunkResult = new ArrayList<>();
-        int start = 0, end;
-        int nextDelimiterPosition = content.indexOf(delimiter);
-
-        while (nextDelimiterPosition != -1) {
-            if (Chunker.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, chunkStringCount)) {
-                break;
-            }
-            end = nextDelimiterPosition + delimiter.length();
-            chunkResult.add(content.substring(start, end));
-            start = end;
-            nextDelimiterPosition = content.indexOf(delimiter, start);
+        // Skip splitting to save memory if content is short and has no delimiter.
+        if (content.length() <= this.chunkSize && !content.contains(delimiter)) {
+            return Collections.singletonList(content);
         }
 
-        // add the rest content into the chunk result
-        if (start < content.length()) {
-            chunkResult.add(content.substring(start));
+        List<String> chunkResult = new ArrayList<>();
+        int start = 0;
+
+        while (start < content.length()) {
+            if (Chunker.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, chunkStringCount)) {
+                chunkResult.add(content.substring(start));
+                break;
+            }
+
+            int nextDelimiterPosition = content.indexOf(delimiter, start);
+            int end = (nextDelimiterPosition == -1) ? content.length() : nextDelimiterPosition + delimiter.length();
+
+            String chunk = content.substring(start, end);
+
+            // For here 'chunk' represents a portion of content sliced by the delimiter.
+            // If chunk is too large, split it further by chunkSize
+            if (chunk.length() > this.chunkSize) {
+                List<String> splitChunks = splitByMaxLengthIncludingDelimiter(chunk, this.chunkSize);
+                int segmentOffsetWithinContent = 0;
+
+                for (String splitChunk : splitChunks) {
+                    // If adding this chunk exceeds the max chunk limit for chunkResult,
+                    // merge all remaining parts into the last chunk
+                    if (Chunker.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, chunkStringCount)) {
+                        chunkResult.add(content.substring(start + segmentOffsetWithinContent));
+                        return chunkResult;
+                    }
+
+                    chunkResult.add(splitChunk);
+                    segmentOffsetWithinContent += splitChunk.length();
+                }
+            } else {
+                chunkResult.add(chunk);
+            }
+
+            start = end;
         }
 
         return chunkResult;
+    }
+
+    private List<String> splitByMaxLengthIncludingDelimiter(final String text, final int maxLength) {
+        List<String> result = new ArrayList<>();
+        int start = 0;
+
+        while (start < text.length()) {
+            int end = Math.min(start + maxLength, text.length());
+
+            // If a delimiter exists within the chunk and doesn't end at the boundary,
+            // adjust to include the full delimiter
+            if (!text.substring(start, end).endsWith(delimiter) && text.indexOf(delimiter, start) < end) {
+                end = text.indexOf(delimiter, start) + delimiter.length();
+            }
+
+            result.add(text.substring(start, end));
+            start = end;
+        }
+
+        return result;
     }
 }
