@@ -9,6 +9,8 @@ import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -60,6 +62,34 @@ public class RRFProcessorIT extends BaseNeuralSearchIT {
         assertEquals(0.011475409, (Double) weightedHitsList.get(1).get("_score"), DELTA_FOR_SCORE_ASSERTION);
         assertEquals(0.011290322, (Double) weightedHitsList.getLast().get("_score"), DELTA_FOR_SCORE_ASSERTION);
 
+    }
+
+    @SneakyThrows
+    public void testRRF_statsEnabled() {
+        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+
+        createPipelineProcessor(null, RRF_INGEST_PIPELINE, ProcessorType.TEXT_EMBEDDING);
+        prepareKnnIndex(RRF_INDEX_NAME, Collections.singletonList(new KNNFieldConfig("passage_embedding", RRF_DIMENSION, TEST_SPACE_TYPE)));
+        addDocuments();
+        createDefaultRRFSearchPipeline();
+
+        HybridQueryBuilder hybridQueryBuilder = getHybridQueryBuilder();
+
+        Map<String, Object> results = search(RRF_INDEX_NAME, hybridQueryBuilder, null, 5, Map.of("search_pipeline", RRF_SEARCH_PIPELINE));
+
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        // Parse json to get stats
+        assertEquals(1, getNestedValue(allNodesStats, EventStatName.RRF_PROCESSOR_EXECUTIONS));
+        assertEquals(1, getNestedValue(allNodesStats, EventStatName.COMB_TECHNIQUE_RRF_EXECUTIONS));
+
+        assertEquals(1, getNestedValue(stats, InfoStatName.RRF_PROCESSORS));
+        assertEquals(1, getNestedValue(stats, InfoStatName.COMB_TECHNIQUE_RRF_PROCESSORS));
+
+        updateClusterSettings("plugins.neural_search.stats_enabled", false);
     }
 
     private HybridQueryBuilder getHybridQueryBuilder() {

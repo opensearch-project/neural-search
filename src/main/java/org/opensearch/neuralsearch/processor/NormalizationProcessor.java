@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.processor;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryStartStopElement;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -15,8 +16,16 @@ import org.opensearch.action.search.QueryPhaseResultConsumer;
 import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.action.search.SearchPhaseName;
 import org.opensearch.action.search.SearchPhaseResults;
+import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.GeometricMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.HarmonicMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ZScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.search.SearchPhaseResult;
 import org.opensearch.search.fetch.FetchSearchResult;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
@@ -40,6 +49,24 @@ public class NormalizationProcessor extends AbstractScoreHybridizationProcessor 
     private final ScoreCombinationTechnique combinationTechnique;
     private final NormalizationProcessorWorkflow normalizationWorkflow;
 
+    private final Map<String, Runnable> normTechniqueIncrementers = Map.of(
+        L2ScoreNormalizationTechnique.TECHNIQUE_NAME,
+        () -> EventStatsManager.increment(EventStatName.NORM_TECHNIQUE_L2_EXECUTIONS),
+        MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME,
+        () -> EventStatsManager.increment(EventStatName.NORM_TECHNIQUE_MINMAX_EXECUTIONS),
+        ZScoreNormalizationTechnique.TECHNIQUE_NAME,
+        () -> EventStatsManager.increment(EventStatName.NORM_TECHNIQUE_NORM_ZSCORE_EXECUTIONS)
+    );
+
+    private final Map<String, Runnable> combTechniqueIncrementers = Map.of(
+        ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+        () -> EventStatsManager.increment(EventStatName.COMB_TECHNIQUE_ARITHMETIC_EXECUTIONS),
+        HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+        () -> EventStatsManager.increment(EventStatName.COMB_TECHNIQUE_HARMONIC_EXECUTIONS),
+        GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+        () -> EventStatsManager.increment(EventStatName.COMB_TECHNIQUE_GEOMETRIC_EXECUTIONS)
+    );
+
     @Override
     <Result extends SearchPhaseResult> void hybridizeScores(
         SearchPhaseResults<Result> searchPhaseResult,
@@ -54,6 +81,7 @@ public class NormalizationProcessor extends AbstractScoreHybridizationProcessor 
         Optional<FetchSearchResult> fetchSearchResult = getFetchSearchResults(searchPhaseResult);
         boolean explain = Objects.nonNull(searchPhaseContext.getRequest().source().explain())
             && searchPhaseContext.getRequest().source().explain();
+        recordStats(normalizationTechnique, combinationTechnique);
         NormalizationProcessorWorkflowExecuteRequest request = NormalizationProcessorWorkflowExecuteRequest.builder()
             .querySearchResults(querySearchResults)
             .fetchSearchResultOptional(fetchSearchResult)
@@ -134,5 +162,11 @@ public class NormalizationProcessor extends AbstractScoreHybridizationProcessor 
     ) {
         Optional<Result> optionalFirstSearchPhaseResult = searchPhaseResults.getAtomicArray().asList().stream().findFirst();
         return optionalFirstSearchPhaseResult.map(SearchPhaseResult::fetchResult);
+    }
+
+    private void recordStats(ScoreNormalizationTechnique normalizationTechnique, ScoreCombinationTechnique combinationTechnique) {
+        EventStatsManager.increment(EventStatName.NORMALIZATION_PROCESSOR_EXECUTIONS);
+        Optional.ofNullable(normTechniqueIncrementers.get(normalizationTechnique.techniqueName())).ifPresent(Runnable::run);
+        Optional.ofNullable(combTechniqueIncrementers.get(combinationTechnique.techniqueName())).ifPresent(Runnable::run);
     }
 }
