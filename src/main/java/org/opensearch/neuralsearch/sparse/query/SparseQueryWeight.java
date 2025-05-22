@@ -64,7 +64,6 @@ public class SparseQueryWeight extends Weight {
         String fieldType = query.getFieldName();
         SparseVectorReader sparseReader = null;
         if (info != null) {
-            log.info("segment info: {}", info.name);
             InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(info, fieldType);
             SparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.get(key);
             sparseReader = index != null ? index.getForwardIndexReader()::readSparseVector : (docId -> { return null; });

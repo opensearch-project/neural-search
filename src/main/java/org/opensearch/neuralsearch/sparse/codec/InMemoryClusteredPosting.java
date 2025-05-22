@@ -70,13 +70,13 @@ public class InMemoryClusteredPosting implements Accountable {
             if (clusters == null || clusters.isEmpty()) {
                 return null;
             }
-             return inMemoryPostings.compute(key, (k, existingMap) -> {
-                 if (existingMap == null) {
-                     existingMap = new ConcurrentHashMap<>();
-                 }
-                 existingMap.put(term.clone(), new PostingClusters(clusters));
-                 return existingMap;
-             });
+            return inMemoryPostings.compute(key, (k, existingMap) -> {
+                if (existingMap == null) {
+                    existingMap = new ConcurrentHashMap<>();
+                }
+                existingMap.put(term.clone(), new PostingClusters(clusters));
+                return existingMap;
+            });
         }
     }
 }

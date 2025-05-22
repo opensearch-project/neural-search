@@ -87,7 +87,7 @@ public class PostingWithClustersScorer extends Scorer {
                 return;
             }
             SparsePostingsEnum sparsePostingsEnum = (SparsePostingsEnum) postingsEnum;
-            log.info(
+            log.debug(
                 "query token: {}, posting doc size: {}, cluster size: {}",
                 token,
                 sparsePostingsEnum.size(),

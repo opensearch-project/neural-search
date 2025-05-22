@@ -80,7 +80,7 @@ public class SparsePostingsReader {
             // get all terms of old segments from InMemoryClusteredPosting
             Set<BytesRef> allTerms = getAllTerms(fieldInfo);
             sparseTermsLuceneWriter.writeTermsSize(allTerms.size());
-            clusteredPostingTermsWriter.setField(fieldInfo);
+            clusteredPostingTermsWriter.setFieldAndMaxDoc(fieldInfo, docCount);
 
             List<CompletableFuture<PostingClusters>> futures = new ArrayList<>(allTerms.size());
             for (BytesRef term : allTerms) {
