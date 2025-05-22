@@ -37,6 +37,7 @@ import java.util.function.Consumer;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.any;
+import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME;
 
 public class SemanticMappingTransformerTests extends OpenSearchTestCase {
     @Mock
@@ -99,6 +100,7 @@ public class SemanticMappingTransformerTests extends OpenSearchTestCase {
         properties.put("inter_field.semantic_field_1", semanticFiled1);
         semanticFiled1.put(MappingConstants.TYPE, SemanticFieldMapper.CONTENT_TYPE);
         semanticFiled1.put(SemanticFieldConstants.MODEL_ID, textEmbeddingModelId);
+        semanticFiled1.put(SemanticFieldConstants.CHUNKING, true);
 
         final String customSemanticInfoFieldName = "custom_semantic_info_field";
         final Map<String, Object> semanticFiled2 = new HashMap<>();
@@ -109,10 +111,9 @@ public class SemanticMappingTransformerTests extends OpenSearchTestCase {
 
         // prepare mock model config
         final Integer embeddingDimension = 768;
-        final String allConfig = "{\"space_type\":\"l2\"}";
         final TextEmbeddingModelConfig textEmbeddingModelConfig = TextEmbeddingModelConfig.builder()
             .embeddingDimension(embeddingDimension)
-            .allConfig(allConfig)
+            .additionalConfig(Map.of(KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME, "l2"))
             .modelType("modelType")
             .frameworkType(TextEmbeddingModelConfig.FrameworkType.HUGGINGFACE_TRANSFORMERS)
             .build();
@@ -157,6 +158,7 @@ public class SemanticMappingTransformerTests extends OpenSearchTestCase {
         properties.put("inter_field.semantic_field_1", semanticFiled1);
         semanticFiled1.put(MappingConstants.TYPE, SemanticFieldMapper.CONTENT_TYPE);
         semanticFiled1.put(SemanticFieldConstants.MODEL_ID, remoteTextEmbeddingModelId);
+        semanticFiled1.put(SemanticFieldConstants.CHUNKING, true);
 
         final String customSemanticInfoFieldName = "custom_semantic_info_field";
         final Map<String, Object> semanticFiled2 = new HashMap<>();
@@ -167,10 +169,9 @@ public class SemanticMappingTransformerTests extends OpenSearchTestCase {
 
         // prepare mock model config
         final Integer embeddingDimension = 768;
-        final String allConfig = "{\"space_type\":\"l2\"}";
         final TextEmbeddingModelConfig remoteTextEmbeddingModelConfig = TextEmbeddingModelConfig.builder()
             .embeddingDimension(embeddingDimension)
-            .allConfig(allConfig)
+            .additionalConfig(Map.of(KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME, "l2"))
             .modelType(FunctionName.TEXT_EMBEDDING.name())
             .frameworkType(TextEmbeddingModelConfig.FrameworkType.HUGGINGFACE_TRANSFORMERS)
             .build();
