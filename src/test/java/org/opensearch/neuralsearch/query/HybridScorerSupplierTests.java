@@ -12,6 +12,7 @@ import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Scorer;
@@ -27,6 +28,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -85,9 +87,7 @@ public class HybridScorerSupplierTests extends OpenSearchQueryTestCase {
     public void testGetWithEmptyScorers() throws IOException {
         HybridScorerSupplier hybridScorerSupplier = new HybridScorerSupplier(Collections.emptyList(), weight, scoreMode, context);
 
-        Scorer scorer = hybridScorerSupplier.get(randomLong());
-        assertNotNull(scorer);
-        assertTrue(scorer instanceof HybridQueryScorer);
+        expectThrows(IllegalArgumentException.class, () -> hybridScorerSupplier.get(randomLong()));
     }
 
     public void testGetWithNullScorer() throws IOException {
@@ -137,9 +137,14 @@ public class HybridScorerSupplierTests extends OpenSearchQueryTestCase {
 
     private ScorerSupplier createMockScorerSupplier(long cost) {
         ScorerSupplier scorerSupplier = mock(ScorerSupplier.class);
+        Scorer scorer = mock(Scorer.class);
+        DocIdSetIterator docIdSetIterator = mock(DocIdSetIterator.class);
         try {
-            when(scorerSupplier.get(randomLong())).thenReturn(mock(Scorer.class));
+            when(docIdSetIterator.cost()).thenReturn(cost);
+            when(scorer.iterator()).thenReturn(docIdSetIterator);
+            when(scorerSupplier.get(anyLong())).thenReturn(scorer);
             when(scorerSupplier.cost()).thenReturn(cost);
+
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

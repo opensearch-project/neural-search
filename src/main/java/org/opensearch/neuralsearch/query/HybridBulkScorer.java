@@ -35,6 +35,7 @@ public class HybridBulkScorer extends BulkScorer {
     @Getter
     private final float[][] windowScores;
     private final HybridQueryDocIdStream hybridQueryDocIdStream;
+    @Getter
     private final int maxDoc;
     private int[] docIds;
 
