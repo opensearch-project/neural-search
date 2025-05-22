@@ -341,7 +341,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         when(queryCoordinatorContext.getSearchRequest()).thenReturn(indicesRequest);
         when(indicesRequest.indices()).thenReturn(List.of(LOCAL_INDEX_NAME).toArray(new String[0]));
         mockIndexMapping(
-            Map.of(LOCAL_INDEX_NAME, createIndexMappingWithSemanticField(MODEL_ID_1, KNNVectorFieldMapper.CONTENT_TYPE, null)),
+            Map.of(LOCAL_INDEX_NAME, createIndexMappingWithSemanticField(MODEL_ID_1, KNNVectorFieldMapper.CONTENT_TYPE, null, true)),
             indicesRequest
         );
 
@@ -406,9 +406,9 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         mockIndexMapping(
             Map.of(
                 LOCAL_INDEX_NAME,
-                createIndexMappingWithSemanticField(MODEL_ID_1, KNNVectorFieldMapper.CONTENT_TYPE, null),
+                createIndexMappingWithSemanticField(MODEL_ID_1, KNNVectorFieldMapper.CONTENT_TYPE, null, true),
                 LOCAL_INDEX_NAME_2,
-                createIndexMappingWithSemanticField(MODEL_ID_2, KNNVectorFieldMapper.CONTENT_TYPE, CUSTOM_SEMANTIC_INFO_FIELD_NAME)
+                createIndexMappingWithSemanticField(MODEL_ID_2, KNNVectorFieldMapper.CONTENT_TYPE, CUSTOM_SEMANTIC_INFO_FIELD_NAME, false)
             ),
             indicesRequest
         );
@@ -458,7 +458,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         assertTrue(rewritten2 instanceof NeuralQueryBuilder);
 
         // prepare data for rewrite on the shard level for the first index LOCAL_INDEX_NAME
-        final QueryShardContext queryShardContext = mockQueryShardContextForKnn(MODEL_ID_1, null);
+        final QueryShardContext queryShardContext = mockQueryShardContextForKnn(MODEL_ID_1, null, true);
 
         QueryBuilder rewritten3 = ((NeuralQueryBuilder) rewritten2).doRewrite(queryShardContext);
 
@@ -472,18 +472,13 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         );
 
         // prepare data for rewrite on the shard level for the second index LOCAL_INDEX_NAME_2
-        final QueryShardContext queryShardContext2 = mockQueryShardContextForKnn(MODEL_ID_2, CUSTOM_SEMANTIC_INFO_FIELD_NAME);
+        final QueryShardContext queryShardContext2 = mockQueryShardContextForKnn(MODEL_ID_2, CUSTOM_SEMANTIC_INFO_FIELD_NAME, false);
 
         QueryBuilder rewritten4 = ((NeuralQueryBuilder) rewritten2).doRewrite(queryShardContext2);
 
-        // verify the query should be rewritten as NeuralKNNQueryBuilder in a NestedQueryBuilder
-        assertTrue(rewritten4 instanceof NestedQueryBuilder);
-        assertTrue(((NestedQueryBuilder) rewritten4).query() instanceof NeuralKNNQueryBuilder);
-        assertArrayEquals(
-            expectedVector2,
-            (float[]) ((NeuralKNNQueryBuilder) ((NestedQueryBuilder) rewritten4).query()).getKnnQueryBuilder().vector(),
-            1e-6f
-        );
+        // verify the query should be rewritten as NeuralKNNQueryBuilder since the chunking is disabled
+        assertTrue(rewritten4 instanceof NeuralKNNQueryBuilder);
+        assertArrayEquals(expectedVector2, (float[]) ((NeuralKNNQueryBuilder) rewritten4).getKnnQueryBuilder().vector(), 1e-6f);
     }
 
     public void testRewriteTargetSemanticKnn_whenModelIdInQuery_thenNestedKnnQueryBuilder() {
@@ -494,7 +489,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         when(queryCoordinatorContext.getSearchRequest()).thenReturn(indicesRequest);
         when(indicesRequest.indices()).thenReturn(List.of(LOCAL_INDEX_NAME).toArray(new String[0]));
         mockIndexMapping(
-            Map.of(LOCAL_INDEX_NAME, createIndexMappingWithSemanticField(MODEL_ID_1, KNNVectorFieldMapper.CONTENT_TYPE, null)),
+            Map.of(LOCAL_INDEX_NAME, createIndexMappingWithSemanticField(MODEL_ID_1, KNNVectorFieldMapper.CONTENT_TYPE, null, true)),
             indicesRequest
         );
 
@@ -550,7 +545,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
     public void testRewriteTargetSemanticKnn_whenOnShardDirectly_thenNestedKnnQueryBuilder() {
         setUpClusterService();
         // prepare data to rewrite on the shard directly
-        final QueryShardContext queryShardContext = mockQueryShardContextForKnn(MODEL_ID_1, null);
+        final QueryShardContext queryShardContext = mockQueryShardContextForKnn(MODEL_ID_1, null, true);
 
         final List<BiConsumer<Client, ActionListener<Void>>> asyncActions = mockRegisterAsyncAction(queryShardContext);
 
@@ -593,19 +588,34 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         );
     }
 
-    private QueryShardContext mockQueryShardContextForKnn(final String modelId, final String semanticInfoFieldName) {
+    private QueryShardContext mockQueryShardContextForKnn(
+        final String modelId,
+        final String semanticInfoFieldName,
+        final Boolean chunkingEnabled
+    ) {
         final QueryShardContext queryShardContext = mock(QueryShardContext.class);
         final SemanticFieldMapper.SemanticFieldType semanticFieldType = mock(SemanticFieldMapper.SemanticFieldType.class);
         final KNNVectorFieldType knnVectorFieldType = mock(KNNVectorFieldType.class);
         when(queryShardContext.fieldMapper(FIELD_NAME)).thenReturn(semanticFieldType);
-        String embeddingFullPath = semanticInfoFieldName == null ? FIELD_NAME + "_semantic_info" : semanticInfoFieldName;
-        embeddingFullPath += ".chunks.embedding";
+        final String semanticInfoFieldPath = semanticInfoFieldName == null ? FIELD_NAME + "_semantic_info" : semanticInfoFieldName;
+        String embeddingFullPath;
+        final SemanticParameters.SemanticParametersBuilder semanticParametersBuilder = SemanticParameters.builder()
+            .modelId(modelId)
+            .rawFieldType(TextFieldMapper.CONTENT_TYPE)
+            .semanticInfoFieldName(semanticInfoFieldName);
+        if (Boolean.TRUE.equals(chunkingEnabled)) {
+            embeddingFullPath = semanticInfoFieldPath + ".chunks.embedding";
+            semanticParametersBuilder.chunkingEnabled(true);
+        } else {
+            embeddingFullPath = semanticInfoFieldPath + ".embedding";
+            semanticParametersBuilder.chunkingEnabled(false);
+        }
+
         when(queryShardContext.fieldMapper(embeddingFullPath)).thenReturn(knnVectorFieldType);
-        when(semanticFieldType.getSemanticParameters()).thenReturn(
-            new SemanticParameters(modelId, null, TextFieldMapper.CONTENT_TYPE, semanticInfoFieldName)
-        );
+        when(semanticFieldType.getSemanticParameters()).thenReturn(semanticParametersBuilder.build());
         when(semanticFieldType.name()).thenReturn(FIELD_NAME);
         when(semanticFieldType.typeName()).thenReturn(SemanticFieldMapper.CONTENT_TYPE);
+        when(semanticFieldType.getSemanticInfoFieldPath()).thenReturn(semanticInfoFieldPath);
         when(knnVectorFieldType.typeName()).thenReturn(KNNVectorFieldMapper.CONTENT_TYPE);
         return queryShardContext;
     }
@@ -618,7 +628,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         when(queryCoordinatorContext.getSearchRequest()).thenReturn(indicesRequest);
         when(indicesRequest.indices()).thenReturn(List.of(LOCAL_INDEX_NAME).toArray(new String[0]));
         mockIndexMapping(
-            Map.of(LOCAL_INDEX_NAME, createIndexMappingWithSemanticField(MODEL_ID_1, RankFeaturesFieldMapper.CONTENT_TYPE, null)),
+            Map.of(LOCAL_INDEX_NAME, createIndexMappingWithSemanticField(MODEL_ID_1, RankFeaturesFieldMapper.CONTENT_TYPE, null, true)),
             indicesRequest
         );
 
@@ -660,7 +670,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         assertEquals(expectedTokenMap, ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten2).query()).queryTokensSupplier().get());
     }
 
-    public void testRewriteTargetSemanticRankFeatures_whenMultipleTargetIndices_thenNestedKnnQueryBuilder() {
+    public void testRewriteTargetSemanticRankFeatures_whenMultipleTargetIndices_thenSuccess() {
         // prepare data to rewrite on coordinate level
         final QueryCoordinatorContext queryCoordinatorContext = mock(QueryCoordinatorContext.class);
         final IndicesRequest indicesRequest = mock(IndicesRequest.class);
@@ -670,9 +680,9 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         mockIndexMapping(
             Map.of(
                 LOCAL_INDEX_NAME,
-                createIndexMappingWithSemanticField(MODEL_ID_1, RankFeaturesFieldMapper.CONTENT_TYPE, null),
+                createIndexMappingWithSemanticField(MODEL_ID_1, RankFeaturesFieldMapper.CONTENT_TYPE, null, false),
                 LOCAL_INDEX_NAME_2,
-                createIndexMappingWithSemanticField(MODEL_ID_2, RankFeaturesFieldMapper.CONTENT_TYPE, CUSTOM_SEMANTIC_INFO_FIELD_NAME)
+                createIndexMappingWithSemanticField(MODEL_ID_2, RankFeaturesFieldMapper.CONTENT_TYPE, CUSTOM_SEMANTIC_INFO_FIELD_NAME, true)
             ),
             indicesRequest
         );
@@ -730,19 +740,19 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
             true
         );
         when(queryShardContext.fieldMapper(FIELD_NAME)).thenReturn(semanticFieldType);
-        when(queryShardContext.fieldMapper(FIELD_NAME + "_semantic_info.chunks.embedding")).thenReturn(rankFeaturesFieldType);
+        when(queryShardContext.fieldMapper(FIELD_NAME + "_semantic_info.embedding")).thenReturn(rankFeaturesFieldType);
         when(semanticFieldType.getSemanticParameters()).thenReturn(
-            new SemanticParameters(MODEL_ID_1, null, TextFieldMapper.CONTENT_TYPE, null)
+            SemanticParameters.builder().modelId(MODEL_ID_1).rawFieldType(TextFieldMapper.CONTENT_TYPE).build()
         );
         when(semanticFieldType.name()).thenReturn(FIELD_NAME);
         when(semanticFieldType.typeName()).thenReturn(SemanticFieldMapper.CONTENT_TYPE);
+        when(semanticFieldType.getSemanticInfoFieldPath()).thenReturn(FIELD_NAME + "_semantic_info");
 
         QueryBuilder rewritten3 = ((NeuralQueryBuilder) rewritten2).doRewrite(queryShardContext);
 
-        // verify the query should be rewritten as NeuralSparseQueryBuilder in a NestedQueryBuilder
-        assertTrue(rewritten3 instanceof NestedQueryBuilder);
-        assertTrue(((NestedQueryBuilder) rewritten3).query() instanceof NeuralSparseQueryBuilder);
-        NeuralSparseQueryBuilder neuralSparseQueryBuilder = (NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten3).query();
+        // verify the query should be rewritten as NeuralSparseQueryBuilder since the chunking is disabled
+        assertTrue(rewritten3 instanceof NeuralSparseQueryBuilder);
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = (NeuralSparseQueryBuilder) rewritten3;
         assertEquals(expectedTokens1, neuralSparseQueryBuilder.queryTokensSupplier().get());
 
         // prepare data for rewrite on the shard level for the second index LOCAL_INDEX_NAME_2
@@ -751,10 +761,16 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         when(queryShardContext2.fieldMapper(FIELD_NAME)).thenReturn(semanticFieldType2);
         when(queryShardContext2.fieldMapper(CUSTOM_SEMANTIC_INFO_FIELD_NAME + ".chunks.embedding")).thenReturn(rankFeaturesFieldType);
         when(semanticFieldType2.getSemanticParameters()).thenReturn(
-            new SemanticParameters(MODEL_ID_2, null, TextFieldMapper.CONTENT_TYPE, CUSTOM_SEMANTIC_INFO_FIELD_NAME)
+            SemanticParameters.builder()
+                .modelId(MODEL_ID_2)
+                .rawFieldType(TextFieldMapper.CONTENT_TYPE)
+                .semanticInfoFieldName(CUSTOM_SEMANTIC_INFO_FIELD_NAME)
+                .chunkingEnabled(true)
+                .build()
         );
         when(semanticFieldType2.name()).thenReturn(FIELD_NAME);
         when(semanticFieldType2.typeName()).thenReturn(SemanticFieldMapper.CONTENT_TYPE);
+        when(semanticFieldType2.getSemanticInfoFieldPath()).thenReturn(CUSTOM_SEMANTIC_INFO_FIELD_NAME);
 
         QueryBuilder rewritten4 = ((NeuralQueryBuilder) rewritten2).doRewrite(queryShardContext2);
 
@@ -772,7 +788,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         when(queryCoordinatorContext.getSearchRequest()).thenReturn(indicesRequest);
         when(indicesRequest.indices()).thenReturn(List.of(LOCAL_INDEX_NAME).toArray(new String[0]));
         mockIndexMapping(
-            Map.of(LOCAL_INDEX_NAME, createIndexMappingWithSemanticField(MODEL_ID_1, RankFeaturesFieldMapper.CONTENT_TYPE, null)),
+            Map.of(LOCAL_INDEX_NAME, createIndexMappingWithSemanticField(MODEL_ID_1, RankFeaturesFieldMapper.CONTENT_TYPE, null, true)),
             indicesRequest
         );
 
@@ -840,36 +856,53 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
     private Map<String, Object> createIndexMappingWithSemanticField(
         final String modelId,
         final String embeddingFieldType,
-        final String semanticInfoName
+        final String semanticInfoName,
+        final Boolean chunkingEnabled
     ) {
         String semanticInfoFieldName = FIELD_NAME + "_semantic_info";
         final Map<String, Object> semanticFieldConfig = new HashMap<>();
         semanticFieldConfig.put(TYPE, SemanticFieldMapper.CONTENT_TYPE);
         semanticFieldConfig.put(SemanticFieldConstants.MODEL_ID, modelId);
+        if (Boolean.TRUE.equals(chunkingEnabled)) {
+            semanticFieldConfig.put(SemanticFieldConstants.CHUNKING, Boolean.TRUE);
+        }
         if (semanticInfoName != null) {
             semanticInfoFieldName = semanticInfoName;
             semanticFieldConfig.put(SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME, semanticInfoName);
         }
 
-        return Map.of(
-            PROPERTIES,
-            Map.of(
-                FIELD_NAME,
-                semanticFieldConfig,
-                semanticInfoFieldName,
+        if (Boolean.TRUE.equals(chunkingEnabled)) {
+            return Map.of(
+                PROPERTIES,
                 Map.of(
-                    PROPERTIES,
+                    FIELD_NAME,
+                    semanticFieldConfig,
+                    semanticInfoFieldName,
                     Map.of(
-                        SemanticInfoFieldConstants.CHUNKS_FIELD_NAME,
+                        PROPERTIES,
                         Map.of(
-                            TYPE,
-                            ObjectMapper.NESTED_CONTENT_TYPE,
-                            PROPERTIES,
-                            Map.of(SemanticInfoFieldConstants.CHUNKS_EMBEDDING_FIELD_NAME, Map.of(TYPE, embeddingFieldType))
+                            SemanticInfoFieldConstants.CHUNKS_FIELD_NAME,
+                            Map.of(
+                                TYPE,
+                                ObjectMapper.NESTED_CONTENT_TYPE,
+                                PROPERTIES,
+                                Map.of(SemanticInfoFieldConstants.EMBEDDING_FIELD_NAME, Map.of(TYPE, embeddingFieldType))
+                            )
                         )
                     )
                 )
-            )
-        );
+            );
+        } else {
+            return Map.of(
+                PROPERTIES,
+                Map.of(
+                    FIELD_NAME,
+                    semanticFieldConfig,
+                    semanticInfoFieldName,
+                    Map.of(PROPERTIES, Map.of(SemanticInfoFieldConstants.EMBEDDING_FIELD_NAME, Map.of(TYPE, embeddingFieldType)))
+                )
+            );
+        }
+
     }
 }

@@ -1,12 +1,9 @@
 {
   "_routing" : "routing",
   "geo_data_semantic_info" : {
-    "chunks" : [ {
-      "text" : "dummy_geo_data_1",
-      "embedding" : {
-        "dummy token" : 1.0
-      }
-    } ],
+    "embedding" : {
+      "dummy token" : 1.0
+    },
     "model" : {
       "name" : "SPARSE_ENCODING",
       "id" : "dummy_model_id_2",

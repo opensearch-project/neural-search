@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.search.collector;
 
+import java.io.IOException;
 import java.util.List;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.TopDocs;
@@ -15,7 +16,7 @@ public interface HybridSearchCollector extends Collector {
     /**
      * @return List of topDocs which contains topDocs of individual subqueries.
      */
-    List<? extends TopDocs> topDocs();
+    List<? extends TopDocs> topDocs() throws IOException;
 
     /**
      * @return count of total hits per shard

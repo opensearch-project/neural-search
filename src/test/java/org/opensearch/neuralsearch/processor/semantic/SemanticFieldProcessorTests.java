@@ -51,6 +51,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.opensearch.neuralsearch.constants.MappingConstants.PATH_SEPARATOR;
 import static org.opensearch.neuralsearch.constants.MappingConstants.TYPE;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.CHUNKING;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessorTests.getAnalysisRegistry;
 
@@ -98,9 +99,10 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
         analysisRegistry = getAnalysisRegistry();
 
         // two semantic fields with different model ids
+        // one field enable the chunking and one field disable the chunking
         pathToFieldConfigMap = Map.of(
             FIELD_NAME_PRODUCTS + PATH_SEPARATOR + FIELD_NAME_PRODUCT_DESCRIPTION,
-            Map.of(TYPE, SemanticFieldMapper.CONTENT_TYPE, MODEL_ID, DUMMY_MODEL_ID_1),
+            Map.of(TYPE, SemanticFieldMapper.CONTENT_TYPE, MODEL_ID, DUMMY_MODEL_ID_1, CHUNKING, true),
             FIELD_NAME_GEO_DATA,
             Map.of(TYPE, SemanticFieldMapper.CONTENT_TYPE, MODEL_ID, DUMMY_MODEL_ID_2)
         );
@@ -412,18 +414,33 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
     @SuppressWarnings("unchecked")
     private Map<String, Object> readExpectedDocFromFile(String filePath) throws URISyntaxException, IOException {
         final Map<String, Object> expectedIngestedDoc = readDocSourceFromFile(filePath);
+        // manually add the _version
         expectedIngestedDoc.put("_version", Long.valueOf(expectedIngestedDoc.get("_version").toString()));
+        // For sparse model we need to convert the double we define in the json file to float otherwise the compare will
+        // fail.
         Map<String, Object> geoDataSemanticInfo = (Map<String, Object>) expectedIngestedDoc.get("geo_data_semantic_info");
         List<Map<String, Object>> chunks = (List<Map<String, Object>>) geoDataSemanticInfo.get("chunks");
-        for (Map<String, Object> chunk : chunks) {
-            Map<String, Float> embeddingWithFloat = new HashMap<>();
-            Map<String, Double> embedding = (Map<String, Double>) chunk.get("embedding");
-            for (Map.Entry<String, Double> entry : embedding.entrySet()) {
-                embeddingWithFloat.put(entry.getKey(), entry.getValue().floatValue());
+        // If chunking is enabled when process each chunk
+        if (chunks != null) {
+            for (Map<String, Object> chunk : chunks) {
+                Map<String, Double> embedding = (Map<String, Double>) chunk.get("embedding");
+                chunk.put("embedding", convertToEmbeddingWithFloat(embedding));
             }
-            chunk.put("embedding", embeddingWithFloat);
+        } else {
+            // If chunking is disabled then process the embedding directly
+            Map<String, Double> embedding = (Map<String, Double>) geoDataSemanticInfo.get("embedding");
+            geoDataSemanticInfo.put("embedding", convertToEmbeddingWithFloat(embedding));
         }
+
         return expectedIngestedDoc;
+    }
+
+    private Map<String, Float> convertToEmbeddingWithFloat(Map<String, Double> embeddingWithDouble) {
+        final Map<String, Float> embeddingWithFloat = new HashMap<>();
+        for (Map.Entry<String, Double> entry : embeddingWithDouble.entrySet()) {
+            embeddingWithFloat.put(entry.getKey(), entry.getValue().floatValue());
+        }
+        return embeddingWithFloat;
     }
 
     private IngestDocumentWrapper createIngestDocWrapper(@NonNull final String id, @NonNull final Map<String, Object> source) {

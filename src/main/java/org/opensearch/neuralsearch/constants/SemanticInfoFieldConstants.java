@@ -23,7 +23,7 @@ public class SemanticInfoFieldConstants {
 
     public static final String CHUNKS_FIELD_NAME = "chunks";
     public static final String CHUNKS_TEXT_FIELD_NAME = "text";
-    public static final String CHUNKS_EMBEDDING_FIELD_NAME = "embedding";
+    public static final String EMBEDDING_FIELD_NAME = "embedding";
 
     public static final String MODEL_FIELD_NAME = "model";
     public static final String MODEL_ID_FIELD_NAME = "id";

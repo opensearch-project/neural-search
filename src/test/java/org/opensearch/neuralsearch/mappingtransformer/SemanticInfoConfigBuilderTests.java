@@ -81,7 +81,7 @@ public class SemanticInfoConfigBuilderTests extends OpenSearchTestCase {
             () -> builder.mlModel(remoteTextEmbeddingModel, "dummyModelId")
         );
 
-        final String expectedErrorMessage = "space_type is not defined or not a string in the all_config of the model dummyModelId.";
+        final String expectedErrorMessage = "space_type is not defined or not a string in the additional_config of the model dummyModelId.";
         assertEquals(expectedErrorMessage, exception.getMessage());
     }
 

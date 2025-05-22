@@ -30,6 +30,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import static org.opensearch.neuralsearch.constants.MappingConstants.PATH_SEPARATOR;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.CHUNKING;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DEFAULT_SEMANTIC_INFO_FIELD_NAME_SUFFIX;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.RAW_FIELD_TYPE;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEARCH_MODEL_ID;
@@ -127,6 +130,14 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
             null
         );
 
+        @Getter
+        protected final Parameter<Boolean> chunkingEnabled = Parameter.boolParam(
+            CHUNKING,
+            false,
+            m -> ((SemanticFieldMapper) m).semanticParameters.getChunkingEnabled(),
+            false
+        );
+
         @Setter
         protected ParametrizedFieldMapper.Builder delegateBuilder;
 
@@ -136,7 +147,7 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
 
         @Override
         protected List<Parameter<?>> getParameters() {
-            return List.of(modelId, searchModelId, rawFieldType, semanticInfoFieldName);
+            return List.of(modelId, searchModelId, rawFieldType, semanticInfoFieldName, chunkingEnabled);
         }
 
         @Override
@@ -157,12 +168,13 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
         }
 
         public SemanticParameters getSemanticParameters() {
-            return new SemanticParameters(
-                modelId.getValue(),
-                searchModelId.getValue(),
-                rawFieldType.getValue(),
-                semanticInfoFieldName.getValue()
-            );
+            return SemanticParameters.builder()
+                .modelId(modelId.getValue())
+                .searchModelId(searchModelId.getValue())
+                .rawFieldType(rawFieldType.getValue())
+                .semanticInfoFieldName(semanticInfoFieldName.getValue())
+                .chunkingEnabled(chunkingEnabled.getValue())
+                .build();
         }
     }
 
@@ -248,6 +260,15 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
         @Override
         public String typeName() {
             return SemanticFieldMapper.CONTENT_TYPE;
+        }
+
+        public String getSemanticInfoFieldPath() {
+            final String[] paths = name().split("\\.");
+            final String semanticInfoFieldName = semanticParameters.getSemanticInfoFieldName();
+            paths[paths.length - 1] = semanticInfoFieldName == null
+                ? paths[paths.length - 1] + DEFAULT_SEMANTIC_INFO_FIELD_NAME_SUFFIX
+                : semanticInfoFieldName;
+            return String.join(PATH_SEPARATOR, paths);
         }
     }
 

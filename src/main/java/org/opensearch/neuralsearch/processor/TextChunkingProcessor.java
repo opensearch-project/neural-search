@@ -33,7 +33,6 @@ import static org.opensearch.neuralsearch.processor.chunker.Chunker.MAX_CHUNK_LI
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.DEFAULT_MAX_CHUNK_LIMIT;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.DISABLED_MAX_CHUNK_LIMIT;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.CHUNK_STRING_COUNT_FIELD;
-import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseInteger;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseIntegerWithDefault;
 
 /**
@@ -273,31 +272,11 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         }
     }
 
-    /**
-     * Chunk the content, update the runtime max_chunk_limit and return the result
-     */
-    private List<String> chunkString(final String content, final Map<String, Object> runTimeParameters) {
-        // return an empty list for empty string
-        if (StringUtils.isEmpty(content)) {
-            return List.of();
-        }
-        List<String> contentResult = chunker.chunk(content, runTimeParameters);
-        // update chunk_string_count for each string
-        int chunkStringCount = parseInteger(runTimeParameters, CHUNK_STRING_COUNT_FIELD);
-        runTimeParameters.put(CHUNK_STRING_COUNT_FIELD, chunkStringCount - 1);
-        // update runtime max_chunk_limit if not disabled
-        int runtimeMaxChunkLimit = parseInteger(runTimeParameters, MAX_CHUNK_LIMIT_FIELD);
-        if (runtimeMaxChunkLimit != DISABLED_MAX_CHUNK_LIMIT) {
-            runTimeParameters.put(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit - contentResult.size());
-        }
-        return contentResult;
-    }
-
     private List<String> chunkList(final List<String> contentList, final Map<String, Object> runTimeParameters) {
         // flatten original output format from List<List<String>> to List<String>
         List<String> result = new ArrayList<>();
         for (String content : contentList) {
-            result.addAll(chunkString(content, runTimeParameters));
+            result.addAll(chunker.chunkString(content, runTimeParameters));
         }
         return result;
     }
@@ -314,7 +293,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
             if (StringUtils.isBlank(String.valueOf(value))) {
                 return result;
             }
-            result = chunkString(value.toString(), runTimeParameters);
+            result = chunker.chunkString(value.toString(), runTimeParameters);
         } else if (isListOfString(value)) {
             result = chunkList((List<String>) value, runTimeParameters);
         }

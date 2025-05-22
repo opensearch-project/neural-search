@@ -5,7 +5,8 @@
       "properties": {
         "semantic_field_1": {
           "model_id": "textEmbeddingModelId",
-          "type": "semantic"
+          "type": "semantic",
+          "chunking": true
         },
         "semantic_field_1_semantic_info": {
           "properties": {
@@ -52,16 +53,8 @@
     },
     "custom_semantic_info_field": {
       "properties": {
-        "chunks": {
-          "type": "nested",
-          "properties": {
-            "embedding": {
-              "type": "rank_features"
-            },
-            "text": {
-              "type": "text"
-            }
-          }
+        "embedding": {
+          "type": "rank_features"
         },
         "model": {
           "properties": {
