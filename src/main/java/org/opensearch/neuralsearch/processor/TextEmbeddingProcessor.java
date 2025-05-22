@@ -72,6 +72,7 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
             generateAndSetInference(ingestDocument, processMap, inferenceList, handler);
             return;
         }
+        EventStatsManager.increment(EventStatName.TEXT_EMBEDDING_PROCESSOR_SKIP_EXISTING_EXECUTIONS);
         // if skipExisting flag is turned on, eligible inference texts will be compared and filtered after embeddings are copied
         Object index = ingestDocument.getSourceAndMetadata().get(INDEX_FIELD);
         Object id = ingestDocument.getSourceAndMetadata().get(ID_FIELD);
@@ -109,6 +110,7 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
     @Override
     public void subBatchExecute(List<IngestDocumentWrapper> ingestDocumentWrappers, Consumer<List<IngestDocumentWrapper>> handler) {
         try {
+            EventStatsManager.increment(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS);
             if (CollectionUtils.isEmpty(ingestDocumentWrappers)) {
                 handler.accept(ingestDocumentWrappers);
                 return;
@@ -126,6 +128,7 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
             }
             // skipExisting flag is turned on, eligible inference texts in dataForInferences will be compared and filtered after embeddings
             // are copied
+            EventStatsManager.increment(EventStatName.TEXT_EMBEDDING_PROCESSOR_SKIP_EXISTING_EXECUTIONS);
             openSearchClient.execute(
                 MultiGetAction.INSTANCE,
                 buildMultiGetRequest(dataForInferences),

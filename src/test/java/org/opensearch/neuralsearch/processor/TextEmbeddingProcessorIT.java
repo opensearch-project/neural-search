@@ -9,6 +9,7 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -31,6 +32,8 @@ import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 import com.google.common.collect.ImmutableList;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
 
 public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
@@ -478,4 +481,53 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         reindex(fromIndexName, toIndexName);
         assertEquals(1, getDocCount(toIndexName));
     }
+
+    public void testTextEmbeddingProcessor_processorStats_successful() throws Exception {
+        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+        String modelId = uploadTextEmbeddingModel();
+        loadModel(modelId);
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING_WITH_SKIP_EXISTING);
+        createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
+        ingestDocument(INDEX_NAME, INGEST_DOC1, "1");
+        updateDocument(INDEX_NAME, UPDATE_DOC1, "1");
+        assertEquals(1, getDocCount(INDEX_NAME));
+        assertEquals(2, getDocById(INDEX_NAME, "1").get("_version"));
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        // Parse json to get stats
+        assertEquals(2, getNestedValue(allNodesStats, EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS));
+        assertEquals(2, getNestedValue(allNodesStats, EventStatName.TEXT_EMBEDDING_PROCESSOR_SKIP_EXISTING_EXECUTIONS));
+
+        assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_EMBEDDING_PROCESSORS));
+        assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_EMBEDDING_SKIP_EXISTING_PROCESSORS));
+        // Reset stats
+        updateClusterSettings("plugins.neural_search.stats_enabled", false);
+    }
+
+    public void testTextEmbeddingProcessor_batch__processorStats_successful() throws Exception {
+        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+        String modelId = uploadTextEmbeddingModel();
+        loadModel(modelId);
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING_WITH_SKIP_EXISTING);
+        createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
+        ingestBatchDocumentWithBulk("batch_", 2, Collections.emptySet(), Collections.emptySet(), List.of(INGEST_DOC1, INGEST_DOC2));
+        assertEquals(2, getDocCount(INDEX_NAME));
+
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        // Parse json to get stats
+        assertEquals(2, getNestedValue(allNodesStats, EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS));
+        assertEquals(2, getNestedValue(allNodesStats, EventStatName.TEXT_EMBEDDING_PROCESSOR_SKIP_EXISTING_EXECUTIONS));
+
+        assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_EMBEDDING_PROCESSORS));
+        assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_EMBEDDING_SKIP_EXISTING_PROCESSORS));
+        updateClusterSettings("plugins.neural_search.stats_enabled", false);
+    }
+
 }

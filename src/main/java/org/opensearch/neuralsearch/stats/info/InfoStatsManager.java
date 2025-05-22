@@ -17,6 +17,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -130,7 +131,7 @@ public class InfoStatsManager {
                     Map<String, Object> processorConfig = asMap(entry.getValue());
                     switch (processorType) {
                         case TextEmbeddingProcessor.TYPE:
-                            increment(stats, InfoStatName.TEXT_EMBEDDING_PROCESSORS);
+                            countTextEmbeddingProcessorStats(stats, processorConfig);
                             break;
                         case TextChunkingProcessor.TYPE:
                             countTextChunkingProcessorStats(stats, processorConfig);
@@ -138,6 +139,19 @@ public class InfoStatsManager {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Counts text embedding processor stats based on processor config
+     * @param stats map containing the stat to increment
+     * @param processorConfig map of the processor config, parsed to add stats
+     */
+    private void countTextEmbeddingProcessorStats(Map<InfoStatName, CountableInfoStatSnapshot> stats, Map<String, Object> processorConfig) {
+        increment(stats, InfoStatName.TEXT_EMBEDDING_PROCESSORS);
+        Object skipExisting = processorConfig.get(TextEmbeddingProcessor.SKIP_EXISTING);
+        if (Objects.nonNull(skipExisting) && skipExisting.equals(Boolean.TRUE)) {
+            increment(stats, InfoStatName.TEXT_EMBEDDING_SKIP_EXISTING_PROCESSORS);
         }
     }
 
