@@ -13,6 +13,8 @@ import org.opensearch.common.Nullable;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.ingest.ConfigurationUtils;
 import org.opensearch.neuralsearch.query.visitor.NeuralSearchQueryVisitor;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.search.pipeline.AbstractProcessor;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
@@ -66,6 +68,7 @@ public class NeuralQueryEnricherProcessor extends AbstractProcessor implements S
      */
     @Override
     public SearchRequest processRequest(SearchRequest searchRequest) {
+        EventStatsManager.increment(EventStatName.NEURAL_QUERY_ENRICHER_PROCESSOR_EXECUTIONS);
         QueryBuilder queryBuilder = searchRequest.source().query();
         /* Use null check for the case where users are using empty query body. i.e. GET /index_name/_search */
         if (queryBuilder != null) {

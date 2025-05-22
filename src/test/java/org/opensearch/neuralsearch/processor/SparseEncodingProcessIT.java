@@ -4,12 +4,15 @@
  */
 package org.opensearch.neuralsearch.processor;
 
+import java.util.ArrayList;
 import java.util.Map;
 
 import org.junit.Before;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
 
 public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
 
@@ -120,5 +123,21 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
         assertFalse(searchResponse.isEmpty());
         double maxScore = (Double) ((Map) searchResponse.get("hits")).get("max_score");
         assertEquals(4.4433594, maxScore, 1e-3);
+    }
+
+    public void testSparseEncodingProcessor_statsEnabled() throws Exception {
+        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+
+        testSparseEncodingProcessor();
+
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        assertEquals(5, getNestedValue(allNodesStats, EventStatName.SPARSE_ENCODING_PROCESSOR_EXECUTIONS));
+        assertEquals(1, getNestedValue(allNodesStats, InfoStatName.SPARSE_ENCODING_PROCESSORS));
+
+        updateClusterSettings("plugins.neural_search.stats_enabled", false);
     }
 }

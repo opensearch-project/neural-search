@@ -5,10 +5,12 @@
 package org.opensearch.neuralsearch.processor;
 
 import lombok.SneakyThrows;
+import org.junit.Before;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.search.builder.SearchSourceBuilder;
@@ -24,6 +26,11 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
     static final private String ENABLE_KEY = "enabled";
     static final private String EXPANSION_KEY = "expansion_rate";
     static final private String MAX_WINDOW_SIZE_KEY = "max_window_size";
+
+    @Before
+    public void setup() {
+        TestUtils.initializeEventStatsManager();
+    }
 
     public void testFactory_whenCreateDefaultPipeline_thenSuccess() throws Exception {
         NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();

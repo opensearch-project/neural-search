@@ -16,7 +16,10 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.functionscore.FunctionScoreQueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -441,6 +444,25 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = 6 * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
+    }
+
+    @SneakyThrows
+    public void testBooleanQuery_withMultipleSparseEncodingQueries_whenTwoPhaseEnabled_statsEnabled() {
+        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+
+        testBooleanQuery_withMultipleSparseEncodingQueries_whenTwoPhaseEnabled();
+
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        // Parse json to get stats
+        assertEquals(5, getNestedValue(allNodesStats, EventStatName.NEURAL_SPARSE_TWO_PHASE_PROCESSOR_EXECUTIONS));
+        assertEquals(1, getNestedValue(allNodesStats, InfoStatName.NEURAL_SPARSE_TWO_PHASE_PROCESSORS));
+
+        // Reset stats
+        updateClusterSettings("plugins.neural_search.stats_enabled", false);
     }
 
     @SneakyThrows
