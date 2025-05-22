@@ -22,7 +22,7 @@ public final class ChunkerFactory {
         FixedTokenLengthChunker.ALGORITHM_NAME,
         FixedTokenLengthChunker::new,
         FixedStringLengthChunker.ALGORITHM_NAME,
-        FixedTokenLengthChunker::new,
+        FixedStringLengthChunker::new,
         DelimiterChunker.ALGORITHM_NAME,
         DelimiterChunker::new
     );

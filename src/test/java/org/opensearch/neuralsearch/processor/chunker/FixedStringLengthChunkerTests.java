@@ -133,12 +133,7 @@ public class FixedStringLengthChunkerTests extends OpenSearchTestCase {
         FixedStringLengthChunker chunker = new FixedStringLengthChunker(Map.of(LENGTH_LIMIT_FIELD, 10, OVERLAP_RATE_FIELD, 0.0));
         String content = "This is a test string for chunking."; // length 35
         List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
-        List<String> expectedPassages = List.of(
-            "This is a ",
-            "test strin",
-            "g for chun",
-            "king."
-        );
+        List<String> expectedPassages = List.of("This is a ", "test strin", "g for chun", "king.");
         assertEquals(expectedPassages, passages);
     }
 
@@ -177,13 +172,7 @@ public class FixedStringLengthChunkerTests extends OpenSearchTestCase {
         FixedStringLengthChunker chunker = new FixedStringLengthChunker(Map.of(LENGTH_LIMIT_FIELD, 10, OVERLAP_RATE_FIELD, 0.5));
         String content = "abcdefghijklmnopqrstuvwxyz";
         List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
-        List<String> expectedPassages = List.of(
-            "abcdefghij",
-            "fghijklmno",
-            "klmnopqrst",
-            "pqrstuvwxy",
-            "uvwxyz"
-        );
+        List<String> expectedPassages = List.of("abcdefghij", "fghijklmno", "klmnopqrst", "pqrstuvwxy", "uvwxyz");
         assertEquals(expectedPassages, passages);
     }
 
@@ -191,11 +180,7 @@ public class FixedStringLengthChunkerTests extends OpenSearchTestCase {
         FixedStringLengthChunker chunker = new FixedStringLengthChunker(Map.of(LENGTH_LIMIT_FIELD, 10, OVERLAP_RATE_FIELD, 0.2));
         String content = "abcdefghijklmnopqrstuvwxyz"; // length 26
         List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
-        List<String> expectedPassages = List.of(
-            "abcdefghij",
-            "ijklmnopqr",
-            "qrstuvwxyz"
-        );
+        List<String> expectedPassages = List.of("abcdefghij", "ijklmnopqr", "qrstuvwxyz");
         assertEquals(expectedPassages, passages);
     }
 
@@ -216,10 +201,7 @@ public class FixedStringLengthChunkerTests extends OpenSearchTestCase {
         String content = "This is a test string for chunking with max limit."; // length 49
 
         List<String> passages = chunker.chunk(content, runtimeParameters);
-        List<String> expectedPassages = List.of(
-            "This is a ",
-            "test string for chunking with max limit."
-        );
+        List<String> expectedPassages = List.of("This is a ", "test string for chunking with max limit.");
         assertEquals(expectedPassages, passages);
     }
 
@@ -249,13 +231,7 @@ public class FixedStringLengthChunkerTests extends OpenSearchTestCase {
         FixedStringLengthChunker chunker = new FixedStringLengthChunker(Map.of(LENGTH_LIMIT_FIELD, 2, OVERLAP_RATE_FIELD, 0.5));
         String content = "abcde";
         List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
-        List<String> expectedPassages = List.of(
-            "ab",
-            "bc",
-            "cd",
-            "de",
-            "e"
-        );
+        List<String> expectedPassages = List.of("ab", "bc", "cd", "de", "e");
         assertEquals(expectedPassages, passages);
     }
 }
