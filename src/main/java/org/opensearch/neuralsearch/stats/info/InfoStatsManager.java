@@ -44,7 +44,14 @@ public class InfoStatsManager {
     private final NeuralSearchSettingsAccessor settingsAccessor;
     private final PipelineServiceUtil pipelineServiceUtil;
 
-    private final Map<String, Consumer<Map<InfoStatName, CountableInfoStatSnapshot>>> normTechniqueIncrementers = Map.of(
+    private static final Map<String, Consumer<Map<InfoStatName, CountableInfoStatSnapshot>>> chunkingAlgorithmIncrementers = Map.of(
+        DelimiterChunker.ALGORITHM_NAME,
+        stats -> increment(stats, InfoStatName.TEXT_CHUNKING_DELIMITER_PROCESSORS),
+        FixedTokenLengthChunker.ALGORITHM_NAME,
+        stats -> increment(stats, InfoStatName.TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS)
+    );
+
+    private static final Map<String, Consumer<Map<InfoStatName, CountableInfoStatSnapshot>>> normTechniqueIncrementers = Map.of(
         L2ScoreNormalizationTechnique.TECHNIQUE_NAME,
         stats -> increment(stats, InfoStatName.NORM_TECHNIQUE_L2_PROCESSORS),
         MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME,
@@ -53,7 +60,7 @@ public class InfoStatsManager {
         stats -> increment(stats, InfoStatName.NORM_TECHNIQUE_ZSCORE_PROCESSORS)
     );
 
-    private final Map<String, Consumer<Map<InfoStatName, CountableInfoStatSnapshot>>> combTechniqueIncrementers = Map.of(
+    private static final Map<String, Consumer<Map<InfoStatName, CountableInfoStatSnapshot>>> combTechniqueIncrementers = Map.of(
         ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME,
         stats -> increment(stats, InfoStatName.COMB_TECHNIQUE_ARITHMETIC_PROCESSORS),
         HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME,
@@ -205,11 +212,12 @@ public class InfoStatsManager {
         Map.Entry<String, Object> algorithmEntry = algorithmMap.entrySet().iterator().next();
         String algorithmKey = algorithmEntry.getKey();
 
-        switch (algorithmKey) {
-            case DelimiterChunker.ALGORITHM_NAME -> increment(stats, InfoStatName.TEXT_CHUNKING_DELIMITER_PROCESSORS);
-            case FixedTokenLengthChunker.ALGORITHM_NAME -> increment(stats, InfoStatName.TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS);
-            // If no algorithm is specified, the default is fixed length
-            default -> increment(stats, InfoStatName.TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS);
+        // If no algorithm is specified, default case is fixed length
+        if (chunkingAlgorithmIncrementers.containsKey(algorithmKey) == false) {
+            increment(stats, InfoStatName.TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS);
+        } else {
+            // Map is guaranteed to contain key in this block, so we can do direct map get
+            chunkingAlgorithmIncrementers.get(algorithmKey).accept(stats);
         }
     }
 
@@ -272,11 +280,11 @@ public class InfoStatsManager {
      * @param infoStatName the identifier for the stat to increment
      */
     @VisibleForTesting
-    protected void increment(Map<InfoStatName, CountableInfoStatSnapshot> stats, InfoStatName infoStatName) {
+    protected static void increment(Map<InfoStatName, CountableInfoStatSnapshot> stats, InfoStatName infoStatName) {
         incrementBy(stats, infoStatName, 1L);
     }
 
-    private void incrementBy(Map<InfoStatName, CountableInfoStatSnapshot> stats, InfoStatName statName, Long amount) {
+    private static void incrementBy(Map<InfoStatName, CountableInfoStatSnapshot> stats, InfoStatName statName, Long amount) {
         if (stats.containsKey(statName)) {
             stats.get(statName).incrementBy(amount);
         }
