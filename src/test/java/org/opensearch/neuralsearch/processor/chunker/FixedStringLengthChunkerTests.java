@@ -20,18 +20,15 @@ public class FixedStringLengthChunkerTests extends OpenSearchTestCase {
 
     private FixedStringLengthChunker fixedStringLengthChunker;
 
-    // Default runtime parameters for most tests
     private final Map<String, Object> defaultRuntimeParameters = Map.of(
         MAX_CHUNK_LIMIT_FIELD,
-        100, // A high limit, unlikely to be hit unless specified in a test
+        100,
         CHUNK_STRING_COUNT_FIELD,
         1
     );
 
     public void testParseParameters_whenNoParams_thenSuccessfulUsesDefaults() {
         FixedStringLengthChunker chunker = new FixedStringLengthChunker(Map.of());
-        // Access private fields via reflection or add getters if needed for assertion
-        // For now, we assume default values are set as per FixedStringLengthChunker.DEFAULT_LENGTH_LIMIT etc.
         assertNotNull(chunker);
     }
 
