@@ -14,6 +14,7 @@ import org.opensearch.neuralsearch.NeuralSearchRestTestCase;
 import org.opensearch.rest.RestRequest;
 
 import java.io.IOException;
+import java.util.Locale;
 
 public class HybridCollapseIT extends NeuralSearchRestTestCase {
 
@@ -55,7 +56,7 @@ public class HybridCollapseIT extends NeuralSearchRestTestCase {
             .toString();
         final Request searchRequest = new Request(
             RestRequest.Method.GET.name(),
-            String.format("%s/_search?search_pipeline=%s", COLLAPSE_TEST_INDEX, pipelineName)
+            String.format(Locale.ROOT, "%s/_search?search_pipeline=%s", COLLAPSE_TEST_INDEX, pipelineName)
         );
         searchRequest.setJsonEntity(searchRequestBody);
         Response searchResponse = client().performRequest(searchRequest);
@@ -107,7 +108,7 @@ public class HybridCollapseIT extends NeuralSearchRestTestCase {
             .toString();
         final Request indexRequest = new Request(
             RestRequest.Method.POST.name(),
-            String.format("%s/_doc/%d?refresh", COLLAPSE_TEST_INDEX, currentDocNumber)
+            String.format(Locale.ROOT, "%s/_doc/%d?refresh", COLLAPSE_TEST_INDEX, currentDocNumber)
         );
         indexRequest.setJsonEntity(indexRequestBody);
         assertOK(client().performRequest(indexRequest));

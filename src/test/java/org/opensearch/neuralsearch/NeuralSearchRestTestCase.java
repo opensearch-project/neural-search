@@ -10,6 +10,7 @@ import org.opensearch.rest.RestRequest;
 import org.opensearch.test.rest.OpenSearchRestTestCase;
 
 import java.io.IOException;
+import java.util.Locale;
 
 public class NeuralSearchRestTestCase extends OpenSearchRestTestCase {
     protected String createNormalizationPipeline(String normalizationTechnique, String combinationTechnique) throws IOException {
@@ -29,8 +30,11 @@ public class NeuralSearchRestTestCase extends OpenSearchRestTestCase {
             .endArray()
             .endObject()
             .toString();
-        String pipelineName = String.format("%s-%s-pipeline", normalizationTechnique, combinationTechnique);
-        final Request pipelineRequest = new Request(RestRequest.Method.PUT.name(), String.format("_search/pipeline/%s", pipelineName));
+        String pipelineName = String.format(Locale.ROOT, "%s-%s-pipeline", normalizationTechnique, combinationTechnique);
+        final Request pipelineRequest = new Request(
+            RestRequest.Method.PUT.name(),
+            String.format(Locale.ROOT, "_search/pipeline/%s", pipelineName)
+        );
         pipelineRequest.setJsonEntity(pipelineRequestBody);
         assertOK(client().performRequest(pipelineRequest));
         return pipelineName;
