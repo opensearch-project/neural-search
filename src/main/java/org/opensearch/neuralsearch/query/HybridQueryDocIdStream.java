@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.query;
 
 import lombok.RequiredArgsConstructor;
-import lombok.Setter;
 import org.apache.lucene.search.CheckedIntConsumer;
 import org.apache.lucene.search.DocIdStream;
 import org.apache.lucene.util.FixedBitSet;
@@ -20,8 +19,8 @@ import java.util.Objects;
 public class HybridQueryDocIdStream extends DocIdStream {
     private static final int BLOCK_SHIFT = 6;
     private final HybridBulkScorer hybridBulkScorer;
-    @Setter
     private int base;
+    private int upTo;
 
     /**
      * Iterate over all doc ids and collect each doc id with leaf collector
@@ -29,7 +28,8 @@ public class HybridQueryDocIdStream extends DocIdStream {
      * @throws IOException in case of IO exception
      */
     @Override
-    public void forEach(CheckedIntConsumer<IOException> consumer) throws IOException {
+    public void forEach(int upTo, CheckedIntConsumer<IOException> consumer) throws IOException {
+        upTo = Math.min(upTo, hybridBulkScorer.getMaxDoc());
         // bitset that represents matching documents, bit is set (1) if doc id is a match
         FixedBitSet matchingBitSet = hybridBulkScorer.getMatching();
         long[] bitArray = matchingBitSet.getBits();
@@ -52,12 +52,33 @@ public class HybridQueryDocIdStream extends DocIdStream {
                     hybridBulkScorer.getHybridSubQueryScorer().getSubQueryScores()[subQueryIndex] = scoreOfDocIdForSubQuery;
                 }
                 // process the document with its base offset
-                consumer.accept(base | docIndexInWindow);
+                int doc = base | docIndexInWindow;
+                if (doc < upTo + base) {
+                    consumer.accept(doc);
+                    this.upTo++;
+                }
                 // reset scores after processing of one doc, this is required because scorer object is re-used
                 hybridBulkScorer.getHybridSubQueryScorer().resetScores();
                 // reset bit for this doc id to indicate that it has been consumed
                 bits ^= 1L << numberOfTrailingZeros;
             }
         }
+    }
+
+    @Override
+    public int count(int upTo) throws IOException {
+        int[] count = new int[1];
+        forEach(upTo, (doc -> count[0]++));
+        return count[0];
+    }
+
+    @Override
+    public boolean mayHaveRemaining() {
+        return this.upTo + 1 < hybridBulkScorer.getMaxDoc();
+    }
+
+    public void setBase(int base) {
+        this.base = base;
+        this.upTo = base;
     }
 }
