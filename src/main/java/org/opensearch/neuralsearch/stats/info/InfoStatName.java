@@ -23,7 +23,14 @@ public enum InfoStatName implements StatName {
     TEXT_EMBEDDING_PROCESSORS("text_embedding_processors_in_pipelines", "processors.ingest", InfoStatType.INFO_COUNTER),
     TEXT_CHUNKING_PROCESSORS("text_chunking_processors", "processors.ingest", InfoStatType.INFO_COUNTER),
     TEXT_CHUNKING_DELIMITER_PROCESSORS("text_chunking_delimiter_processors", "processors.ingest", InfoStatType.INFO_COUNTER),
-    TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS("text_chunking_fixed_length_processors", "processors.ingest", InfoStatType.INFO_COUNTER);
+    TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS("text_chunking_fixed_length_processors", "processors.ingest", InfoStatType.INFO_COUNTER),
+    // Misc processors
+    TEXT_IMAGE_EMBEDDING_PROCESSORS("text_image_embedding_processors", "processors.ingest", InfoStatType.INFO_COUNTER),
+    SPARSE_ENCODING_PROCESSORS("sparse_encoding_processors", "processors.ingest", InfoStatType.INFO_COUNTER),
+    NEURAL_QUERY_ENRICHER_PROCESSORS("neural_query_enricher_processors", "processors.search", InfoStatType.INFO_COUNTER),
+    NEURAL_SPARSE_TWO_PHASE_PROCESSORS("neural_sparse_two_phase_processors", "processors.search", InfoStatType.INFO_COUNTER),
+    RERANK_BY_FIELD_PROCESSORS("rerank_by_field_processors", "processors.search", InfoStatType.INFO_COUNTER),
+    RERANK_ML_PROCESSORS("rerank_ml_processors", "processors.search", InfoStatType.INFO_COUNTER),;
 
     private final String nameString;
     private final String path;

@@ -19,6 +19,7 @@ import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.bytes.BytesArray;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
+import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
@@ -68,6 +69,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         MockitoAnnotations.openMocks(this);
         doReturn(Settings.EMPTY).when(clusterService).getSettings();
         factory = new RerankProcessorFactory(null, clusterService);
+        TestUtils.initializeEventStatsManager();
     }
 
     public void testBasics() throws IOException {

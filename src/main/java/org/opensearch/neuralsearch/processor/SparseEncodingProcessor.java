@@ -23,6 +23,8 @@ import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.IngestDocumentWrapper;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.optimization.TextEmbeddingInferenceFilter;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 
@@ -78,6 +80,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         List<String> inferenceList,
         BiConsumer<IngestDocument, Exception> handler
     ) {
+        EventStatsManager.increment(EventStatName.SPARSE_ENCODING_PROCESSOR_EXECUTIONS);
         if (skipExisting == false) {
             generateAndSetMapInference(ingestDocument, processMap, inferenceList, pruneType, pruneRatio, handler);
             return;
@@ -130,6 +133,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
 
     @Override
     public void subBatchExecute(List<IngestDocumentWrapper> ingestDocumentWrappers, Consumer<List<IngestDocumentWrapper>> handler) {
+        EventStatsManager.increment(EventStatName.SPARSE_ENCODING_PROCESSOR_EXECUTIONS);
         try {
             if (CollectionUtils.isEmpty(ingestDocumentWrappers)) {
                 handler.accept(ingestDocumentWrappers);

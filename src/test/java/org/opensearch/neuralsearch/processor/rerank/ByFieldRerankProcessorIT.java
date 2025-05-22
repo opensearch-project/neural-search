@@ -21,12 +21,15 @@ import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.search.SearchHit;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -85,6 +88,24 @@ public class ByFieldRerankProcessorIT extends BaseNeuralSearchIT {
         createPipeline();
         applyPipeLine();
         testSearchResponse();
+    }
+
+    @SneakyThrows
+    public void testByFieldRerankProcessor_statsEnabled() throws IOException {
+        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+        testByFieldRerankProcessor();
+
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        // Parse json to get stats
+        assertEquals(5, getNestedValue(allNodesStats, EventStatName.RERANK_BY_FIELD_PROCESSOR_EXECUTIONS));
+        assertEquals(1, getNestedValue(allNodesStats, InfoStatName.RERANK_BY_FIELD_PROCESSORS));
+
+        // Reset stats
+        updateClusterSettings("plugins.neural_search.stats_enabled", false);
     }
 
     private void createAndPopulateIndex() throws Exception {
