@@ -23,6 +23,7 @@ import org.opensearch.index.mapper.MappedFieldType;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Locale;
 
 abstract class CollapseDocSourceGroupSelector<T> extends GroupSelector<T> {
 
@@ -237,7 +238,9 @@ abstract class CollapseDocSourceGroupSelector<T> extends GroupSelector<T> {
                     break;
 
                 default:
-                    throw new IllegalStateException(String.format("unexpected doc values type `%s` for field `%s`", type, field));
+                    throw new IllegalStateException(
+                        String.format(Locale.ROOT, "unexpected doc values type `%s` for field `%s`", type, field)
+                    );
             }
         }
 
