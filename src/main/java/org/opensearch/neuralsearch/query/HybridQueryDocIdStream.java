@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.query;
 
 import lombok.RequiredArgsConstructor;
-import lombok.Setter;
 import org.apache.lucene.search.CheckedIntConsumer;
 import org.apache.lucene.search.DocIdStream;
 import org.apache.lucene.util.FixedBitSet;
