@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.processor;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -19,6 +20,8 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.FieldDoc;
+import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
+import org.apache.lucene.util.BytesRef;
 import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.processor.combination.CombineScoresDto;
@@ -29,6 +32,7 @@ import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.processor.explain.ExplanationPayload;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
+import org.opensearch.neuralsearch.search.query.HybridQueryFieldDocComparator;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.fetch.FetchSearchResult;
@@ -202,20 +206,42 @@ public class NormalizationProcessorWorkflow {
         final List<CompoundTopDocs> queryTopDocs = getCompoundTopDocs(combineScoresDTO, querySearchResults);
         final Sort sort = combineScoresDTO.getSort();
         int totalScoreDocsCount = 0;
-        for (int index = 0; index < querySearchResults.size(); index++) {
-            QuerySearchResult querySearchResult = querySearchResults.get(index);
-            CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
-            totalScoreDocsCount += updatedTopDocs.getScoreDocs().size();
-            TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(
-                buildTopDocs(updatedTopDocs, sort),
-                maxScoreForShard(updatedTopDocs, sort != null)
-            );
-            // Fetch Phase had ran before the normalization phase, therefore update the from value in result of each shard.
-            // This will ensure the trimming of the search results.
-            if (isFetchPhaseExecuted) {
-                querySearchResult.from(combineScoresDTO.getFromValueForSingleShard());
+
+        // Get index of first non-empty CompoundTopDocs to check if collapse is enabled
+        boolean isCollapseEnabled = false;
+        int indexOfFirstNonEmpty = 0;
+        for (CompoundTopDocs compoundTopDocs : queryTopDocs) {
+            if (!compoundTopDocs.getTopDocs().isEmpty() && compoundTopDocs.getTopDocs().getFirst() instanceof CollapseTopFieldDocs) {
+                isCollapseEnabled = true;
+                break;
             }
-            querySearchResult.topDocs(updatedTopDocsAndMaxScore, querySearchResult.sortValueFormats());
+            indexOfFirstNonEmpty++;
+        }
+        if (isCollapseEnabled) {
+            totalScoreDocsCount = collapse(
+                queryTopDocs,
+                indexOfFirstNonEmpty,
+                querySearchResults,
+                sort,
+                isFetchPhaseExecuted,
+                combineScoresDTO
+            );
+        } else {
+            for (int shardIndex = 0; shardIndex < querySearchResults.size(); shardIndex++) {
+                QuerySearchResult querySearchResult = querySearchResults.get(shardIndex);
+                CompoundTopDocs updatedTopDocs = queryTopDocs.get(shardIndex);
+                totalScoreDocsCount += updatedTopDocs.getScoreDocs().size();
+                TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(
+                    buildTopDocs(updatedTopDocs, sort),
+                    maxScoreForShard(updatedTopDocs, sort != null)
+                );
+                // Fetch Phase had ran before the normalization phase, therefore update the from value in result of each shard.
+                // This will ensure the trimming of the search results.
+                if (isFetchPhaseExecuted) {
+                    querySearchResult.from(combineScoresDTO.getFromValueForSingleShard());
+                }
+                querySearchResult.topDocs(updatedTopDocsAndMaxScore, querySearchResult.sortValueFormats());
+            }
         }
 
         final int from = querySearchResults.get(0).from();
@@ -224,6 +250,201 @@ public class NormalizationProcessorWorkflow {
                 String.format(Locale.ROOT, "Reached end of search result, increase pagination_depth value to see more results")
             );
         }
+    }
+
+    private int collapse(
+        List<CompoundTopDocs> queryTopDocs,
+        int indexOfFirstNonEmpty,
+        List<QuerySearchResult> querySearchResults,
+        Sort sort,
+        final boolean isFetchPhaseExecuted,
+        CombineScoresDto combineScoresDTO
+    ) {
+        boolean isKeyword = ((CollapseTopFieldDocs) queryTopDocs.get(indexOfFirstNonEmpty)
+            .getTopDocs()
+            .getFirst()).collapseValues[0] instanceof BytesRef;
+
+        if (isKeyword) {
+            return collapseOnKeyword(queryTopDocs, querySearchResults, sort, indexOfFirstNonEmpty, isFetchPhaseExecuted, combineScoresDTO);
+        } else {
+            return collapseOnNumeric(queryTopDocs, querySearchResults, sort, indexOfFirstNonEmpty, isFetchPhaseExecuted, combineScoresDTO);
+        }
+    }
+
+    private int collapseOnKeyword(
+        List<CompoundTopDocs> queryTopDocs,
+        List<QuerySearchResult> querySearchResults,
+        Sort sort,
+        int indexOfFirstNonEmpty,
+        final boolean isFetchPhaseExecuted,
+        CombineScoresDto combineScoresDTO
+    ) {
+        int totalScoreDocsCount = 0;
+        Map<BytesRef, FieldDoc> collapseValueToTopScoreDocMap = new HashMap<>();
+        Map<BytesRef, Integer> collapseValueToShardMap = new HashMap<>();
+        String collapseField = "";
+
+        HybridQueryFieldDocComparator comparator = new HybridQueryFieldDocComparator(
+            ((CollapseTopFieldDocs) queryTopDocs.get(indexOfFirstNonEmpty).getTopDocs().getFirst()).fields,
+            Comparator.comparing((ScoreDoc scoreDoc) -> scoreDoc.score)
+        );
+
+        for (int i = 0; i < querySearchResults.size(); i++) {
+            CompoundTopDocs updatedTopDocs = queryTopDocs.get(i);
+            List<ScoreDoc> updatedScoreDocs = updatedTopDocs.getScoreDocs();
+            if (updatedScoreDocs.isEmpty()) {
+                continue;
+            }
+            collapseField = ((CollapseTopFieldDocs) updatedTopDocs.getTopDocs().getFirst()).field;
+
+            for (ScoreDoc scoreDoc : updatedScoreDocs) {
+                FieldDoc fieldDoc = (FieldDoc) scoreDoc;
+                BytesRef collapseValue = (BytesRef) fieldDoc.fields[fieldDoc.fields.length - 1];
+                if (collapseValue == null) {
+                    continue;
+                }
+
+                FieldDoc currentBestFieldDoc = collapseValueToTopScoreDocMap.get(collapseValue);
+                if (currentBestFieldDoc == null || comparator.compare(fieldDoc, currentBestFieldDoc) < 0) {
+                    collapseValueToTopScoreDocMap.put(BytesRef.deepCopyOf(collapseValue), fieldDoc);
+                    collapseValueToShardMap.put(BytesRef.deepCopyOf(collapseValue), i);
+                }
+            }
+        }
+
+        List<Map.Entry<BytesRef, FieldDoc>> entryList = new ArrayList<>(collapseValueToTopScoreDocMap.entrySet());
+
+        entryList.sort(Map.Entry.comparingByValue(comparator));
+
+        for (int index = 0; index < querySearchResults.size(); index++) {
+            CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
+            List<FieldDoc> newFieldDocs = new ArrayList<>();
+            List<BytesRef> collapseValues = new ArrayList<>();
+
+            for (Map.Entry<BytesRef, FieldDoc> entry : entryList) {
+                BytesRef collapseValue = entry.getKey();
+                FieldDoc fieldDoc = entry.getValue();
+                if (collapseValueToShardMap.get(collapseValue) == index) {
+                    newFieldDocs.add(
+                        new FieldDoc(fieldDoc.doc, fieldDoc.score, Arrays.copyOfRange(fieldDoc.fields, 0, fieldDoc.fields.length - 1))
+                    );
+                    collapseValues.add(collapseValue);
+                }
+            }
+
+            totalScoreDocsCount += newFieldDocs.size();
+
+            Object[] objectCollapseValues = new Object[collapseValues.size()];
+            for (int i = 0; i < objectCollapseValues.length; i++) {
+                objectCollapseValues[i] = collapseValues.get(i);
+            }
+
+            TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(
+                new CollapseTopFieldDocs(
+                    collapseField,
+                    updatedTopDocs.getTotalHits(),
+                    newFieldDocs.toArray(new ScoreDoc[0]),
+                    sort.getSort(),
+                    objectCollapseValues
+                ),
+                maxScoreForShard(updatedTopDocs, true)
+            );
+            if (isFetchPhaseExecuted) {
+                querySearchResults.get(index).from(combineScoresDTO.getFromValueForSingleShard());
+            }
+            querySearchResults.get(index).topDocs(updatedTopDocsAndMaxScore, querySearchResults.get(index).sortValueFormats());
+        }
+
+        return totalScoreDocsCount;
+    }
+
+    private int collapseOnNumeric(
+        List<CompoundTopDocs> queryTopDocs,
+        List<QuerySearchResult> querySearchResults,
+        Sort sort,
+        int indexOfNonEmpty,
+        final boolean isFetchPhaseExecuted,
+        CombineScoresDto combineScoresDTO
+    ) {
+        int totalScoreDocsCount = 0;
+        Map<Long, FieldDoc> collapseValueToTopScoreDocMap = new HashMap<>();
+        Map<Long, Integer> collapseValueToShardMap = new HashMap<>();
+        String collapseField = "";
+
+        HybridQueryFieldDocComparator comparator = new HybridQueryFieldDocComparator(
+            ((CollapseTopFieldDocs) queryTopDocs.get(indexOfNonEmpty).getTopDocs().getFirst()).fields,
+            Comparator.comparing((ScoreDoc scoreDoc) -> scoreDoc.score)
+        );
+
+        for (int i = 0; i < querySearchResults.size(); i++) {
+            CompoundTopDocs updatedTopDocs = queryTopDocs.get(i);
+            List<ScoreDoc> updatedScoreDocs = updatedTopDocs.getScoreDocs();
+
+            if (updatedScoreDocs.isEmpty()) {
+                continue;
+            }
+
+            collapseField = ((CollapseTopFieldDocs) updatedTopDocs.getTopDocs().getFirst()).field;
+
+            for (ScoreDoc scoreDoc : updatedScoreDocs) {
+                FieldDoc fieldDoc = (FieldDoc) scoreDoc;
+                Long collapseValue = (Long) fieldDoc.fields[fieldDoc.fields.length - 1];
+                if (collapseValue == null) {
+                    continue;
+                }
+
+                FieldDoc currentBestFieldDoc = collapseValueToTopScoreDocMap.get(collapseValue);
+                if (currentBestFieldDoc == null || comparator.compare(fieldDoc, currentBestFieldDoc) < 0) {
+                    collapseValueToTopScoreDocMap.put(collapseValue, fieldDoc);
+                    collapseValueToShardMap.put(collapseValue, i);
+                }
+            }
+        }
+
+        List<Map.Entry<Long, FieldDoc>> entryList = new ArrayList<>(collapseValueToTopScoreDocMap.entrySet());
+
+        entryList.sort(Map.Entry.comparingByValue(comparator));
+
+        for (int index = 0; index < querySearchResults.size(); index++) {
+            CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
+            List<FieldDoc> newFieldDocs = new ArrayList<>();
+            List<Long> collapseValues = new ArrayList<>();
+
+            for (Map.Entry<Long, FieldDoc> entry : entryList) {
+                Long collapseValue = entry.getKey();
+                FieldDoc fieldDoc = entry.getValue();
+                if (collapseValueToShardMap.get(collapseValue) == index) {
+                    newFieldDocs.add(
+                        new FieldDoc(fieldDoc.doc, fieldDoc.score, Arrays.copyOfRange(fieldDoc.fields, 0, fieldDoc.fields.length - 1))
+                    );
+                    collapseValues.add(collapseValue);
+                }
+            }
+
+            totalScoreDocsCount += newFieldDocs.size();
+
+            Object[] objectCollapseValues = new Object[collapseValues.size()];
+            for (int i = 0; i < objectCollapseValues.length; i++) {
+                objectCollapseValues[i] = collapseValues.get(i);
+            }
+
+            TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(
+                new CollapseTopFieldDocs(
+                    collapseField,
+                    updatedTopDocs.getTotalHits(),
+                    newFieldDocs.toArray(new ScoreDoc[0]),
+                    sort.getSort(),
+                    objectCollapseValues
+                ),
+                maxScoreForShard(updatedTopDocs, true)
+            );
+            if (isFetchPhaseExecuted) {
+                querySearchResults.get(index).from(combineScoresDTO.getFromValueForSingleShard());
+            }
+            querySearchResults.get(index).topDocs(updatedTopDocsAndMaxScore, querySearchResults.get(index).sortValueFormats());
+        }
+
+        return totalScoreDocsCount;
     }
 
     private List<CompoundTopDocs> getCompoundTopDocs(CombineScoresDto combineScoresDTO, List<QuerySearchResult> querySearchResults) {
