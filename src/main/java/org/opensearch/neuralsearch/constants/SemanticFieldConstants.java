@@ -35,4 +35,10 @@ public class SemanticFieldConstants {
      * Default suffix for semantic info field name. It will be used to construct the field name of the semantic info.
      */
     public static final String DEFAULT_SEMANTIC_INFO_FIELD_NAME_SUFFIX = "_semantic_info";
+
+    /**
+     * Name of the field to control if we should do chunking for the semantic field. By default, the chunking is
+     * disabled to not downgrade the search performance.
+     */
+    public static final String CHUNKING = "chunking";
 }

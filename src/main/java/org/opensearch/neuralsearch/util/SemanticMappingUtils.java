@@ -21,15 +21,14 @@ import java.util.Map;
 import static org.opensearch.neuralsearch.constants.MappingConstants.DOC;
 import static org.opensearch.neuralsearch.constants.MappingConstants.PATH_SEPARATOR;
 import static org.opensearch.neuralsearch.constants.MappingConstants.PROPERTIES;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.CHUNKING;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.MappingConstants.TYPE;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DEFAULT_SEMANTIC_INFO_FIELD_NAME_SUFFIX;
-import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEARCH_MODEL_ID;
-import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.CHUNKS_FIELD_NAME;
-import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.EMBEDDING_FIELD;
+import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.EMBEDDING_FIELD_NAME;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.SUPPORTED_TARGET_FIELD_TYPES;
 
 /**
@@ -135,19 +134,31 @@ public class SemanticMappingUtils {
     }
 
     /**
-     * Get the semantic info field name from the semantic field config. It will validate the name is a valid string
-     * value if it exists.
+     * Get the full path to the semantic info field
      * @param fieldConfigMap semantic field config
-     * @param fullPath full path to the semantic field
-     * @return valid model id
+     * @param baseFieldPath The base path to construct the semantic info field full path
+     * @param semanticFieldFullPathInMapping full path to access semantic field in the index mapping
+     * @return full path to the semantic info field
      */
-    public static String getSemanticInfoFieldName(@NonNull final Map<String, Object> fieldConfigMap, @NonNull final String fullPath) {
-        final String error = validateSemanticInfoFieldName(fullPath, fieldConfigMap);
+    public static String getSemanticInfoFieldFullPath(
+        @NonNull final Map<String, Object> fieldConfigMap,
+        @NonNull final String baseFieldPath,
+        @NonNull final String semanticFieldFullPathInMapping
+    ) {
+        final String error = validateSemanticInfoFieldName(semanticFieldFullPathInMapping, fieldConfigMap);
         if (error != null) {
             throw new IllegalArgumentException(error);
         }
-
-        return fieldConfigMap.containsKey(SEMANTIC_INFO_FIELD_NAME) ? (String) fieldConfigMap.get(SEMANTIC_INFO_FIELD_NAME) : null;
+        String semanticInfoFullPath = baseFieldPath + DEFAULT_SEMANTIC_INFO_FIELD_NAME_SUFFIX;
+        final String userDefinedSemanticInfoFieldName = fieldConfigMap.containsKey(SEMANTIC_INFO_FIELD_NAME)
+            ? (String) fieldConfigMap.get(SEMANTIC_INFO_FIELD_NAME)
+            : null;
+        if (userDefinedSemanticInfoFieldName != null) {
+            final String[] paths = semanticInfoFullPath.split("\\.");
+            paths[paths.length - 1] = userDefinedSemanticInfoFieldName;
+            semanticInfoFullPath = String.join(PATH_SEPARATOR, paths);
+        }
+        return semanticInfoFullPath;
     }
 
     /**
@@ -244,7 +255,6 @@ public class SemanticMappingUtils {
                     "%s should be a non-empty string for the semantic field at %s",
                     SEMANTIC_INFO_FIELD_NAME,
                     semanticFieldPath
-
                 );
             }
         }
@@ -367,16 +377,43 @@ public class SemanticMappingUtils {
         @NonNull final Map<String, Object> mappings,
         @NonNull final NeuralQueryTargetFieldConfig.NeuralQueryTargetFieldConfigBuilder targetFieldConfigBuilder
     ) {
-        String embeddingFieldPath = fieldName + DEFAULT_SEMANTIC_INFO_FIELD_NAME_SUFFIX;
-        if (targetFieldConfig.containsKey(SEMANTIC_INFO_FIELD_NAME)) {
-            String[] paths = embeddingFieldPath.split("\\.");
-            paths[paths.length - 1] = (String) targetFieldConfig.get(SEMANTIC_INFO_FIELD_NAME);
-            embeddingFieldPath = String.join(".", paths);
+        final String semanticInfoFieldFullPath = getSemanticInfoFieldFullPath(targetFieldConfig, fieldName, fieldName);
+        final Boolean chunkingEnabled = isChunkingEnabled(targetFieldConfig, fieldName);
+        targetFieldConfigBuilder.chunkingEnabled(chunkingEnabled);
+        String embeddingFieldPath;
+        if (Boolean.TRUE.equals(chunkingEnabled)) {
+            targetFieldConfigBuilder.chunksPath(semanticInfoFieldFullPath + PATH_SEPARATOR + CHUNKS_FIELD_NAME);
+            embeddingFieldPath = new StringBuilder().append(semanticInfoFieldFullPath)
+                .append(PATH_SEPARATOR)
+                .append(CHUNKS_FIELD_NAME)
+                .append(PATH_SEPARATOR)
+                .append(EMBEDDING_FIELD_NAME)
+                .toString();
+        } else {
+            embeddingFieldPath = semanticInfoFieldFullPath + PATH_SEPARATOR + EMBEDDING_FIELD_NAME;
         }
-        targetFieldConfigBuilder.chunksPath(embeddingFieldPath + PATH_SEPARATOR + CHUNKS_FIELD_NAME);
-        embeddingFieldPath += PATH_SEPARATOR + CHUNKS_FIELD_NAME + PATH_SEPARATOR + EMBEDDING_FIELD;
         targetFieldConfigBuilder.embeddingFieldPath(embeddingFieldPath);
         return SemanticMappingUtils.getFieldConfigByPath(mappings, embeddingFieldPath);
     }
 
+    /**
+     * Check if the chunking is enabled in the semantic field config. If the field is not defined then return false as
+     * the default value.
+     * @param fieldConfigMap The config for a semantic field.
+     * @return If the chunking is enabled in the semantic filed config.
+     */
+    public static Boolean isChunkingEnabled(@NonNull final Map<String, Object> fieldConfigMap, @NonNull final String semanticFieldPath) {
+        if (fieldConfigMap.containsKey(CHUNKING)) {
+            final Object chunkingEnabledObj = fieldConfigMap.get(CHUNKING);
+            if (chunkingEnabledObj instanceof Boolean) {
+                return (Boolean) chunkingEnabledObj;
+            } else {
+                throw new IllegalArgumentException(
+                    String.format(Locale.ROOT, "%s should be a boolean for the semantic field at %s", CHUNKING, semanticFieldPath)
+                );
+            }
+        }
+
+        return false;
+    }
 }

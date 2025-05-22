@@ -33,6 +33,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.opensearch.neuralsearch.constants.MappingConstants.TYPE;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.CHUNKING;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.RAW_FIELD_TYPE;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEARCH_MODEL_ID;
@@ -163,9 +164,9 @@ public class SemanticFieldMapperTests extends OpenSearchTestCase {
 
     public void testBuilder_getParameters() {
         final SemanticFieldMapper.Builder builder = new SemanticFieldMapper.Builder(SemanticFieldMapperTestUtil.fieldName);
-        assertEquals(4, builder.getParameters().size());
+        assertEquals(5, builder.getParameters().size());
         List<String> actualParams = builder.getParameters().stream().map(a -> a.name).collect(Collectors.toList());
-        List<String> expectedParams = Arrays.asList(MODEL_ID, SEARCH_MODEL_ID, RAW_FIELD_TYPE, SEMANTIC_INFO_FIELD_NAME);
+        List<String> expectedParams = Arrays.asList(MODEL_ID, SEARCH_MODEL_ID, RAW_FIELD_TYPE, SEMANTIC_INFO_FIELD_NAME, CHUNKING);
         assertEquals(expectedParams, actualParams);
     }
 
@@ -198,7 +199,7 @@ public class SemanticFieldMapperTests extends OpenSearchTestCase {
         assertTrue(mergedSemanticFieldMapper.getDelegateFieldMapper() instanceof TextFieldMapper);
     }
 
-    public void testFieldMapper_merge_whenConflictWithSemanticParameters_thenException() {
+    public void testFieldMapper_merge_whenTryUpdateSemanticInfoFieldName_thenException() {
         final String newSemanticInfoFieldName = "newSemanticInfoFieldName";
         final SemanticFieldMapper semanticFieldMapper = buildSemanticFieldMapperWithTextAsRawFieldType(parserContext);
 
@@ -214,6 +215,24 @@ public class SemanticFieldMapperTests extends OpenSearchTestCase {
 
         final String expectedError = "Mapper for [testField] conflicts with existing mapper:\n"
             + "\tCannot update parameter [semantic_info_field_name] from [semanticInfoFieldName] to [newSemanticInfoFieldName]";
+        assertEquals(expectedError, exception.getMessage());
+    }
+
+    public void testFieldMapper_merge_whenTryUpdateChunkingEnabled_thenException() {
+        final SemanticFieldMapper semanticFieldMapper = buildSemanticFieldMapperWithTextAsRawFieldType(parserContext);
+
+        final Map<String, Object> updatedConfig = createFieldConfig(TextFieldMapper.CONTENT_TYPE);
+        updatedConfig.put(CHUNKING, true);
+        when(parserContext.typeParser(KeywordFieldMapper.CONTENT_TYPE)).thenReturn(KeywordFieldMapper.PARSER);
+        final SemanticFieldMapper semanticFieldMapperToMerge = buildSemanticFieldMapperWithTextAsRawFieldType(updatedConfig, parserContext);
+
+        final IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> semanticFieldMapper.merge(semanticFieldMapperToMerge)
+        );
+
+        final String expectedError = "Mapper for [testField] conflicts with existing mapper:\n"
+            + "\tCannot update parameter [chunking] from [false] to [true]";
         assertEquals(expectedError, exception.getMessage());
     }
 
