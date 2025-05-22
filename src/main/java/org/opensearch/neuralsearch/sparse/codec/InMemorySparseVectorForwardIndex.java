@@ -5,8 +5,6 @@
 package org.opensearch.neuralsearch.sparse.codec;
 
 import lombok.extern.log4j.Log4j2;
-import org.apache.lucene.index.FieldInfo;
-import org.apache.lucene.index.SegmentInfo;
 import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.RamUsageEstimator;
@@ -34,16 +32,11 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
         return mem;
     }
 
-    public static InMemorySparseVectorForwardIndex getOrCreate(InMemoryKey.IndexKey key) {
+    public static InMemorySparseVectorForwardIndex getOrCreate(InMemoryKey.IndexKey key, int docCount) {
         if (key == null) {
             throw new IllegalArgumentException("Index key cannot be null");
         }
-        return forwardIndexMap.computeIfAbsent(key, k -> new InMemorySparseVectorForwardIndex());
-    }
-
-    public static InMemorySparseVectorForwardIndex getOrCreate(SegmentInfo segmentInfo, FieldInfo fieldInfo) {
-        InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(segmentInfo, fieldInfo);
-        return forwardIndexMap.computeIfAbsent(key, k -> new InMemorySparseVectorForwardIndex());
+        return forwardIndexMap.computeIfAbsent(key, k -> new InMemorySparseVectorForwardIndex(docCount));
     }
 
     public static InMemorySparseVectorForwardIndex get(InMemoryKey.IndexKey key) {
@@ -57,9 +50,12 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
         forwardIndexMap.remove(key);
     }
 
-    private final Map<Integer, SparseVector> sparseVectorMap = new ConcurrentHashMap<>();
+    // private final Map<Integer, SparseVector> sparseVectorMap = new ConcurrentHashMap<>();
+    private final SparseVector[] sparseVectors;
 
-    public InMemorySparseVectorForwardIndex() {}
+    public InMemorySparseVectorForwardIndex(int docCount) {
+        sparseVectors = new SparseVector[docCount];
+    }
 
     @Override
     public SparseVectorForwardIndexReader getForwardIndexReader() {
@@ -74,9 +70,9 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
     @Override
     public long ramBytesUsed() {
         long ramUsed = 0;
-        for (Map.Entry<Integer, SparseVector> entry : sparseVectorMap.entrySet()) {
-            ramUsed += RamUsageEstimator.shallowSizeOfInstance(Integer.class);
-            ramUsed += entry.getValue().ramBytesUsed();
+        for (SparseVector vector : sparseVectors) {
+            if (vector == null) continue;
+            ramUsed += RamUsageEstimator.shallowSizeOfInstance(SparseVector.class);
         }
         return ramUsed;
     }
@@ -85,7 +81,8 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
 
         @Override
         public SparseVector readSparseVector(int docId) {
-            return sparseVectorMap.get(docId);
+            assert docId < sparseVectors.length : "docId " + docId + " is out of bounds";
+            return sparseVectors[docId];
         }
 
         @Override
@@ -98,12 +95,8 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
 
         @Override
         public void write(int docId, SparseVector vector) {
-            if (vector == null) return;
-            // Use putIfAbsent to make the operation atomic and more efficient
-            SparseVector existing = sparseVectorMap.putIfAbsent(docId, vector);
-            if (existing != null) {
-                throw new IllegalArgumentException("Document ID " + docId + " already exists");
-            }
+            if (vector == null || docId >= sparseVectors.length) return;
+            sparseVectors[docId] = vector;
         }
 
         @Override

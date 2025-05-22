@@ -25,10 +25,6 @@ public interface SparseVectorForwardIndex extends ForwardIndex {
         void write(int docId, SparseVector vector);
     }
 
-    static SparseVectorForwardIndex getOrCreate(InMemoryKey.IndexKey key) {
-        return InMemorySparseVectorForwardIndex.getOrCreate(key);
-    }
-
     static void removeIndex(InMemoryKey.IndexKey key) {
         InMemorySparseVectorForwardIndex.removeIndex(key);
     }
