@@ -16,6 +16,7 @@ import static org.opensearch.knn.index.query.KNNQueryBuilder.MIN_SCORE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.RESCORE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.RESCORE_OVERSAMPLE_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TOKENS_FIELD;
+import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.SEARCH_ANALYZER_FIELD;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_FLOATS_ASSERTION;
 import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.K_FIELD;
@@ -67,6 +68,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
     private static final String QUERY_TEXT = "Hello world!";
     private static final String IMAGE_TEXT = "base641234567890";
     private static final String MODEL_ID = "mfgfgdsfgfdgsde";
+    private static final String SEARCH_ANALYZER = "search_analyzer";
     private static final Integer K = 10;
     private static final Float MAX_DISTANCE = 1.0f;
     private static final Float MIN_SCORE = 0.985f;
@@ -117,6 +119,41 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(FIELD_NAME, neuralQueryBuilder.fieldName());
         assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
         assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
+        assertEquals(K, neuralQueryBuilder.k());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuiltWithSearchAnalyzer_thenBuildSuccessfully() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": "string",
+                "query_image": "string",
+                "model_id": "string",
+                "search_analyzer": "string",
+                "k": int
+              }
+          }
+        */
+        setUpClusterService(Version.V_2_10_0);
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .field(SEARCH_ANALYZER_FIELD.getPreferredName(), SEARCH_ANALYZER)
+            .field(K_FIELD.getPreferredName(), K)
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.fromXContent(contentParser);
+
+        assertEquals(FIELD_NAME, neuralQueryBuilder.fieldName());
+        assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
+        assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
+        assertEquals(SEARCH_ANALYZER, neuralQueryBuilder.searchAnalyzer());
         assertEquals(K, neuralQueryBuilder.k());
     }
 
