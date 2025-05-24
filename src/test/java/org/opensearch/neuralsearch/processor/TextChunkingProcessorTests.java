@@ -36,7 +36,6 @@ import org.opensearch.indices.analysis.AnalysisModule;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.processor.chunker.DelimiterChunker;
-import org.opensearch.neuralsearch.processor.chunker.FixedCharLengthChunker;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.neuralsearch.processor.factory.TextChunkingProcessorFactory;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
