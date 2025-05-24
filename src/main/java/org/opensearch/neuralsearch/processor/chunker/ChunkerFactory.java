@@ -21,10 +21,10 @@ public final class ChunkerFactory {
     private static final Map<String, Function<Map<String, Object>, Chunker>> CHUNKERS_CONSTRUCTORS = ImmutableMap.of(
         FixedTokenLengthChunker.ALGORITHM_NAME,
         FixedTokenLengthChunker::new,
-        FixedStringLengthChunker.ALGORITHM_NAME,
-        FixedStringLengthChunker::new,
         DelimiterChunker.ALGORITHM_NAME,
-        DelimiterChunker::new
+        DelimiterChunker::new,
+        CharacterLengthChunker.ALGORITHM_NAME,
+        CharacterLengthChunker::new
     );
 
     /** Set of supported chunker algorithm types */

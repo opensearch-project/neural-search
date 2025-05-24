@@ -16,19 +16,19 @@ import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterPars
 /**
  * The implementation {@link Chunker} for fixed string character length algorithm.
  */
-public final class FixedStringLengthChunker implements Chunker {
+public final class CharacterLengthChunker extends Chunker {
 
     /** The identifier for the fixed string length chunking algorithm. */
-    public static final String ALGORITHM_NAME = "fixed_string_length";
+    public static final String ALGORITHM_NAME = "character_length";
 
     /** Field name for specifying the maximum number of characters per chunk. */
-    public static final String LENGTH_LIMIT_FIELD = "length_limit";
+    public static final String CHAR_LIMIT_FIELD = "char_limit";
 
     /** Field name for specifying the overlap rate between consecutive chunks based on character length. */
     public static final String OVERLAP_RATE_FIELD = "overlap_rate";
 
     // Default values for each non-runtime parameter
-    private static final int DEFAULT_LENGTH_LIMIT = 500; // Default character limit per chunk
+    private static final int DEFAULT_CHAR_LIMIT = 500; // Default character limit per chunk
     private static final double DEFAULT_OVERLAP_RATE = 0.0;
 
     // Parameter restrictions
@@ -43,7 +43,7 @@ public final class FixedStringLengthChunker implements Chunker {
      * Constructor that initializes the fixed string length chunker with the specified parameters.
      * @param parameters a map with non-runtime parameters to be parsed
      */
-    public FixedStringLengthChunker(final Map<String, Object> parameters) {
+    public CharacterLengthChunker(final Map<String, Object> parameters) {
         parseParameters(parameters);
     }
 
@@ -60,7 +60,7 @@ public final class FixedStringLengthChunker implements Chunker {
      */
     @Override
     public void parseParameters(Map<String, Object> parameters) {
-        this.lengthLimit = parsePositiveIntegerWithDefault(parameters, LENGTH_LIMIT_FIELD, DEFAULT_LENGTH_LIMIT);
+        this.lengthLimit = parsePositiveIntegerWithDefault(parameters, CHAR_LIMIT_FIELD, DEFAULT_CHAR_LIMIT);
         this.overlapRate = parseDoubleWithDefault(parameters, OVERLAP_RATE_FIELD, DEFAULT_OVERLAP_RATE);
 
         if (overlapRate < OVERLAP_RATE_LOWER_BOUND || overlapRate > OVERLAP_RATE_UPPER_BOUND) {
@@ -129,5 +129,10 @@ public final class FixedStringLengthChunker implements Chunker {
             startCharIndex += chunkInterval;
         }
         return chunkResult;
+    }
+
+    @Override
+    public String getAlgorithmName() {
+        return "";
     }
 }
