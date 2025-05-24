@@ -95,13 +95,9 @@ public final class CharacterLengthChunker extends Chunker {
 
         int startCharIndex = 0;
         int overlapCharNumber = (int) Math.floor(this.charLimit * this.overlapRate);
-        // Ensure chunkInterval is positive. charLimit is positive. overlapRate is [0, 0.5].
-        // So, (charLimit - overlapCharNumber) >= 0.5 * charLimit, which is > 0 if charLimit >= 1.
+        // Ensure `chunkInterval` is positive. charLimit is positive. overlapRate is [0, 0.5].
+        // So, (charLimit - overlapCharNumber) >= 0.5 * charLimit, which is always > 0 if charLimit >= 1.
         int chunkInterval = this.charLimit - overlapCharNumber;
-        if (chunkInterval <= 0) {
-            chunkResult.add(content);
-            return chunkResult;
-        }
 
         while (startCharIndex < content.length()) {
             if (Chunker.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, chunkStringCount)) {
