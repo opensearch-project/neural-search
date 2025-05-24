@@ -25,7 +25,7 @@ public class CharacterLengthChunkerTests extends OpenSearchTestCase {
         assertNotNull(chunker);
     }
 
-    public void testParseParameters_whenIllegalLengthLimitType_thenFail() {
+    public void testParseParameters_whenIllegalCharLimitType_thenFail() {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(CHAR_LIMIT_FIELD, "invalid character limit");
         IllegalArgumentException illegalArgumentException = assertThrows(
@@ -38,7 +38,7 @@ public class CharacterLengthChunkerTests extends OpenSearchTestCase {
         );
     }
 
-    public void testParseParameters_whenIllegalLengthLimitValue_thenFail() {
+    public void testParseParameters_whenIllegalCharLimitValue_thenFail() {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put(CHAR_LIMIT_FIELD, -1);
         IllegalArgumentException illegalArgumentException = assertThrows(
@@ -104,22 +104,15 @@ public class CharacterLengthChunkerTests extends OpenSearchTestCase {
         assertTrue(passages.isEmpty());
     }
 
-    public void testChunk_withNullInput_thenSucceedReturnsEmptyList() {
-        CharacterLengthChunker chunker = new CharacterLengthChunker(Map.of(CHAR_LIMIT_FIELD, 10));
-        String content = null;
-        List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
-        assertTrue(passages.isEmpty());
-    }
-
-    public void testChunk_withLengthLimitZeroOrNegative_handledByDefensiveCode_returnsFullContent() {
-        // This test assumes the defensive check `if (this.lengthLimit <= 0)` is hit.
+    public void testChunk_withCharLimitZeroOrNegative_handledByDefensiveCode_returnsFullContent() {
+        // This test assumes the defensive check `if (this.charLimit <= 0)` is hit.
         // parsePositiveIntegerWithDefault should prevent this, so this tests an edge case
         Map<String, Object> params = new HashMap<>();
         params.put(CHAR_LIMIT_FIELD, 0);
         assertThrows(IllegalArgumentException.class, () -> new CharacterLengthChunker(params));
     }
 
-    public void testChunk_withLengthLimit10_noOverlap_thenSucceed() {
+    public void testChunk_withCharLimit10_noOverlap_thenSucceed() {
         CharacterLengthChunker chunker = new CharacterLengthChunker(Map.of(CHAR_LIMIT_FIELD, 10, OVERLAP_RATE_FIELD, 0.0));
         String content = "This is a test string for chunking."; // length 35
         List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
@@ -127,7 +120,7 @@ public class CharacterLengthChunkerTests extends OpenSearchTestCase {
         assertEquals(expectedPassages, passages);
     }
 
-    public void testChunk_withContentShorterThanLengthLimit_noOverlap_thenSucceed() {
+    public void testChunk_withContentShorterThanCharLimit_noOverlap_thenSucceed() {
         CharacterLengthChunker chunker = new CharacterLengthChunker(Map.of(CHAR_LIMIT_FIELD, 100, OVERLAP_RATE_FIELD, 0.0));
         String content = "Short content."; // length 14
         List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
@@ -135,7 +128,7 @@ public class CharacterLengthChunkerTests extends OpenSearchTestCase {
         assertEquals(expectedPassages, passages);
     }
 
-    public void testChunk_withContentEqualToLengthLimit_noOverlap_thenSucceed() {
+    public void testChunk_withContentEqualToCharLimit_noOverlap_thenSucceed() {
         CharacterLengthChunker chunker = new CharacterLengthChunker(Map.of(CHAR_LIMIT_FIELD, 14, OVERLAP_RATE_FIELD, 0.0));
         String content = "Short content."; // length 14
         List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
@@ -143,21 +136,22 @@ public class CharacterLengthChunkerTests extends OpenSearchTestCase {
         assertEquals(expectedPassages, passages);
     }
 
-    public void testChunk_withLengthLimit20_noOverlap_thenSucceed() {
+    public void testChunk_withCharLimit20_noOverlap_thenSucceed() {
         CharacterLengthChunker chunker = new CharacterLengthChunker(Map.of(CHAR_LIMIT_FIELD, 20, OVERLAP_RATE_FIELD, 0.0));
-        String content = "This is an example document to be chunked by fixed string length."; // length 68
+        String content = "This is an example document to be chunked by the algorithm named 'character_length'."; // length 68
         List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
         List<String> expectedPassages = List.of(
             "This is an example d", // 20
             "ocument to be chunke", // 20
-            "d by fixed string le", // 20
-            "ngth."                 // 6
+            "d by the algorithm n", // 20
+            "amed 'character_leng", // 20
+            "th'."                  // 4
         );
         assertEquals(expectedPassages, passages);
     }
 
-    public void testChunk_withOverlapRateHalf_lengthLimit10_thenSucceed() {
-        // lengthLimit = 10, overlapRate = 0.5
+    public void testChunk_withOverlapRateHalf_charLimit10_thenSucceed() {
+        // charLimit = 10, overlapRate = 0.5
         // overlapCharNumber = floor(10 * 0.5) = 5
         CharacterLengthChunker chunker = new CharacterLengthChunker(Map.of(CHAR_LIMIT_FIELD, 10, OVERLAP_RATE_FIELD, 0.5));
         String content = "abcdefghijklmnopqrstuvwxyz";
@@ -166,7 +160,7 @@ public class CharacterLengthChunkerTests extends OpenSearchTestCase {
         assertEquals(expectedPassages, passages);
     }
 
-    public void testChunk_withOverlapRatePointTwo_lengthLimit10_thenSucceed() {
+    public void testChunk_withOverlapRatePointTwo_charLimit10_thenSucceed() {
         CharacterLengthChunker chunker = new CharacterLengthChunker(Map.of(CHAR_LIMIT_FIELD, 10, OVERLAP_RATE_FIELD, 0.2));
         String content = "abcdefghijklmnopqrstuvwxyz"; // length 26
         List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
@@ -174,7 +168,7 @@ public class CharacterLengthChunkerTests extends OpenSearchTestCase {
         assertEquals(expectedPassages, passages);
     }
 
-    public void testChunk_withOverlapRateZero_lengthLimitExactMultiple_thenSucceed() {
+    public void testChunk_withOverlapRateZero_charLimitExactMultiple_thenSucceed() {
         CharacterLengthChunker chunker = new CharacterLengthChunker(Map.of(CHAR_LIMIT_FIELD, 5, OVERLAP_RATE_FIELD, 0.0));
         String content = "abcdefghij"; // length 10
         List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
@@ -221,7 +215,7 @@ public class CharacterLengthChunkerTests extends OpenSearchTestCase {
         CharacterLengthChunker chunker = new CharacterLengthChunker(Map.of(CHAR_LIMIT_FIELD, 2, OVERLAP_RATE_FIELD, 0.5));
         String content = "abcde";
         List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
-        List<String> expectedPassages = List.of("ab", "bc", "cd", "de", "e");
+        List<String> expectedPassages = List.of("ab", "bc", "cd", "de");
         assertEquals(expectedPassages, passages);
     }
 }

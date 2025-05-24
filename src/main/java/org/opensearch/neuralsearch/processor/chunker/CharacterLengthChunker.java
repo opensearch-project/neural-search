@@ -36,7 +36,7 @@ public final class CharacterLengthChunker extends Chunker {
     private static final double OVERLAP_RATE_UPPER_BOUND = 0.5; // Max 50% overlap
 
     // Parameter values
-    private int lengthLimit;
+    private int charLimit;
     private double overlapRate;
 
     /**
@@ -60,7 +60,7 @@ public final class CharacterLengthChunker extends Chunker {
      */
     @Override
     public void parseParameters(Map<String, Object> parameters) {
-        this.lengthLimit = parsePositiveIntegerWithDefault(parameters, CHAR_LIMIT_FIELD, DEFAULT_CHAR_LIMIT);
+        this.charLimit = parsePositiveIntegerWithDefault(parameters, CHAR_LIMIT_FIELD, DEFAULT_CHAR_LIMIT);
         this.overlapRate = parseDoubleWithDefault(parameters, OVERLAP_RATE_FIELD, DEFAULT_OVERLAP_RATE);
 
         if (overlapRate < OVERLAP_RATE_LOWER_BOUND || overlapRate > OVERLAP_RATE_UPPER_BOUND) {
@@ -92,21 +92,12 @@ public final class CharacterLengthChunker extends Chunker {
         int chunkStringCount = parseInteger(runtimeParameters, CHUNK_STRING_COUNT_FIELD);
 
         List<String> chunkResult = new ArrayList<>();
-        if (content == null || content.isEmpty()) {
-            return chunkResult;
-        }
-
-        // Should be caught by parsePositiveIntegerWithDefault, but as a safeguard
-        if (this.lengthLimit <= 0) {
-            chunkResult.add(content);
-            return chunkResult;
-        }
 
         int startCharIndex = 0;
-        int overlapCharNumber = (int) Math.floor(this.lengthLimit * this.overlapRate);
-        // Ensure chunkInterval is positive. lengthLimit is positive. overlapRate is [0, 0.5].
-        // So, (lengthLimit - overlapCharNumber) >= 0.5 * lengthLimit, which is > 0 if lengthLimit >= 1.
-        int chunkInterval = this.lengthLimit - overlapCharNumber;
+        int overlapCharNumber = (int) Math.floor(this.charLimit * this.overlapRate);
+        // Ensure chunkInterval is positive. charLimit is positive. overlapRate is [0, 0.5].
+        // So, (charLimit - overlapCharNumber) >= 0.5 * charLimit, which is > 0 if charLimit >= 1.
+        int chunkInterval = this.charLimit - overlapCharNumber;
         if (chunkInterval <= 0) {
             chunkResult.add(content);
             return chunkResult;
@@ -119,7 +110,7 @@ public final class CharacterLengthChunker extends Chunker {
                 break;
             }
 
-            int endPosition = Math.min(startCharIndex + this.lengthLimit, content.length());
+            int endPosition = Math.min(startCharIndex + this.charLimit, content.length());
             chunkResult.add(content.substring(startCharIndex, endPosition));
 
             if (endPosition == content.length()) {
