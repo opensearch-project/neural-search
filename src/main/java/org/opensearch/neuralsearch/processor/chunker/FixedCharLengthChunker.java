@@ -14,21 +14,21 @@ import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterPars
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parsePositiveIntegerWithDefault;
 
 /**
- * The implementation {@link Chunker} for fixed string character length algorithm.
+ * The implementation {@link Chunker} for fixed character length algorithm.
  */
-public final class CharacterLengthChunker extends Chunker {
+public final class FixedCharLengthChunker extends Chunker {
 
-    /** The identifier for the fixed string length chunking algorithm. */
-    public static final String ALGORITHM_NAME = "character_length";
+    /** The identifier for the fixed character length chunking algorithm. */
+    public static final String ALGORITHM_NAME = "fixed_char_length";
 
     /** Field name for specifying the maximum number of characters per chunk. */
     public static final String CHAR_LIMIT_FIELD = "char_limit";
 
-    /** Field name for specifying the overlap rate between consecutive chunks based on character length. */
+    /** Field name for specifying the overlap rate between consecutive chunks based on fixed character length. */
     public static final String OVERLAP_RATE_FIELD = "overlap_rate";
 
     // Default values for each non-runtime parameter
-    private static final int DEFAULT_CHAR_LIMIT = 500; // Default character limit per chunk
+    private static final int DEFAULT_CHAR_LIMIT = 2048; // Default character limit per chunk (512 tokens * 4 chars)
     private static final double DEFAULT_OVERLAP_RATE = 0.0;
 
     // Parameter restrictions
@@ -40,15 +40,15 @@ public final class CharacterLengthChunker extends Chunker {
     private double overlapRate;
 
     /**
-     * Constructor that initializes the fixed string length chunker with the specified parameters.
+     * Constructor that initializes the fixed character length chunker with the specified parameters.
      * @param parameters a map with non-runtime parameters to be parsed
      */
-    public CharacterLengthChunker(final Map<String, Object> parameters) {
+    public FixedCharLengthChunker(final Map<String, Object> parameters) {
         parseParameters(parameters);
     }
 
     /**
-     * Parse the parameters for fixed string length algorithm.
+     * Parse the parameters for fixed character length algorithm.
      * Throw IllegalArgumentException when parameters are invalid.
      *
      * @param parameters a map with non-runtime parameters as the following:
@@ -78,7 +78,7 @@ public final class CharacterLengthChunker extends Chunker {
     }
 
     /**
-     * Return the chunked passages for fixed string length algorithm.
+     * Return the chunked passages for fixed character length algorithm.
      * Throw IllegalArgumentException when runtime parameters are invalid.
      *
      * @param content input string
@@ -108,10 +108,6 @@ public final class CharacterLengthChunker extends Chunker {
 
             int endPosition = Math.min(startCharIndex + this.charLimit, content.length());
             chunkResult.add(content.substring(startCharIndex, endPosition));
-
-            if (endPosition == content.length()) {
-                break;
-            }
 
             startCharIndex += chunkInterval;
         }
