@@ -14,6 +14,7 @@ import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.MergeState;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.util.Bits;
+import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -44,12 +45,16 @@ public class SparseDocValuesReader extends EmptyDocValuesProducer {
                         values = docValuesProducer.getBinary(readerFieldInfo);
                     }
                     if (values != null) {
+                        InMemoryKey.IndexKey key = null;
+                        if (values instanceof SparseBinaryDocValuesPassThrough) {
+                            SparseBinaryDocValuesPassThrough sparseBinaryDocValuesPassThrough = (SparseBinaryDocValuesPassThrough) values;
+                            key = new InMemoryKey.IndexKey(sparseBinaryDocValuesPassThrough.getSegmentInfo(), field);
+                        }
                         totalLiveDocs = totalLiveDocs + getLiveDocsCount(values, this.mergeState.liveDocs[i]);
                         // docValues will be consumed when liveDocs are not null, hence resetting the docsValues
                         // pointer.
                         values = this.mergeState.liveDocs[i] != null ? docValuesProducer.getBinary(readerFieldInfo) : values;
-
-                        subs.add(new BinaryDocValuesSub(mergeState.docMaps[i], values));
+                        subs.add(new BinaryDocValuesSub(mergeState.docMaps[i], values, key));
                     }
                 }
             }

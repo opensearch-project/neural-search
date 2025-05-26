@@ -4,33 +4,37 @@
  */
 package org.opensearch.neuralsearch.sparse.codec;
 
+import lombok.Getter;
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.DocIDMerger;
 import org.apache.lucene.index.MergeState;
+import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 
 import java.io.IOException;
 
 /**
  * It holds binary doc values sub for each segment. It is used to merge doc values from multiple segments.
  */
+@Getter
 public class BinaryDocValuesSub extends DocIDMerger.Sub {
 
     private final BinaryDocValues values;
+    private final InMemoryKey.IndexKey key;
+    private int docId = 0;
 
-    public BinaryDocValuesSub(MergeState.DocMap docMap, BinaryDocValues values) {
+    public BinaryDocValuesSub(MergeState.DocMap docMap, BinaryDocValues values, InMemoryKey.IndexKey key) {
         super(docMap);
         if (values == null || (values.docID() != -1)) {
             throw new IllegalStateException("Doc values is either null or docID is not -1 ");
         }
         this.values = values;
+        this.key = key;
     }
 
     @Override
     public int nextDoc() throws IOException {
-        return values.nextDoc();
+        docId = values.nextDoc();
+        return docId;
     }
 
-    public BinaryDocValues getValues() {
-        return values;
-    }
 }

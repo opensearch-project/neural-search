@@ -17,6 +17,7 @@ import org.apache.lucene.util.BytesRef;
 import org.opensearch.neuralsearch.sparse.SparseTokensField;
 import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 import org.opensearch.neuralsearch.sparse.common.MergeHelper;
+import org.opensearch.neuralsearch.sparse.common.SparseVector;
 
 import java.io.IOException;
 
@@ -60,8 +61,19 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
         }
         int docId = binaryDocValues.nextDoc();
         while (docId != DocIdSetIterator.NO_MORE_DOCS) {
-            BytesRef bytesRef = binaryDocValues.binaryValue();
-            writer.write(docId, bytesRef);
+            boolean written = false;
+            if (isMerge) {
+                SparseBinaryDocValues sparseBinaryDocValues = (SparseBinaryDocValues) binaryDocValues;
+                SparseVector vector = sparseBinaryDocValues.cachedSparseVector();
+                if (vector != null) {
+                    writer.write(docId, vector);
+                    written = true;
+                }
+            }
+            if (!written) {
+                BytesRef bytesRef = binaryDocValues.binaryValue();
+                writer.write(docId, bytesRef);
+            }
             docId = binaryDocValues.nextDoc();
         }
         if (isMerge) {

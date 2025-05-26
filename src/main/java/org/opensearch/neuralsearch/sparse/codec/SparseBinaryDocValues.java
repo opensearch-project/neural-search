@@ -8,6 +8,8 @@ import lombok.Getter;
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.DocIDMerger;
 import org.apache.lucene.util.BytesRef;
+import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
+import org.opensearch.neuralsearch.sparse.common.SparseVector;
 
 import java.io.IOException;
 
@@ -61,6 +63,17 @@ public class SparseBinaryDocValues extends BinaryDocValues {
     @Override
     public BytesRef binaryValue() throws IOException {
         return current.getValues().binaryValue();
+    }
+
+    public SparseVector cachedSparseVector() throws IOException {
+        if (this.current == null) return null;
+        InMemoryKey.IndexKey key = this.current.getKey();
+        if (key == null) return null;
+        InMemorySparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.get(key);
+        if (index == null) return null;
+        InMemorySparseVectorForwardIndex.SparseVectorForwardIndexReader reader = index.getForwardIndexReader();
+        int oldDocId = this.current.getDocId();
+        return reader.readSparseVector(oldDocId);
     }
 
     /**
