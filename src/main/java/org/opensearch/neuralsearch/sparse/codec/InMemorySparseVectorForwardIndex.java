@@ -72,7 +72,7 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
         long ramUsed = 0;
         for (SparseVector vector : sparseVectors) {
             if (vector == null) continue;
-            ramUsed += RamUsageEstimator.shallowSizeOfInstance(SparseVector.class);
+            ramUsed += vector.ramBytesUsed();
         }
         return ramUsed;
     }

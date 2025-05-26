@@ -17,6 +17,7 @@ import org.opensearch.neuralsearch.sparse.common.SparseVector;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -27,7 +28,9 @@ import java.util.List;
 @EqualsAndHashCode
 public class DocumentCluster implements Accountable {
     private SparseVector summary;
-    private final List<DocFreq> docs;
+    // private final List<DocFreq> docs;
+    private final int[] docIds;
+    private final float[] freqs;
     // if true, docs in this cluster should always be examined
     private boolean shouldNotSkip;
 
@@ -35,17 +38,28 @@ public class DocumentCluster implements Accountable {
         this.summary = summary;
         List<DocFreq> docsCopy = new ArrayList<>(docs);
         docsCopy.sort((a, b) -> Integer.compare(a.getDocID(), b.getDocID()));
-        this.docs = Collections.unmodifiableList(docsCopy);
+        int size = docsCopy.size();
+        this.docIds = new int[size];
+        this.freqs = new float[size];
+        for (int i = 0; i < size; i++) {
+            DocFreq docFreq = docsCopy.get(i);
+            this.docIds[i] = docFreq.getDocID();
+            this.freqs[i] = docFreq.getFreq();
+        }
         this.shouldNotSkip = shouldNotSkip;
     }
 
     public int size() {
-        return docs == null ? 0 : docs.size();
+        return docIds == null ? 0 : docIds.length;
+    }
+
+    public Iterator<DocFreq> iterator() {
+        return new DocFreqCombinatorIterator(docIds, freqs);
     }
 
     public DocFreqIterator getDisi() {
         return new DocFreqIterator() {
-            final IteratorWrapper<DocFreq> wrapper = new IteratorWrapper<>(docs.iterator());
+            final IteratorWrapper<DocFreq> wrapper = new IteratorWrapper<>(new DocFreqCombinatorIterator(docIds, freqs));
 
             @Override
             public float freq() {
@@ -82,9 +96,13 @@ public class DocumentCluster implements Accountable {
 
     @Override
     public long ramBytesUsed() {
-        return RamUsageEstimator.shallowSizeOfInstance(DocumentCluster.class) + docs.size() * RamUsageEstimator.shallowSizeOfInstance(
-            DocFreq.class
-        );
+        long sizeInBytes = 0;
+        sizeInBytes += RamUsageEstimator.shallowSizeOfInstance(DocumentCluster.class);
+        if (docIds != null) {
+            sizeInBytes += RamUsageEstimator.sizeOf(docIds);
+            sizeInBytes += RamUsageEstimator.sizeOf(freqs);
+        }
+        return sizeInBytes;
     }
 
     @Override
@@ -94,5 +112,35 @@ public class DocumentCluster implements Accountable {
             children.add(summary);
         }
         return Collections.unmodifiableList(children);
+    }
+
+    public class DocFreqCombinatorIterator implements Iterator<DocFreq> {
+        private final int[] docIds;
+        private final float[] freqs;
+        private int currentIndex = 0;
+
+        public DocFreqCombinatorIterator(int[] docIds, float[] freqs) {
+            this.docIds = docIds;
+            this.freqs = freqs;
+            // Validate arrays have same length
+            if (docIds.length != freqs.length) {
+                throw new IllegalArgumentException("docIds and freqs arrays must have the same length");
+            }
+        }
+
+        @Override
+        public boolean hasNext() {
+            return currentIndex < docIds.length;
+        }
+
+        @Override
+        public DocFreq next() {
+            if (!hasNext()) {
+                return null;
+            }
+            DocFreq docFreq = new DocFreq(docIds[currentIndex], freqs[currentIndex]);
+            currentIndex++;
+            return docFreq;
+        }
     }
 }

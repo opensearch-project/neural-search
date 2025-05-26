@@ -34,6 +34,7 @@ import org.opensearch.neuralsearch.sparse.mapper.SparseMethodContext;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -107,8 +108,10 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
         state.blockFilePointer = postingOut.getFilePointer();
         postingOut.writeVLong(clusters.size());
         for (DocumentCluster cluster : clusters) {
-            postingOut.writeVLong(cluster.getDocs().size());
-            for (DocFreq docFreq : cluster.getDocs()) {
+            postingOut.writeVLong(cluster.size());
+            Iterator<DocFreq> iterator = cluster.iterator();
+            while (iterator.hasNext()) {
+                DocFreq docFreq = iterator.next();
                 postingOut.writeVInt(docFreq.getDocID());
                 postingOut.writeVInt(ValueEncoder.encodeFeatureValue(docFreq.getFreq()));
             }
