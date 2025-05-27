@@ -36,6 +36,7 @@ import org.opensearch.indices.analysis.AnalysisModule;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.processor.chunker.DelimiterChunker;
+import org.opensearch.neuralsearch.processor.chunker.FixedCharLengthChunker;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.neuralsearch.processor.factory.TextChunkingProcessorFactory;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
@@ -1063,5 +1064,27 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
 
         assertEquals(1L, snapshots.get(EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS).getValue().longValue());
         assertEquals(1L, snapshots.get(EventStatName.TEXT_CHUNKING_DELIMITER_EXECUTIONS).getValue().longValue());
+    }
+
+    @SneakyThrows
+    public void testExecute_statsEnabled_withFixedCharLength_andSourceDataString_thenSucceed() {
+        TextChunkingProcessor processor = createFixedCharLengthInstance(createStringFieldMap());
+        IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
+        IngestDocument document = processor.execute(ingestDocument);
+        assert document.getSourceAndMetadata().containsKey(OUTPUT_FIELD);
+        Object passages = document.getSourceAndMetadata().get(OUTPUT_FIELD);
+        assert (passages instanceof List<?>);
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked. The doc");
+        expectedPassages.add("d. The document contains a single paragraph, two s");
+        expectedPassages.add("aph, two sentences and 24 tokens by standard token");
+        expectedPassages.add("dard tokenizer in OpenSearch.");
+        assertEquals(expectedPassages, passages);
+
+        Map<EventStatName, TimestampedEventStatSnapshot> snapshots = EventStatsManager.instance()
+            .getTimestampedEventStatSnapshots(EnumSet.allOf(EventStatName.class));
+
+        assertEquals(1L, snapshots.get(EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS).getValue().longValue());
+        assertEquals(1L, snapshots.get(EventStatName.TEXT_CHUNKING_FIXED_CHAR_LENGTH_EXECUTIONS).getValue().longValue());
     }
 }
