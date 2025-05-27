@@ -39,6 +39,8 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
 
     private static final String DELIMITER_PIPELINE_NAME = "pipeline-text-chunking-delimiter";
 
+    private static final String FIXED_CHAR_LENGTH_PIPELINE_NAME = "pipeline-text-chunking-fixed-char-length";
+
     private static final String CASCADE_PIPELINE_NAME = "pipeline-text-chunking-cascade";
 
     private static final String TEST_DOCUMENT = "processor/chunker/TextChunkingTestDocument.json";
@@ -54,6 +56,8 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         "processor/chunker/PipelineForFixedTokenLengthChunkerWithLowercaseTokenizer.json",
         DELIMITER_PIPELINE_NAME,
         "processor/chunker/PipelineForDelimiterChunker.json",
+        FIXED_CHAR_LENGTH_PIPELINE_NAME,
+        "processor/chunker/PipelineForFixedCharLengthChunker.json",
         CASCADE_PIPELINE_NAME,
         "processor/chunker/PipelineForCascadedChunker.json"
     );
@@ -138,6 +142,22 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
+    public void testTextChunkingProcessor_withFixedCharLengthAlgorithm_thenSucceed() {
+        createPipelineProcessor(FIXED_CHAR_LENGTH_PIPELINE_NAME);
+        createTextChunkingIndex(INDEX_NAME, FIXED_CHAR_LENGTH_PIPELINE_NAME);
+
+        String document = getDocumentFromFilePath(TEST_DOCUMENT);
+        ingestDocument(INDEX_NAME, document);
+
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked. The doc");
+        expectedPassages.add("d. The document contains a single paragraph, two s");
+        expectedPassages.add("aph, two sentences and 24 tokens by standard token");
+        expectedPassages.add("dard tokenizer in OpenSearch.");
+        validateIndexIngestResults(INDEX_NAME, OUTPUT_FIELD, expectedPassages);
+    }
+
+    @SneakyThrows
     public void testTextChunkingProcessor_withCascadePipeline_successful() {
         createPipelineProcessor(CASCADE_PIPELINE_NAME);
         createTextChunkingIndex(INDEX_NAME, CASCADE_PIPELINE_NAME);
@@ -209,11 +229,11 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         // Parse json to get stats
         assertEquals(5, getNestedValue(allNodesStats, EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS));
         assertEquals(3, getNestedValue(allNodesStats, EventStatName.TEXT_CHUNKING_DELIMITER_EXECUTIONS));
-        assertEquals(2, getNestedValue(allNodesStats, EventStatName.TEXT_CHUNKING_FIXED_LENGTH_EXECUTIONS));
+        assertEquals(2, getNestedValue(allNodesStats, EventStatName.TEXT_CHUNKING_FIXED_TOKEN_LENGTH_EXECUTIONS));
 
         assertEquals(3, getNestedValue(stats, InfoStatName.TEXT_CHUNKING_PROCESSORS));
         assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_CHUNKING_DELIMITER_PROCESSORS));
-        assertEquals(2, getNestedValue(stats, InfoStatName.TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS));
+        assertEquals(2, getNestedValue(stats, InfoStatName.TEXT_CHUNKING_FIXED_TOKEN_LENGTH_PROCESSORS));
 
         // Reset stats
         updateClusterSettings("plugins.neural_search.stats_enabled", false);

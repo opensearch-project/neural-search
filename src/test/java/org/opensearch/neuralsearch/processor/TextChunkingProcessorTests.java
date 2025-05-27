@@ -36,6 +36,7 @@ import org.opensearch.indices.analysis.AnalysisModule;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.processor.chunker.DelimiterChunker;
+import org.opensearch.neuralsearch.processor.chunker.FixedCharLengthChunker;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.neuralsearch.processor.factory.TextChunkingProcessorFactory;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
@@ -127,6 +128,13 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         return parameters;
     }
 
+    private Map<String, Object> createFixedCharLengthParameters() {
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put(FixedCharLengthChunker.CHAR_LIMIT_FIELD, 50);
+        parameters.put(FixedCharLengthChunker.OVERLAP_RATE_FIELD, 0.2);
+        return parameters;
+    }
+
     private Map<String, Object> createStringFieldMap() {
         Map<String, Object> fieldMap = new HashMap<>();
         fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
@@ -184,6 +192,17 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
         Map<String, Object> algorithmMap = new HashMap<>();
         algorithmMap.put(DelimiterChunker.ALGORITHM_NAME, createDelimiterParameters());
         fieldMap.put(INPUT_FIELD, OUTPUT_FIELD);
+        config.put(FIELD_MAP_FIELD, fieldMap);
+        config.put(ALGORITHM_FIELD, algorithmMap);
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        return textChunkingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+    }
+
+    @SneakyThrows
+    private TextChunkingProcessor createFixedCharLengthInstance(Map<String, Object> fieldMap) {
+        Map<String, Object> config = new HashMap<>();
+        Map<String, Object> algorithmMap = new HashMap<>();
+        algorithmMap.put(FixedCharLengthChunker.ALGORITHM_NAME, createFixedCharLengthParameters());
         config.put(FIELD_MAP_FIELD, fieldMap);
         config.put(ALGORITHM_FIELD, algorithmMap);
         Map<String, Processor.Factory> registry = new HashMap<>();
@@ -1003,7 +1022,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             .getTimestampedEventStatSnapshots(EnumSet.allOf(EventStatName.class));
 
         assertEquals(0L, snapshots.get(EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS).getValue().longValue());
-        assertEquals(0L, snapshots.get(EventStatName.TEXT_CHUNKING_FIXED_LENGTH_EXECUTIONS).getValue().longValue());
+        assertEquals(0L, snapshots.get(EventStatName.TEXT_CHUNKING_FIXED_TOKEN_LENGTH_EXECUTIONS).getValue().longValue());
     }
 
     @SneakyThrows
@@ -1024,7 +1043,7 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
             .getTimestampedEventStatSnapshots(EnumSet.allOf(EventStatName.class));
 
         assertEquals(1L, snapshots.get(EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS).getValue().longValue());
-        assertEquals(1L, snapshots.get(EventStatName.TEXT_CHUNKING_FIXED_LENGTH_EXECUTIONS).getValue().longValue());
+        assertEquals(1L, snapshots.get(EventStatName.TEXT_CHUNKING_FIXED_TOKEN_LENGTH_EXECUTIONS).getValue().longValue());
     }
 
     @SneakyThrows
@@ -1045,5 +1064,27 @@ public class TextChunkingProcessorTests extends OpenSearchTestCase {
 
         assertEquals(1L, snapshots.get(EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS).getValue().longValue());
         assertEquals(1L, snapshots.get(EventStatName.TEXT_CHUNKING_DELIMITER_EXECUTIONS).getValue().longValue());
+    }
+
+    @SneakyThrows
+    public void testExecute_statsEnabled_withFixedCharLength_andSourceDataString_thenSucceed() {
+        TextChunkingProcessor processor = createFixedCharLengthInstance(createStringFieldMap());
+        IngestDocument ingestDocument = createIngestDocumentWithSourceData(createSourceDataString());
+        IngestDocument document = processor.execute(ingestDocument);
+        assert document.getSourceAndMetadata().containsKey(OUTPUT_FIELD);
+        Object passages = document.getSourceAndMetadata().get(OUTPUT_FIELD);
+        assert (passages instanceof List<?>);
+        List<String> expectedPassages = new ArrayList<>();
+        expectedPassages.add("This is an example document to be chunked. The doc");
+        expectedPassages.add("d. The document contains a single paragraph, two s");
+        expectedPassages.add("aph, two sentences and 24 tokens by standard token");
+        expectedPassages.add("dard tokenizer in OpenSearch.");
+        assertEquals(expectedPassages, passages);
+
+        Map<EventStatName, TimestampedEventStatSnapshot> snapshots = EventStatsManager.instance()
+            .getTimestampedEventStatSnapshots(EnumSet.allOf(EventStatName.class));
+
+        assertEquals(1L, snapshots.get(EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS).getValue().longValue());
+        assertEquals(1L, snapshots.get(EventStatName.TEXT_CHUNKING_FIXED_CHAR_LENGTH_EXECUTIONS).getValue().longValue());
     }
 }

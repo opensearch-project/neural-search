@@ -1,0 +1,18 @@
+{
+  "description": "An example fixed character length chunker pipeline with overlap_rate",
+  "processors" : [
+    {
+      "text_chunking": {
+        "field_map": {
+          "body": "body_chunk"
+        },
+        "algorithm": {
+          "fixed_char_length": {
+            "char_limit": 50,
+            "overlap_rate": 0.2
+          }
+        }
+      }
+    }
+  ]
+}
