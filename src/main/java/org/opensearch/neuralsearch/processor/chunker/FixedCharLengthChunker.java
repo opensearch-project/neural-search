@@ -52,10 +52,10 @@ public final class FixedCharLengthChunker extends Chunker {
      * Throw IllegalArgumentException when parameters are invalid.
      *
      * @param parameters a map with non-runtime parameters as the following:
-     * 1. length_limit: the character limit for each chunked passage
+     * 1. char_limit: the character limit for each chunked passage
      * 2. overlap_rate: the overlapping degree for each chunked passage, indicating how many characters come from the previous passage
      * Here are requirements for non-runtime parameters:
-     * 1. length_limit must be a positive integer
+     * 1. char_limit must be a positive integer
      * 2. overlap_rate must be within range [0, 0.5]
      */
     @Override
@@ -93,24 +93,29 @@ public final class FixedCharLengthChunker extends Chunker {
 
         List<String> chunkResult = new ArrayList<>();
 
-        int startCharIndex = 0;
-        int overlapCharNumber = (int) Math.floor(this.charLimit * this.overlapRate);
-        // Ensure `chunkInterval` is positive. charLimit is positive. overlapRate is [0, 0.5].
-        // So, (charLimit - overlapCharNumber) >= 0.5 * charLimit, which is always > 0 if charLimit >= 1.
-        int chunkInterval = this.charLimit - overlapCharNumber;
+        if (this.charLimit >= content.length()) {
+            chunkResult.add(content);
+        } else {
+            int startCharIndex = 0;
+            int overlapCharNumber = (int) Math.floor(this.charLimit * this.overlapRate);
+            // Ensure `chunkInterval` is positive. charLimit is positive. overlapRate is [0, 0.5].
+            // So, (charLimit - overlapCharNumber) >= 0.5 * charLimit, which is always > 0 if charLimit >= 1.
+            int chunkInterval = this.charLimit - overlapCharNumber;
 
-        while (startCharIndex < content.length()) {
-            if (Chunker.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, chunkStringCount)) {
-                // Add all remaining content as the last chunk
-                chunkResult.add(content.substring(startCharIndex));
-                break;
+            while (startCharIndex + overlapCharNumber < content.length()) {
+                if (Chunker.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, chunkStringCount)) {
+                    // Add all remaining content as the last chunk
+                    chunkResult.add(content.substring(startCharIndex));
+                    break;
+                }
+
+                int endPosition = Math.min(startCharIndex + this.charLimit, content.length());
+                chunkResult.add(content.substring(startCharIndex, endPosition));
+
+                startCharIndex += chunkInterval;
             }
-
-            int endPosition = Math.min(startCharIndex + this.charLimit, content.length());
-            chunkResult.add(content.substring(startCharIndex, endPosition));
-
-            startCharIndex += chunkInterval;
         }
+
         return chunkResult;
     }
 

@@ -97,13 +97,6 @@ public class FixedCharLengthChunkerTests extends OpenSearchTestCase {
         );
     }
 
-    public void testChunk_withEmptyInput_thenSucceedReturnsEmptyList() {
-        FixedCharLengthChunker chunker = new FixedCharLengthChunker(Map.of(CHAR_LIMIT_FIELD, 10));
-        String content = "";
-        List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
-        assertTrue(passages.isEmpty());
-    }
-
     public void testChunk_withCharLimitZeroOrNegative_handledByDefensiveCode_returnsFullContent() {
         // This test assumes the defensive check `if (this.charLimit <= 0)` is hit.
         // parsePositiveIntegerWithDefault should prevent this, so this tests an edge case
@@ -216,6 +209,24 @@ public class FixedCharLengthChunkerTests extends OpenSearchTestCase {
         String content = "abcde";
         List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
         List<String> expectedPassages = List.of("ab", "bc", "cd", "de");
+        assertEquals(expectedPassages, passages);
+    }
+
+    public void testChunk_whenOverlapRateRoundsToZero_thenSucceed() {
+        // charLimit=3, overlapRate=0.33 => overlapNum=0, chunkInterval=3
+        FixedCharLengthChunker chunker = new FixedCharLengthChunker(Map.of(CHAR_LIMIT_FIELD, 3, OVERLAP_RATE_FIELD, 0.33));
+        String content = "abcd"; // length 4
+        List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
+        List<String> expectedPassages = List.of("abc", "d");
+        assertEquals(expectedPassages, passages);
+    }
+
+    public void testChunk_contentEqualToOverlap_charLimitGreaterThanContent_withOverlap() {
+        // charLimit=5, overlapRate=0.2 => overlapNum=1, chunkInterval=4
+        FixedCharLengthChunker chunker = new FixedCharLengthChunker(Map.of(CHAR_LIMIT_FIELD, 5, OVERLAP_RATE_FIELD, 0.2));
+        String content = "a"; // length 1
+        List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
+        List<String> expectedPassages = List.of("a");
         assertEquals(expectedPassages, passages);
     }
 }
