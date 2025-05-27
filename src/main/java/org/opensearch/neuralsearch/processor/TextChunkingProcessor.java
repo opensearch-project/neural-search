@@ -24,6 +24,7 @@ import org.opensearch.neuralsearch.processor.chunker.Chunker;
 import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
 import org.opensearch.neuralsearch.processor.chunker.DelimiterChunker;
+import org.opensearch.neuralsearch.processor.chunker.FixedCharLengthChunker;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
@@ -304,7 +305,12 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         EventStatsManager.increment(EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS);
         switch (algorithmName) {
             case DelimiterChunker.ALGORITHM_NAME -> EventStatsManager.increment(EventStatName.TEXT_CHUNKING_DELIMITER_EXECUTIONS);
-            case FixedTokenLengthChunker.ALGORITHM_NAME -> EventStatsManager.increment(EventStatName.TEXT_CHUNKING_FIXED_LENGTH_EXECUTIONS);
+            case FixedTokenLengthChunker.ALGORITHM_NAME -> EventStatsManager.increment(
+                EventStatName.TEXT_CHUNKING_FIXED_TOKEN_LENGTH_EXECUTIONS
+            );
+            case FixedCharLengthChunker.ALGORITHM_NAME -> EventStatsManager.increment(
+                EventStatName.TEXT_CHUNKING_FIXED_CHAR_LENGTH_EXECUTIONS
+            );
         }
     }
 }
