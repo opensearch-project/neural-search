@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.query;
 
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import org.apache.lucene.search.CheckedIntConsumer;
 import org.apache.lucene.search.DocIdStream;
 import org.apache.lucene.util.FixedBitSet;
@@ -19,8 +20,8 @@ import java.util.Objects;
 public class HybridQueryDocIdStream extends DocIdStream {
     private static final int BLOCK_SHIFT = 6;
     private final HybridBulkScorer hybridBulkScorer;
+    @Setter
     private int base;
-    private int upTo;
 
     /**
      * Iterate over all doc ids and collect each doc id with leaf collector
@@ -55,7 +56,6 @@ public class HybridQueryDocIdStream extends DocIdStream {
                 int doc = base | docIndexInWindow;
                 if (doc < upTo + base) {
                     consumer.accept(doc);
-                    this.upTo++;
                 }
                 // reset scores after processing of one doc, this is required because scorer object is re-used
                 hybridBulkScorer.getHybridSubQueryScorer().resetScores();
@@ -77,8 +77,4 @@ public class HybridQueryDocIdStream extends DocIdStream {
         return false;
     }
 
-    public void setBase(int base) {
-        this.base = base;
-        this.upTo = base;
-    }
 }
