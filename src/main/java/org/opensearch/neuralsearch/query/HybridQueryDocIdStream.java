@@ -74,7 +74,7 @@ public class HybridQueryDocIdStream extends DocIdStream {
 
     @Override
     public boolean mayHaveRemaining() {
-        return this.upTo + 1 < hybridBulkScorer.getMaxDoc();
+        return false;
     }
 
     public void setBase(int base) {
