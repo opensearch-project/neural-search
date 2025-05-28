@@ -107,7 +107,6 @@ public class PostingWithClustersScorer extends Scorer {
         }
     }
 
-
     private void addToHeap(Pair<Integer, Float> pair) {
         if (pair.getRight() > heapThreshold) {
             scoreHeap.add(pair);

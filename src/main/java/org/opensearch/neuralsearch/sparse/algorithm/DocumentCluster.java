@@ -9,6 +9,8 @@ import lombok.Getter;
 import lombok.Setter;
 import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.RamUsageEstimator;
+import org.opensearch.neuralsearch.sparse.common.ArrayIterator;
+import org.opensearch.neuralsearch.sparse.common.CombinedIterator;
 import org.opensearch.neuralsearch.sparse.common.DocFreq;
 import org.opensearch.neuralsearch.sparse.common.DocFreqIterator;
 import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
@@ -54,12 +56,16 @@ public class DocumentCluster implements Accountable {
     }
 
     public Iterator<DocFreq> iterator() {
-        return new DocFreqCombinatorIterator(docIds, freqs);
+        return new CombinedIterator<Integer, Float, DocFreq>(
+            new ArrayIterator.IntArrayIterator(docIds),
+            new ArrayIterator.FloatArrayIterator(freqs),
+            DocFreq::new
+        );
     }
 
     public DocFreqIterator getDisi() {
         return new DocFreqIterator() {
-            final IteratorWrapper<DocFreq> wrapper = new IteratorWrapper<>(new DocFreqCombinatorIterator(docIds, freqs));
+            final IteratorWrapper<DocFreq> wrapper = new IteratorWrapper<>(iterator());
 
             @Override
             public float freq() {
@@ -112,35 +118,5 @@ public class DocumentCluster implements Accountable {
             children.add(summary);
         }
         return Collections.unmodifiableList(children);
-    }
-
-    public class DocFreqCombinatorIterator implements Iterator<DocFreq> {
-        private final int[] docIds;
-        private final float[] freqs;
-        private int currentIndex = 0;
-
-        public DocFreqCombinatorIterator(int[] docIds, float[] freqs) {
-            this.docIds = docIds;
-            this.freqs = freqs;
-            // Validate arrays have same length
-            if (docIds.length != freqs.length) {
-                throw new IllegalArgumentException("docIds and freqs arrays must have the same length");
-            }
-        }
-
-        @Override
-        public boolean hasNext() {
-            return currentIndex < docIds.length;
-        }
-
-        @Override
-        public DocFreq next() {
-            if (!hasNext()) {
-                return null;
-            }
-            DocFreq docFreq = new DocFreq(docIds[currentIndex], freqs[currentIndex]);
-            currentIndex++;
-            return docFreq;
-        }
     }
 }
