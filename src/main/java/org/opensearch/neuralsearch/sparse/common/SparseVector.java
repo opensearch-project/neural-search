@@ -27,14 +27,16 @@ import java.util.stream.Collectors;
  */
 @EqualsAndHashCode
 public class SparseVector implements Accountable {
-    @Getter
-    private final int size;
     // tokens will be stored in order
     private short[] tokens;
     private float[] freqs;
 
     public SparseVector(BytesRef bytesRef) throws IOException {
         this(readToMap(bytesRef));
+    }
+
+    public int getSize() {
+        return tokens == null ? 0 : tokens.length;
     }
 
     public SparseVector(Map<String, Float> pairs) {
@@ -47,10 +49,10 @@ public class SparseVector implements Accountable {
 
     public SparseVector(List<Item> items) {
         items.sort((o1, o2) -> o1.getToken() - o2.getToken());
-        this.size = items.size();
-        this.tokens = new short[this.size];
-        this.freqs = new float[this.size];
-        for (int i = 0; i < this.size; ++i) {
+        int size = items.size();
+        this.tokens = new short[size];
+        this.freqs = new float[size];
+        for (int i = 0; i < size; ++i) {
             this.tokens[i] = (short) items.get(i).getToken();
             this.freqs[i] = items.get(i).getFreq();
         }
@@ -75,33 +77,14 @@ public class SparseVector implements Accountable {
         return map;
     }
 
-    public float dotProduct(final SparseVector vector) {
-        int iA = 0;
-        int iB = 0;
-        float score = 0.0f;
-        while (iA < this.size && iB < vector.size) {
-            int tokenA = this.tokens[iA];
-            int tokenB = vector.tokens[iB];
-            if (tokenA == tokenB) {
-                score += this.freqs[iA] * vector.freqs[iB];
-                ++iA;
-                ++iB;
-            } else if (tokenA < tokenB) {
-                ++iA;
-            } else {
-                ++iB;
-            }
-        }
-        return score;
-    }
-
     public float[] toDenseVector() {
-        if (this.size == 0) {
+        int size = getSize();
+        if (size == 0) {
             return new float[0];
         }
-        int maxToken = this.tokens[this.size - 1];
+        int maxToken = this.tokens[size - 1];
         float[] denseVector = new float[maxToken + 1];
-        for (int i = 0; i < this.size; ++i) {
+        for (int i = 0; i < size; ++i) {
             denseVector[this.tokens[i]] = this.freqs[i];
         }
         return denseVector;
@@ -109,13 +92,13 @@ public class SparseVector implements Accountable {
 
     public float dotProduct(final float[] denseVector) {
         float score = 0.0f;
-
+        int size = getSize();
         // Early exit for empty vectors
-        if (this.size == 0 || denseVector.length == 0) return 0;
+        if (size == 0 || denseVector.length == 0) return 0;
 
         // Loop unrolling for better performance
         final int unrollFactor = 4;
-        final int limit = this.size - (this.size % unrollFactor);
+        final int limit = size - (size % unrollFactor);
 
         // Main loop with unrolling
         int i = 0;
@@ -145,7 +128,7 @@ public class SparseVector implements Accountable {
         }
 
         // Handle remaining elements
-        for (; i < this.size; ++i) {
+        for (; i < size; ++i) {
             if (this.tokens[i] >= denseVector.length) {
                 break;
             }
@@ -157,6 +140,7 @@ public class SparseVector implements Accountable {
 
     public IteratorWrapper<Item> iterator() {
         return new IteratorWrapper<>(new Iterator<>() {
+            private int size = getSize();
             private int current = -1;
 
             @Override
