@@ -60,6 +60,12 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
     @Setter
     private boolean flatten;
 
+    @Setter
+    /**
+     * Controls whether the response will include individual nodes
+     */
+    private boolean includeIndividualNodes;
+
     /**
      * Builder constructor for creating NeuralStatsInput with specific filtering parameters.
      *
@@ -75,13 +81,15 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         EnumSet<EventStatName> eventStatNames,
         EnumSet<InfoStatName> infoStatNames,
         boolean includeMetadata,
-        boolean flatten
+        boolean flatten,
+        boolean includeIndividualNodes
     ) {
         this.nodeIds = nodeIds;
         this.eventStatNames = eventStatNames;
         this.infoStatNames = infoStatNames;
         this.includeMetadata = includeMetadata;
         this.flatten = flatten;
+        this.includeIndividualNodes = includeIndividualNodes;
     }
 
     /**
@@ -94,6 +102,7 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         this.infoStatNames = EnumSet.noneOf(InfoStatName.class);
         this.includeMetadata = false;
         this.flatten = false;
+        this.includeIndividualNodes = true;
     }
 
     /**
@@ -108,6 +117,7 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         infoStatNames = input.readOptionalEnumSet(InfoStatName.class);
         includeMetadata = input.readBoolean();
         flatten = input.readBoolean();
+        includeIndividualNodes = input.readBoolean();
     }
 
     /**
@@ -123,6 +133,7 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         out.writeOptionalEnumSet(infoStatNames);
         out.writeBoolean(includeMetadata);
         out.writeBoolean(flatten);
+        out.writeBoolean(includeIndividualNodes);
     }
 
     /**
@@ -147,6 +158,7 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         }
         builder.field(RestNeuralStatsAction.INCLUDE_METADATA_PARAM, includeMetadata);
         builder.field(RestNeuralStatsAction.FLATTEN_PARAM, flatten);
+        builder.field(RestNeuralStatsAction.INCLUDE_INDIVIDUAL_NODES_PARAM, includeIndividualNodes);
         builder.endObject();
         return builder;
     }

@@ -77,9 +77,6 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         List<NeuralStatsNodeResponse> responses,
         List<FailedNodeException> failures
     ) {
-        // Final object that will hold the stats in format Map<ResponsePath, Value>
-        Map<String, StatSnapshot<?>> resultStats = new HashMap<>();
-
         // Convert node level stats to map
         Map<String, Map<String, StatSnapshot<?>>> nodeIdToEventStats = processorNodeEventStatsIntoMap(responses);
 
@@ -105,7 +102,8 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
             aggregatedNodeStats,
             nodeIdToEventStats,
             request.getNeuralStatsInput().isFlatten(),
-            request.getNeuralStatsInput().isIncludeMetadata()
+            request.getNeuralStatsInput().isIncludeMetadata(),
+            request.getNeuralStatsInput().isIncludeIndividualNodes()
         );
     }
 

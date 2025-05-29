@@ -34,6 +34,7 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
     private Map<String, Map<String, StatSnapshot<?>>> nodeIdToNodeEventStats;
     private boolean flatten;
     private boolean includeMetadata;
+    private boolean includeIndividualNodes;
 
     /**
      * Constructor
@@ -53,6 +54,7 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
         this.nodeIdToNodeEventStats = castedNodeIdToNodeEventStats;
         this.flatten = in.readBoolean();
         this.includeMetadata = in.readBoolean();
+        this.includeIndividualNodes = in.readBoolean();
     }
 
     /**
@@ -75,7 +77,8 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
         Map<String, StatSnapshot<?>> aggregatedNodeStats,
         Map<String, Map<String, StatSnapshot<?>>> nodeIdToNodeEventStats,
         boolean flatten,
-        boolean includeMetadata
+        boolean includeMetadata,
+        boolean includeIndividualNodes
     ) {
         super(clusterName, nodes, failures);
         this.infoStats = infoStats;
@@ -83,6 +86,7 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
         this.nodeIdToNodeEventStats = nodeIdToNodeEventStats;
         this.flatten = flatten;
         this.includeMetadata = includeMetadata;
+        this.includeIndividualNodes = includeIndividualNodes;
     }
 
     @Override
@@ -97,6 +101,7 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
         out.writeMap(downcastedNodeIdToNodeEventStats);
         out.writeBoolean(flatten);
         out.writeBoolean(includeMetadata);
+        out.writeBoolean(includeIndividualNodes);
     }
 
     @Override
@@ -121,10 +126,12 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
         builder.mapContents(formattedAggregatedNodeStats);
         builder.endObject();
 
-        Map<String, Object> formattedNodeEventStats = formatNodeEventStats(nodeIdToNodeEventStats);
-        builder.startObject(NODES_KEY_PREFIX);
-        builder.mapContents(formattedNodeEventStats);
-        builder.endObject();
+        if (includeIndividualNodes) {
+            Map<String, Object> formattedNodeEventStats = formatNodeEventStats(nodeIdToNodeEventStats);
+            builder.startObject(NODES_KEY_PREFIX);
+            builder.mapContents(formattedNodeEventStats);
+            builder.endObject();
+        }
 
         return builder;
     }
