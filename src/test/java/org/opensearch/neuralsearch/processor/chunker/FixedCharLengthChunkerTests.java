@@ -131,7 +131,7 @@ public class FixedCharLengthChunkerTests extends OpenSearchTestCase {
 
     public void testChunk_withCharLimit20_noOverlap_thenSucceed() {
         FixedCharLengthChunker chunker = new FixedCharLengthChunker(Map.of(CHAR_LIMIT_FIELD, 20, OVERLAP_RATE_FIELD, 0.0));
-        String content = "This is an example document to be chunked by the algorithm named 'fixed_char_length'."; // length 68
+        String content = "This is an example document to be chunked by the algorithm named 'fixed_char_length'."; // length 85
         List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
         List<String> expectedPassages = List.of(
             "This is an example d", // 20
@@ -147,7 +147,7 @@ public class FixedCharLengthChunkerTests extends OpenSearchTestCase {
         // charLimit = 10, overlapRate = 0.5
         // overlapCharNumber = floor(10 * 0.5) = 5
         FixedCharLengthChunker chunker = new FixedCharLengthChunker(Map.of(CHAR_LIMIT_FIELD, 10, OVERLAP_RATE_FIELD, 0.5));
-        String content = "abcdefghijklmnopqrstuvwxyz";
+        String content = "abcdefghijklmnopqrstuvwxyz"; // length 26
         List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
         List<String> expectedPassages = List.of("abcdefghij", "fghijklmno", "klmnopqrst", "pqrstuvwxy", "uvwxyz");
         assertEquals(expectedPassages, passages);
@@ -175,7 +175,7 @@ public class FixedCharLengthChunkerTests extends OpenSearchTestCase {
         Map<String, Object> runtimeParameters = new HashMap<>(this.defaultRuntimeParameters);
         runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit);
 
-        String content = "This is a test string for chunking with max limit."; // length 49
+        String content = "This is a test string for chunking with max limit."; // length 50
 
         List<String> passages = chunker.chunk(content, runtimeParameters);
         List<String> expectedPassages = List.of("This is a ", "test string for chunking with max limit.");
@@ -187,7 +187,7 @@ public class FixedCharLengthChunkerTests extends OpenSearchTestCase {
         int runtimeMaxChunkLimit = 5;
         Map<String, Object> runtimeParameters = new HashMap<>(this.defaultRuntimeParameters);
         runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit);
-        String content = "This is a test string for chunking with max limit."; // length 49
+        String content = "This is a test string for chunking with max limit."; // length 50
         List<String> passages = chunker.chunk(content, runtimeParameters);
         List<String> expectedPassages = List.of("This is a ", "test strin", "g for chun", "king with ", "max limit.");
         assertEquals(expectedPassages, passages);
@@ -198,7 +198,7 @@ public class FixedCharLengthChunkerTests extends OpenSearchTestCase {
         int runtimeMaxChunkLimit = 1;
         Map<String, Object> runtimeParameters = new HashMap<>(this.defaultRuntimeParameters);
         runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, runtimeMaxChunkLimit);
-        String content = "This is a test string.";
+        String content = "This is a test string."; // length 22
         List<String> passages = chunker.chunk(content, runtimeParameters);
         List<String> expectedPassages = List.of("This is a test string.");
         assertEquals(expectedPassages, passages);
@@ -206,7 +206,7 @@ public class FixedCharLengthChunkerTests extends OpenSearchTestCase {
 
     public void testChunk_whenChunkIntervalIsOne_dueToOverlap() {
         FixedCharLengthChunker chunker = new FixedCharLengthChunker(Map.of(CHAR_LIMIT_FIELD, 2, OVERLAP_RATE_FIELD, 0.5));
-        String content = "abcde";
+        String content = "abcde"; // length 5
         List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
         List<String> expectedPassages = List.of("ab", "bc", "cd", "de");
         assertEquals(expectedPassages, passages);
