@@ -61,26 +61,6 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
     public static final String ORIGINAL_QUERY_TEXT_FIELD = "original_query_text";
 
     /**
-     * The name of the query
-     */
-    public static final String NAME = "neural_knn";
-
-    /**
-     * The field name for the original query text
-     */
-    public static final String ORIGINAL_QUERY_TEXT_FIELD = "original_query_text";
-
-    /**
-     * The name of the query
-     */
-    public static final String NAME = "neural_knn";
-
-    /**
-     * The field name for the original query text
-     */
-    public static final String ORIGINAL_QUERY_TEXT_FIELD = "original_query_text";
-
-    /**
      * The underlying KNN query builder that handles the vector search functionality
      */
     private final KNNQueryBuilder knnQueryBuilder;
