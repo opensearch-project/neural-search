@@ -71,7 +71,7 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
         client.close();
     }
 
-    public void test_execute() throws Exception {
+    public void test_execute_defaultParams() throws Exception {
         when(settingsAccessor.isStatsEnabled()).thenReturn(true);
         RestNeuralStatsAction restNeuralStatsAction = new RestNeuralStatsAction(settingsAccessor);
 
@@ -84,6 +84,32 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
         NeuralStatsInput capturedInput = argumentCaptor.getValue().getNeuralStatsInput();
         assertEquals(capturedInput.getEventStatNames(), EnumSet.allOf(EventStatName.class));
         assertEquals(capturedInput.getInfoStatNames(), EnumSet.allOf(InfoStatName.class));
+        assertFalse(capturedInput.isFlatten());
+        assertFalse(capturedInput.isIncludeMetadata());
+        assertTrue(capturedInput.isIncludeIndividualNodes());
+    }
+
+    public void test_execute_customParams() throws Exception {
+        when(settingsAccessor.isStatsEnabled()).thenReturn(true);
+        RestNeuralStatsAction restNeuralStatsAction = new RestNeuralStatsAction(settingsAccessor);
+
+        Map<String, String> params = new HashMap<>();
+        params.put(RestNeuralStatsAction.FLATTEN_PARAM, "true");
+        params.put(RestNeuralStatsAction.INCLUDE_METADATA_PARAM, "true");
+        params.put(RestNeuralStatsAction.INCLUDE_INDIVIDUAL_NODES_PARAM, "false");
+        RestRequest request = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withParams(params).build();
+
+        restNeuralStatsAction.handleRequest(request, channel, client);
+
+        ArgumentCaptor<NeuralStatsRequest> argumentCaptor = ArgumentCaptor.forClass(NeuralStatsRequest.class);
+        verify(client, times(1)).execute(eq(NeuralStatsAction.INSTANCE), argumentCaptor.capture(), any());
+
+        NeuralStatsInput capturedInput = argumentCaptor.getValue().getNeuralStatsInput();
+        assertEquals(capturedInput.getEventStatNames(), EnumSet.allOf(EventStatName.class));
+        assertEquals(capturedInput.getInfoStatNames(), EnumSet.allOf(InfoStatName.class));
+        assertTrue(capturedInput.isFlatten());
+        assertTrue(capturedInput.isIncludeMetadata());
+        assertFalse(capturedInput.isIncludeIndividualNodes());
     }
 
     public void test_handleRequest_disabledForbidden() throws Exception {
