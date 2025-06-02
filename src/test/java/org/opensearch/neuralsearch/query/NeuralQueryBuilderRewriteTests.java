@@ -811,6 +811,35 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         );
     }
 
+    public void testRewriteTargetSemanticRankFeatures_whenWithRawTokensAndSearchAnalyzer_thenNestedNeuralSparseQueryBuilder() {
+        // prepare data to rewrite on coordinate level
+        final QueryCoordinatorContext queryCoordinatorContext = mock(QueryCoordinatorContext.class);
+        final IndicesRequest indicesRequest = mock(IndicesRequest.class);
+        when(queryCoordinatorContext.convertToCoordinatorContext()).thenReturn(queryCoordinatorContext);
+        when(queryCoordinatorContext.getSearchRequest()).thenReturn(indicesRequest);
+        when(indicesRequest.indices()).thenReturn(List.of(LOCAL_INDEX_NAME).toArray(new String[0]));
+        mockIndexMapping(
+            Map.of(LOCAL_INDEX_NAME, createIndexMappingWithSemanticField(MODEL_ID_1, RankFeaturesFieldMapper.CONTENT_TYPE, null, true)),
+            indicesRequest
+        );
+
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryTokensMapSupplier(() -> Map.of("key1", 1.0f))
+            .searchAnalyzer("standard")
+            .build();
+
+        // first rewrite on the coordinate level
+        QueryBuilder rewritten1 = neuralQueryBuilder.doRewrite(queryCoordinatorContext);
+
+        // verify
+        // first rewrite will directly rewrite it as NeuralKNNQueryBuilder in a NestedQueryBuilder since we have query
+        // tokens and only target one index
+        assertTrue(rewritten1 instanceof NestedQueryBuilder);
+        assertTrue(((NestedQueryBuilder) rewritten1).query() instanceof NeuralSparseQueryBuilder);
+        assertEquals("standard", ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten1).query()).analyzer());
+    }
+
     private void mockIndexMapping(final Map<String, Map<String, Object>> indexToMappingMap, final IndicesRequest indicesRequest) {
         final ClusterService clusterService = NeuralSearchClusterTestUtils.mockClusterService(Version.CURRENT);
         final IndexNameExpressionResolver indexNameExpressionResolver = mock(IndexNameExpressionResolver.class);
