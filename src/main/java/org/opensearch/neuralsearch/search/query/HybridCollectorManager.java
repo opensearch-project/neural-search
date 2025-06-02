@@ -11,7 +11,6 @@ import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.CollectorManager;
-import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.ScoreMode;
@@ -26,17 +25,14 @@ import org.apache.lucene.util.BytesRef;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.lucene.search.FilteredCollector;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
-import org.opensearch.index.mapper.KeywordFieldMapper;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.mapper.NumberFieldMapper;
 import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 import org.opensearch.neuralsearch.search.collector.HybridCollapsingTopDocsCollector;
+import org.opensearch.neuralsearch.search.collector.HybridCollectorFactory;
+import org.opensearch.neuralsearch.search.collector.HybridCollectorFactoryDTO;
 import org.opensearch.neuralsearch.search.collector.HybridSearchCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopFieldDocSortCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopScoreDocCollector;
-import org.opensearch.neuralsearch.search.collector.SimpleFieldCollector;
-import org.opensearch.neuralsearch.search.collector.PagingFieldCollector;
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.collapse.CollapseContext;
 import org.opensearch.search.internal.ContextIndexSearcher;
@@ -148,51 +144,19 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
 
     @Override
     public Collector newCollector() {
-        Collector hybridCollector = getHybridQueryCollector();
+        Collector hybridCollector = HybridCollectorFactory.createCollector(
+            HybridCollectorFactoryDTO.builder()
+                .collapseContext(collapseContext)
+                .sortAndFormats(sortAndFormats)
+                .searchContext(searchContext)
+                .hitsThresholdChecker(hitsThresholdChecker)
+                .numHits(numHits)
+                .after(after)
+                .build()
+        );
         // Check if filterWeight is present. If it is present then return wrap Hybrid Sort collector object underneath the FilteredCollector
         // object and return it.
         return Objects.nonNull(filterWeight) ? new FilteredCollector(hybridCollector, filterWeight) : hybridCollector;
-    }
-
-    private Collector getHybridQueryCollector() {
-        if (collapseContext != null) {
-            // Collapse is applied
-            MappedFieldType fieldType = collapseContext.getFieldType();
-            if (fieldType instanceof KeywordFieldMapper.KeywordFieldType) {
-                return HybridCollapsingTopDocsCollector.createKeyword(
-                    collapseContext.getFieldName(),
-                    fieldType,
-                    sortAndFormats == null ? new Sort(new SortField(null, SortField.Type.SCORE)) : sortAndFormats.sort,
-                    searchContext.size(),
-                    hitsThresholdChecker
-                );
-            } else if (fieldType instanceof NumberFieldMapper.NumberFieldType) {
-                return HybridCollapsingTopDocsCollector.createNumeric(
-                    collapseContext.getFieldName(),
-                    fieldType,
-                    sortAndFormats == null ? new Sort(new SortField(null, SortField.Type.SCORE)) : sortAndFormats.sort,
-                    searchContext.size(),
-                    hitsThresholdChecker
-                );
-            } else {
-                throw new IllegalStateException(
-                    "unknown type for collapse field " + collapseContext.getFieldName() + ", only keywords and numbers are accepted"
-                );
-            }
-        } else {
-            if (sortAndFormats == null) {
-                return new HybridTopScoreDocCollector(numHits, hitsThresholdChecker);
-            } else {
-                // Sorting is applied
-                if (after == null) {
-                    return new SimpleFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort);
-                } else {
-                    // search_after is applied
-                    validateSearchAfterFieldAndSortFormats();
-                    return new PagingFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort, after);
-                }
-            }
-        }
     }
 
     /**
@@ -361,23 +325,6 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
         }
         if (trackScores && hasScoreSort) {
             throw new IllegalArgumentException("Hybrid search results are by default sorted by _score, track_scores must be set to false.");
-        }
-    }
-
-    private void validateSearchAfterFieldAndSortFormats() {
-        if (after.fields == null) {
-            throw new IllegalArgumentException("after.fields wasn't set; you must pass fillFields=true for the previous search");
-        }
-
-        if (after.fields.length != sortAndFormats.sort.getSort().length) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "after.fields has %s values but sort has %s",
-                    after.fields.length,
-                    sortAndFormats.sort.getSort().length
-                )
-            );
         }
     }
 
