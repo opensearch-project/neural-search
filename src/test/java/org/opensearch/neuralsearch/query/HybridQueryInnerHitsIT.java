@@ -592,8 +592,8 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
         Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
 
         // Parse json to get stats
-        assertEquals(2, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_COUNT));
-        assertEquals(2, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_INNER_HITS_COUNT));
+        assertEquals(2, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_REQUESTS));
+        assertEquals(2, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_INNER_HITS_REQUESTS));
 
         updateClusterSettings("plugins.neural_search.stats_enabled", false);
     }

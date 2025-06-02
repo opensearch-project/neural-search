@@ -145,8 +145,8 @@ public class HybridQueryFilterIT extends BaseNeuralSearchIT {
         Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
 
         // Parse json to get stats
-        assertEquals(1, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_COUNT));
-        assertEquals(1, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_FILTER_COUNT));
+        assertEquals(1, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_REQUESTS));
+        assertEquals(1, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_FILTER_REQUESTS));
 
         updateClusterSettings("plugins.neural_search.stats_enabled", false);
     }

@@ -893,12 +893,12 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
 
         // Parse json to get stats
-        assertEquals(1, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_COUNT));
+        assertEquals(1, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_REQUESTS));
 
         // Verify optional stats are not incremented
-        assertEquals(0, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_INNER_HITS_COUNT));
-        assertEquals(0, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_PAGINATION_COUNT));
-        assertEquals(0, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_FILTER_COUNT));
+        assertEquals(0, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_INNER_HITS_REQUESTS));
+        assertEquals(0, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_PAGINATION_REQUESTS));
+        assertEquals(0, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_FILTER_REQUESTS));
 
         updateClusterSettings("plugins.neural_search.stats_enabled", false);
     }
@@ -918,8 +918,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
 
         // Parse json to get stats
-        assertEquals(1, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_COUNT));
-        assertEquals(1, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_PAGINATION_COUNT));
+        assertEquals(1, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_REQUESTS));
+        assertEquals(1, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_PAGINATION_REQUESTS));
 
         updateClusterSettings("plugins.neural_search.stats_enabled", false);
     }
