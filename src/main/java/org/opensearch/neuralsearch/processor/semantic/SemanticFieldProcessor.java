@@ -47,6 +47,8 @@ import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.M
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.CHUNK_STRING_COUNT_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.DEFAULT_MAX_CHUNK_LIMIT;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.MAX_CHUNK_LIMIT_FIELD;
+import static org.opensearch.neuralsearch.processor.util.ChunkUtils.chunkList;
+import static org.opensearch.neuralsearch.processor.util.ChunkUtils.chunkString;
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getMaxTokenCount;
 import static org.opensearch.neuralsearch.util.ProcessorDocumentUtils.unflattenIngestDoc;
 import static org.opensearch.neuralsearch.util.SemanticMLModelUtils.getModelType;
@@ -317,12 +319,9 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
 
             final List<String> chunkedText = new ArrayList<>();
             if (isFirstChunker) {
-                chunkedText.addAll(chunker.chunkString(semanticFieldInfo.getValue(), runtimeParameters));
+                chunkedText.addAll(chunkString(chunker, semanticFieldInfo.getValue(), runtimeParameters));
             } else {
-                for (String chunk : chunks) {
-                    final List<String> chunkedTextTemp = chunker.chunkString(chunk, runtimeParameters);
-                    chunkedText.addAll(chunkedTextTemp);
-                }
+                chunkedText.addAll(chunkList(chunker, chunks, runtimeParameters));
             }
             semanticFieldInfo.setChunks(chunkedText);
         }
