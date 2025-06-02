@@ -25,6 +25,10 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.Locale;
 
+/**
+ * Group selector that selects based on a collapse value
+ * @param <T> Type of collapse value: Numeric or Keyword
+ */
 abstract class CollapseDocSourceGroupSelector<T> extends GroupSelector<T> {
 
     protected final String field;

@@ -43,6 +43,7 @@ public class CompoundTopDocs {
     private List<ScoreDoc> scoreDocs;
     @Getter
     private SearchShard searchShard;
+    private final int COLLAPSE_STARTING_INDEX = 2;
 
     public CompoundTopDocs(
         final TotalHits totalHits,
@@ -104,7 +105,7 @@ public class CompoundTopDocs {
         List<TopDocs> topDocsList = new ArrayList<>();
         List<ScoreDoc> scoreDocList = new ArrayList<>();
         List<Object> collapseValueList = new ArrayList<>();
-        int collapseIndex = 2;
+        int collapseIndex = COLLAPSE_STARTING_INDEX;
         for (int index = 2; index < scoreDocs.length; index++) {
             // getting first element of score's series
             ScoreDoc scoreDoc = scoreDocs[index];

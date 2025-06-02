@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.processor;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -289,16 +290,22 @@ public class NormalizationProcessorWorkflow {
             Comparator.comparing((ScoreDoc scoreDoc) -> scoreDoc.score)
         );
 
-        for (int i = 0; i < querySearchResults.size(); i++) {
-            CompoundTopDocs updatedTopDocs = queryTopDocs.get(i);
+        for (int shardIndex = 0; shardIndex < querySearchResults.size(); shardIndex++) {
+            CompoundTopDocs updatedTopDocs = queryTopDocs.get(shardIndex);
             List<ScoreDoc> updatedScoreDocs = updatedTopDocs.getScoreDocs();
             if (updatedScoreDocs.isEmpty()) {
                 continue;
             }
+            // Collapse field is the same for all the CollapseTopFieldDocs in a query
+            // Therefore, we only need to access one of them to get the collapse field.
             collapseField = ((CollapseTopFieldDocs) updatedTopDocs.getTopDocs().getFirst()).field;
 
             for (ScoreDoc scoreDoc : updatedScoreDocs) {
                 FieldDoc fieldDoc = (FieldDoc) scoreDoc;
+                if (fieldDoc.fields == null || fieldDoc.fields.length == 0) {
+                    log.info("Field doc 'fields' attribute does not contain any values");
+                    continue;
+                }
                 BytesRef collapseValue = (BytesRef) fieldDoc.fields[fieldDoc.fields.length - 1];
                 if (collapseValue == null) {
                     continue;
@@ -307,52 +314,40 @@ public class NormalizationProcessorWorkflow {
                 FieldDoc currentBestFieldDoc = collapseValueToTopScoreDocMap.get(collapseValue);
                 if (currentBestFieldDoc == null || comparator.compare(fieldDoc, currentBestFieldDoc) < 0) {
                     collapseValueToTopScoreDocMap.put(BytesRef.deepCopyOf(collapseValue), fieldDoc);
-                    collapseValueToShardMap.put(BytesRef.deepCopyOf(collapseValue), i);
+                    collapseValueToShardMap.put(BytesRef.deepCopyOf(collapseValue), shardIndex);
                 }
             }
         }
 
         List<Map.Entry<BytesRef, FieldDoc>> entryList = new ArrayList<>(collapseValueToTopScoreDocMap.entrySet());
 
+        // FieldDocs must be sorted before replacing the query search results.
+        // Since we are using a map to collapse values, this sort guarantees that the FieldDocs are in the correct order
+        // before updating the query search results.
         entryList.sort(Map.Entry.comparingByValue(comparator));
 
-        for (int index = 0; index < querySearchResults.size(); index++) {
-            CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
-            List<FieldDoc> newFieldDocs = new ArrayList<>();
-            List<BytesRef> collapseValues = new ArrayList<>();
+        Map<Integer, List<Map.Entry<BytesRef, FieldDoc>>> shardToEntriesMap = entryList.stream()
+            .collect(Collectors.groupingBy(entry -> collapseValueToShardMap.get(entry.getKey())));
 
-            for (Map.Entry<BytesRef, FieldDoc> entry : entryList) {
-                BytesRef collapseValue = entry.getKey();
-                FieldDoc fieldDoc = entry.getValue();
-                if (collapseValueToShardMap.get(collapseValue) == index) {
-                    newFieldDocs.add(
-                        new FieldDoc(fieldDoc.doc, fieldDoc.score, Arrays.copyOfRange(fieldDoc.fields, 0, fieldDoc.fields.length - 1))
-                    );
-                    collapseValues.add(collapseValue);
-                }
-            }
+        for (int shardIndex = 0; shardIndex < querySearchResults.size(); shardIndex++) {
+            CompoundTopDocs updatedTopDocs = queryTopDocs.get(shardIndex);
 
-            totalScoreDocsCount += newFieldDocs.size();
+            List<Map.Entry<BytesRef, FieldDoc>> relevantEntries = shardToEntriesMap.getOrDefault(shardIndex, Collections.emptyList());
 
-            Object[] objectCollapseValues = new Object[collapseValues.size()];
-            for (int i = 0; i < objectCollapseValues.length; i++) {
-                objectCollapseValues[i] = collapseValues.get(i);
-            }
+            Object[] objectCollapseValues = relevantEntries.stream().map(Map.Entry::getKey).toArray(Object[]::new);
+
+            ScoreDoc[] newFieldDocs = relevantEntries.stream().map(Map.Entry::getValue).toArray(ScoreDoc[]::new);
+
+            totalScoreDocsCount += newFieldDocs.length;
 
             TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(
-                new CollapseTopFieldDocs(
-                    collapseField,
-                    updatedTopDocs.getTotalHits(),
-                    newFieldDocs.toArray(new ScoreDoc[0]),
-                    sort.getSort(),
-                    objectCollapseValues
-                ),
+                new CollapseTopFieldDocs(collapseField, updatedTopDocs.getTotalHits(), newFieldDocs, sort.getSort(), objectCollapseValues),
                 maxScoreForShard(updatedTopDocs, true)
             );
             if (isFetchPhaseExecuted) {
-                querySearchResults.get(index).from(combineScoresDTO.getFromValueForSingleShard());
+                querySearchResults.get(shardIndex).from(combineScoresDTO.getFromValueForSingleShard());
             }
-            querySearchResults.get(index).topDocs(updatedTopDocsAndMaxScore, querySearchResults.get(index).sortValueFormats());
+            querySearchResults.get(shardIndex).topDocs(updatedTopDocsAndMaxScore, querySearchResults.get(shardIndex).sortValueFormats());
         }
 
         return totalScoreDocsCount;
@@ -376,18 +371,24 @@ public class NormalizationProcessorWorkflow {
             Comparator.comparing((ScoreDoc scoreDoc) -> scoreDoc.score)
         );
 
-        for (int i = 0; i < querySearchResults.size(); i++) {
-            CompoundTopDocs updatedTopDocs = queryTopDocs.get(i);
+        for (int shardIndex = 0; shardIndex < querySearchResults.size(); shardIndex++) {
+            CompoundTopDocs updatedTopDocs = queryTopDocs.get(shardIndex);
             List<ScoreDoc> updatedScoreDocs = updatedTopDocs.getScoreDocs();
 
             if (updatedScoreDocs.isEmpty()) {
                 continue;
             }
 
+            // Collapse field is the same for all the CollapseTopFieldDocs in a query
+            // Therefore, we only need to access one of them to get the collapse field.
             collapseField = ((CollapseTopFieldDocs) updatedTopDocs.getTopDocs().getFirst()).field;
 
             for (ScoreDoc scoreDoc : updatedScoreDocs) {
                 FieldDoc fieldDoc = (FieldDoc) scoreDoc;
+                if (fieldDoc.fields == null || fieldDoc.fields.length == 0) {
+                    log.info("Field doc 'fields' attribute does not contain any values");
+                    continue;
+                }
                 Long collapseValue = (Long) fieldDoc.fields[fieldDoc.fields.length - 1];
                 if (collapseValue == null) {
                     continue;
@@ -396,24 +397,27 @@ public class NormalizationProcessorWorkflow {
                 FieldDoc currentBestFieldDoc = collapseValueToTopScoreDocMap.get(collapseValue);
                 if (currentBestFieldDoc == null || comparator.compare(fieldDoc, currentBestFieldDoc) < 0) {
                     collapseValueToTopScoreDocMap.put(collapseValue, fieldDoc);
-                    collapseValueToShardMap.put(collapseValue, i);
+                    collapseValueToShardMap.put(collapseValue, shardIndex);
                 }
             }
         }
 
         List<Map.Entry<Long, FieldDoc>> entryList = new ArrayList<>(collapseValueToTopScoreDocMap.entrySet());
 
+        // FieldDocs must be sorted before replacing the query search results.
+        // Since we are using a map to collapse values, this sort guarantees that the FieldDocs are in the correct order
+        // before updating the query search results.
         entryList.sort(Map.Entry.comparingByValue(comparator));
 
-        for (int index = 0; index < querySearchResults.size(); index++) {
-            CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
+        for (int shardIndex = 0; shardIndex < querySearchResults.size(); shardIndex++) {
+            CompoundTopDocs updatedTopDocs = queryTopDocs.get(shardIndex);
             List<FieldDoc> newFieldDocs = new ArrayList<>();
             List<Long> collapseValues = new ArrayList<>();
 
             for (Map.Entry<Long, FieldDoc> entry : entryList) {
                 Long collapseValue = entry.getKey();
                 FieldDoc fieldDoc = entry.getValue();
-                if (collapseValueToShardMap.get(collapseValue) == index) {
+                if (collapseValueToShardMap.get(collapseValue) == shardIndex) {
                     newFieldDocs.add(
                         new FieldDoc(fieldDoc.doc, fieldDoc.score, Arrays.copyOfRange(fieldDoc.fields, 0, fieldDoc.fields.length - 1))
                     );
@@ -423,10 +427,7 @@ public class NormalizationProcessorWorkflow {
 
             totalScoreDocsCount += newFieldDocs.size();
 
-            Object[] objectCollapseValues = new Object[collapseValues.size()];
-            for (int i = 0; i < objectCollapseValues.length; i++) {
-                objectCollapseValues[i] = collapseValues.get(i);
-            }
+            Object[] objectCollapseValues = collapseValues.toArray();
 
             TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(
                 new CollapseTopFieldDocs(
@@ -439,9 +440,9 @@ public class NormalizationProcessorWorkflow {
                 maxScoreForShard(updatedTopDocs, true)
             );
             if (isFetchPhaseExecuted) {
-                querySearchResults.get(index).from(combineScoresDTO.getFromValueForSingleShard());
+                querySearchResults.get(shardIndex).from(combineScoresDTO.getFromValueForSingleShard());
             }
-            querySearchResults.get(index).topDocs(updatedTopDocsAndMaxScore, querySearchResults.get(index).sortValueFormats());
+            querySearchResults.get(shardIndex).topDocs(updatedTopDocsAndMaxScore, querySearchResults.get(shardIndex).sortValueFormats());
         }
 
         return totalScoreDocsCount;

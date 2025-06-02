@@ -169,7 +169,7 @@ public class ScoreCombiner {
         final boolean isSortByScore = isSortOrderByScore(sort);
         final boolean isCollapseEnabled = topFieldDocs.getFirst() instanceof CollapseTopFieldDocs;
         for (TopDocs topDocs : topFieldDocs) {
-            int i = 0;
+            int scoreDocIndex = 0;
             for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
                 FieldDoc fieldDoc = (FieldDoc) scoreDoc;
 
@@ -183,21 +183,21 @@ public class ScoreCombiner {
                             isCollapseEnabled
                                 ? new Object[] {
                                     combinedNormalizedScoresByDocId.get(fieldDoc.doc),
-                                    ((CollapseTopFieldDocs) topDocs).collapseValues[i] }
+                                    ((CollapseTopFieldDocs) topDocs).collapseValues[scoreDocIndex] }
                                 : new Object[] { combinedNormalizedScoresByDocId.get(fieldDoc.doc) }
                         );
                     } else {
                         if (isCollapseEnabled) {
                             Object[] fields = new Object[fieldDoc.fields.length + 1];
                             System.arraycopy(fieldDoc.fields, 0, fields, 0, fieldDoc.fields.length);
-                            fields[fieldDoc.fields.length] = ((CollapseTopFieldDocs) topDocs).collapseValues[i];
+                            fields[fieldDoc.fields.length] = ((CollapseTopFieldDocs) topDocs).collapseValues[scoreDocIndex];
                             docIdSortFieldMap.put(fieldDoc.doc, fields);
                         } else {
                             docIdSortFieldMap.put(fieldDoc.doc, fieldDoc.fields);
                         }
                     }
                 }
-                i++;
+                scoreDocIndex++;
             }
         }
         return docIdSortFieldMap;
