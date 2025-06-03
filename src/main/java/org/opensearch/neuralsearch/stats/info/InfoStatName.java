@@ -21,6 +21,7 @@ public enum InfoStatName implements StatName {
     // Cluster info
     CLUSTER_VERSION("cluster_version", "", InfoStatType.INFO_STRING),
     TEXT_EMBEDDING_PROCESSORS("text_embedding_processors_in_pipelines", "processors.ingest", InfoStatType.INFO_COUNTER),
+    TEXT_EMBEDDING_SKIP_EXISTING_PROCESSORS("text_embedding_skip_existing_processors", "processors.ingest", InfoStatType.INFO_COUNTER),
     TEXT_CHUNKING_PROCESSORS("text_chunking_processors", "processors.ingest", InfoStatType.INFO_COUNTER),
     TEXT_CHUNKING_DELIMITER_PROCESSORS("text_chunking_delimiter_processors", "processors.ingest", InfoStatType.INFO_COUNTER),
     TEXT_CHUNKING_FIXED_TOKEN_LENGTH_PROCESSORS(
