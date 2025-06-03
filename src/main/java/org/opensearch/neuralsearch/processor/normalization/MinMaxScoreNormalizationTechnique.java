@@ -84,7 +84,8 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
      * - iterate over each result and update score as per formula above where "score" is raw score returned by Hybrid query
      */
     @Override
-    public void normalize(final NormalizeScoresDTO normalizeScoresDTO) {
+    public Map<Integer, float[]> normalize(final NormalizeScoresDTO normalizeScoresDTO) {
+        Map<Integer, float[]> docIdToSubqueryScores = new HashMap<>();
         final List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
         MinMaxScores minMaxScores = getMinMaxScoresResult(queryTopDocs);
         // do normalization using actual score and min and max scores for corresponding sub query
@@ -107,6 +108,9 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                 LowerBound lowerBound = getLowerBound(j);
                 UpperBound upperBound = getUpperBound(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
+                    // Initialize or update subquery scores array per doc
+                    float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(scoreDoc.doc, k -> new float[topDocsPerSubQuery.size()]);
+                    scoresArray[j] = scoreDoc.score;
                     scoreDoc.score = normalizeSingleScore(
                         scoreDoc.score,
                         minMaxScores.getMinScoresPerSubquery()[j],
@@ -117,6 +121,8 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                 }
             }
         }
+
+        return docIdToSubqueryScores;
     }
 
     private boolean isBoundsAndSubQueriesCountMismatched(List<TopDocs> topDocsPerSubQuery) {

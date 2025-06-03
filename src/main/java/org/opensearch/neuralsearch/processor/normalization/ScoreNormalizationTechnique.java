@@ -6,6 +6,8 @@ package org.opensearch.neuralsearch.processor.normalization;
 
 import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 
+import java.util.Map;
+
 /**
  * Abstracts normalization of scores in query search results.
  */
@@ -18,7 +20,7 @@ public interface ScoreNormalizationTechnique {
      * original query results from multiple shards and multiple sub-queries, ScoreNormalizationTechnique,
      * and nullable rankConstant that is only used in RRF technique
      */
-    void normalize(final NormalizeScoresDTO normalizeScoresDTO);
+    Map<Integer, float[]> normalize(final NormalizeScoresDTO normalizeScoresDTO);
 
     /**
      * Returns the name of the normalization technique.
