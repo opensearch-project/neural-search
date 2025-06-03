@@ -29,10 +29,10 @@ import org.opensearch.neuralsearch.search.lucene.MultiLeafFieldComparator;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Collects the CollapseTopFieldDocs based on a collapse field passed in a search request containing a hybrid query.
@@ -47,13 +47,13 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
     private final int[] reversed;
     private final boolean needsScores;
     private int docBase;
-    private final ConcurrentHashMap<T, FieldValueHitQueue<FieldValueHitQueue.Entry>[]> groupQueueMap;
-    private ConcurrentHashMap<T, int[]> collectedHitsPerSubQueryMap;
-    private ConcurrentHashMap<T, FieldValueHitQueue.Entry[]> fieldValueLeafTrackersMap;
-    private ConcurrentHashMap<T, LeafFieldComparator[]> comparatorsMap;
-    private ConcurrentHashMap<T, FieldComparator<?>> firstComparatorMap;
-    private ConcurrentHashMap<T, Integer> reverseMulMap;
-    private ConcurrentHashMap<T, boolean[]> queueFullMap;
+    private final HashMap<T, FieldValueHitQueue<FieldValueHitQueue.Entry>[]> groupQueueMap;
+    private HashMap<T, int[]> collectedHitsPerSubQueryMap;
+    private HashMap<T, FieldValueHitQueue.Entry[]> fieldValueLeafTrackersMap;
+    private HashMap<T, LeafFieldComparator[]> comparatorsMap;
+    private HashMap<T, FieldComparator<?>> firstComparatorMap;
+    private HashMap<T, Integer> reverseMulMap;
+    private HashMap<T, boolean[]> queueFullMap;
     private final int numHits;
     @Setter
     TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
@@ -81,13 +81,13 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 this.reversed[i] = sortField.getReverse() ? -1 : 1;
             }
 
-            this.groupQueueMap = new ConcurrentHashMap<>();
-            this.collectedHitsPerSubQueryMap = new ConcurrentHashMap<>();
-            this.fieldValueLeafTrackersMap = new ConcurrentHashMap<>();
-            this.comparatorsMap = new ConcurrentHashMap<>();
-            this.firstComparatorMap = new ConcurrentHashMap<>();
-            this.reverseMulMap = new ConcurrentHashMap<>();
-            this.queueFullMap = new ConcurrentHashMap<>();
+            this.groupQueueMap = new HashMap<>();
+            this.collectedHitsPerSubQueryMap = new HashMap<>();
+            this.fieldValueLeafTrackersMap = new HashMap<>();
+            this.comparatorsMap = new HashMap<>();
+            this.firstComparatorMap = new HashMap<>();
+            this.reverseMulMap = new HashMap<>();
+            this.queueFullMap = new HashMap<>();
 
             this.numHits = topNGroups;
             this.hitsThresholdChecker = hitsThresholdChecker;
@@ -197,10 +197,10 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         docBase = context.docBase;
         groupSelector.setNextReader(context);
         return new HybridLeafCollector() {
-            ConcurrentHashMap<T, Boolean> initializeLeafComparatorsPerSegmentOnceMap;
+            HashMap<T, Boolean> initializeLeafComparatorsPerSegmentOnceMap;
 
             {
-                initializeLeafComparatorsPerSegmentOnceMap = new ConcurrentHashMap<>();
+                initializeLeafComparatorsPerSegmentOnceMap = new HashMap<>();
             }
 
             @Override
@@ -209,34 +209,68 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 if (Objects.isNull(compoundQueryScorer)) {
                     return;
                 }
+
                 groupSelector.advanceTo(doc);
                 T groupValue = groupSelector.currentValue();
                 assert groupValue != null;
-                FieldValueHitQueue<FieldValueHitQueue.Entry>[] group = groupQueueMap.get(groupValue);
+
                 float[] subScoresByQuery = compoundQueryScorer.getSubQueryScores();
-                if (group == null) {
-                    initializeQueue(subScoresByQuery.length);
+                initializeQueueIfNeeded(groupValue, subScoresByQuery.length);
+                initializeLeafComparatorsIfNeeded(groupValue, subScoresByQuery.length, compoundQueryScorer);
+
+                updateHitCount();
+
+                for (int i = 0; i < subScoresByQuery.length; i++) {
+                    float score = subScoresByQuery[i];
+                    if (score == 0) {
+                        continue;
+                    }
+
+                    if (isQueueFull(groupValue, i)) {
+                        updateExistingEntry(groupValue, i, doc);
+                    } else {
+                        addNewEntry(groupValue, i, doc, score);
+                    }
+                }
+            }
+
+            private void initializeQueueIfNeeded(T groupValue, int subQueryCount) throws IOException {
+                if (groupQueueMap.get(groupValue) == null) {
+                    initializeQueue(subQueryCount);
+                }
+            }
+
+            private void initializeLeafComparatorsIfNeeded(T groupValue, int numSubQueries, HybridSubQueryScorer compoundQueryScorer)
+                throws IOException {
+                if (initializeLeafComparatorsPerSegmentOnceMap.get(groupValue) == null) {
+                    initializeLeafComparators(groupValue, numSubQueries, compoundQueryScorer);
+                }
+            }
+
+            private void initializeLeafComparators(T groupValue, int numSubQueries, HybridSubQueryScorer compoundQueryScorer)
+                throws IOException {
+                LeafFieldComparator[] comparators = comparatorsMap.get(groupValue);
+                FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores = groupQueueMap.get(groupValue);
+
+                for (int i = 0; i < numSubQueries; i++) {
+                    LeafFieldComparator[] leafFieldComparators = compoundScores[i].getComparators(context);
+                    int[] reverseMuls = compoundScores[i].getReverseMul();
+
+                    if (leafFieldComparators.length == 1) {
+                        reverseMulMap.put(groupSelector.copyValue(), reverseMuls[0]);
+                        comparators[i] = leafFieldComparators[0];
+                    } else {
+                        reverseMulMap.put(groupSelector.copyValue(), 1);
+                        comparators[i] = new MultiLeafFieldComparator(leafFieldComparators, reverseMuls);
+                    }
+                    comparators[i].setScorer(compoundQueryScorer);
                 }
 
-                if (initializeLeafComparatorsPerSegmentOnceMap.get(groupValue) == null) {
-                    int numSubQueries = subScoresByQuery.length;
-                    LeafFieldComparator[] comparators = comparatorsMap.get(groupValue);
-                    FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores = groupQueueMap.get(groupValue);
-                    for (int i = 0; i < numSubQueries; i++) {
-                        LeafFieldComparator[] leafFieldComparators = compoundScores[i].getComparators(context);
-                        int[] reverseMuls = compoundScores[i].getReverseMul();
-                        if (leafFieldComparators.length == 1) {
-                            reverseMulMap.put(groupSelector.copyValue(), reverseMuls[0]);
-                            comparators[i] = leafFieldComparators[0];
-                        } else {
-                            reverseMulMap.put(groupSelector.copyValue(), 1);
-                            comparators[i] = new MultiLeafFieldComparator(leafFieldComparators, reverseMuls);
-                        }
-                        comparators[i].setScorer(compoundQueryScorer);
-                    }
-                    comparatorsMap.put(groupSelector.copyValue(), comparators);
-                    initializeLeafComparatorsPerSegmentOnceMap.put(groupSelector.copyValue(), false);
-                }
+                comparatorsMap.put(groupSelector.copyValue(), comparators);
+                initializeLeafComparatorsPerSegmentOnceMap.put(groupSelector.copyValue(), false);
+            }
+
+            private void updateHitCount() throws CollectionTerminatedException {
                 totalHitCount++;
                 hitsThresholdChecker.incrementHitCount();
 
@@ -245,58 +279,66 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     log.info("Terminating collection early as specified hits threshold is reached");
                     throw new CollectionTerminatedException();
                 }
+            }
 
-                for (int i = 0; i < subScoresByQuery.length; i++) {
-                    float score = subScoresByQuery[i];
-                    if (score == 0) {
-                        continue;
-                    }
+            private boolean isQueueFull(T groupValue, int index) {
+                boolean[] queueFullArray = queueFullMap.get(groupValue);
+                return queueFullArray[index];
+            }
 
-                    boolean[] queueFullArray = queueFullMap.get(groupValue);
-                    if (queueFullArray[i]) {
-                        LeafFieldComparator[] comparators = comparatorsMap.get(groupValue);
-                        if (reverseMulMap.get(groupValue) * comparators[i].compareBottom(doc) > 0) {
-                            FieldValueHitQueue.Entry[] fieldValueLeafTrackers = fieldValueLeafTrackersMap.get(groupValue);
-                            FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores = groupQueueMap.get(groupValue);
-                            comparators[i].copy(fieldValueLeafTrackers[i].slot, doc);
+            private void updateExistingEntry(T groupValue, int index, int doc) throws IOException {
+                LeafFieldComparator[] comparators = comparatorsMap.get(groupValue);
+                if (reverseMulMap.get(groupValue) * comparators[index].compareBottom(doc) > 0) {
+                    FieldValueHitQueue.Entry[] fieldValueLeafTrackers = fieldValueLeafTrackersMap.get(groupValue);
+                    FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores = groupQueueMap.get(groupValue);
 
-                            fieldValueLeafTrackers[i].doc = docBase + doc;
-                            fieldValueLeafTrackers[i] = compoundScores[i].updateTop();
-                            comparators[i].setBottom(fieldValueLeafTrackers[i].slot);
+                    comparators[index].copy(fieldValueLeafTrackers[index].slot, doc);
+                    fieldValueLeafTrackers[index].doc = docBase + doc;
+                    fieldValueLeafTrackers[index] = compoundScores[index].updateTop();
+                    comparators[index].setBottom(fieldValueLeafTrackers[index].slot);
 
-                            comparatorsMap.put(groupSelector.copyValue(), comparators);
-                            fieldValueLeafTrackersMap.put(groupSelector.copyValue(), fieldValueLeafTrackers);
-                            groupQueueMap.put(groupSelector.copyValue(), compoundScores);
-                        }
-                    } else {
-                        int[] collectedHitsForCurrentSubQuery = collectedHitsPerSubQueryMap.get(groupValue);
-                        int slot = collectedHitsForCurrentSubQuery[i];
-
-                        collectedHitsForCurrentSubQuery[i]++;
-                        collectedHitsPerSubQueryMap.put(groupValue, collectedHitsForCurrentSubQuery);
-
-                        FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores = groupQueueMap.get(groupValue);
-                        maxScore = Math.max(score, maxScore);
-
-                        FieldValueHitQueue.Entry[] fieldValueLeafTrackers = fieldValueLeafTrackersMap.get(groupValue);
-
-                        LeafFieldComparator[] comparators = comparatorsMap.get(groupValue);
-                        comparators[i].copy(slot, doc);
-
-                        FieldValueHitQueue.Entry bottomEntry = new FieldValueHitQueue.Entry(slot, docBase + doc);
-                        bottomEntry.score = score;
-
-                        fieldValueLeafTrackers[i] = compoundScores[i].add(bottomEntry);
-
-                        fieldValueLeafTrackersMap.put(groupSelector.copyValue(), fieldValueLeafTrackers);
-                        groupQueueMap.put(groupSelector.copyValue(), compoundScores);
-
-                        if (slot == (numHits - 1)) {
-                            queueFullArray[i] = true;
-                            queueFullMap.put(groupSelector.copyValue(), queueFullArray);
-                        }
-                    }
+                    updateMaps(groupValue, comparators, fieldValueLeafTrackers, compoundScores);
                 }
+            }
+
+            private void addNewEntry(T groupValue, int index, int doc, float score) throws IOException {
+                int[] collectedHitsForCurrentSubQuery = collectedHitsPerSubQueryMap.get(groupValue);
+                int slot = collectedHitsForCurrentSubQuery[index];
+
+                collectedHitsForCurrentSubQuery[index]++;
+                collectedHitsPerSubQueryMap.put(groupValue, collectedHitsForCurrentSubQuery);
+
+                FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores = groupQueueMap.get(groupValue);
+                maxScore = Math.max(score, maxScore);
+
+                FieldValueHitQueue.Entry[] fieldValueLeafTrackers = fieldValueLeafTrackersMap.get(groupValue);
+                LeafFieldComparator[] comparators = comparatorsMap.get(groupValue);
+
+                comparators[index].copy(slot, doc);
+
+                FieldValueHitQueue.Entry bottomEntry = new FieldValueHitQueue.Entry(slot, docBase + doc);
+                bottomEntry.score = score;
+
+                fieldValueLeafTrackers[index] = compoundScores[index].add(bottomEntry);
+
+                updateMaps(groupValue, comparators, fieldValueLeafTrackers, compoundScores);
+
+                if (slot == (numHits - 1)) {
+                    boolean[] queueFullArray = queueFullMap.get(groupValue);
+                    queueFullArray[index] = true;
+                    queueFullMap.put(groupSelector.copyValue(), queueFullArray);
+                }
+            }
+
+            private void updateMaps(
+                T groupValue,
+                LeafFieldComparator[] comparators,
+                FieldValueHitQueue.Entry[] fieldValueLeafTrackers,
+                FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores
+            ) throws IOException {
+                comparatorsMap.put(groupSelector.copyValue(), comparators);
+                fieldValueLeafTrackersMap.put(groupSelector.copyValue(), fieldValueLeafTrackers);
+                groupQueueMap.put(groupSelector.copyValue(), compoundScores);
             }
 
             private void initializeQueue(int numSubQueries) throws IOException {
