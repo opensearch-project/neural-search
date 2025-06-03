@@ -93,27 +93,30 @@ public final class FixedCharLengthChunker extends Chunker {
 
         List<String> chunkResult = new ArrayList<>();
 
-        if (this.charLimit >= content.length()) {
-            chunkResult.add(content);
-        } else {
-            int startCharIndex = 0;
-            int overlapCharNumber = (int) Math.floor(this.charLimit * this.overlapRate);
-            // Ensure `chunkInterval` is positive. charLimit is positive. overlapRate is [0, 0.5].
-            // So, (charLimit - overlapCharNumber) >= 0.5 * charLimit, which is always > 0 if charLimit >= 1.
-            int chunkInterval = this.charLimit - overlapCharNumber;
+        int startCharIndex = 0;
+        int overlapCharNumber = (int) Math.floor(this.charLimit * this.overlapRate);
+        // Ensure `chunkInterval` is positive. charLimit is positive. overlapRate is [0, 0.5].
+        // So, (charLimit - overlapCharNumber) >= 0.5 * charLimit, which is always > 0 if charLimit >= 1.
+        int chunkInterval = this.charLimit - overlapCharNumber;
 
-            while (startCharIndex + overlapCharNumber < content.length()) {
-                if (Chunker.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, chunkStringCount)) {
-                    // Add all remaining content as the last chunk
-                    chunkResult.add(content.substring(startCharIndex));
-                    break;
-                }
-
-                int endPosition = Math.min(startCharIndex + this.charLimit, content.length());
-                chunkResult.add(content.substring(startCharIndex, endPosition));
-
-                startCharIndex += chunkInterval;
+        while (startCharIndex < content.length()) {
+            if (Chunker.checkRunTimeMaxChunkLimit(chunkResult.size(), runtimeMaxChunkLimit, chunkStringCount)) {
+                chunkResult.add(content.substring(startCharIndex));
+                break;
             }
+
+            int endPosition;
+            // Check if the current chunk will extend to or past the end of the content
+            if (startCharIndex + this.charLimit >= content.length()) {
+                endPosition = content.length(); // Ensure chunk goes to the very end
+                chunkResult.add(content.substring(startCharIndex, endPosition));
+                break;
+            } else {
+                endPosition = startCharIndex + this.charLimit;
+                chunkResult.add(content.substring(startCharIndex, endPosition));
+            }
+
+            startCharIndex += chunkInterval;
         }
 
         return chunkResult;
@@ -121,6 +124,6 @@ public final class FixedCharLengthChunker extends Chunker {
 
     @Override
     public String getAlgorithmName() {
-        return "";
+        return ALGORITHM_NAME;
     }
 }
