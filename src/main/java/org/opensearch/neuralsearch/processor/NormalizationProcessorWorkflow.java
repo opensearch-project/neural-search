@@ -342,7 +342,8 @@ public class NormalizationProcessorWorkflow {
 
             float[] subqueryScores = scoreMap.get(scoreDoc.doc);
 
-            if (subqueryScores != null && searchHit.getDocumentFields() == null) {
+            Map<String, DocumentField> documentFields = searchHit.getDocumentFields();
+            if (subqueryScores != null && !documentFields.containsKey("_hybridization")) {
                 // Add it as a field rather than modifying _source
                 searchHit.setDocumentField("_hybridization", new DocumentField("_hybridization", List.of(subqueryScores)));
             }
