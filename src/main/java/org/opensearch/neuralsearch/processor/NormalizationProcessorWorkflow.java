@@ -21,6 +21,7 @@ import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.opensearch.action.search.SearchPhaseContext;
+import org.opensearch.common.document.DocumentField;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.processor.collapse.CollapseDTO;
 import org.opensearch.neuralsearch.processor.collapse.CollapseExecutor;
@@ -35,6 +36,7 @@ import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.fetch.FetchSearchResult;
+import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.query.QuerySearchResult;
 
@@ -80,7 +82,7 @@ public class NormalizationProcessorWorkflow {
 
         // normalize
         log.debug("Do score normalization");
-        scoreNormalizer.normalizeScores(normalizeScoresDTO);
+        scoreNormalizer.normalizeScores(normalizeScoresDTO, request.getSearchContext());
 
         CombineScoresDto combineScoresDTO = CombineScoresDto.builder()
             .queryTopDocs(queryTopDocs)
@@ -99,6 +101,7 @@ public class NormalizationProcessorWorkflow {
         log.debug("Post-process query results after score normalization and combination");
         updateOriginalQueryResults(combineScoresDTO, fetchSearchResultOptional.isPresent());
         updateOriginalFetchResults(
+            request.getSearchContext(),
             querySearchResults,
             fetchSearchResultOptional,
             unprocessedDocIds,
@@ -286,6 +289,7 @@ public class NormalizationProcessorWorkflow {
      * A workaround for a single shard case, fetch has happened, and we need to update both fetch and query results
      */
     private void updateOriginalFetchResults(
+        final SearchContext searchContext,
         final List<QuerySearchResult> querySearchResults,
         final Optional<FetchSearchResult> fetchSearchResultOptional,
         final List<Integer> docIds,
@@ -294,6 +298,7 @@ public class NormalizationProcessorWorkflow {
         if (fetchSearchResultOptional.isEmpty()) {
             return;
         }
+        Map<Integer, float[]> scoreMap = HybridScoreRegistry.get(searchContext);
         // fetch results have list of document content, that includes start/stop and
         // delimiter elements. list is in original order from query searcher. We need to:
         // 1. filter out start/stop and delimiter elements
@@ -334,6 +339,13 @@ public class NormalizationProcessorWorkflow {
             SearchHit searchHit = docIdToSearchHit.get(scoreDoc.doc);
             // update score to normalized/combined value (3)
             searchHit.score(scoreDoc.score);
+
+            float[] subqueryScores = scoreMap.get(scoreDoc.doc);
+
+            if (subqueryScores != null && searchHit.getDocumentFields() == null) {
+                // Add it as a field rather than modifying _source
+                searchHit.setDocumentField("_hybridization", new DocumentField("_hybridization", List.of(subqueryScores)));
+            }
             updatedSearchHitArray[i] = searchHit;
         }
         SearchHits updatedSearchHits = new SearchHits(
