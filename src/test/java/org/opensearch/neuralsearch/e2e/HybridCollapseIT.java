@@ -68,6 +68,55 @@ public class HybridCollapseIT extends NeuralSearchRestTestCase {
         assertTrue(isCollapseDuplicateRemoved(responseBody, collapseDuplicate));
     }
 
+    public void testCollapse_whenE2E_andSortEnabled_thenSuccessful() throws IOException, ParseException {
+        createBasicCollapseIndex();
+        indexCollapseTestDocuments();
+        String pipelineName = createNormalizationPipeline("min_max", "arithmetic_mean");
+
+        final String searchRequestBody = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("query")
+            .startObject("hybrid")
+            .startArray("queries")
+            .startObject()
+            .startObject("match")
+            .field("item", "Chocolate Cake")
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject("bool")
+            .startObject("must")
+            .startObject("match")
+            .field("category", "cakes")
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endArray()
+            .endObject()
+            .endObject()
+            .startObject("collapse")
+            .field("field", "item")
+            .endObject()
+            .field("sort", "price")
+            .endObject()
+            .toString();
+        final Request searchRequest = new Request(
+            RestRequest.Method.GET.name(),
+            String.format(Locale.ROOT, "%s/_search?search_pipeline=%s", COLLAPSE_TEST_INDEX, pipelineName)
+        );
+        searchRequest.setJsonEntity(searchRequestBody);
+        Response searchResponse = client().performRequest(searchRequest);
+        assertOK(searchResponse);
+
+        final String responseBody = EntityUtils.toString(searchResponse.getEntity());
+
+        String collapseDuplicate = "Chocolate Cake";
+        assertTrue(isCollapseDuplicateRemoved(responseBody, collapseDuplicate));
+        // Assert that the hits are sorted correctly
+        assertTrue(responseBody.indexOf("Vanilla") < responseBody.indexOf("Chocolate"));
+    }
+
     private void createBasicCollapseIndex() throws IOException {
         String mapping = XContentFactory.jsonBuilder()
             .startObject()
