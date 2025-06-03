@@ -14,10 +14,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Abstract base class for implementing different collapse strategies.
+ * Provides framework for handling both keyword and numeric field collapses.
+ */
 @Getter
 public abstract class CollapseStrategy {
     protected int totalCollapsedDocsCount = 0;
 
+    /**
+     * Executes the collapse operation according to the specific strategy implementation.
+     *
+     * @param collapseDTO Data transfer object containing collapse configuration and results
+     */
     public abstract void executeCollapse(CollapseDTO collapseDTO);
 
     private static class KeywordCollapseStrategy extends CollapseStrategy {
@@ -86,10 +95,20 @@ public abstract class CollapseStrategy {
         }
     }
 
+    /**
+     * Factory method to create a strategy for keyword field collapse operations.
+     *
+     * @return A new instance of KeywordCollapseStrategy
+     */
     public static CollapseStrategy createKeywordStrategy() {
         return new KeywordCollapseStrategy();
     }
 
+    /**
+     * Factory method to create a strategy for numeric field collapse operations.
+     *
+     * @return A new instance of NumericCollapseStrategy
+     */
     public static CollapseStrategy createNumericStrategy() {
         return new NumericCollapseStrategy();
     }

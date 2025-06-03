@@ -105,7 +105,6 @@ public class CompoundTopDocs {
         List<TopDocs> topDocsList = new ArrayList<>();
         List<ScoreDoc> scoreDocList = new ArrayList<>();
         List<Object> collapseValueList = new ArrayList<>();
-        int collapseIndex = COLLAPSE_STARTING_INDEX;
         for (int index = 2; index < scoreDocs.length; index++) {
             // getting first element of score's series
             ScoreDoc scoreDoc = scoreDocs[index];
@@ -134,10 +133,9 @@ public class CompoundTopDocs {
                 scoreDocList.add(scoreDoc);
                 if (isCollapseEnabled) {
                     CollapseTopFieldDocs collapseTopFieldDocs = (CollapseTopFieldDocs) topDocs;
-                    collapseValueList.add(collapseTopFieldDocs.collapseValues[collapseIndex]);
+                    collapseValueList.add(collapseTopFieldDocs.collapseValues[index]);
                 }
             }
-            collapseIndex++;
         }
         initialize(topDocs.totalHits, topDocsList, isSortEnabled, searchShard);
     }

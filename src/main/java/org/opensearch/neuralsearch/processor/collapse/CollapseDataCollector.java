@@ -20,6 +20,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+/**
+ * A collector class that handles data collapsing operations for search results.
+ * Supports collapsing on fields of type BytesRef or Long.
+ *
+ * @param <T> The type of the collapse field value (BytesRef or Long)
+ */
 @Log4j2
 public class CollapseDataCollector<T> {
 
@@ -30,6 +36,12 @@ public class CollapseDataCollector<T> {
     @Getter
     private String collapseField;
 
+    /**
+     * Constructs a new CollapseDataCollector.
+     *
+     * @param collapseDTO The data transfer object containing collapse configuration and initial data
+     * @throws IllegalArgumentException if the collapse value type cannot be determined from input data
+     */
     public CollapseDataCollector(CollapseDTO collapseDTO) {
         this.collapseComparator = new HybridQueryFieldDocComparator(
             ((CollapseTopFieldDocs) collapseDTO.getCollapseQueryTopDocs()
@@ -60,6 +72,13 @@ public class CollapseDataCollector<T> {
         return null;
     }
 
+    /**
+     * Processes and collects collapse data from search results across all shards.
+     * Updates internal maps tracking the top documents and their corresponding shards for each collapse value.
+     *
+     * @param collapseDTO The data transfer object containing collapse query results
+     * @throws IllegalArgumentException if the document structure doesn't match expected collapse format
+     */
     public void collectCollapseData(CollapseDTO collapseDTO) {
         for (int shardIndex = 0; shardIndex < collapseDTO.getCollapseQuerySearchResults().size(); shardIndex++) {
             CompoundTopDocs updatedCollapseTopDocs = collapseDTO.getCollapseQueryTopDocs().get(shardIndex);
@@ -137,12 +156,25 @@ public class CollapseDataCollector<T> {
         }
     }
 
+    /**
+     * Returns a sorted list of collapse entries (collapse value to FieldDoc mappings).
+     * The entries are sorted based on the collapse comparator.
+     *
+     * @return List of sorted Map.Entry objects containing collapse values and their corresponding top FieldDocs
+     */
     public List<Map.Entry<T, FieldDoc>> getSortedCollapseEntries() {
         List<Map.Entry<T, FieldDoc>> collapseEntryList = new ArrayList<>(collapseValueToTopDocMap.entrySet());
         collapseEntryList.sort(Map.Entry.comparingByValue(collapseComparator));
         return collapseEntryList;
     }
 
+    /**
+     * Retrieves the shard index for a given collapse key.
+     *
+     * @param key The collapse value to look up
+     * @return The shard index where the top document for this collapse value was found, or null if not found
+     * @throws IllegalArgumentException if the provided key is not of the expected type
+     */
     public Integer getCollapseShardIndex(T key) {
         if (!expectedType.isInstance(key)) {
             throw new IllegalArgumentException(

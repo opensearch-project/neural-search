@@ -14,11 +14,22 @@ import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import java.util.Arrays;
 import java.util.Map;
 
+/**
+ * Updates collapse results based on the processed collapse data.
+ * This class is responsible for creating new collapsed field documents and updating the search results.
+ */
 @Getter
 public class CollapseResultUpdater {
     private int processedCollapsedDocsCount = 0;
 
-    public <T> void updateCollapseResults(CollapseDTO collapseDTO) {
+    /**
+     * Updates the collapse results based on the provided collapse data.
+     * This method creates new collapsed field documents, updates the top documents,
+     * and adjusts the search results accordingly.
+     *
+     * @param collapseDTO Data transfer object containing collapse configuration and results
+     */
+    public void updateCollapseResults(CollapseDTO collapseDTO) {
         Object[] objectCollapseValues = collapseDTO.getRelevantCollapseEntries().stream().map(Map.Entry::getKey).toArray(Object[]::new);
 
         ScoreDoc[] newCollapsedFieldDocs = collapseDTO.getRelevantCollapseEntries()
@@ -38,7 +49,7 @@ public class CollapseResultUpdater {
             NormalizationProcessorWorkflow.maxScoreForShard(collapseDTO.getUpdatedCollapseTopDocs(), true)
         );
 
-        if (collapseDTO.isCollapseFetchPhaseExecuted()) {
+        if (collapseDTO.isFetchPhaseExecuted()) {
             collapseDTO.getCollapseQuerySearchResults()
                 .get(collapseDTO.getCollapseShardIndex())
                 .from(collapseDTO.getCollapseCombineScoresDTO().getFromValueForSingleShard());
@@ -53,5 +64,4 @@ public class CollapseResultUpdater {
 
         this.processedCollapsedDocsCount = newCollapsedFieldDocs.length;
     }
-
 }

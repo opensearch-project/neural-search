@@ -93,6 +93,16 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         }
     }
 
+    /**
+     * Creates a HybridCollapsingTopDocsCollector for keyword fields.
+     *
+     * @param collapseField The field to collapse on
+     * @param fieldType The mapped field type
+     * @param sort The sort criteria to apply
+     * @param topNGroups The number of top groups to collect
+     * @param hitsThresholdChecker Checker for hits threshold
+     * @return A new HybridCollapsingTopDocsCollector instance for keyword fields
+     */
     public static HybridCollapsingTopDocsCollector<?> createKeyword(
         String collapseField,
         MappedFieldType fieldType,
@@ -109,6 +119,16 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         );
     }
 
+    /**
+     * Creates a HybridCollapsingTopDocsCollector for numeric fields.
+     *
+     * @param collapseField The field to collapse on
+     * @param fieldType The mapped field type
+     * @param sort The sort criteria to apply
+     * @param topNGroups The number of top groups to collect
+     * @param hitsThresholdChecker Checker for hits threshold
+     * @return A new HybridCollapsingTopDocsCollector instance for numeric fields
+     */
     public static HybridCollapsingTopDocsCollector<?> createNumeric(
         String collapseField,
         MappedFieldType fieldType,
@@ -125,6 +145,12 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         );
     }
 
+    /**
+     * Returns the collected top documents, including collapse values and sort fields, grouped by sub-query.
+     *
+     * @return A list of CollapseTopFieldDocs
+     * @throws IOException If an I/O error occurs
+     */
     @Override
     public List<CollapseTopFieldDocs> topDocs() throws IOException {
         List<CollapseTopFieldDocs> topDocsList = new ArrayList<>();
@@ -176,21 +202,43 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         return topDocsList;
     }
 
+    /**
+     * Returns the total number of hits across all groups.
+     *
+     * @return The total hit count
+     */
     @Override
     public int getTotalHits() {
         return totalHitCount;
     }
 
+    /**
+     * Returns the maximum score across all collected documents.
+     *
+     * @return The maximum score
+     */
     @Override
     public float getMaxScore() {
         return maxScore;
     }
 
+    /**
+     * Returns the score mode for this collector.
+     *
+     * @return The ScoreMode indicating how scores should be computed
+     */
     @Override
     public ScoreMode scoreMode() {
-        return this.needsScores ? ScoreMode.COMPLETE : ScoreMode.COMPLETE_NO_SCORES;
+        return ScoreMode.COMPLETE;
     }
 
+    /**
+     * Creates a LeafCollector for collecting documents in a segment.
+     *
+     * @param context The context for the current leaf reader
+     * @return A LeafCollector for the segment
+     * @throws IOException If an I/O error occurs
+     */
     @Override
     public LeafCollector getLeafCollector(LeafReaderContext context) throws IOException {
         docBase = context.docBase;
@@ -202,6 +250,12 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 initializeLeafComparatorsPerSegmentOnceMap = new HashMap<>();
             }
 
+            /**
+             * Collects a document and processes it based on its group value, scores, and sort.
+             *
+             * @param doc The document ID
+             * @throws IOException If an I/O error occurs
+             */
             @Override
             public void collect(int doc) throws IOException {
                 HybridSubQueryScorer compoundQueryScorer = getCompoundQueryScorer();
@@ -292,7 +346,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     fieldValueLeafTrackers[index] = compoundScores[index].updateTop();
                     comparators[index].setBottom(fieldValueLeafTrackers[index].slot);
 
-                    updateMaps(groupValue, comparators, fieldValueLeafTrackers, compoundScores);
+                    updateMaps(comparators, fieldValueLeafTrackers, compoundScores);
                 }
             }
 
@@ -316,7 +370,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
                 fieldValueLeafTrackers[subQueryNumber] = compoundScores[subQueryNumber].add(bottomEntry);
 
-                updateMaps(groupValue, comparators, fieldValueLeafTrackers, compoundScores);
+                updateMaps(comparators, fieldValueLeafTrackers, compoundScores);
 
                 if (slot == (numHits - 1)) {
                     boolean[] queueFullArray = queueFullMap.get(groupValue);
@@ -326,7 +380,6 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
             }
 
             private void updateMaps(
-                T groupValue,
                 LeafFieldComparator[] comparators,
                 FieldValueHitQueue.Entry[] fieldValueLeafTrackers,
                 FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores

@@ -27,6 +27,8 @@ import java.util.Locale;
 
 /**
  * Group selector that selects based on a collapse value
+ * This class is same as in OpenSearch core. Because the implementation does not have public access, we have to add it to the neural search plugin.
+ * https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/apache/lucene/search/grouping/CollapsingDocValuesSource.java
  * @param <T> Type of collapse value: Numeric or Keyword
  */
 abstract class CollapseDocSourceGroupSelector<T> extends GroupSelector<T> {

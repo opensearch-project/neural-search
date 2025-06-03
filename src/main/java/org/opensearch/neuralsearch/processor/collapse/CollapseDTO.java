@@ -14,6 +14,10 @@ import org.opensearch.search.query.QuerySearchResult;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Data Transfer Object (DTO) for managing collapse-related search data across shards.
+ * Contains both base collapse information and shard-specific details for search operations.
+ */
 @Getter
 public class CollapseDTO {
     // Base collapse fields
@@ -21,7 +25,7 @@ public class CollapseDTO {
     private final List<QuerySearchResult> collapseQuerySearchResults;
     private final Sort collapseSort;
     private final int indexOfFirstNonEmpty;
-    private final boolean isCollapseFetchPhaseExecuted;
+    private final boolean isFetchPhaseExecuted;
     private final CombineScoresDto collapseCombineScoresDTO;
 
     // Shard-specific fields
@@ -35,23 +39,34 @@ public class CollapseDTO {
         List<QuerySearchResult> collapseQuerySearchResults,
         Sort collapseSort,
         int indexOfFirstNonEmpty,
-        boolean isCollapseFetchPhaseExecuted,
+        boolean isFetchPhaseExecuted,
         CombineScoresDto collapseCombineScoresDTO
     ) {
         this.collapseQueryTopDocs = collapseQueryTopDocs;
         this.collapseQuerySearchResults = collapseQuerySearchResults;
         this.collapseSort = collapseSort;
         this.indexOfFirstNonEmpty = indexOfFirstNonEmpty;
-        this.isCollapseFetchPhaseExecuted = isCollapseFetchPhaseExecuted;
+        this.isFetchPhaseExecuted = isFetchPhaseExecuted;
         this.collapseCombineScoresDTO = collapseCombineScoresDTO;
     }
 
+    /**
+     * Factory method to create a new CollapseDTO instance with initial collapse parameters.
+     *
+     * @param collapseQueryTopDocs List of compound top documents from collapse query
+     * @param collapseQuerySearchResults List of search results from collapse query
+     * @param collapseSort Sort criteria for collapse operation
+     * @param indexOfFirstNonEmpty Index of the first non-empty result
+     * @param isFetchPhaseExecuted Flag indicating if  fetch phase is complete
+     * @param collapseCombineScoresDTO DTO containing score combination parameters
+     * @return A new CollapseDTO instance
+     */
     public static CollapseDTO createInitialCollapseDTO(
         List<CompoundTopDocs> collapseQueryTopDocs,
         List<QuerySearchResult> collapseQuerySearchResults,
         Sort collapseSort,
         int indexOfFirstNonEmpty,
-        boolean isCollapseFetchPhaseExecuted,
+        boolean isFetchPhaseExecuted,
         CombineScoresDto collapseCombineScoresDTO
     ) {
         return new CollapseDTO(
@@ -59,11 +74,20 @@ public class CollapseDTO {
             collapseQuerySearchResults,
             collapseSort,
             indexOfFirstNonEmpty,
-            isCollapseFetchPhaseExecuted,
+            isFetchPhaseExecuted,
             collapseCombineScoresDTO
         );
     }
 
+    /**
+     * Updates the DTO with shard-specific collapse information.
+     *
+     * @param <T> The type of the collapse field value
+     * @param relevantCollapseEntries List of collapse entries relevant for the shard
+     * @param collapseField Name of the field being collapsed on
+     * @param updatedCollapseTopDocs Updated compound top documents for the shard
+     * @param collapseShardIndex Index of the current shard being processed
+     */
     public <T> void updateForShard(
         List<Map.Entry<T, FieldDoc>> relevantCollapseEntries,
         String collapseField,
