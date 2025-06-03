@@ -23,7 +23,7 @@ import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.processor.collapse.CollapseDTO;
-import org.opensearch.neuralsearch.processor.collapse.CollapseProcessor;
+import org.opensearch.neuralsearch.processor.collapse.CollapseExecutor;
 import org.opensearch.neuralsearch.processor.combination.CombineScoresDto;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.explain.CombinedExplanationDetails;
@@ -208,27 +208,28 @@ public class NormalizationProcessorWorkflow {
 
         // Get index of first non-empty CompoundTopDocs to check if collapse is enabled
         boolean isCollapseEnabled = false;
-        int indexOfFirstNonEmpty = 0;
-        for (CompoundTopDocs compoundTopDocs : queryTopDocs) {
-            if (!compoundTopDocs.getTopDocs().isEmpty() && compoundTopDocs.getTopDocs().getFirst() instanceof CollapseTopFieldDocs) {
+        int firstNonEmptyIndex = -1;
+        for (int queryTopDocIndex = 0; queryTopDocIndex < queryTopDocs.size(); queryTopDocIndex++) {
+            List<TopDocs> topDocsList = queryTopDocs.get(queryTopDocIndex).getTopDocs();
+            if (!topDocsList.isEmpty() && topDocsList.getFirst() instanceof CollapseTopFieldDocs) {
                 isCollapseEnabled = true;
+                firstNonEmptyIndex = queryTopDocIndex;
                 break;
             }
-            indexOfFirstNonEmpty++;
         }
         if (isCollapseEnabled) {
-            CollapseProcessor collapseProcessor = new CollapseProcessor();
+            CollapseExecutor collapseExecutor = new CollapseExecutor();
             CollapseDTO collapseDTO = CollapseDTO.createInitialCollapseDTO(
                 queryTopDocs,
                 querySearchResults,
                 sort,
-                indexOfFirstNonEmpty,
+                firstNonEmptyIndex,
                 isFetchPhaseExecuted,
                 combineScoresDTO
             );
 
-            collapseProcessor.executeCollapse(collapseDTO);
-            totalScoreDocsCount = collapseProcessor.getTotalCollapsedDocsCount();
+            collapseExecutor.executeCollapse(collapseDTO);
+            totalScoreDocsCount = collapseExecutor.getTotalCollapsedDocsCount();
         } else {
             for (int shardIndex = 0; shardIndex < querySearchResults.size(); shardIndex++) {
                 QuerySearchResult querySearchResult = querySearchResults.get(shardIndex);

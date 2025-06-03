@@ -13,7 +13,7 @@ import org.apache.lucene.util.BytesRef;
  * Determines the appropriate collapse strategy based on the field type and executes the collapse.
  */
 @Getter
-public class CollapseProcessor {
+public class CollapseExecutor {
     private int totalCollapsedDocsCount = 0;
 
     /**
@@ -24,7 +24,7 @@ public class CollapseProcessor {
      * @param collapseDTO Data transfer object containing collapse configuration and results
      */
     public void executeCollapse(CollapseDTO collapseDTO) {
-        boolean isKeywordCollapse = isKeywordCollapseType(collapseDTO);
+        boolean isKeywordCollapse = isCollapseOnKeywordField(collapseDTO);
         CollapseStrategy collapseStrategy = isKeywordCollapse
             ? CollapseStrategy.createKeywordStrategy()
             : CollapseStrategy.createNumericStrategy();
@@ -33,7 +33,7 @@ public class CollapseProcessor {
         this.totalCollapsedDocsCount = collapseStrategy.getTotalCollapsedDocsCount();
     }
 
-    private boolean isKeywordCollapseType(CollapseDTO collapseDTO) {
+    private boolean isCollapseOnKeywordField(CollapseDTO collapseDTO) {
         return ((CollapseTopFieldDocs) collapseDTO.getCollapseQueryTopDocs()
             .get(collapseDTO.getIndexOfFirstNonEmpty())
             .getTopDocs()

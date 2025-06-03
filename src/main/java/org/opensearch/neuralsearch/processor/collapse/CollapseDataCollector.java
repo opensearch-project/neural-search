@@ -53,6 +53,7 @@ public class CollapseDataCollector<T> {
 
         this.expectedType = determineExpectedType(collapseDTO);
         if (this.expectedType == null) {
+            log.error("Could not determine collapse value type from input data");
             throw new IllegalArgumentException("Could not determine collapse value type from input data");
         }
     }
@@ -100,7 +101,8 @@ public class CollapseDataCollector<T> {
 
             collapseField = ((CollapseTopFieldDocs) updatedCollapseTopDocs.getTopDocs().getFirst()).field;
 
-            for (ScoreDoc scoreDoc : updatedCollapseDocs) {
+            for (int scoreDocIndex = 0; scoreDocIndex < updatedCollapseDocs.size(); scoreDocIndex++) {
+                ScoreDoc scoreDoc = updatedCollapseDocs.get(scoreDocIndex);
                 try {
                     processCollapseDoc(scoreDoc, shardIndex);
                 } catch (ClassCastException | IllegalArgumentException e) {
@@ -188,5 +190,4 @@ public class CollapseDataCollector<T> {
         }
         return collapseValueToShardMap.get(key);
     }
-
 }

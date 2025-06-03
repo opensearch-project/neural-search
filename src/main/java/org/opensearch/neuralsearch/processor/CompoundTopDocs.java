@@ -43,7 +43,6 @@ public class CompoundTopDocs {
     private List<ScoreDoc> scoreDocs;
     @Getter
     private SearchShard searchShard;
-    private final int COLLAPSE_STARTING_INDEX = 2;
 
     public CompoundTopDocs(
         final TotalHits totalHits,
