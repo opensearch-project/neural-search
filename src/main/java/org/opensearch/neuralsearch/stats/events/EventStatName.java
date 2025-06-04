@@ -166,7 +166,39 @@ public enum EventStatName implements StatName {
         "query.neural_sparse",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
-    );
+    ),
+    // Misc processors
+    TEXT_IMAGE_EMBEDDING_PROCESSOR_EXECUTIONS(
+        "text_image_embedding_executions",
+        "processors.ingest",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        Version.V_3_1_0
+    ),
+    SPARSE_ENCODING_PROCESSOR_EXECUTIONS(
+        "sparse_encoding_executions",
+        "processors.ingest",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        Version.V_3_1_0
+    ),
+    NEURAL_QUERY_ENRICHER_PROCESSOR_EXECUTIONS(
+        "neural_query_enricher_executions",
+        "processors.search",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        Version.V_3_1_0
+    ),
+    NEURAL_SPARSE_TWO_PHASE_PROCESSOR_EXECUTIONS(
+        "neural_sparse_two_phase_executions",
+        "processors.search",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        Version.V_3_1_0
+    ),
+    RERANK_BY_FIELD_PROCESSOR_EXECUTIONS(
+        "rerank_by_field_executions",
+        "processors.search",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        Version.V_3_1_0
+    ),
+    RERANK_ML_PROCESSOR_EXECUTIONS("rerank_ml_executions", "processors.search", EventStatType.TIMESTAMPED_EVENT_COUNTER, Version.V_3_1_0),;
 
     private final String nameString;
     private final String path;

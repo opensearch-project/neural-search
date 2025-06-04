@@ -60,7 +60,19 @@ public enum InfoStatName implements StatName {
     ),
     COMB_TECHNIQUE_HARMONIC_PROCESSORS("comb_harmonic_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER, Version.V_3_1_0),
     RRF_PROCESSORS("rank_based_normalization_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER, Version.V_3_1_0),
-    COMB_TECHNIQUE_RRF_PROCESSORS("comb_rrf_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER, Version.V_3_1_0);
+    COMB_TECHNIQUE_RRF_PROCESSORS("comb_rrf_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER, Version.V_3_1_0),
+    // Misc processors
+    TEXT_IMAGE_EMBEDDING_PROCESSORS("text_image_embedding_processors", "processors.ingest", InfoStatType.INFO_COUNTER, Version.V_3_1_0),
+    SPARSE_ENCODING_PROCESSORS("sparse_encoding_processors", "processors.ingest", InfoStatType.INFO_COUNTER, Version.V_3_1_0),
+    NEURAL_QUERY_ENRICHER_PROCESSORS("neural_query_enricher_processors", "processors.search", InfoStatType.INFO_COUNTER, Version.V_3_1_0),
+    NEURAL_SPARSE_TWO_PHASE_PROCESSORS(
+        "neural_sparse_two_phase_processors",
+        "processors.search",
+        InfoStatType.INFO_COUNTER,
+        Version.V_3_1_0
+    ),
+    RERANK_BY_FIELD_PROCESSORS("rerank_by_field_processors", "processors.search", InfoStatType.INFO_COUNTER, Version.V_3_1_0),
+    RERANK_ML_PROCESSORS("rerank_ml_processors", "processors.search", InfoStatType.INFO_COUNTER, Version.V_3_1_0),;
 
     private final String nameString;
     private final String path;

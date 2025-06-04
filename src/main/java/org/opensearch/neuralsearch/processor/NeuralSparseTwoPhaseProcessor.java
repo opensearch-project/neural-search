@@ -13,6 +13,8 @@ import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.ingest.ConfigurationUtils;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.search.builder.SearchSourceBuilder;
@@ -88,6 +90,7 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
      */
     @Override
     public SearchRequest processRequest(final SearchRequest request) {
+        EventStatsManager.increment(EventStatName.NEURAL_SPARSE_TWO_PHASE_PROCESSOR_EXECUTIONS);
         if (!enabled || pruneRatio == 0f) {
             return request;
         }

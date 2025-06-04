@@ -65,7 +65,7 @@ public class InfoStatsManagerTests extends OpenSearchTestCase {
     public void test_getStats_returnsAllStats_partiallyEmptyPipelineConfigs() {
         when(mockPipelineServiceUtil.getIngestPipelineConfigs()).thenReturn(List.of(Collections.emptyMap()));
         when(mockPipelineServiceUtil.getSearchPipelineConfigs()).thenReturn(List.of(Map.of(
-                InfoStatsManager.PHASE_RESULTS_PROCESSORS_KEY, List.of(Collections.emptyMap())
+                InfoStatsManager.PHASE_PROCESSORS_KEY, List.of(Collections.emptyMap())
         )));
 
         Map<InfoStatName, StatSnapshot<?>> stats = infoStatsManager.getStats(EnumSet.allOf(InfoStatName.class));

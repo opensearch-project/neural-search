@@ -16,7 +16,10 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.functionscore.FunctionScoreQueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -460,6 +463,42 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = 6 * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
+    }
+
+    @SneakyThrows
+    public void testBooleanQuery_withMultipleSparseEncodingQueries_whenTwoPhaseEnabled_statsEnabled() {
+        enableStats();
+
+        initializeTwoPhaseProcessor();
+        initializeIndexIfNotExist(TEST_MULTI_NEURAL_SPARSE_FIELD_INDEX_NAME);
+        setDefaultSearchPipelineForIndex(TEST_MULTI_NEURAL_SPARSE_FIELD_INDEX_NAME);
+        BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
+        Map<String, Float> randomTokenWeight = createRandomTokenWeightMap(TWO_PHASE_TEST_TOKEN);
+        Supplier<Map<String, Float>> randomTokenWeightSupplier = () -> randomTokenWeight;
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder1 = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
+            .queryTokensSupplier(randomTokenWeightSupplier);
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder2 = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_2)
+            .queryTokensSupplier(randomTokenWeightSupplier);
+        boolQueryBuilder.should(sparseEncodingQueryBuilder1).should(sparseEncodingQueryBuilder2);
+
+        Map<String, Object> searchResponseAsMap = search(TEST_MULTI_NEURAL_SPARSE_FIELD_INDEX_NAME, boolQueryBuilder, 1);
+        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+
+        assertEquals("1", firstInnerHit.get("_id"));
+        float expectedScore = 2 * computeExpectedScore(testRankFeaturesDoc, randomTokenWeightSupplier.get());
+        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
+
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        // Parse json to get stats
+        assertEquals(1, getNestedValue(allNodesStats, EventStatName.NEURAL_SPARSE_TWO_PHASE_PROCESSOR_EXECUTIONS.getFullPath()));
+        assertEquals(1, getNestedValue(stats, InfoStatName.NEURAL_SPARSE_TWO_PHASE_PROCESSORS.getFullPath()));
+
+        // Reset stats
+        disableStats();
     }
 
     @SneakyThrows

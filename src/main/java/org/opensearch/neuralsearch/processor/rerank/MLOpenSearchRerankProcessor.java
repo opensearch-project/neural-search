@@ -17,6 +17,8 @@ import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
 import org.opensearch.neuralsearch.processor.rerank.context.ContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.context.DocumentContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.context.QueryContextSourceFetcher;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 
 /**
  * Rescoring Rerank Processor that uses a TextSimilarity model in ml-commons to rescore
@@ -57,6 +59,7 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
         final Map<String, Object> rerankingContext,
         final ActionListener<List<Float>> listener
     ) {
+        EventStatsManager.increment(EventStatName.RERANK_ML_PROCESSOR_EXECUTIONS);
         Object ctxObj = rerankingContext.get(DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD);
         if (!(ctxObj instanceof List<?>)) {
             listener.onFailure(

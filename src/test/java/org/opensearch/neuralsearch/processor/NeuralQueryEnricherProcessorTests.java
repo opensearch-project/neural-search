@@ -8,14 +8,20 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.junit.Before;
 import org.opensearch.OpenSearchParseException;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
+import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class NeuralQueryEnricherProcessorTests extends OpenSearchTestCase {
+    @Before
+    public void setup() {
+        TestUtils.initializeEventStatsManager();
+    }
 
     public void testFactory_whenMissingQueryParam_thenThrowException() throws Exception {
         NeuralQueryEnricherProcessor.Factory factory = new NeuralQueryEnricherProcessor.Factory();

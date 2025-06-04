@@ -4,12 +4,15 @@
  */
 package org.opensearch.neuralsearch.processor;
 
+import java.util.ArrayList;
 import java.util.Map;
 
 import org.junit.Before;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
 
 public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
 
@@ -120,5 +123,34 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
         assertFalse(searchResponse.isEmpty());
         double maxScore = (Double) ((Map) searchResponse.get("hits")).get("max_score");
         assertEquals(4.4433594, maxScore, 1e-3);
+    }
+
+    public void testSparseEncodingProcessor_statsEnabled() throws Exception {
+        enableStats();
+
+        String modelId = null;
+        modelId = prepareSparseEncodingModel();
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING);
+        createIndexWithPipeline(INDEX_NAME, "SparseEncodingIndexMappings.json", PIPELINE_NAME);
+        ingestDocument(INDEX_NAME, INGEST_DOCUMENT);
+        assertEquals(1, getDocCount(INDEX_NAME));
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
+        neuralSparseQueryBuilder.fieldName("title_sparse");
+        neuralSparseQueryBuilder.queryTokensSupplier(() -> Map.of("good", 1.0f, "a", 2.0f));
+        Map<String, Object> searchResponse = search(INDEX_NAME, neuralSparseQueryBuilder, 2);
+        assertFalse(searchResponse.isEmpty());
+        double maxScore = (Double) ((Map) searchResponse.get("hits")).get("max_score");
+        assertEquals(4.4433594, maxScore, 1e-3);
+
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        assertEquals(1, getNestedValue(allNodesStats, EventStatName.SPARSE_ENCODING_PROCESSOR_EXECUTIONS));
+        assertEquals(1, getNestedValue(stats, InfoStatName.SPARSE_ENCODING_PROCESSORS));
+
+        disableStats();
     }
 }
