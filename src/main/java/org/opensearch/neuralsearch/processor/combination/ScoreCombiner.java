@@ -169,9 +169,8 @@ public class ScoreCombiner {
         final boolean isSortByScore = isSortOrderByScore(sort);
         final boolean isCollapseEnabled = topFieldDocs.getFirst() instanceof CollapseTopFieldDocs;
         for (TopDocs topDocs : topFieldDocs) {
-            int scoreDocIndex = 0;
-            for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
-                FieldDoc fieldDoc = (FieldDoc) scoreDoc;
+            for (int scoreDocIndex = 0; scoreDocIndex < topDocs.scoreDocs.length; scoreDocIndex++) {
+                FieldDoc fieldDoc = (FieldDoc) topDocs.scoreDocs[scoreDocIndex];
 
                 if (docIdSortFieldMap.get(fieldDoc.doc) == null) {
                     // If sort by score then replace sort field value with normalized score.
@@ -197,7 +196,6 @@ public class ScoreCombiner {
                         }
                     }
                 }
-                scoreDocIndex++;
             }
         }
         return docIdSortFieldMap;

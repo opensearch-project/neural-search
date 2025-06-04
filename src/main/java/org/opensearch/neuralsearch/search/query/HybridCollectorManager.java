@@ -50,6 +50,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 import static org.apache.lucene.search.TotalHits.Relation;
 
@@ -82,6 +83,12 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     private final FieldDoc after;
     private final SearchContext searchContext;
     private final CollapseContext collapseContext;
+
+    private final Set<Class<?>> VALID_COLLECTOR_TYPES = Set.of(
+        HybridTopScoreDocCollector.class,
+        HybridTopFieldDocSortCollector.class,
+        HybridCollapsingTopDocsCollector.class
+    );
 
     /**
      * Create new instance of HybridCollectorManager depending on the concurrent search beeing enabled or disabled.
@@ -295,15 +302,12 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     }
 
     private boolean isHybridNonFilteredCollector(Collector collector) {
-        return collector instanceof HybridTopScoreDocCollector
-            || collector instanceof HybridTopFieldDocSortCollector
-            || collector instanceof HybridCollapsingTopDocsCollector;
+        return VALID_COLLECTOR_TYPES.stream().anyMatch(type -> type.isInstance(collector));
     }
 
     private boolean isHybridFilteredCollector(Collector collector) {
         return collector instanceof FilteredCollector
-            && (((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector
-                || ((FilteredCollector) collector).getCollector() instanceof HybridTopFieldDocSortCollector);
+            && VALID_COLLECTOR_TYPES.stream().anyMatch(type -> type.isInstance(((FilteredCollector) collector).getCollector()));
     }
 
     private static void validateSortCriteria(SearchContext searchContext, boolean trackScores) {

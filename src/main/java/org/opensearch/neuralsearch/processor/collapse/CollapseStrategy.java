@@ -29,36 +29,39 @@ public abstract class CollapseStrategy {
      */
     public abstract void executeCollapse(CollapseDTO collapseDTO);
 
+    protected <T> void executeCollapseGeneric(CollapseDTO collapseDTO, CollapseDataCollector<T> collapseDataCollector) {
+        collapseDataCollector.collectCollapseData(collapseDTO);
+        List<Map.Entry<T, FieldDoc>> sortedCollapseEntries = collapseDataCollector.getSortedCollapseEntries();
+
+        Map<Integer, List<Map.Entry<T, FieldDoc>>> shardToCollapseEntriesMap = sortedCollapseEntries.stream()
+            .collect(Collectors.groupingBy(entry -> collapseDataCollector.getCollapseShardIndex(entry.getKey())));
+
+        CollapseResultUpdater collapseResultUpdater = new CollapseResultUpdater();
+
+        for (int shardIndex = 0; shardIndex < collapseDTO.getCollapseQuerySearchResults().size(); shardIndex++) {
+            CompoundTopDocs updatedCollapseTopDocs = collapseDTO.getCollapseQueryTopDocs().get(shardIndex);
+            List<Map.Entry<T, FieldDoc>> relevantCollapseEntries = shardToCollapseEntriesMap.getOrDefault(
+                shardIndex,
+                Collections.emptyList()
+            );
+
+            collapseDTO.updateForShard(
+                relevantCollapseEntries,
+                collapseDataCollector.getCollapseField(),
+                updatedCollapseTopDocs,
+                shardIndex
+            );
+
+            collapseResultUpdater.updateCollapseResults(collapseDTO);
+            this.totalCollapsedDocsCount += collapseResultUpdater.getProcessedCollapsedDocsCount().intValue();
+        }
+    }
+
     private static class KeywordCollapseStrategy extends CollapseStrategy {
         @Override
         public void executeCollapse(CollapseDTO collapseDTO) {
             CollapseDataCollector<BytesRef> collapseDataCollector = new CollapseDataCollector<>(collapseDTO);
-
-            collapseDataCollector.collectCollapseData(collapseDTO);
-            List<Map.Entry<BytesRef, FieldDoc>> sortedCollapseEntries = collapseDataCollector.getSortedCollapseEntries();
-
-            Map<Integer, List<Map.Entry<BytesRef, FieldDoc>>> shardToCollapseEntriesMap = sortedCollapseEntries.stream()
-                .collect(Collectors.groupingBy(entry -> collapseDataCollector.getCollapseShardIndex(entry.getKey())));
-
-            CollapseResultUpdater collapseResultUpdater = new CollapseResultUpdater();
-
-            for (int shardIndex = 0; shardIndex < collapseDTO.getCollapseQuerySearchResults().size(); shardIndex++) {
-                CompoundTopDocs updatedCollapseTopDocs = collapseDTO.getCollapseQueryTopDocs().get(shardIndex);
-                List<Map.Entry<BytesRef, FieldDoc>> relevantCollapseEntries = shardToCollapseEntriesMap.getOrDefault(
-                    shardIndex,
-                    Collections.emptyList()
-                );
-
-                collapseDTO.updateForShard(
-                    relevantCollapseEntries,
-                    collapseDataCollector.getCollapseField(),
-                    updatedCollapseTopDocs,
-                    shardIndex
-                );
-
-                collapseResultUpdater.updateCollapseResults(collapseDTO);
-                this.totalCollapsedDocsCount += collapseResultUpdater.getProcessedCollapsedDocsCount();
-            }
+            executeCollapseGeneric(collapseDTO, collapseDataCollector);
         }
     }
 
@@ -66,32 +69,7 @@ public abstract class CollapseStrategy {
         @Override
         public void executeCollapse(CollapseDTO collapseDTO) {
             CollapseDataCollector<Long> collapseDataCollector = new CollapseDataCollector<>(collapseDTO);
-
-            collapseDataCollector.collectCollapseData(collapseDTO);
-            List<Map.Entry<Long, FieldDoc>> sortedCollapseEntries = collapseDataCollector.getSortedCollapseEntries();
-
-            Map<Integer, List<Map.Entry<Long, FieldDoc>>> shardToCollapseEntriesMap = sortedCollapseEntries.stream()
-                .collect(Collectors.groupingBy(entry -> collapseDataCollector.getCollapseShardIndex(entry.getKey())));
-
-            CollapseResultUpdater collapseResultUpdater = new CollapseResultUpdater();
-
-            for (int shardIndex = 0; shardIndex < collapseDTO.getCollapseQuerySearchResults().size(); shardIndex++) {
-                CompoundTopDocs updatedCollapseTopDocs = collapseDTO.getCollapseQueryTopDocs().get(shardIndex);
-                List<Map.Entry<Long, FieldDoc>> relevantCollapseEntries = shardToCollapseEntriesMap.getOrDefault(
-                    shardIndex,
-                    Collections.emptyList()
-                );
-
-                collapseDTO.updateForShard(
-                    relevantCollapseEntries,
-                    collapseDataCollector.getCollapseField(),
-                    updatedCollapseTopDocs,
-                    shardIndex
-                );
-
-                collapseResultUpdater.updateCollapseResults(collapseDTO);
-                this.totalCollapsedDocsCount += collapseResultUpdater.getProcessedCollapsedDocsCount();
-            }
+            executeCollapseGeneric(collapseDTO, collapseDataCollector);
         }
     }
 

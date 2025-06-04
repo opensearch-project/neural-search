@@ -11,8 +11,8 @@ import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflowUtil;
 
-import java.util.Arrays;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Updates collapse results based on the processed collapse data.
@@ -20,48 +20,64 @@ import java.util.Map;
  */
 @Getter
 public class CollapseResultUpdater {
-    private int processedCollapsedDocsCount = 0;
+    private AtomicInteger processedCollapsedDocsCount = new AtomicInteger(0);
 
-    /**
-     * Updates the collapse results based on the provided collapse data.
-     * This method creates new collapsed field documents, updates the top documents,
-     * and adjusts the search results accordingly.
-     *
-     * @param collapseDTO Data transfer object containing collapse configuration and results
-     */
     public void updateCollapseResults(CollapseDTO collapseDTO) {
-        Object[] objectCollapseValues = collapseDTO.getRelevantCollapseEntries().stream().map(Map.Entry::getKey).toArray(Object[]::new);
-
-        ScoreDoc[] newCollapsedFieldDocs = collapseDTO.getRelevantCollapseEntries()
-            .stream()
-            .map(Map.Entry::getValue)
-            .map(fieldDoc -> new FieldDoc(fieldDoc.doc, fieldDoc.score, Arrays.copyOfRange(fieldDoc.fields, 0, fieldDoc.fields.length - 1)))
-            .toArray(ScoreDoc[]::new);
-
-        TopDocsAndMaxScore updatedCollapseTopDocsAndMaxScore = new TopDocsAndMaxScore(
-            new CollapseTopFieldDocs(
-                collapseDTO.getCollapseField(),
-                collapseDTO.getUpdatedCollapseTopDocs().getTotalHits(),
-                newCollapsedFieldDocs,
-                collapseDTO.getCollapseSort().getSort(),
-                objectCollapseValues
-            ),
-            NormalizationProcessorWorkflowUtil.maxScoreForShard(collapseDTO.getUpdatedCollapseTopDocs(), true)
-        );
-
-        if (collapseDTO.isFetchPhaseExecuted()) {
-            collapseDTO.getCollapseQuerySearchResults()
-                .get(collapseDTO.getCollapseShardIndex())
-                .from(collapseDTO.getCollapseCombineScoresDTO().getFromValueForSingleShard());
+        if (!isValidCollapseData(collapseDTO)) {
+            return;
         }
 
-        collapseDTO.getCollapseQuerySearchResults()
-            .get(collapseDTO.getCollapseShardIndex())
-            .topDocs(
-                updatedCollapseTopDocsAndMaxScore,
-                collapseDTO.getCollapseQuerySearchResults().get(collapseDTO.getCollapseShardIndex()).sortValueFormats()
-            );
+        ScoreDoc[] newCollapsedFieldDocs = createCollapsedFieldDocs(collapseDTO);
+        TopDocsAndMaxScore updatedTopDocs = createUpdatedTopDocs(collapseDTO, newCollapsedFieldDocs);
+        updateSearchResults(collapseDTO, updatedTopDocs);
 
-        this.processedCollapsedDocsCount = newCollapsedFieldDocs.length;
+        this.processedCollapsedDocsCount.set(newCollapsedFieldDocs.length);
+    }
+
+    private boolean isValidCollapseData(CollapseDTO collapseDTO) {
+        return collapseDTO != null && collapseDTO.getRelevantCollapseEntries() != null;
+    }
+
+    private ScoreDoc[] createCollapsedFieldDocs(CollapseDTO collapseDTO) {
+        return collapseDTO.getRelevantCollapseEntries().stream().map(Map.Entry::getValue).map(fieldDoc -> {
+            if (isInvalidFieldDoc(fieldDoc)) {
+                return new FieldDoc(fieldDoc.doc, fieldDoc.score, new Object[0]);
+            }
+            int newLength = fieldDoc.fields.length - 1;
+            Object[] newFields = new Object[newLength];
+            System.arraycopy(fieldDoc.fields, 0, newFields, 0, newLength);
+            return new FieldDoc(fieldDoc.doc, fieldDoc.score, newFields);
+        }).toArray(ScoreDoc[]::new);
+    }
+
+    private static boolean isInvalidFieldDoc(FieldDoc fieldDoc) {
+        return fieldDoc.fields == null || fieldDoc.fields.length <= 1;
+    }
+
+    private TopDocsAndMaxScore createUpdatedTopDocs(CollapseDTO collapseDTO, ScoreDoc[] newCollapsedFieldDocs) {
+        Object[] objectCollapseValues = collapseDTO.getRelevantCollapseEntries().stream().map(Map.Entry::getKey).toArray(Object[]::new);
+
+        CollapseTopFieldDocs collapseTopFieldDocs = new CollapseTopFieldDocs(
+            collapseDTO.getCollapseField(),
+            collapseDTO.getUpdatedCollapseTopDocs().getTotalHits(),
+            newCollapsedFieldDocs,
+            collapseDTO.getCollapseSort().getSort(),
+            objectCollapseValues
+        );
+
+        return new TopDocsAndMaxScore(
+            collapseTopFieldDocs,
+            NormalizationProcessorWorkflowUtil.maxScoreForShard(collapseDTO.getUpdatedCollapseTopDocs(), true)
+        );
+    }
+
+    private void updateSearchResults(CollapseDTO collapseDTO, TopDocsAndMaxScore updatedTopDocs) {
+        var searchResults = collapseDTO.getCollapseQuerySearchResults().get(collapseDTO.getCollapseShardIndex());
+
+        if (collapseDTO.isFetchPhaseExecuted()) {
+            searchResults.from(collapseDTO.getCollapseCombineScoresDTO().getFromValueForSingleShard());
+        }
+
+        searchResults.topDocs(updatedTopDocs, searchResults.sortValueFormats());
     }
 }
