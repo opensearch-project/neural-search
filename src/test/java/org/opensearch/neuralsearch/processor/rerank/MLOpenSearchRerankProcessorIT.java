@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.processor.rerank;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -23,6 +24,8 @@ import com.google.common.collect.ImmutableList;
 
 import lombok.SneakyThrows;
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
 
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_USER_AGENT;
 
@@ -42,6 +45,28 @@ public class MLOpenSearchRerankProcessorIT extends BaseNeuralSearchIT {
         createSearchPipelineViaConfig(modelId, PIPELINE_NAME, "processor/RerankMLOpenSearchPipelineConfiguration.json");
         setupIndex();
         runQueries();
+    }
+
+    @SneakyThrows
+    public void testCrossEncoderRerankProcessor_statsEnabled() {
+        enableStats();
+        String modelId = uploadTextSimilarityModel();
+        loadModel(modelId);
+        createSearchPipelineViaConfig(modelId, PIPELINE_NAME, "processor/RerankMLOpenSearchPipelineConfiguration.json");
+        setupIndex();
+        runQueries();
+
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        // Parse json to get stats
+        assertEquals(2, getNestedValue(allNodesStats, EventStatName.RERANK_ML_PROCESSOR_EXECUTIONS.getFullPath()));
+        assertEquals(1, getNestedValue(stats, InfoStatName.RERANK_ML_PROCESSORS.getFullPath()));
+
+        // Reset stats
+        disableStats();
     }
 
     private String uploadTextSimilarityModel() throws Exception {

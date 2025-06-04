@@ -2286,6 +2286,14 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         );
     }
 
+    protected void enableStats() {
+        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+    }
+
+    protected void disableStats() {
+        updateClusterSettings("plugins.neural_search.stats_enabled", false);
+    }
+
     protected String executeNeuralStatRequest(List<String> nodeIds, List<String> stats) throws IOException, ParseException {
         return executeNeuralStatRequest(nodeIds, stats, Collections.emptyMap());
     }
