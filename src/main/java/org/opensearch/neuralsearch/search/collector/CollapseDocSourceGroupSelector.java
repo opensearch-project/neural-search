@@ -105,7 +105,11 @@ abstract class CollapseDocSourceGroupSelector<T> extends GroupSelector<T> {
                                 if (sorted.advanceExact(target)) {
                                     if (sorted.docValueCount() > 1) {
                                         throw new IllegalStateException(
-                                            "failed to collapse " + target + ", the collapse field must be single valued"
+                                            String.format(
+                                                Locale.ROOT,
+                                                "failed to collapse %d, the collapse field must be single valued",
+                                                target
+                                            )
                                         );
                                     }
                                     value = sorted.nextValue();
@@ -130,7 +134,9 @@ abstract class CollapseDocSourceGroupSelector<T> extends GroupSelector<T> {
                     break;
 
                 default:
-                    throw new IllegalStateException("unexpected doc values type " + type + "` for field `" + field + "`");
+                    throw new IllegalStateException(
+                        String.format(Locale.ROOT, "unexpected doc values type %s` for field `%s`", type, field)
+                    );
             }
         }
 
@@ -211,7 +217,11 @@ abstract class CollapseDocSourceGroupSelector<T> extends GroupSelector<T> {
                                     ord = (int) sorted.nextOrd();
                                     if (sorted.docValueCount() != 1) {
                                         throw new IllegalStateException(
-                                            "failed to collapse " + target + ", the collapse field must be single valued"
+                                            String.format(
+                                                Locale.ROOT,
+                                                "failed to collapse %d, the collapse field must be single valued",
+                                                target
+                                            )
                                         );
                                     }
                                     return true;

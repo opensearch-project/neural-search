@@ -285,17 +285,25 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                         hybridSearchCollectors.add((HybridSearchCollector) sub);
                     }
                 }
-            } else if (collector instanceof HybridTopScoreDocCollector
-                || collector instanceof HybridTopFieldDocSortCollector
-                || collector instanceof HybridCollapsingTopDocsCollector) {
-                    hybridSearchCollectors.add((HybridSearchCollector) collector);
-                } else if (collector instanceof FilteredCollector
-                    && (((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector
-                        || ((FilteredCollector) collector).getCollector() instanceof HybridTopFieldDocSortCollector)) {
-                            hybridSearchCollectors.add((HybridSearchCollector) ((FilteredCollector) collector).getCollector());
-                        }
+            } else if (isHybridNonFilteredCollector(collector)) {
+                hybridSearchCollectors.add((HybridSearchCollector) collector);
+            } else if (isHybridFilteredCollector(collector)) {
+                hybridSearchCollectors.add((HybridSearchCollector) ((FilteredCollector) collector).getCollector());
+            }
         }
         return hybridSearchCollectors;
+    }
+
+    private boolean isHybridNonFilteredCollector(Collector collector) {
+        return collector instanceof HybridTopScoreDocCollector
+            || collector instanceof HybridTopFieldDocSortCollector
+            || collector instanceof HybridCollapsingTopDocsCollector;
+    }
+
+    private boolean isHybridFilteredCollector(Collector collector) {
+        return collector instanceof FilteredCollector
+            && (((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector
+                || ((FilteredCollector) collector).getCollector() instanceof HybridTopFieldDocSortCollector);
     }
 
     private static void validateSortCriteria(SearchContext searchContext, boolean trackScores) {

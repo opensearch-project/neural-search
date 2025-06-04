@@ -42,7 +42,6 @@ import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
 import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY;
-import static org.opensearch.neuralsearch.processor.combination.ScoreCombiner.MAX_SCORE_WHEN_NO_HITS_FOUND;
 import static org.opensearch.neuralsearch.search.util.HybridSearchSortUtil.evaluateSortCriteria;
 
 /**
@@ -228,8 +227,7 @@ public class NormalizationProcessorWorkflow {
                 combineScoresDTO
             );
 
-            collapseExecutor.executeCollapse(collapseDTO);
-            totalScoreDocsCount = collapseExecutor.getTotalCollapsedDocsCount();
+            totalScoreDocsCount = collapseExecutor.executeCollapse(collapseDTO);
         } else {
             for (int shardIndex = 0; shardIndex < querySearchResults.size(); shardIndex++) {
                 QuerySearchResult querySearchResult = querySearchResults.get(shardIndex);
@@ -237,7 +235,7 @@ public class NormalizationProcessorWorkflow {
                 totalScoreDocsCount += updatedTopDocs.getScoreDocs().size();
                 TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(
                     buildTopDocs(updatedTopDocs, sort),
-                    maxScoreForShard(updatedTopDocs, sort != null)
+                    NormalizationProcessorWorkflowUtil.maxScoreForShard(updatedTopDocs, sort != null)
                 );
                 // Fetch Phase had ran before the normalization phase, therefore update the from value in result of each shard.
                 // This will ensure the trimming of the search results.
@@ -269,28 +267,6 @@ public class NormalizationProcessorWorkflow {
             );
         }
         return queryTopDocs;
-    }
-
-    /**
-     * Get Max score on Shard
-     * @param updatedTopDocs updatedTopDocs compound top docs on a shard
-     * @param isSortEnabled if sort is enabled or disabled
-     * @return  max score
-     */
-    public static float maxScoreForShard(CompoundTopDocs updatedTopDocs, boolean isSortEnabled) {
-        if (updatedTopDocs.getTotalHits().value() == 0 || updatedTopDocs.getScoreDocs().isEmpty()) {
-            return MAX_SCORE_WHEN_NO_HITS_FOUND;
-        }
-        if (isSortEnabled) {
-            float maxScore = MAX_SCORE_WHEN_NO_HITS_FOUND;
-            // In case of sorting iterate over score docs and deduce the max score
-            for (ScoreDoc scoreDoc : updatedTopDocs.getScoreDocs()) {
-                maxScore = Math.max(maxScore, scoreDoc.score);
-            }
-            return maxScore;
-        }
-        // If it is a normal hybrid query then first entry of score doc will have max score
-        return updatedTopDocs.getScoreDocs().get(0).score;
     }
 
     /**

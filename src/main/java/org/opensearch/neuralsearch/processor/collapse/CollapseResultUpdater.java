@@ -9,7 +9,7 @@ import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
-import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
+import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflowUtil;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -46,7 +46,7 @@ public class CollapseResultUpdater {
                 collapseDTO.getCollapseSort().getSort(),
                 objectCollapseValues
             ),
-            NormalizationProcessorWorkflow.maxScoreForShard(collapseDTO.getUpdatedCollapseTopDocs(), true)
+            NormalizationProcessorWorkflowUtil.maxScoreForShard(collapseDTO.getUpdatedCollapseTopDocs(), true)
         );
 
         if (collapseDTO.isFetchPhaseExecuted()) {

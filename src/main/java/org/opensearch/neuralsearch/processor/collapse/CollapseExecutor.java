@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch.processor.collapse;
 
-import lombok.Getter;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.apache.lucene.util.BytesRef;
 
@@ -12,9 +11,7 @@ import org.apache.lucene.util.BytesRef;
  * Processes collapse operations on search results.
  * Determines the appropriate collapse strategy based on the field type and executes the collapse.
  */
-@Getter
 public class CollapseExecutor {
-    private int totalCollapsedDocsCount = 0;
 
     /**
      * Executes the collapse operation based on the provided collapse data.
@@ -22,15 +19,16 @@ public class CollapseExecutor {
      * creates the appropriate strategy, and performs the collapse.
      *
      * @param collapseDTO Data transfer object containing collapse configuration and results
+     * @return The total number of documents that were collapsed during the operation
      */
-    public void executeCollapse(CollapseDTO collapseDTO) {
+    public int executeCollapse(CollapseDTO collapseDTO) {
         boolean isKeywordCollapse = isCollapseOnKeywordField(collapseDTO);
         CollapseStrategy collapseStrategy = isKeywordCollapse
             ? CollapseStrategy.createKeywordStrategy()
             : CollapseStrategy.createNumericStrategy();
 
         collapseStrategy.executeCollapse(collapseDTO);
-        this.totalCollapsedDocsCount = collapseStrategy.getTotalCollapsedDocsCount();
+        return collapseStrategy.getTotalCollapsedDocsCount();
     }
 
     private boolean isCollapseOnKeywordField(CollapseDTO collapseDTO) {

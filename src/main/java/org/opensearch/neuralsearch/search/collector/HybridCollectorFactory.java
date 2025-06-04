@@ -18,7 +18,19 @@ import org.opensearch.search.sort.SortAndFormats;
 
 import java.util.Locale;
 
+/**
+ * A factory class for creating various types of Hybrid Collectors based on the provided configuration.
+ */
 public class HybridCollectorFactory {
+
+    /**
+     * Creates and returns a Collector based on the configuration provided in the HybridCollectorFactoryDTO.
+     *
+     * @param hybridCollectorFactoryDTO A data transfer object containing the configuration for creating the collector.
+     * @return A Collector instance based on the provided configuration.
+     * @throws IllegalStateException If an unsupported field type is provided for collapsing.
+     * @throws IllegalArgumentException If the search_after configuration is invalid.
+     */
     public static Collector createCollector(HybridCollectorFactoryDTO hybridCollectorFactoryDTO) {
         CollapseContext collapseContext = hybridCollectorFactoryDTO.getCollapseContext();
         SortAndFormats sortAndFormats = hybridCollectorFactoryDTO.getSortAndFormats();
@@ -47,7 +59,11 @@ public class HybridCollectorFactory {
                 );
             } else {
                 throw new IllegalStateException(
-                    "unknown type for collapse field " + collapseContext.getFieldName() + ", only keywords and numbers are accepted"
+                    String.format(
+                        Locale.ROOT,
+                        "unknown type for collapse field %s, only keywords and numbers are accepted",
+                        collapseContext.getFieldName()
+                    )
                 );
             }
         } else {
