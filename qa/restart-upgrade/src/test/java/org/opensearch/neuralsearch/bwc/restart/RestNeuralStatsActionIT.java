@@ -32,7 +32,10 @@ public class RestNeuralStatsActionIT extends AbstractRestartUpgradeRestTestCase 
         // Get initial stats
         String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
 
-        int numberOfExecution = (int) getNestedValue(parseAggregatedNodeStatsResponse(responseBody), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS);
+        int numberOfExecution = (int) getNestedValue(
+            parseAggregatedNodeStatsResponse(responseBody),
+            EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS
+        );
         int numberOfProcessor = (int) getNestedValue(parseInfoStatsResponse(responseBody), InfoStatName.TEXT_EMBEDDING_PROCESSORS);
 
         // Currently using text embedding processor executions stat since that's the only one implemented
@@ -48,26 +51,40 @@ public class RestNeuralStatsActionIT extends AbstractRestartUpgradeRestTestCase 
                 PIPELINE_NAME
             );
             addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, null, null);
+            addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT, null, null);
+            addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT, null, null);
 
             // Get stats
             responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
 
-            assertEquals(numberOfExecution + 1, getNestedValue(parseAggregatedNodeStatsResponse(responseBody), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS));
-            assertEquals(numberOfProcessor + 1, getNestedValue(parseInfoStatsResponse(responseBody), InfoStatName.TEXT_EMBEDDING_PROCESSORS));
+            assertEquals(
+                numberOfExecution + 3,
+                getNestedValue(parseAggregatedNodeStatsResponse(responseBody), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS)
+            );
+            assertEquals(
+                numberOfProcessor + 1,
+                getNestedValue(parseInfoStatsResponse(responseBody), InfoStatName.TEXT_EMBEDDING_PROCESSORS)
+            );
         } else {
             String modelId = null;
             try {
                 modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
                 loadModel(modelId);
-                addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1, null, null);
-                addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_1, null, null);
                 addDocument(getIndexNameForTest(), "3", TEST_FIELD, TEXT_1, null, null);
+                addDocument(getIndexNameForTest(), "4", TEST_FIELD, TEXT_1, null, null);
+                addDocument(getIndexNameForTest(), "5", TEST_FIELD, TEXT_1, null, null);
 
                 // Get stats
                 responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
 
-                assertEquals(numberOfExecution + 3, getNestedValue(parseAggregatedNodeStatsResponse(responseBody), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS));
-                assertEquals(numberOfProcessor, getNestedValue(parseInfoStatsResponse(responseBody), InfoStatName.TEXT_EMBEDDING_PROCESSORS));
+                assertEquals(
+                    numberOfExecution + 3,
+                    getNestedValue(parseAggregatedNodeStatsResponse(responseBody), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS)
+                );
+                assertEquals(
+                    numberOfProcessor,
+                    getNestedValue(parseInfoStatsResponse(responseBody), InfoStatName.TEXT_EMBEDDING_PROCESSORS)
+                );
             } finally {
                 wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
             }
