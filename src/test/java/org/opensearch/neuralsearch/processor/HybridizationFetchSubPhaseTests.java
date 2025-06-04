@@ -66,9 +66,7 @@ public class HybridizationFetchSubPhaseTests extends OpenSearchTestCase {
                 searchHit = new SearchHit(docId);
                 hitContext = new FetchSubPhase.HitContext(searchHit, leafReaderContext, docId, new SourceLookup());
 
-                // Mock ScoreNormalizer and HybridScoreRegistry
                 var mockSearchContext = mock(SearchContext.class);
-                // mockedNormalizer.when(ScoreNormalizer::getSearchContext).thenReturn(mockSearchContext);
                 final List<CompoundTopDocs> queryTopDocs = List.of(
                     new CompoundTopDocs(
                         new TotalHits(1, TotalHits.Relation.EQUAL_TO),
@@ -152,7 +150,7 @@ public class HybridizationFetchSubPhaseTests extends OpenSearchTestCase {
                 final List<CompoundTopDocs> queryTopDocs = List.of(
                     new CompoundTopDocs(
                         new TotalHits(1, TotalHits.Relation.EQUAL_TO),
-                        List.of(new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(docId, 2.0f) })),
+                        List.of(new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(1, 2.0f) })),
                         false,
                         SEARCH_SHARD
                     )
@@ -164,13 +162,16 @@ public class HybridizationFetchSubPhaseTests extends OpenSearchTestCase {
                 scoreNormalizer.normalizeScores(normalizeScoresDTO, mockSearchContext);
 
                 float[] scores = new float[] { 0.4f, 0.6f };
-                hybridScoreRegistry.store(mockSearchContext, Map.of(docId, scores));
+                hybridScoreRegistry.store(mockSearchContext, Map.of(1, scores));
 
                 FetchSubPhaseProcessor processor = subPhase.getProcessor(mockFetchContext);
                 processor.setNextReader(leafReaderContext);
                 processor.process(hitContext);
 
-                assertEquals(1, hitContext.hit().docId());
+                // Check hit context has docId 0 set
+                assertEquals(0, hitContext.hit().docId());
+                // Check hit does not have _hybridization field as there are no subquery scores for doc 0
+                assertNull(hitContext.hit().field("_hybridization"));
             }
         }
     }
