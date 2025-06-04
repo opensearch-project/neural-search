@@ -49,6 +49,7 @@ import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.index.analysis.AnalyzerScope;
 import org.opensearch.index.analysis.IndexAnalyzers;
 import org.opensearch.index.analysis.NamedAnalyzer;
+import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.transport.client.Client;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.SetOnce;
@@ -87,8 +88,11 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     private static final Supplier<Map<String, Float>> QUERY_TOKENS_SUPPLIER = () -> Map.of("hello", 1.f, "world", 2.f);
 
     @Before
-    public void setupClusterServiceToCurrentVersion() {
+    public void setup() {
         setUpClusterService(Version.CURRENT);
+
+        // Initialize EventStatsManager for tests
+        TestUtils.initializeEventStatsManager();
     }
 
     @SneakyThrows

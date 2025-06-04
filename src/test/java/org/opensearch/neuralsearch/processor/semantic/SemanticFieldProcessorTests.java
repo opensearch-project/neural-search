@@ -54,6 +54,7 @@ import static org.opensearch.neuralsearch.constants.MappingConstants.TYPE;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.CHUNKING;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessorTests.getAnalysisRegistry;
+import org.opensearch.neuralsearch.util.TestUtils;
 
 public class SemanticFieldProcessorTests extends OpenSearchTestCase {
     @Mock
@@ -80,6 +81,9 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
 
     @Before
     public void setup() {
+        // Initialize EventStatsManager for tests
+        TestUtils.initializeEventStatsManager();
+
         MockitoAnnotations.openMocks(this);
         // mock env
         final Settings settings = Settings.builder()

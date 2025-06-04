@@ -38,6 +38,7 @@ import org.opensearch.neuralsearch.processor.MapInferenceRequest;
 import org.opensearch.neuralsearch.processor.TextInferenceRequest;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
+import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.transport.client.Client;
 
@@ -99,6 +100,8 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
     public void setup() throws Exception {
         mlClient = mock(MLCommonsClientAccessor.class);
         NeuralQueryBuilder.initialize(mlClient);
+        // Initialize EventStatsManager for tests
+        TestUtils.initializeEventStatsManager();
     }
 
     @SneakyThrows
