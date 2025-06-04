@@ -16,6 +16,7 @@ import static org.opensearch.knn.index.query.KNNQueryBuilder.MIN_SCORE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.RESCORE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.RESCORE_OVERSAMPLE_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TOKENS_FIELD;
+import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.SEMANTIC_FIELD_SEARCH_ANALYZER_FIELD;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_FLOATS_ASSERTION;
 import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.K_FIELD;
@@ -36,8 +37,10 @@ import org.apache.lucene.search.Query;
 import org.junit.Before;
 import org.opensearch.Version;
 import org.opensearch.index.mapper.MappedFieldType;
+import org.opensearch.index.mapper.RankFeaturesFieldMapper;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.neuralsearch.query.dto.NeuralQueryBuildStage;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.common.xcontent.XContentFactory;
@@ -67,6 +70,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
     private static final String QUERY_TEXT = "Hello world!";
     private static final String IMAGE_TEXT = "base641234567890";
     private static final String MODEL_ID = "mfgfgdsfgfdgsde";
+    private static final String SEARCH_ANALYZER = "search_analyzer";
     private static final Integer K = 10;
     private static final Float MAX_DISTANCE = 1.0f;
     private static final Float MIN_SCORE = 0.985f;
@@ -118,6 +122,41 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(QUERY_TEXT, neuralQueryBuilder.queryText());
         assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
         assertEquals(K, neuralQueryBuilder.k());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuiltWithSearchAnalyzer_thenBuildFails() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_text": "string",
+                "query_image": "string",
+                "search_analyzer": "string",
+                "k": int
+              }
+          }
+        */
+        setUpClusterService(Version.V_2_10_0);
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TEXT_FIELD.getPreferredName(), QUERY_TEXT)
+            .field(MODEL_ID_FIELD.getPreferredName(), MODEL_ID)
+            .field(SEMANTIC_FIELD_SEARCH_ANALYZER_FIELD.getPreferredName(), SEARCH_ANALYZER)
+            .field(K_FIELD.getPreferredName(), K)
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        final IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> NeuralQueryBuilder.fromXContent(contentParser)
+        );
+        final String expectedMessage = "Failed to build the NeuralQueryBuilder: Target field is a KNN "
+            + "field using a dense model. semantic_field_search_analyzer "
+            + "is not supported since it is for the sparse model.";
+        assertEquals(expectedMessage, exception.getMessage());
     }
 
     @SneakyThrows
@@ -587,6 +626,8 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         final Map<String, ?> methodParameters3 = Map.of("ef_search", 101);
         final RescoreContext rescoreContext2 = RescoreContext.getDefault();
         final RescoreContext rescoreContext3 = RescoreContext.builder().build();
+        final String analyzer1 = "standard";
+        final String analyzer2 = "bert_uncased";
 
         final QueryBuilder filter2 = new MatchNoneQueryBuilder();
 
@@ -662,6 +703,23 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         final NeuralQueryBuilder neuralQueryBuilder_diffRescoreContext = getBaselineNeuralQueryBuilder();
         neuralQueryBuilder_diffRescoreContext.rescoreContext(rescoreContext3);
 
+        final NeuralQueryBuilder neuralQueryBuilder_analyzer1 = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .searchAnalyzer(analyzer1)
+            .embeddingFieldType(RankFeaturesFieldMapper.CONTENT_TYPE)
+            .buildStage(NeuralQueryBuildStage.REWRITE)
+            .queryText(QUERY_TEXT)
+            .isSemanticField(true)
+            .build();
+        final NeuralQueryBuilder neuralQueryBuilder_analyzer2 = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .searchAnalyzer(analyzer2)
+            .embeddingFieldType(RankFeaturesFieldMapper.CONTENT_TYPE)
+            .buildStage(NeuralQueryBuildStage.REWRITE)
+            .queryText(QUERY_TEXT)
+            .isSemanticField(true)
+            .build();
+
         assertEquals(neuralQueryBuilder_baseline, neuralQueryBuilder_baseline);
         assertEquals(neuralQueryBuilder_baseline.hashCode(), neuralQueryBuilder_baseline.hashCode());
 
@@ -703,6 +761,9 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
 
         assertNotEquals(neuralQueryBuilder_baseline, neuralQueryBuilder_diffRescoreContext);
         assertNotEquals(neuralQueryBuilder_baseline.hashCode(), neuralQueryBuilder_diffRescoreContext.hashCode());
+
+        assertNotEquals(neuralQueryBuilder_analyzer1, neuralQueryBuilder_analyzer2);
+        assertNotEquals(neuralQueryBuilder_analyzer1.hashCode(), neuralQueryBuilder_analyzer2.hashCode());
     }
 
     private NeuralQueryBuilder getBaselineNeuralQueryBuilder() {

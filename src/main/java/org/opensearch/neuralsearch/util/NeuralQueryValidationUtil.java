@@ -31,6 +31,7 @@ import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MODEL_ID_FIEL
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_IMAGE_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TEXT_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TOKENS_FIELD;
+import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.SEMANTIC_FIELD_SEARCH_ANALYZER_FIELD;
 
 public class NeuralQueryValidationUtil {
     public static List<String> validateNeuralQueryForKnn(
@@ -43,6 +44,26 @@ public class NeuralQueryValidationUtil {
             if (queryBuilder.modelId() == null) {
                 errors.add(String.format(Locale.ROOT, "%s must be provided.", MODEL_ID_FIELD.getPreferredName()));
             }
+        }
+
+        if (queryBuilder.searchAnalyzer() != null) {
+            errors.add(
+                String.format(
+                    Locale.ROOT,
+                    "Target field is a KNN field using a dense model. %s is not supported since it is for the sparse model.",
+                    SEMANTIC_FIELD_SEARCH_ANALYZER_FIELD.getPreferredName()
+                )
+            );
+        }
+
+        if (queryBuilder.queryTokensMapSupplier() != null) {
+            errors.add(
+                String.format(
+                    Locale.ROOT,
+                    "Target field is a KNN field using a dense model. %s is not supported since it is for the sparse model.",
+                    QUERY_TOKENS_FIELD.getPreferredName()
+                )
+            );
         }
         return errors;
     }
@@ -84,6 +105,16 @@ public class NeuralQueryValidationUtil {
                     Locale.ROOT,
                     "Target field is a semantic field using a dense model. %s is not supported since it is for the sparse model.",
                     QUERY_TOKENS_FIELD.getPreferredName()
+                )
+            );
+        }
+
+        if (queryBuilder.searchAnalyzer() != null) {
+            errors.add(
+                String.format(
+                    Locale.ROOT,
+                    "Target field is a semantic field using a dense model. %s is not supported since it is for the sparse model.",
+                    SEMANTIC_FIELD_SEARCH_ANALYZER_FIELD.getPreferredName()
                 )
             );
         }
@@ -142,8 +173,29 @@ public class NeuralQueryValidationUtil {
             errors.add(String.format(Locale.ROOT, "%s field can not be empty", QUERY_TEXT_FIELD.getPreferredName()));
         }
 
+        int countValidInputsForSemanticSparseQuery = 0;
+        if (queryBuilder.modelId() != null) countValidInputsForSemanticSparseQuery++;
+        if (queryBuilder.searchAnalyzer() != null) countValidInputsForSemanticSparseQuery++;
+        if (queryBuilder.queryTokensMapSupplier() != null) countValidInputsForSemanticSparseQuery++;
+
+        if (countValidInputsForSemanticSparseQuery > 1) {
+            errors.add(
+                String.format(
+                    Locale.ROOT,
+                    "%s, %s and %s can not coexist",
+                    QUERY_TOKENS_FIELD.getPreferredName(),
+                    MODEL_ID_FIELD.getPreferredName(),
+                    SEMANTIC_FIELD_SEARCH_ANALYZER_FIELD.getPreferredName()
+                )
+            );
+        }
+
         if (StringUtils.EMPTY.equals(queryBuilder.modelId())) {
             errors.add(String.format(Locale.ROOT, "%s field can not be empty", MODEL_ID_FIELD.getPreferredName()));
+        }
+
+        if (StringUtils.EMPTY.equals(queryBuilder.searchAnalyzer())) {
+            errors.add(String.format(Locale.ROOT, "%s field can not be empty", SEMANTIC_FIELD_SEARCH_ANALYZER_FIELD.getPreferredName()));
         }
 
         final Set<String> fieldsOnlySupportedByDenseModel = getFieldsOnlySupportedByDenseModel(queryBuilder);

@@ -34,6 +34,8 @@ import static org.opensearch.neuralsearch.processor.chunker.Chunker.DEFAULT_MAX_
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.DISABLED_MAX_CHUNK_LIMIT;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.CHUNK_STRING_COUNT_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseIntegerWithDefault;
+import static org.opensearch.neuralsearch.processor.util.ChunkUtils.chunkString;
+import static org.opensearch.neuralsearch.processor.util.ChunkUtils.chunkList;
 
 /**
  * This processor is used for text chunking.
@@ -272,15 +274,6 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         }
     }
 
-    private List<String> chunkList(final List<String> contentList, final Map<String, Object> runTimeParameters) {
-        // flatten original output format from List<List<String>> to List<String>
-        List<String> result = new ArrayList<>();
-        for (String content : contentList) {
-            result.addAll(chunker.chunkString(content, runTimeParameters));
-        }
-        return result;
-    }
-
     @SuppressWarnings("unchecked")
     private List<String> chunkLeafType(final Object value, final Map<String, Object> runTimeParameters) {
         // leaf type means null, String or List<String>
@@ -293,9 +286,9 @@ public final class TextChunkingProcessor extends AbstractProcessor {
             if (StringUtils.isBlank(String.valueOf(value))) {
                 return result;
             }
-            result = chunker.chunkString(value.toString(), runTimeParameters);
+            result = chunkString(chunker, value.toString(), runTimeParameters);
         } else if (isListOfString(value)) {
-            result = chunkList((List<String>) value, runTimeParameters);
+            result = chunkList(chunker, (List<String>) value, runTimeParameters);
         }
         return result;
     }
