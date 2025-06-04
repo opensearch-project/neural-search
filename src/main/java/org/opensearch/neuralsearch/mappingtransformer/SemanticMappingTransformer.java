@@ -242,7 +242,6 @@ public class SemanticMappingTransformer implements MappingTransformer {
             // field so that we can set the semantic info fields config by the path.
             if (interFieldConfig == null) {
                 interFieldConfig = unflattenMapping(interFieldName, current);
-
             }
 
             // handle the case when the inter field is an object field
