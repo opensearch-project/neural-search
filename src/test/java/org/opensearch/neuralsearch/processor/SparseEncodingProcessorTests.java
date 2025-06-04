@@ -59,6 +59,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
 import lombok.SneakyThrows;
+import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.transport.client.OpenSearchClient;
 
@@ -88,6 +89,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         MockitoAnnotations.openMocks(this);
         Settings settings = Settings.builder().put("index.mapping.depth.limit", 20).build();
         when(clusterService.state().metadata().index(anyString()).getSettings()).thenReturn(settings);
+        TestUtils.initializeEventStatsManager();
     }
 
     @SneakyThrows

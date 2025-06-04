@@ -4,10 +4,16 @@
  */
 package org.opensearch.neuralsearch.stats.info;
 
+import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
+import org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor;
+import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.TextChunkingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
+import org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.chunker.DelimiterChunker;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
+import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
+import org.opensearch.neuralsearch.processor.rerank.RerankType;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
@@ -25,6 +31,9 @@ import java.util.stream.Collectors;
  */
 public class InfoStatsManager {
     public static final String PROCESSORS_KEY = "processors";
+    public static final String REQUEST_PROCESSORS_KEY = "request_processors";
+    public static final String RESPONSE_PROCESSORS_KEY = "response_processors";
+    public static final String PHASE_PROCESSORS_KEY = "phase_results_processors";
 
     private final NeuralSearchClusterUtil neuralSearchClusterUtil;
     private final NeuralSearchSettingsAccessor settingsAccessor;
@@ -84,6 +93,9 @@ public class InfoStatsManager {
         // Parses ingest pipeline processor configs for processor info
         addIngestProcessorStats(countableInfoStats);
 
+        // Parses search pipeline processor configs for processor info
+        addSearchProcessorStats(countableInfoStats);
+
         // Helpers to parse search pipeline processor configs for processor info would go here
         return countableInfoStats;
     }
@@ -116,6 +128,46 @@ public class InfoStatsManager {
     }
 
     /**
+     * Adds search processor info stats, mutating the input
+     * @param stats mutable map of info stats that the result will be added to
+     */
+    private void addSearchProcessorStats(Map<InfoStatName, CountableInfoStatSnapshot> stats) {
+        List<Map<String, Object>> pipelineConfigs = pipelineServiceUtil.getSearchPipelineConfigs();
+
+        // Iterate through all search processors and count their stats individually by calling helpers
+        for (Map<String, Object> pipelineConfig : pipelineConfigs) {
+            // Search request processors
+            List<Map<String, Object>> requestProcessors = asListOfMaps(pipelineConfig.get(REQUEST_PROCESSORS_KEY));
+            if (requestProcessors != null) {
+                for (Map<String, Object> requestProcessor : requestProcessors) {
+                    for (Map.Entry<String, Object> entry : requestProcessor.entrySet()) {
+                        String processorType = entry.getKey();
+                        Map<String, Object> processorConfig = asMap(entry.getValue());
+                        switch (processorType) {
+                            case NeuralQueryEnricherProcessor.TYPE -> increment(stats, InfoStatName.NEURAL_QUERY_ENRICHER_PROCESSORS);
+                            case NeuralSparseTwoPhaseProcessor.TYPE -> increment(stats, InfoStatName.NEURAL_SPARSE_TWO_PHASE_PROCESSORS);
+                        }
+                    }
+                }
+            }
+
+            // Search response processors
+            List<Map<String, Object>> responseProcessors = asListOfMaps(pipelineConfig.get(RESPONSE_PROCESSORS_KEY));
+            if (responseProcessors != null) {
+                for (Map<String, Object> responseProcessor : responseProcessors) {
+                    for (Map.Entry<String, Object> entry : responseProcessor.entrySet()) {
+                        String processorType = entry.getKey();
+                        Map<String, Object> processorConfig = asMap(entry.getValue());
+                        switch (processorType) {
+                            case RerankProcessor.TYPE -> countRerankProcessorStats(stats, processorConfig);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Adds ingest processor info stats, mutating the input
      * @param stats mutable map of info stats that the result will be added to
      */
@@ -130,12 +182,10 @@ public class InfoStatsManager {
                     String processorType = entry.getKey();
                     Map<String, Object> processorConfig = asMap(entry.getValue());
                     switch (processorType) {
-                        case TextEmbeddingProcessor.TYPE:
-                            countTextEmbeddingProcessorStats(stats, processorConfig);
-                            break;
-                        case TextChunkingProcessor.TYPE:
-                            countTextChunkingProcessorStats(stats, processorConfig);
-                            break;
+                        case TextEmbeddingProcessor.TYPE -> countTextEmbeddingProcessorStats(stats, processorConfig);
+                        case TextImageEmbeddingProcessor.TYPE -> increment(stats, InfoStatName.TEXT_IMAGE_EMBEDDING_PROCESSORS);
+                        case TextChunkingProcessor.TYPE -> countTextChunkingProcessorStats(stats, processorConfig);
+                        case SparseEncodingProcessor.TYPE -> increment(stats, InfoStatName.SPARSE_ENCODING_PROCESSORS);
                     }
                 }
             }
@@ -173,6 +223,14 @@ public class InfoStatsManager {
             case FixedTokenLengthChunker.ALGORITHM_NAME -> increment(stats, InfoStatName.TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS);
             // If no algorithm is specified, the default is fixed length
             default -> increment(stats, InfoStatName.TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS);
+        }
+    }
+
+    private void countRerankProcessorStats(Map<InfoStatName, CountableInfoStatSnapshot> stats, Map<String, Object> processorConfig) {
+        if (processorConfig.containsKey(RerankType.ML_OPENSEARCH.getLabel())) {
+            increment(stats, InfoStatName.RERANK_ML_PROCESSORS);
+        } else if (processorConfig.containsKey(RerankType.BY_FIELD.getLabel())) {
+            increment(stats, InfoStatName.RERANK_BY_FIELD_PROCESSORS);
         }
     }
 

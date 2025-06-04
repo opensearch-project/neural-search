@@ -28,6 +28,8 @@ import com.google.common.annotations.VisibleForTesting;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.processor.optimization.TextImageEmbeddingInferenceFilter;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.transport.client.OpenSearchClient;
 
 /**
@@ -120,6 +122,7 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
      */
     @Override
     public void execute(final IngestDocument ingestDocument, final BiConsumer<IngestDocument, Exception> handler) {
+        EventStatsManager.increment(EventStatName.TEXT_IMAGE_EMBEDDING_PROCESSOR_EXECUTIONS);
         try {
             Map<String, String> knnMap = buildMapWithKnnKeyAndOriginalValue(ingestDocument);
             Map<String, String> inferenceMap = createInferences(knnMap);
