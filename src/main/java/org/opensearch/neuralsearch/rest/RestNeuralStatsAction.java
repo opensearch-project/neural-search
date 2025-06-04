@@ -61,6 +61,21 @@ public class RestNeuralStatsAction extends BaseRestHandler {
     public static final String INCLUDE_METADATA_PARAM = "include_metadata";
 
     /**
+     * Query parameter name to include individual nodes data
+     */
+    public static final String INCLUDE_INDIVIDUAL_NODES_PARAM = "include_individual_nodes";
+
+    /**
+     * Query parameter name to include individual nodes data
+     */
+    public static final String INCLUDE_ALL_NODES_PARAM = "include_all_nodes";
+
+    /**
+     * Query parameter name to include individual nodes data
+     */
+    public static final String INCLUDE_INFO = "include_info";
+
+    /**
      * Regex for valid params, containing only alphanumeric, -, or _
      */
     public static final String PARAM_REGEX = "^[A-Za-z0-9-_]+$";
@@ -91,7 +106,13 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         new Route(RestRequest.Method.GET, NEURAL_BASE_URI + "/stats/{stat}")
     );
 
-    private static final Set<String> RESPONSE_PARAMS = ImmutableSet.of(NODE_ID_PARAM, STAT_PARAM, INCLUDE_METADATA_PARAM, FLATTEN_PARAM);
+    private static final Set<String> RESPONSE_PARAMS = ImmutableSet.of(
+        NODE_ID_PARAM,
+        STAT_PARAM,
+        INCLUDE_METADATA_PARAM,
+        FLATTEN_PARAM,
+        INCLUDE_INDIVIDUAL_NODES_PARAM
+    );
 
     /**
      * Validates a param string if its under the max length and matches simple string pattern
@@ -168,6 +189,9 @@ public class RestNeuralStatsAction extends BaseRestHandler {
 
         boolean includeMetadata = request.paramAsBoolean(INCLUDE_METADATA_PARAM, false);
         neuralStatsInput.setIncludeMetadata(includeMetadata);
+
+        boolean includeIndividualNodes = request.paramAsBoolean(INCLUDE_INDIVIDUAL_NODES_PARAM, true);
+        neuralStatsInput.setIncludeIndividualNodes(includeIndividualNodes);
 
         // Process requested stats parameters
         processStatsRequestParameters(request, neuralStatsInput);

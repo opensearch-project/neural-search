@@ -60,6 +60,22 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
     @Setter
     private boolean flatten;
 
+    @Setter
+    /**
+     * Controls whether the response will include individual nodes
+     */
+    private boolean includeIndividualNodes;
+    @Setter
+    /**
+     * Controls whether the response will include aggregated nodes
+     */
+    private boolean includeAllNodes;
+    @Setter
+    /**
+     * Controls whether the response will include info nodes
+     */
+    private boolean includeInfo;
+
     /**
      * Builder constructor for creating NeuralStatsInput with specific filtering parameters.
      *
@@ -75,13 +91,19 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         EnumSet<EventStatName> eventStatNames,
         EnumSet<InfoStatName> infoStatNames,
         boolean includeMetadata,
-        boolean flatten
+        boolean flatten,
+        boolean includeIndividualNodes,
+        boolean includeAllNodes,
+        boolean includeInfo
     ) {
         this.nodeIds = nodeIds;
         this.eventStatNames = eventStatNames;
         this.infoStatNames = infoStatNames;
         this.includeMetadata = includeMetadata;
         this.flatten = flatten;
+        this.includeIndividualNodes = includeIndividualNodes;
+        this.includeAllNodes = includeAllNodes;
+        this.includeInfo = includeInfo;
     }
 
     /**
@@ -94,6 +116,9 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         this.infoStatNames = EnumSet.noneOf(InfoStatName.class);
         this.includeMetadata = false;
         this.flatten = false;
+        this.includeIndividualNodes = true;
+        this.includeAllNodes = true;
+        this.includeInfo = true;
     }
 
     /**
@@ -108,6 +133,9 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         infoStatNames = input.readOptionalEnumSet(InfoStatName.class);
         includeMetadata = input.readBoolean();
         flatten = input.readBoolean();
+        includeIndividualNodes = input.readBoolean();
+        includeAllNodes = input.readBoolean();
+        includeInfo = input.readBoolean();
     }
 
     /**
@@ -123,6 +151,9 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         out.writeOptionalEnumSet(infoStatNames);
         out.writeBoolean(includeMetadata);
         out.writeBoolean(flatten);
+        out.writeBoolean(includeIndividualNodes);
+        out.writeBoolean(includeAllNodes);
+        out.writeBoolean(includeInfo);
     }
 
     /**
@@ -147,6 +178,9 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         }
         builder.field(RestNeuralStatsAction.INCLUDE_METADATA_PARAM, includeMetadata);
         builder.field(RestNeuralStatsAction.FLATTEN_PARAM, flatten);
+        builder.field(RestNeuralStatsAction.INCLUDE_INDIVIDUAL_NODES_PARAM, includeIndividualNodes);
+        builder.field(RestNeuralStatsAction.INCLUDE_ALL_NODES_PARAM, includeAllNodes);
+        builder.field(RestNeuralStatsAction.INCLUDE_INFO, includeInfo);
         builder.endObject();
         return builder;
     }

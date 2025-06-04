@@ -77,9 +77,6 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         List<NeuralStatsNodeResponse> responses,
         List<FailedNodeException> failures
     ) {
-        // Final object that will hold the stats in format Map<ResponsePath, Value>
-        Map<String, StatSnapshot<?>> resultStats = new HashMap<>();
-
         // Convert node level stats to map
         Map<String, Map<String, StatSnapshot<?>>> nodeIdToEventStats = processorNodeEventStatsIntoMap(responses);
 
@@ -89,13 +86,16 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
             request.getNeuralStatsInput().getEventStatNames()
         );
 
-        // Get info stats
-        Map<InfoStatName, StatSnapshot<?>> infoStats = infoStatsManager.getStats(request.getNeuralStatsInput().getInfoStatNames());
+        Map<String, StatSnapshot<?>> flatInfoStats = new HashMap<>();
+        if (request.getNeuralStatsInput().isIncludeInfo()) {
+            // Get info stats
+            Map<InfoStatName, StatSnapshot<?>> infoStats = infoStatsManager.getStats(request.getNeuralStatsInput().getInfoStatNames());
 
-        // Convert stat name keys into flat path strings
-        Map<String, StatSnapshot<?>> flatInfoStats = infoStats.entrySet()
-            .stream()
-            .collect(Collectors.toMap(entry -> entry.getKey().getFullPath(), Map.Entry::getValue));
+            // Convert stat name keys into flat path strings
+            flatInfoStats = infoStats.entrySet()
+                    .stream()
+                    .collect(Collectors.toMap(entry -> entry.getKey().getFullPath(), Map.Entry::getValue));
+        }
 
         return new NeuralStatsResponse(
             clusterService.getClusterName(),
@@ -105,7 +105,10 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
             aggregatedNodeStats,
             nodeIdToEventStats,
             request.getNeuralStatsInput().isFlatten(),
-            request.getNeuralStatsInput().isIncludeMetadata()
+            request.getNeuralStatsInput().isIncludeMetadata(),
+            request.getNeuralStatsInput().isIncludeIndividualNodes(),
+            request.getNeuralStatsInput().isIncludeAllNodes(),
+            request.getNeuralStatsInput().isIncludeInfo()
         );
     }
 
