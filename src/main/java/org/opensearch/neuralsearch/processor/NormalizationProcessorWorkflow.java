@@ -40,6 +40,7 @@ import org.opensearch.search.query.QuerySearchResult;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
+import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForSubQuerySupport;
 import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY;
 import static org.opensearch.neuralsearch.processor.combination.ScoreCombiner.MAX_SCORE_WHEN_NO_HITS_FOUND;
 import static org.opensearch.neuralsearch.search.util.HybridSearchSortUtil.evaluateSortCriteria;
@@ -337,7 +338,9 @@ public class NormalizationProcessorWorkflow {
             float[] subqueryScores = scoreMap.get(scoreDoc.doc);
 
             Map<String, DocumentField> documentFields = searchHit.getDocumentFields();
-            if (subqueryScores != null && !documentFields.containsKey("_hybridization")) {
+            if (subqueryScores != null
+                && !documentFields.containsKey("_hybridization")
+                && isClusterOnOrAfterMinReqVersionForSubQuerySupport()) {
                 // Add it as a field rather than modifying _source
                 searchHit.setDocumentField("_hybridization", new DocumentField("_hybridization", List.of(subqueryScores)));
             }
