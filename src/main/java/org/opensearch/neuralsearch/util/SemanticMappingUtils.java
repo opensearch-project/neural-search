@@ -23,6 +23,7 @@ import static org.opensearch.neuralsearch.constants.MappingConstants.PATH_SEPARA
 import static org.opensearch.neuralsearch.constants.MappingConstants.PROPERTIES;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.CHUNKING;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_FIELD_SEARCH_ANALYZER;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.MappingConstants.TYPE;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DEFAULT_SEMANTIC_INFO_FIELD_NAME_SUFFIX;
@@ -344,6 +345,10 @@ public class SemanticMappingUtils {
                     targetFieldConfigBuilder
                 );
                 final String embeddingFieldType = (String) embeddingFieldConfig.get(TYPE);
+                String semanticFieldSearchAnalyzer = null;
+                if (targetFieldConfig.containsKey(SEMANTIC_FIELD_SEARCH_ANALYZER)) {
+                    semanticFieldSearchAnalyzer = (String) targetFieldConfig.get(SEMANTIC_FIELD_SEARCH_ANALYZER);
+                }
                 // If we have search model id we should use it otherwise fall back to use the model id.
                 String searchModelId = (String) targetFieldConfig.get(MODEL_ID);
                 if (targetFieldConfig.containsKey(SEARCH_MODEL_ID)) {
@@ -352,6 +357,7 @@ public class SemanticMappingUtils {
                 targetFieldConfigBuilder.embeddingFieldType(embeddingFieldType);
                 targetFieldConfigBuilder.searchModelId(searchModelId);
                 targetFieldConfigBuilder.isSemanticField(Boolean.TRUE);
+                targetFieldConfigBuilder.semanticFieldSearchAnalyzer(semanticFieldSearchAnalyzer);
             } else if (KNNVectorFieldMapper.CONTENT_TYPE.equals(targetFieldType)) {
                 targetFieldConfigBuilder.isSemanticField(Boolean.FALSE);
                 targetFieldConfigBuilder.embeddingFieldType(targetFieldType);
@@ -415,5 +421,34 @@ public class SemanticMappingUtils {
         }
 
         return false;
+    }
+
+    /**
+     * Check if the semantic field search analyzer is provided in the semantic field config.
+     * If the field is not defined then return null as the default value.
+     * @param fieldConfigMap The config for a semantic field.
+     * @return if the semantic field search analyzer is provided in the semantic field config.
+     */
+    public static String getSemanticFieldSearchAnalyzer(
+        @NonNull final Map<String, Object> fieldConfigMap,
+        @NonNull final String semanticFieldPath
+    ) {
+        if (fieldConfigMap.containsKey(SEMANTIC_FIELD_SEARCH_ANALYZER)) {
+            final Object semanticFieldSearchAnalyzer = fieldConfigMap.get(SEMANTIC_FIELD_SEARCH_ANALYZER);
+            if (semanticFieldSearchAnalyzer instanceof String) {
+                return (String) semanticFieldSearchAnalyzer;
+            } else {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "%s should be a String for the semantic field at %s",
+                        SEMANTIC_FIELD_SEARCH_ANALYZER,
+                        semanticFieldPath
+                    )
+                );
+            }
+        }
+
+        return null;
     }
 }

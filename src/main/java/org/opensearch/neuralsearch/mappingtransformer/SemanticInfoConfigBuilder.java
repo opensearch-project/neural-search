@@ -45,6 +45,7 @@ public class SemanticInfoConfigBuilder {
     private String knnMethodName = KNN_VECTOR_METHOD_DEFAULT_NAME;
     private Integer embeddingDimension;
     private Boolean chunkingEnabled;
+    private String semanticFieldSearchAnalyzer;
 
     public SemanticInfoConfigBuilder(@NonNull final NamedXContentRegistry xContentRegistry) {
         this.xContentRegistry = xContentRegistry;
@@ -72,6 +73,16 @@ public class SemanticInfoConfigBuilder {
      * @return Config of the semantic info fields.
      */
     public Map<String, Object> build() {
+        if (semanticFieldSearchAnalyzer != null && RankFeaturesFieldMapper.CONTENT_TYPE.equals(embeddingFieldType) == false) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "Cannot build the semantic info config because the embedding field type %s cannot build with semantic field search analyzer %s",
+                    embeddingFieldType,
+                    semanticFieldSearchAnalyzer
+                )
+            );
+        }
         final Map<String, Object> embeddingFieldConfig = switch (embeddingFieldType) {
             case KNNVectorFieldMapper.CONTENT_TYPE -> buildKnnFieldConfig();
             case RankFeaturesFieldMapper.CONTENT_TYPE -> buildRankFeaturesFieldConfig();
@@ -215,6 +226,11 @@ public class SemanticInfoConfigBuilder {
 
     public SemanticInfoConfigBuilder chunkingEnabled(final Boolean chunkingEnabled) {
         this.chunkingEnabled = chunkingEnabled;
+        return this;
+    }
+
+    public SemanticInfoConfigBuilder semanticFieldSearchAnalyzer(final String semanticFieldSearchAnalyzer) {
+        this.semanticFieldSearchAnalyzer = semanticFieldSearchAnalyzer;
         return this;
     }
 }

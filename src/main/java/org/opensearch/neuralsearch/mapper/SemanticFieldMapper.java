@@ -37,6 +37,7 @@ import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.RAW_FIELD_TYPE;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEARCH_MODEL_ID;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_FIELD_SEARCH_ANALYZER;
 
 /**
  * FieldMapper for the semantic field. It will hold a delegate field mapper to delegate the data parsing and query work
@@ -138,6 +139,13 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
             false
         );
 
+        protected final Parameter<String> semanticFieldSearchAnalyzer = Parameter.stringParam(
+            SEMANTIC_FIELD_SEARCH_ANALYZER,
+            true,
+            m -> ((SemanticFieldMapper) m).semanticParameters.getSemanticFieldSearchAnalyzer(),
+            null
+        );
+
         @Setter
         protected ParametrizedFieldMapper.Builder delegateBuilder;
 
@@ -147,7 +155,7 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
 
         @Override
         protected List<Parameter<?>> getParameters() {
-            return List.of(modelId, searchModelId, rawFieldType, semanticInfoFieldName, chunkingEnabled);
+            return List.of(modelId, searchModelId, rawFieldType, semanticInfoFieldName, chunkingEnabled, semanticFieldSearchAnalyzer);
         }
 
         @Override
@@ -174,6 +182,7 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
                 .rawFieldType(rawFieldType.getValue())
                 .semanticInfoFieldName(semanticInfoFieldName.getValue())
                 .chunkingEnabled(chunkingEnabled.getValue())
+                .semanticFieldSearchAnalyzer(semanticFieldSearchAnalyzer.getValue())
                 .build();
         }
     }
@@ -192,8 +201,10 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
         @Override
         public Builder parse(String name, Map<String, Object> node, ParserContext parserContext) throws MapperParsingException {
             final String rawFieldType = (String) node.getOrDefault(RAW_FIELD_TYPE, TextFieldMapper.CONTENT_TYPE);
-
+            final String searchModelId = (String) node.getOrDefault(SEARCH_MODEL_ID, null);
+            final String semanticFieldSearchAnalyzer = (String) node.getOrDefault(SEMANTIC_FIELD_SEARCH_ANALYZER, null);
             validateRawFieldType(rawFieldType);
+            validateSearchModelIdAndSemanticFieldSearchAnalyzer(searchModelId, semanticFieldSearchAnalyzer, name);
 
             final ParametrizedFieldMapper.TypeParser typeParser = (ParametrizedFieldMapper.TypeParser) parserContext.typeParser(
                 rawFieldType
@@ -220,6 +231,36 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
                     String.join(", ", SUPPORTED_RAW_FIELD_TYPE)
                 );
                 throw new IllegalArgumentException(err);
+            }
+        }
+
+        private void validateSearchModelIdAndSemanticFieldSearchAnalyzer(
+            final String searchModelId,
+            final String semanticFieldSearchAnalyzer,
+            final String name
+        ) {
+            if (searchModelId != null && semanticFieldSearchAnalyzer != null) {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "%s can not coexist with %s in semantic field %s",
+                        SEARCH_MODEL_ID,
+                        SEMANTIC_FIELD_SEARCH_ANALYZER,
+                        name
+                    )
+                );
+            }
+
+            if (searchModelId != null && searchModelId.isEmpty()) {
+                throw new IllegalArgumentException(
+                    String.format(Locale.ROOT, "%s can not be empty string in semantic field %s", SEARCH_MODEL_ID, name)
+                );
+            }
+
+            if (semanticFieldSearchAnalyzer != null && semanticFieldSearchAnalyzer.isEmpty()) {
+                throw new IllegalArgumentException(
+                    String.format(Locale.ROOT, "%s can not be empty string in semantic field %s", SEMANTIC_FIELD_SEARCH_ANALYZER, name)
+                );
             }
         }
 

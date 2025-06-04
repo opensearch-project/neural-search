@@ -17,4 +17,5 @@ public class NeuralQueryTargetFieldConfig {
     private final String embeddingFieldPath;
     private final String chunksPath;
     private final Boolean chunkingEnabled;
+    private final String semanticFieldSearchAnalyzer;
 }
