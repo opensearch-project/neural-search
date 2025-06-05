@@ -270,12 +270,12 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
 
         // Parse json to get stats
-        assertEquals(5, getNestedValue(allNodesStats, EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS));
+        assertEquals(9, getNestedValue(allNodesStats, EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS));
         assertEquals(3, getNestedValue(allNodesStats, EventStatName.TEXT_CHUNKING_DELIMITER_EXECUTIONS));
         assertEquals(2, getNestedValue(allNodesStats, EventStatName.TEXT_CHUNKING_FIXED_TOKEN_LENGTH_EXECUTIONS));
         assertEquals(4, getNestedValue(allNodesStats, EventStatName.TEXT_CHUNKING_FIXED_CHAR_LENGTH_EXECUTIONS));
 
-        assertEquals(3, getNestedValue(stats, InfoStatName.TEXT_CHUNKING_PROCESSORS));
+        assertEquals(4, getNestedValue(stats, InfoStatName.TEXT_CHUNKING_PROCESSORS));
         assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_CHUNKING_DELIMITER_PROCESSORS));
         assertEquals(2, getNestedValue(stats, InfoStatName.TEXT_CHUNKING_FIXED_TOKEN_LENGTH_PROCESSORS));
         assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_CHUNKING_FIXED_CHAR_LENGTH_PROCESSORS));
