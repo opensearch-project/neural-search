@@ -20,8 +20,10 @@ import java.util.stream.Collectors;
 public enum InfoStatName implements StatName {
     // Cluster info
     CLUSTER_VERSION("cluster_version", "", InfoStatType.INFO_STRING),
+    // Text Embedding processor
     TEXT_EMBEDDING_PROCESSORS("text_embedding_processors_in_pipelines", "processors.ingest", InfoStatType.INFO_COUNTER),
     TEXT_EMBEDDING_SKIP_EXISTING_PROCESSORS("text_embedding_skip_existing_processors", "processors.ingest", InfoStatType.INFO_COUNTER),
+    // Text Chunking processor
     TEXT_CHUNKING_PROCESSORS("text_chunking_processors", "processors.ingest", InfoStatType.INFO_COUNTER),
     TEXT_CHUNKING_DELIMITER_PROCESSORS("text_chunking_delimiter_processors", "processors.ingest", InfoStatType.INFO_COUNTER),
     TEXT_CHUNKING_FIXED_TOKEN_LENGTH_PROCESSORS(
@@ -33,7 +35,7 @@ public enum InfoStatName implements StatName {
         "text_chunking_fixed_char_length_processors",
         "processors.ingest",
         InfoStatType.INFO_COUNTER
-    );
+    ),
     // Normalization processor
     NORMALIZATION_PROCESSORS("normalization_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER),
     NORM_TECHNIQUE_L2_PROCESSORS("norm_l2_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER),

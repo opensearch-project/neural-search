@@ -56,8 +56,14 @@ public class RestNeuralStatsActionIT extends AbstractRollingUpgradeTestCase {
 
                 responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
 
-                assertEquals(numberOfExecution + 1, getNestedValue(parseAggregatedNodeStatsResponse(responseBody), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS));
-                assertEquals(numberOfProcessor + 1, getNestedValue(parseInfoStatsResponse(responseBody), InfoStatName.TEXT_EMBEDDING_PROCESSORS));
+                assertEquals(
+                    numberOfExecution + 1,
+                    getNestedValue(parseAggregatedNodeStatsResponse(responseBody), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS)
+                );
+                assertEquals(
+                    numberOfProcessor + 1,
+                    getNestedValue(parseInfoStatsResponse(responseBody), InfoStatName.TEXT_EMBEDDING_PROCESSORS)
+                );
                 break;
             case MIXED:
                 modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
@@ -69,8 +75,14 @@ public class RestNeuralStatsActionIT extends AbstractRollingUpgradeTestCase {
                 // Get stats
                 responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
 
-                assertEquals(numberOfExecution + 3, getNestedValue(parseAggregatedNodeStatsResponse(responseBody), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS));
-                assertEquals(numberOfProcessor, getNestedValue(parseInfoStatsResponse(responseBody), InfoStatName.TEXT_EMBEDDING_PROCESSORS));
+                assertEquals(
+                    numberOfExecution + 3,
+                    getNestedValue(parseAggregatedNodeStatsResponse(responseBody), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS)
+                );
+                assertEquals(
+                    numberOfProcessor,
+                    getNestedValue(parseInfoStatsResponse(responseBody), InfoStatName.TEXT_EMBEDDING_PROCESSORS)
+                );
                 break;
             case UPGRADED:
                 try {
@@ -87,7 +99,10 @@ public class RestNeuralStatsActionIT extends AbstractRollingUpgradeTestCase {
                         numberOfExecution + 3,
                         getNestedValue(parseAggregatedNodeStatsResponse(responseBody), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS)
                     );
-                    assertEquals(numberOfProcessor, getNestedValue(parseInfoStatsResponse(responseBody), InfoStatName.TEXT_EMBEDDING_PROCESSORS));
+                    assertEquals(
+                        numberOfProcessor,
+                        getNestedValue(parseInfoStatsResponse(responseBody), InfoStatName.TEXT_EMBEDDING_PROCESSORS)
+                    );
                 } finally {
                     wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
                 }
