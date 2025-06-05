@@ -2,13 +2,12 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.processor;
+package org.opensearch.neuralsearch.processor.collapse;
 
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.apache.lucene.util.BytesRef;
-import org.opensearch.neuralsearch.processor.collapse.CollapseDTO;
-import org.opensearch.neuralsearch.processor.collapse.CollapseDataCollector;
+import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.List;
