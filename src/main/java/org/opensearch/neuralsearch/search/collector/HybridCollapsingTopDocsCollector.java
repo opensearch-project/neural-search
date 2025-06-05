@@ -275,15 +275,23 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
                 updateHitCount();
 
-                for (int i = 0; i < subScoresByQuery.length; i++) {
-                    float score = subScoresByQuery[i];
+                for (int subQueryNumber = 0; subQueryNumber < subScoresByQuery.length; subQueryNumber++) {
+                    float score = subScoresByQuery[subQueryNumber];
+
+                    // Retrieve the array of collected hits for the current group
+                    int[] collectedHitsForCurrentSubQuery = collectedHitsPerSubQueryMap.get(groupValue);
+                    int slot = collectedHitsForCurrentSubQuery[subQueryNumber];
+
+                    // Increment the hit count for the current subquery
+                    collectedHitsForCurrentSubQuery[subQueryNumber]++;
+                    collectedHitsPerSubQueryMap.put(groupValue, collectedHitsForCurrentSubQuery);
 
                     // If the priority queue is full, replace the lowest scoring document per the comparator.
                     // If the priority queue is not full, add the entry to the queue.
-                    if (isQueueFull(groupValue, i)) {
-                        updateExistingEntry(groupValue, i, doc);
+                    if (isQueueFull(groupValue, subQueryNumber)) {
+                        updateExistingEntry(groupValue, subQueryNumber, doc);
                     } else {
-                        addNewEntry(groupValue, i, doc, score);
+                        addNewEntry(groupValue, subQueryNumber, doc, score, slot);
                     }
                 }
             }
@@ -368,15 +376,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 }
             }
 
-            private void addNewEntry(T groupValue, int subQueryNumber, int doc, float score) throws IOException {
-                // Retrieve the array of collected hits for the current group
-                int[] collectedHitsForCurrentSubQuery = collectedHitsPerSubQueryMap.get(groupValue);
-                int slot = collectedHitsForCurrentSubQuery[subQueryNumber];
-
-                // Increment the hit count for the current subquery
-                collectedHitsForCurrentSubQuery[subQueryNumber]++;
-                collectedHitsPerSubQueryMap.put(groupValue, collectedHitsForCurrentSubQuery);
-
+            private void addNewEntry(T groupValue, int subQueryNumber, int doc, float score, int slot) throws IOException {
                 // Retrieve the compound scores for the current group
                 FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores = groupQueueMap.get(groupValue);
                 // Update the maximum score if necessary
