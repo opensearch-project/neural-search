@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch;
 
+import joptsimple.internal.Strings;
 import lombok.NonNull;
 import org.junit.After;
 import org.opensearch.action.search.SearchResponse;
@@ -358,6 +359,18 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         if (StringUtils.isNotBlank(pipelineName)) {
             indexConfiguration = String.format(LOCALE, indexConfiguration, pipelineName);
         }
+        createIndex(indexName, indexConfiguration);
+    }
+
+    protected void createSemanticIndexWithConfiguration(final String indexName, String indexConfiguration, final String modelId)
+        throws Exception {
+        if (StringUtils.isNotBlank(modelId)) {
+            indexConfiguration = String.format(LOCALE, indexConfiguration, modelId);
+        }
+        createIndex(indexName, indexConfiguration);
+    }
+
+    protected void createIndex(final String indexName, final String indexConfiguration) throws Exception {
         Response response = makeRequest(
             client(),
             "PUT",
@@ -373,6 +386,31 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         );
         assertEquals("true", node.get("acknowledged").toString());
         assertEquals(indexName, node.get("index").toString());
+    }
+
+    protected void updateSemanticIndexWithConfiguration(final String indexName, String indexConfiguration, final String modelId)
+        throws Exception {
+        if (StringUtils.isNotBlank(modelId)) {
+            indexConfiguration = String.format(LOCALE, indexConfiguration, modelId);
+        }
+        updateIndexMapping(indexName, indexConfiguration);
+    }
+
+    protected void updateIndexMapping(final String indexName, final String indexConfiguration) throws Exception {
+        Response response = makeRequest(
+            client(),
+            "PUT",
+            indexName + "/_mapping",
+            null,
+            toHttpEntity(indexConfiguration),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+        Map<String, Object> node = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(response.getEntity()),
+            false
+        );
+        assertEquals("true", node.get("acknowledged").toString());
     }
 
     protected void createPipelineProcessor(final String modelId, final String pipelineName, final ProcessorType processorType)
@@ -1018,6 +1056,27 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     @SneakyThrows
+    protected void addSemanticDoc(
+        final String index,
+        final String docId,
+        final String semanticInfoField,
+        final List<String> fieldNames,
+        final List<Map<String, Float>> docs
+    ) {
+        Request request = new Request("POST", "/" + index + "/_doc/" + docId + "?refresh=true");
+        XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
+        builder.startObject(semanticInfoField);
+        for (int i = 0; i < fieldNames.size(); i++) {
+            builder.field(fieldNames.get(i), docs.get(i));
+        }
+        builder.endObject();
+        builder.endObject();
+        request.setJsonEntity(builder.toString());
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.CREATED, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+    }
+
+    @SneakyThrows
     protected void addSparseEncodingDoc(
         final String index,
         final String docId,
@@ -1325,6 +1384,18 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         createIndexWithConfiguration(indexName, buildIndexConfiguration(knnFieldConfigs, numOfShards), "");
     }
 
+    /**
+     * Create a semantic index from a list of KNNFieldConfigs
+     *
+     * @param indexName of index to be created
+     * @param semanticFieldConfigs list of configs specifying field
+     * @param modelId model ID used to create embeddings
+     */
+    @SneakyThrows
+    protected void prepareSemanticIndex(final String indexName, final List<SemanticFieldConfig> semanticFieldConfigs, String modelId) {
+        createSemanticIndexWithConfiguration(indexName, buildSemanticIndexConfiguration(semanticFieldConfigs, modelId, 3), Strings.EMPTY);
+    }
+
     @SneakyThrows
     protected void prepareSparseEncodingIndex(final String indexName, final List<String> sparseEncodingFieldNames) {
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder().startObject().startObject("mappings").startObject("properties");
@@ -1492,6 +1563,28 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return xContentBuilder.toString();
     }
 
+    @SneakyThrows
+    protected String buildSemanticIndexConfiguration(
+        final List<SemanticFieldConfig> semanticFieldConfigs,
+        final String modelId,
+        final int numberOfShards
+    ) {
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("settings")
+            .field("number_of_shards", numberOfShards)
+            .field("index.knn", true)
+            .endObject()
+            .startObject("mappings")
+            .startObject("properties");
+
+        for (SemanticFieldConfig semanticFieldConfig : semanticFieldConfigs) {
+            xContentBuilder.startObject(semanticFieldConfig.getName()).field("type", "semantic").field("model_id", modelId).endObject();
+        }
+        xContentBuilder.endObject().endObject().endObject();
+        return xContentBuilder.toString();
+    }
+
     protected static Response makeRequest(
         RestClient client,
         String method,
@@ -1540,6 +1633,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         private final String name;
         private final Integer dimension;
         private final SpaceType spaceType;
+    }
+
+    @AllArgsConstructor
+    @Getter
+    protected static class SemanticFieldConfig {
+        private final String name;
     }
 
     @SneakyThrows
@@ -1819,6 +1918,34 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             indexName,
             Files.readString(Path.of(classLoader.getResource("processor/" + indexMappingFileName).toURI())),
             pipelineName
+        );
+    }
+
+    /**
+     * Create an index without a pipeline with mappings from an index mapping file name
+     * @param indexName
+     * @param indexMappingFileName
+     * @throws Exception
+     */
+    protected void createIndexWithModelId(String indexName, String indexMappingFileName, String modelId) throws Exception {
+        createSemanticIndexWithConfiguration(
+            indexName,
+            Files.readString(Path.of(classLoader.getResource("processor/" + indexMappingFileName).toURI())),
+            modelId
+        );
+    }
+
+    /**
+     * Update an index with mappings from an index mapping file name
+     * @param indexName
+     * @param mappingFileName
+     * @throws Exception
+     */
+    protected void updateIndexWithModelId(String indexName, String mappingFileName, String modelId) throws Exception {
+        updateSemanticIndexWithConfiguration(
+            indexName,
+            Files.readString(Path.of(classLoader.getResource("processor/" + mappingFileName).toURI())),
+            modelId
         );
     }
 
@@ -2478,5 +2605,58 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             Arrays.asList(preTags),
             Arrays.asList(postTags)
         );
+    }
+
+    protected void ingestBatchDocumentWithBulk(
+        String index,
+        String idPrefix,
+        int docCount,
+        Set<Integer> failedIds,
+        Set<Integer> droppedIds,
+        List<String> docs,
+        String bulkTemplate
+    ) throws Exception {
+        StringBuilder payloadBuilder = new StringBuilder();
+        for (int i = 0; i < docCount; ++i) {
+            String docTemplate = docs.get(i % 2);
+            if (failedIds.contains(i)) {
+                docTemplate = String.format(LOCALE, docTemplate, "fail");
+            } else if (droppedIds.contains(i)) {
+                docTemplate = String.format(LOCALE, docTemplate, "drop");
+            } else {
+                docTemplate = String.format(LOCALE, docTemplate, "success");
+            }
+            String doc = docTemplate.replace("\n", "");
+            final String id = idPrefix + (i + 1);
+            String item = bulkTemplate.replace("{{index}}", index).replace("{{id}}", id).replace("{{doc}}", doc);
+            payloadBuilder.append(item).append("\n");
+        }
+        final String payload = payloadBuilder.toString();
+        Map<String, String> params = new HashMap<>();
+        params.put("refresh", "true");
+        Response response = makeRequest(
+            client(),
+            "POST",
+            "_bulk",
+            params,
+            toHttpEntity(payload),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
+        );
+        Map<String, Object> map = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(response.getEntity()),
+            false
+        );
+        assertEquals(!failedIds.isEmpty(), map.get("errors"));
+        assertEquals(docCount, ((List) map.get("items")).size());
+
+        int failedDocCount = 0;
+        for (Object item : ((List) map.get("items"))) {
+            Map<String, Map<String, Object>> itemMap = (Map<String, Map<String, Object>>) item;
+            if (itemMap.get("index").get("error") != null) {
+                failedDocCount++;
+            }
+        }
+        assertEquals(failedIds.size(), failedDocCount);
     }
 }

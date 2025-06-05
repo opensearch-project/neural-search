@@ -14,6 +14,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import joptsimple.internal.Strings;
 import org.junit.Before;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
@@ -24,19 +25,28 @@ import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import com.google.common.primitives.Floats;
 
 import lombok.SneakyThrows;
+import org.opensearch.neuralsearch.util.TestUtils;
 
 public class NeuralQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_BASIC_INDEX_NAME = "test-neural-basic-index";
     private static final String TEST_MULTI_VECTOR_FIELD_INDEX_NAME = "test-neural-multi-vector-field-index";
     private static final String TEST_NESTED_INDEX_NAME = "test-neural-nested-index";
     private static final String TEST_MULTI_DOC_INDEX_NAME = "test-neural-multi-doc-index";
+    private static final String TEST_SEMANTIC_INDEX_SPARSE_NAME = "test-neural-sparse-semantic-index";
     private static final String TEST_QUERY_TEXT = "Hello world";
     private static final String TEST_IMAGE_TEXT = "/9j/4AAQSkZJRgABAQAASABIAAD";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_1 = "test-knn-vector-1";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_2 = "test-knn-vector-2";
+    private static final String TEST_SEMANTIC_TEXT_FIELD = "test_field";
+    private static final String SEMANTIC_INFO_FIELD = "semantic_info";
+    private static final String SEMANTIC_EMBEDDING_FIELD = "embedding";
     private static final String TEST_TEXT_FIELD_NAME_1 = "test-text-field";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_NESTED = "nested.knn.field";
     private final float[] testVector = createRandomVector(TEST_DIMENSION);
+    private static final List<String> TEST_TOKENS = List.of("hello", "world", "a", "b", "c");
+    private final Map<String, Float> testRankFeaturesDoc = TestUtils.createRandomTokenWeightMap(TEST_TOKENS);
+
+    private static final Float DELTA = 1e-5f;
 
     @Before
     public void setUp() throws Exception {
@@ -446,8 +456,45 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA_FOR_SCORE_ASSERTION);
     }
 
+    /**
+     * Tests basic query with boost in semantic index:
+     * {
+     *     "query": {
+     *         "neural_sparse": {
+     *             "text_sparse": {
+     *                 "query_text": "Hello world a b",
+     *                 "model_id": "dcsdcasd",
+     *                 "boost": 2
+     *             }
+     *         }
+     *     }
+     * }
+     */
+    @SneakyThrows
+    public void testNeuralQuery_InSemanticField_WithSparseModel() {
+        String modelId = prepareSparseEncodingModel();
+        initializeIndexIfNotExist(TEST_SEMANTIC_INDEX_SPARSE_NAME, modelId);
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(TEST_SEMANTIC_TEXT_FIELD)
+            .queryText(TEST_QUERY_TEXT)
+            .boost(2.0f)
+            .build();
+
+        Map<String, Object> searchResponseAsMap = search(TEST_SEMANTIC_INDEX_SPARSE_NAME, neuralQueryBuilder, 3);
+        assertEquals(1, getHitCount(searchResponseAsMap));
+        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+        assertEquals("4", firstInnerHit.get("_id"));
+        float expectedScore = 2 * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
+        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
+    }
+
     @SneakyThrows
     private void initializeIndexIfNotExist(String indexName) {
+        initializeIndexIfNotExist(indexName, Strings.EMPTY);
+    }
+
+    @SneakyThrows
+    private void initializeIndexIfNotExist(String indexName, String modelId) {
         if (TEST_BASIC_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_INDEX_NAME)) {
             prepareKnnIndex(
                 TEST_BASIC_INDEX_NAME,
@@ -519,6 +566,22 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
                 Collections.singletonList(Floats.asList(testVector).toArray())
             );
             assertEquals(3, getDocCount(TEST_MULTI_DOC_INDEX_NAME));
+        }
+
+        if (TEST_SEMANTIC_INDEX_SPARSE_NAME.equals(indexName) && !indexExists(TEST_SEMANTIC_INDEX_SPARSE_NAME)) {
+            prepareSemanticIndex(
+                TEST_SEMANTIC_INDEX_SPARSE_NAME,
+                Collections.singletonList(new SemanticFieldConfig(TEST_SEMANTIC_TEXT_FIELD)),
+                modelId
+            );
+            addSemanticDoc(
+                indexName,
+                "4",
+                String.format(LOCALE, "%s_%s", TEST_SEMANTIC_TEXT_FIELD, SEMANTIC_INFO_FIELD),
+                List.of(SEMANTIC_EMBEDDING_FIELD),
+                List.of(testRankFeaturesDoc)
+            );
+            assertEquals(1, getDocCount(TEST_SEMANTIC_INDEX_SPARSE_NAME));
         }
     }
 }
