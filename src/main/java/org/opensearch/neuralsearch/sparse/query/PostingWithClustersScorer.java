@@ -30,6 +30,7 @@ import org.opensearch.neuralsearch.sparse.common.SparseVectorReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.PriorityQueue;
 
 /**
@@ -44,7 +45,7 @@ public class PostingWithClustersScorer extends Scorer {
     private final String fieldName;
     private final SparseQueryContext sparseQueryContext;
     private final SparseVector queryVector;
-    private final float[] queryDenseVector;
+    private final byte[] queryDenseVector;
     // The heap to maintain docId and its similarity score with query
     private final PriorityQueue<Pair<Integer, Float>> scoreHeap = new PriorityQueue<>((a, b) -> Float.compare(a.getRight(), b.getRight()));
     private final LongBitSet visitedDocId;
@@ -84,11 +85,10 @@ public class PostingWithClustersScorer extends Scorer {
                 continue;
             }
             PostingsEnum postingsEnum = termsEnum.postings(null, PostingsEnum.FREQS);
-            if (!(postingsEnum instanceof SparsePostingsEnum)) {
+            if (!(postingsEnum instanceof SparsePostingsEnum sparsePostingsEnum)) {
                 log.error("posting enum is not SparsePostingsEnum, actual type: {}", postingsEnum.getClass().getName());
                 return;
             }
-            SparsePostingsEnum sparsePostingsEnum = (SparsePostingsEnum) postingsEnum;
             log.debug(
                 "query token: {}, posting doc size: {}, cluster size: {}",
                 token,
@@ -99,7 +99,7 @@ public class PostingWithClustersScorer extends Scorer {
                 SparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.get(sparsePostingsEnum.getIndexKey());
                 if (index != null) {
                     SparseVectorForwardIndex.SparseVectorForwardIndexReader indexReader = index.getForwardIndexReader();
-                    reader = (docId) -> { return indexReader.readSparseVector(docId); };
+                    reader = indexReader::readSparseVector;
                 } else {
                     reader = (docId) -> { return null; };
                 }
@@ -204,7 +204,7 @@ public class PostingWithClustersScorer extends Scorer {
     }
 
     class SingleScorer extends Scorer {
-        private IteratorWrapper<DocumentCluster> clusterIter;
+        private final IteratorWrapper<DocumentCluster> clusterIter;
         private DocFreqIterator docs = null;
 
         public SingleScorer(SparsePostingsEnum postingsEnum, BytesRef term) throws IOException {
@@ -229,9 +229,9 @@ public class PostingWithClustersScorer extends Scorer {
                         if (cluster.isShouldNotSkip()) {
                             return cluster;
                         }
-                        float score = cluster.getSummary().dotProduct(queryDenseVector);
+                        int score = cluster.getSummary().dotProduct(queryDenseVector);
                         if (scoreHeap.size() == sparseQueryContext.getK()
-                            && score < scoreHeap.peek().getRight() / sparseQueryContext.getHeapFactor()) {
+                            && score < Objects.requireNonNull(scoreHeap.peek()).getRight() / sparseQueryContext.getHeapFactor()) {
                             cluster = clusterIter.next();
                         } else {
                             return cluster;

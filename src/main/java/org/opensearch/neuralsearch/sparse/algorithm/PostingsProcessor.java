@@ -23,10 +23,6 @@ import java.util.stream.Collectors;
  * This is a utility class for processing postings. It is used by the clustering algorithm to sort and prune postings.
  */
 public class PostingsProcessor {
-    public static List<DocFreq> sortByFreq(List<DocFreq> postings) {
-        postings.sort((o1, o2) -> Float.compare(o2.getFreq(), o1.getFreq()));
-        return postings;
-    }
 
     public static List<DocFreq> pruneBySize(List<DocFreq> postings, int size) {
         return postings.subList(0, Math.min(postings.size(), size));
@@ -36,7 +32,7 @@ public class PostingsProcessor {
         if (K >= postings.size()) {
             return postings;
         }
-        PriorityQueue<DocFreq> pq = new PriorityQueue<>(K, (o1, o2) -> Float.compare(o1.getFreq(), o2.getFreq()));
+        PriorityQueue<DocFreq> pq = new PriorityQueue<>(K, (o1, o2) -> ByteQuantizer.compareUnsignedByte(o1.getFreq(), o2.getFreq()));
         for (DocFreq docFreq : postings) {
             pq.add(docFreq);
             if (pq.size() > K) {
@@ -47,7 +43,7 @@ public class PostingsProcessor {
     }
 
     public static void summarize(DocumentCluster cluster, SparseVectorReader reader, float alpha) throws IOException {
-        Map<Integer, Float> summary = new HashMap<>();
+        Map<Integer, Integer> summary = new HashMap<>();
         DocFreqIterator iterator = cluster.getDisi();
         while (iterator.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
             int docId = iterator.docID();
@@ -57,9 +53,9 @@ public class PostingsProcessor {
                 while (vectorIterator.hasNext()) {
                     SparseVector.Item item = vectorIterator.next();
                     if (!summary.containsKey(item.getToken())) {
-                        summary.put(item.getToken(), item.getFreq());
+                        summary.put(item.getToken(), item.getIntFreq());
                     } else {
-                        summary.put(item.getToken(), Math.max(summary.get(item.getToken()), item.getFreq()));
+                        summary.put(item.getToken(), Math.max(summary.get(item.getToken()), item.getIntFreq()));
                     }
                 }
             }
@@ -67,17 +63,17 @@ public class PostingsProcessor {
         // convert summary to a SparseVector
         List<SparseVector.Item> items = summary.entrySet()
             .stream()
-            .map(entry -> new SparseVector.Item(entry.getKey(), entry.getValue()))
-            .sorted((o1, o2) -> Float.compare(o2.getFreq(), o1.getFreq()))
+            .map(entry -> new SparseVector.Item(entry.getKey(), (byte) entry.getValue().intValue()))
+            .sorted((o1, o2) -> ByteQuantizer.compareUnsignedByte(o2.getFreq(), o1.getFreq()))
             .collect(Collectors.toList());
         // count total freq of items
-        double totalFreq = items.stream().mapToDouble(SparseVector.Item::getFreq).sum();
-        double freqThreshold = totalFreq * alpha;
-        double freqSum = 0.0;
+        double totalFreq = items.stream().mapToDouble(SparseVector.Item::getIntFreq).sum();
+        int freqThreshold = (int) Math.floor(totalFreq * alpha);
+        int freqSum = 0;
         int idx = 0;
         for (SparseVector.Item item : items) {
             ++idx;
-            freqSum += item.getFreq();
+            freqSum += item.getIntFreq();
             if (freqSum > freqThreshold) {
                 break;
             }
