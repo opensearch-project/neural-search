@@ -41,4 +41,10 @@ public class SemanticFieldConstants {
      * disabled to not downgrade the search performance.
      */
     public static final String CHUNKING = "chunking";
+
+    /**
+     * Name of the field for search analyzer parameter. With this field set up, user has not to specify
+     * it during query time.
+     */
+    public static final String SEMANTIC_FIELD_SEARCH_ANALYZER = "semantic_field_search_analyzer";
 }

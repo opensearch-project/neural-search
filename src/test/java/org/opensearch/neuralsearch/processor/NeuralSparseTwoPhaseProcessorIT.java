@@ -444,6 +444,25 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
+    public void testMultiNeuralSparseQuery_whenTwoPhaseAndModelSetByNeuralEnrich_thenGetExpectedScore() {
+        String modelId = prepareSparseEncodingModel();
+        initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
+        createNeuralSparseTwoPhaseSearchProcessor(search_pipeline, modelId);
+        setDefaultSearchPipelineForIndex(TEST_BASIC_INDEX_NAME);
+        BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME_1)
+            .queryText(TEST_QUERY_TEXT)
+            .boost(3.0f);
+        boolQueryBuilder.should(sparseEncodingQueryBuilder);
+        boolQueryBuilder.should(sparseEncodingQueryBuilder);
+        Map<String, Object> searchResponseAsMap = search(TEST_BASIC_INDEX_NAME, boolQueryBuilder, 1);
+        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+        assertEquals("1", firstInnerHit.get("_id"));
+        float expectedScore = 6 * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
+        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
+    }
+
+    @SneakyThrows
     protected void initializeIndexIfNotExist(String indexName) {
         if (TEST_BASIC_INDEX_NAME.equals(indexName) && !indexExists(indexName)) {
             prepareSparseEncodingIndex(indexName, List.of(TEST_NEURAL_SPARSE_FIELD_NAME_1));

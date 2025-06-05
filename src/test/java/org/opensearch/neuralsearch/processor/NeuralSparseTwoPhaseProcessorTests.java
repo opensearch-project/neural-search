@@ -82,6 +82,30 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 4.0f, 10000);
         processor.processRequest(searchRequest);
         NeuralSparseQueryBuilder queryBuilder = (NeuralSparseQueryBuilder) searchRequest.source().query();
+        NeuralSparseQueryBuilder copy = (NeuralSparseQueryBuilder) ((BoolQueryBuilder) ((QueryRescorerBuilder) searchRequest.source()
+            .rescores()
+            .getFirst()).getRescoreQuery()).should().getFirst();
+        assertNull("queryTokens of the copy should be null since raw query tokens are not provided.", copy.queryTokensSupplier().get());
+        assertEquals(queryBuilder.neuralSparseQueryTwoPhaseInfo().getTwoPhasePruneRatio(), 0.5f, 1e-3);
+        assertNotNull(searchRequest.source().rescores());
+    }
+
+    public void testProcessRequest_whenTwoPhaseEnabledWithRawQueryTokens_thenSuccess() throws Exception {
+        NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
+        NeuralSparseQueryBuilder neuralQueryBuilder = new NeuralSparseQueryBuilder();
+        neuralQueryBuilder.queryTokensSupplier(() -> Map.of("key", 0.1f));
+        SearchRequest searchRequest = new SearchRequest();
+        searchRequest.source(new SearchSourceBuilder().query(neuralQueryBuilder));
+        NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 4.0f, 10000);
+        processor.processRequest(searchRequest);
+        NeuralSparseQueryBuilder queryBuilder = (NeuralSparseQueryBuilder) searchRequest.source().query();
+        NeuralSparseQueryBuilder copy = (NeuralSparseQueryBuilder) ((BoolQueryBuilder) ((QueryRescorerBuilder) searchRequest.source()
+            .rescores()
+            .getFirst()).getRescoreQuery()).should().getFirst();
+        assertNotNull(
+            "queryTokens of the copy should not be null since raw query tokens are not provided.",
+            copy.queryTokensSupplier().get()
+        );
         assertEquals(queryBuilder.neuralSparseQueryTwoPhaseInfo().getTwoPhasePruneRatio(), 0.5f, 1e-3);
         assertNotNull(searchRequest.source().rescores());
     }

@@ -36,6 +36,7 @@ public class SemanticFieldMapperTestUtil {
     public static final String modelId = "modelId";
     public static final String searchModelId = "searchModelId";
     public static final String semanticInfoFieldName = "semanticInfoFieldName";
+    public static final String semanticFieldSearchAnalyzer = "bert-uncased";
 
     public static final SemanticFieldMapper.TypeParser TYPE_PARSER = new SemanticFieldMapper.TypeParser();
     private static final IndexAnalyzers indexAnalyzers = new IndexAnalyzers(
