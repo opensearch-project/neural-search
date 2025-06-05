@@ -169,17 +169,19 @@ public class InfoStatsManager {
         // Iterate through all ingest processors and count their stats individually by calling helpers
         for (Map<String, Object> pipelineConfig : pipelineConfigs) {
             List<Map<String, Object>> ingestProcessors = asListOfMaps(pipelineConfig.get(PROCESSORS_KEY));
-            for (Map<String, Object> ingestProcessor : ingestProcessors) {
-                for (Map.Entry<String, Object> entry : ingestProcessor.entrySet()) {
-                    String processorType = entry.getKey();
-                    Map<String, Object> processorConfig = asMap(entry.getValue());
-                    switch (processorType) {
-                        case TextEmbeddingProcessor.TYPE:
-                            countTextEmbeddingProcessorStats(stats, processorConfig);
-                            break;
-                        case TextChunkingProcessor.TYPE:
-                            countTextChunkingProcessorStats(stats, processorConfig);
-                            break;
+            if (ingestProcessors != null) {
+                for (Map<String, Object> ingestProcessor : ingestProcessors) {
+                    for (Map.Entry<String, Object> entry : ingestProcessor.entrySet()) {
+                        String processorType = entry.getKey();
+                        Map<String, Object> processorConfig = asMap(entry.getValue());
+                        switch (processorType) {
+                            case TextEmbeddingProcessor.TYPE:
+                                countTextEmbeddingProcessorStats(stats, processorConfig);
+                                break;
+                            case TextChunkingProcessor.TYPE:
+                                countTextChunkingProcessorStats(stats, processorConfig);
+                                break;
+                        }
                     }
                 }
             }
@@ -232,17 +234,19 @@ public class InfoStatsManager {
         for (Map<String, Object> pipelineConfig : pipelineConfigs) {
             // Search phase results processors
             List<Map<String, Object>> phaseResultsProcessors = asListOfMaps(pipelineConfig.get(PHASE_RESULTS_PROCESSORS_KEY));
-            for (Map<String, Object> phaseResultsProcessor : phaseResultsProcessors) {
-                for (Map.Entry<String, Object> entry : phaseResultsProcessor.entrySet()) {
-                    String processorType = entry.getKey();
-                    Map<String, Object> processorConfig = asMap(entry.getValue());
-                    switch (processorType) {
-                        case NormalizationProcessor.TYPE:
-                            countNormalizationProcessorStats(stats, processorConfig);
-                            break;
-                        case RRFProcessor.TYPE:
-                            countRRFProcessorStats(stats, processorConfig);
-                            break;
+            if (phaseResultsProcessors != null) {
+                for (Map<String, Object> phaseResultsProcessor : phaseResultsProcessors) {
+                    for (Map.Entry<String, Object> entry : phaseResultsProcessor.entrySet()) {
+                        String processorType = entry.getKey();
+                        Map<String, Object> processorConfig = asMap(entry.getValue());
+                        switch (processorType) {
+                            case NormalizationProcessor.TYPE:
+                                countNormalizationProcessorStats(stats, processorConfig);
+                                break;
+                            case RRFProcessor.TYPE:
+                                countRRFProcessorStats(stats, processorConfig);
+                                break;
+                        }
                     }
                 }
             }

@@ -183,7 +183,7 @@ public class NeuralSearch extends Plugin
         IndexNameExpressionResolver indexNameExpressionResolver,
         Supplier<DiscoveryNodes> nodesInCluster
     ) {
-        RestNeuralStatsAction restNeuralStatsAction = new RestNeuralStatsAction(settingsAccessor);
+        RestNeuralStatsAction restNeuralStatsAction = new RestNeuralStatsAction(settingsAccessor, NeuralSearchClusterUtil.instance());
         return ImmutableList.of(restNeuralStatsAction);
     }
 

@@ -8,14 +8,17 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.Version;
 import org.opensearch.common.util.set.Sets;
 import org.opensearch.core.rest.RestStatus;
+import org.opensearch.neuralsearch.common.MinClusterVersionUtil;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.NeuralStatsInput;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.neuralsearch.transport.NeuralStatsAction;
 import org.opensearch.neuralsearch.transport.NeuralStatsRequest;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.rest.BaseRestHandler;
 import org.opensearch.rest.BytesRestResponse;
 import org.opensearch.rest.RestRequest;
@@ -103,6 +106,7 @@ public class RestNeuralStatsAction extends BaseRestHandler {
     }
 
     private NeuralSearchSettingsAccessor settingsAccessor;
+    private NeuralSearchClusterUtil neuralSearchClusterUtil;
 
     @Override
     public String getName() {
@@ -195,12 +199,27 @@ public class RestNeuralStatsAction extends BaseRestHandler {
                 continue;
             }
 
-            if (EVENT_STAT_NAMES.contains(normalizedStat)) {
-                neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
-            } else if (STATE_STAT_NAMES.contains(normalizedStat)) {
-                neuralStatsInput.getInfoStatNames().add(InfoStatName.from(normalizedStat));
+            Version minClusterVersion = neuralSearchClusterUtil.getClusterMinVersion();
+            if (minClusterVersion == Version.CURRENT) {
+                if (EventStatName.isValidName(normalizedStat)) {
+                    neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
+                } else if (InfoStatName.isValidName(normalizedStat)) {
+                    neuralStatsInput.getInfoStatNames().add(InfoStatName.from(normalizedStat));
+                } else {
+                    invalidStatNames.add(normalizedStat);
+                }
             } else {
-                invalidStatNames.add(normalizedStat);
+                // If min cluster version does not match current, we are in rolling upgrade case
+                // If so, we want to only fetch stats that exist on the min version to prevent a serialization error
+                EnumSet<InfoStatName> availableInfoStats = MinClusterVersionUtil.getInfoStatsAvailableInVersion(minClusterVersion);
+                EnumSet<EventStatName> availableEventStats = MinClusterVersionUtil.getEventStatsAvailableInVersion(minClusterVersion);
+
+                if (InfoStatName.isValidName(normalizedStat) && availableInfoStats.contains(InfoStatName.from(normalizedStat))) {
+                    neuralStatsInput.getInfoStatNames().add(InfoStatName.from(normalizedStat));
+                } else if (EventStatName.isValidName(normalizedStat) && availableEventStats.contains(EventStatName.from(normalizedStat))) {
+                    neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
+                }
+                // We don't add to invalid stat names since they technically aren't invalid, we just don't want to fetch them
             }
         }
 
@@ -214,8 +233,17 @@ public class RestNeuralStatsAction extends BaseRestHandler {
     }
 
     private void addAllStats(NeuralStatsInput neuralStatsInput) {
-        neuralStatsInput.getEventStatNames().addAll(EnumSet.allOf(EventStatName.class));
-        neuralStatsInput.getInfoStatNames().addAll(EnumSet.allOf(InfoStatName.class));
+        Version minClusterVersion = neuralSearchClusterUtil.getClusterMinVersion();
+        if (minClusterVersion == Version.CURRENT) {
+            // Default non-rolling upgrade case, add all stats
+            neuralStatsInput.getEventStatNames().addAll(EnumSet.allOf(EventStatName.class));
+            neuralStatsInput.getInfoStatNames().addAll(EnumSet.allOf(InfoStatName.class));
+        } else {
+            // If cluster min version does not match current node version, that means we are mid cluster version upgrade.
+            // In this case we only want to request stats that exist in the the min version
+            neuralStatsInput.getInfoStatNames().addAll(MinClusterVersionUtil.getInfoStatsAvailableInVersion(minClusterVersion));
+            neuralStatsInput.getEventStatNames().addAll(MinClusterVersionUtil.getEventStatsAvailableInVersion(minClusterVersion));
+        }
     }
 
     private Optional<String[]> splitCommaSeparatedParam(RestRequest request, String paramName) {
