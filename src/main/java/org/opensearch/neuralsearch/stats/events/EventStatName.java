@@ -124,10 +124,19 @@ public enum EventStatName implements StatName {
      * @return the StatName enum associated with that String name
      */
     public static EventStatName from(String name) {
-        if (BY_NAME.containsKey(name) == false) {
+        if (isValidName(name) == false) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "Event stat not found: %s", name));
         }
         return BY_NAME.get(name);
+    }
+
+    /**
+     * Determines whether a given string is a valid stat name
+     * @param name
+     * @return whether the name is valid
+     */
+    public static boolean isValidName(String name) {
+        return BY_NAME.containsKey(name);
     }
 
     /**

@@ -38,7 +38,7 @@ public class InfoStatsManagerTests extends OpenSearchTestCase {
     public void setup() {
         MockitoAnnotations.openMocks(this);
         when(mockPipelineServiceUtil.getIngestPipelineConfigs()).thenReturn(new ArrayList<>());
-        when(mockClusterUtil.getClusterMinVersion()).thenReturn(Version.fromString("3.0.0"));
+        when(mockClusterUtil.getClusterMinVersion()).thenReturn(Version.CURRENT);
         infoStatsManager = new InfoStatsManager(mockClusterUtil, mockSettingsAccessor, mockPipelineServiceUtil);
     }
 
@@ -54,7 +54,7 @@ public class InfoStatsManagerTests extends OpenSearchTestCase {
 
         assertEquals(1, stats.size());
         assertTrue(stats.containsKey(InfoStatName.CLUSTER_VERSION));
-        assertEquals("3.0.0", ((SettableInfoStatSnapshot<?>) stats.get(InfoStatName.CLUSTER_VERSION)).getValue());
+        assertEquals(Version.CURRENT.toString(), ((SettableInfoStatSnapshot<?>) stats.get(InfoStatName.CLUSTER_VERSION)).getValue());
     }
 
     public void test_callNullableIncrementer() {
