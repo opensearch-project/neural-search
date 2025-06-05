@@ -11,6 +11,7 @@ import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.processor.combination.CombineScoresDto;
 import org.opensearch.search.query.QuerySearchResult;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -34,24 +35,8 @@ public class CollapseDTO {
     private CompoundTopDocs updatedCollapseTopDocs;
     private int collapseShardIndex;
 
-    private CollapseDTO(
-        List<CompoundTopDocs> collapseQueryTopDocs,
-        List<QuerySearchResult> collapseQuerySearchResults,
-        Sort collapseSort,
-        int indexOfFirstNonEmpty,
-        boolean isFetchPhaseExecuted,
-        CombineScoresDto collapseCombineScoresDTO
-    ) {
-        this.collapseQueryTopDocs = collapseQueryTopDocs;
-        this.collapseQuerySearchResults = collapseQuerySearchResults;
-        this.collapseSort = collapseSort;
-        this.indexOfFirstNonEmpty = indexOfFirstNonEmpty;
-        this.isFetchPhaseExecuted = isFetchPhaseExecuted;
-        this.collapseCombineScoresDTO = collapseCombineScoresDTO;
-    }
-
     /**
-     * Factory method to create a new CollapseDTO instance with initial collapse parameters.
+     * Constructor to create a new CollapseDTO instance with initial collapse parameters.
      *
      * @param collapseQueryTopDocs List of compound top documents from collapse query
      * @param collapseQuerySearchResults List of search results from collapse query
@@ -61,7 +46,7 @@ public class CollapseDTO {
      * @param collapseCombineScoresDTO DTO containing score combination parameters
      * @return A new CollapseDTO instance
      */
-    public static CollapseDTO createInitialCollapseDTO(
+    public CollapseDTO(
         List<CompoundTopDocs> collapseQueryTopDocs,
         List<QuerySearchResult> collapseQuerySearchResults,
         Sort collapseSort,
@@ -69,14 +54,12 @@ public class CollapseDTO {
         boolean isFetchPhaseExecuted,
         CombineScoresDto collapseCombineScoresDTO
     ) {
-        return new CollapseDTO(
-            collapseQueryTopDocs,
-            collapseQuerySearchResults,
-            collapseSort,
-            indexOfFirstNonEmpty,
-            isFetchPhaseExecuted,
-            collapseCombineScoresDTO
-        );
+        this.collapseQueryTopDocs = Collections.unmodifiableList(collapseQueryTopDocs);
+        this.collapseQuerySearchResults = collapseQuerySearchResults;
+        this.collapseSort = collapseSort;
+        this.indexOfFirstNonEmpty = indexOfFirstNonEmpty;
+        this.isFetchPhaseExecuted = isFetchPhaseExecuted;
+        this.collapseCombineScoresDTO = collapseCombineScoresDTO;
     }
 
     /**

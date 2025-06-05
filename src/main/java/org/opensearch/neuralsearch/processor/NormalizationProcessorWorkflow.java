@@ -218,7 +218,7 @@ public class NormalizationProcessorWorkflow {
         }
         if (isCollapseEnabled) {
             CollapseExecutor collapseExecutor = new CollapseExecutor();
-            CollapseDTO collapseDTO = CollapseDTO.createInitialCollapseDTO(
+            CollapseDTO collapseDTO = new CollapseDTO(
                 queryTopDocs,
                 querySearchResults,
                 sort,

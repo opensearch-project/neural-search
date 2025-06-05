@@ -53,10 +53,10 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         for (int i = 0; i < 1000; i++) {
             addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + (i % 10));
         }
+        writer.forceMerge(1);
         writer.commit();
 
         DirectoryReader reader = DirectoryReader.open(writer);
-        LeafReaderContext context = reader.leaves().get(0);
 
         Sort sort = new Sort(SortField.FIELD_SCORE);
         KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
@@ -71,13 +71,14 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
 
         Weight weight = mock(Weight.class);
         collector.setWeight(weight);
-        LeafCollector leafCollector = collector.getLeafCollector(context);
 
         int[] docIds = IntStream.range(0, 1000).toArray();
         List<Float> scores = Stream.generate(() -> random().nextFloat()).limit(1000).collect(Collectors.toList());
 
         HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
 
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
         leafCollector.setScorer(hybridScorer);
 
         collectDocsAndScores(hybridScorer, scores, leafCollector, 0, docIds);
@@ -114,10 +115,10 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         for (int i = 0; i < 1000; i++) {
             addNumericDoc(writer, i, "text" + i, 100 + i, i % 10);
         }
+        writer.forceMerge(1);
         writer.commit();
 
         DirectoryReader reader = DirectoryReader.open(writer);
-        LeafReaderContext context = reader.leaves().get(0);
 
         Sort sort = new Sort(new SortField(INT_FIELD_NAME, SortField.Type.INT));
         NumberFieldMapper.NumberFieldType fieldType = new NumberFieldMapper.NumberFieldType(
@@ -135,13 +136,14 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
 
         Weight weight = mock(Weight.class);
         collector.setWeight(weight);
-        LeafCollector leafCollector = collector.getLeafCollector(context);
 
         int[] docIds = IntStream.range(0, 1000).toArray();
         List<Float> scores = Stream.generate(() -> random().nextFloat()).limit(1000).collect(Collectors.toList());
 
         HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
 
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
         leafCollector.setScorer(hybridScorer);
 
         collectDocsAndScores(hybridScorer, scores, leafCollector, 0, docIds);
