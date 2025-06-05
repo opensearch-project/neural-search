@@ -34,6 +34,17 @@ public enum InfoStatName implements StatName {
         "processors.ingest",
         InfoStatType.INFO_COUNTER
     );
+    // Normalization processor
+    NORMALIZATION_PROCESSORS("normalization_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER),
+    NORM_TECHNIQUE_L2_PROCESSORS("norm_l2_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER),
+    NORM_TECHNIQUE_MINMAX_PROCESSORS("norm_minmax_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER),
+    NORM_TECHNIQUE_ZSCORE_PROCESSORS("norm_zscore_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER),
+    COMB_TECHNIQUE_ARITHMETIC_PROCESSORS("comb_arithmetic_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER),
+    COMB_TECHNIQUE_GEOMETRIC_PROCESSORS("comb_geometric_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER),
+    COMB_TECHNIQUE_HARMONIC_PROCESSORS("comb_harmonic_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER),
+    // RRF processor
+    RRF_PROCESSORS("rank_based_normalization_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER),
+    COMB_TECHNIQUE_RRF_PROCESSORS("comb_rrf_processors", "processors.search.hybrid", InfoStatType.INFO_COUNTER),;
 
     private final String nameString;
     private final String path;
