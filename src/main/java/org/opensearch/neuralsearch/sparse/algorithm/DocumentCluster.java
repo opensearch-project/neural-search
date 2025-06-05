@@ -32,17 +32,17 @@ public class DocumentCluster implements Accountable {
     private SparseVector summary;
     // private final List<DocFreq> docs;
     private final int[] docIds;
-    private final float[] freqs;
+    private final byte[] freqs;
     // if true, docs in this cluster should always be examined
     private boolean shouldNotSkip;
 
     public DocumentCluster(SparseVector summary, List<DocFreq> docs, boolean shouldNotSkip) {
         this.summary = summary;
         List<DocFreq> docsCopy = new ArrayList<>(docs);
-        docsCopy.sort((a, b) -> Integer.compare(a.getDocID(), b.getDocID()));
+        docsCopy.sort((o1, o2) -> ByteQuantizer.compareUnsignedByte(o1.getFreq(), o2.getFreq()));
         int size = docsCopy.size();
         this.docIds = new int[size];
-        this.freqs = new float[size];
+        this.freqs = new byte[size];
         for (int i = 0; i < size; i++) {
             DocFreq docFreq = docsCopy.get(i);
             this.docIds[i] = docFreq.getDocID();
@@ -56,11 +56,7 @@ public class DocumentCluster implements Accountable {
     }
 
     public Iterator<DocFreq> iterator() {
-        return new CombinedIterator<Integer, Float, DocFreq>(
-            new ArrayIterator.IntArrayIterator(docIds),
-            new ArrayIterator.FloatArrayIterator(freqs),
-            DocFreq::new
-        );
+        return new CombinedIterator<>(new ArrayIterator.IntArrayIterator(docIds), new ArrayIterator.ByteArrayIterator(freqs), DocFreq::new);
     }
 
     public DocFreqIterator getDisi() {
@@ -68,7 +64,7 @@ public class DocumentCluster implements Accountable {
             final IteratorWrapper<DocFreq> wrapper = new IteratorWrapper<>(iterator());
 
             @Override
-            public float freq() {
+            public byte freq() {
                 return wrapper.getCurrent().getFreq();
             }
 

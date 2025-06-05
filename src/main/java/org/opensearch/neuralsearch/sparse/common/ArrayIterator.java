@@ -49,11 +49,11 @@ public class ArrayIterator<T> implements Iterator<T> {
         }
     }
 
-    public static class FloatArrayIterator implements Iterator<Float> {
-        private final float[] array;
+    public static class ByteArrayIterator implements Iterator<Byte> {
+        private final byte[] array;
         private int index = 0;
 
-        public FloatArrayIterator(float[] array) {
+        public ByteArrayIterator(byte[] array) {
             this.array = array;
         }
 
@@ -63,7 +63,7 @@ public class ArrayIterator<T> implements Iterator<T> {
         }
 
         @Override
-        public Float next() {
+        public Byte next() {
             if (!hasNext()) {
                 return null;
             }

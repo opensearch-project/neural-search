@@ -10,5 +10,5 @@ import org.apache.lucene.search.DocIdSetIterator;
  * DocFreqIterator is a DocIdSetIterator that also provides the frequency of the term in the document
  */
 public abstract class DocFreqIterator extends DocIdSetIterator {
-    public abstract float freq();
+    public abstract byte freq();
 }

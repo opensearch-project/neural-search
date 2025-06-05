@@ -37,6 +37,8 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+import org.opensearch.neuralsearch.sparse.algorithm.ByteQuantizer;
+
 /**
  * ClusteredPostingTermsWriter is used to write postings for each segment.
  * It handles the logic to write data to both in-memory and lucene index.
@@ -113,7 +115,7 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
             while (iterator.hasNext()) {
                 DocFreq docFreq = iterator.next();
                 postingOut.writeVInt(docFreq.getDocID());
-                postingOut.writeVInt(ValueEncoder.encodeFeatureValue(docFreq.getFreq()));
+                postingOut.writeByte(docFreq.getFreq());
             }
             postingOut.writeByte((byte) (cluster.isShouldNotSkip() ? 1 : 0));
             if (cluster.getSummary() == null) {
@@ -124,7 +126,7 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
                 while (iter.hasNext()) {
                     SparseVector.Item item = iter.next();
                     postingOut.writeVInt(item.getToken());
-                    postingOut.writeVInt(ValueEncoder.encodeFeatureValue(item.getFreq()));
+                    postingOut.writeByte(item.getFreq());
                 }
             }
         }
@@ -143,7 +145,7 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
         if (docID == -1) {
             throw new IllegalStateException("docId must be set before startDoc");
         }
-        docFreqs.add(new DocFreq(docID, ValueEncoder.decodeFeatureValue(freq)));
+        docFreqs.add(new DocFreq(docID, ByteQuantizer.quantizeFloatToByte(ValueEncoder.decodeFeatureValue(freq))));
     }
 
     @Override

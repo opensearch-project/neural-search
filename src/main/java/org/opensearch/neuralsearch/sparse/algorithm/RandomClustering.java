@@ -20,8 +20,6 @@ import java.util.Random;
 @AllArgsConstructor
 public class RandomClustering implements Clustering {
 
-    private final static int MINIMAL_CLUSTER_DOC_SIZE = 3;
-
     private final int lambda;
     private final float alpha;
     private final int beta;
@@ -39,7 +37,7 @@ public class RandomClustering implements Clustering {
         int num_cluster = (int) Math.ceil((double) (size * beta) / lambda);
         int[] centers = random.ints(0, size).distinct().limit(num_cluster).toArray();
         List<List<DocFreq>> docAssignments = new ArrayList<>(num_cluster);
-        List<float[]> denseCentroids = new ArrayList<>();
+        List<byte[]> denseCentroids = new ArrayList<>();
         for (int i = 0; i < num_cluster; i++) {
             docAssignments.add(new ArrayList<>());
             SparseVector center = reader.read(centers[i]);
@@ -59,7 +57,7 @@ public class RandomClustering implements Clustering {
             }
             for (int i = 0; i < num_cluster; i++) {
                 float score = Float.MIN_VALUE;
-                float[] center = denseCentroids.get(i);
+                byte[] center = denseCentroids.get(i);
                 if (center != null) {
                     score = docVector.dotProduct(center);
                 }
