@@ -50,7 +50,8 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
      * - iterate over each result and update score as per formula above where "score" is raw score returned by Hybrid query
      */
     @Override
-    public void normalize(final NormalizeScoresDTO normalizeScoresDTO) {
+    public Map<Integer, float[]> normalize(final NormalizeScoresDTO normalizeScoresDTO) {
+        Map<Integer, float[]> docIdToSubqueryScores = new HashMap<>();
         List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
         // get l2 norms for each sub-query
         List<Float> normsPerSubquery = getL2Norm(queryTopDocs);
@@ -64,10 +65,14 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
             for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
                 TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
+                    // Initialize or update subquery scores array per doc
+                    float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(scoreDoc.doc, k -> new float[topDocsPerSubQuery.size()]);
+                    scoresArray[j] = scoreDoc.score;
                     scoreDoc.score = normalizeSingleScore(scoreDoc.score, normsPerSubquery.get(j));
                 }
             }
         }
+        return docIdToSubqueryScores;
     }
 
     @Override
