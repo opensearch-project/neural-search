@@ -150,7 +150,42 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
         assertEquals(capturedInput.getInfoStatNames(), MinClusterVersionUtil.getInfoStatsAvailableInVersion(Version.V_3_0_0));
     }
 
-    public void test_execute_singleStat() throws Exception {
+    public void test_execute_statParameters() throws Exception {
+        when(settingsAccessor.isStatsEnabled()).thenReturn(true);
+        when(mockClusterUtil.getClusterMinVersion()).thenReturn(Version.CURRENT);
+
+        RestNeuralStatsAction restNeuralStatsAction = new RestNeuralStatsAction(settingsAccessor, mockClusterUtil);
+
+
+        // Create request with stats not existing on 3.0.0
+        Map<String, String> params = new HashMap<>();
+        params.put("stat", String.join(",",
+                EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS.getNameString(),
+                EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getNameString(),
+                InfoStatName.TEXT_CHUNKING_PROCESSORS.getNameString(),
+                InfoStatName.TEXT_EMBEDDING_PROCESSORS.getNameString()
+        ));
+        RestRequest request = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY)
+                .withParams(params)
+                .build();
+
+        restNeuralStatsAction.handleRequest(request, channel, client);
+
+        ArgumentCaptor<NeuralStatsRequest> argumentCaptor = ArgumentCaptor.forClass(NeuralStatsRequest.class);
+        verify(client, times(1)).execute(eq(NeuralStatsAction.INSTANCE), argumentCaptor.capture(), any());
+
+        NeuralStatsInput capturedInput = argumentCaptor.getValue().getNeuralStatsInput();
+        assertEquals(capturedInput.getEventStatNames(), EnumSet.of(
+                EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS,
+                EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS
+        ));
+        assertEquals(capturedInput.getInfoStatNames(), EnumSet.of(
+                InfoStatName.TEXT_CHUNKING_PROCESSORS,
+                InfoStatName.TEXT_EMBEDDING_PROCESSORS
+        ));
+    }
+
+    public void test_execute_statParameters_duringVersionUpgrade() throws Exception {
         when(settingsAccessor.isStatsEnabled()).thenReturn(true);
         when(mockClusterUtil.getClusterMinVersion()).thenReturn(Version.V_3_0_0);
 

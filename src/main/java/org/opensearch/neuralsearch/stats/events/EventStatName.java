@@ -15,6 +15,8 @@ import java.util.stream.Collectors;
 
 /**
  * Enum that contains all event stat names, paths, and types
+ * WE SHOULD AVOID CHANGING THE ORDER OF THESE STAT ENUMS! The ordinal is used in StreamInput/Output.
+ * Changing the order will break the mixed cluster version upgrade version case.
  */
 @Getter
 public enum EventStatName implements StatName {
