@@ -40,7 +40,7 @@ public class RandomClustering implements Clustering {
         List<byte[]> denseCentroids = new ArrayList<>();
         for (int i = 0; i < num_cluster; i++) {
             docAssignments.add(new ArrayList<>());
-            SparseVector center = reader.read(centers[i]);
+            SparseVector center = reader.read(docFreqs.get(centers[i]).getDocID());
             if (center == null) {
                 denseCentroids.add(null);
             } else {
