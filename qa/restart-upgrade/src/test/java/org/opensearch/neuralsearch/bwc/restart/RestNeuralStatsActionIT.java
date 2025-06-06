@@ -51,12 +51,14 @@ public class RestNeuralStatsActionIT extends AbstractRestartUpgradeRestTestCase 
                 PIPELINE_NAME
             );
             addDocument(getIndexNameForTest(), "0", TEST_FIELD, TEXT, null, null);
+            addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT, null, null);
+            addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT, null, null);
 
             // Get stats
             responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
 
             assertEquals(
-                numberOfExecution + 1,
+                numberOfExecution + 3,
                 getNestedValue(parseAggregatedNodeStatsResponse(responseBody), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS)
             );
             assertEquals(
@@ -68,9 +70,9 @@ public class RestNeuralStatsActionIT extends AbstractRestartUpgradeRestTestCase 
             try {
                 modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
                 loadModel(modelId);
-                addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1, null, null);
-                addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_1, null, null);
                 addDocument(getIndexNameForTest(), "3", TEST_FIELD, TEXT_1, null, null);
+                addDocument(getIndexNameForTest(), "4", TEST_FIELD, TEXT_1, null, null);
+                addDocument(getIndexNameForTest(), "5", TEST_FIELD, TEXT_1, null, null);
 
                 // Get stats
                 responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
