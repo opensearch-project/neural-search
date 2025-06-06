@@ -44,7 +44,6 @@ public class CollapseDTO {
      * @param indexOfFirstNonEmpty Index of the first non-empty result
      * @param isFetchPhaseExecuted Flag indicating if  fetch phase is complete
      * @param collapseCombineScoresDTO DTO containing score combination parameters
-     * @return A new CollapseDTO instance
      */
     public CollapseDTO(
         List<CompoundTopDocs> collapseQueryTopDocs,
