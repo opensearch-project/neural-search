@@ -8,7 +8,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
-import org.opensearch.Version;
 import org.opensearch.common.util.set.Sets;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.neuralsearch.common.MinClusterVersionUtil;
@@ -18,7 +17,6 @@ import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.neuralsearch.transport.NeuralStatsAction;
 import org.opensearch.neuralsearch.transport.NeuralStatsRequest;
-import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.rest.BaseRestHandler;
 import org.opensearch.rest.BytesRestResponse;
 import org.opensearch.rest.RestRequest;
@@ -106,7 +104,6 @@ public class RestNeuralStatsAction extends BaseRestHandler {
     }
 
     private NeuralSearchSettingsAccessor settingsAccessor;
-    private NeuralSearchClusterUtil neuralSearchClusterUtil;
 
     @Override
     public String getName() {
@@ -199,12 +196,9 @@ public class RestNeuralStatsAction extends BaseRestHandler {
                 continue;
             }
 
-            Version minClusterVersion = neuralSearchClusterUtil.getClusterMinVersion();
-
-            // If min cluster version does not match current, we are in rolling upgrade case
-            // If so, we want to only fetch stats that exist on the min version to prevent a serialization error
-            EnumSet<InfoStatName> availableInfoStats = MinClusterVersionUtil.getInfoStatsAvailableInVersion(minClusterVersion);
-            EnumSet<EventStatName> availableEventStats = MinClusterVersionUtil.getEventStatsAvailableInVersion(minClusterVersion);
+            // We want to only fetch stats that exist on the min version of the cluster to prevent a serialization error
+            EnumSet<InfoStatName> availableInfoStats = MinClusterVersionUtil.getInfoStatsAvailable();
+            EnumSet<EventStatName> availableEventStats = MinClusterVersionUtil.getEventStatsAvailable();
 
             if (InfoStatName.isValidName(normalizedStat) && availableInfoStats.contains(InfoStatName.from(normalizedStat))) {
                 neuralStatsInput.getInfoStatNames().add(InfoStatName.from(normalizedStat));
@@ -223,9 +217,8 @@ public class RestNeuralStatsAction extends BaseRestHandler {
     }
 
     private void addAllStats(NeuralStatsInput neuralStatsInput) {
-        Version minClusterVersion = neuralSearchClusterUtil.getClusterMinVersion();
-        neuralStatsInput.getInfoStatNames().addAll(MinClusterVersionUtil.getInfoStatsAvailableInVersion(minClusterVersion));
-        neuralStatsInput.getEventStatNames().addAll(MinClusterVersionUtil.getEventStatsAvailableInVersion(minClusterVersion));
+        neuralStatsInput.getInfoStatNames().addAll(MinClusterVersionUtil.getInfoStatsAvailable());
+        neuralStatsInput.getEventStatNames().addAll(MinClusterVersionUtil.getEventStatsAvailable());
     }
 
     private Optional<String[]> splitCommaSeparatedParam(RestRequest request, String paramName) {
