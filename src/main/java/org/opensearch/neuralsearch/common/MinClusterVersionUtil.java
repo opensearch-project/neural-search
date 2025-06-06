@@ -141,6 +141,10 @@ public final class MinClusterVersionUtil {
      * @return an EnumSet of all available stats at that version
      */
     public static EnumSet<InfoStatName> getInfoStatsAvailableInVersion(Version version) {
+        if (version == Version.CURRENT) {
+            return EnumSet.allOf(InfoStatName.class);
+        }
+
         EnumSet<InfoStatName> infoStatNames = EnumSet.noneOf(InfoStatName.class);
         for (Map.Entry<Version, EnumSet<InfoStatName>> entry : infoStatsByVersion.entrySet()) {
             if (entry.getKey().onOrBefore(version)) {
@@ -156,6 +160,10 @@ public final class MinClusterVersionUtil {
      * @return an EnumSet of all available stats at that version
      */
     public static EnumSet<EventStatName> getEventStatsAvailableInVersion(Version version) {
+        if (version == Version.CURRENT) {
+            return EnumSet.allOf(EventStatName.class);
+        }
+
         EnumSet<EventStatName> eventStatNames = EnumSet.noneOf(EventStatName.class);
         for (Map.Entry<Version, EnumSet<EventStatName>> entry : eventStatsByVersion.entrySet()) {
             if (entry.getKey().onOrBefore(version)) {

@@ -194,32 +194,22 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         for (String stat : stats) {
             // Validate parameter
             String normalizedStat = stat.toLowerCase(Locale.ROOT);
-            if (isValidParamString(normalizedStat) == false) {
+            if (isValidParamString(normalizedStat) == false || isValidEventOrInfoStatName(normalizedStat) == false) {
                 invalidStatNames.add(normalizedStat);
                 continue;
             }
 
             Version minClusterVersion = neuralSearchClusterUtil.getClusterMinVersion();
-            if (minClusterVersion == Version.CURRENT) {
-                if (EventStatName.isValidName(normalizedStat)) {
-                    neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
-                } else if (InfoStatName.isValidName(normalizedStat)) {
-                    neuralStatsInput.getInfoStatNames().add(InfoStatName.from(normalizedStat));
-                } else {
-                    invalidStatNames.add(normalizedStat);
-                }
-            } else {
-                // If min cluster version does not match current, we are in rolling upgrade case
-                // If so, we want to only fetch stats that exist on the min version to prevent a serialization error
-                EnumSet<InfoStatName> availableInfoStats = MinClusterVersionUtil.getInfoStatsAvailableInVersion(minClusterVersion);
-                EnumSet<EventStatName> availableEventStats = MinClusterVersionUtil.getEventStatsAvailableInVersion(minClusterVersion);
 
-                if (InfoStatName.isValidName(normalizedStat) && availableInfoStats.contains(InfoStatName.from(normalizedStat))) {
-                    neuralStatsInput.getInfoStatNames().add(InfoStatName.from(normalizedStat));
-                } else if (EventStatName.isValidName(normalizedStat) && availableEventStats.contains(EventStatName.from(normalizedStat))) {
-                    neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
-                }
-                // We don't add to invalid stat names since they technically aren't invalid, we just don't want to fetch them
+            // If min cluster version does not match current, we are in rolling upgrade case
+            // If so, we want to only fetch stats that exist on the min version to prevent a serialization error
+            EnumSet<InfoStatName> availableInfoStats = MinClusterVersionUtil.getInfoStatsAvailableInVersion(minClusterVersion);
+            EnumSet<EventStatName> availableEventStats = MinClusterVersionUtil.getEventStatsAvailableInVersion(minClusterVersion);
+
+            if (InfoStatName.isValidName(normalizedStat) && availableInfoStats.contains(InfoStatName.from(normalizedStat))) {
+                neuralStatsInput.getInfoStatNames().add(InfoStatName.from(normalizedStat));
+            } else if (EventStatName.isValidName(normalizedStat) && availableEventStats.contains(EventStatName.from(normalizedStat))) {
+                neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
             }
         }
 
@@ -234,16 +224,8 @@ public class RestNeuralStatsAction extends BaseRestHandler {
 
     private void addAllStats(NeuralStatsInput neuralStatsInput) {
         Version minClusterVersion = neuralSearchClusterUtil.getClusterMinVersion();
-        if (minClusterVersion == Version.CURRENT) {
-            // Default non-rolling upgrade case, add all stats
-            neuralStatsInput.getEventStatNames().addAll(EnumSet.allOf(EventStatName.class));
-            neuralStatsInput.getInfoStatNames().addAll(EnumSet.allOf(InfoStatName.class));
-        } else {
-            // If cluster min version does not match current node version, that means we are mid cluster version upgrade.
-            // In this case we only want to request stats that exist in the the min version
-            neuralStatsInput.getInfoStatNames().addAll(MinClusterVersionUtil.getInfoStatsAvailableInVersion(minClusterVersion));
-            neuralStatsInput.getEventStatNames().addAll(MinClusterVersionUtil.getEventStatsAvailableInVersion(minClusterVersion));
-        }
+        neuralStatsInput.getInfoStatNames().addAll(MinClusterVersionUtil.getInfoStatsAvailableInVersion(minClusterVersion));
+        neuralStatsInput.getEventStatNames().addAll(MinClusterVersionUtil.getEventStatsAvailableInVersion(minClusterVersion));
     }
 
     private Optional<String[]> splitCommaSeparatedParam(RestRequest request, String paramName) {
@@ -253,5 +235,9 @@ public class RestNeuralStatsAction extends BaseRestHandler {
     private boolean isValidNodeId(String nodeId) {
         // Validate node id parameter
         return isValidParamString(nodeId) && nodeId.length() == 22;
+    }
+
+    private boolean isValidEventOrInfoStatName(String statName) {
+        return InfoStatName.isValidName(statName) || EventStatName.isValidName(statName);
     }
 }
